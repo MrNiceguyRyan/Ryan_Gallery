@@ -1,14 +1,16 @@
 import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@astrojs/react';
 import sanity from '@sanity/astro';
 
 export default defineConfig({
+  vite: {
+    plugins: [tailwindcss()],
+  },
   integrations: [
-    tailwind(),
     react(),
     sanity({
-      projectId: 'z610fooo', // 你的真实云端门牌号
+      projectId: 'z610fooo',
       dataset: 'production',
       useCdn: true,
       apiVersion: '2024-03-16',
