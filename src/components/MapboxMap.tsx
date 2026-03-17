@@ -3,7 +3,6 @@ import MapGL, { Marker, NavigationControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Photo } from '../types';
-import 'mapbox-gl/dist/mapbox-gl.css';
 
 // ─── Location clustering ───
 interface LocationCluster {
