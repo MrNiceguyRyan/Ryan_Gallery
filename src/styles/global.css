@@ -1,7 +1,5 @@
-@import "tailwindcss";
-
-/* ─── Inter 字体引入 ─── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap');
+@import "tailwindcss";
 
 /* ─── 基础样式重置 ─── */
 html {
