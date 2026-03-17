@@ -1,0 +1,116 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="About | Ryan" description="The person behind the lens.">
+  <section class="pt-20 pb-24 px-6 md:px-16 max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-20">
+      <h1 class="text-5xl md:text-7xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
+        About.
+      </h1>
+      <p class="text-gray-400 text-lg font-light mt-6 max-w-lg leading-relaxed">
+        The person behind the lens.
+      </p>
+    </div>
+
+    <!-- Bio grid -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-12 md:gap-16">
+      <!-- Portrait placeholder -->
+      <div class="md:col-span-2">
+        <div class="aspect-[3/4] rounded-2xl bg-gray-50 overflow-hidden flex items-center justify-center">
+          <div class="text-center">
+            <span class="text-7xl font-extralight text-gray-200">R</span>
+            <p class="text-[10px] text-gray-300 mt-2 uppercase tracking-[0.2em]">Portrait</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bio -->
+      <div class="md:col-span-3 flex flex-col justify-center">
+        <h2 class="text-3xl font-light text-gray-900 tracking-tight mb-6">Ryan</h2>
+        <div class="space-y-4 text-gray-500 font-light leading-relaxed">
+          <p>
+            I'm a photographer who believes in the quiet power of observation.
+            My work is less about capturing perfect moments and more about
+            finding beauty in the spaces between them.
+          </p>
+          <p>
+            I shoot primarily on the Nikon Zf — a camera that feels like an
+            extension of thought. Its blend of classic ergonomics and modern
+            sensor technology mirrors my own approach: rooted in tradition,
+            looking forward.
+          </p>
+          <p>
+            When I'm not behind the lens, I'm usually exploring new cities on
+            foot, searching for the light that tells a story.
+          </p>
+        </div>
+
+        <!-- Quick facts -->
+        <div class="flex flex-wrap gap-3 mt-8">
+          <span class="text-xs font-light text-gray-400 bg-gray-50 px-4 py-2 rounded-full">
+            Street Photography
+          </span>
+          <span class="text-xs font-light text-gray-400 bg-gray-50 px-4 py-2 rounded-full">
+            Architecture
+          </span>
+          <span class="text-xs font-light text-gray-400 bg-gray-50 px-4 py-2 rounded-full">
+            Landscape
+          </span>
+          <span class="text-xs font-light text-gray-400 bg-gray-50 px-4 py-2 rounded-full">
+            Travel
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Philosophy -->
+    <div class="mt-24 pt-16 border-t border-gray-100">
+      <div class="max-w-2xl">
+        <h3 class="text-[10px] text-gray-400 uppercase tracking-[0.2em] mb-6">Philosophy</h3>
+        <blockquote class="text-2xl md:text-3xl font-extralight text-gray-900 tracking-tight leading-snug">
+          "Photography is not about the things you see, but about the way
+          you see them."
+        </blockquote>
+        <p class="text-gray-400 text-sm font-light mt-6 leading-relaxed max-w-lg">
+          Every photograph in this archive represents a deliberate choice — of
+          light, of moment, of perspective. I strive for images that feel both
+          immediate and timeless, grounded in a place yet universal in emotion.
+        </p>
+      </div>
+    </div>
+
+    <!-- Equipment -->
+    <div class="mt-24 pt-16 border-t border-gray-100">
+      <h3 class="text-[10px] text-gray-400 uppercase tracking-[0.2em] mb-8">Equipment</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Body -->
+        <div class="p-6 rounded-2xl bg-gray-50 group hover:bg-gray-100 transition-colors duration-300">
+          <div class="text-xs text-gray-300 font-mono mb-3">Body</div>
+          <h4 class="text-lg font-light text-gray-900 tracking-tight">Nikon Zf</h4>
+          <p class="text-xs text-gray-400 mt-1 font-light">
+            Full-frame mirrorless, 24.5MP
+          </p>
+        </div>
+
+        <!-- Lenses -->
+        <div class="p-6 rounded-2xl bg-gray-50 group hover:bg-gray-100 transition-colors duration-300">
+          <div class="text-xs text-gray-300 font-mono mb-3">Primary Lens</div>
+          <h4 class="text-lg font-light text-gray-900 tracking-tight">NIKKOR Z 40mm f/2</h4>
+          <p class="text-xs text-gray-400 mt-1 font-light">
+            Compact, sharp, everyday carry
+          </p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-gray-50 group hover:bg-gray-100 transition-colors duration-300">
+          <div class="text-xs text-gray-300 font-mono mb-3">Wide Angle</div>
+          <h4 class="text-lg font-light text-gray-900 tracking-tight">NIKKOR Z 24-70mm f/4</h4>
+          <p class="text-xs text-gray-400 mt-1 font-light">
+            Versatile zoom for architecture & landscape
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>

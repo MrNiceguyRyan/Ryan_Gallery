@@ -1,17 +1,112 @@
 ---
+import Layout from '../layouts/Layout.astro';
+import { sanityClient } from 'sanity:client';
+import type { Collection, Photo, StyleGroup } from '../types';
+import { STYLE_META } from '../types';
 
+import Galleries from '../components/Galleries';
+import PhotographyStyles from '../components/PhotographyStyles';
+import MasonryWall from '../components/MasonryWall';
+
+// ─── GROQ: Featured Collections ───
+const collections: Collection[] = await sanityClient.fetch(`
+  *[_type == "collection" && featured == true] | order(year desc) {
+    _id,
+    name,
+    "slug": slug.current,
+    subtitle,
+    "coverImageUrl": coverImage.asset->url,
+    location,
+    year,
+    gridSize,
+    "photoCount": count(*[_type == "photo" && references(^._id)])
+  }
+`);
+
+// ─── GROQ: All Photos ───
+const photos: Photo[] = await sanityClient.fetch(`
+  *[_type == "photo"] | order(_createdAt desc) {
+    _id,
+    title,
+    "imageUrl": image.asset->url,
+    camera,
+    focalLength,
+    aperture,
+    shutterSpeed,
+    iso,
+    styleCategory,
+    location,
+    collection->{
+      name,
+      "slug": slug.current
+    }
+  }
+`);
+
+// ─── Group by style category ───
+const styleGroupMap = new Map<string, Photo[]>();
+for (const photo of photos) {
+  if (photo.styleCategory) {
+    if (!styleGroupMap.has(photo.styleCategory)) {
+      styleGroupMap.set(photo.styleCategory, []);
+    }
+    styleGroupMap.get(photo.styleCategory)!.push(photo);
+  }
+}
+
+const styleGroups: StyleGroup[] = Array.from(styleGroupMap.entries())
+  .map(([category, groupPhotos]) => ({
+    category,
+    label: STYLE_META[category]?.label ?? category,
+    description: STYLE_META[category]?.description ?? '',
+    photos: groupPhotos,
+    coverImageUrl: groupPhotos[0]?.imageUrl ?? '',
+  }))
+  .filter((g) => g.photos.length > 0);
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Layout>
+  <!-- Hero -->
+  <header class="pt-20 pb-24 px-6 md:px-16 max-w-7xl mx-auto">
+    <div class="flex flex-col gap-6">
+      <h1 class="text-5xl md:text-7xl lg:text-8xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
+        Visual<br />Archive.
+      </h1>
+
+      <p class="text-gray-400 text-lg md:text-xl font-light max-w-lg leading-relaxed">
+        Shot on Nikon Zf. Every frame, a quiet conversation between light and intention.
+      </p>
+
+      <!-- Stats -->
+      <div class="flex items-center gap-8 mt-4 pt-6 border-t border-gray-100">
+        <div>
+          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{photos.length}</span>
+          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Photographs</p>
+        </div>
+        <div>
+          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{collections.length}</span>
+          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Collections</p>
+        </div>
+        <div>
+          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{styleGroups.length}</span>
+          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Styles</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Galleries bento grid -->
+    {collections.length > 0 && (
+      <Galleries client:load collections={collections} />
+    )}
+
+    <!-- Photography Styles accordion -->
+    {styleGroups.length > 0 && (
+      <PhotographyStyles client:load styleGroups={styleGroups} />
+    )}
+
+    <!-- Masonry photo wall -->
+    <MasonryWall client:load photos={photos} />
+  </main>
+</Layout>

@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* ─── Inter 字体引入 ─── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap');
+
+/* ─── 基础样式重置 ─── */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ─── 自定义动画：地图锚点脉冲 ─── */
+@keyframes map-pulse {
+  0%, 100% {
+    r: 12;
+    opacity: 0.3;
+  }
+  50% {
+    r: 20;
+    opacity: 0;
+  }
+}
+
+.animate-map-pulse {
+  animation: map-pulse 3s ease-in-out infinite;
+}
+
+/* ─── 自定义动画：缓慢呼吸发光 ─── */
+@keyframes glow-breathe {
+  0%, 100% {
+    box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.3);
+  }
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 3s ease-in-out infinite;
+}
+
+/* ─── 滚动条极简化 ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* ─── 选区样式 ─── */
+::selection {
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
