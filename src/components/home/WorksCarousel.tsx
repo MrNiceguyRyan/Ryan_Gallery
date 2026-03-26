@@ -13,7 +13,7 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
 
   const count = collections.length;
   const angleStep = 360 / count;
-  const radius = 220;
+  const radius = 170;
 
   const goTo = useCallback(
     (i: number) => {
@@ -49,9 +49,9 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-center min-h-[600px]">
         {/* Left: Ferris wheel carousel */}
-        <div className="relative h-[500px] flex items-center justify-center">
+        <div className="relative h-[500px] flex items-center justify-center overflow-hidden">
           <motion.div
-            className="relative w-[440px] h-[440px]"
+            className="relative w-[380px] h-[380px]"
             animate={{ rotate: rotation }}
             transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
           >

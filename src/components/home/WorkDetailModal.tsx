@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection } from '../../types';
 
@@ -7,7 +8,15 @@ interface Props {
 }
 
 export default function WorkDetailModal({ collection, onClose }: Props) {
+  const [activePhoto, setActivePhoto] = useState(0);
+  const dragRef = useRef<HTMLDivElement>(null);
+
   if (!collection) return null;
+
+  const photos = collection.photos ?? [];
+  const CARD_W = 220;
+  const CARD_GAP = 16;
+  const totalWidth = photos.length * (CARD_W + CARD_GAP);
 
   return (
     <AnimatePresence>
@@ -21,108 +30,148 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
         >
           {/* Backdrop */}
           <motion.div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={onClose}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
           />
 
-          {/* Modal content */}
+          {/* Modal */}
           <motion.div
-            className="relative z-10 w-[90vw] max-w-4xl max-h-[85vh] bg-white rounded-3xl overflow-hidden shadow-2xl"
-            initial={{ opacity: 0, scale: 0.9, y: 40 }}
+            className="relative z-10 w-[92vw] max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl"
+            initial={{ opacity: 0, scale: 0.92, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 40 }}
-            transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+            exit={{ opacity: 0, scale: 0.92, y: 40 }}
+            transition={{ duration: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
           >
-            {/* Close button */}
+            {/* Close */}
             <button
               onClick={onClose}
-              className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full bg-black/5 flex items-center justify-center
-                hover:bg-black/10 transition-colors"
+              className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/8 flex items-center justify-center hover:bg-black/15 transition-colors"
             >
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
             {/* Hero image */}
-            <div className="relative h-[300px] md:h-[400px]">
+            <div className="relative h-52 md:h-72">
               <img
                 src={`${collection.coverImageUrl}?auto=format&w=1200&q=85`}
                 alt={collection.name}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent" />
             </div>
 
             {/* Info */}
-            <div className="px-8 pb-8 -mt-16 relative">
-              <div className="flex items-center gap-3 mb-2">
+            <div className="px-7 pb-3 -mt-10 relative">
+              <div className="flex items-center gap-2 mb-1">
                 {collection.year && (
                   <span className="text-[10px] font-mono text-gray-400 tracking-wider">{collection.year}</span>
                 )}
                 {collection.location && (
                   <>
-                    <span className="text-gray-200">·</span>
+                    <span className="text-gray-300">·</span>
                     <span className="text-[10px] font-mono text-gray-400 tracking-wider">{collection.location}</span>
+                  </>
+                )}
+                {photos.length > 0 && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <span className="text-[10px] font-mono text-gray-400 tracking-wider">{photos.length} photos</span>
                   </>
                 )}
               </div>
 
-              <h2 className="text-3xl md:text-4xl font-extralight tracking-tight text-gray-900">
+              <h2 className="text-3xl font-extralight tracking-tight text-gray-900">
                 {collection.name}
               </h2>
-
               {collection.subtitle && (
-                <p className="text-gray-400 text-lg font-light mt-2">{collection.subtitle}</p>
+                <p className="text-gray-400 text-sm font-light mt-1">{collection.subtitle}</p>
               )}
+            </div>
 
-              {collection.description && (
-                <p className="text-gray-400 text-sm font-light mt-4 leading-relaxed max-w-2xl">
-                  {collection.description}
+            {/* ── Draggable photo strip ── */}
+            {photos.length > 0 && (
+              <div className="mt-3 mb-1">
+                {/* Drag hint */}
+                <p className="px-7 text-[10px] text-gray-300 font-light tracking-widest uppercase mb-3 flex items-center gap-2">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5M3.75 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                  drag to browse
                 </p>
-              )}
 
-              {/* Photo preview grid */}
-              {collection.photos && collection.photos.length > 0 && (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mt-6">
-                  {collection.photos.slice(0, 8).map((photo) => (
-                    <div key={photo._id} className="aspect-square rounded-xl overflow-hidden">
-                      <img
-                        src={`${photo.imageUrl}?auto=format&w=300&q=75`}
-                        alt={photo.title}
-                        className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                      />
-                    </div>
+                {/* Overflow container */}
+                <div className="overflow-hidden px-7">
+                  <motion.div
+                    ref={dragRef}
+                    className="flex gap-4 cursor-grab active:cursor-grabbing select-none"
+                    drag="x"
+                    dragConstraints={{
+                      right: 0,
+                      left: Math.min(0, -(totalWidth - (typeof window !== 'undefined' ? window.innerWidth * 0.78 : 600))),
+                    }}
+                    dragElastic={0.08}
+                    dragMomentum={true}
+                    dragTransition={{ bounceStiffness: 300, bounceDamping: 40 }}
+                    whileTap={{ cursor: 'grabbing' }}
+                  >
+                    {photos.map((photo, i) => (
+                      <motion.div
+                        key={photo._id}
+                        className="flex-shrink-0 rounded-2xl overflow-hidden bg-gray-100"
+                        style={{ width: CARD_W, height: 280 }}
+                        animate={{ opacity: i === activePhoto ? 1 : 0.65, scale: i === activePhoto ? 1 : 0.96 }}
+                        transition={{ duration: 0.3 }}
+                        onClick={() => setActivePhoto(i)}
+                        whileHover={{ opacity: 1, scale: 1 }}
+                      >
+                        <img
+                          src={`${photo.imageUrl}?auto=format&w=500&q=80`}
+                          alt={photo.title}
+                          className="w-full h-full object-cover pointer-events-none"
+                          draggable={false}
+                        />
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                </div>
+
+                {/* Dots indicator */}
+                <div className="flex justify-center gap-1.5 mt-4 mb-1">
+                  {photos.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActivePhoto(i)}
+                      className={`rounded-full transition-all duration-300 ${
+                        i === activePhoto ? 'w-4 h-1.5 bg-gray-900' : 'w-1.5 h-1.5 bg-gray-200'
+                      }`}
+                    />
                   ))}
                 </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex items-center gap-4 mt-8">
-                {collection.slug && (
-                  <a
-                    href={`/works/${collection.slug}`}
-                    className="px-8 py-3 bg-gray-900 text-white text-sm font-light tracking-wider rounded-full
-                      hover:bg-gray-800 transition-colors duration-300"
-                  >
-                    View Full Gallery
-                  </a>
-                )}
-                {collection.liveProjectUrl && (
-                  <a
-                    href={collection.liveProjectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-8 py-3 border border-gray-200 text-gray-600 text-sm font-light tracking-wider rounded-full
-                      hover:border-gray-900 hover:text-gray-900 transition-all duration-300"
-                  >
-                    View Live Project
-                  </a>
-                )}
               </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 px-7 py-5 border-t border-gray-50 mt-2">
+              {collection.slug && (
+                <a
+                  href={`/works/${collection.slug}`}
+                  className="px-7 py-2.5 bg-gray-900 text-white text-sm font-light tracking-wider rounded-full hover:bg-gray-800 transition-colors"
+                >
+                  View Full Gallery
+                </a>
+              )}
+              {collection.liveProjectUrl && (
+                <a
+                  href={collection.liveProjectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-7 py-2.5 border border-gray-200 text-gray-600 text-sm font-light tracking-wider rounded-full hover:border-gray-900 hover:text-gray-900 transition-all"
+                >
+                  Live Project
+                </a>
+              )}
             </div>
           </motion.div>
         </motion.div>
