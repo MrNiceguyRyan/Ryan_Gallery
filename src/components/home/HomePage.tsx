@@ -144,7 +144,7 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
 
           {/* Photo grid */}
-          <motion.div layout className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <motion.div layout className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             <AnimatePresence mode="popLayout">
               {(activeStyle
                 ? photos.filter((p) => p.styleCategory === activeStyle)
@@ -157,7 +157,7 @@ export default function HomePage({ collections, photos }: Props) {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.4, delay: i * 0.05 }}
-                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden cursor-zoom-in"
+                  className="group relative aspect-square rounded-xl overflow-hidden cursor-zoom-in"
                   onClick={() => setLightboxPhoto(photo)}
                 >
                   <img
