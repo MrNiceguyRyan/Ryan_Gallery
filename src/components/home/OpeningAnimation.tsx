@@ -48,7 +48,7 @@ export default function OpeningAnimation({ onComplete }: Props) {
               transition={{ duration: 0.6 }}
             >
               <motion.h1
-                className="text-4xl md:text-6xl font-extralight tracking-[0.3em] text-gray-900 uppercase"
+                className="text-4xl md:text-6xl font-extralight tracking-[0.3em] text-gray-900 uppercase pl-[0.3em]"
                 initial={{ y: 40 }}
                 animate={phase === 'text' ? { y: 0 } : {}}
                 transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}

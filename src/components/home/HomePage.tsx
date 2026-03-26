@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
@@ -29,9 +29,17 @@ interface Props {
 }
 
 export default function HomePage({ collections, photos }: Props) {
-  const [showOpening, setShowOpening] = useState(true);
+  // Show animation only once per browser session
+  const [showOpening, setShowOpening] = useState(false);
   const [selectedWork, setSelectedWork] = useState<Collection | null>(null);
   const [activeStyle, setActiveStyle] = useState<string | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<Photo | null>(null);
+
+  useEffect(() => {
+    if (!sessionStorage.getItem('opening-shown')) {
+      setShowOpening(true);
+    }
+  }, []);
 
   // Group photos by style
   const styleGroups: StyleGroup[] = (() => {
@@ -51,7 +59,10 @@ export default function HomePage({ collections, photos }: Props) {
     }));
   })();
 
-  const handleOpeningComplete = useCallback(() => setShowOpening(false), []);
+  const handleOpeningComplete = useCallback(() => {
+    sessionStorage.setItem('opening-shown', '1');
+    setShowOpening(false);
+  }, []);
   const handleSelectWork = useCallback((c: Collection) => setSelectedWork(c), []);
   const handleCloseModal = useCallback(() => setSelectedWork(null), []);
 
@@ -146,12 +157,13 @@ export default function HomePage({ collections, photos }: Props) {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.4, delay: i * 0.05 }}
-                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden cursor-pointer"
+                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden cursor-zoom-in"
+                  onClick={() => setLightboxPhoto(photo)}
                 >
                   <img
                     src={`${photo.imageUrl}?auto=format&w=600&q=80`}
                     alt={photo.title}
-                    className="w-full h-full object-cover "
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">
@@ -204,6 +216,57 @@ export default function HomePage({ collections, photos }: Props) {
       <AnimatePresence>
         {selectedWork && (
           <WorkDetailModal collection={selectedWork} onClose={handleCloseModal} />
+        )}
+      </AnimatePresence>
+
+      {/* ══════ Photo lightbox ══════ */}
+      <AnimatePresence>
+        {lightboxPhoto && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => setLightboxPhoto(null)}
+          >
+            {/* Close button */}
+            <button
+              className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+              onClick={() => setLightboxPhoto(null)}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Image */}
+            <motion.div
+              className="relative max-w-[90vw] max-h-[90vh] flex flex-col"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={`${lightboxPhoto.imageUrl}?auto=format&w=1600&q=90`}
+                alt={lightboxPhoto.title}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              />
+              {/* Caption */}
+              <div className="mt-4 flex items-center justify-between px-1">
+                <p className="text-white/80 text-sm font-light">{lightboxPhoto.title}</p>
+                <div className="flex items-center gap-3 text-white/40 text-xs font-mono">
+                  {lightboxPhoto.focalLength && <span>{lightboxPhoto.focalLength}</span>}
+                  {lightboxPhoto.aperture && <span>{lightboxPhoto.aperture}</span>}
+                  {lightboxPhoto.shutterSpeed && <span>{lightboxPhoto.shutterSpeed}</span>}
+                  {lightboxPhoto.iso && <span>ISO {lightboxPhoto.iso}</span>}
+                  {lightboxPhoto.location?.city && <span>{lightboxPhoto.location.city}</span>}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
