@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection } from '../../types';
 
@@ -10,46 +10,31 @@ interface Props {
 export default function WorksCarousel({ collections, onSelectWork }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [rotation, setRotation] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isScrolling = useRef(false);
 
   const count = collections.length;
   const angleStep = 360 / count;
-  const radius = 220; // px from center
+  const radius = 220;
 
-  // Scroll wheel rotates the Ferris wheel
-  const handleWheel = useCallback(
-    (e: WheelEvent) => {
-      e.preventDefault();
-      if (isScrolling.current) return;
-      isScrolling.current = true;
-
-      const direction = e.deltaY > 0 ? 1 : -1;
-      const newIndex = (activeIndex + direction + count) % count;
-      setActiveIndex(newIndex);
-      setRotation((prev) => prev - direction * angleStep);
-
-      setTimeout(() => {
-        isScrolling.current = false;
-      }, 600);
+  const goTo = useCallback(
+    (i: number) => {
+      setActiveIndex(i);
+      setRotation(-i * angleStep);
     },
-    [activeIndex, count, angleStep],
+    [angleStep],
   );
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, [handleWheel]);
+  const prev = useCallback(() => {
+    goTo((activeIndex - 1 + count) % count);
+  }, [activeIndex, count, goTo]);
+
+  const next = useCallback(() => {
+    goTo((activeIndex + 1) % count);
+  }, [activeIndex, count, goTo]);
 
   const activeCollection = collections[activeIndex];
 
   return (
-    <section
-      ref={containerRef}
-      className="min-h-screen relative px-6 md:px-16 py-24 overflow-hidden"
-    >
+    <section className="min-h-screen relative px-6 md:px-16 py-24 overflow-hidden">
       <motion.div
         className="mb-8"
         initial={{ opacity: 0, y: 30 }}
@@ -85,15 +70,12 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
                     top: `calc(50% + ${y}px - 80px)`,
                   }}
                   animate={{
-                    rotate: -rotation, // Counter-rotate to stay upright
+                    rotate: -rotation,
                     scale: isActive ? 1.15 : 0.85,
                     opacity: isActive ? 1 : 0.5,
                   }}
                   transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
-                  onClick={() => {
-                    setActiveIndex(i);
-                    setRotation(-i * angleStep);
-                  }}
+                  onClick={() => goTo(i)}
                 >
                   <div
                     className={`w-[120px] h-[160px] rounded-xl overflow-hidden shadow-lg transition-shadow duration-500 ${
@@ -116,7 +98,27 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-gray-200" />
           </motion.div>
 
-          {/* Navigation dots below carousel */}
+          {/* Prev / Next arrows */}
+          <button
+            onClick={prev}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
+            aria-label="Previous"
+          >
+            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
+            aria-label="Next"
+          >
+            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+            </svg>
+          </button>
+
+          {/* Navigation dots */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
             {collections.map((_, i) => (
               <button
@@ -124,10 +126,7 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
                 className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
                   i === activeIndex ? 'bg-gray-900 w-4' : 'bg-gray-300'
                 }`}
-                onClick={() => {
-                  setActiveIndex(i);
-                  setRotation(-i * angleStep);
-                }}
+                onClick={() => goTo(i)}
               />
             ))}
           </div>
