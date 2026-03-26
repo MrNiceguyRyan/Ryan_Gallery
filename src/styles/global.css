@@ -104,16 +104,6 @@ body {
   color: inherit;
 }
 
-/* ─── Grayscale to color transition ─── */
-.grayscale-hover {
-  filter: grayscale(100%);
-  transition: filter 0.6s ease, transform 0.6s ease;
-}
-
-.grayscale-hover:hover {
-  filter: grayscale(0%);
-  transform: scale(1.05);
-}
 
 /* ─── Hide scrollbar for horizontal scroll ─── */
 .no-scrollbar {

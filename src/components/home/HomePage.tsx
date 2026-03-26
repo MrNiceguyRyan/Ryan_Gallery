@@ -154,7 +154,7 @@ export default function HomePage({ collections, photos }: Props) {
                   <img
                     src={`${photo.imageUrl}?auto=format&w=600&q=80`}
                     alt={photo.title}
-                    className="w-full h-full object-cover grayscale-hover"
+                    className="w-full h-full object-cover "
                     loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">

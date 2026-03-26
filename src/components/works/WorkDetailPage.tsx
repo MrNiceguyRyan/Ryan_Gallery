@@ -136,7 +136,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                   <img
                     src={`${photo.imageUrl}?auto=format&w=700&q=85`}
                     alt={photo.title}
-                    className="w-full h-full object-cover grayscale-hover"
+                    className="w-full h-full object-cover "
                     loading="lazy"
                   />
                 </div>

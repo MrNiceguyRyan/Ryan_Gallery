@@ -104,7 +104,7 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
                       src={`${collection.coverImageUrl}?auto=format&w=300&q=80`}
                       alt={collection.name}
                       className={`w-full h-full object-cover transition-all duration-700 ${
-                        isActive ? '' : 'grayscale'
+                        isActive ? '' : 'opacity-60'
                       }`}
                     />
                   </div>

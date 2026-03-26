@@ -42,7 +42,7 @@ export default function CoverPage({ collections }: Props) {
             <img
               src={`${collection.coverImageUrl}?auto=format&w=800&q=80`}
               alt={collection.name}
-              className="w-full h-full object-cover grayscale-hover"
+              className="w-full h-full object-cover "
               loading="lazy"
             />
 
