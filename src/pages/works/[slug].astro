@@ -1,0 +1,55 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { sanityClient } from 'sanity:client';
+import type { Collection, Photo } from '../../types';
+import WorkDetailPage from '../../components/works/WorkDetailPage';
+
+export async function getStaticPaths() {
+  const collections = await sanityClient.fetch(`
+    *[_type == "collection" && defined(slug.current)] {
+      "slug": slug.current
+    }
+  `);
+
+  return collections.map((c: { slug: string }) => ({
+    params: { slug: c.slug },
+  }));
+}
+
+const { slug } = Astro.params;
+
+const collection: Collection = await sanityClient.fetch(
+  `*[_type == "collection" && slug.current == $slug][0] {
+    _id,
+    name,
+    "slug": slug.current,
+    subtitle,
+    "coverImageUrl": coverImage.asset->url,
+    location,
+    year,
+    description,
+    gridSize
+  }`,
+  { slug },
+);
+
+const photos: Photo[] = await sanityClient.fetch(
+  `*[_type == "photo" && references($collectionId)] | order(_createdAt desc) {
+    _id,
+    title,
+    "imageUrl": image.asset->url,
+    camera,
+    focalLength,
+    aperture,
+    shutterSpeed,
+    iso,
+    styleCategory,
+    location
+  }`,
+  { collectionId: collection._id },
+);
+---
+
+<Layout title={`${collection.name} | Ryan`} description={collection.description || collection.subtitle}>
+  <WorkDetailPage client:load collection={collection} photos={photos} />
+</Layout>

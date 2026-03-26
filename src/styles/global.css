@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* ─── 基础样式重置 ─── */
+/* ─── Base reset ─── */
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
@@ -10,41 +10,79 @@ html {
 
 body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow-x: hidden;
 }
 
-/* ─── 自定义动画：地图锚点脉冲 ─── */
-@keyframes map-pulse {
+/* ─── Blob morph animation ─── */
+@keyframes blob-morph {
   0%, 100% {
-    r: 12;
-    opacity: 0.3;
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
+  25% {
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
   }
   50% {
-    r: 20;
-    opacity: 0;
+    border-radius: 50% 60% 30% 60% / 30% 40% 70% 60%;
+  }
+  75% {
+    border-radius: 60% 30% 60% 40% / 70% 50% 40% 60%;
   }
 }
 
-.animate-map-pulse {
-  animation: map-pulse 3s ease-in-out infinite;
+.animate-blob-morph {
+  animation: blob-morph 8s ease-in-out infinite;
 }
 
-/* ─── 自定义动画：缓慢呼吸发光 ─── */
-@keyframes glow-breathe {
+/* ─── Guide bar breathing glow ─── */
+@keyframes breathe-glow {
   0%, 100% {
-    box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.15);
+    opacity: 0.4;
+    box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.1);
   }
   50% {
-    box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.3);
+    opacity: 1;
+    box-shadow: 0 0 20px 6px rgba(255, 255, 255, 0.25);
   }
 }
 
-.animate-glow-breathe {
-  animation: glow-breathe 3s ease-in-out infinite;
+.animate-breathe-glow {
+  animation: breathe-glow 3s ease-in-out infinite;
 }
 
-/* ─── 滚动条极简化 ─── */
+/* ─── Line growth animation ─── */
+@keyframes line-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.animate-line-grow {
+  animation: line-grow 1.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  transform-origin: top center;
+}
+
+/* ─── Glassmorphism utility ─── */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* ─── Minimal scrollbar ─── */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -52,16 +90,37 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-/* ─── 选区样式 ─── */
+/* ─── Selection ─── */
 ::selection {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   color: inherit;
+}
+
+/* ─── Grayscale to color transition ─── */
+.grayscale-hover {
+  filter: grayscale(100%);
+  transition: filter 0.6s ease, transform 0.6s ease;
+}
+
+.grayscale-hover:hover {
+  filter: grayscale(0%);
+  transform: scale(1.05);
+}
+
+/* ─── Hide scrollbar for horizontal scroll ─── */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

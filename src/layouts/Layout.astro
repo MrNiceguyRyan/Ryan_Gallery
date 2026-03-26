@@ -1,5 +1,4 @@
 ---
-import Nav from '../components/Nav';
 import '../styles/global.css';
 
 interface Props {
@@ -11,8 +10,6 @@ const {
   title = 'Ryan | Visual Archive',
   description = 'A curated collection of photographic moments — shot on Nikon Zf, engineered with intention.',
 } = Astro.props;
-
-const currentPath = Astro.url.pathname;
 ---
 
 <html lang="en">
@@ -26,30 +23,6 @@ const currentPath = Astro.url.pathname;
   </head>
 
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
-    <Nav client:load currentPath={currentPath} />
-
-    <!-- Page content (with top padding for fixed nav) -->
-    <div class="pt-16">
-      <slot />
-    </div>
-
-    <!-- Footer -->
-    <footer class="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div>
-          <h2 class="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-          <p class="text-xs text-gray-400 mt-1 font-light">
-            &copy; {new Date().getFullYear()} Ryan. All rights reserved.
-          </p>
-        </div>
-        <div class="flex items-center gap-6 text-xs text-gray-400 font-mono">
-          <span>Nikon Zf</span>
-          <span class="text-gray-200">|</span>
-          <span>Astro + React</span>
-          <span class="text-gray-200">|</span>
-          <span>Sanity CMS</span>
-        </div>
-      </div>
-    </footer>
+    <slot />
   </body>
 </html>

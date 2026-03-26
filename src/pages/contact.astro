@@ -1,9 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav';
+
+const currentPath = Astro.url.pathname;
 ---
 
 <Layout title="Contact | Ryan" description="Get in touch for collaborations and creative projects.">
-  <section class="pt-20 pb-24 px-6 md:px-16 max-w-4xl mx-auto">
+  <Nav client:load currentPath={currentPath} />
+
+  <section class="pt-28 pb-24 px-6 md:px-16 max-w-4xl mx-auto">
     <!-- Header -->
     <div class="mb-16">
       <h1 class="text-5xl md:text-7xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
@@ -28,7 +33,7 @@ import Layout from '../layouts/Layout.astro';
         <p class="text-sm text-gray-400 mt-1 font-light">hello@ryanxu.com</p>
         <div class="mt-auto pt-6">
           <span class="text-xs text-gray-300 group-hover:text-gray-400 transition-colors font-light tracking-wider uppercase">
-            Send message
+            Send message →
           </span>
         </div>
       </a>
@@ -48,7 +53,7 @@ import Layout from '../layouts/Layout.astro';
         <p class="text-sm text-gray-400 mt-1 font-light">@ryan.photography</p>
         <div class="mt-auto pt-6">
           <span class="text-xs text-gray-300 group-hover:text-gray-400 transition-colors font-light tracking-wider uppercase">
-            Follow
+            Follow →
           </span>
         </div>
       </a>
@@ -97,4 +102,23 @@ import Layout from '../layouts/Layout.astro';
       </a>
     </div>
   </section>
+
+  <!-- Footer -->
+  <footer class="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div>
+        <h2 class="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
+        <p class="text-xs text-gray-400 mt-1 font-light">
+          &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+        </p>
+      </div>
+      <div class="flex items-center gap-6 text-xs text-gray-400 font-mono">
+        <span>Nikon Zf</span>
+        <span class="text-gray-200">|</span>
+        <span>Astro + React</span>
+        <span class="text-gray-200">|</span>
+        <span>Sanity CMS</span>
+      </div>
+    </div>
+  </footer>
 </Layout>

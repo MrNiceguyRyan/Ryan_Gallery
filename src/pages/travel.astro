@@ -1,14 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
 
-const mapboxToken = import.meta.env.PUBLIC_MAPBOX_TOKEN;
+const currentPath = Astro.url.pathname;
 
-// ─── GROQ: Photos with geo-coordinates ───
 const photos: Photo[] = await sanityClient.fetch(`
-  *[_type == "photo" && defined(location.lat) && defined(location.lng)] | order(_createdAt desc) {
+  *[_type == "photo" && defined(location)] | order(_createdAt desc) {
     _id,
     title,
     "imageUrl": image.asset->url,
@@ -26,46 +26,72 @@ const photos: Photo[] = await sanityClient.fetch(`
   }
 `);
 
-// Derive unique locations
-const uniqueCities = [...new Set(photos.map((p) => p.location?.city).filter(Boolean))];
-const uniqueCountries = [...new Set(photos.map((p) => p.location?.country).filter(Boolean))];
+const mapboxToken = import.meta.env.PUBLIC_MAPBOX_TOKEN;
 ---
 
-<Layout title="Travel | Ryan" description="An interactive geo-map of photographic memories across the globe.">
-  <section class="pt-20 pb-24 px-6 md:px-16 max-w-7xl mx-auto">
+<Layout title="Travel | Ryan" description="The Interactive Geo-Map — photography locations around the world.">
+  <Nav client:load currentPath={currentPath} />
+
+  <section class="pt-28 pb-24 px-6 md:px-16 max-w-7xl mx-auto">
     <!-- Header -->
     <div class="mb-12">
       <h1 class="text-5xl md:text-7xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
         The Interactive<br />Geo-Map.
       </h1>
       <p class="text-gray-400 text-lg font-light mt-6 max-w-lg leading-relaxed">
-        Every coordinate holds a story. Explore the world through my lens.
+        Every photograph lives somewhere. Explore the coordinates behind the collection.
       </p>
+      <div class="flex items-center gap-4 mt-4 text-[10px] font-mono text-gray-300">
+        <span>{photos.length} photographs</span>
+        <span>·</span>
+        <span>Mapped locations</span>
+      </div>
     </div>
 
     <!-- Map -->
-    {photos.length > 0 && mapboxToken ? (
-      <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} />
-    ) : (
-      <div class="h-[500px] rounded-2xl bg-gray-50 flex items-center justify-center">
-        <p class="text-gray-400 font-light">No geo-tagged photos yet.</p>
-      </div>
-    )}
+    <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} />
 
-    <!-- Stats -->
-    <div class="mt-12 flex flex-wrap gap-8 pt-8 border-t border-gray-100">
-      <div>
-        <span class="text-2xl font-extralight text-gray-900 tabular-nums">{uniqueCities.length}</span>
-        <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Cities</p>
-      </div>
-      <div>
-        <span class="text-2xl font-extralight text-gray-900 tabular-nums">{uniqueCountries.length}</span>
-        <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Countries</p>
-      </div>
-      <div>
-        <span class="text-2xl font-extralight text-gray-900 tabular-nums">{photos.length}</span>
-        <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Photographs</p>
-      </div>
+    <!-- Location list -->
+    <div class="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {[...new Map(photos.filter(p => p.location?.city).map(p => [p.location!.city!, p])).values()].map((photo) => (
+        <div class="group p-6 rounded-2xl bg-gray-50 hover:bg-gray-100 transition-colors duration-300">
+          <div class="flex items-start gap-4">
+            <div class="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
+              <img
+                src={`${photo.imageUrl}?auto=format&w=200&q=75`}
+                alt={photo.location?.city}
+                class="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <h3 class="text-base font-light text-gray-900 tracking-tight">{photo.location?.city}</h3>
+              <p class="text-xs text-gray-400 mt-0.5 font-light">{photo.location?.country}</p>
+              <p class="text-[10px] font-mono text-gray-300 mt-1">
+                {photo.location?.lat?.toFixed(4)}°N, {Math.abs(photo.location?.lng ?? 0).toFixed(4)}°{(photo.location?.lng ?? 0) >= 0 ? 'E' : 'W'}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   </section>
+
+  <!-- Footer -->
+  <footer class="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div>
+        <h2 class="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
+        <p class="text-xs text-gray-400 mt-1 font-light">
+          &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+        </p>
+      </div>
+      <div class="flex items-center gap-6 text-xs text-gray-400 font-mono">
+        <span>Nikon Zf</span>
+        <span class="text-gray-200">|</span>
+        <span>Astro + React</span>
+        <span class="text-gray-200">|</span>
+        <span>Sanity CMS</span>
+      </div>
+    </div>
+  </footer>
 </Layout>

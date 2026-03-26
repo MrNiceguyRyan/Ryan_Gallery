@@ -1,16 +1,15 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
-import type { Collection, Photo, StyleGroup } from '../types';
-import { STYLE_META } from '../types';
+import type { Collection, Photo } from '../types';
+import HomePage from '../components/home/HomePage';
 
-import Galleries from '../components/Galleries';
-import PhotographyStyles from '../components/PhotographyStyles';
-import MasonryWall from '../components/MasonryWall';
+const currentPath = Astro.url.pathname;
 
-// ─── GROQ: Featured Collections ───
+// ─── GROQ: All collections with photos ───
 const collections: Collection[] = await sanityClient.fetch(`
-  *[_type == "collection" && featured == true] | order(year desc) {
+  *[_type == "collection"] | order(year desc) {
     _id,
     name,
     "slug": slug.current,
@@ -18,12 +17,23 @@ const collections: Collection[] = await sanityClient.fetch(`
     "coverImageUrl": coverImage.asset->url,
     location,
     year,
+    description,
     gridSize,
-    "photoCount": count(*[_type == "photo" && references(^._id)])
+    "photoCount": count(*[_type == "photo" && references(^._id)]),
+    "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
+      _id,
+      title,
+      "imageUrl": image.asset->url,
+      camera,
+      focalLength,
+      aperture,
+      shutterSpeed,
+      iso
+    }
   }
 `);
 
-// ─── GROQ: All Photos ───
+// ─── GROQ: All photos ───
 const photos: Photo[] = await sanityClient.fetch(`
   *[_type == "photo"] | order(_createdAt desc) {
     _id,
@@ -42,71 +52,9 @@ const photos: Photo[] = await sanityClient.fetch(`
     }
   }
 `);
-
-// ─── Group by style category ───
-const styleGroupMap = new Map<string, Photo[]>();
-for (const photo of photos) {
-  if (photo.styleCategory) {
-    if (!styleGroupMap.has(photo.styleCategory)) {
-      styleGroupMap.set(photo.styleCategory, []);
-    }
-    styleGroupMap.get(photo.styleCategory)!.push(photo);
-  }
-}
-
-const styleGroups: StyleGroup[] = Array.from(styleGroupMap.entries())
-  .map(([category, groupPhotos]) => ({
-    category,
-    label: STYLE_META[category]?.label ?? category,
-    description: STYLE_META[category]?.description ?? '',
-    photos: groupPhotos,
-    coverImageUrl: groupPhotos[0]?.imageUrl ?? '',
-  }))
-  .filter((g) => g.photos.length > 0);
 ---
 
 <Layout>
-  <!-- Hero -->
-  <header class="pt-20 pb-24 px-6 md:px-16 max-w-7xl mx-auto">
-    <div class="flex flex-col gap-6">
-      <h1 class="text-5xl md:text-7xl lg:text-8xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
-        Visual<br />Archive.
-      </h1>
-
-      <p class="text-gray-400 text-lg md:text-xl font-light max-w-lg leading-relaxed">
-        Shot on Nikon Zf. Every frame, a quiet conversation between light and intention.
-      </p>
-
-      <!-- Stats -->
-      <div class="flex items-center gap-8 mt-4 pt-6 border-t border-gray-100">
-        <div>
-          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{photos.length}</span>
-          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Photographs</p>
-        </div>
-        <div>
-          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{collections.length}</span>
-          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Collections</p>
-        </div>
-        <div>
-          <span class="text-2xl font-extralight text-gray-900 tabular-nums">{styleGroups.length}</span>
-          <p class="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Styles</p>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <!-- Galleries bento grid -->
-    {collections.length > 0 && (
-      <Galleries client:load collections={collections} />
-    )}
-
-    <!-- Photography Styles accordion -->
-    {styleGroups.length > 0 && (
-      <PhotographyStyles client:load styleGroups={styleGroups} />
-    )}
-
-    <!-- Masonry photo wall -->
-    <MasonryWall client:load photos={photos} />
-  </main>
+  <Nav client:load currentPath={currentPath} />
+  <HomePage client:load collections={collections} photos={photos} />
 </Layout>

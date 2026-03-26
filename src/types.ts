@@ -1,4 +1,4 @@
-// ─── Shared TypeScript interfaces for the entire app ───
+// ─── Shared TypeScript interfaces ───
 
 export interface Collection {
   _id: string;
@@ -8,6 +8,10 @@ export interface Collection {
   coverImageUrl: string;
   location?: string;
   year?: number;
+  description?: string;
+  introduction?: string;
+  liveProjectUrl?: string;
+  photos?: Photo[];
   gridSize: 'large' | 'medium' | 'small';
   photoCount?: number;
 }
@@ -33,20 +37,3 @@ export interface Photo {
     country?: string;
   };
 }
-
-export interface StyleGroup {
-  category: string;
-  label: string;
-  description: string;
-  photos: Photo[];
-  coverImageUrl: string;
-}
-
-// 风格映射表
-export const STYLE_META: Record<string, { label: string; description: string }> = {
-  landscape: { label: 'Landscape', description: 'Where horizons dissolve into light' },
-  portrait: { label: 'Portrait', description: 'Faces that tell unspoken stories' },
-  street: { label: 'Street', description: 'The poetry of passing moments' },
-  architecture: { label: 'Architecture', description: 'Geometry carved from silence' },
-  abstract: { label: 'Abstract', description: 'Beyond form, into feeling' },
-};
