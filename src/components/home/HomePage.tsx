@@ -93,10 +93,7 @@ export default function HomePage({ collections, photos }: Props) {
           </motion.div>
         </section>
 
-        {/* ── Section 2: Cover page — collection grid with grayscale→color hover ── */}
-        <CoverPage collections={collections} />
-
-        {/* ── Section 3: Browse by Style — filter + photo grid ── */}
+        {/* ── Section 2: Browse by Style — filter + photo grid ── */}
         <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto border-t border-gray-100">
           <motion.h2
             className="text-lg font-light text-gray-300 tracking-widest uppercase mb-10"
