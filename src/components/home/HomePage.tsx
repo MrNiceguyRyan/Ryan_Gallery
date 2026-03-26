@@ -2,6 +2,9 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
+import CoverPage from './CoverPage';
+import AboutSection from './AboutSection';
+import WorksCarousel from './WorksCarousel';
 import WorkDetailModal from './WorkDetailModal';
 
 interface StyleGroup {
@@ -49,14 +52,19 @@ export default function HomePage({ collections, photos }: Props) {
   })();
 
   const handleOpeningComplete = useCallback(() => setShowOpening(false), []);
+  const handleSelectWork = useCallback((c: Collection) => setSelectedWork(c), []);
+  const handleCloseModal = useCallback(() => setSelectedWork(null), []);
 
   return (
     <>
+      {/* ══════ Opening animation overlay ══════ */}
       {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
 
+      {/* ══════ Main scrollable content ══════ */}
       <div className={showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-500'}>
-        {/* ─── Hero ─── */}
-        <section className="pt-28 pb-16 px-6 md:px-16 max-w-7xl mx-auto">
+
+        {/* ── Section 1: Hero ── */}
+        <section className="pt-28 pb-12 px-6 md:px-16 max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -68,8 +76,6 @@ export default function HomePage({ collections, photos }: Props) {
             <p className="text-gray-400 text-lg md:text-xl font-light max-w-lg mt-6 leading-relaxed">
               Shot on Nikon Zf. Every frame, a quiet conversation between light and intention.
             </p>
-
-            {/* Stats */}
             <div className="flex items-center gap-8 mt-8 pt-6 border-t border-gray-100">
               <div>
                 <span className="text-2xl font-extralight text-gray-900 tabular-nums">{photos.length}</span>
@@ -87,8 +93,11 @@ export default function HomePage({ collections, photos }: Props) {
           </motion.div>
         </section>
 
-        {/* ─── Style Categories ─── */}
-        <section className="px-6 md:px-16 pb-20 max-w-7xl mx-auto">
+        {/* ── Section 2: Cover page — collection grid with grayscale→color hover ── */}
+        <CoverPage collections={collections} />
+
+        {/* ── Section 3: Browse by Style — filter + photo grid ── */}
+        <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto border-t border-gray-100">
           <motion.h2
             className="text-lg font-light text-gray-300 tracking-widest uppercase mb-10"
             initial={{ opacity: 0 }}
@@ -148,7 +157,6 @@ export default function HomePage({ collections, photos }: Props) {
                     className="w-full h-full object-cover grayscale-hover"
                     loading="lazy"
                   />
-                  {/* Overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">
                     <div className="absolute bottom-3 left-3 right-3">
                       <p className="text-white text-sm font-light">{photo.title}</p>
@@ -165,59 +173,17 @@ export default function HomePage({ collections, photos }: Props) {
           </motion.div>
         </section>
 
-        {/* ─── Featured Collections ─── */}
-        <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto border-t border-gray-100">
-          <motion.h2
-            className="text-lg font-light text-gray-300 tracking-widest uppercase mb-10"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-          >
-            Collections
-          </motion.h2>
+        {/* ── Section 4: Works Carousel — Ferris wheel ── */}
+        {collections.length > 0 && (
+          <WorksCarousel collections={collections} onSelectWork={handleSelectWork} />
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {collections.map((collection, i) => (
-              <motion.div
-                key={collection._id}
-                className="group relative aspect-[16/10] rounded-2xl overflow-hidden cursor-pointer"
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-50px' }}
-                transition={{ duration: 0.6, delay: i * 0.1 }}
-                onClick={() => setSelectedWork(collection)}
-              >
-                <img
-                  src={`${collection.coverImageUrl}?auto=format&w=900&q=80`}
-                  alt={collection.name}
-                  className="w-full h-full object-cover grayscale-hover"
-                  loading="lazy"
-                />
-                {/* Guide bar */}
-                <div className="absolute bottom-5 left-5 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                  <div className="w-px h-10 bg-white/60 animate-breathe-glow" />
-                  <div className="h-px w-10 bg-white/60 animate-breathe-glow" />
-                </div>
-                {/* Info overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                  <div className="absolute bottom-5 left-5 pl-4">
-                    <h3 className="text-white text-xl font-light tracking-wide">{collection.name}</h3>
-                    {collection.subtitle && (
-                      <p className="text-white/60 text-sm font-light mt-1">{collection.subtitle}</p>
-                    )}
-                    <div className="flex gap-3 mt-2 text-[10px] font-mono text-white/40">
-                      {collection.year && <span>{collection.year}</span>}
-                      {collection.location && <span>{collection.location}</span>}
-                      {collection.photoCount != null && <span>{collection.photoCount} photos</span>}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </section>
+        {/* ── Section 5: About — blob avatar + timeline ── */}
+        <div className="border-t border-gray-100">
+          <AboutSection />
+        </div>
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         <footer className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
@@ -237,10 +203,10 @@ export default function HomePage({ collections, photos }: Props) {
         </footer>
       </div>
 
-      {/* Work detail modal */}
+      {/* ══════ Work detail modal overlay ══════ */}
       <AnimatePresence>
         {selectedWork && (
-          <WorkDetailModal collection={selectedWork} onClose={() => setSelectedWork(null)} />
+          <WorkDetailModal collection={selectedWork} onClose={handleCloseModal} />
         )}
       </AnimatePresence>
     </>
