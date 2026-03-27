@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection } from '../../types';
 
@@ -10,6 +10,36 @@ interface Props {
 export default function WorkDetailModal({ collection, onClose }: Props) {
   const [activePhoto, setActivePhoto] = useState(0);
   const dragRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(600);
+
+  // Safely measure container width on mount (avoids SSR window reference)
+  useEffect(() => {
+    const updateWidth = () => {
+      if (dragRef.current?.parentElement) {
+        setContainerWidth(dragRef.current.parentElement.clientWidth);
+      } else {
+        setContainerWidth(window.innerWidth * 0.78);
+      }
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [collection]);
+
+  // Keyboard: Escape to close
+  useEffect(() => {
+    if (!collection) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [collection, onClose]);
+
+  // Reset active photo when collection changes
+  useEffect(() => {
+    setActivePhoto(0);
+  }, [collection?._id]);
 
   if (!collection) return null;
 
@@ -36,7 +66,7 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
 
           {/* Modal */}
           <motion.div
-            className="relative z-10 w-[92vw] max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl"
+            className="relative z-10 w-[92vw] max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto"
             initial={{ opacity: 0, scale: 0.92, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 40 }}
@@ -46,6 +76,7 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
             <button
               onClick={onClose}
               className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/8 flex items-center justify-center hover:bg-black/15 transition-colors"
+              aria-label="Close modal"
             >
               <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -70,13 +101,13 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
                 )}
                 {collection.location && (
                   <>
-                    <span className="text-gray-300">·</span>
+                    <span className="text-gray-300">&middot;</span>
                     <span className="text-[10px] font-mono text-gray-400 tracking-wider">{collection.location}</span>
                   </>
                 )}
                 {photos.length > 0 && (
                   <>
-                    <span className="text-gray-300">·</span>
+                    <span className="text-gray-300">&middot;</span>
                     <span className="text-[10px] font-mono text-gray-400 tracking-wider">{photos.length} photos</span>
                   </>
                 )}
@@ -109,7 +140,7 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
                     drag="x"
                     dragConstraints={{
                       right: 0,
-                      left: Math.min(0, -(totalWidth - (typeof window !== 'undefined' ? window.innerWidth * 0.78 : 600))),
+                      left: Math.min(0, -(totalWidth - containerWidth)),
                     }}
                     dragElastic={0.08}
                     dragMomentum={true}
@@ -146,6 +177,7 @@ export default function WorkDetailModal({ collection, onClose }: Props) {
                       className={`rounded-full transition-all duration-300 ${
                         i === activePhoto ? 'w-4 h-1.5 bg-gray-900' : 'w-1.5 h-1.5 bg-gray-200'
                       }`}
+                      aria-label={`Go to photo ${i + 1}`}
                     />
                   ))}
                 </div>

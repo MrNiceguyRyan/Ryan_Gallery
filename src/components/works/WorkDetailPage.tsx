@@ -7,18 +7,26 @@ interface Props {
   photos: Photo[];
 }
 
+// Clamp velocity to prevent runaway scrolling from rapid wheel events
+const MAX_VELOCITY = 60;
+const FRICTION = 0.92;
+
 export default function WorkDetailPage({ collection, photos }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const velocityRef = useRef(0);
   const rafRef = useRef<number>(0);
 
-  // Horizontal scroll on mouse wheel with inertia
+  // Horizontal scroll on mouse wheel with clamped inertia
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     const el = scrollRef.current;
     if (!el) return;
 
-    velocityRef.current += e.deltaY * 0.8;
+    // Use deltaY for vertical-to-horizontal conversion, deltaX for trackpad horizontal swipe
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    velocityRef.current += delta * 0.8;
+    // Clamp to prevent velocity from accumulating infinitely
+    velocityRef.current = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, velocityRef.current));
   }, []);
 
   useEffect(() => {
@@ -31,7 +39,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
     const animate = () => {
       if (scrollRef.current && Math.abs(velocityRef.current) > 0.5) {
         scrollRef.current.scrollLeft += velocityRef.current;
-        velocityRef.current *= 0.92; // friction
+        velocityRef.current *= FRICTION;
       } else {
         velocityRef.current = 0;
       }
@@ -62,7 +70,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 
       {/* Main content: left intro + right horizontal gallery */}
       <div className="flex min-h-screen pt-20">
-        {/* Left: Chinese-style introduction */}
+        {/* Left: Introduction */}
         <div className="hidden lg:flex w-[360px] flex-shrink-0 flex-col justify-center px-12 border-r border-gray-100">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -70,7 +78,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
             transition={{ duration: 0.8, delay: 0.3 }}
           >
             <span className="text-[10px] font-mono text-gray-300 tracking-wider">
-              {collection.year} · {collection.location}
+              {collection.year}{collection.location ? ` · ${collection.location}` : ''}
             </span>
 
             <h1 className="text-4xl font-extralight tracking-tight text-gray-900 mt-4 leading-tight">
@@ -97,8 +105,16 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 
             <div className="mt-8 flex items-center gap-3 text-[10px] font-mono text-gray-300">
               <span>{photos.length} photographs</span>
-              <span>·</span>
+              <span>&middot;</span>
               <span>Nikon Zf</span>
+            </div>
+
+            {/* Scroll hint */}
+            <div className="mt-6 flex items-center gap-2 text-[10px] text-gray-200 font-light tracking-widest uppercase">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+              scroll to explore
             </div>
           </motion.div>
         </div>
@@ -130,13 +146,13 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                 className={`flex-shrink-0 ${isOdd ? 'mt-16' : '-mt-8'}`}
                 initial={{ opacity: 0, x: 60 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 + i * 0.1 }}
+                transition={{ duration: 0.6, delay: Math.min(0.2 + i * 0.1, 1.5) }}
               >
                 <div className="group w-[280px] md:w-[340px] aspect-[3/4] rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-500">
                   <img
                     src={`${photo.imageUrl}?auto=format&w=700&q=85`}
                     alt={photo.title}
-                    className="w-full h-full object-cover "
+                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700"
                     loading="lazy"
                   />
                 </div>

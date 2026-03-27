@@ -67,7 +67,7 @@ const mapboxToken = import.meta.env.PUBLIC_MAPBOX_TOKEN;
               <h3 class="text-base font-light text-gray-900 tracking-tight">{photo.location?.city}</h3>
               <p class="text-xs text-gray-400 mt-0.5 font-light">{photo.location?.country}</p>
               <p class="text-[10px] font-mono text-gray-300 mt-1">
-                {photo.location?.lat?.toFixed(4)}°N, {Math.abs(photo.location?.lng ?? 0).toFixed(4)}°{(photo.location?.lng ?? 0) >= 0 ? 'E' : 'W'}
+                {Math.abs(photo.location?.lat ?? 0).toFixed(4)}°{(photo.location?.lat ?? 0) >= 0 ? 'N' : 'S'}, {Math.abs(photo.location?.lng ?? 0).toFixed(4)}°{(photo.location?.lng ?? 0) >= 0 ? 'E' : 'W'}
               </p>
             </div>
           </div>

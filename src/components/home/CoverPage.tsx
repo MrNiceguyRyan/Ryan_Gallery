@@ -30,9 +30,10 @@ export default function CoverPage({ collections }: Props) {
       {/* Cover grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 max-w-6xl">
         {covers.map((collection, i) => (
-          <motion.div
+          <motion.a
             key={collection._id}
-            className="group relative aspect-[3/4] rounded-2xl overflow-hidden cursor-pointer"
+            href={collection.slug ? `/works/${collection.slug}` : undefined}
+            className="group relative aspect-[3/4] rounded-2xl overflow-hidden cursor-pointer block"
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-50px' }}
@@ -77,7 +78,7 @@ export default function CoverPage({ collections }: Props) {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </motion.a>
         ))}
       </div>
     </section>

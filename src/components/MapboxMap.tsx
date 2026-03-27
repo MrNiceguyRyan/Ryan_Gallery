@@ -1,8 +1,48 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
+import type { ReactNode, ErrorInfo } from 'react';
 import MapGL, { Marker, NavigationControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Photo } from '../types';
+
+// ─── Error Boundary ───
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('MapboxMap error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-[500px] md:h-[650px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
+          <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          <p className="text-gray-400 text-sm font-light">Map failed to load</p>
+          <p className="text-gray-300 text-xs font-mono mt-2 max-w-sm">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-4 px-5 py-2 text-xs font-light tracking-wider rounded-full border border-gray-200 text-gray-500 hover:border-gray-900 hover:text-gray-900 transition-all duration-300"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Location clustering ───
 interface LocationCluster {
@@ -32,8 +72,14 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
   return Object.values(groups);
 }
 
+// ─── Coordinate formatter ───
+function formatCoord(value: number, posDir: string, negDir: string): string {
+  const dir = value >= 0 ? posDir : negDir;
+  return `${Math.abs(value).toFixed(4)}°${dir}`;
+}
+
 // ─── Component ───
-export default function MapboxMap({
+function MapboxMapInner({
   photos,
   mapboxToken,
 }: {
@@ -42,6 +88,7 @@ export default function MapboxMap({
 }) {
   const mapRef = useRef<MapRef>(null);
   const [selectedCluster, setSelectedCluster] = useState<LocationCluster | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const clusters = useMemo(() => clusterByLocation(photos), [photos]);
 
   const handleMarkerClick = useCallback(
@@ -60,7 +107,39 @@ export default function MapboxMap({
     [selectedCluster],
   );
 
-  if (clusters.length === 0) return null;
+  // Keyboard: Escape to deselect
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedCluster(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Token validation
+  if (!mapboxToken) {
+    return (
+      <div className="h-[500px] md:h-[650px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
+        <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+        <p className="text-gray-400 text-sm font-light">Mapbox token not configured</p>
+        <p className="text-gray-300 text-xs font-mono mt-2">Set PUBLIC_MAPBOX_TOKEN in .env</p>
+      </div>
+    );
+  }
+
+  if (clusters.length === 0) {
+    return (
+      <div className="h-[500px] md:h-[650px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
+        <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <p className="text-gray-400 text-sm font-light">No geotagged photos found</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -70,7 +149,7 @@ export default function MapboxMap({
           ref={mapRef}
           initialViewState={{
             longitude: clusters.length === 1 ? clusters[0].lng : 0,
-            latitude: clusters.length === 1 ? clusters[0].lat : 30,
+            latitude: clusters.length === 1 ? clusters[0].lat : 20,
             zoom: clusters.length === 1 ? 5 : 1.5,
           }}
           mapboxAccessToken={mapboxToken}
@@ -78,10 +157,11 @@ export default function MapboxMap({
           style={{ width: '100%', height: '100%' }}
           attributionControl={false}
           onClick={() => setSelectedCluster(null)}
+          onLoad={() => setMapLoaded(true)}
         >
           <NavigationControl position="bottom-right" showCompass={false} />
 
-          {clusters.map((cluster, i) => {
+          {mapLoaded && clusters.map((cluster, i) => {
             const isSelected = selectedCluster?.city === cluster.city;
             return (
               <Marker
@@ -137,7 +217,7 @@ export default function MapboxMap({
         </MapGL>
       </div>
 
-      {/* Floating Info Panel */}
+      {/* Floating Info Panel — Desktop */}
       <div className="absolute top-4 right-4 w-[300px] md:w-[340px] hidden sm:block">
         <AnimatePresence mode="wait">
           {selectedCluster ? (
@@ -153,6 +233,7 @@ export default function MapboxMap({
               <button
                 onClick={() => setSelectedCluster(null)}
                 className="absolute top-3 right-3 text-white/30 hover:text-white/70 transition-colors"
+                aria-label="Close info panel"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -169,11 +250,8 @@ export default function MapboxMap({
                 </p>
               )}
               <div className="flex items-center gap-4 mt-2 text-[10px] font-mono text-white/20">
-                <span>{selectedCluster.lat.toFixed(4)}°N</span>
-                <span>
-                  {Math.abs(selectedCluster.lng).toFixed(4)}°
-                  {selectedCluster.lng >= 0 ? 'E' : 'W'}
-                </span>
+                <span>{formatCoord(selectedCluster.lat, 'N', 'S')}</span>
+                <span>{formatCoord(selectedCluster.lng, 'E', 'W')}</span>
               </div>
 
               <div className="h-px bg-white/10 my-4" />
@@ -259,10 +337,15 @@ export default function MapboxMap({
                   {selectedCluster.country && (
                     <p className="text-gray-400 text-sm mt-0.5">{selectedCluster.country}</p>
                   )}
+                  <div className="flex items-center gap-3 mt-1 text-[10px] font-mono text-gray-300">
+                    <span>{formatCoord(selectedCluster.lat, 'N', 'S')}</span>
+                    <span>{formatCoord(selectedCluster.lng, 'E', 'W')}</span>
+                  </div>
                 </div>
                 <button
                   onClick={() => setSelectedCluster(null)}
                   className="text-gray-300 hover:text-gray-500 transition-colors"
+                  aria-label="Close"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -280,10 +363,22 @@ export default function MapboxMap({
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-gray-300 font-mono mt-3">
+                {selectedCluster.photos.length} photograph{selectedCluster.photos.length !== 1 ? 's' : ''}
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+// ─── Exported wrapper with error boundary ───
+export default function MapboxMap(props: { photos: Photo[]; mapboxToken: string }) {
+  return (
+    <MapErrorBoundary>
+      <MapboxMapInner {...props} />
+    </MapErrorBoundary>
   );
 }
