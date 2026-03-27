@@ -45,9 +45,9 @@ export default function AboutSection() {
           >
             <div className="w-full h-full animate-blob-morph overflow-hidden bg-gray-100">
               <img
-                src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&q=80"
+                src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
                 alt="Ryan"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-right"
               />
             </div>
           </motion.div>
