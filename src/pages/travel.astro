@@ -4,6 +4,7 @@ import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
+import { getMapboxToken } from '../config/mapbox';
 
 const currentPath = Astro.url.pathname;
 
@@ -26,7 +27,7 @@ const photos: Photo[] = await sanityClient.fetch(`
   }
 `);
 
-const mapboxToken = import.meta.env.PUBLIC_MAPBOX_TOKEN;
+const mapboxToken = getMapboxToken();
 ---
 
 <Layout title="Travel | Ryan" description="The Interactive Geo-Map — photography locations around the world.">
