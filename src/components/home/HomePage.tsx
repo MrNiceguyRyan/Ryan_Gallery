@@ -13,7 +13,7 @@ interface Props {
 const HERO_IMAGE =
   'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
 
-/** Extract width x height from a Sanity CDN image URL */
+/** Extract width × height from a Sanity CDN image URL */
 function parseDimensions(url: string) {
   const m = url.match(/-(\d+)x(\d+)\./);
   return m ? { w: +m[1], h: +m[2] } : { w: 4, h: 3 };
@@ -43,85 +43,153 @@ function AnimatedCounter({ target }: { target: number }) {
 }
 
 /* ═══════════════════════════════════════════════════════
- *  CollectionRow — one city = one horizontal photo strip
- *  Photos sized by their real aspect ratios, fixed height
+ *  CollectionSection — gregorylalle-inspired layout
+ *  LEFT photos | CENTER nav list | RIGHT photos
  * ═══════════════════════════════════════════════════════ */
-function CollectionRow({
+function CollectionSection({
   collection,
+  allCollections,
   index,
 }: {
   collection: Collection;
+  allCollections: Collection[];
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-40px' });
+  const isInView = useInView(ref, { once: true, margin: '-60px' });
   const photos = collection.photos || [];
+  const leftPhotos = photos.slice(0, 2);
+  const rightPhotos = photos.slice(2, 7);
+
+  // Heights create visual rhythm (tall anchor on right position 1)
+  const leftH = [120, 175];
+  const rightH = [120, 265, 140, 140, 140];
 
   return (
-    <motion.div
+    <motion.section
       ref={ref}
-      className="mb-12 md:mb-16"
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{
-        duration: 0.8,
-        delay: Math.min(index * 0.1, 0.3),
-        ease: expo,
-      }}
+      id={`work-${collection.slug}`}
+      className="py-10 md:py-16 overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={isInView ? { opacity: 1 } : {}}
+      transition={{ duration: 0.8, ease: expo }}
     >
-      {/* City label + meta */}
-      <a
-        href={`/works/${collection.slug}`}
-        className="group inline-flex items-center gap-3 md:gap-4 mb-3 md:mb-4"
-      >
-        <h3 className="font-serif italic text-xl md:text-2xl text-white/90 group-hover:text-white transition-colors duration-500">
-          {collection.name}
-        </h3>
-        {collection.location && (
-          <span className="text-[9px] text-white/20 tracking-[0.15em] uppercase hidden md:inline">
-            {collection.location}
-          </span>
-        )}
-        <span className="text-[9px] text-white/15 tracking-[0.12em] uppercase font-mono">
-          {collection.photoCount || photos.length}
-        </span>
-        <svg
-          className="w-3.5 h-3.5 text-white/15 group-hover:text-white/50 group-hover:translate-x-1 transition-all duration-500"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75"
-          />
-        </svg>
-      </a>
+      {/* ── Desktop: 3-zone layout ── */}
+      <div className="hidden md:flex items-start">
+        {/* LEFT photos */}
+        <div className="flex flex-col gap-2 shrink-0 pl-3">
+          {leftPhotos.map((photo, i) => {
+            const { w, h } = parseDimensions(photo.imageUrl);
+            return (
+              <a
+                key={photo._id}
+                href={`/works/${collection.slug}#photo-${photo._id}`}
+                className="block overflow-hidden group"
+                style={{
+                  height: `${leftH[i]}px`,
+                  aspectRatio: `${w} / ${h}`,
+                }}
+              >
+                <img
+                  src={`${photo.imageUrl}?auto=format&w=400&q=80`}
+                  alt={photo.title || collection.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  draggable={false}
+                />
+              </a>
+            );
+          })}
+        </div>
 
-      {/* Photo strip — horizontal, natural aspect ratios */}
-      <div className="flex gap-1.5 md:gap-2 overflow-x-auto no-scrollbar pb-1">
-        {photos.map((photo) => {
-          const { w, h } = parseDimensions(photo.imageUrl);
-          return (
+        {/* CENTER: collection navigation list */}
+        <div className="flex-1 flex justify-center items-start pt-6 min-w-[180px]">
+          <nav className="flex flex-col gap-1">
+            {allCollections.map((c) => {
+              const isActive = c._id === collection._id;
+              return (
+                <button
+                  key={c._id}
+                  onClick={() => {
+                    document
+                      .getElementById(`work-${c.slug}`)
+                      ?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className={`text-left text-[11px] tracking-[0.12em] uppercase transition-colors duration-300 flex items-center gap-2 py-0.5 ${
+                    isActive
+                      ? 'text-gray-900 font-semibold'
+                      : 'text-gray-300 hover:text-gray-600'
+                  }`}
+                >
+                  {c.name}
+                  {isActive && <span className="text-[10px]">&#9668;</span>}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* RIGHT photos */}
+        <div className="flex gap-2 items-start shrink-0">
+          {rightPhotos.map((photo, i) => {
+            const { w, h } = parseDimensions(photo.imageUrl);
+            return (
+              <a
+                key={photo._id}
+                href={`/works/${collection.slug}#photo-${photo._id}`}
+                className="block overflow-hidden shrink-0 group"
+                style={{
+                  height: `${rightH[i]}px`,
+                  aspectRatio: `${w} / ${h}`,
+                }}
+              >
+                <img
+                  src={`${photo.imageUrl}?auto=format&w=500&q=80`}
+                  alt={photo.title || collection.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  draggable={false}
+                />
+              </a>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Mobile: compact grid ── */}
+      <div className="md:hidden px-4">
+        <a
+          href={`/works/${collection.slug}`}
+          className="group inline-flex items-center gap-2 mb-3"
+        >
+          <h3 className="font-serif italic text-xl text-gray-900 group-hover:text-gray-500 transition-colors">
+            {collection.name}
+          </h3>
+          <span className="text-[10px] text-gray-300 tracking-wider uppercase font-mono">
+            {collection.photoCount || photos.length}
+          </span>
+        </a>
+        <div className="grid grid-cols-3 gap-1">
+          {photos.slice(0, 6).map((photo) => (
             <a
               key={photo._id}
-              href={`/works/${collection.slug}`}
-              className="shrink-0 h-[160px] md:h-[220px] lg:h-[260px] overflow-hidden group"
-              style={{ aspectRatio: `${w} / ${h}` }}
+              href={`/works/${collection.slug}#photo-${photo._id}`}
+              className="block aspect-square overflow-hidden"
             >
               <img
-                src={`${photo.imageUrl}?auto=format&w=500&q=80`}
+                src={`${photo.imageUrl}?auto=format&w=250&q=75`}
                 alt={photo.title || collection.name}
-                className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-700 ease-out"
+                className="w-full h-full object-cover"
                 draggable={false}
               />
             </a>
-          );
-        })}
+          ))}
+        </div>
       </div>
-    </motion.div>
+
+      {/* Section number */}
+      <div className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mt-4 md:mt-6 pl-4 md:pl-3 tracking-tight leading-none">
+        {String(index + 1).padStart(2, '0')}
+      </div>
+    </motion.section>
   );
 }
 
@@ -153,7 +221,7 @@ export default function HomePage({ collections, photos }: Props) {
     setShowOpening(false);
   }, []);
 
-  /* ── Marquee content ── */
+  /* ── Marquee ── */
   const marqueeItems = [
     'Photographer',
     'Visual Storyteller',
@@ -163,7 +231,6 @@ export default function HomePage({ collections, photos }: Props) {
     'Architecture',
     'Portrait',
   ];
-  const collectionNames = collections.map((c) => c.name);
 
   return (
     <>
@@ -181,7 +248,6 @@ export default function HomePage({ collections, photos }: Props) {
           ref={heroRef}
           className="relative h-screen overflow-hidden bg-[#0a0a0a]"
         >
-          {/* Background photo with parallax */}
           <motion.div
             className="absolute inset-0"
             style={{ y: smoothImgY, scale: heroImgScale }}
@@ -194,12 +260,8 @@ export default function HomePage({ collections, photos }: Props) {
               draggable={false}
             />
           </motion.div>
-
-          {/* Gradient layers */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/30 to-[#0a0a0a]/60" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a]/40 via-transparent to-transparent" />
-
-          {/* Grain */}
           <div
             className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay"
             style={{
@@ -207,7 +269,6 @@ export default function HomePage({ collections, photos }: Props) {
             }}
           />
 
-          {/* Hero text */}
           <motion.div
             className="absolute inset-0 flex flex-col items-center justify-center z-10"
             style={{ y: smoothTextY, opacity: heroOpacity }}
@@ -220,7 +281,6 @@ export default function HomePage({ collections, photos }: Props) {
             >
               Discover the World
             </motion.h1>
-
             <motion.div
               className="flex items-center gap-6 mt-8"
               initial={{ opacity: 0, y: 30 }}
@@ -235,7 +295,6 @@ export default function HomePage({ collections, photos }: Props) {
             </motion.div>
           </motion.div>
 
-          {/* Scroll indicator */}
           <motion.div
             className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10"
             initial={{ opacity: 0 }}
@@ -257,7 +316,7 @@ export default function HomePage({ collections, photos }: Props) {
           </motion.div>
         </section>
 
-        {/* ═══════════════════ MARQUEE STRIP ═══════════════════ */}
+        {/* ═══════════════════ MARQUEE ═══════════════════ */}
         <div className="py-5 border-y border-gray-100 bg-white overflow-hidden">
           <div className="animate-marquee flex whitespace-nowrap">
             {[0, 1].map((copy) => (
@@ -280,36 +339,20 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
         </div>
 
-        {/* ═══════════════════ WORKS — row per city ═══════════════════ */}
-        <section className="py-16 md:py-24 px-4 md:px-10 lg:px-16 bg-[#0a0a0a]">
-          {/* Section label */}
-          <motion.div
-            className="flex items-center gap-6 mb-10 md:mb-14 max-w-7xl mx-auto"
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1, ease: expo }}
-          >
-            <span className="w-12 h-px bg-white/20" />
-            <span className="text-[10px] tracking-[0.5em] text-white/30 uppercase">
-              Selected Works
-            </span>
-          </motion.div>
-
-          {/* Collection rows */}
-          <div className="max-w-7xl mx-auto">
-            {collections.map((collection, i) => (
-              <CollectionRow
-                key={collection._id}
-                collection={collection}
-                index={i}
-              />
-            ))}
-          </div>
+        {/* ═══════════════════ WORKS — gregorylalle style ═══════════════════ */}
+        <section className="bg-white pt-12 md:pt-20 pb-8">
+          {collections.map((collection, i) => (
+            <CollectionSection
+              key={collection._id}
+              collection={collection}
+              allCollections={collections}
+              index={i}
+            />
+          ))}
         </section>
 
         {/* ═══════════════════ STATEMENT ═══════════════════ */}
-        <section className="py-36 md:py-52 bg-[#0a0a0a] relative overflow-hidden border-t border-white/5">
+        <section className="py-36 md:py-52 bg-[#0a0a0a] relative overflow-hidden">
           <div
             className="absolute inset-0 opacity-[0.03] pointer-events-none"
             style={{
@@ -342,34 +385,8 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
         </section>
 
-        {/* ═══════════════════ MARQUEE STRIP 2 ═══════════════════ */}
-        <div className="py-5 border-y border-gray-100 bg-white overflow-hidden">
-          <div className="animate-marquee-reverse flex whitespace-nowrap">
-            {[0, 1].map((copy) => (
-              <div key={copy} className="flex items-center shrink-0">
-                {Array(5)
-                  .fill(collectionNames)
-                  .flat()
-                  .map((name, j) => (
-                    <span
-                      key={`${copy}-${j}`}
-                      className="flex items-center shrink-0 mx-6 md:mx-10"
-                    >
-                      <span className="text-base md:text-xl font-serif italic text-gray-800">
-                        {name}
-                      </span>
-                      <span className="text-gray-200 ml-6 md:ml-10">
-                        &middot;
-                      </span>
-                    </span>
-                  ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* ═══════════════════ STATS ═══════════════════ */}
-        <section className="py-32 md:py-44 px-6 md:px-16">
+        <section className="py-32 md:py-44 px-6 md:px-16 bg-white">
           <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-20 md:gap-32">
             {[
               { value: photos.length, label: 'Photographs' },
