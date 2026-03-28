@@ -38,11 +38,11 @@ export default function Nav({ currentPath }: Props) {
         {/* Logo */}
         <a
           href="/"
-          className={`text-lg font-light tracking-tight transition-colors duration-700 hover:opacity-70 ${
+          className={`text-lg font-serif italic tracking-tight transition-colors duration-700 hover:opacity-70 ${
             scrolled ? 'text-gray-900' : 'text-white'
           }`}
         >
-          Ryan.
+          Ryan Xu.
         </a>
 
         {/* Desktop links */}
