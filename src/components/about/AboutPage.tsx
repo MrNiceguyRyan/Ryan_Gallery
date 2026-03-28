@@ -1,4 +1,4 @@
-import { motion, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
+import { motion, useInView } from 'framer-motion';
 import { useRef, useState, useEffect } from 'react';
 
 /* ───── Easing ───── */
@@ -105,107 +105,49 @@ function PhilosophyCard({ title, desc, index }: { title: string; desc: string; i
 
 /* ═════════════════════ MAIN COMPONENT ═════════════════════ */
 export default function AboutPage() {
-  const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: heroProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  });
-
-  // Parallax transforms
-  const heroImgY = useTransform(heroProgress, [0, 1], [0, 120]);
-  const heroImgScale = useTransform(heroProgress, [0, 1], [1, 1.08]);
-  const heroTextY = useTransform(heroProgress, [0, 1], [0, -60]);
-  const heroOpacity = useTransform(heroProgress, [0, 0.6], [1, 0]);
-  const smoothImgY = useSpring(heroImgY, { stiffness: 80, damping: 30 });
-  const smoothTextY = useSpring(heroTextY, { stiffness: 80, damping: 30 });
-
   return (
     <div className="bg-white">
 
-      {/* ═══════ HERO — Full-bleed parallax portrait ═══════ */}
-      <section ref={heroRef} className="relative h-[85vh] md:h-screen overflow-hidden">
-        {/* Background image with parallax */}
-        <motion.div
-          className="absolute inset-0"
-          style={{ y: smoothImgY, scale: heroImgScale }}
-        >
-          <img
-            src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=1800&q=85"
-            alt="Ryan Xu"
-            className="w-full h-full object-cover object-right"
-          />
-          {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/30 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-white/60 via-transparent to-transparent" />
-        </motion.div>
-
-        {/* Hero text — pinned bottom-left */}
-        <motion.div
-          className="absolute bottom-16 md:bottom-24 left-6 md:left-16 z-10"
-          style={{ y: smoothTextY, opacity: heroOpacity }}
-        >
-          <motion.p
-            className="text-[10px] md:text-xs tracking-[0.4em] text-gray-500 uppercase font-light mb-4"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: expo }}
-          >
-            About the Photographer
-          </motion.p>
-          <motion.h1
-            className="text-5xl md:text-7xl lg:text-8xl font-[100] text-gray-900 tracking-tight leading-[0.95]"
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.1, ease: expo }}
-          >
-            Ryan<br />Xu.
-          </motion.h1>
+      {/* ═══════ HERO — Blob avatar + intro ═══════ */}
+      <section className="pt-32 md:pt-40 pb-20 px-6 md:px-16 max-w-6xl mx-auto">
+        <div className="flex flex-col items-center text-center">
+          {/* Blob avatar */}
           <motion.div
-            className="flex items-center gap-6 mt-6"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5, ease: expo }}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1, ease: expo }}
           >
-            <span className="text-xs text-gray-400 font-mono tracking-wider">New York, NY</span>
-            <span className="w-6 h-px bg-gray-300" />
-            <span className="text-xs text-gray-400 font-mono tracking-wider">Nikon Zf</span>
+            <div className="w-44 h-44 md:w-56 md:h-56 animate-blob-morph overflow-hidden bg-gray-100 shadow-xl">
+              <img
+                src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
+                alt="Ryan Xu"
+                className="w-full h-full object-cover object-right"
+              />
+            </div>
           </motion.div>
-        </motion.div>
 
-        {/* Scroll indicator */}
-        <motion.div
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.6 }}
-        >
-          <motion.div
-            className="w-px h-8 bg-gray-300 origin-top"
-            animate={{ scaleY: [0, 1, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-          />
-        </motion.div>
+          {/* Name + location */}
+          <motion.h1
+            className="text-5xl md:text-7xl lg:text-8xl font-[100] text-gray-900 tracking-tight leading-[0.95] mt-10"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: expo }}
+          >
+            Ryan Xu.
+          </motion.h1>
+          <motion.p
+            className="text-xs md:text-sm text-gray-400 font-mono tracking-wider mt-5"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4, ease: expo }}
+          >
+            Photographer · New York, NY · Nikon Zf
+          </motion.p>
+        </div>
       </section>
 
-      {/* ═══════ BIO — Avatar + Split text reveal ═══════ */}
-      <section className="px-6 md:px-16 py-28 md:py-40 max-w-6xl mx-auto">
-        {/* Blob avatar */}
-        <motion.div
-          className="flex justify-center mb-16"
-          initial={{ opacity: 0, scale: 0.8 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.8, ease: expo }}
-        >
-          <div className="w-40 h-40 md:w-52 md:h-52 animate-blob-morph overflow-hidden bg-gray-100 shadow-lg">
-            <img
-              src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
-              alt="Ryan Xu"
-              className="w-full h-full object-cover object-right"
-            />
-          </div>
-        </motion.div>
-
+      {/* ═══════ BIO — Split text reveal ═══════ */}
+      <section className="px-6 md:px-16 py-20 md:py-32 max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-24 items-start">
           <motion.div
             initial={{ opacity: 0, y: 50 }}
