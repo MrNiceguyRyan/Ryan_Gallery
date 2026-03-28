@@ -1,104 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
+import AboutPage from '../components/about/AboutPage';
 
 const currentPath = Astro.url.pathname;
 ---
 
 <Layout title="About | Ryan" description="Photographer based in New York. Visual storytelling through light and intention.">
   <Nav client:load currentPath={currentPath} />
-
-  <section class="pt-28 pb-24 px-6 md:px-16 max-w-6xl mx-auto">
-    <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-16">
-      <!-- Left: Avatar & info -->
-      <div>
-        <!-- Blob avatar -->
-        <div class="w-52 h-52 mx-auto lg:mx-0 mb-8 animate-blob-morph overflow-hidden bg-gray-100">
-          <img
-            src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
-            alt="Ryan Xu"
-            class="w-full h-full object-cover object-right"
-          />
-        </div>
-
-        <h1 class="text-4xl font-extralight tracking-tight text-gray-900">Ryan Xu</h1>
-        <p class="text-gray-400 text-sm font-light mt-4 leading-relaxed">
-          Photographer based in New York. I believe in capturing the quiet moments where light meets intention.
-          Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
-        </p>
-
-        <div class="h-px bg-gray-100 my-6" />
-
-        <div class="space-y-3">
-          <div class="flex items-center gap-3">
-            <span class="text-[10px] font-mono text-gray-300 w-16 uppercase tracking-wider">Camera</span>
-            <span class="text-sm text-gray-600 font-light">Nikon Zf</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="text-[10px] font-mono text-gray-300 w-16 uppercase tracking-wider">Based</span>
-            <span class="text-sm text-gray-600 font-light">New York, NY</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="text-[10px] font-mono text-gray-300 w-16 uppercase tracking-wider">Focus</span>
-            <span class="text-sm text-gray-600 font-light">Street · Architecture · Travel</span>
-          </div>
-        </div>
-
-        <!-- Skill tags -->
-        <div class="flex flex-wrap gap-2 mt-8">
-          {['Photography', 'Lightroom', 'Photoshop', 'Nikon Zf', 'Street', 'Portrait', 'Landscape', 'Architecture', 'Color Grading', 'Composition', 'Travel', 'Editorial'].map((skill) => (
-            <span class="px-3 py-1.5 text-xs font-light tracking-wide rounded-full border border-gray-200 text-gray-500 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-all duration-300 cursor-default">
-              {skill}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <!-- Right: Journey timeline -->
-      <div class="relative">
-        <h2 class="text-lg font-light text-gray-300 tracking-widest uppercase mb-12">Journey</h2>
-
-        <!-- Timeline line -->
-        <div class="absolute left-[7px] top-20 bottom-0 w-px bg-gray-100"></div>
-
-        <div class="space-y-10">
-          {[
-            { year: '2025', title: 'Tokyo Neon Series', desc: 'Captured the duality of ancient temples and neon-lit streets across Japan. A study in contrast and coexistence.' },
-            { year: '2024', title: 'New York Stories', desc: 'A visual journey through the streets, architecture, and energy of New York City. Light and shadow in the city that never sleeps.' },
-            { year: '2024', title: 'Paris Lumière', desc: 'The timeless elegance and romantic atmosphere of Paris. Capturing the eternal city of light through a modern lens.' },
-            { year: '2024', title: 'Greek Islands', desc: 'Sun-kissed walls and endless blue of the Mediterranean. The iconic whitewashed beauty under warm Aegean light.' },
-            { year: '2023', title: 'Started Photography', desc: 'Picked up my first camera and fell in love with the art of seeing. Every journey begins with a single frame.' },
-          ].map((item, i) => (
-            <div class="relative pl-10">
-              <div class="absolute left-0 top-1 w-[14px] h-[14px] rounded-full border-2 border-gray-200 bg-white"></div>
-              <div class="glass-light rounded-2xl p-6">
-                <span class="text-[10px] font-mono text-gray-300 tracking-wider">{item.year}</span>
-                <h3 class="text-lg font-light text-gray-900 mt-1 tracking-tight">{item.title}</h3>
-                <p class="text-sm text-gray-400 font-light mt-2 leading-relaxed">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
-    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-      <div>
-        <h2 class="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-        <p class="text-xs text-gray-400 mt-1 font-light">
-          &copy; {new Date().getFullYear()} Ryan. All rights reserved.
-        </p>
-      </div>
-      <div class="flex items-center gap-6 text-xs text-gray-400 font-mono">
-        <span>Nikon Zf</span>
-        <span class="text-gray-200">|</span>
-        <span>Astro + React</span>
-        <span class="text-gray-200">|</span>
-        <span>Sanity CMS</span>
-      </div>
-    </div>
-  </footer>
+  <AboutPage client:load />
 </Layout>

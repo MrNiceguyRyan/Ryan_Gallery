@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import CoverPage from './CoverPage';
-import AboutSection from './AboutSection';
 import WorksCarousel from './WorksCarousel';
 import WorkDetailModal from './WorkDetailModal';
 
@@ -225,11 +224,6 @@ export default function HomePage({ collections, photos }: Props) {
         {collections.length > 0 && (
           <WorksCarousel collections={collections} onSelectWork={handleSelectWork} />
         )}
-
-        {/* ── Section 5: About — blob avatar + timeline ── */}
-        <div className="border-t border-gray-100">
-          <AboutSection />
-        </div>
 
         {/* ── Footer ── */}
         <footer className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100">
