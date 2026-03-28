@@ -24,5 +24,30 @@ const {
 
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
     <slot />
+
+    <!-- Global image protection: prevent right-click, drag & long-press save -->
+    <style is:global>
+      img {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        pointer-events: auto;
+        -webkit-user-drag: none;
+      }
+    </style>
+    <script is:inline>
+      // Block right-click context menu on all images
+      document.addEventListener('contextmenu', function(e) {
+        if (e.target && e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }, true);
+      // Block drag-to-save on all images
+      document.addEventListener('dragstart', function(e) {
+        if (e.target && e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }, true);
+    </script>
   </body>
 </html>
