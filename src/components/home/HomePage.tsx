@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import CoverPage from './CoverPage';
+import ParallaxHero from '../ParallaxHero';
 import WorksCarousel from './WorksCarousel';
 import WorkDetailModal from './WorkDetailModal';
 
@@ -111,35 +112,15 @@ export default function HomePage({ collections, photos }: Props) {
       {/* ══════ Main scrollable content ══════ */}
       <div className={showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-500'}>
 
-        {/* ── Section 1: Hero ── */}
-        <section className="pt-28 pb-12 px-6 md:px-16 max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
-              Visual<br />Archive.
-            </h1>
-            <p className="text-gray-400 text-lg md:text-xl font-light max-w-lg mt-6 leading-relaxed">
-              Shot on Nikon Zf. Every frame, a quiet conversation between light and intention.
-            </p>
-            <div className="flex items-center gap-8 mt-8 pt-6 border-t border-gray-100">
-              <div>
-                <span className="text-2xl font-extralight text-gray-900 tabular-nums">{photos.length}</span>
-                <p className="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Photographs</p>
-              </div>
-              <div>
-                <span className="text-2xl font-extralight text-gray-900 tabular-nums">{collections.length}</span>
-                <p className="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Collections</p>
-              </div>
-              <div>
-                <span className="text-2xl font-extralight text-gray-900 tabular-nums">{styleGroups.length}</span>
-                <p className="text-[10px] text-gray-400 uppercase tracking-[0.15em] mt-0.5">Styles</p>
-              </div>
-            </div>
-          </motion.div>
-        </section>
+        {/* ── Section 1: Parallax Hero ── */}
+        <ParallaxHero
+          imageUrl="https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg?auto=format&w=1800&q=85"
+          title="Visual"
+          titleLine2="Archive."
+          label="A curated photography collection"
+          meta={[`${photos.length} Photographs`, `${collections.length} Collections`, 'Nikon Zf']}
+          objectPosition="center 40%"
+        />
 
         {/* ── Section 2: Browse by Style — filter + photo grid ── */}
         <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto border-t border-gray-100">

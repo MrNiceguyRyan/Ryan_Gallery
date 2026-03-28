@@ -4,6 +4,7 @@ import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
+import ParallaxHero from '../components/ParallaxHero';
 import { getMapboxToken } from '../config/mapbox';
 
 const currentPath = Astro.url.pathname;
@@ -33,22 +34,18 @@ const mapboxToken = getMapboxToken();
 <Layout title="Travel | Ryan" description="The Interactive Geo-Map — photography locations around the world.">
   <Nav client:load currentPath={currentPath} />
 
-  <section class="pt-28 pb-24 px-6 md:px-16 max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="mb-12">
-      <h1 class="text-5xl md:text-7xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
-        The Interactive<br />Geo-Map.
-      </h1>
-      <p class="text-gray-400 text-lg font-light mt-6 max-w-lg leading-relaxed">
-        Every photograph lives somewhere. Explore the coordinates behind the collection.
-      </p>
-      <div class="flex items-center gap-4 mt-4 text-[10px] font-mono text-gray-300">
-        <span>{photos.length} photographs</span>
-        <span>·</span>
-        <span>Mapped locations</span>
-      </div>
-    </div>
+  <!-- Parallax Hero -->
+  <ParallaxHero
+    client:load
+    imageUrl="https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg?auto=format&w=1800&q=85"
+    title="The Interactive"
+    titleLine2="Geo-Map."
+    label="Explore the coordinates"
+    meta={[`${photos.length} Locations`, 'Mapped worldwide']}
+    objectPosition="center 60%"
+  />
 
+  <section class="py-16 px-6 md:px-16 max-w-7xl mx-auto">
     <!-- Map -->
     <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} />
 

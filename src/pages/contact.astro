@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
+import ParallaxHero from '../components/ParallaxHero';
 
 const currentPath = Astro.url.pathname;
 ---
@@ -8,17 +9,18 @@ const currentPath = Astro.url.pathname;
 <Layout title="Contact | Ryan" description="Get in touch for collaborations and creative projects.">
   <Nav client:load currentPath={currentPath} />
 
-  <section class="pt-28 pb-24 px-6 md:px-16 max-w-4xl mx-auto">
-    <!-- Header -->
-    <div class="mb-16">
-      <h1 class="text-5xl md:text-7xl font-extralight tracking-tighter text-gray-900 leading-[0.95]">
-        Let's<br />Connect.
-      </h1>
-      <p class="text-gray-400 text-lg font-light mt-6 max-w-lg leading-relaxed">
-        Open for collaborations, commissions, and creative conversations.
-      </p>
-    </div>
+  <!-- Parallax Hero -->
+  <ParallaxHero
+    client:load
+    imageUrl="https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1800&q=85"
+    title="Let's"
+    titleLine2="Connect."
+    label="Open for collaboration"
+    meta={['New York, NY', 'Worldwide']}
+    objectPosition="center 30%"
+  />
 
+  <section class="py-24 px-6 md:px-16 max-w-4xl mx-auto">
     <!-- Contact grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <!-- Email -->

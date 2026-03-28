@@ -187,8 +187,25 @@ export default function AboutPage() {
         </motion.div>
       </section>
 
-      {/* ═══════ BIO — Split text reveal ═══════ */}
+      {/* ═══════ BIO — Avatar + Split text reveal ═══════ */}
       <section className="px-6 md:px-16 py-28 md:py-40 max-w-6xl mx-auto">
+        {/* Blob avatar */}
+        <motion.div
+          className="flex justify-center mb-16"
+          initial={{ opacity: 0, scale: 0.8 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={{ duration: 0.8, ease: expo }}
+        >
+          <div className="w-40 h-40 md:w-52 md:h-52 animate-blob-morph overflow-hidden bg-gray-100 shadow-lg">
+            <img
+              src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
+              alt="Ryan Xu"
+              className="w-full h-full object-cover object-right"
+            />
+          </div>
+        </motion.div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-24 items-start">
           <motion.div
             initial={{ opacity: 0, y: 50 }}
