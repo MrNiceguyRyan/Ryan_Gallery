@@ -15,7 +15,7 @@ const HERO_IMAGE =
   'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
 
 /* ═══════════════════════════════════════════════════════
- *  Animated Counter — numbers count up when scrolled into view
+ *  Animated Counter
  * ═══════════════════════════════════════════════════════ */
 function AnimatedCounter({ target }: { target: number }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -40,11 +40,10 @@ function AnimatedCounter({ target }: { target: number }) {
 }
 
 /* ═══════════════════════════════════════════════════════
- *  Featured Work — editorial-style collection showcase
- *  Alternates image/text positioning (left-right / right-left)
- *  Grayscale → color hover · "VIEW" overlay · scale transition
+ *  WorkCard — compact grid card for collections
+ *  Full-color cover · hover scale + overlay · name at bottom
  * ═══════════════════════════════════════════════════════ */
-function FeaturedWork({
+function WorkCard({
   collection,
   index,
 }: {
@@ -52,112 +51,60 @@ function FeaturedWork({
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-100px' });
-  const reversed = index % 2 === 1;
+  const isInView = useInView(ref, { once: true, margin: '-60px' });
   const coverUrl =
     collection.photos?.[0]?.imageUrl || collection.coverImageUrl;
 
   return (
     <motion.div
       ref={ref}
-      className={`flex flex-col ${reversed ? 'lg:flex-row-reverse' : 'lg:flex-row'} gap-8 lg:gap-0 items-stretch`}
-      initial={{ opacity: 0 }}
-      animate={isInView ? { opacity: 1 } : {}}
-      transition={{ duration: 1.2, ease: expo }}
+      initial={{ opacity: 0, y: 40 }}
+      animate={isInView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.7, delay: Math.min(index * 0.08, 0.4), ease: expo }}
     >
-      {/* ── Image ── */}
-      <div className="w-full lg:w-[58%]">
-        <a
-          href={`/works/${collection.slug}`}
-          className="group block relative overflow-hidden aspect-[4/5] lg:aspect-[3/4]"
-        >
-          <img
-            src={`${coverUrl}?auto=format&w=1200&q=85`}
-            alt={collection.name}
-            className="w-full h-full object-cover transition-all duration-[1.2s] ease-out
-                       grayscale group-hover:grayscale-0
-                       scale-[1.06] group-hover:scale-100"
-            draggable={false}
-          />
-          {/* Dark veil on hover */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-700" />
-          {/* "VIEW" pill */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500">
-            <span className="text-white text-[11px] tracking-[0.5em] uppercase font-light border border-white/30 px-8 py-3 backdrop-blur-[2px]">
-              View
+      <a
+        href={`/works/${collection.slug}`}
+        className="group block relative overflow-hidden rounded-2xl aspect-[3/4]"
+      >
+        {/* Cover photo — full color */}
+        <img
+          src={`${coverUrl}?auto=format&w=800&q=85`}
+          alt={collection.name}
+          className="w-full h-full object-cover transition-transform duration-700 ease-out scale-[1.02] group-hover:scale-110"
+          draggable={false}
+        />
+
+        {/* Permanent bottom gradient for text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+
+        {/* Hover dark overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-500" />
+
+        {/* Bottom info — always visible */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6">
+          <h3 className="font-serif italic text-2xl md:text-3xl text-white leading-tight tracking-[-0.01em]">
+            {collection.name}
+          </h3>
+          <div className="flex items-center gap-3 mt-2 text-[9px] md:text-[10px] text-white/50 tracking-[0.15em] uppercase">
+            {collection.location && (
+              <>
+                <span>{collection.location}</span>
+                <span className="w-3 h-px bg-white/20" />
+              </>
+            )}
+            <span className="font-mono">
+              {collection.photoCount || collection.photos?.length || 0} photos
             </span>
           </div>
-        </a>
-      </div>
+        </div>
 
-      {/* ── Text ── */}
-      <div
-        className={`w-full lg:w-[42%] flex flex-col justify-center ${
-          reversed
-            ? 'lg:pr-20 lg:text-right lg:items-end'
-            : 'lg:pl-20 lg:items-start'
-        }`}
-      >
-        <motion.span
-          className="text-[11px] font-mono text-gray-300 tracking-wider"
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8, delay: 0.2, ease: expo }}
-        >
-          {String(index + 1).padStart(2, '0')}
-        </motion.span>
-
-        <motion.h3
-          className="text-5xl md:text-6xl lg:text-[5.5rem] font-serif italic text-gray-900 leading-[0.9] mt-4 tracking-[-0.02em]"
-          initial={{ opacity: 0, y: 60 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 1, delay: 0.3, ease: expo }}
-        >
-          {collection.name}
-        </motion.h3>
-
-        <motion.div
-          className={`flex items-center gap-4 mt-6 text-[10px] text-gray-400 tracking-[0.2em] uppercase ${
-            reversed ? 'lg:flex-row-reverse' : ''
-          }`}
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8, delay: 0.5, ease: expo }}
-        >
-          {collection.location && <span>{collection.location}</span>}
-          {collection.location && collection.year && (
-            <span className="w-5 h-px bg-gray-200" />
-          )}
-          {collection.year && <span>{collection.year}</span>}
-          <span className="w-5 h-px bg-gray-200" />
-          <span className="font-mono text-gray-300">
-            {collection.photoCount || collection.photos?.length || 0} photos
+        {/* Hover "Explore" pill — slides up */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 text-white text-[10px] tracking-[0.5em] uppercase font-light border border-white/30 px-7 py-2.5 backdrop-blur-[2px] transition-all duration-500">
+            Explore
           </span>
-        </motion.div>
-
-        <motion.a
-          href={`/works/${collection.slug}`}
-          className="inline-flex items-center gap-3 mt-10 text-[11px] tracking-[0.3em] uppercase text-gray-900 hover:text-gray-500 transition-colors duration-500 group/link"
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8, delay: 0.6, ease: expo }}
-        >
-          <span>Explore</span>
-          <svg
-            className="w-4 h-4 transition-transform duration-500 group-hover/link:translate-x-1.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="1"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75"
-            />
-          </svg>
-        </motion.a>
-      </div>
+        </div>
+      </a>
     </motion.div>
   );
 }
@@ -198,11 +145,11 @@ export default function HomePage({ collections, photos }: Props) {
   const marqueeItems = [
     'Photographer',
     'Visual Storyteller',
-    'New York',
-    'Nikon Zf',
     'Travel',
     'Street',
     'Landscape',
+    'Architecture',
+    'Portrait',
   ];
   const collectionNames = collections.map((c) => c.name);
 
@@ -255,17 +202,19 @@ export default function HomePage({ collections, photos }: Props) {
             className="absolute inset-0 flex flex-col items-center justify-center z-10"
             style={{ y: smoothTextY, opacity: heroOpacity }}
           >
-            {/* Name — massive serif italic */}
+            {/* Main title — massive serif italic */}
             <motion.h1
-              className="font-serif italic text-[17vw] md:text-[14vw] lg:text-[12vw] leading-[0.85] text-white tracking-[-0.04em] text-center"
+              className="font-serif italic text-[12vw] md:text-[10vw] lg:text-[8vw] leading-[0.9] text-white tracking-[-0.03em] text-center px-4"
               initial={{ opacity: 0, y: 100, filter: 'blur(20px)' }}
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
               transition={{ duration: 1.8, delay: 0.2, ease: expo }}
             >
-              Ryan Xu
+              Discover
+              <br />
+              the World
             </motion.h1>
 
-            {/* Divider + role */}
+            {/* Divider + subtitle */}
             <motion.div
               className="flex items-center gap-6 mt-8"
               initial={{ opacity: 0, y: 30 }}
@@ -274,25 +223,9 @@ export default function HomePage({ collections, photos }: Props) {
             >
               <span className="w-12 h-px bg-white/20" />
               <span className="text-[10px] md:text-[11px] tracking-[0.6em] text-white/50 uppercase font-light">
-                Photographer
+                Ryan&apos;s Gallery
               </span>
               <span className="w-12 h-px bg-white/20" />
-            </motion.div>
-
-            {/* Location · Camera */}
-            <motion.div
-              className="flex items-center gap-8 mt-5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 1.1 }}
-            >
-              <span className="text-[8px] tracking-[0.4em] text-white/25 font-mono uppercase">
-                New York
-              </span>
-              <span className="text-white/10">·</span>
-              <span className="text-[8px] tracking-[0.4em] text-white/25 font-mono uppercase">
-                Nikon Zf
-              </span>
             </motion.div>
           </motion.div>
 
@@ -341,28 +274,26 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
         </div>
 
-        {/* ═══════════════════ SELECTED WORKS ═══════════════════ */}
-        <section className="py-28 md:py-44">
+        {/* ═══════════════════ SELECTED WORKS — compact grid ═══════════════════ */}
+        <section className="py-20 md:py-32 px-6 md:px-16 max-w-7xl mx-auto">
           {/* Section label */}
-          <div className="px-6 md:px-16 max-w-7xl mx-auto mb-20 md:mb-28">
-            <motion.div
-              className="flex items-center gap-6"
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 1, ease: expo }}
-            >
-              <span className="w-12 h-px bg-gray-900" />
-              <span className="text-[10px] tracking-[0.5em] text-gray-400 uppercase">
-                Selected Works
-              </span>
-            </motion.div>
-          </div>
+          <motion.div
+            className="flex items-center gap-6 mb-12 md:mb-16"
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, ease: expo }}
+          >
+            <span className="w-12 h-px bg-gray-900" />
+            <span className="text-[10px] tracking-[0.5em] text-gray-400 uppercase">
+              Selected Works
+            </span>
+          </motion.div>
 
-          {/* Featured collection cards */}
-          <div className="space-y-28 md:space-y-44 px-6 md:px-16 max-w-7xl mx-auto">
+          {/* Grid of collection cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
             {collections.map((collection, i) => (
-              <FeaturedWork
+              <WorkCard
                 key={collection._id}
                 collection={collection}
                 index={i}
