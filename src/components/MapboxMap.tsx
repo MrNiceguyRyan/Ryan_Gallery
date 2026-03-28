@@ -85,7 +85,7 @@ function PhotoMarker({
       <span
         className={`absolute inset-0 rounded-full transition-all duration-500 ${
           isSelected
-            ? 'animate-ping bg-white/20 scale-150'
+            ? 'animate-ping bg-gray-900/10 scale-150'
             : 'bg-transparent'
         }`}
         style={{ animationDuration: '2.5s' }}
@@ -95,8 +95,8 @@ function PhotoMarker({
       <div
         className={`relative rounded-full overflow-hidden transition-all duration-500 ease-out ${
           isSelected
-            ? 'w-16 h-16 md:w-20 md:h-20 ring-[3px] ring-white shadow-[0_0_30px_rgba(255,255,255,0.4)]'
-            : 'w-10 h-10 md:w-12 md:h-12 ring-2 ring-white/70 shadow-lg group-hover:w-14 group-hover:h-14 group-hover:ring-white group-hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]'
+            ? 'w-16 h-16 md:w-20 md:h-20 ring-[3px] ring-gray-900 shadow-[0_0_20px_rgba(0,0,0,0.15)]'
+            : 'w-10 h-10 md:w-12 md:h-12 ring-2 ring-white shadow-lg group-hover:w-14 group-hover:h-14 group-hover:ring-gray-900 group-hover:shadow-xl'
         }`}
       >
         <img
@@ -105,17 +105,16 @@ function PhotoMarker({
           className="w-full h-full object-cover"
           draggable={false}
         />
-        {/* Subtle inner shadow for depth */}
-        <div className="absolute inset-0 rounded-full shadow-[inset_0_0_8px_rgba(0,0,0,0.15)]" />
+        <div className="absolute inset-0 rounded-full shadow-[inset_0_0_8px_rgba(0,0,0,0.1)]" />
       </div>
 
       {/* Photo count badge */}
       {cluster.photos.length > 1 && (
         <div
-          className={`absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white text-[9px] font-medium shadow-md transition-all duration-500 ${
+          className={`absolute -top-1 -right-1 flex items-center justify-center rounded-full text-[9px] font-medium shadow-md transition-all duration-500 ${
             isSelected
-              ? 'w-6 h-6 bg-white text-gray-900'
-              : 'w-5 h-5 bg-gray-900/80 backdrop-blur-sm group-hover:bg-white group-hover:text-gray-900'
+              ? 'w-6 h-6 bg-gray-900 text-white'
+              : 'w-5 h-5 bg-white text-gray-900 ring-1 ring-gray-200 group-hover:bg-gray-900 group-hover:text-white'
           }`}
         >
           {cluster.photos.length}
@@ -124,10 +123,10 @@ function PhotoMarker({
 
       {/* City label */}
       <div
-        className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-light tracking-wider transition-all duration-300 ${
+        className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-wider transition-all duration-300 ${
           isSelected
-            ? '-bottom-6 text-white/80 opacity-100'
-            : '-bottom-5 text-white/40 opacity-0 group-hover:opacity-100'
+            ? '-bottom-6 text-gray-900 opacity-100'
+            : '-bottom-5 text-gray-500 opacity-0 group-hover:opacity-100'
         }`}
       >
         {cluster.city}
@@ -204,9 +203,10 @@ function MapboxMapInner({
 
   return (
     <div>
-      {/* ─── Map ─── */}
-      <div className="relative">
-        <div className="h-[500px] md:h-[700px] lg:h-[800px] rounded-2xl overflow-hidden shadow-xl">
+      {/* ─── Card layout: Map left, Cities right ─── */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-2xl overflow-hidden shadow-xl border border-gray-100 bg-white">
+        {/* Map side */}
+        <div className="relative flex-1 h-[400px] md:h-[500px] lg:h-[650px]">
           <MapGL
             ref={mapRef}
             initialViewState={{
@@ -215,7 +215,7 @@ function MapboxMapInner({
               zoom: clusters.length === 1 ? 5 : 2.2,
             }}
             mapboxAccessToken={mapboxToken}
-            mapStyle="mapbox://styles/mapbox/dark-v11"
+            mapStyle="mapbox://styles/mapbox/light-v11"
             style={{ width: '100%', height: '100%' }}
             attributionControl={false}
             onClick={() => setSelectedCluster(null)}
@@ -246,224 +246,136 @@ function MapboxMapInner({
           </MapGL>
         </div>
 
-        {/* ─── Floating Info Panel — Desktop ─── */}
-        <div className="absolute top-4 right-4 w-[320px] md:w-[360px] hidden sm:block">
-          <AnimatePresence mode="wait">
-            {selectedCluster ? (
-              <motion.div
-                key={selectedCluster.city}
-                initial={{ opacity: 0, y: -10, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.96 }}
-                transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
-                className="bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
-              >
-                {/* Cover photo strip */}
-                <div className="relative h-32 overflow-hidden">
-                  <img
-                    src={`${selectedCluster.photos[0].imageUrl}?auto=format&w=720&q=80`}
-                    alt={selectedCluster.city}
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                  <div className="absolute bottom-3 left-4 right-4">
-                    <h3 className="text-xl font-light text-white tracking-wide">
-                      {selectedCluster.city}
-                    </h3>
-                    <p className="text-white/50 text-xs mt-0.5 font-light">
-                      {selectedCluster.country}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCluster(null)}
-                    className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm text-white/50 hover:text-white hover:bg-black/60 transition-all"
-                    aria-label="Close"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
+        {/* ─── Right side: City list panel (desktop) ─── */}
+        <div className="hidden lg:flex flex-col w-[340px] border-l border-gray-100 bg-white">
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-gray-100">
+            <p className="text-[10px] tracking-[0.3em] text-gray-400 uppercase font-light">Locations</p>
+            <p className="text-xs text-gray-300 font-mono mt-1">{clusters.length} cities · {photos.length} photos</p>
+          </div>
 
-                <div className="p-4">
-                  <div className="flex items-center gap-4 text-[10px] font-mono text-white/25 mb-3">
-                    <span>{formatCoord(selectedCluster.lat, 'N', 'S')}</span>
-                    <span>{formatCoord(selectedCluster.lng, 'E', 'W')}</span>
-                    <span className="ml-auto text-white/35">
-                      {selectedCluster.photos.length} photo{selectedCluster.photos.length !== 1 ? 's' : ''}
+          {/* Scrollable city list */}
+          <div className="flex-1 overflow-y-auto">
+            {clusters.map((cluster) => {
+              const isSelected = selectedCluster?.city === cluster.city;
+              return (
+                <button
+                  key={cluster.city}
+                  onClick={() => flyToCluster(cluster)}
+                  className={`w-full text-left px-5 py-4 border-b border-gray-50 transition-all duration-300 hover:bg-gray-50 ${
+                    isSelected ? 'bg-gray-900 text-white hover:bg-gray-800' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full overflow-hidden flex-shrink-0 ring-2 transition-colors ${isSelected ? 'ring-white/20' : 'ring-gray-100'}`}>
+                      <img
+                        src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`}
+                        alt={cluster.city}
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`text-sm font-light tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                        {cluster.city}
+                      </h3>
+                      <p className={`text-[11px] font-light mt-0.5 ${isSelected ? 'text-white/40' : 'text-gray-400'}`}>
+                        {cluster.country}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] font-mono ${isSelected ? 'text-white/40' : 'text-gray-300'}`}>
+                      {cluster.photos.length}
                     </span>
                   </div>
 
-                  {/* Photo thumbnails */}
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {selectedCluster.photos.slice(0, 6).map((photo, i) => (
+                  {/* Show photos when selected */}
+                  <AnimatePresence>
+                    {isSelected && (
                       <motion.div
-                        key={photo._id}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05, duration: 0.3 }}
-                        className="aspect-square rounded-lg overflow-hidden"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
                       >
-                        <img
-                          src={`${photo.imageUrl}?auto=format&w=200&q=75`}
-                          alt={photo.title}
-                          className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                          loading="lazy"
-                          draggable={false}
-                        />
+                        <div className="grid grid-cols-3 gap-1.5 mt-3">
+                          {cluster.photos.slice(0, 6).map((photo, i) => (
+                            <motion.div
+                              key={photo._id}
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: i * 0.04, duration: 0.25 }}
+                              className="aspect-square rounded-md overflow-hidden"
+                            >
+                              <img
+                                src={`${photo.imageUrl}?auto=format&w=160&q=75`}
+                                alt={photo.title}
+                                className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                                loading="lazy"
+                                draggable={false}
+                              />
+                            </motion.div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-white/30 font-mono mt-2">
+                          {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
+                        </p>
                       </motion.div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="placeholder"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="bg-black/30 backdrop-blur-xl border border-white/[0.06] border-dashed rounded-2xl p-6 text-center"
-              >
-                <svg className="w-8 h-8 mx-auto text-white/15 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <p className="text-white/30 text-sm font-light">Select a point on the map</p>
-                <p className="text-white/15 text-xs mt-1 font-mono">{clusters.length} location{clusters.length !== 1 ? 's' : ''}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* ─── Mobile: info below map ─── */}
-        <div className="sm:hidden mt-4">
-          <AnimatePresence mode="wait">
-            {selectedCluster && (
-              <motion.div
-                key={selectedCluster.city}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="bg-gray-50 rounded-2xl overflow-hidden"
-              >
-                {/* Cover strip — mobile */}
-                <div className="relative h-28 overflow-hidden">
-                  <img
-                    src={`${selectedCluster.photos[0].imageUrl}?auto=format&w=600&q=75`}
-                    alt={selectedCluster.city}
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-50 via-transparent to-transparent" />
-                </div>
-                <div className="p-5 -mt-4 relative">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-light text-gray-900">{selectedCluster.city}</h3>
-                      {selectedCluster.country && (
-                        <p className="text-gray-400 text-sm mt-0.5">{selectedCluster.country}</p>
-                      )}
-                      <div className="flex items-center gap-3 mt-1 text-[10px] font-mono text-gray-300">
-                        <span>{formatCoord(selectedCluster.lat, 'N', 'S')}</span>
-                        <span>{formatCoord(selectedCluster.lng, 'E', 'W')}</span>
-                      </div>
-                    </div>
-                    <button onClick={() => setSelectedCluster(null)} className="text-gray-300 hover:text-gray-500 transition-colors" aria-label="Close">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5 mt-4">
-                    {selectedCluster.photos.slice(0, 4).map((photo) => (
-                      <div key={photo._id} className="aspect-square rounded-lg overflow-hidden">
-                        <img src={`${photo.imageUrl}?auto=format&w=200&q=75`} alt={photo.title} className="w-full h-full object-cover" draggable={false} />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-gray-300 font-mono mt-3">
-                    {selectedCluster.photos.length} photograph{selectedCluster.photos.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                    )}
+                  </AnimatePresence>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* ─── Location Cards — clickable, synced with map ─── */}
-      {showLocationList && (
-        <div ref={locationListRef} className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clusters.map((cluster, i) => {
-            const isSelected = selectedCluster?.city === cluster.city;
-            return (
-              <motion.button
-                key={cluster.city}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.5, delay: i * 0.05 }}
-                onClick={() => flyToCluster(cluster)}
-                className={`group p-5 rounded-2xl text-left transition-all duration-300 ${
-                  isSelected
-                    ? 'bg-gray-900 text-white shadow-lg'
-                    : 'bg-gray-50 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  {/* Photo thumbnail circle */}
-                  <div
-                    className={`w-14 h-14 rounded-full overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${
-                      isSelected ? 'ring-white/30' : 'ring-gray-200 group-hover:ring-gray-300'
-                    }`}
-                  >
-                    <img
-                      src={`${cluster.photos[0].imageUrl}?auto=format&w=120&h=120&fit=crop&q=75`}
-                      alt={cluster.city}
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className={`text-base font-light tracking-tight truncate ${
-                        isSelected ? 'text-white' : 'text-gray-900'
-                      }`}
-                    >
-                      {cluster.city}
-                    </h3>
-                    <p
-                      className={`text-xs mt-0.5 font-light ${
-                        isSelected ? 'text-white/50' : 'text-gray-400'
-                      }`}
-                    >
-                      {cluster.country}
-                    </p>
-                    <p
-                      className={`text-[10px] font-mono mt-1 ${
-                        isSelected ? 'text-white/30' : 'text-gray-300'
-                      }`}
-                    >
-                      {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
-                    </p>
-                  </div>
-                  {/* Photo count */}
-                  <div
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-light ${
-                      isSelected
-                        ? 'bg-white/10 text-white/70'
-                        : 'bg-gray-200/60 text-gray-400 group-hover:bg-gray-200'
-                    }`}
-                  >
-                    {cluster.photos.length}
-                  </div>
+      {/* ─── Mobile/Tablet: city list below map ─── */}
+      <div className="lg:hidden mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {clusters.map((cluster) => {
+          const isSelected = selectedCluster?.city === cluster.city;
+          return (
+            <button
+              key={cluster.city}
+              onClick={() => flyToCluster(cluster)}
+              className={`group p-4 rounded-xl text-left transition-all duration-300 ${
+                isSelected ? 'bg-gray-900 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full overflow-hidden flex-shrink-0 ring-2 transition-colors ${isSelected ? 'ring-white/20' : 'ring-gray-200'}`}>
+                  <img src={`${cluster.photos[0].imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                 </div>
-              </motion.button>
-            );
-          })}
-        </div>
-      )}
+                <div className="flex-1 min-w-0">
+                  <h3 className={`text-sm font-light tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>{cluster.city}</h3>
+                  <p className={`text-[11px] font-light ${isSelected ? 'text-white/40' : 'text-gray-400'}`}>{cluster.country}</p>
+                </div>
+                <span className={`text-xs font-mono ${isSelected ? 'text-white/40' : 'text-gray-300'}`}>{cluster.photos.length}</span>
+              </div>
+              {/* Expandable thumbnails on selection */}
+              <AnimatePresence>
+                {isSelected && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="grid grid-cols-4 gap-1.5 mt-3">
+                      {cluster.photos.slice(0, 4).map((photo) => (
+                        <div key={photo._id} className="aspect-square rounded-md overflow-hidden">
+                          <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover" draggable={false} />
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
