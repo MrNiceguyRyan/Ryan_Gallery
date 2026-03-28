@@ -1,8 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { motion, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
-import ParallaxHero from '../ParallaxHero';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -11,11 +10,179 @@ interface Props {
   photos: Photo[];
 }
 
+// Hero background — curated for maximum impact
+const HERO_IMAGE =
+  'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
+
+/* ═══════════════════════════════════════════════════════
+ *  Animated Counter — numbers count up when scrolled into view
+ * ═══════════════════════════════════════════════════════ */
+function AnimatedCounter({ target }: { target: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true });
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!isInView) return;
+    const duration = 2000;
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * target));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [isInView, target]);
+
+  return <span ref={ref}>{count}</span>;
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  Featured Work — editorial-style collection showcase
+ *  Alternates image/text positioning (left-right / right-left)
+ *  Grayscale → color hover · "VIEW" overlay · scale transition
+ * ═══════════════════════════════════════════════════════ */
+function FeaturedWork({
+  collection,
+  index,
+}: {
+  collection: Collection;
+  index: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true, margin: '-100px' });
+  const reversed = index % 2 === 1;
+  const coverUrl =
+    collection.photos?.[0]?.imageUrl || collection.coverImageUrl;
+
+  return (
+    <motion.div
+      ref={ref}
+      className={`flex flex-col ${reversed ? 'lg:flex-row-reverse' : 'lg:flex-row'} gap-8 lg:gap-0 items-stretch`}
+      initial={{ opacity: 0 }}
+      animate={isInView ? { opacity: 1 } : {}}
+      transition={{ duration: 1.2, ease: expo }}
+    >
+      {/* ── Image ── */}
+      <div className="w-full lg:w-[58%]">
+        <a
+          href={`/works/${collection.slug}`}
+          className="group block relative overflow-hidden aspect-[4/5] lg:aspect-[3/4]"
+        >
+          <img
+            src={`${coverUrl}?auto=format&w=1200&q=85`}
+            alt={collection.name}
+            className="w-full h-full object-cover transition-all duration-[1.2s] ease-out
+                       grayscale group-hover:grayscale-0
+                       scale-[1.06] group-hover:scale-100"
+            draggable={false}
+          />
+          {/* Dark veil on hover */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-700" />
+          {/* "VIEW" pill */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500">
+            <span className="text-white text-[11px] tracking-[0.5em] uppercase font-light border border-white/30 px-8 py-3 backdrop-blur-[2px]">
+              View
+            </span>
+          </div>
+        </a>
+      </div>
+
+      {/* ── Text ── */}
+      <div
+        className={`w-full lg:w-[42%] flex flex-col justify-center ${
+          reversed
+            ? 'lg:pr-20 lg:text-right lg:items-end'
+            : 'lg:pl-20 lg:items-start'
+        }`}
+      >
+        <motion.span
+          className="text-[11px] font-mono text-gray-300 tracking-wider"
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, delay: 0.2, ease: expo }}
+        >
+          {String(index + 1).padStart(2, '0')}
+        </motion.span>
+
+        <motion.h3
+          className="text-5xl md:text-6xl lg:text-[5.5rem] font-serif italic text-gray-900 leading-[0.9] mt-4 tracking-[-0.02em]"
+          initial={{ opacity: 0, y: 60 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 1, delay: 0.3, ease: expo }}
+        >
+          {collection.name}
+        </motion.h3>
+
+        <motion.div
+          className={`flex items-center gap-4 mt-6 text-[10px] text-gray-400 tracking-[0.2em] uppercase ${
+            reversed ? 'lg:flex-row-reverse' : ''
+          }`}
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, delay: 0.5, ease: expo }}
+        >
+          {collection.location && <span>{collection.location}</span>}
+          {collection.location && collection.year && (
+            <span className="w-5 h-px bg-gray-200" />
+          )}
+          {collection.year && <span>{collection.year}</span>}
+          <span className="w-5 h-px bg-gray-200" />
+          <span className="font-mono text-gray-300">
+            {collection.photoCount || collection.photos?.length || 0} photos
+          </span>
+        </motion.div>
+
+        <motion.a
+          href={`/works/${collection.slug}`}
+          className="inline-flex items-center gap-3 mt-10 text-[11px] tracking-[0.3em] uppercase text-gray-900 hover:text-gray-500 transition-colors duration-500 group/link"
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, delay: 0.6, ease: expo }}
+        >
+          <span>Explore</span>
+          <svg
+            className="w-4 h-4 transition-transform duration-500 group-hover/link:translate-x-1.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth="1"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75"
+            />
+          </svg>
+        </motion.a>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  HomePage — Editorial luxury layout
+ * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [showOpening, setShowOpening] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState<number>(-1);
-  const [lightboxCollection, setLightboxCollection] = useState<Collection | null>(null);
 
+  /* ── Hero parallax ── */
+  const heroRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: heroProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  });
+
+  const heroImgY = useTransform(heroProgress, [0, 1], [0, 150]);
+  const heroImgScale = useTransform(heroProgress, [0, 1], [1, 1.12]);
+  const heroTextY = useTransform(heroProgress, [0, 1], [0, -80]);
+  const heroOpacity = useTransform(heroProgress, [0, 0.5], [1, 0]);
+  const smoothImgY = useSpring(heroImgY, { stiffness: 50, damping: 30 });
+  const smoothTextY = useSpring(heroTextY, { stiffness: 50, damping: 30 });
+
+  /* ── Opening animation ── */
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) {
       setShowOpening(true);
@@ -27,161 +194,320 @@ export default function HomePage({ collections, photos }: Props) {
     setShowOpening(false);
   }, []);
 
-  // Lightbox photos from selected collection
-  const lightboxPhotos = lightboxCollection?.photos ?? [];
-  const lightboxPhoto = lightboxIndex >= 0 ? lightboxPhotos[lightboxIndex] : null;
-
-  // Lightbox keyboard nav
-  useEffect(() => {
-    if (lightboxIndex < 0) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          setLightboxIndex(-1);
-          setLightboxCollection(null);
-          break;
-        case 'ArrowRight':
-          setLightboxIndex((prev) => (prev + 1) % lightboxPhotos.length);
-          break;
-        case 'ArrowLeft':
-          setLightboxIndex((prev) => (prev - 1 + lightboxPhotos.length) % lightboxPhotos.length);
-          break;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lightboxIndex, lightboxPhotos.length]);
-
-  const openLightbox = useCallback((collection: Collection, index: number) => {
-    setLightboxCollection(collection);
-    setLightboxIndex(index);
-  }, []);
-
-  const closeLightbox = useCallback(() => {
-    setLightboxIndex(-1);
-    setLightboxCollection(null);
-  }, []);
+  /* ── Marquee content ── */
+  const marqueeItems = [
+    'Photographer',
+    'Visual Storyteller',
+    'New York',
+    'Nikon Zf',
+    'Travel',
+    'Street',
+    'Landscape',
+  ];
+  const collectionNames = collections.map((c) => c.name);
 
   return (
     <>
-      {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
+      {showOpening && (
+        <OpeningAnimation onComplete={handleOpeningComplete} />
+      )}
 
-      <div className={showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-500'}>
-
-        {/* ── Parallax Hero ── */}
-        <ParallaxHero
-          imageUrl="https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg?auto=format&w=1800&q=85"
-          title="Visual"
-          titleLine2="Archive."
-          label="A curated photography collection"
-          meta={[`${photos.length} Photographs`, `${collections.length} Collections`, 'Nikon Zf']}
-          objectPosition="center 40%"
-        />
-
-        {/* ── Gallery Collections ── */}
-        <section className="px-6 md:px-16 py-20 max-w-7xl mx-auto">
-          <motion.h2
-            className="text-lg font-light text-gray-300 tracking-widest uppercase mb-12"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
+      <div
+        className={
+          showOpening
+            ? 'opacity-0'
+            : 'opacity-100 transition-opacity duration-700'
+        }
+      >
+        {/* ═══════════════════ HERO ═══════════════════ */}
+        <section
+          ref={heroRef}
+          className="relative h-screen overflow-hidden bg-[#0a0a0a]"
+        >
+          {/* Background photo with parallax */}
+          <motion.div
+            className="absolute inset-0"
+            style={{ y: smoothImgY, scale: heroImgScale }}
           >
-            Collections
-          </motion.h2>
+            <img
+              src={`${HERO_IMAGE}?auto=format&w=2000&q=80`}
+              alt=""
+              className="w-full h-full object-cover opacity-40"
+              style={{ objectPosition: 'center 40%' }}
+              draggable={false}
+            />
+          </motion.div>
 
-          <div className="space-y-20">
-            {collections.map((collection, ci) => (
-              <motion.div
+          {/* Gradient layers */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/30 to-[#0a0a0a]/60" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a]/40 via-transparent to-transparent" />
+
+          {/* Grain texture */}
+          <div
+            className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+            }}
+          />
+
+          {/* Hero typography */}
+          <motion.div
+            className="absolute inset-0 flex flex-col items-center justify-center z-10"
+            style={{ y: smoothTextY, opacity: heroOpacity }}
+          >
+            {/* Name — massive serif italic */}
+            <motion.h1
+              className="font-serif italic text-[17vw] md:text-[14vw] lg:text-[12vw] leading-[0.85] text-white tracking-[-0.04em] text-center"
+              initial={{ opacity: 0, y: 100, filter: 'blur(20px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 1.8, delay: 0.2, ease: expo }}
+            >
+              Ryan Xu
+            </motion.h1>
+
+            {/* Divider + role */}
+            <motion.div
+              className="flex items-center gap-6 mt-8"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1, delay: 0.7, ease: expo }}
+            >
+              <span className="w-12 h-px bg-white/20" />
+              <span className="text-[10px] md:text-[11px] tracking-[0.6em] text-white/50 uppercase font-light">
+                Photographer
+              </span>
+              <span className="w-12 h-px bg-white/20" />
+            </motion.div>
+
+            {/* Location · Camera */}
+            <motion.div
+              className="flex items-center gap-8 mt-5"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 1.1 }}
+            >
+              <span className="text-[8px] tracking-[0.4em] text-white/25 font-mono uppercase">
+                New York
+              </span>
+              <span className="text-white/10">·</span>
+              <span className="text-[8px] tracking-[0.4em] text-white/25 font-mono uppercase">
+                Nikon Zf
+              </span>
+            </motion.div>
+          </motion.div>
+
+          {/* Scroll indicator */}
+          <motion.div
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.8, duration: 0.8 }}
+          >
+            <span className="text-[7px] tracking-[0.5em] text-white/25 uppercase">
+              Scroll
+            </span>
+            <motion.div
+              className="w-px h-8 bg-white/20 origin-top"
+              animate={{ scaleY: [0, 1, 0] }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+            />
+          </motion.div>
+        </section>
+
+        {/* ═══════════════════ MARQUEE STRIP 1 ═══════════════════ */}
+        <div className="py-5 border-y border-gray-100 bg-white overflow-hidden">
+          <div className="animate-marquee flex whitespace-nowrap">
+            {[0, 1].map((copy) => (
+              <div key={copy} className="flex items-center shrink-0">
+                {[...marqueeItems, ...marqueeItems].map((item, j) => (
+                  <span
+                    key={`${copy}-${j}`}
+                    className="flex items-center shrink-0 mx-5 md:mx-8"
+                  >
+                    <span className="text-sm md:text-base font-serif italic text-gray-800 tracking-wide">
+                      {item}
+                    </span>
+                    <span className="text-gray-200/60 text-[10px] ml-5 md:ml-8">
+                      ✦
+                    </span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══════════════════ SELECTED WORKS ═══════════════════ */}
+        <section className="py-28 md:py-44">
+          {/* Section label */}
+          <div className="px-6 md:px-16 max-w-7xl mx-auto mb-20 md:mb-28">
+            <motion.div
+              className="flex items-center gap-6"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 1, ease: expo }}
+            >
+              <span className="w-12 h-px bg-gray-900" />
+              <span className="text-[10px] tracking-[0.5em] text-gray-400 uppercase">
+                Selected Works
+              </span>
+            </motion.div>
+          </div>
+
+          {/* Featured collection cards */}
+          <div className="space-y-28 md:space-y-44 px-6 md:px-16 max-w-7xl mx-auto">
+            {collections.map((collection, i) => (
+              <FeaturedWork
                 key={collection._id}
+                collection={collection}
+                index={i}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════════════ STATEMENT ═══════════════════ */}
+        <section className="py-36 md:py-52 bg-[#0a0a0a] relative overflow-hidden">
+          {/* Grain texture */}
+          <div
+            className="absolute inset-0 opacity-[0.03] pointer-events-none"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+            }}
+          />
+
+          <div className="px-6 md:px-16 max-w-4xl mx-auto text-center relative z-10">
+            <motion.blockquote
+              className="text-3xl md:text-5xl lg:text-6xl font-serif italic text-white/85 leading-[1.15] tracking-[-0.01em]"
+              initial={{ opacity: 0, y: 60 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-80px' }}
+              transition={{ duration: 1.4, ease: expo }}
+            >
+              Every frame is a dialogue between light and intention.
+            </motion.blockquote>
+
+            <motion.div
+              className="mt-12 flex items-center justify-center gap-5"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, delay: 0.5 }}
+            >
+              <span className="w-8 h-px bg-white/15" />
+              <span className="text-[9px] tracking-[0.4em] text-white/25 uppercase font-mono">
+                Ryan Xu
+              </span>
+              <span className="w-8 h-px bg-white/15" />
+            </motion.div>
+          </div>
+        </section>
+
+        {/* ═══════════════════ MARQUEE STRIP 2 (reverse) ═══════════════════ */}
+        <div className="py-5 border-y border-gray-100 bg-white overflow-hidden">
+          <div className="animate-marquee-reverse flex whitespace-nowrap">
+            {[0, 1].map((copy) => (
+              <div key={copy} className="flex items-center shrink-0">
+                {Array(5)
+                  .fill(collectionNames)
+                  .flat()
+                  .map((name, j) => (
+                    <span
+                      key={`${copy}-${j}`}
+                      className="flex items-center shrink-0 mx-6 md:mx-10"
+                    >
+                      <span className="text-base md:text-xl font-serif italic text-gray-800">
+                        {name}
+                      </span>
+                      <span className="text-gray-200 ml-6 md:ml-10">·</span>
+                    </span>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══════════════════ STATS ═══════════════════ */}
+        <section className="py-32 md:py-44 px-6 md:px-16">
+          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-20 md:gap-32">
+            {[
+              { value: photos.length, label: 'Photographs' },
+              { value: collections.length, label: 'Collections' },
+              {
+                value: new Date().getFullYear(),
+                label: 'Year',
+                isYear: true,
+              },
+            ].map((stat, i) => (
+              <motion.div
+                key={i}
+                className="text-center"
                 initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-80px' }}
-                transition={{ duration: 0.8, ease: expo }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.8, delay: i * 0.15, ease: expo }}
               >
-                {/* Collection header */}
-                <div className="flex items-end justify-between mb-6">
-                  <div>
-                    <a
-                      href={`/works/${collection.slug}`}
-                      className="group inline-block"
-                    >
-                      <h3 className="text-3xl md:text-4xl font-[100] text-gray-900 tracking-tight group-hover:text-gray-600 transition-colors">
-                        {collection.name}
-                      </h3>
-                    </a>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 font-light">
-                      {collection.location && <span>{collection.location}</span>}
-                      {collection.year && <span>{collection.year}</span>}
-                      <span className="text-gray-300 font-mono">{collection.photoCount || collection.photos?.length || 0} photos</span>
-                    </div>
-                  </div>
-                  <a
-                    href={`/works/${collection.slug}`}
-                    className="hidden md:inline-flex items-center gap-2 text-xs text-gray-400 hover:text-gray-900 font-light tracking-wider uppercase transition-colors"
-                  >
-                    View all
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                    </svg>
-                  </a>
+                <div className="text-7xl md:text-[6rem] font-serif italic text-gray-900 leading-none tracking-tight">
+                  {stat.isYear ? (
+                    stat.value
+                  ) : (
+                    <AnimatedCounter target={stat.value} />
+                  )}
                 </div>
-
-                {/* Photo grid — horizontal scrollable on mobile, grid on desktop */}
-                <div className="relative">
-                  <div className="flex md:grid md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 overflow-x-auto md:overflow-visible pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0 snap-x snap-mandatory md:snap-none scrollbar-hide">
-                    {(collection.photos || []).slice(0, 10).map((photo, pi) => (
-                      <motion.div
-                        key={photo._id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        whileInView={{ opacity: 1, scale: 1 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.4, delay: Math.min(pi * 0.04, 0.5) }}
-                        className="group relative aspect-[3/4] min-w-[45vw] md:min-w-0 rounded-xl overflow-hidden cursor-pointer snap-start"
-                        onClick={() => openLightbox(collection, pi)}
-                      >
-                        <img
-                          src={`${photo.imageUrl}?auto=format&w=600&q=80`}
-                          alt={photo.title}
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                          loading="lazy"
-                          draggable={false}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                          <div className="absolute bottom-3 left-3 right-3">
-                            <p className="text-white text-sm font-light">{photo.title}</p>
-                            <div className="flex items-center gap-2 mt-1 text-[9px] font-mono text-white/50">
-                              {photo.focalLength && <span>{photo.focalLength}</span>}
-                              {photo.aperture && <span>{photo.aperture}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mobile "View all" link */}
-                <a
-                  href={`/works/${collection.slug}`}
-                  className="md:hidden inline-flex items-center gap-2 mt-4 text-xs text-gray-400 hover:text-gray-900 font-light tracking-wider uppercase transition-colors"
-                >
-                  View all →
-                </a>
+                <p className="text-[9px] tracking-[0.5em] text-gray-400 uppercase mt-5 font-light">
+                  {stat.label}
+                </p>
               </motion.div>
             ))}
           </div>
         </section>
 
-        {/* ── Footer ── */}
+        {/* ═══════════════════ CTA ═══════════════════ */}
+        <section className="py-16 md:py-24 px-6 md:px-16 text-center border-t border-gray-50">
+          <motion.a
+            href="/travel"
+            className="inline-flex items-center gap-5 group"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+          >
+            <span className="font-serif italic text-3xl md:text-4xl text-gray-900 group-hover:text-gray-500 transition-colors duration-500">
+              Explore the Journey
+            </span>
+            <svg
+              className="w-6 h-6 text-gray-400 group-hover:text-gray-900 group-hover:translate-x-2 transition-all duration-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="1"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75"
+              />
+            </svg>
+          </motion.a>
+        </section>
+
+        {/* ═══════════════════ FOOTER ═══════════════════ */}
         <footer className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
-              <h2 className="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-              <p className="text-xs text-gray-400 mt-1 font-light">
-                &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+              <h2 className="text-xl font-serif italic text-gray-900 tracking-tight">
+                Ryan Xu.
+              </h2>
+              <p className="text-[10px] text-gray-400 mt-2 font-light tracking-wider">
+                &copy; {new Date().getFullYear()} All rights reserved.
               </p>
             </div>
-            <div className="flex items-center gap-6 text-xs text-gray-400 font-mono">
+            <div className="flex items-center gap-6 text-[10px] text-gray-400 font-mono tracking-wider">
               <span>Nikon Zf</span>
               <span className="text-gray-200">|</span>
               <span>Astro + React</span>
@@ -191,86 +517,6 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
         </footer>
       </div>
-
-      {/* ══════ Photo lightbox ══════ */}
-      <AnimatePresence>
-        {lightboxPhoto && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            onClick={closeLightbox}
-          >
-            <button
-              className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white z-10"
-              onClick={closeLightbox}
-              aria-label="Close lightbox"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {lightboxPhotos.length > 1 && (
-              <>
-                <button
-                  className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white z-10"
-                  onClick={(e) => { e.stopPropagation(); setLightboxIndex((p) => (p - 1 + lightboxPhotos.length) % lightboxPhotos.length); }}
-                  aria-label="Previous"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                  </svg>
-                </button>
-                <button
-                  className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white z-10"
-                  onClick={(e) => { e.stopPropagation(); setLightboxIndex((p) => (p + 1) % lightboxPhotos.length); }}
-                  aria-label="Next"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
-                </button>
-              </>
-            )}
-
-            <motion.div
-              key={lightboxPhoto._id}
-              className="relative max-w-[90vw] max-h-[90vh] flex flex-col"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <img
-                src={`${lightboxPhoto.imageUrl}?auto=format&w=1600&q=90`}
-                alt={lightboxPhoto.title}
-                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-                draggable={false}
-              />
-              <div className="mt-4 flex items-center justify-between px-1">
-                <div className="flex items-center gap-3">
-                  <p className="text-white/80 text-sm font-light">{lightboxPhoto.title}</p>
-                  {lightboxPhotos.length > 1 && (
-                    <span className="text-white/30 text-xs font-mono">
-                      {lightboxIndex + 1} / {lightboxPhotos.length}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-white/40 text-xs font-mono">
-                  {lightboxPhoto.focalLength && <span>{lightboxPhoto.focalLength}</span>}
-                  {lightboxPhoto.aperture && <span>{lightboxPhoto.aperture}</span>}
-                  {lightboxPhoto.shutterSpeed && <span>{lightboxPhoto.shutterSpeed}</span>}
-                  {lightboxPhoto.iso && <span>ISO {lightboxPhoto.iso}</span>}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 }
