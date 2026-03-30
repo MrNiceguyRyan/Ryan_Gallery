@@ -4,6 +4,7 @@ import react from '@astrojs/react';
 import sanity from '@sanity/astro';
 
 export default defineConfig({
+  output: 'static',
   vite: {
     plugins: [tailwindcss()],
   },

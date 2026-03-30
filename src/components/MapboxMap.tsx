@@ -15,7 +15,7 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-[500px] md:h-[700px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
+        <div className="h-[50vh] min-h-[300px] md:h-[500px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
           <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
@@ -205,8 +205,8 @@ function MapboxMapInner({
     <div>
       {/* ─── Card layout: Map left, Cities right ─── */}
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-2xl overflow-hidden shadow-xl border border-gray-100 bg-white">
-        {/* Map side */}
-        <div className="relative flex-1 h-[400px] md:h-[500px] lg:h-[650px]">
+        {/* Map side — always visible at every viewport width */}
+        <div className="relative w-full lg:flex-1 h-[50vh] min-h-[300px] md:h-[500px] lg:h-[650px]">
           <MapGL
             ref={mapRef}
             initialViewState={{
