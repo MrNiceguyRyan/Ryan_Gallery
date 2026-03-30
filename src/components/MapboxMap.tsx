@@ -135,6 +135,115 @@ function PhotoMarker({
   );
 }
 
+// ─── Stylize map layers for a rich, elegant white-base look ───
+function stylizeMap(map: any) {
+  const style = map.getStyle();
+  if (!style?.layers) return;
+
+  for (const layer of style.layers) {
+    const id = layer.id;
+    const type = layer.type;
+
+    // ── Water: soft blue-tinted ──
+    if (id.includes('water') && type === 'fill') {
+      map.setPaintProperty(id, 'fill-color', '#dce8f0');
+    }
+
+    // ── Land / background: warm white ──
+    if (id === 'land' || id === 'background') {
+      map.setPaintProperty(id, 'background-color', '#f8f7f5');
+      if (type === 'fill') map.setPaintProperty(id, 'fill-color', '#f8f7f5');
+    }
+
+    // ── Landuse: subtle terrain tints ──
+    if (id.includes('landuse') && type === 'fill') {
+      if (id.includes('park') || id.includes('green')) {
+        map.setPaintProperty(id, 'fill-color', '#e8efe5');
+        map.setPaintProperty(id, 'fill-opacity', 0.6);
+      } else if (id.includes('sand') || id.includes('beach')) {
+        map.setPaintProperty(id, 'fill-color', '#f0ebe0');
+      }
+    }
+
+    // ── Hillshade: visible terrain depth ──
+    if (type === 'hillshade') {
+      map.setPaintProperty(id, 'hillshade-shadow-color', '#d0cfc8');
+      map.setPaintProperty(id, 'hillshade-highlight-color', '#ffffff');
+      map.setPaintProperty(id, 'hillshade-exaggeration', 0.3);
+    }
+
+    // ── Roads: thin, elegant lines ──
+    if (id.includes('road') && type === 'line') {
+      if (id.includes('highway') || id.includes('motorway') || id.includes('trunk')) {
+        map.setPaintProperty(id, 'line-color', '#d4d0c8');
+        map.setPaintProperty(id, 'line-width', 1.2);
+      } else if (id.includes('major') || id.includes('primary') || id.includes('secondary')) {
+        map.setPaintProperty(id, 'line-color', '#ddd9d2');
+        map.setPaintProperty(id, 'line-width', 0.8);
+      } else {
+        map.setPaintProperty(id, 'line-color', '#e8e5e0');
+        map.setPaintProperty(id, 'line-width', 0.4);
+      }
+    }
+
+    // ── Administrative boundaries: subtle dashed lines ──
+    if (id.includes('admin') && type === 'line') {
+      if (id.includes('0') || id.includes('country')) {
+        map.setPaintProperty(id, 'line-color', '#b8b4ac');
+        map.setPaintProperty(id, 'line-width', 0.8);
+      } else {
+        map.setPaintProperty(id, 'line-color', '#d0ccc5');
+        map.setPaintProperty(id, 'line-width', 0.4);
+      }
+    }
+
+    // ── Country / state labels: elegant serif-like styling ──
+    if (id.includes('label') && type === 'symbol') {
+      if (id.includes('country')) {
+        map.setPaintProperty(id, 'text-color', '#8a857c');
+        map.setPaintProperty(id, 'text-halo-color', '#f8f7f5');
+        map.setPaintProperty(id, 'text-halo-width', 1.5);
+        map.setLayoutProperty(id, 'text-letter-spacing', 0.15);
+        map.setLayoutProperty(id, 'text-transform', 'uppercase');
+      } else if (id.includes('state') || id.includes('region')) {
+        map.setPaintProperty(id, 'text-color', '#a09b93');
+        map.setPaintProperty(id, 'text-halo-color', '#f8f7f5');
+        map.setPaintProperty(id, 'text-halo-width', 1.2);
+        map.setLayoutProperty(id, 'text-letter-spacing', 0.1);
+      } else if (id.includes('city') || id.includes('place') || id.includes('town')) {
+        map.setPaintProperty(id, 'text-color', '#6b6660');
+        map.setPaintProperty(id, 'text-halo-color', '#f8f7f5');
+        map.setPaintProperty(id, 'text-halo-width', 1);
+      } else {
+        map.setPaintProperty(id, 'text-color', '#b0aaa2');
+        map.setPaintProperty(id, 'text-halo-color', '#f8f7f5');
+        map.setPaintProperty(id, 'text-halo-width', 0.8);
+      }
+    }
+
+    // ── Buildings: subtle volumetric feel ──
+    if (id.includes('building') && type === 'fill') {
+      map.setPaintProperty(id, 'fill-color', '#eae7e2');
+      map.setPaintProperty(id, 'fill-opacity', 0.5);
+    }
+    if (id.includes('building') && type === 'fill-extrusion') {
+      map.setPaintProperty(id, 'fill-extrusion-color', '#eae7e2');
+      map.setPaintProperty(id, 'fill-extrusion-opacity', 0.4);
+    }
+  }
+
+  // ── Add terrain / hillshade source if not present ──
+  if (!map.getSource('mapbox-dem')) {
+    map.addSource('mapbox-dem', {
+      type: 'raster-dem',
+      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      tileSize: 512,
+      maxzoom: 14,
+    });
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 });
+  }
+}
+
 // ─── Main Map Component ───
 function MapboxMapInner({
   photos,
@@ -150,6 +259,19 @@ function MapboxMapInner({
   const [mapLoaded, setMapLoaded] = useState(false);
   const clusters = useMemo(() => clusterByLocation(photos), [photos]);
   const locationListRef = useRef<HTMLDivElement>(null);
+
+  const handleMapLoad = useCallback(() => {
+    setMapLoaded(true);
+    const map = mapRef.current?.getMap();
+    if (map) {
+      // Wait for style to be fully loaded before customizing
+      if (map.isStyleLoaded()) {
+        stylizeMap(map);
+      } else {
+        map.once('style.load', () => stylizeMap(map));
+      }
+    }
+  }, []);
 
   const flyToCluster = useCallback(
     (cluster: LocationCluster) => {
@@ -219,7 +341,7 @@ function MapboxMapInner({
             style={{ width: '100%', height: '100%' }}
             attributionControl={false}
             onClick={() => setSelectedCluster(null)}
-            onLoad={() => setMapLoaded(true)}
+            onLoad={handleMapLoad}
             maxZoom={16}
             minZoom={1.5}
           >
