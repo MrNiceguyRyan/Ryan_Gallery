@@ -37,21 +37,142 @@ function AnimatedCounter({ target }: { target: number }) {
 }
 
 /* ═══════════════════════════════════════════════════════
- *  WorksShowcase — single-row project switcher
- *  Nav on left · ALL photos in ONE horizontal row · no stacking
- *  Scales proportionally with viewport width
+ *  State → City map from PHOTO folder structure
+ * ═══════════════════════════════════════════════════════ */
+const STATE_MAP = [
+  { name: 'Arizona', cities: ['66 Road', 'Grand Canyon', 'Page'] },
+  { name: 'California', cities: ['Death Valley', 'Los Angeles', 'San Diego'] },
+  { name: 'Colorado', cities: ['Denver', 'Rocky Mountain'] },
+  { name: 'DMV', cities: ['Baltimore', 'DC'] },
+  { name: 'Florida', cities: ['Miami', 'Orlando'] },
+  { name: 'Macau', cities: ['Macau'] },
+  { name: 'Nevada', cities: ['Las Vegas'] },
+  { name: 'New York', cities: ['New York'] },
+  { name: 'Utah', cities: ['Bryce Canyon', 'Capitol Reef', 'Zion'] },
+  { name: 'Washington', cities: ['Seattle'] },
+];
+
+/* ── iMessage-style stacked photo pile for a city ── */
+function PhotoStack({
+  cityName,
+  photos,
+  slug,
+  index,
+}: {
+  cityName: string;
+  photos: Photo[];
+  slug?: string;
+  index: number;
+}) {
+  const stackPhotos = photos.slice(0, 4);
+  const hasPhotos = stackPhotos.length > 0;
+  const href = slug ? `/works/${slug}` : undefined;
+  const Wrapper = href ? 'a' : 'div';
+
+  return (
+    <motion.div
+      className="shrink-0 flex flex-col items-center gap-3 group cursor-pointer"
+      initial={{ opacity: 0, y: 30, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, delay: index * 0.08, ease: expo }}
+      whileHover={{ y: -4, transition: { type: 'spring', stiffness: 300, damping: 25 } }}
+    >
+      <Wrapper
+        {...(href ? { href } : {})}
+        className="relative block"
+        style={{ width: 'clamp(100px, 11vw, 160px)', height: 'clamp(130px, 14vw, 200px)' }}
+      >
+        {hasPhotos ? (
+          /* Stacked photos — iMessage style: each slightly rotated + offset */
+          <>
+            {stackPhotos.map((photo, i) => {
+              const rotations = [-4, 3, -1.5, 2];
+              const offsets = [
+                { x: -3, y: 2 },
+                { x: 4, y: -1 },
+                { x: -1, y: 3 },
+                { x: 2, y: -2 },
+              ];
+              const isTop = i === 0;
+              return (
+                <motion.div
+                  key={photo._id}
+                  className="absolute inset-0 rounded-md overflow-hidden shadow-md"
+                  style={{
+                    zIndex: stackPhotos.length - i,
+                    rotate: `${rotations[i % 4]}deg`,
+                    x: offsets[i % 4].x,
+                    y: offsets[i % 4].y,
+                  }}
+                  whileHover={
+                    isTop
+                      ? { scale: 1.02, rotate: '0deg', transition: { duration: 0.4 } }
+                      : undefined
+                  }
+                >
+                  <img
+                    src={`${photo.imageUrl}?auto=format&w=400&q=75`}
+                    alt={photo.title || cityName}
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                  {/* Slight darkening on bottom cards */}
+                  {!isTop && (
+                    <div className="absolute inset-0 bg-black/10" />
+                  )}
+                </motion.div>
+              );
+            })}
+            {/* Photo count badge */}
+            {photos.length > 1 && (
+              <div className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-gray-900 text-white text-[9px] font-medium flex items-center justify-center shadow-lg">
+                {photos.length}
+              </div>
+            )}
+          </>
+        ) : (
+          /* Placeholder for cities without photos yet */
+          <div className="absolute inset-0 rounded-md bg-gray-100 border border-gray-200/50 flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z" />
+            </svg>
+          </div>
+        )}
+      </Wrapper>
+      {/* City name label */}
+      <span
+        className="text-gray-500 font-light tracking-wide text-center leading-tight group-hover:text-gray-900 transition-colors duration-400"
+        style={{ fontSize: 'clamp(10px, 0.9vw, 13px)' }}
+      >
+        {cityName}
+      </span>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  WorksShowcase — State nav → City photo stacks
+ *  Left: state names · Right: iMessage-style city piles
  * ═══════════════════════════════════════════════════════ */
 function WorksShowcase({ collections }: { collections: Collection[] }) {
   const [activeIdx, setActiveIdx] = useState(0);
-  const active = collections[activeIdx];
-  const visiblePhotos = (active?.photos || []).slice(0, 6);
+  const activeState = STATE_MAP[activeIdx];
+
+  /* Match Sanity collections to cities by fuzzy name match */
+  function findCollection(cityName: string): Collection | undefined {
+    return collections.find((c) => {
+      const cn = c.name.trim().toLowerCase();
+      const target = cityName.toLowerCase();
+      return cn.includes(target) || target.includes(cn);
+    });
+  }
 
   return (
     <div className="relative px-[3vw]">
-      {/* ── Desktop: nav left + all photos in one row ── */}
-      <div className="hidden md:flex items-center gap-[3vw]">
-        {/* LEFT: section number + nav */}
-        <div className="shrink-0 flex flex-col items-start">
+      {/* ── Desktop: state nav left + city stacks right ── */}
+      <div className="hidden md:flex items-start gap-[3vw]">
+        {/* LEFT: section number + state nav */}
+        <div className="shrink-0 flex flex-col items-start pt-2">
           <AnimatePresence mode="wait">
             <motion.div
               key={`num-${activeIdx}`}
@@ -66,20 +187,20 @@ function WorksShowcase({ collections }: { collections: Collection[] }) {
             </motion.div>
           </AnimatePresence>
           <nav className="flex flex-col gap-1">
-            {collections.map((c, i) => {
+            {STATE_MAP.map((state, i) => {
               const isActive = i === activeIdx;
               return (
                 <button
-                  key={c._id}
+                  key={state.name}
                   onClick={() => setActiveIdx(i)}
-                  className={`text-left uppercase whitespace-nowrap transition-colors duration-300 flex items-center gap-2 py-0.5 cursor-pointer tracking-[0.14em] ${
+                  className={`text-left uppercase whitespace-nowrap transition-colors duration-400 flex items-center gap-2 py-0.5 cursor-pointer tracking-[0.14em] ${
                     isActive
                       ? 'text-gray-900 font-semibold'
                       : 'text-gray-300 hover:text-gray-600'
                   }`}
                   style={{ fontSize: 'clamp(12px, 1.1vw, 16px)' }}
                 >
-                  {c.name}
+                  {state.name}
                   {isActive && <span style={{ fontSize: 'clamp(10px, 0.9vw, 13px)' }}>&#9668;</span>}
                 </button>
               );
@@ -87,51 +208,45 @@ function WorksShowcase({ collections }: { collections: Collection[] }) {
           </nav>
         </div>
 
-        {/* RIGHT: ALL photos in ONE horizontal row */}
+        {/* RIGHT: city photo stacks — slide in/out */}
         <div className="flex-1 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
-              key={`photos-${activeIdx}`}
-              className="flex gap-[1vw]"
+              key={`cities-${activeIdx}`}
+              className="flex gap-[2vw] items-start py-2"
               initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -40, opacity: 0 }}
               transition={{ duration: 0.5, ease: expo }}
             >
-              {visiblePhotos.map((photo, i) => (
-                <motion.a
-                  key={photo._id}
-                  href={`/works/${active.slug}#photo-${photo._id}`}
-                  className="block shrink-0 overflow-hidden rounded-sm group"
-                  style={{ width: 'clamp(120px, 13vw, 220px)', aspectRatio: '4/3' }}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: i * 0.08, ease: expo }}
-                  whileHover={{ y: -4, transition: { type: 'spring', stiffness: 300, damping: 25 } }}
-                >
-                  <img
-                    src={`${photo.imageUrl}?auto=format&w=500&q=80`}
-                    alt={photo.title || active.name}
-                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700 ease-out"
-                    draggable={false}
+              {activeState.cities.map((cityName, i) => {
+                const col = findCollection(cityName);
+                const cityPhotos = col?.photos || [];
+                return (
+                  <PhotoStack
+                    key={cityName}
+                    cityName={cityName}
+                    photos={cityPhotos}
+                    slug={col?.slug}
+                    index={i}
                   />
-                </motion.a>
-              ))}
+                );
+              })}
             </motion.div>
           </AnimatePresence>
         </div>
       </div>
 
-      {/* ── Mobile: city tabs + one-row scroll ── */}
+      {/* ── Mobile: state tabs + city stacks horizontal scroll ── */}
       <div className="md:hidden">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4 mb-5">
           <span className="text-3xl font-bold text-gray-900 leading-none">
             {String(activeIdx + 1).padStart(2, '0')}
           </span>
           <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            {collections.map((c, i) => (
+            {STATE_MAP.map((state, i) => (
               <button
-                key={c._id}
+                key={state.name}
                 onClick={() => setActiveIdx(i)}
                 className={`text-[10px] tracking-[0.12em] uppercase whitespace-nowrap py-1 border-b-2 transition-colors ${
                   i === activeIdx
@@ -139,7 +254,7 @@ function WorksShowcase({ collections }: { collections: Collection[] }) {
                     : 'text-gray-300 border-transparent'
                 }`}
               >
-                {c.name}
+                {state.name}
               </button>
             ))}
           </div>
@@ -147,26 +262,25 @@ function WorksShowcase({ collections }: { collections: Collection[] }) {
         <AnimatePresence mode="wait">
           <motion.div
             key={`m-${activeIdx}`}
-            className="flex gap-2 overflow-x-auto no-scrollbar pb-2"
+            className="flex gap-5 overflow-x-auto no-scrollbar pb-4 px-1"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
             transition={{ duration: 0.4, ease: expo }}
           >
-            {visiblePhotos.map((photo) => (
-              <a
-                key={photo._id}
-                href={`/works/${active.slug}#photo-${photo._id}`}
-                className="block shrink-0 w-[35vw] aspect-[4/3] overflow-hidden"
-              >
-                <img
-                  src={`${photo.imageUrl}?auto=format&w=300&q=75`}
-                  alt={photo.title || active.name}
-                  className="w-full h-full object-cover"
-                  draggable={false}
+            {activeState.cities.map((cityName, i) => {
+              const col = findCollection(cityName);
+              const cityPhotos = col?.photos || [];
+              return (
+                <PhotoStack
+                  key={cityName}
+                  cityName={cityName}
+                  photos={cityPhotos}
+                  slug={col?.slug}
+                  index={i}
                 />
-              </a>
-            ))}
+              );
+            })}
           </motion.div>
         </AnimatePresence>
       </div>
