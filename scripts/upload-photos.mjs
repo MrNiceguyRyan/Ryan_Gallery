@@ -1,15 +1,15 @@
 /**
- * Batch Photo Upload Script
- * Usage: node scripts/upload-photos.mjs [folder-name]
- * Example: node scripts/upload-photos.mjs Miami
- *          node scripts/upload-photos.mjs  (uploads all folders)
+ * Batch Photo Upload Script (State → City structure)
+ * Usage: node scripts/upload-photos.mjs                   (upload all)
+ *        node scripts/upload-photos.mjs Florida            (upload one state)
+ *        node scripts/upload-photos.mjs Florida/Miami      (upload one city)
  *
  * Requires: ANTHROPIC_API_KEY env var for AI naming (optional)
  */
 
 import { createClient } from '@sanity/client';
 import exifr from 'exifr';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { createReadStream } from 'fs';
 
@@ -18,24 +18,41 @@ const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
 const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// Folder name → location metadata
+// City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
-  'new york': { city: 'New York', country: 'United States', lat: 40.7128, lng: -74.006 },
-  'miami':    { city: 'Miami',    country: 'United States', lat: 25.7617, lng: -80.1918 },
-  'arizona':  { city: 'Phoenix',  country: 'United States', lat: 33.4484, lng: -112.074 },
-  'tokyo':    { city: 'Tokyo',    country: 'Japan',         lat: 35.6762, lng: 139.6503 },
-  'paris':    { city: 'Paris',    country: 'France',        lat: 48.8566, lng: 2.3522 },
-  'greece':   { city: 'Santorini',country: 'Greece',        lat: 36.3932, lng: 25.4615 },
+  '66 road':                      { city: '66 Road',          country: 'United States', lat: 35.1983, lng: -111.6513 },
+  'grand canyon national park':   { city: 'Grand Canyon',     country: 'United States', lat: 36.1069, lng: -112.1129 },
+  'page':                         { city: 'Page',             country: 'United States', lat: 36.9147, lng: -111.4558 },
+  'death valley nation park':     { city: 'Death Valley',     country: 'United States', lat: 36.5054, lng: -117.0794 },
+  'los angeles':                  { city: 'Los Angeles',      country: 'United States', lat: 34.0522, lng: -118.2437 },
+  'san diego':                    { city: 'San Diego',        country: 'United States', lat: 32.7157, lng: -117.1611 },
+  'denver':                       { city: 'Denver',           country: 'United States', lat: 39.7392, lng: -104.9903 },
+  'rocky mountain national park': { city: 'Rocky Mountain',   country: 'United States', lat: 40.3428, lng: -105.6836 },
+  'baltimore':                    { city: 'Baltimore',        country: 'United States', lat: 39.2904, lng: -76.6122 },
+  'dc':                           { city: 'Washington DC',    country: 'United States', lat: 38.9072, lng: -77.0369 },
+  'miami':                        { city: 'Miami',            country: 'United States', lat: 25.7617, lng: -80.1918 },
+  'orlando':                      { city: 'Orlando',          country: 'United States', lat: 28.5383, lng: -81.3792 },
+  'macau':                        { city: 'Macau',            country: 'China',         lat: 22.1987, lng: 113.5439 },
+  'las vegas':                    { city: 'Las Vegas',        country: 'United States', lat: 36.1699, lng: -115.1398 },
+  'new york':                     { city: 'New York',         country: 'United States', lat: 40.7128, lng: -74.006 },
+  'bryce canyon national park':   { city: 'Bryce Canyon',     country: 'United States', lat: 37.5930, lng: -112.1871 },
+  'capitol reef national park':   { city: 'Capitol Reef',     country: 'United States', lat: 38.2832, lng: -111.2471 },
+  'zion national park':           { city: 'Zion',             country: 'United States', lat: 37.2982, lng: -113.0263 },
+  'seattle':                      { city: 'Seattle',          country: 'United States', lat: 47.6062, lng: -122.3321 },
 };
 
-// Folder name → style category suggestion
-const STYLE_MAP = {
-  'new york': 'street',
-  'miami':    'street',
-  'arizona':  'landscape',
-  'tokyo':    'street',
-  'paris':    'architecture',
-  'greece':   'landscape',
+// State name → style category default
+const STATE_STYLE_MAP = {
+  'arizona':    'landscape',
+  'california': 'landscape',
+  'colorado':   'landscape',
+  'dmv':        'street',
+  'florida':    'street',
+  'macau':      'street',
+  'nevada':     'street',
+  'new york':   'street',
+  'utah':       'landscape',
+  'washington': 'street',
 };
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG', '.HEIC', '.heic']);
@@ -54,19 +71,17 @@ function isImage(file) {
   return IMAGE_EXTS.has(extname(file));
 }
 
-function folderKey(name) {
-  return name.toLowerCase().trim();
-}
-
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 // AI-powered title generation using Claude API
-async function generateTitle(folderName, index, exifData) {
+async function generateTitle(cityName, stateName, index, exifData) {
+  const locationInfo = LOCATION_MAP[cityName.toLowerCase()] || {};
+  const displayCity = locationInfo.city || cityName;
+
   if (!ANTHROPIC_API_KEY) {
-    const city = LOCATION_MAP[folderKey(folderName)]?.city ?? folderName;
-    return `${city} #${String(index + 1).padStart(2, '0')}`;
+    return `${displayCity} #${String(index + 1).padStart(2, '0')}`;
   }
 
   const camera = exifData?.Make && exifData?.Model
@@ -75,7 +90,6 @@ async function generateTitle(folderName, index, exifData) {
   const date = exifData?.DateTimeOriginal
     ? new Date(exifData.DateTimeOriginal).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : '';
-  const location = LOCATION_MAP[folderKey(folderName)]?.city ?? folderName;
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -90,26 +104,27 @@ async function generateTitle(folderName, index, exifData) {
         max_tokens: 50,
         messages: [{
           role: 'user',
-          content: `Create a short, evocative title (3-5 words) for a street/travel photo taken in ${location}${date ? ` in ${date}` : ''} with ${camera}. Reply with ONLY the title, no quotes, no explanation.`,
+          content: `Create a short, evocative title (3-5 words) for a travel/landscape photo taken in ${displayCity}, ${stateName}${date ? ` in ${date}` : ''} with ${camera}. Reply with ONLY the title, no quotes, no explanation.`,
         }],
       }),
     });
     const data = await resp.json();
-    return data.content?.[0]?.text?.trim() ?? `${location} #${String(index + 1).padStart(2, '0')}`;
+    return data.content?.[0]?.text?.trim() ?? `${displayCity} #${String(index + 1).padStart(2, '0')}`;
   } catch {
-    return `${location} #${String(index + 1).padStart(2, '0')}`;
+    return `${displayCity} #${String(index + 1).padStart(2, '0')}`;
   }
 }
 
-// Find or create a collection for the folder
-async function findOrCreateCollection(folderName) {
-  const key = folderKey(folderName);
-  const slug = slugify(folderName);
+// Find or create a collection for the city
+async function findOrCreateCollection(cityFolderName, stateName) {
+  const slug = slugify(cityFolderName);
+  const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
+  const displayCity = locationInfo.city || cityFolderName;
 
-  // Search for existing collection
+  // Search for existing collection by slug or name
   const existing = await sanity.fetch(
-    `*[_type == "collection" && slug.current == $slug][0]{ _id, name }`,
-    { slug }
+    `*[_type == "collection" && (slug.current == $slug || lower(name) == $lowerName)][0]{ _id, name }`,
+    { slug, lowerName: displayCity.toLowerCase() }
   );
 
   if (existing) {
@@ -118,22 +133,20 @@ async function findOrCreateCollection(folderName) {
   }
 
   // Create new collection
-  const location = LOCATION_MAP[key];
-  const year = new Date().getFullYear().toString();
-
   const doc = {
     _type: 'collection',
-    name: folderName,
+    name: displayCity,
     slug: { _type: 'slug', current: slug },
-    subtitle: location ? `${location.city}, ${location.country}` : folderName,
-    location: location?.city ?? folderName,
-    year,
-    description: `A visual journey through ${location?.city ?? folderName}.`,
+    subtitle: `${displayCity}, ${locationInfo.country || stateName}`,
+    location: displayCity,
+    year: new Date().getFullYear(),
+    description: `A visual journey through ${displayCity}.`,
     featured: false,
+    gridSize: 'medium',
   };
 
   const created = await sanity.create(doc);
-  console.log(`  ✓ Created new collection: "${folderName}" (${created._id})`);
+  console.log(`  ✓ Created new collection: "${displayCity}" (${created._id})`);
   return created._id;
 }
 
@@ -161,32 +174,39 @@ function parseCameraInfo(exif) {
   };
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
-async function uploadFolder(folderName) {
-  const folderPath = join(PHOTO_ROOT, folderName);
-  const key = folderKey(folderName);
-
-  console.log(`\n📁 Processing folder: ${folderName}`);
+// ─── Upload a single city folder ─────────────────────────────────────────────
+async function uploadCity(stateName, cityFolderName) {
+  const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
+  const locationKey = cityFolderName.toLowerCase().trim();
+  const locationInfo = LOCATION_MAP[locationKey];
+  const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
-  const files = readdirSync(folderPath).filter(isImage);
+  const files = readdirSync(cityPath).filter(isImage);
   if (files.length === 0) {
-    console.log('  ⚠️  No images found, skipping.');
+    console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
     return;
   }
-  console.log(`  Found ${files.length} images`);
+  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
 
   // Find or create collection
-  const collectionId = await findOrCreateCollection(folderName);
-  const location = LOCATION_MAP[key];
-  const styleCategory = STYLE_MAP[key] ?? 'street';
+  const collectionId = await findOrCreateCollection(cityFolderName, stateName);
+
+  // Check existing photos in this collection to avoid duplicates
+  const existingPhotos = await sanity.fetch(
+    `count(*[_type == "photo" && collection._ref == $id])`,
+    { id: collectionId }
+  );
+  if (existingPhotos > 0) {
+    console.log(`    ℹ️  Collection already has ${existingPhotos} photos. Uploading new ones...`);
+  }
 
   // Upload each photo
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const filePath = join(folderPath, file);
+    const filePath = join(cityPath, file);
 
-    process.stdout.write(`  [${i + 1}/${files.length}] ${file} → `);
+    process.stdout.write(`    [${i + 1}/${files.length}] ${file} → `);
 
     try {
       // Read EXIF
@@ -195,7 +215,7 @@ async function uploadFolder(folderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(folderName, i, exif);
+      const title = await generateTitle(cityFolderName, stateName, existingPhotos + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -212,13 +232,13 @@ async function uploadFolder(folderName) {
           asset: { _type: 'reference', _ref: assetId },
         },
         collection: { _type: 'reference', _ref: collectionId },
-        styleCategory,
-        ...(location && {
+        styleCategory: stateStyle,
+        ...(locationInfo && {
           location: {
-            lat: location.lat,
-            lng: location.lng,
-            city: location.city,
-            country: location.country,
+            lat: locationInfo.lat,
+            lng: locationInfo.lng,
+            city: locationInfo.city,
+            country: locationInfo.country,
           },
         }),
         ...(cam.camera && { camera: cam.camera }),
@@ -228,51 +248,100 @@ async function uploadFolder(folderName) {
         ...(cam.iso && { iso: cam.iso }),
       };
 
-      // Create and immediately publish
       const created = await sanity.create(photoDoc);
-      await sanity.patch(created._id).set({}).commit(); // ensure saved
-
       console.log(`✓ "${title}"`);
     } catch (err) {
       console.log(`✗ Error: ${err.message}`);
     }
   }
 
-  // Set collection cover image to first uploaded photo
+  // Set collection cover image to first photo if not set
   try {
-    const firstPhoto = await sanity.fetch(
-      `*[_type == "photo" && collection._ref == $id][0]{ image }`,
+    const col = await sanity.fetch(
+      `*[_type == "collection" && _id == $id][0]{ coverImage }`,
       { id: collectionId }
     );
-    if (firstPhoto?.image) {
-      await sanity.patch(collectionId).set({ coverImage: firstPhoto.image }).commit();
-      console.log(`  ✓ Set collection cover image`);
+    if (!col?.coverImage) {
+      const firstPhoto = await sanity.fetch(
+        `*[_type == "photo" && collection._ref == $id][0]{ image }`,
+        { id: collectionId }
+      );
+      if (firstPhoto?.image) {
+        await sanity.patch(collectionId).set({ coverImage: firstPhoto.image }).commit();
+        console.log(`    ✓ Set collection cover image`);
+      }
     }
   } catch { /* optional */ }
 }
 
-async function main() {
-  const targetFolder = process.argv[2]; // optional: upload only one folder
+// ─── Upload a state folder ───────────────────────────────────────────────────
+async function uploadState(stateName) {
+  const statePath = join(PHOTO_ROOT, stateName);
 
-  console.log('🚀 Batch Photo Upload');
+  if (!existsSync(statePath) || !statSync(statePath).isDirectory()) {
+    console.error(`  ✗ State folder not found: ${statePath}`);
+    return;
+  }
+
+  console.log(`\n📁 ${stateName}`);
+
+  // Get city subfolders
+  const cities = readdirSync(statePath).filter(
+    (f) => statSync(join(statePath, f)).isDirectory()
+  );
+
+  if (cities.length === 0) {
+    // Check for photos directly in state folder (e.g., Macau)
+    const directPhotos = readdirSync(statePath).filter(isImage);
+    if (directPhotos.length > 0) {
+      console.log(`  📷 Photos directly in ${stateName} (no city subfolders)`);
+      // Treat state as city
+      await uploadCity(stateName, '.');
+    } else {
+      console.log(`  ⚠️  No city folders or photos found, skipping.`);
+    }
+    return;
+  }
+
+  for (const city of cities.sort()) {
+    await uploadCity(stateName, city);
+  }
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+async function main() {
+  const target = process.argv[2]; // optional: "Florida" or "Florida/Miami"
+
+  console.log('🚀 Batch Photo Upload (State → City)');
   console.log(`   Source: ${PHOTO_ROOT}`);
-  console.log(`   AI naming: ${ANTHROPIC_API_KEY ? '✓ enabled (Claude API)' : '✗ disabled (using location+index)'}`);
+  console.log(`   AI naming: ${ANTHROPIC_API_KEY ? '✓ enabled (Claude API)' : '✗ disabled (using city+index)'}`);
 
   try {
-    if (targetFolder) {
-      await uploadFolder(targetFolder);
+    if (target) {
+      if (target.includes('/')) {
+        // Specific city: "Florida/Miami"
+        const [state, city] = target.split('/');
+        console.log(`\n📁 ${state}`);
+        await uploadCity(state, city);
+      } else {
+        // Entire state
+        await uploadState(target);
+      }
     } else {
-      // Upload all folders
-      const folders = readdirSync(PHOTO_ROOT).filter(
-        (f) => statSync(join(PHOTO_ROOT, f)).isDirectory()
-      );
-      for (const folder of folders) {
-        await uploadFolder(folder);
+      // Upload all states
+      const states = readdirSync(PHOTO_ROOT)
+        .filter((f) => statSync(join(PHOTO_ROOT, f)).isDirectory())
+        .sort();
+
+      console.log(`   Found ${states.length} state folders\n`);
+
+      for (const state of states) {
+        await uploadState(state);
       }
     }
 
-    console.log('\n✅ Upload complete! Photos will appear on the site after Vercel redeploys.');
-    console.log('   You can also trigger a manual redeploy at https://vercel.com/dashboard');
+    console.log('\n✅ Upload complete! Photos will appear on the site after Cloudflare rebuilds.');
+    console.log('   Push to GitHub to trigger auto-deploy, or wait for Sanity webhook.');
   } catch (err) {
     console.error('Fatal error:', err);
     process.exit(1);

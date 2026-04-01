@@ -52,6 +52,7 @@ const STATE_MAP = [
   { name: 'Washington', cities: ['Seattle'] },
 ];
 
+
 /* ── iMessage-style stacked photo pile for a city ── */
 function PhotoStack({
   cityName,
@@ -152,7 +153,7 @@ function PhotoStack({
 
 /* ═══════════════════════════════════════════════════════
  *  WorksShowcase — State nav → City photo stacks
- *  Left: state names · Right: iMessage-style city piles
+ *  Left: state names (top→bottom) · Right: iMessage-style city piles
  * ═══════════════════════════════════════════════════════ */
 function WorksShowcase({ collections }: { collections: Collection[] }) {
   const [activeIdx, setActiveIdx] = useState(0);
