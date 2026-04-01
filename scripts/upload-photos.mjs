@@ -150,13 +150,30 @@ async function findOrCreateCollection(cityFolderName, stateName) {
   return created._id;
 }
 
-// Upload a single image file to Sanity and return asset reference
-async function uploadImage(filePath) {
-  const stream = createReadStream(filePath);
-  const asset = await sanity.assets.upload('image', stream, {
-    filename: basename(filePath),
-  });
-  return asset._id;
+// Sleep helper
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Upload a single image file to Sanity with retry logic
+async function uploadImage(filePath, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const stream = createReadStream(filePath);
+      const asset = await sanity.assets.upload('image', stream, {
+        filename: basename(filePath),
+      });
+      return asset._id;
+    } catch (err) {
+      if (attempt < retries && (err.message?.includes('503') || err.message?.includes('429') || err.message?.includes('ECONNRESET'))) {
+        const delay = attempt * 3000; // 3s, 6s, 9s
+        process.stdout.write(`(retry ${attempt}, wait ${delay / 1000}s) `);
+        await sleep(delay);
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 // Parse EXIF camera info
@@ -192,19 +209,29 @@ async function uploadCity(stateName, cityFolderName) {
   // Find or create collection
   const collectionId = await findOrCreateCollection(cityFolderName, stateName);
 
-  // Check existing photos in this collection to avoid duplicates
+  // Check existing photos — get filenames to skip duplicates
   const existingPhotos = await sanity.fetch(
-    `count(*[_type == "photo" && collection._ref == $id])`,
+    `*[_type == "photo" && collection._ref == $id]{ title, image { asset-> { originalFilename } } }`,
     { id: collectionId }
   );
-  if (existingPhotos > 0) {
-    console.log(`    ℹ️  Collection already has ${existingPhotos} photos. Uploading new ones...`);
+  const existingFilenames = new Set(
+    existingPhotos.map((p) => p.image?.asset?.originalFilename).filter(Boolean)
+  );
+  if (existingPhotos.length > 0) {
+    console.log(`    ℹ️  Collection already has ${existingPhotos.length} photos.`);
   }
 
   // Upload each photo
+  let uploaded = 0;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const filePath = join(cityPath, file);
+
+    // Skip if already uploaded
+    if (existingFilenames.has(file)) {
+      console.log(`    [${i + 1}/${files.length}] ${file} → ⏭ already exists`);
+      continue;
+    }
 
     process.stdout.write(`    [${i + 1}/${files.length}] ${file} → `);
 
@@ -215,7 +242,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos + i, exif);
+      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -249,11 +276,18 @@ async function uploadCity(stateName, cityFolderName) {
       };
 
       const created = await sanity.create(photoDoc);
+      uploaded++;
       console.log(`✓ "${title}"`);
+
+      // Throttle: wait 1.5s between uploads to avoid rate limiting
+      if (i < files.length - 1) await sleep(1500);
     } catch (err) {
       console.log(`✗ Error: ${err.message}`);
+      // Wait longer after an error
+      await sleep(3000);
     }
   }
+  console.log(`    📊 Uploaded ${uploaded} new photos`);
 
   // Set collection cover image to first photo if not set
   try {
