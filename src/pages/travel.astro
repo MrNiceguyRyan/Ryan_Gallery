@@ -3,8 +3,9 @@ import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
-import LeafletClusterMap from '../components/LeafletClusterMap';
+import MapboxMap from '../components/MapboxMap';
 import ParallaxHero from '../components/ParallaxHero';
+import { getMapboxToken } from '../config/mapbox';
 
 const currentPath = Astro.url.pathname;
 
@@ -27,6 +28,7 @@ const photos: Photo[] = await sanityClient.fetch(`
   }
 `);
 
+const mapboxToken = getMapboxToken();
 ---
 
 <Layout title="Travel | Ryan" description="The Interactive Geo-Map — photography locations around the world.">
@@ -45,7 +47,7 @@ const photos: Photo[] = await sanityClient.fetch(`
 
   <section class="py-16 px-6 md:px-16 max-w-7xl mx-auto animate-fade-in-up">
     <!-- Map + integrated location cards -->
-    <LeafletClusterMap client:only="react" photos={photos} />
+    <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
   </section>
 
   <!-- Footer -->
