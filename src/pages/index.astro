@@ -7,7 +7,7 @@ import HomePage from '../components/home/HomePage';
 
 const currentPath = Astro.url.pathname;
 
-// ─── GROQ: All collections with photos ───
+// ─── GROQ: All collections with photos + location data ───
 const collections: Collection[] = await sanityClient.fetch(`
   *[_type == "collection"] | order(year desc) {
     _id,
@@ -28,7 +28,9 @@ const collections: Collection[] = await sanityClient.fetch(`
       focalLength,
       aperture,
       shutterSpeed,
-      iso
+      iso,
+      styleCategory,
+      location
     }
   }
 `);
@@ -55,6 +57,5 @@ const photos: Photo[] = await sanityClient.fetch(`
 ---
 
 <Layout>
-  <Nav client:load currentPath={currentPath} />
   <HomePage client:load collections={collections} photos={photos} />
 </Layout>

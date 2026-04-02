@@ -1,548 +1,598 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { motion, useScroll, useTransform, useSpring, useInView, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { ChevronLeft, ArrowRight, Globe, User, Camera } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
-import OpeningAnimation from './OpeningAnimation';
 
-const expo = [0.16, 1, 0.3, 1] as const;
+const expo = [0.23, 1, 0.32, 1] as const;
+
+const HERO_IMAGE =
+  'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
 
 interface Props {
   collections: Collection[];
   photos: Photo[];
 }
 
-const HERO_IMAGE =
-  'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
-
 /* ═══════════════════════════════════════════════════════
- *  Animated Counter
+ *  Lightbox — fullscreen photo viewer
  * ═══════════════════════════════════════════════════════ */
-function AnimatedCounter({ target }: { target: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true });
-  const [count, setCount] = useState(0);
+function Lightbox({
+  photos,
+  initialIndex,
+  onClose,
+}: {
+  photos: Photo[];
+  initialIndex: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const photo = photos[index];
+  const touchStartX = useRef(0);
+
+  const goNext = useCallback(
+    () => setIndex((i) => Math.min(i + 1, photos.length - 1)),
+    [photos.length],
+  );
+  const goPrev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
   useEffect(() => {
-    if (!isInView) return;
-    const dur = 2000;
-    const start = Date.now();
-    const tick = () => {
-      const p = Math.min((Date.now() - start) / dur, 1);
-      setCount(Math.round((1 - Math.pow(1 - p, 3)) * target));
-      if (p < 1) requestAnimationFrame(tick);
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
     };
-    requestAnimationFrame(tick);
-  }, [isInView, target]);
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose, goNext, goPrev]);
 
-  return <span ref={ref}>{count}</span>;
-}
-
-/* ═══════════════════════════════════════════════════════
- *  State → City map from PHOTO folder structure
- * ═══════════════════════════════════════════════════════ */
-const STATE_MAP = [
-  { name: 'Arizona', cities: ['66 Road', 'Grand Canyon', 'Page'] },
-  { name: 'California', cities: ['Death Valley', 'Los Angeles', 'San Diego'] },
-  { name: 'Colorado', cities: ['Denver', 'Rocky Mountain'] },
-  { name: 'DMV', cities: ['Baltimore', 'DC'] },
-  { name: 'Florida', cities: ['Miami', 'Orlando'] },
-  { name: 'Macau', cities: ['Macau'] },
-  { name: 'Nevada', cities: ['Las Vegas'] },
-  { name: 'New York', cities: ['New York'] },
-  { name: 'Utah', cities: ['Bryce Canyon', 'Capitol Reef', 'Zion'] },
-  { name: 'Washington', cities: ['Seattle'] },
-];
-
-
-/* ── iMessage-style stacked photo pile for a city ── */
-function PhotoStack({
-  cityName,
-  photos,
-  slug,
-  index,
-}: {
-  cityName: string;
-  photos: Photo[];
-  slug?: string;
-  index: number;
-}) {
-  const stackPhotos = photos.slice(0, 4);
-  const hasPhotos = stackPhotos.length > 0;
-  const href = slug ? `/works/${slug}` : undefined;
-  const Wrapper = href ? 'a' : 'div';
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+  };
 
   return (
     <motion.div
-      className="shrink-0 flex flex-col items-center gap-3 group cursor-pointer"
-      initial={{ opacity: 0, y: 30, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: expo }}
-      whileHover={{ y: -4, transition: { type: 'spring', stiffness: 300, damping: 25 } }}
+      className="fixed inset-0 z-[60] bg-black/97 backdrop-blur-md flex items-center justify-center"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
-      <Wrapper
-        {...(href ? { href } : {})}
-        className="relative block"
-        style={{ width: 'clamp(100px, 11vw, 160px)', height: 'clamp(130px, 14vw, 200px)' }}
+      <button
+        onClick={onClose}
+        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors"
       >
-        {hasPhotos ? (
-          /* Stacked photos — iMessage style: each slightly rotated + offset */
-          <>
-            {stackPhotos.map((photo, i) => {
-              const rotations = [-4, 3, -1.5, 2];
-              const offsets = [
-                { x: -3, y: 2 },
-                { x: 4, y: -1 },
-                { x: -1, y: 3 },
-                { x: 2, y: -2 },
-              ];
-              const isTop = i === 0;
-              return (
-                <motion.div
-                  key={photo._id}
-                  className="absolute inset-0 rounded-md overflow-hidden shadow-md"
-                  style={{
-                    zIndex: stackPhotos.length - i,
-                    rotate: `${rotations[i % 4]}deg`,
-                    x: offsets[i % 4].x,
-                    y: offsets[i % 4].y,
-                  }}
-                  whileHover={
-                    isTop
-                      ? { scale: 1.02, rotate: '0deg', transition: { duration: 0.4 } }
-                      : undefined
-                  }
-                >
-                  <img
-                    src={`${photo.imageUrl}?auto=format&w=400&q=75`}
-                    alt={photo.title || cityName}
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
-                  {/* Slight darkening on bottom cards */}
-                  {!isTop && (
-                    <div className="absolute inset-0 bg-black/10" />
-                  )}
-                </motion.div>
-              );
-            })}
-            {/* Photo count badge */}
-            {photos.length > 1 && (
-              <div className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-gray-900 text-white text-[9px] font-medium flex items-center justify-center shadow-lg">
-                {photos.length}
-              </div>
-            )}
-          </>
-        ) : (
-          /* Placeholder for cities without photos yet */
-          <div className="absolute inset-0 rounded-md bg-gray-100 border border-gray-200/50 flex items-center justify-center">
-            <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z" />
-            </svg>
-          </div>
-        )}
-      </Wrapper>
-      {/* City name label */}
-      <span
-        className="text-gray-500 font-light tracking-wide text-center leading-tight group-hover:text-gray-900 transition-colors duration-400"
-        style={{ fontSize: 'clamp(10px, 0.9vw, 13px)' }}
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={photo._id}
+          src={`${photo.imageUrl}?auto=format&w=1800&q=90`}
+          alt={photo.title || ''}
+          className="max-w-[92vw] max-h-[78vh] object-contain select-none"
+          initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
+          animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+          exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+          onClick={(e) => e.stopPropagation()}
+          draggable={false}
+        />
+      </AnimatePresence>
+
+      {index > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goPrev(); }}
+          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
+        >
+          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+      )}
+
+      {index < photos.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goNext(); }}
+          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
+        >
+          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      )}
+
+      <div
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
       >
-        {cityName}
-      </span>
+        <div className="flex items-center gap-4">
+          {photo.title && (
+            <span className="text-white/60 text-sm font-light tracking-wide">{photo.title}</span>
+          )}
+          <span className="text-white/30 text-xs font-mono tracking-wider">
+            {index + 1} / {photos.length}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-[13px] text-white/35 font-mono tracking-wide">
+          {photo.camera && <span className="text-white/45">{photo.camera}</span>}
+          {photo.focalLength && (<><span className="text-white/15">|</span><span>{photo.focalLength}</span></>)}
+          {photo.aperture && (<><span className="text-white/15">|</span><span>{photo.aperture}</span></>)}
+          {photo.shutterSpeed && (<><span className="text-white/15">|</span><span>{photo.shutterSpeed}</span></>)}
+          {photo.iso && (<><span className="text-white/15">|</span><span>ISO {photo.iso}</span></>)}
+        </div>
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
+        <motion.div
+          className="h-full bg-white/25"
+          animate={{ width: `${((index + 1) / photos.length) * 100}%` }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+        />
+      </div>
     </motion.div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
- *  WorksShowcase — State nav → City photo stacks
- *  Left: state names (top→bottom) · Right: iMessage-style city piles
+ *  Overlay — full-screen container (light bg)
  * ═══════════════════════════════════════════════════════ */
-function WorksShowcase({ collections }: { collections: Collection[] }) {
-  const [activeIdx, setActiveIdx] = useState(0);
-  const activeState = STATE_MAP[activeIdx];
-
-  /* Match Sanity collections to cities by fuzzy name match */
-  function findCollection(cityName: string): Collection | undefined {
-    return collections.find((c) => {
-      const cn = c.name.trim().toLowerCase();
-      const target = cityName.toLowerCase();
-      return cn.includes(target) || target.includes(cn);
-    });
-  }
-
+function Overlay({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
   return (
-    <div className="relative px-[3vw]">
-      {/* ── Desktop: state nav left + city stacks right ── */}
-      <div className="hidden md:flex items-start gap-[3vw]">
-        {/* LEFT: section number + state nav */}
-        <div className="shrink-0 flex flex-col items-start pt-2">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`num-${activeIdx}`}
-              className="font-bold text-gray-900 tracking-tight leading-none mb-[1.5vw]"
-              style={{ fontSize: 'clamp(2.5rem, 5vw, 5rem)' }}
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -20, opacity: 0 }}
-              transition={{ duration: 0.4, ease: expo }}
-            >
-              {String(activeIdx + 1).padStart(2, '0')}
-            </motion.div>
-          </AnimatePresence>
-          <nav className="flex flex-col gap-1">
-            {STATE_MAP.map((state, i) => {
-              const isActive = i === activeIdx;
-              return (
-                <button
-                  key={state.name}
-                  onClick={() => setActiveIdx(i)}
-                  className={`text-left uppercase whitespace-nowrap transition-colors duration-400 flex items-center gap-2 py-0.5 cursor-pointer tracking-[0.14em] ${
-                    isActive
-                      ? 'text-gray-900 font-semibold'
-                      : 'text-gray-300 hover:text-gray-600'
-                  }`}
-                  style={{ fontSize: 'clamp(12px, 1.1vw, 16px)' }}
-                >
-                  {state.name}
-                  {isActive && <span style={{ fontSize: 'clamp(10px, 0.9vw, 13px)' }}>&#9668;</span>}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* RIGHT: city photo stacks — slide in/out */}
-        <div className="flex-1 overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`cities-${activeIdx}`}
-              className="flex gap-[2vw] items-start py-2"
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -40, opacity: 0 }}
-              transition={{ duration: 0.5, ease: expo }}
-            >
-              {activeState.cities.map((cityName, i) => {
-                const col = findCollection(cityName);
-                const cityPhotos = col?.photos || [];
-                return (
-                  <PhotoStack
-                    key={cityName}
-                    cityName={cityName}
-                    photos={cityPhotos}
-                    slug={col?.slug}
-                    index={i}
-                  />
-                );
-              })}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 1.02, y: 20 }}
+      transition={{ type: 'spring', damping: 30, stiffness: 200 }}
+      className="fixed inset-0 z-50 bg-[#FDFDFB] text-[#1A1A1A] overflow-y-auto no-scrollbar"
+    >
+      <div className="sticky top-0 left-0 w-full z-10 px-6 py-6 md:px-12 flex justify-between items-center bg-white/80 backdrop-blur-3xl border-b border-black/5">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold hover:opacity-50 transition-all hover:gap-5"
+        >
+          <ChevronLeft size={16} /> Back
+        </button>
+        <div className="text-[11px] uppercase tracking-[0.6em] font-bold opacity-30">{title}</div>
       </div>
-
-      {/* ── Mobile: state tabs + city stacks horizontal scroll ── */}
-      <div className="md:hidden">
-        <div className="flex items-center gap-4 mb-5">
-          <span className="text-3xl font-bold text-gray-900 leading-none">
-            {String(activeIdx + 1).padStart(2, '0')}
-          </span>
-          <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            {STATE_MAP.map((state, i) => (
-              <button
-                key={state.name}
-                onClick={() => setActiveIdx(i)}
-                className={`text-[10px] tracking-[0.12em] uppercase whitespace-nowrap py-1 border-b-2 transition-colors ${
-                  i === activeIdx
-                    ? 'text-gray-900 font-semibold border-gray-900'
-                    : 'text-gray-300 border-transparent'
-                }`}
-              >
-                {state.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`m-${activeIdx}`}
-            className="flex gap-5 overflow-x-auto no-scrollbar pb-4 px-1"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -20, opacity: 0 }}
-            transition={{ duration: 0.4, ease: expo }}
-          >
-            {activeState.cities.map((cityName, i) => {
-              const col = findCollection(cityName);
-              const cityPhotos = col?.photos || [];
-              return (
-                <PhotoStack
-                  key={cityName}
-                  cityName={cityName}
-                  photos={cityPhotos}
-                  slug={col?.slug}
-                  index={i}
-                />
-              );
-            })}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
+      <div className="px-6 md:px-12">{children}</div>
+    </motion.div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
- *  HomePage
+ *  PhotoBlock — dynamic photo in grid
  * ═══════════════════════════════════════════════════════ */
-export default function HomePage({ collections, photos }: Props) {
-  const [showOpening, setShowOpening] = useState(false);
+function PhotoBlock({
+  photo,
+  span,
+  onClick,
+}: {
+  photo: Photo;
+  span: 'full' | 'half' | 'third';
+  onClick: () => void;
+}) {
+  const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 60 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-10%' }}
+      transition={{ duration: 1.5, ease: expo }}
+      className={`${colSpan} group relative overflow-hidden rounded-sm cursor-pointer`}
+      onClick={onClick}
+    >
+      <motion.img
+        whileHover={{ scale: 1.03 }}
+        transition={{ duration: 1.5, ease: expo }}
+        src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
+        alt={photo.title || ''}
+        className="w-full h-auto object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+        loading="lazy"
+        draggable={false}
+      />
+    </motion.div>
+  );
+}
 
-  /* ── Hero parallax ── */
-  const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: heroProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  });
-  const heroImgY = useTransform(heroProgress, [0, 1], [0, 150]);
-  const heroTextY = useTransform(heroProgress, [0, 1], [0, -80]);
-  const heroOpacity = useTransform(heroProgress, [0, 0.5], [1, 0]);
-  const smoothImgY = useSpring(heroImgY, { stiffness: 50, damping: 30 });
-  const smoothTextY = useSpring(heroTextY, { stiffness: 50, damping: 30 });
+/* ═══════════════════════════════════════════════════════
+ *  FilmstripItem — parallax collection band
+ * ═══════════════════════════════════════════════════════ */
+function FilmstripItem({
+  collection,
+  onClick,
+  index,
+}: {
+  collection: Collection;
+  onClick: () => void;
+  index: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
 
-  /* ── Opening animation ── */
-  useEffect(() => {
-    if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
-  }, []);
-  const handleOpeningComplete = useCallback(() => {
-    sessionStorage.setItem('opening-shown', '1');
-    setShowOpening(false);
-  }, []);
+  const coverUrl = collection.coverImageUrl
+    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    : collection.photos?.[0]?.imageUrl
+      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      : '';
 
-  /* ── Marquee ── */
-  const marqueeItems = [
-    'Photographer',
-    'Visual Storyteller',
-    'Travel',
-    'Street',
-    'Landscape',
-    'Architecture',
-    'Portrait',
-  ];
+  const photoCount = collection.photos?.length || collection.photoCount || 0;
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 100 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-10%' }}
+      transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
+      onClick={onClick}
+      className="filmstrip-item group relative cursor-pointer"
+    >
+      <div className="absolute inset-0 overflow-hidden">
+        {coverUrl && (
+          <motion.img
+            style={{ y }}
+            src={coverUrl}
+            alt={collection.name}
+            className="filmstrip-image brightness-[0.6] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            draggable={false}
+          />
+        )}
+      </div>
+      <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      <div className="relative z-10 text-center px-6">
+        <motion.div className="flex flex-col items-center gap-6">
+          <span className="text-[10px] uppercase tracking-[0.8em] opacity-40 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+            {collection.location || collection.subtitle || ''}
+          </span>
+          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none">
+            {collection.name}
+          </h2>
+          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
+          {photoCount > 0 && (
+            <span className="text-[9px] uppercase tracking-[0.5em] text-white/30 font-mono">
+              {photoCount} photographs
+            </span>
+          )}
+        </motion.div>
+      </div>
+      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-60 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
+        Explore Story <ArrowRight size={14} />
+      </div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  CollectionDetail — overlay with sticky sidebar + grid
+ * ═══════════════════════════════════════════════════════ */
+function CollectionDetail({
+  collection,
+  onClose,
+}: {
+  collection: Collection;
+  onClose: () => void;
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const collectionPhotos = collection.photos || [];
+
+  /* Build dynamic photo grid rows: hero / half / hero / thirds */
+  const rows: { photo: Photo; span: 'full' | 'half' | 'third' }[][] = [];
+  let i = 0;
+  while (i < collectionPhotos.length) {
+    const pattern = rows.length % 4;
+    if (pattern === 0 || pattern === 2) {
+      // Full-width hero
+      rows.push([{ photo: collectionPhotos[i], span: 'full' }]);
+      i += 1;
+    } else if (pattern === 1) {
+      // Two side-by-side
+      const row: { photo: Photo; span: 'full' | 'half' | 'third' }[] = [
+        { photo: collectionPhotos[i], span: 'half' },
+      ];
+      if (i + 1 < collectionPhotos.length) {
+        row.push({ photo: collectionPhotos[i + 1], span: 'half' });
+        i += 2;
+      } else {
+        row[0].span = 'full';
+        i += 1;
+      }
+      rows.push(row);
+    } else {
+      // Three in a row
+      const row: { photo: Photo; span: 'full' | 'half' | 'third' }[] = [
+        { photo: collectionPhotos[i], span: 'third' },
+      ];
+      if (i + 1 < collectionPhotos.length) row.push({ photo: collectionPhotos[i + 1], span: 'third' });
+      if (i + 2 < collectionPhotos.length) row.push({ photo: collectionPhotos[i + 2], span: 'third' });
+      // Adjust span if fewer than 3
+      if (row.length === 1) row[0].span = 'full';
+      else if (row.length === 2) { row[0].span = 'half'; row[1].span = 'half'; }
+      i += row.length;
+      rows.push(row);
+    }
+  }
 
   return (
     <>
-      {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
-
-      <div
-        className={
-          showOpening
-            ? 'opacity-0'
-            : 'opacity-100 transition-opacity duration-700'
-        }
-      >
-        {/* ═══════════════════ HERO — fullscreen cover ═══════════════════ */}
-        <section
-          ref={heroRef}
-          className="relative h-screen overflow-hidden bg-[#0a0a0a]"
-        >
-          {/* Ken Burns slow-zoom + parallax image */}
-          <motion.div
-            className="absolute inset-0"
-            style={{ y: smoothImgY }}
-          >
-            <motion.img
-              src={`${HERO_IMAGE}?auto=format&w=2200&q=85`}
-              alt=""
-              className="w-full h-[120%] object-cover"
-              style={{ objectPosition: 'center 40%' }}
-              draggable={false}
-              initial={{ scale: 1.2, filter: 'brightness(0.6) blur(6px)' }}
-              animate={{ scale: 1.02, filter: 'brightness(0.85) blur(0px)' }}
-              transition={{ duration: 8, ease: [0.25, 0, 0.2, 1] }}
-            />
-          </motion.div>
-
-          {/* Subtle overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/30" />
-
-          {/* Text overlay — centered */}
-          <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center z-10"
-            style={{ y: smoothTextY, opacity: heroOpacity }}
-          >
-            <motion.h1
-              className="font-serif italic text-white tracking-[-0.02em] text-center leading-none"
-              style={{ fontSize: 'clamp(2.8rem, 7vw, 7rem)' }}
-              initial={{ opacity: 0, y: 80, filter: 'blur(16px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              transition={{ duration: 1.6, delay: 0.2, ease: expo }}
-            >
-              Discover the World
-            </motion.h1>
-            <motion.div
-              className="flex items-center gap-6 mt-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1, delay: 0.8, ease: expo }}
-            >
-              <motion.span
-                className="h-px bg-white/30"
-                initial={{ width: 0 }}
-                animate={{ width: 48 }}
-                transition={{ duration: 1.2, delay: 1.2, ease: expo }}
-              />
-              <span
-                className="tracking-[0.6em] text-white/50 uppercase font-light"
-                style={{ fontSize: 'clamp(8px, 0.8vw, 12px)' }}
-              >
-                Ryan&apos;s Gallery
+      <Overlay title={collection.location || collection.name} onClose={onClose}>
+        <div className="max-w-7xl mx-auto">
+          <div className="detail-grid">
+            {/* Sticky sidebar */}
+            <div className="lg:sticky lg:top-32 h-fit space-y-10 mb-24 lg:mb-0">
+              <span className="text-[11px] uppercase tracking-[0.5em] opacity-40 block font-medium">
+                Archive Collection
               </span>
-              <motion.span
-                className="h-px bg-white/30"
-                initial={{ width: 0 }}
-                animate={{ width: 48 }}
-                transition={{ duration: 1.2, delay: 1.2, ease: expo }}
-              />
-            </motion.div>
-          </motion.div>
-
-          {/* Scroll indicator */}
-          <motion.div
-            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2, duration: 0.8 }}
-          >
-            <span className="text-[7px] tracking-[0.5em] text-white/30 uppercase">
-              Scroll
-            </span>
-            <motion.div
-              className="w-px h-8 bg-white/20 origin-top"
-              animate={{ scaleY: [0, 1, 0] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
-        </section>
-
-        {/* ═══════════════════ MARQUEE ═══════════════════ */}
-        <motion.div
-          className="py-5 border-y border-gray-100 bg-white overflow-hidden"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-        >
-          <div className="animate-marquee flex whitespace-nowrap">
-            {[0, 1].map((copy) => (
-              <div key={copy} className="flex items-center shrink-0">
-                {[...marqueeItems, ...marqueeItems].map((item, j) => (
-                  <span key={`${copy}-${j}`} className="flex items-center shrink-0 mx-5 md:mx-8">
-                    <span className="text-sm md:text-base font-serif italic text-gray-800 tracking-wide">
-                      {item}
-                    </span>
-                    <span className="text-gray-200/60 text-[10px] ml-5 md:ml-8">&#10022;</span>
-                  </span>
-                ))}
+              <h2 className="text-7xl md:text-9xl font-serif italic tracking-tighter leading-[0.85]">
+                {collection.name}
+              </h2>
+              {collection.description && (
+                <p className="text-lg md:text-xl leading-relaxed font-light opacity-60 max-w-md italic">
+                  &ldquo;{collection.description}&rdquo;
+                </p>
+              )}
+              {collection.subtitle && !collection.description && (
+                <p className="text-lg leading-relaxed font-light opacity-60 max-w-md italic">
+                  {collection.subtitle}
+                </p>
+              )}
+              <div className="flex items-center gap-6 pt-12">
+                <div className="w-16 h-[1px] bg-[#1A1A1A] opacity-10" />
+                <span className="text-[10px] uppercase tracking-[0.3em] font-mono opacity-40">
+                  {collectionPhotos.length} Captured Frames
+                </span>
               </div>
-            ))}
+            </div>
+
+            {/* Photo grid */}
+            <div className="space-y-24 md:space-y-48">
+              {rows.map((row, rowIdx) => (
+                <div key={rowIdx} className="grid grid-cols-6 gap-4 md:gap-8">
+                  {row.map((item, colIdx) => {
+                    const globalIdx = rows
+                      .slice(0, rowIdx)
+                      .reduce((sum, r) => sum + r.length, 0) + colIdx;
+                    return (
+                      <PhotoBlock
+                        key={item.photo._id}
+                        photo={item.photo}
+                        span={item.span}
+                        onClick={() => setLightboxIndex(globalIdx)}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+
+              {/* Return button */}
+              <footer className="pt-48 pb-24 text-center">
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="group flex flex-col items-center gap-4 mx-auto"
+                >
+                  <div className="w-12 h-12 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-black group-hover:text-white transition-all duration-500">
+                    <ArrowRight className="-rotate-90" size={16} />
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity">
+                    Return to Archive
+                  </span>
+                </button>
+              </footer>
+            </div>
           </div>
+        </div>
+      </Overlay>
+
+      <AnimatePresence>
+        {lightboxIndex !== null && (
+          <Lightbox
+            photos={collectionPhotos}
+            initialIndex={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  HomePage — dark filmstrip archive
+ * ═══════════════════════════════════════════════════════ */
+export default function HomePage({ collections, photos }: Props) {
+  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+
+  // Filter to collections that have photos
+  const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
+
+  useEffect(() => {
+    const isOverlayOpen = !!selectedCollection;
+    document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
+    document.body.style.backgroundColor = isOverlayOpen ? '#FDFDFB' : '#0A0A0A';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.backgroundColor = '';
+    };
+  }, [selectedCollection]);
+
+  return (
+    <div
+      className={`min-h-screen font-sans transition-colors duration-1000 ${
+        selectedCollection
+          ? 'bg-[#FDFDFB] text-[#1A1A1A]'
+          : 'bg-[#0A0A0A] text-[#FDFDFB]'
+      }`}
+    >
+      {/* ── Nav ── */}
+      <nav
+        className={`fixed top-0 left-0 w-full z-40 px-6 py-4 md:px-12 flex justify-between items-center transition-all duration-700 ${
+          selectedCollection
+            ? 'bg-white/80 backdrop-blur-2xl border-b border-black/5'
+            : 'bg-black/20 backdrop-blur-xl border-b border-white/5'
+        }`}
+      >
+        <button
+          onClick={() => {
+            setSelectedCollection(null);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="flex items-center gap-3 text-lg font-serif italic tracking-tight hover:opacity-60 transition-all group"
+        >
+          <Camera size={20} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+          <span>Ryan Xu</span>
+        </button>
+
+        <div className="hidden md:flex items-center space-x-10 text-[9px] uppercase tracking-[0.25em] font-bold opacity-60">
+          <a
+            href="/travel"
+            className="hover:opacity-100 flex items-center gap-2 transition-all hover:tracking-[0.35em]"
+          >
+            <Globe size={12} /> Travel
+          </a>
+          <a
+            href="/about"
+            className="hover:opacity-100 flex items-center gap-2 transition-all hover:tracking-[0.35em]"
+          >
+            <User size={12} /> About
+          </a>
+        </div>
+
+        <div className="md:hidden flex gap-4">
+          <a href="/travel" className="hover:opacity-50 transition-opacity"><Globe size={18} /></a>
+          <a href="/about" className="hover:opacity-50 transition-opacity"><User size={18} /></a>
+        </div>
+      </nav>
+
+      {/* ── Hero ── */}
+      <header className="h-[90vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, scale: 1.15 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 2.5, ease: expo }}
+          className="absolute inset-0 z-0"
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-[#0A0A0A] z-10" />
+          <img
+            src={`${HERO_IMAGE}?auto=format&w=2200&q=85`}
+            className="w-full h-full object-cover opacity-60"
+            alt=""
+            draggable={false}
+          />
         </motion.div>
 
-        {/* ═══════════════════ WORKS — one-row interactive switcher ═══════════════════ */}
-        <motion.section
-          className="bg-white py-16 md:py-24 overflow-hidden"
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.8, ease: expo }}
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 1.5, ease: expo }}
+          className="relative z-10 space-y-10"
         >
-          <WorksShowcase collections={collections} />
-        </motion.section>
-
-        {/* ═══════════════════ STATS ═══════════════════ */}
-        <section className="py-20 md:py-28 px-6 md:px-16 bg-white">
-          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-16 md:gap-28">
-            {[
-              { value: photos.length, label: 'Photographs' },
-              { value: new Set(collections.map(c => c.location || c.name)).size, label: 'Cities' },
-              { value: collections.length, label: 'Collections' },
-            ].map((stat, i) => (
-              <motion.div
-                key={i}
-                className="text-center"
-                initial={{ opacity: 0, y: 40 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.8, delay: i * 0.15, ease: expo }}
-              >
-                <div
-                  className="font-serif italic text-gray-900 leading-none tracking-tight"
-                  style={{ fontSize: 'clamp(3.5rem, 7vw, 6rem)' }}
-                >
-                  <AnimatedCounter target={stat.value} />
-                </div>
-                <p className="text-[9px] tracking-[0.5em] text-gray-400 uppercase mt-5 font-light">
-                  {stat.label}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* ═══════════════════ CTA ═══════════════════ */}
-        <motion.section
-          className="py-16 md:py-24 px-6 md:px-16 text-center border-t border-gray-50"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8, ease: expo }}
-        >
-          <motion.a
-            href="/travel"
-            className="inline-flex items-center gap-5 group"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
+          <span className="text-[11px] uppercase tracking-[1em] opacity-50 block font-medium">
+            Visual Archive
+          </span>
+          <h1
+            className="text-8xl md:text-[13vw] font-serif italic tracking-tighter leading-[0.8] drop-shadow-2xl"
+            style={{ color: '#9cc2a9' }}
           >
-            <span
-              className="font-serif italic text-gray-900 group-hover:text-gray-500 transition-colors duration-500"
-              style={{ fontSize: 'clamp(1.5rem, 3vw, 2.5rem)' }}
-            >
-              Explore the Journey
-            </span>
-            <svg
-              className="w-6 h-6 text-gray-400 group-hover:text-gray-900 group-hover:translate-x-2 transition-all duration-500"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75" />
-            </svg>
-          </motion.a>
-        </motion.section>
-
-        {/* ═══════════════════ FOOTER ═══════════════════ */}
-        <motion.footer
-          className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-        >
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div>
-              <h2 className="text-xl font-serif italic text-gray-900 tracking-tight">Ryan Xu.</h2>
-              <p className="text-[10px] text-gray-400 mt-2 font-light tracking-wider">
-                &copy; {new Date().getFullYear()} All rights reserved.
+            Ryan&apos;s Gallery
+          </h1>
+          <div className="flex flex-col items-center gap-12 pt-16">
+            <div className="flex items-center gap-8">
+              <div className="w-20 h-[1px] bg-white opacity-20" />
+              <p className="text-[10px] uppercase tracking-[0.6em] opacity-40 font-bold">
+                {photos.length} Photographs &middot; {activeCollections.length} Collections
               </p>
+              <div className="w-20 h-[1px] bg-white opacity-20" />
             </div>
-            <div className="flex items-center gap-6 text-[10px] text-gray-400 font-mono tracking-wider">
-              <span>Nikon Zf</span>
-              <span className="text-gray-200">|</span>
-              <span>Astro + React</span>
-              <span className="text-gray-200">|</span>
-              <span>Sanity CMS</span>
-            </div>
+
+            <motion.div
+              animate={{ y: [0, 10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="opacity-20"
+            >
+              <ArrowRight className="rotate-90" size={20} />
+            </motion.div>
           </div>
-        </motion.footer>
-      </div>
-    </>
+        </motion.div>
+      </header>
+
+      {/* ── Filmstrip collection list ── */}
+      <main className="pb-64">
+        <div className="space-y-0">
+          {activeCollections.map((collection, index) => (
+            <FilmstripItem
+              key={collection._id}
+              collection={collection}
+              onClick={() => setSelectedCollection(collection)}
+              index={index}
+            />
+          ))}
+        </div>
+      </main>
+
+      {/* ── Collection detail overlay ── */}
+      <AnimatePresence>
+        {selectedCollection && (
+          <CollectionDetail
+            collection={selectedCollection}
+            onClose={() => setSelectedCollection(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Footer ── */}
+      <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
+        <div className="flex flex-col items-center md:items-start gap-6">
+          <div className="flex items-center gap-3 text-2xl font-serif italic tracking-tighter text-white">
+            <Camera size={24} className="opacity-40" />
+            <span>Ryan Xu</span>
+          </div>
+          <p className="max-w-xs text-center md:text-left leading-loose">
+            A curated collection of visual narratives from across the globe.
+          </p>
+          <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
+            &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
+          </div>
+        </div>
+        <div className="flex gap-16">
+          <div className="flex flex-col gap-4">
+            <span className="opacity-100 font-bold mb-2">Navigate</span>
+            <a href="/travel" className="hover:text-white transition-colors">Travel</a>
+            <a href="/about" className="hover:text-white transition-colors">About</a>
+          </div>
+          <div className="flex flex-col gap-4">
+            <span className="opacity-100 font-bold mb-2">Tech</span>
+            <span>Nikon Zf</span>
+            <span>Astro + React</span>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
