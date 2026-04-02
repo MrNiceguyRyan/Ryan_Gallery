@@ -11,9 +11,9 @@ export default function OpeningAnimation({ onComplete }: Props) {
   const [phase, setPhase] = useState<'build' | 'reveal' | 'exit'>('build');
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('reveal'), 600);
-    const t2 = setTimeout(() => setPhase('exit'), 2000);
-    const t3 = setTimeout(onComplete, 2600);
+    const t1 = setTimeout(() => setPhase('reveal'), 350);
+    const t2 = setTimeout(() => setPhase('exit'), 1400);
+    const t3 = setTimeout(onComplete, 1800);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onComplete]);
 
@@ -25,7 +25,7 @@ export default function OpeningAnimation({ onComplete }: Props) {
         <motion.div
           className="fixed inset-0 z-50 bg-[#0A0A0A] flex items-center justify-center overflow-hidden"
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         >
           {/* Concentric rings */}
           {[0, 1, 2].map((i) => (
@@ -46,8 +46,8 @@ export default function OpeningAnimation({ onComplete }: Props) {
                 opacity: [0, 0.5, 0.15],
               }}
               transition={{
-                duration: 1.8 + i * 0.2,
-                delay: i * 0.15,
+                duration: 1.0 + i * 0.15,
+                delay: i * 0.08,
                 ease: [0.25, 0, 0.2, 1],
               }}
             />
@@ -71,8 +71,8 @@ export default function OpeningAnimation({ onComplete }: Props) {
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: [0, 0.4, 0.1] }}
               transition={{
-                duration: 1.4,
-                delay: 0.1 + i * 0.05,
+                duration: 0.8,
+                delay: 0.05 + i * 0.03,
                 ease: [0.25, 0, 0.2, 1],
               }}
             />
@@ -93,8 +93,8 @@ export default function OpeningAnimation({ onComplete }: Props) {
                         : {}
                     }
                     transition={{
-                      duration: 0.7,
-                      delay: i * 0.08,
+                      duration: 0.5,
+                      delay: i * 0.05,
                       ease: expo,
                     }}
                   >
@@ -112,7 +112,7 @@ export default function OpeningAnimation({ onComplete }: Props) {
                   ? { opacity: 1, y: 0, filter: 'blur(0px)' }
                   : {}
               }
-              transition={{ duration: 0.6, delay: 0.3, ease: expo }}
+              transition={{ duration: 0.4, delay: 0.15, ease: expo }}
             >
               VISUAL ARCHIVE
             </motion.p>
@@ -121,7 +121,7 @@ export default function OpeningAnimation({ onComplete }: Props) {
               className="flex items-center gap-3 mt-6"
               initial={{ opacity: 0 }}
               animate={phase === 'reveal' ? { opacity: 1 } : {}}
-              transition={{ duration: 0.4, delay: 0.5 }}
+              transition={{ duration: 0.3, delay: 0.25 }}
             >
               {[0, 1, 2].map((d) => (
                 <motion.div
@@ -135,7 +135,7 @@ export default function OpeningAnimation({ onComplete }: Props) {
                   }}
                   initial={{ scale: 0 }}
                   animate={phase === 'reveal' ? { scale: 1 } : {}}
-                  transition={{ duration: 0.3, delay: 0.55 + d * 0.08 }}
+                  transition={{ duration: 0.2, delay: 0.3 + d * 0.05 }}
                 />
               ))}
             </motion.div>

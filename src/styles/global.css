@@ -1,10 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
 @import "@fontsource-variable/inter";
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  --font-display: "Cinzel Decorative", "Playfair Display", ui-serif, Georgia, serif;
 }
 
 /* ─── Base reset ─── */
@@ -214,13 +216,13 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(0.6);
+  filter: grayscale(0.3) brightness(0.85);
   transition: all 1s ease-out;
   transform: scale(1.1);
 }
 
 .filmstrip-item:hover .filmstrip-image {
-  filter: grayscale(0);
+  filter: grayscale(0) brightness(1);
   transform: scale(1);
 }
 
@@ -240,4 +242,86 @@ img {
 /* Apple-like spring timing */
 .apple-spring {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  Leaflet Map — overrides & cluster styles
+ * ═══════════════════════════════════════════════════════ */
+
+.leaflet-container {
+  font-family: "Inter", system-ui, sans-serif;
+  background: #f8f7f5;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  background: white;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
+}
+
+.leaflet-popup-tip-container {
+  display: none;
+}
+
+.leaflet-tooltip {
+  background: #1a1a1a;
+  color: white;
+  border: none;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.leaflet-tooltip-top::before,
+.leaflet-tooltip-bottom::before,
+.leaflet-tooltip-left::before,
+.leaflet-tooltip-right::before {
+  border: none;
+}
+
+.leaflet-bar {
+  border: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.leaflet-bar a {
+  background: white;
+  color: #1a1a1a;
+  border: none;
+}
+
+.leaflet-bar a:hover {
+  background: #f5f5f5;
+}
+
+/* Cluster marker pulse animation */
+@keyframes cluster-pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+  70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.cluster-pulse {
+  animation: cluster-pulse 2s infinite;
+}
+
+/* Custom marker/cluster icon reset */
+.custom-marker-icon,
+.custom-cluster-icon {
+  background: transparent !important;
+  border: none !important;
 }

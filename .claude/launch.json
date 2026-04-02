@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "astro-dev",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["astro", "dev"],
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && npx astro dev"],
       "port": 4321
     }
   ]

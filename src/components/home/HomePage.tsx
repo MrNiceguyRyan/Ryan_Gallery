@@ -259,24 +259,24 @@ function FilmstripItem({
             style={{ y }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image brightness-[0.6] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
             draggable={false}
           />
         )}
       </div>
-      <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
       <div className="relative z-10 text-center px-6">
         <motion.div className="flex flex-col items-center gap-6">
-          <span className="text-[10px] uppercase tracking-[0.8em] opacity-40 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+          <span className="text-[10px] uppercase tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none">
+          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none drop-shadow-lg">
             {collection.name}
           </h2>
           <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
         </motion.div>
       </div>
-      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-60 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
+      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
         Explore Story <ArrowRight size={14} />
       </div>
     </motion.div>
@@ -478,7 +478,7 @@ export default function HomePage({ collections, photos }: Props) {
               setSelectedCollection(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`text-xl md:text-2xl font-serif tracking-[0.08em] hover:opacity-60 transition-all ${
+            className={`text-xl md:text-2xl font-display tracking-[0.12em] hover:opacity-60 transition-all ${
               selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
             }`}
           >
@@ -490,7 +490,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
               }`}
             >
               Photography
@@ -498,7 +498,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/travel"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
               }`}
             >
               Travel
@@ -506,7 +506,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/about"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
               }`}
             >
               About
@@ -547,14 +547,14 @@ export default function HomePage({ collections, photos }: Props) {
               className="text-6xl md:text-8xl lg:text-[9vw] font-serif italic tracking-tighter leading-[0.85] drop-shadow-2xl"
               style={{ color: '#9cc2a9' }}
             >
-              Ryan&apos;s Gallery
+              Journal Gallery
             </h1>
             <div className="flex items-center gap-6">
-              <div className="w-12 h-[1px] bg-white/20" />
-              <p className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] text-white/40 font-medium">
+              <div className="w-12 h-[1px] bg-white/30" />
+              <p className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] text-white/60 font-medium">
                 Visual Archive
               </p>
-              <div className="w-12 h-[1px] bg-white/20" />
+              <div className="w-12 h-[1px] bg-white/30" />
             </div>
 
             <motion.div
@@ -592,9 +592,9 @@ export default function HomePage({ collections, photos }: Props) {
       </AnimatePresence>
 
         {/* ── Footer ── */}
-        <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
+        <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-50">
           <div className="flex flex-col items-center md:items-start gap-6">
-            <span className="text-2xl font-serif tracking-[0.08em] text-white">RYAN XU</span>
+            <span className="text-2xl font-display tracking-[0.12em] text-white">RYAN XU</span>
             <p className="max-w-xs text-center md:text-left leading-loose">
               A curated collection of visual narratives from across the globe.
             </p>
