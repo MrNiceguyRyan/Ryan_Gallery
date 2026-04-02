@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { ChevronLeft, ArrowRight, Globe, User, Camera } from 'lucide-react';
+import { ChevronLeft, ArrowRight, Search } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
+import OpeningAnimation from './OpeningAnimation';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
 const HERO_IMAGE =
-  'https://cdn.sanity.io/images/z610fooo/production/b3ff88abc00f4b64e60a031bdfd701ca34ceb618-4096x2730.jpg';
+  'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2000&auto=format&fit=crop';
 
 interface Props {
   collections: Collection[];
@@ -273,11 +274,6 @@ function FilmstripItem({
             {collection.name}
           </h2>
           <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
-          {photoCount > 0 && (
-            <span className="text-[9px] uppercase tracking-[0.5em] text-white/30 font-mono">
-              {photoCount} photographs
-            </span>
-          )}
         </motion.div>
       </div>
       <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-60 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
@@ -428,9 +424,19 @@ function CollectionDetail({
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [showOpening, setShowOpening] = useState(false);
 
   // Filter to collections that have photos
   const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
+
+  useEffect(() => {
+    if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
+  }, []);
+
+  const handleOpeningComplete = useCallback(() => {
+    sessionStorage.setItem('opening-shown', '1');
+    setShowOpening(false);
+  }, []);
 
   useEffect(() => {
     const isOverlayOpen = !!selectedCollection;
@@ -443,104 +449,123 @@ export default function HomePage({ collections, photos }: Props) {
   }, [selectedCollection]);
 
   return (
-    <div
-      className={`min-h-screen font-sans transition-colors duration-1000 ${
-        selectedCollection
-          ? 'bg-[#FDFDFB] text-[#1A1A1A]'
-          : 'bg-[#0A0A0A] text-[#FDFDFB]'
-      }`}
-    >
-      {/* ── Nav ── */}
-      <nav
-        className={`fixed top-0 left-0 w-full z-40 px-6 py-4 md:px-12 flex justify-between items-center transition-all duration-700 ${
+    <>
+      {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
+
+      <div
+        className={`min-h-screen font-sans transition-colors duration-1000 ${
+          showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
+        } ${
           selectedCollection
-            ? 'bg-white/80 backdrop-blur-2xl border-b border-black/5'
-            : 'bg-black/20 backdrop-blur-xl border-b border-white/5'
+            ? 'bg-[#FDFDFB] text-[#1A1A1A]'
+            : 'bg-[#0A0A0A] text-[#FDFDFB]'
         }`}
       >
-        <button
-          onClick={() => {
-            setSelectedCollection(null);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          className="flex items-center gap-3 text-lg font-serif italic tracking-tight hover:opacity-60 transition-all group"
+        {/* ── Nav — centered name + right links ── */}
+        <nav
+          className={`fixed top-0 left-0 w-full z-40 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
+            selectedCollection
+              ? 'bg-white/80 backdrop-blur-2xl border-b border-black/5'
+              : 'bg-transparent'
+          }`}
         >
-          <Camera size={20} className="opacity-40 group-hover:opacity-100 transition-opacity" />
-          <span>Ryan Xu</span>
-        </button>
+          {/* Left spacer for centering */}
+          <div className="flex-1" />
 
-        <div className="hidden md:flex items-center space-x-10 text-[9px] uppercase tracking-[0.25em] font-bold opacity-60">
-          <a
-            href="/travel"
-            className="hover:opacity-100 flex items-center gap-2 transition-all hover:tracking-[0.35em]"
+          {/* Center: name */}
+          <button
+            onClick={() => {
+              setSelectedCollection(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`text-xl md:text-2xl font-serif tracking-[0.08em] hover:opacity-60 transition-all ${
+              selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
+            }`}
           >
-            <Globe size={12} /> Travel
-          </a>
-          <a
-            href="/about"
-            className="hover:opacity-100 flex items-center gap-2 transition-all hover:tracking-[0.35em]"
+            RYAN XU
+          </button>
+
+          {/* Right: nav links */}
+          <div className="flex-1 flex justify-end items-center gap-6 md:gap-8">
+            <a
+              href="/"
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
+                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+              }`}
+            >
+              Photography
+            </a>
+            <a
+              href="/travel"
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
+                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+              }`}
+            >
+              Travel
+            </a>
+            <a
+              href="/about"
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
+                selectedCollection ? 'text-[#1A1A1A]/60' : 'text-white/60'
+              }`}
+            >
+              About
+            </a>
+            {/* Mobile: search icon as menu hint */}
+            <div className="md:hidden flex items-center gap-4">
+              <a href="/travel" className="opacity-50 hover:opacity-100 transition-opacity">
+                <Search size={16} className={selectedCollection ? 'text-[#1A1A1A]' : 'text-white'} />
+              </a>
+            </div>
+          </div>
+        </nav>
+
+        {/* ── Hero ── */}
+        <header className="h-[90vh] flex flex-col justify-end items-center text-center px-6 pb-20 relative overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, scale: 1.15 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 2.5, ease: expo }}
+            className="absolute inset-0 z-0"
           >
-            <User size={12} /> About
-          </a>
-        </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-[#0A0A0A] z-10" />
+            <img
+              src={HERO_IMAGE}
+              className="w-full h-full object-cover opacity-50"
+              alt=""
+              draggable={false}
+            />
+          </motion.div>
 
-        <div className="md:hidden flex gap-4">
-          <a href="/travel" className="hover:opacity-50 transition-opacity"><Globe size={18} /></a>
-          <a href="/about" className="hover:opacity-50 transition-opacity"><User size={18} /></a>
-        </div>
-      </nav>
-
-      {/* ── Hero ── */}
-      <header className="h-[90vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-        <motion.div
-          initial={{ opacity: 0, scale: 1.15 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 2.5, ease: expo }}
-          className="absolute inset-0 z-0"
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-[#0A0A0A] z-10" />
-          <img
-            src={`${HERO_IMAGE}?auto=format&w=2200&q=85`}
-            className="w-full h-full object-cover opacity-60"
-            alt=""
-            draggable={false}
-          />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 1.5, ease: expo }}
-          className="relative z-10 space-y-10"
-        >
-          <span className="text-[11px] uppercase tracking-[1em] opacity-50 block font-medium">
-            Visual Archive
-          </span>
-          <h1
-            className="text-8xl md:text-[13vw] font-serif italic tracking-tighter leading-[0.8] drop-shadow-2xl"
-            style={{ color: '#9cc2a9' }}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 1.5, ease: expo }}
+            className="relative z-10 flex flex-col items-center gap-8"
           >
-            Ryan&apos;s Gallery
-          </h1>
-          <div className="flex flex-col items-center gap-12 pt-16">
-            <div className="flex items-center gap-8">
-              <div className="w-20 h-[1px] bg-white opacity-20" />
-              <p className="text-[10px] uppercase tracking-[0.6em] opacity-40 font-bold">
-                {photos.length} Photographs &middot; {activeCollections.length} Collections
+            <h1
+              className="text-6xl md:text-8xl lg:text-[9vw] font-serif italic tracking-tighter leading-[0.85] drop-shadow-2xl"
+              style={{ color: '#9cc2a9' }}
+            >
+              Ryan&apos;s Gallery
+            </h1>
+            <div className="flex items-center gap-6">
+              <div className="w-12 h-[1px] bg-white/20" />
+              <p className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] text-white/40 font-medium">
+                Visual Archive
               </p>
-              <div className="w-20 h-[1px] bg-white opacity-20" />
+              <div className="w-12 h-[1px] bg-white/20" />
             </div>
 
             <motion.div
-              animate={{ y: [0, 10, 0] }}
+              animate={{ y: [0, 8, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="opacity-20"
+              className="opacity-20 mt-4"
             >
-              <ArrowRight className="rotate-90" size={20} />
+              <ArrowRight className="rotate-90" size={18} />
             </motion.div>
-          </div>
-        </motion.div>
-      </header>
+          </motion.div>
+        </header>
 
       {/* ── Filmstrip collection list ── */}
       <main className="pb-64">
@@ -566,33 +591,31 @@ export default function HomePage({ collections, photos }: Props) {
         )}
       </AnimatePresence>
 
-      {/* ── Footer ── */}
-      <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
-        <div className="flex flex-col items-center md:items-start gap-6">
-          <div className="flex items-center gap-3 text-2xl font-serif italic tracking-tighter text-white">
-            <Camera size={24} className="opacity-40" />
-            <span>Ryan Xu</span>
+        {/* ── Footer ── */}
+        <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
+          <div className="flex flex-col items-center md:items-start gap-6">
+            <span className="text-2xl font-serif tracking-[0.08em] text-white">RYAN XU</span>
+            <p className="max-w-xs text-center md:text-left leading-loose">
+              A curated collection of visual narratives from across the globe.
+            </p>
+            <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
+              &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
+            </div>
           </div>
-          <p className="max-w-xs text-center md:text-left leading-loose">
-            A curated collection of visual narratives from across the globe.
-          </p>
-          <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
-            &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
+          <div className="flex gap-16">
+            <div className="flex flex-col gap-4">
+              <span className="opacity-100 font-bold mb-2">Navigate</span>
+              <a href="/travel" className="hover:text-white transition-colors">Travel</a>
+              <a href="/about" className="hover:text-white transition-colors">About</a>
+            </div>
+            <div className="flex flex-col gap-4">
+              <span className="opacity-100 font-bold mb-2">Tech</span>
+              <span>Nikon Zf</span>
+              <span>Astro + React</span>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-16">
-          <div className="flex flex-col gap-4">
-            <span className="opacity-100 font-bold mb-2">Navigate</span>
-            <a href="/travel" className="hover:text-white transition-colors">Travel</a>
-            <a href="/about" className="hover:text-white transition-colors">About</a>
-          </div>
-          <div className="flex flex-col gap-4">
-            <span className="opacity-100 font-bold mb-2">Tech</span>
-            <span>Nikon Zf</span>
-            <span>Astro + React</span>
-          </div>
-        </div>
-      </footer>
-    </div>
+        </footer>
+      </div>
+    </>
   );
 }
