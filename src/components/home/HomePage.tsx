@@ -374,33 +374,52 @@ function CollectionDetail({
                 </span>
               </div>
 
-              {/* Location mini-map card */}
+              {/* Location mini-map card — country-level view */}
               {collectionLocation && mapboxToken && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3, duration: 0.8, ease: expo }}
-                  className="mt-8 rounded-2xl overflow-hidden border border-black/5 shadow-sm"
+                  className="mt-8 rounded-2xl overflow-hidden border border-black/5 shadow-md"
                 >
-                  <div className="relative h-40 overflow-hidden">
+                  <div className="relative h-48 overflow-hidden">
                     <img
-                      src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-s+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},10,0/400x200@2x?access_token=${mapboxToken}`}
+                      src={`https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},4,0/500x280@2x?access_token=${mapboxToken}&addlayer={"id":"country-boundary","type":"line","source":"composite","source-layer":"admin","filter":["==","admin_level",0],"paint":{"line-color":"#2c3e50","line-width":1.5}}`}
                       alt={`Map of ${collectionLocation.city || collection.name}`}
                       className="w-full h-full object-cover"
                       draggable={false}
+                      onError={(e) => {
+                        // Fallback without addlayer if the complex URL fails
+                        (e.target as HTMLImageElement).src = `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},4,0/500x280@2x?access_token=${mapboxToken}`;
+                      }}
                     />
+                    {/* Gradient overlay at bottom for text readability */}
+                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white/60 to-transparent" />
                   </div>
-                  <div className="px-4 py-3 bg-white flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#2c3e50]/10 flex items-center justify-center flex-shrink-0">
-                      <MapPin size={14} className="text-[#2c3e50]" />
+                  <div className="px-4 py-3 bg-white">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#2c3e50]/8 flex items-center justify-center flex-shrink-0">
+                        <MapPin size={16} className="text-[#2c3e50]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-[#1A1A1A] truncate">
+                          {collectionLocation.city || collection.name}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          {collectionLocation.country || ''}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-[12px] font-medium text-[#1A1A1A] truncate">
-                        {collectionLocation.city || collection.name}{collectionLocation.country ? `, ${collectionLocation.country}` : ''}
-                      </p>
-                      <p className="text-[10px] text-gray-400 font-mono">
+                    <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+                      <p className="text-[10px] text-gray-400 font-mono tracking-wide">
                         {Math.abs(collectionLocation.lat).toFixed(4)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(collectionLocation.lng).toFixed(4)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
                       </p>
+                      <a
+                        href="/travel"
+                        className="text-[10px] uppercase tracking-[0.1em] font-bold text-[#2c3e50] hover:opacity-60 transition-opacity"
+                      >
+                        View on Map
+                      </a>
                     </div>
                   </div>
                 </motion.div>
@@ -544,7 +563,7 @@ export default function HomePage({ collections, photos }: Props) {
                 selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
               }`}
             >
-              Travel
+              Journal
             </a>
             <a
               href="/about"
@@ -648,7 +667,7 @@ export default function HomePage({ collections, photos }: Props) {
           <div className="flex gap-16">
             <div className="flex flex-col gap-4">
               <span className="opacity-100 font-bold mb-2">Navigate</span>
-              <a href="/travel" className="hover:text-white transition-colors">Travel</a>
+              <a href="/travel" className="hover:text-white transition-colors">Journal</a>
               <a href="/about" className="hover:text-white transition-colors">About</a>
             </div>
             <div className="flex flex-col gap-4">

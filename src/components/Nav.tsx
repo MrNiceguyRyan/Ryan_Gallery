@@ -7,7 +7,7 @@ interface Props {
 
 const links = [
   { href: '/', label: 'Home' },
-  { href: '/travel', label: 'Travel' },
+  { href: '/travel', label: 'Journal' },
   { href: '/about', label: 'About' },
 ];
 
