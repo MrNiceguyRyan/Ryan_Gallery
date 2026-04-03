@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { ChevronLeft, ArrowRight, Search } from 'lucide-react';
+import { ChevronLeft, ArrowRight, Search, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
+import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -296,6 +297,16 @@ function CollectionDetail({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const collectionPhotos = collection.photos || [];
 
+  // Derive location from first geotagged photo
+  const collectionLocation = useMemo(() => {
+    const photo = collectionPhotos.find(p => p.location?.lat != null && p.location?.lng != null);
+    return photo?.location || null;
+  }, [collectionPhotos]);
+
+  const mapboxToken = useMemo(() => {
+    try { return getMapboxToken(); } catch { return ''; }
+  }, []);
+
   /* Build dynamic photo grid rows: hero / half / hero / thirds */
   const rows: { photo: Photo; span: 'full' | 'half' | 'third' }[][] = [];
   let i = 0;
@@ -362,6 +373,38 @@ function CollectionDetail({
                   {collectionPhotos.length} Captured Frames
                 </span>
               </div>
+
+              {/* Location mini-map card */}
+              {collectionLocation && mapboxToken && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.8, ease: expo }}
+                  className="mt-8 rounded-2xl overflow-hidden border border-black/5 shadow-sm"
+                >
+                  <div className="relative h-40 overflow-hidden">
+                    <img
+                      src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-s+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},10,0/400x200@2x?access_token=${mapboxToken}`}
+                      alt={`Map of ${collectionLocation.city || collection.name}`}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  </div>
+                  <div className="px-4 py-3 bg-white flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#2c3e50]/10 flex items-center justify-center flex-shrink-0">
+                      <MapPin size={14} className="text-[#2c3e50]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-medium text-[#1A1A1A] truncate">
+                        {collectionLocation.city || collection.name}{collectionLocation.country ? `, ${collectionLocation.country}` : ''}
+                      </p>
+                      <p className="text-[10px] text-gray-400 font-mono">
+                        {Math.abs(collectionLocation.lat).toFixed(4)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(collectionLocation.lng).toFixed(4)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </div>
 
             {/* Photo grid */}
