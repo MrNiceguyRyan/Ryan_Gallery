@@ -209,13 +209,18 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     setActiveCluster(null);
   }, [clusterIndex, viewState.zoom]);
 
-  // Photo marker click → show collection popup
+  // Photo marker click → highlight in sidebar (no map popup)
   const handlePhotoClick = useCallback((photo: Photo) => {
     const city = photo.location?.city || '';
     const cluster = cityClusters.find(c => c.city === city) || null;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
-    // Don't zoom in aggressively — just center with a gentle zoom
+    // Also expand the region containing this city
+    if (cluster) {
+      const region = getRegion(cluster.country);
+      setExpandedRegion(region);
+    }
+    // Gentle center, don't zoom aggressively
     const targetZoom = Math.max(viewState.zoom, 6);
     mapRef.current?.flyTo({
       center: [photo.location!.lng, photo.location!.lat],
@@ -223,6 +228,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       duration: 1200,
       essential: true,
     });
+    // Scroll sidebar to the city
+    setTimeout(() => {
+      const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
   }, [viewState.zoom, cityClusters]);
 
   // Sidebar city click
@@ -234,6 +244,38 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: 1500, essential: true });
     }
   }, [activeClusterCity]);
+
+  // Handle #loc= hash from mini-map navigation
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#loc=')) {
+      const parts = hash.replace('#loc=', '').split(',');
+      if (parts.length >= 2) {
+        const lat = parseFloat(parts[0]);
+        const lng = parseFloat(parts[1]);
+        const zoom = parts[2] ? parseFloat(parts[2]) : 8;
+        if (!isNaN(lat) && !isNaN(lng)) {
+          setTimeout(() => {
+            mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
+            // Find and highlight closest city
+            let closest: LocationCluster | null = null;
+            let minDist = Infinity;
+            for (const c of cityClusters) {
+              const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
+              if (d < minDist) { minDist = d; closest = c; }
+            }
+            if (closest && minDist < 2) {
+              setActiveClusterCity(closest.city);
+              setActiveCluster(closest);
+              setExpandedRegion(getRegion(closest.country));
+            }
+          }, 500);
+          // Clean the hash
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+    }
+  }, [cityClusters]);
 
   const resetView = useCallback(() => {
     mapRef.current?.flyTo({ center: [-40, 30], zoom: 2.2, pitch: 40, bearing: 0, duration: 2000 });
@@ -266,7 +308,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             onLoad={handleMapLoad}
             maxZoom={16}
             minZoom={1.5}
-            onClick={() => { setActiveCluster(null); setShowStylePicker(false); }}
+            onClick={() => { setShowStylePicker(false); }}
           >
             <NavigationControl position="bottom-right" showCompass={false} />
             <FullscreenControl position="bottom-right" />
@@ -363,92 +405,6 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             )}
           </AnimatePresence>
 
-          {/* ── Collection popup card — app-level design, no overlap ── */}
-          <AnimatePresence>
-            {activeCluster && (
-              <motion.div
-                initial={{ opacity: 0, x: -30, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -30, scale: 0.95 }}
-                transition={{ type: 'spring', damping: 30, stiffness: 400 }}
-                className="absolute top-6 left-6 z-20 w-[300px] md:w-[320px]"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="bg-white/95 backdrop-blur-2xl rounded-[1.25rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.2),0_0_0_1px_rgba(0,0,0,0.03)] overflow-hidden">
-                  {/* Cover photo with gradient overlay */}
-                  <div className="relative h-44 overflow-hidden">
-                    <img
-                      src={`${activeCluster.photos[0].imageUrl}?auto=format&w=700&q=85`}
-                      alt={activeCluster.city}
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-
-                    {/* Close button */}
-                    <button
-                      onClick={() => setActiveCluster(null)}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white/80 hover:bg-black/40 hover:text-white transition-all active:scale-90"
-                    >
-                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-
-                    {/* Photo count badge */}
-                    <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-bold text-white tracking-wider">
-                      {activeCluster.photos.length} PHOTOS
-                    </div>
-
-                    {/* City & country on image */}
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">{activeCluster.country}</p>
-                      <h3 className="text-2xl font-serif italic text-white leading-tight mt-0.5">{activeCluster.city}</h3>
-                    </div>
-                  </div>
-
-                  {/* Content area */}
-                  <div className="p-4">
-                    {/* Coordinates */}
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: `rgba(${ACCENT_RGB},0.08)` }}>
-                        <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke={ACCENT} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>
-                      </div>
-                      <span className="text-[10px] text-gray-400 font-mono tracking-wide">
-                        {formatCoord(activeCluster.lat, 'N', 'S')}, {formatCoord(activeCluster.lng, 'E', 'W')}
-                      </span>
-                    </div>
-
-                    {/* Photo thumbnails grid */}
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {activeCluster.photos.slice(0, 8).map((p, i) => (
-                        <motion.div
-                          key={p._id}
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: i * 0.03, duration: 0.3 }}
-                          className="aspect-square rounded-lg overflow-hidden"
-                        >
-                          <img src={`${p.imageUrl}?auto=format&w=120&q=75`} alt="" className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" draggable={false} />
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    {/* Explore button */}
-                    {activeCluster.photos[0]?.collection?.slug && (
-                      <a
-                        href={`/works/${activeCluster.photos[0].collection.slug}`}
-                        className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.12em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ background: ACCENT }}
-                      >
-                        Explore Story
-                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* ── Bottom label ── */}
           <div className="absolute bottom-6 left-6 z-10 pointer-events-none hidden lg:block">
             <div className="bg-white/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">
@@ -503,32 +459,70 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                         {group.clusters.map((cluster) => {
                           const isSelected = activeClusterCity === cluster.city;
                           return (
-                            <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`w-full text-left px-5 py-3.5 border-b border-gray-50 transition-all duration-300 hover:bg-gray-50 ${isSelected ? 'bg-gray-900 text-white hover:bg-gray-800' : ''}`}>
-                              <div className="flex items-center gap-3">
-                                <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-gray-100'}`}>
-                                  <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
+                            <div key={cluster.city} id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}>
+                              <button onClick={() => handleCityClick(cluster)} className={`w-full text-left px-5 py-3.5 border-b transition-all duration-300 hover:bg-gray-50 ${isSelected ? 'bg-[#2c3e50] text-white hover:bg-[#2c3e50]/90 border-b-[#2c3e50]/30' : 'border-b-gray-50'}`}>
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : 'ring-gray-100'}`}>
+                                    <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>{cluster.city}</h3>
+                                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/50' : 'text-gray-400'}`}>{cluster.country}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-[10px] font-mono ${isSelected ? 'text-white/50' : 'text-gray-300'}`}>{cluster.photos.length}</span>
+                                    {isSelected && (
+                                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-2 h-2 rounded-full bg-white/40" />
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>{cluster.city}</h3>
-                                  <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/40' : 'text-gray-400'}`}>{cluster.country}</p>
-                                </div>
-                                <span className={`text-[10px] font-mono ${isSelected ? 'text-white/40' : 'text-gray-300'}`}>{cluster.photos.length}</span>
-                              </div>
-                              <AnimatePresence>
-                                {isSelected && (
-                                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden">
-                                    <div className="grid grid-cols-3 gap-1.5 mt-3">
-                                      {cluster.photos.slice(0, 6).map((photo, i) => (
-                                        <motion.div key={photo._id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.04, duration: 0.25 }} className="aspect-square rounded-md overflow-hidden">
+                              </button>
+                              {/* Rich expanded card for selected city */}
+                              {isSelected && (
+                                <div className="bg-white border-b border-gray-100">
+                                  {/* Cover photo */}
+                                  <div className="relative h-36 overflow-hidden">
+                                    <img
+                                      src={`${cluster.photos[0].imageUrl}?auto=format&w=600&q=80`}
+                                      alt={cluster.city}
+                                      className="w-full h-full object-cover"
+                                      draggable={false}
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                                    <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                                      <div>
+                                        <p className="text-[9px] uppercase tracking-[0.15em] text-white/60 font-semibold">{cluster.country}</p>
+                                        <h4 className="text-lg font-serif italic text-white leading-tight">{cluster.city}</h4>
+                                      </div>
+                                      <span className="text-[10px] font-mono text-white/50">{cluster.photos.length} photos</span>
+                                    </div>
+                                  </div>
+                                  {/* Content */}
+                                  <div className="p-4">
+                                    <p className="text-[10px] text-gray-400 font-mono tracking-wide mb-3">
+                                      {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-1.5">
+                                      {cluster.photos.slice(0, 6).map((photo) => (
+                                        <div key={photo._id} className="aspect-square rounded-lg overflow-hidden">
                                           <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" loading="lazy" draggable={false} />
-                                        </motion.div>
+                                        </div>
                                       ))}
                                     </div>
-                                    <p className="text-[10px] text-white/30 font-mono mt-2">{formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}</p>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </button>
+                                    {cluster.photos[0]?.collection?.slug && (
+                                      <a
+                                        href={`/works/${cluster.photos[0].collection.slug}`}
+                                        className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                                        style={{ background: ACCENT }}
+                                      >
+                                        Explore Story
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </motion.div>

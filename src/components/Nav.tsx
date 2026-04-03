@@ -6,7 +6,7 @@ interface Props {
 }
 
 const links = [
-  { href: '/', label: 'Home' },
+  { href: '/', label: 'Photography' },
   { href: '/travel', label: 'Journal' },
   { href: '/about', label: 'About' },
 ];
@@ -37,11 +37,11 @@ export default function Nav({ currentPath }: Props) {
         {/* Logo */}
         <a
           href="/"
-          className={`text-lg font-serif italic tracking-tight transition-colors duration-700 hover:opacity-70 ${
+          className={`text-xl font-display tracking-[0.12em] transition-colors duration-700 hover:opacity-70 ${
             scrolled ? 'text-gray-900' : 'text-white'
           }`}
         >
-          Ryan Xu.
+          RYAN XU
         </a>
 
         {/* Desktop links */}
@@ -52,7 +52,7 @@ export default function Nav({ currentPath }: Props) {
               <a
                 key={link.href}
                 href={link.href}
-                className={`text-sm font-light tracking-wide transition-colors duration-700 ${
+                className={`text-[11px] uppercase tracking-[0.2em] font-medium transition-all duration-700 ${
                   isActive
                     ? scrolled ? 'text-gray-900' : 'text-white'
                     : scrolled
@@ -107,7 +107,7 @@ export default function Nav({ currentPath }: Props) {
               <motion.a
                 key={link.href}
                 href={link.href}
-                className="text-2xl font-extralight tracking-wide text-gray-900"
+                className="text-lg uppercase tracking-[0.3em] font-medium text-gray-900"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}

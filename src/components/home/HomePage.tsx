@@ -171,14 +171,17 @@ function Overlay({
       transition={{ type: 'spring', damping: 30, stiffness: 200 }}
       className="fixed inset-0 z-50 bg-[#FDFDFB] text-[#1A1A1A] overflow-y-auto no-scrollbar"
     >
-      <div className="sticky top-0 left-0 w-full z-10 px-6 py-6 md:px-12 flex justify-between items-center bg-white/80 backdrop-blur-3xl border-b border-black/5">
+      <div className="sticky top-0 left-0 w-full z-10 px-6 py-5 md:px-12 flex justify-between items-center bg-white/80 backdrop-blur-3xl border-b border-black/5">
         <button
           onClick={onClose}
-          className="flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold hover:opacity-50 transition-all hover:gap-5"
+          className="group flex items-center gap-2 px-4 py-2 -ml-4 rounded-full hover:bg-black/5 transition-all duration-300"
         >
-          <ChevronLeft size={16} /> Back
+          <div className="w-7 h-7 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-black group-hover:text-white group-hover:border-black transition-all duration-300">
+            <ChevronLeft size={14} strokeWidth={1.5} />
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.2em] font-medium text-black/50 group-hover:text-black/80 transition-colors">Back</span>
         </button>
-        <div className="text-[11px] uppercase tracking-[0.6em] font-bold opacity-30">{title}</div>
+        <div className="text-[11px] uppercase tracking-[0.3em] font-medium opacity-25">{title}</div>
       </div>
       <div className="px-6 md:px-12">{children}</div>
     </motion.div>
@@ -374,7 +377,7 @@ function CollectionDetail({
                 </span>
               </div>
 
-              {/* Location mini-map card — country-level view */}
+              {/* Location mini-map card — wide country view, consistent with Journal map */}
               {collectionLocation && mapboxToken && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -382,20 +385,24 @@ function CollectionDetail({
                   transition={{ delay: 0.3, duration: 0.8, ease: expo }}
                   className="mt-8 rounded-2xl overflow-hidden border border-black/5 shadow-md"
                 >
-                  <div className="relative h-48 overflow-hidden">
+                  <a
+                    href={`/travel#loc=${collectionLocation.lat},${collectionLocation.lng},8`}
+                    className="block relative h-44 overflow-hidden group cursor-pointer"
+                  >
                     <img
-                      src={`https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},4,0/500x280@2x?access_token=${mapboxToken}&addlayer={"id":"country-boundary","type":"line","source":"composite","source-layer":"admin","filter":["==","admin_level",0],"paint":{"line-color":"#2c3e50","line-width":1.5}}`}
+                      src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/500x260@2x?access_token=${mapboxToken}`}
                       alt={`Map of ${collectionLocation.city || collection.name}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                       draggable={false}
-                      onError={(e) => {
-                        // Fallback without addlayer if the complex URL fails
-                        (e.target as HTMLImageElement).src = `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},4,0/500x280@2x?access_token=${mapboxToken}`;
-                      }}
                     />
-                    {/* Gradient overlay at bottom for text readability */}
-                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white/60 to-transparent" />
-                  </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-500 flex items-center justify-center">
+                      <span className="text-white text-[10px] uppercase tracking-[0.2em] font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full">
+                        View on Journal Map
+                      </span>
+                    </div>
+                  </a>
                   <div className="px-4 py-3 bg-white">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-[#2c3e50]/8 flex items-center justify-center flex-shrink-0">
@@ -410,16 +417,10 @@ function CollectionDetail({
                         </p>
                       </div>
                     </div>
-                    <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+                    <div className="mt-2 pt-2 border-t border-gray-100">
                       <p className="text-[10px] text-gray-400 font-mono tracking-wide">
                         {Math.abs(collectionLocation.lat).toFixed(4)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(collectionLocation.lng).toFixed(4)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
                       </p>
-                      <a
-                        href="/travel"
-                        className="text-[10px] uppercase tracking-[0.1em] font-bold text-[#2c3e50] hover:opacity-60 transition-opacity"
-                      >
-                        View on Map
-                      </a>
                     </div>
                   </div>
                 </motion.div>
@@ -552,7 +553,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
+                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
               }`}
             >
               Photography
@@ -560,7 +561,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/travel"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
+                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
               }`}
             >
               Journal
@@ -568,7 +569,7 @@ export default function HomePage({ collections, photos }: Props) {
             <a
               href="/about"
               className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]/70' : 'text-white/80'
+                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
               }`}
             >
               About
