@@ -552,7 +552,7 @@ export default function HomePage({ collections, photos }: Props) {
           <div className="flex-1 flex justify-end items-center gap-6 md:gap-8">
             <a
               href="/"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
                 selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
               }`}
             >
@@ -560,16 +560,16 @@ export default function HomePage({ collections, photos }: Props) {
             </a>
             <a
               href="/travel"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
+                selectedCollection ? 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]' : 'text-white/50 hover:text-white'
               }`}
             >
               Journal
             </a>
             <a
               href="/about"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all ${
-                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
+              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
+                selectedCollection ? 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]' : 'text-white/50 hover:text-white'
               }`}
             >
               About
@@ -584,7 +584,7 @@ export default function HomePage({ collections, photos }: Props) {
         </nav>
 
         {/* ── Hero ── */}
-        <header className="h-[90vh] flex flex-col justify-end items-center text-center px-6 pb-20 relative overflow-hidden">
+        <header className="h-screen flex flex-col justify-end items-center text-center px-6 pb-20 relative overflow-hidden">
           <motion.div
             initial={{ opacity: 0, scale: 1.15 }}
             animate={{ opacity: 1, scale: 1 }}

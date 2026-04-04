@@ -28,31 +28,34 @@ export default function Nav({ currentPath }: Props) {
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 px-6 md:px-12 py-4 flex items-center justify-between transition-all duration-700 ${
+        className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
           scrolled
-            ? 'bg-white/80 backdrop-blur-xl border-b border-gray-100/50'
+            ? 'bg-white/80 backdrop-blur-2xl border-b border-gray-100/50'
             : 'bg-transparent border-b border-transparent'
         }`}
       >
-        {/* Logo */}
+        {/* Left spacer for centering */}
+        <div className="flex-1" />
+
+        {/* Center: name */}
         <a
           href="/"
-          className={`text-xl font-display tracking-[0.12em] transition-colors duration-700 hover:opacity-70 ${
+          className={`text-xl md:text-2xl font-display tracking-[0.12em] hover:opacity-60 transition-all ${
             scrolled ? 'text-gray-900' : 'text-white'
           }`}
         >
           RYAN XU
         </a>
 
-        {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-8">
+        {/* Right: nav links */}
+        <div className="flex-1 flex justify-end items-center gap-6 md:gap-8">
           {links.map((link) => {
             const isActive = currentPath === link.href || (link.href !== '/' && currentPath.startsWith(link.href));
             return (
               <a
                 key={link.href}
                 href={link.href}
-                className={`text-[11px] uppercase tracking-[0.2em] font-medium transition-all duration-700 ${
+                className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium transition-all duration-700 hover:opacity-100 ${
                   isActive
                     ? scrolled ? 'text-gray-900' : 'text-white'
                     : scrolled
@@ -61,36 +64,33 @@ export default function Nav({ currentPath }: Props) {
                 }`}
               >
                 {link.label}
-                {isActive && (
-                  <span className={`block h-px w-full mt-0.5 transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`} />
-                )}
               </a>
             );
           })}
-        </div>
 
-        {/* Mobile hamburger */}
-        <button
-          className="md:hidden flex flex-col gap-1.5 p-1"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          aria-label="Menu"
-        >
-          <motion.span
-            className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-            animate={mobileOpen ? { rotate: 45, y: 3.5 } : { rotate: 0, y: 0 }}
-            transition={{ duration: 0.3 }}
-          />
-          <motion.span
-            className={`block w-5 h-px transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-            animate={mobileOpen ? { opacity: 0 } : { opacity: 1 }}
-            transition={{ duration: 0.2 }}
-          />
-          <motion.span
-            className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-            animate={mobileOpen ? { rotate: -45, y: -3.5 } : { rotate: 0, y: 0 }}
-            transition={{ duration: 0.3 }}
-          />
-        </button>
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden flex flex-col gap-1.5 p-1"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Menu"
+          >
+            <motion.span
+              className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
+              animate={mobileOpen ? { rotate: 45, y: 3.5 } : { rotate: 0, y: 0 }}
+              transition={{ duration: 0.3 }}
+            />
+            <motion.span
+              className={`block w-5 h-px transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
+              animate={mobileOpen ? { opacity: 0 } : { opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            />
+            <motion.span
+              className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
+              animate={mobileOpen ? { rotate: -45, y: -3.5 } : { rotate: 0, y: 0 }}
+              transition={{ duration: 0.3 }}
+            />
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu overlay */}
