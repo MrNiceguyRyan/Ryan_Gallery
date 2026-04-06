@@ -129,6 +129,25 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         to   { opacity: 1; transform: scale(1); }
       }
 
+
+      /* ─── Shared element: cover image flies into WorkDetailPage ─── */
+      /* The browser handles the morph automatically via the matching
+         viewTransitionName; we only tune the easing and duration here.  */
+      ::view-transition-old(cover-*),
+      ::view-transition-new(cover-*) {
+        animation-duration: 0.55s;
+        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+        /* Preserve the image's aspect during the morph */
+        object-fit: cover;
+        overflow: clip;
+      }
+      ::view-transition-new(cover-*) {
+        animation-name: none;          /* browser handles the geometry */
+      }
+      ::view-transition-old(cover-*) {
+        animation-name: none;
+      }
+
       /* Reduce motion: instant transition for accessibility */
       @media (prefers-reduced-motion: reduce) {
         ::view-transition-old(root),

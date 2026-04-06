@@ -307,7 +307,8 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                     src={`${photo.imageUrl}?auto=format&w=900&q=84`}
                     alt={photo.title || collection.name}
                     className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-[900ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-                    loading="lazy"
+                    style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+                    loading={i === 0 ? 'eager' : 'lazy'}
                     decoding="async"
                     draggable={false}
                   />

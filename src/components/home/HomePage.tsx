@@ -93,11 +93,9 @@ function PhotoBlock({
  * ═══════════════════════════════════════════════════════ */
 function FilmstripItem({
   collection,
-  onClick,
   index,
 }: {
   collection: Collection;
-  onClick: () => void;
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -113,19 +111,23 @@ function FilmstripItem({
   const photoCount = collection.photos?.length || collection.photoCount || 0;
 
   return (
-    <motion.div
+    <motion.a
+      href={`/works/${collection.slug}`}
       ref={ref}
       initial={{ opacity: 0, y: 100 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      onClick={onClick}
-      className="filmstrip-item group relative cursor-pointer"
+      className="filmstrip-item group relative cursor-pointer block"
     >
       <div className="absolute inset-0 overflow-hidden">
         {coverUrl && (
           <motion.img
-            style={{ y }}
+            style={{
+              y,
+              // Shared element transition: cover flies into WorkDetailPage
+              viewTransitionName: `cover-${collection.slug}`,
+            }}
             src={coverUrl}
             alt={collection.name}
             className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
@@ -150,7 +152,7 @@ function FilmstripItem({
       <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
         Explore Story <ArrowRight size={14} />
       </div>
-    </motion.div>
+    </motion.a>
   );
 }
 
@@ -505,7 +507,6 @@ export default function HomePage({ collections, photos }: Props) {
             <FilmstripItem
               key={collection._id}
               collection={collection}
-              onClick={() => setSelectedCollection(collection)}
               index={index}
             />
           ))}
