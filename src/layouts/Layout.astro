@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { ViewTransitions } from 'astro:transitions';
+import { ClientRouter } from 'astro:transitions';
 
 interface Props {
   title?: string;
@@ -53,7 +53,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     <meta name="twitter:image" content={ogImage} />
 
     <!-- Astro View Transitions — smooth page navigation -->
-    <ViewTransitions />
+    <ClientRouter />
   </head>
 
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
