@@ -216,7 +216,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     const cluster = cityClusters.find(c => c.city === city) || null;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
-    // Also expand the region containing this city
+    // Expand the region containing this city so the card is visible
     if (cluster) {
       const region = getRegion(cluster.country);
       setExpandedRegion(region);
@@ -229,11 +229,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       duration: 1200,
       essential: true,
     });
-    // Scroll sidebar to the city
+    // Wait for AnimatePresence region expand (300ms) before scrolling
     setTimeout(() => {
       const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 200);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 400);
   }, [viewState.zoom, cityClusters]);
 
   // Sidebar city click
@@ -340,18 +340,68 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               if (!photo) return null;
               const isActive = activeCluster?.city === photo.location?.city;
               const isHovered = hoveredIdx === props.photoIndex;
+              // Active markers sit above map labels; idle markers sit below
+              const markerZ = isActive ? 3 : isHovered ? 2 : 1;
+              // Container size matches the visual element — avoids invisible hit area
+              // covering map place-name labels
+              const containerSize = isActive ? 44 : isHovered ? 38 : 30;
 
               return (
-                <Marker key={`photo-${photo._id}`} longitude={lng} latitude={lat} anchor="center" onClick={e => { e.originalEvent.stopPropagation(); handlePhotoClick(photo); }}>
-                  <div className="relative flex items-center justify-center cursor-pointer group" style={{ width: 48, height: 48 }} onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }} onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}>
-                    <div className={`absolute w-[48px] h-[48px] rounded-full transition-all duration-500 ${isActive ? 'scale-100' : 'scale-0 group-hover:scale-100'}`} style={{ backgroundColor: isActive ? `rgba(${ACCENT_RGB},0.15)` : `rgba(${ACCENT_RGB},0.1)` }} />
-                    <div className={`relative z-10 rounded-full overflow-hidden shadow-lg transition-all duration-500 ease-out ${isActive ? 'w-10 h-10 ring-[3px] shadow-[0_0_20px_rgba(44,62,80,0.3)]' : 'w-7 h-7 ring-[2.5px] ring-white group-hover:w-9 group-hover:h-9 group-hover:shadow-xl'}`} style={isActive ? { ringColor: ACCENT } as any : undefined}>
-                      <img src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt="" className="w-full h-full object-cover" draggable={false} />
+                <Marker
+                  key={`photo-${photo._id}`}
+                  longitude={lng}
+                  latitude={lat}
+                  anchor="center"
+                  style={{ zIndex: markerZ }}
+                  onClick={e => { e.originalEvent.stopPropagation(); handlePhotoClick(photo); }}
+                >
+                  <div
+                    className="relative flex items-center justify-center cursor-pointer group"
+                    style={{ width: containerSize, height: containerSize, transition: 'width 0.3s ease, height 0.3s ease' }}
+                    onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
+                    onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
+                  >
+                    {/* Glow ring — only shown when active or hovered */}
+                    {(isActive || isHovered) && (
+                      <div
+                        className="absolute inset-0 rounded-full transition-all duration-500"
+                        style={{ backgroundColor: `rgba(${ACCENT_RGB},${isActive ? 0.15 : 0.08})` }}
+                      />
+                    )}
+                    <div
+                      className="relative rounded-full overflow-hidden shadow-lg transition-all duration-300 ease-out"
+                      style={{
+                        width: isActive ? 40 : isHovered ? 34 : 26,
+                        height: isActive ? 40 : isHovered ? 34 : 26,
+                        outline: isActive
+                          ? `3px solid ${ACCENT}`
+                          : '2.5px solid rgba(255,255,255,0.9)',
+                        outlineOffset: '1px',
+                        boxShadow: isActive
+                          ? `0 0 20px rgba(${ACCENT_RGB},0.4), 0 4px 12px rgba(0,0,0,0.2)`
+                          : '0 2px 8px rgba(0,0,0,0.15)',
+                      }}
+                    >
+                      <img
+                        src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
                     </div>
                     <AnimatePresence>
                       {isHovered && !isActive && (
-                        <motion.div initial={{ opacity: 0, y: -8, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.9 }} transition={{ duration: 0.2 }} className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                          <div className="px-3 py-1.5 text-white text-[10px] font-semibold rounded-full shadow-xl whitespace-nowrap tracking-wide" style={{ background: ACCENT }}>{photo.location?.city || photo.title}</div>
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.9 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute -top-9 left-1/2 -translate-x-1/2 pointer-events-none"
+                          style={{ zIndex: 10 }}
+                        >
+                          <div className="px-3 py-1.5 text-white text-[10px] font-semibold rounded-full shadow-xl whitespace-nowrap tracking-wide" style={{ background: ACCENT }}>
+                            {photo.location?.city || photo.title}
+                          </div>
                           <div className="w-1.5 h-1.5 rotate-45 absolute -bottom-0.5 left-1/2 -translate-x-1/2" style={{ background: ACCENT }} />
                         </motion.div>
                       )}
