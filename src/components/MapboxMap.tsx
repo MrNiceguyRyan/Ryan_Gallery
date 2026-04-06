@@ -314,6 +314,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             <NavigationControl position="bottom-right" showCompass={false} />
             <FullscreenControl position="bottom-right" />
 
+            <AnimatePresence>
             {clusters.map((feature) => {
               const [lng, lat] = feature.geometry.coordinates;
               const props = feature.properties;
@@ -323,14 +324,59 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                 const count = props.point_count;
                 const size = count < 10 ? 40 : count < 30 ? 48 : 56;
                 return (
-                  <Marker key={`cluster-${feature.id}`} longitude={lng} latitude={lat} anchor="center" onClick={e => { e.originalEvent.stopPropagation(); handleClusterClick(feature.id as number, lng, lat); }}>
-                    <div className="relative flex items-center justify-center cursor-pointer group" style={{ width: size + 16, height: size + 16 }}>
-                      <div className="absolute rounded-full animate-ping opacity-15" style={{ width: size + 10, height: size + 10, backgroundColor: `rgba(${ACCENT_RGB},0.4)`, animationDuration: '2.5s' }} />
-                      <div className="absolute rounded-full opacity-25 group-hover:opacity-40 transition-opacity duration-500" style={{ width: size + 4, height: size + 4, backgroundColor: `rgba(${ACCENT_RGB},0.25)` }} />
-                      <div className="relative rounded-full flex items-center justify-center text-white font-bold shadow-lg border-[3px] border-white/60 group-hover:scale-110 transition-transform duration-300" style={{ width: size, height: size, fontSize: count < 10 ? 12 : 14, background: ACCENT, boxShadow: `0 8px 30px rgba(${ACCENT_RGB},0.35)` }}>
-                        {count}
+                  <Marker
+                    key={`cluster-${feature.id}`}
+                    longitude={lng}
+                    latitude={lat}
+                    anchor="center"
+                    style={{ zIndex: 2 }}
+                    onClick={e => { e.originalEvent.stopPropagation(); handleClusterClick(feature.id as number, lng, lat); }}
+                  >
+                    <motion.div
+                      className="relative flex items-center justify-center cursor-pointer group"
+                      style={{ width: size + 20, height: size + 20 }}
+                      initial={{ opacity: 0, scale: 0.4 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.4 }}
+                      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.94 }}
+                    >
+                      {/* Outer breathing ring */}
+                      <motion.div
+                        className="absolute rounded-full"
+                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${ACCENT_RGB},0.12)` }}
+                        animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.15, 0.5] }}
+                        transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                      {/* Inner halo */}
+                      <div
+                        className="absolute rounded-full"
+                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${ACCENT_RGB},0.18)` }}
+                      />
+                      {/* Core badge */}
+                      <div
+                        className="relative rounded-full flex items-center justify-center text-white font-bold shadow-lg border-[2.5px] border-white/50"
+                        style={{
+                          width: size, height: size,
+                          fontSize: count < 10 ? 13 : 14,
+                          background: ACCENT,
+                          boxShadow: `0 6px 24px rgba(${ACCENT_RGB},0.4)`,
+                        }}
+                      >
+                        <AnimatePresence mode="wait">
+                          <motion.span
+                            key={count}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            {count}
+                          </motion.span>
+                        </AnimatePresence>
                       </div>
-                    </div>
+                    </motion.div>
                   </Marker>
                 );
               }
@@ -355,9 +401,13 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                   style={{ zIndex: markerZ }}
                   onClick={e => { e.originalEvent.stopPropagation(); handlePhotoClick(photo); }}
                 >
-                  <div
+                  <motion.div
                     className="relative flex items-center justify-center cursor-pointer group"
-                    style={{ width: containerSize, height: containerSize, transition: 'width 0.3s ease, height 0.3s ease' }}
+                    style={{ width: containerSize, height: containerSize }}
+                    initial={{ opacity: 0, scale: 0.3 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.3 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
@@ -406,10 +456,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </div>
+                  </motion.div>
                 </Marker>
               );
             })}
+            </AnimatePresence>
           </MapGL>
 
           {/* ── Floating label ── */}
