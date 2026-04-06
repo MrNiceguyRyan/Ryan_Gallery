@@ -28,6 +28,7 @@ export default function Nav({ currentPath }: Props) {
   return (
     <>
       <nav
+        style={{ viewTransitionName: 'nav' }}
         className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
           scrolled
             ? 'bg-white/80 backdrop-blur-2xl border-b border-gray-100/50'

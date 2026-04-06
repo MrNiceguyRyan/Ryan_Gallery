@@ -16,6 +16,19 @@ export interface SiteSettings {
   timeline?: TimelineItem[];
 }
 
+/** Portable Text block from Sanity */
+export interface PortableTextBlock {
+  _type: 'block';
+  _key: string;
+  style?: 'normal' | 'blockquote';
+  children: Array<{
+    _type: 'span';
+    _key: string;
+    text: string;
+    marks?: string[];
+  }>;
+}
+
 export interface Collection {
   _id: string;
   name: string;
@@ -25,7 +38,8 @@ export interface Collection {
   location?: string;
   year?: number;
   description?: string;
-  introduction?: string;
+  /** Portable Text — editorial introduction shown in the collection sidebar */
+  introduction?: PortableTextBlock[];
   liveProjectUrl?: string;
   photos?: Photo[];
   gridSize: 'large' | 'medium' | 'small';

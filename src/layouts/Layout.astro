@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import { ViewTransitions } from 'astro:transitions';
 
 interface Props {
   title?: string;
@@ -50,6 +51,9 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
+
+    <!-- Astro View Transitions — smooth page navigation -->
+    <ViewTransitions />
   </head>
 
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
@@ -64,7 +68,80 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         pointer-events: auto;
         -webkit-user-drag: none;
       }
+
+      /* ─── View Transition animations ─── */
+
+      /* Default page: fade + subtle lift */
+      ::view-transition-old(root) {
+        animation: vt-fade-out 0.35s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(root) {
+        animation: vt-fade-in 0.45s cubic-bezier(0, 0, 0.2, 1) both;
+      }
+
+      @keyframes vt-fade-out {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to   { opacity: 0; transform: translateY(-8px) scale(0.99); }
+      }
+      @keyframes vt-fade-in {
+        from { opacity: 0; transform: translateY(12px) scale(0.99); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* Nav bar: stays fixed during transition — no flicker */
+      ::view-transition-old(nav),
+      ::view-transition-new(nav) {
+        animation: none;
+        mix-blend-mode: normal;
+      }
+
+      /* Page title heading — slides in from below */
+      ::view-transition-old(page-title) {
+        animation: vt-title-out 0.3s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(page-title) {
+        animation: vt-title-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+      }
+
+      @keyframes vt-title-out {
+        from { opacity: 1; transform: translateY(0); }
+        to   { opacity: 0; transform: translateY(-20px); }
+      }
+      @keyframes vt-title-in {
+        from { opacity: 0; transform: translateY(24px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Hero image — scale crossfade */
+      ::view-transition-old(hero-image) {
+        animation: vt-hero-out 0.4s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(hero-image) {
+        animation: vt-hero-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      @keyframes vt-hero-out {
+        from { opacity: 1; transform: scale(1); }
+        to   { opacity: 0; transform: scale(1.04); }
+      }
+      @keyframes vt-hero-in {
+        from { opacity: 0; transform: scale(1.04); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+
+      /* Reduce motion: instant transition for accessibility */
+      @media (prefers-reduced-motion: reduce) {
+        ::view-transition-old(root),
+        ::view-transition-new(root),
+        ::view-transition-old(page-title),
+        ::view-transition-new(page-title),
+        ::view-transition-old(hero-image),
+        ::view-transition-new(hero-image) {
+          animation: none;
+        }
+      }
     </style>
+
     <script is:inline>
       // Block right-click context menu on all images
       document.addEventListener('contextmenu', function(e) {
