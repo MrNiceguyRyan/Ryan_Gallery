@@ -4,13 +4,18 @@ import react from '@astrojs/react';
 import sanity from '@sanity/astro';
 import sitemap from '@astrojs/sitemap';
 
+import cloudflare from '@astrojs/cloudflare';
+
 export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
   site: 'https://ryangallery.com',
+
   output: 'static',
+
   vite: {
     plugins: [tailwindcss()],
   },
+
   integrations: [
     react(),
     sanity({
@@ -38,4 +43,6 @@ export default defineConfig({
       },
     }),
   ],
+
+  adapter: cloudflare(),
 });
