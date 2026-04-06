@@ -88,11 +88,12 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         to   { opacity: 1; transform: translateY(0) scale(1); }
       }
 
-      /* Nav bar: stays fixed during transition — no flicker */
-      ::view-transition-old(nav),
+      /* Nav bar: fast crossfade so color change feels intentional, not jarring */
+      ::view-transition-old(nav) {
+        animation: vt-fade-out 0.2s ease both;
+      }
       ::view-transition-new(nav) {
-        animation: none;
-        mix-blend-mode: normal;
+        animation: vt-fade-in 0.25s ease both;
       }
 
       /* Page title heading — slides in from below */

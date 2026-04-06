@@ -9,7 +9,6 @@ const links = [
   { href: '/', label: 'Photography' },
   { href: '/travel', label: 'Journal' },
   { href: '/about', label: 'About' },
-  { href: '/contact', label: 'Contact' },
 ];
 
 export default function Nav({ currentPath }: Props) {

@@ -35,7 +35,7 @@ const collection: Collection = await sanityClient.fetch(
 );
 
 const photos: Photo[] = await sanityClient.fetch(
-  `*[_type == "photo" && references($collectionId)] | order(_createdAt desc) {
+  `*[_type == "photo" && references($collectionId)] | order(_createdAt asc) {
     _id,
     title,
     "imageUrl": image.asset->url,
