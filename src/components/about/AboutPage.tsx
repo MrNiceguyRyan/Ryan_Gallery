@@ -248,20 +248,20 @@ export default function AboutPage({ settings }: Props) {
 
       {/* ═══════ FOOTER ═══════ */}
       <motion.footer
-        className="py-10 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100"
+        className="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
       >
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <h2 className="text-base font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-            <p className="text-[10px] text-gray-400 mt-1 font-light">
+            <h2 className="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
+            <p className="text-xs text-gray-400 mt-1 font-light">
               &copy; {new Date().getFullYear()} Ryan. All rights reserved.
             </p>
           </div>
-          <div className="flex items-center gap-5 text-[10px] text-gray-400 font-mono">
+          <div className="flex items-center gap-6 text-xs text-gray-400 font-mono">
             <span>Nikon Zf</span>
             <span className="text-gray-200">|</span>
             <span>Astro + React</span>
