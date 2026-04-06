@@ -10,6 +10,11 @@ export default defineConfig({
   output: 'static',
   vite: {
     plugins: [tailwindcss()],
+    // Pre-bundle styled-components (pulled in by @sanity/astro) to avoid
+    // the "Failed to resolve dependency" build warning in Vite 7
+    optimizeDeps: {
+      include: ['styled-components'],
+    },
   },
   integrations: [
     react(),
@@ -17,7 +22,8 @@ export default defineConfig({
       projectId: 'z610fooo',
       dataset: 'production',
       useCdn: true,
-      apiVersion: '2024-03-16',
+      // Keep in sync with Sanity API releases: https://www.sanity.io/docs/api-versioning
+      apiVersion: '2025-04-01',
     }),
     sitemap({
       // Exclude Sanity Studio route if ever served under the same domain
