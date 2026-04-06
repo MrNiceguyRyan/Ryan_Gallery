@@ -139,18 +139,28 @@ function FilmstripItem({
       </div>
       <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
       <div className="relative z-10 text-center px-6">
-        <motion.div className="flex flex-col items-center gap-6">
-          <span className="text-[10px] uppercase tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+        <motion.div className="flex flex-col items-center gap-3 md:gap-6">
+          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none drop-shadow-lg">
+          <h2 className="text-4xl sm:text-5xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none drop-shadow-lg">
             {collection.name}
           </h2>
-          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
+          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />
         </motion.div>
       </div>
-      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
+      {/* Desktop-only CTA */}
+      <div className="hidden md:flex absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 items-center gap-4 text-white font-bold">
         Explore Story <ArrowRight size={14} />
+      </div>
+      {/* Mobile: always-visible bottom bar */}
+      <div className="md:hidden absolute bottom-0 left-0 right-0 px-5 py-4 flex items-center justify-between bg-gradient-to-t from-black/60 to-transparent">
+        <span className="text-[9px] font-mono text-white/50 tracking-wider uppercase">
+          {(collection.photos?.length || collection.photoCount || 0)} frames
+        </span>
+        <span className="text-[9px] font-mono text-white/50 tracking-wider uppercase flex items-center gap-1.5">
+          View <ArrowRight size={10} />
+        </span>
       </div>
     </motion.a>
   );

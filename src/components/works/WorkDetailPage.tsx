@@ -250,11 +250,11 @@ export default function WorkDetailPage({ collection, photos }: Props) {
         </div>
 
         {/* Mobile header */}
-        <div className="lg:hidden fixed top-[56px] left-0 right-0 z-20 bg-white/90 backdrop-blur-xl px-6 py-4 border-b border-gray-100/50">
-          <h1 className="font-serif italic text-2xl text-gray-900 tracking-tight">
+        <div className="lg:hidden fixed top-[56px] left-0 right-0 z-20 bg-white/95 backdrop-blur-xl px-5 py-3.5 border-b border-gray-100/60">
+          <h1 className="font-serif italic text-xl text-gray-900 tracking-tight leading-tight">
             {collection.name}
           </h1>
-          <div className="flex items-center gap-3 mt-1 text-[9px] font-mono text-gray-300 tracking-wider uppercase">
+          <div className="flex items-center gap-2 mt-1 text-[9px] font-mono text-gray-300 tracking-wider uppercase">
             {collection.year && <span>{collection.year}</span>}
             {collection.location && (
               <>
@@ -267,10 +267,48 @@ export default function WorkDetailPage({ collection, photos }: Props) {
           </div>
         </div>
 
-        {/* RIGHT — horizontal scroll gallery with dynamic sizing */}
+        {/* ── MOBILE: vertical masonry grid ── */}
+        <div className="lg:hidden flex-1 pt-[96px] px-4 pb-16 overflow-y-auto">
+          <div className="columns-2 gap-3">
+            {photos.map((photo, i) => (
+              <motion.div
+                key={photo._id}
+                className="break-inside-avoid mb-3 cursor-pointer group"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: Math.min(i * 0.05, 0.4), ease: expo }}
+                onClick={() => setLightboxIndex(i)}
+              >
+                <div className="relative overflow-hidden rounded-sm bg-gray-50">
+                  <img
+                    src={`${photo.imageUrl}?auto=format&w=600&q=82`}
+                    alt={photo.title || collection.name}
+                    className="w-full h-auto object-cover"
+                    style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable={false}
+                  />
+                </div>
+                {(photo.title || photo.focalLength) && (
+                  <div className="mt-1.5 px-0.5">
+                    {photo.title && (
+                      <p className="text-[10px] text-gray-500 font-light truncate leading-tight">{photo.title}</p>
+                    )}
+                    {photo.aperture && (
+                      <p className="text-[9px] text-gray-300 font-mono">{photo.aperture}</p>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── DESKTOP: horizontal scroll gallery ── */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden flex items-center cursor-grab select-none pt-[80px] lg:pt-0"
+          className="hidden lg:flex flex-1 overflow-x-auto overflow-y-hidden items-center cursor-grab select-none"
           style={{
             scrollBehavior: 'smooth',
             scrollbarWidth: 'none',
@@ -312,7 +350,6 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                     decoding="async"
                     draggable={false}
                   />
-                  {/* Subtle hover overlay */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-500" />
                 </div>
 
