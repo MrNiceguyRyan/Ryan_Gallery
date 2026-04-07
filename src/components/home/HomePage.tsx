@@ -153,14 +153,22 @@ function FilmstripItem({
       <motion.div
         className="absolute inset-0"
         style={{ clipPath }}
+        // Smooth spring zoom on hover — CSS transition handles the actual image scale
+        whileHover="hovered"
+        initial="idle"
       >
-        {/* Cover image */}
+        {/* Cover image — scale driven by CSS transition in global.css */}
         {coverUrl && (
           <motion.img
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image scale-110 group-hover:scale-105 transition-transform duration-[3s]"
+            className="filmstrip-image"
+            variants={{
+              idle:    { scale: 1.1 },
+              hovered: { scale: 1.04 },
+            }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -192,12 +200,12 @@ function FilmstripItem({
         </div>
       </motion.div>
 
-      {/* Desktop CTA — fades out with title */}
+      {/* Desktop CTA — fades out with title, no scale */}
       <motion.div
-        className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] items-center gap-3 text-white/60 font-light"
+        className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] items-center gap-3 text-white/50 font-light pointer-events-none"
         style={{ opacity: titleOpacity }}
       >
-        Explore <ArrowRight size={12} />
+        View series <ArrowRight size={11} strokeWidth={1} />
       </motion.div>
 
       {/* Mobile bottom bar */}
