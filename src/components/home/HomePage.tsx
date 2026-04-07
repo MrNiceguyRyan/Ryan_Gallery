@@ -99,37 +99,8 @@ function FilmstripItem({
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-
-  // Parallax scroll range: element enters viewport bottom → leaves viewport top
-  const { scrollYProgress: scrollFull } = useScroll({
-    target: ref,
-    offset: ['start end', 'end start'],
-  });
-
-  // Scroll-scrub range: fires when element is near center of viewport → leaves top
-  // This matches the ykproduce.co.jp timing: effect starts mid-screen, finishes at top
-  const { scrollYProgress: scrollScrub } = useScroll({
-    target: ref,
-    offset: ['center center', 'end start'],
-  });
-
-  // Parallax image offset (existing)
-  const y = useTransform(scrollFull, [0, 1], ['-20%', '20%']);
-
-  // Clip-path: full-bleed → inset card with rounded corners
-  // Mobile uses smaller inset (less dramatic on small screens)
-  const clipPath = useTransform(
-    scrollScrub,
-    [0, 1],
-    ['inset(0% 0% 0% 0% round 0px)', 'inset(6% 6% 6% 6% round 20px)'],
-  );
-
-  // Overlay darkens as you scroll past
-  const overlayOpacity = useTransform(scrollScrub, [0, 0.7], [0.2, 0.82]);
-
-  // Title flies upward
-  const titleY = useTransform(scrollScrub, [0, 1], ['0%', '-160%']);
-  const titleOpacity = useTransform(scrollScrub, [0, 0.6], [1, 0]);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
 
   const coverUrl = collection.coverImageUrl
     ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
@@ -147,63 +118,43 @@ function FilmstripItem({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      className="filmstrip-item relative cursor-pointer block"
-      whileHover="hovered"
+      className="filmstrip-item group relative cursor-pointer block"
     >
-      {/* Inner container: clip-path for scroll-scrub shrink effect */}
-      <motion.div
-        className="absolute inset-0"
-        style={{ clipPath }}
-      >
-        {/* Cover image with framer-motion hover variants */}
+      {/* Cover image — pure CSS hover via group */}
+      <div className="absolute inset-0 overflow-hidden">
         {coverUrl && (
           <motion.img
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image"
-            variants={{
-              // 'idle' is the default resting state propagated from parent whileHover
-              idle:    { scale: 1.1,  filter: 'grayscale(0.2) brightness(0.88)' },
-              hovered: { scale: 1.04, filter: 'grayscale(0) brightness(1.05)' },
-            }}
-            animate="idle"
-            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
+            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
             loading="lazy"
             decoding="async"
             draggable={false}
           />
         )}
+      </div>
 
-        {/* Scroll-driven dark overlay */}
-        <motion.div
-          className="absolute inset-0"
-          style={{ backgroundColor: '#000', opacity: overlayOpacity }}
-        />
-      </motion.div>
+      {/* Static dark overlay — fades on hover */}
+      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
 
-      {/* Title — flies upward on scroll */}
-      <motion.div
-        className="relative z-10 text-center px-6"
-        style={{ y: titleY, opacity: titleOpacity }}
-      >
+      {/* Title */}
+      <div className="relative z-10 text-center px-6">
         <div className="flex flex-col items-center gap-3 md:gap-6">
-          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] text-white/70">
+          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-4xl sm:text-5xl md:text-[10vw] font-serif italic tracking-tighter text-white leading-none drop-shadow-lg">
+          <h2 className="text-4xl sm:text-5xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.03] transition-transform duration-[2s] leading-none drop-shadow-lg">
             {collection.name}
           </h2>
+          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />
         </div>
-      </motion.div>
+      </div>
 
-      {/* Desktop CTA — fades out with title, no scale */}
-      <motion.div
-        className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] items-center gap-3 text-white/50 font-light pointer-events-none"
-        style={{ opacity: titleOpacity }}
-      >
+      {/* Desktop CTA */}
+      <div className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-70 transition-all duration-1000 translate-x-6 group-hover:translate-x-0 items-center gap-3 text-white font-light">
         View series <ArrowRight size={11} strokeWidth={1} />
-      </motion.div>
+      </div>
 
       {/* Mobile bottom bar */}
       <div className="md:hidden absolute bottom-0 left-0 right-0 px-5 py-4 flex items-center justify-between bg-gradient-to-t from-black/60 to-transparent">
