@@ -147,7 +147,7 @@ function FilmstripItem({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      className="filmstrip-item group relative cursor-pointer block overflow-hidden"
+      className="filmstrip-item group relative cursor-pointer block"
     >
       {/* Inner container that shrinks+rounds via clip-path on scroll */}
       <motion.div

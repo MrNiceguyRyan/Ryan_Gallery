@@ -1,11 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../types';
 import HomePage from '../components/home/HomePage';
-
-const currentPath = Astro.url.pathname;
 
 // ─── GROQ: All collections with photos + location data ───
 const collections: Collection[] = await sanityClient.fetch(`

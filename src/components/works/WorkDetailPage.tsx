@@ -136,7 +136,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
       <div className="flex min-h-screen pt-[57px]">
 
         {/* ── LEFT SIDEBAR (desktop) ── */}
-        <aside className="hidden lg:flex flex-col w-[300px] xl:w-[340px] shrink-0 px-8 xl:px-10 border-r border-gray-100/60 overflow-y-auto sticky top-[57px] h-[calc(100vh-57px)]">
+        <aside className="hidden lg:flex flex-col w-[300px] xl:w-[340px] shrink-0 px-8 xl:px-10 border-r border-gray-100/60 self-start sticky top-[57px] max-h-[calc(100vh-57px)] overflow-y-auto">
           <div className="py-10 flex flex-col gap-0">
             {/* Name */}
             <motion.h1

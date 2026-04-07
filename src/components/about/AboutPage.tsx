@@ -66,7 +66,7 @@ export default function AboutPage({ settings }: Props) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: expo }}
         >
-          Photographer · New York, NY · Nikon Zf
+          Photographer · New York, NY · Fujifilm X-T50 & Nikon Zf
         </motion.p>
 
         {/* Bio */}
@@ -93,7 +93,7 @@ export default function AboutPage({ settings }: Props) {
               Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
             </p>
             <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
-              Based in New York, I shoot exclusively on the Nikon Zf. There's something about the weight of a real shutter,
+              Based in New York, I shoot on the Fujifilm X-T50 and Nikon Zf. There's something about the weight of a real shutter,
               the intention behind each exposure, that digital convenience can never replace.
             </p>
           </motion.div>
