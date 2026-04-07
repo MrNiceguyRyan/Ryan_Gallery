@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useMotionValue, animate } from 'framer-motion';
 import { ChevronLeft, ArrowRight, Search, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
@@ -101,6 +101,7 @@ function FilmstripItem({
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
+  const scale = useMotionValue(1.1);
 
   const coverUrl = collection.coverImageUrl
     ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
@@ -119,12 +120,14 @@ function FilmstripItem({
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
       className="filmstrip-item group relative cursor-pointer block"
+      onHoverStart={() => animate(scale, 1.0, { duration: 2.5, ease: [0.16, 1, 0.3, 1] })}
+      onHoverEnd={()   => animate(scale, 1.1, { duration: 2.5, ease: [0.16, 1, 0.3, 1] })}
     >
       {/* Cover image — pure CSS hover via group */}
       <div className="absolute inset-0 overflow-hidden">
         {coverUrl && (
           <motion.img
-            style={{ y, viewTransitionName: `cover-${collection.slug}` }}
+            style={{ y, scale, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
             className="filmstrip-image"
