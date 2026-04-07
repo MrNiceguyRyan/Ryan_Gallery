@@ -37,8 +37,25 @@ export default function Nav({ currentPath }: Props) {
               : 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
         }`}
       >
-        {/* Left spacer for centering */}
-        <div className="flex-1" />
+        {/* Left: aperture logo */}
+        <div className="flex-1">
+          <a href="/" aria-label="Home">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"
+              className={`transition-opacity duration-700 hover:opacity-60 ${
+                scrolled ? 'opacity-70' : 'opacity-80'
+              }`}
+            >
+              <circle cx="16" cy="16" r="11" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+              <path d="M 16.00,11.80 L 19.64,13.90 L 19.64,18.10 L 16.00,20.20 L 12.36,18.10 L 12.36,13.90 Z" stroke="currentColor" strokeWidth="0.9" fill="none"/>
+              <line x1="16.00" y1="11.80" x2="21.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="19.64" y1="13.90" x2="27.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="19.64" y1="18.10" x2="21.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="16.00" y1="20.20" x2="10.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="12.36" y1="18.10" x2="5.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="12.36" y1="13.90" x2="10.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
+            </svg>
+          </a>
+        </div>
 
         {/* Center: name */}
         <a
