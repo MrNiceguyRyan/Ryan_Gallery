@@ -239,10 +239,13 @@ function FilmstripItem({
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
 
+  // Smaller initial size for off-screen items keeps mobile/initial load fast.
+  // The first item loads eagerly at full quality; the rest lazy-load.
+  const coverWidth = index === 0 ? 2000 : 1400;
   const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    ? `${collection.coverImageUrl}?auto=format&w=${coverWidth}&q=80`
     : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      ? `${collection.photos[0].imageUrl}?auto=format&w=${coverWidth}&q=80`
       : '';
 
   const photoCount = collection.photos?.length || collection.photoCount || 0;
@@ -263,7 +266,9 @@ function FilmstripItem({
             style={{ y }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            loading={index === 0 ? 'eager' : 'lazy'}
+            decoding="async"
+            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[1200ms] ease-out scale-110 group-hover:scale-100"
             draggable={false}
           />
         )}
@@ -271,16 +276,16 @@ function FilmstripItem({
       <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
       <div className="relative z-10 text-center px-6">
         <motion.div className="flex flex-col items-center gap-6">
-          <span className="text-[10px] uppercase tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+          <span className="text-[10px] uppercase tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-500">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] leading-none drop-shadow-lg">
+          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[1200ms] ease-out leading-none drop-shadow-lg">
             {collection.name}
           </h2>
-          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
+          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-700 opacity-40" />
         </motion.div>
       </div>
-      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
+      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-500 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
         Explore Story <ArrowRight size={14} />
       </div>
     </motion.div>

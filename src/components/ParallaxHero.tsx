@@ -54,7 +54,7 @@ export default function ParallaxHero({
           style={{ objectPosition }}
           initial={{ scale: 1.15, filter: 'brightness(0.7) blur(4px)' }}
           animate={{ scale: 1, filter: 'brightness(1.05) blur(0px)' }}
-          transition={{ duration: 5, ease: [0.25, 0, 0.2, 1] }}
+          transition={{ duration: 2.4, ease: [0.25, 0, 0.2, 1] }}
         />
         {/* Light gradient overlays */}
         <div className="absolute inset-0 bg-gradient-to-t from-white via-white/10 to-transparent" />

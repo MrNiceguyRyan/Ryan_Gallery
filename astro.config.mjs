@@ -7,6 +7,13 @@ export default defineConfig({
   output: 'static',
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      fs: {
+        // Allow serving files from the parent repo when running dev from a git worktree
+        // that links to the main checkout's node_modules.
+        allow: ['..', '../..', '../../..', '../../../..'],
+      },
+    },
   },
   integrations: [
     react(),
