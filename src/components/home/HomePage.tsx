@@ -147,20 +147,28 @@ function FilmstripItem({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      className="filmstrip-item group relative cursor-pointer block"
+      className="filmstrip-item relative cursor-pointer block"
+      whileHover="hovered"
     >
-      {/* Inner container that shrinks+rounds via clip-path on scroll */}
+      {/* Inner container: clip-path for scroll-scrub shrink effect */}
       <motion.div
         className="absolute inset-0"
         style={{ clipPath }}
       >
-        {/* Cover image — hover effects (filter + scale) handled by CSS in global.css */}
+        {/* Cover image with framer-motion hover variants */}
         {coverUrl && (
           <motion.img
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
             className="filmstrip-image"
+            variants={{
+              // 'idle' is the default resting state propagated from parent whileHover
+              idle:    { scale: 1.1,  filter: 'grayscale(0.2) brightness(0.88)' },
+              hovered: { scale: 1.04, filter: 'grayscale(0) brightness(1.05)' },
+            }}
+            animate="idle"
+            transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -172,9 +180,6 @@ function FilmstripItem({
           className="absolute inset-0"
           style={{ backgroundColor: '#000', opacity: overlayOpacity }}
         />
-
-        {/* Static hover overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-700" />
       </motion.div>
 
       {/* Title — flies upward on scroll */}
