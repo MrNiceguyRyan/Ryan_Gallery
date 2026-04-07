@@ -120,21 +120,19 @@ function FilmstripItem({
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
       className="filmstrip-item group relative cursor-pointer block"
     >
-      {/* Cover image — y parallax on motion.div wrapper, scale+filter via CSS on img */}
+      {/* Cover image — pure CSS hover via group */}
       <div className="absolute inset-0 overflow-hidden">
-        <motion.div className="absolute inset-[-20%] top-0" style={{ y }}>
-          {coverUrl && (
-            <img
-              src={coverUrl}
-              alt={collection.name}
-              style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
-              className="filmstrip-image"
-              loading="lazy"
-              decoding="async"
-              draggable={false}
-            />
-          )}
-        </motion.div>
+        {coverUrl && (
+          <motion.img
+            style={{ y, viewTransitionName: `cover-${collection.slug}` }}
+            src={coverUrl}
+            alt={collection.name}
+            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+          />
+        )}
       </div>
 
       {/* Static dark overlay — fades on hover */}

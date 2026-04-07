@@ -228,16 +228,6 @@ img {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  transform: scale(1.1);
-  filter: brightness(0.85);
-  transition: transform 2.5s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 2.5s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, filter;
-}
-
-.filmstrip-item:hover .filmstrip-image {
-  transform: scale(1.0);
-  filter: brightness(1);
 }
 
 /* Detail overlay grid */

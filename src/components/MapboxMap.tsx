@@ -335,12 +335,12 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     <motion.div
                       className="relative flex items-center justify-center cursor-pointer group"
                       style={{ width: size + 20, height: size + 20 }}
-                      initial={{ opacity: 0, scale: 0.5 }}
+                      initial={{ opacity: 0, scale: 0.4 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 1.3, filter: 'blur(4px)' }}
-                      transition={{ type: 'spring', stiffness: 260, damping: 24, mass: 0.8 }}
-                      whileHover={{ scale: 1.06 }}
-                      whileTap={{ scale: 0.93 }}
+                      exit={{ opacity: 0, scale: 0.4 }}
+                      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.94 }}
                     >
                       {/* Outer breathing ring */}
                       <motion.div
@@ -407,7 +407,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     initial={{ opacity: 0, scale: 0.3 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.3 }}
-                    transition={{ type: 'spring', stiffness: 240, damping: 26, mass: 0.9, delay: Math.random() * 0.15 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >

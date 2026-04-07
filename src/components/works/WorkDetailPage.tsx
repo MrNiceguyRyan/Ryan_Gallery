@@ -202,35 +202,24 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                 transition={{ delay: 0.7, duration: 0.8, ease: expo }}
                 className="mt-8 rounded-xl overflow-hidden border border-gray-100 shadow-sm"
               >
-                <motion.a
+                <a
                   href={`/travel#loc=${collectionLocation.lat},${collectionLocation.lng},8`}
-                  className="block relative h-36 overflow-hidden"
-                  whileHover="hovered"
-                  initial="idle"
+                  className="block relative h-36 overflow-hidden group"
                 >
-                  <motion.img
+                  <img
                     src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/480x220@2x?access_token=${mapboxToken}`}
                     alt={`Map of ${collectionLocation.city || collection.name}`}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     loading="lazy"
                     draggable={false}
-                    variants={{
-                      idle:    { scale: 1,    filter: 'brightness(1)' },
-                      hovered: { scale: 1.06, filter: 'brightness(1.04)' },
-                    }}
-                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/25 to-transparent" />
-                  <motion.div
-                    className="absolute inset-0 flex items-center justify-center"
-                    variants={{ idle: { opacity: 0 }, hovered: { opacity: 1 } }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <span className="text-white text-[9px] uppercase tracking-[0.2em] font-bold bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/30 to-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-400">
+                    <span className="text-white text-[9px] uppercase tracking-[0.2em] font-bold bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full">
                       View on map
                     </span>
-                  </motion.div>
-                </motion.a>
+                  </div>
+                </a>
                 <div className="px-3.5 py-3 bg-white flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${ACCENT}12` }}>
                     <MapPin size={12} style={{ color: ACCENT }} />
