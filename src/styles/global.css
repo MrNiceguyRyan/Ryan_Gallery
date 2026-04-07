@@ -228,6 +228,10 @@ img {
   height: 100%;
   object-fit: cover;
   object-position: center;
+  /* Override global img transition — filmstrip needs slow 2.5s ease */
+  transition: transform 2.5s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 2.5s cubic-bezier(0.4, 0, 0.2, 1),
+              brightness 2.5s ease-out !important;
 }
 
 /* Detail overlay grid */
