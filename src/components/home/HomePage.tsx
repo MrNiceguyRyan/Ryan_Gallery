@@ -589,26 +589,18 @@ export default function HomePage({ collections, photos }: Props) {
       </AnimatePresence>
 
         {/* ── Footer ── */}
-        <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-50">
-          <div className="flex flex-col items-center md:items-start gap-6">
-            <span className="text-2xl font-display tracking-[0.12em] text-white">RYAN XU</span>
-            <p className="max-w-xs text-center md:text-left leading-loose">
-              A curated collection of visual narratives from across the globe.
-            </p>
-            <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
-              &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
+        <footer className="py-20 px-6 md:px-12 border-t border-white/[0.06] mt-12">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div>
+              <h2 className="text-lg font-light text-white tracking-tight">Visual Archive.</h2>
+              <p className="text-xs text-white/30 mt-1 font-light">
+                &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+              </p>
             </div>
-          </div>
-          <div className="flex gap-16">
-            <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Navigate</span>
-              <a href="/travel" className="hover:text-white transition-colors">Journal</a>
-              <a href="/about" className="hover:text-white transition-colors">About</a>
-            </div>
-            <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Tech</span>
+            <div className="flex items-center gap-4 text-xs text-white/30 font-mono">
+              <span>Fujifilm X-T50</span>
+              <span className="text-white/10">·</span>
               <span>Nikon Zf</span>
-              <span>Astro + React</span>
             </div>
           </div>
         </footer>
