@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import AboutPage from '../components/about/AboutPage';
+import Footer from '../components/Footer.astro';
 import { sanityClient } from 'sanity:client';
 import type { SiteSettings } from '../types';
 
@@ -38,4 +39,5 @@ const settings: SiteSettings = rawSettings ?? {};
 >
   <Nav client:load currentPath={currentPath} />
   <AboutPage client:load settings={settings} />
+  <Footer />
 </Layout>

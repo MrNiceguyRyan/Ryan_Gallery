@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../../types';
 import WorkDetailPage from '../../components/works/WorkDetailPage';
+import Footer from '../../components/Footer.astro';
 
 export async function getStaticPaths() {
   const collections = await sanityClient.fetch(`
@@ -85,4 +86,5 @@ const ogImage =
   ogType="article"
 >
   <WorkDetailPage client:load collection={collection} photos={photos} />
+  <Footer />
 </Layout>
