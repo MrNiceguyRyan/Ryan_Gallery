@@ -127,7 +127,7 @@ function FilmstripItem({
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            className="filmstrip-image"
             loading="lazy"
             decoding="async"
             draggable={false}
