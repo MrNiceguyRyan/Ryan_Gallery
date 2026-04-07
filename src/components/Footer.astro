@@ -1,18 +1,36 @@
 ---
 // Shared site footer — used across all pages
 ---
-<footer class="py-20 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
-  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+<footer class="py-16 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100 mt-12">
+  <div class="flex flex-col md:flex-row items-start justify-between gap-8">
+
+    <!-- Left: brand + copyright -->
     <div>
-      <h2 class="text-lg font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-      <p class="text-xs text-gray-400 mt-1 font-light">
-        &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+      <a href="/" class="text-base font-light text-gray-900 tracking-tight hover:opacity-60 transition-opacity duration-300">
+        Visual Archive.
+      </a>
+      <p class="text-xs text-gray-400 mt-1.5 font-light">
+        &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
       </p>
     </div>
-    <div class="flex items-center gap-4 text-xs text-gray-400 font-mono">
-      <span>Fujifilm X-T50</span>
-      <span class="text-gray-200">·</span>
-      <span>Nikon Zf</span>
+
+    <!-- Right: nav + gear -->
+    <div class="flex items-start gap-12 md:gap-16">
+      <!-- Quick nav -->
+      <div class="flex flex-col gap-2">
+        <span class="text-[9px] uppercase tracking-[0.25em] text-gray-300 font-mono mb-1">Pages</span>
+        <a href="/travel"   class="text-xs text-gray-400 hover:text-gray-900 transition-colors duration-300 font-light">Journal</a>
+        <a href="/about"    class="text-xs text-gray-400 hover:text-gray-900 transition-colors duration-300 font-light">About</a>
+        <a href="/contact"  class="text-xs text-gray-400 hover:text-gray-900 transition-colors duration-300 font-light">Contact</a>
+      </div>
+
+      <!-- Gear -->
+      <div class="flex flex-col gap-2">
+        <span class="text-[9px] uppercase tracking-[0.25em] text-gray-300 font-mono mb-1">Shot on</span>
+        <span class="text-xs text-gray-400 font-light">Fujifilm X-T50</span>
+        <span class="text-xs text-gray-400 font-light">Nikon Zf</span>
+      </div>
     </div>
+
   </div>
 </footer>
