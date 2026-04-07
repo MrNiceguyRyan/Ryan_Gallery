@@ -1,0 +1,8 @@
+# Cloudflare Pages routing for Astro static output
+# Ensures all routes resolve to their pre-rendered HTML pages
+
+# Works collection pages
+/works/:slug   /works/:slug/index.html   200
+
+# All other routes — let the pre-rendered HTML handle it
+/*   /:splat   200
