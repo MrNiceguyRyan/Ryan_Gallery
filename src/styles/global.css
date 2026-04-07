@@ -227,7 +227,14 @@ img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  filter: grayscale(0.3) brightness(0.85);
+  transition: all 1s ease-out;
+  transform: scale(1.1);
+}
+
+.filmstrip-item:hover .filmstrip-image {
+  filter: grayscale(0) brightness(1);
+  transform: scale(1);
 }
 
 /* Detail overlay grid */
