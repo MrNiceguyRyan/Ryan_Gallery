@@ -153,22 +153,14 @@ function FilmstripItem({
       <motion.div
         className="absolute inset-0"
         style={{ clipPath }}
-        // Smooth spring zoom on hover — CSS transition handles the actual image scale
-        whileHover="hovered"
-        initial="idle"
       >
-        {/* Cover image — scale driven by CSS transition in global.css */}
+        {/* Cover image — hover effects (filter + scale) handled by CSS in global.css */}
         {coverUrl && (
           <motion.img
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
             className="filmstrip-image"
-            variants={{
-              idle:    { scale: 1.1 },
-              hovered: { scale: 1.04 },
-            }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             loading="lazy"
             decoding="async"
             draggable={false}
