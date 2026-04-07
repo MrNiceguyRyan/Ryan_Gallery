@@ -127,7 +127,7 @@ function FilmstripItem({
             style={{ y, viewTransitionName: `cover-${collection.slug}` }}
             src={coverUrl}
             alt={collection.name}
-            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[2.5s] scale-110 group-hover:scale-100"
+            className="filmstrip-image"
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -136,7 +136,7 @@ function FilmstripItem({
       </div>
 
       {/* Static dark overlay — fades on hover */}
-      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      <div className="filmstrip-overlay" />
 
       {/* Title */}
       <div className="relative z-10 text-center px-6">
