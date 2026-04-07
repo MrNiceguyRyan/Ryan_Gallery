@@ -31,8 +31,10 @@ export default function Nav({ currentPath }: Props) {
         style={{ viewTransitionName: 'nav' }}
         className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
           scrolled
-            ? 'bg-white/80 backdrop-blur-2xl border-b border-gray-100/50'
-            : 'bg-transparent border-b border-transparent'
+            ? 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
+            : isHome
+              ? 'bg-black/20 backdrop-blur-xl border-b border-white/10'
+              : 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
         }`}
       >
         {/* Left spacer for centering */}

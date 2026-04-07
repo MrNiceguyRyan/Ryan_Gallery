@@ -123,7 +123,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
     <div className="min-h-screen bg-white">
 
       {/* ── Top nav ── */}
-      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/85 backdrop-blur-xl border-b border-gray-100/60">
+      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
         <a href="/" className="font-serif italic text-sm text-gray-400 hover:text-gray-900 transition-colors duration-300">
           &larr; Ryan Xu.
         </a>
