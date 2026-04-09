@@ -313,34 +313,32 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
 
               // Hover state
             var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
-            var isFilmstrip = !!(e.target && e.target.closest && e.target.closest('.filmstrip-item'));
+            // Both filmstrip bands AND work photo grid trigger aperture cursor
+            var apertureEl = e.target && e.target.closest &&
+              (e.target.closest('.filmstrip-item') || e.target.closest('.work-photo-item'));
 
-            if (isFilmstrip) {
+            if (apertureEl) {
               document.body.classList.add('cursor-filmstrip');
               document.body.classList.remove('cursor-hover');
-              // Show aperture + label
               var aperture = document.getElementById('cursor-aperture');
               var label = document.getElementById('cursor-label');
               if (aperture) aperture.style.opacity = '1';
-              // Get location from filmstrip item data attribute
-              var item = e.target.closest('.filmstrip-item');
-              if (label && item) {
-                var locationText = item.dataset.location || '';
+              if (label) {
+                var locationText = apertureEl.dataset.location || '';
                 label.textContent = locationText;
                 label.style.opacity = locationText ? '1' : '0';
               }
-              // Animate aperture blades open
               animateAperture(true);
             } else {
               if (document.body.classList.contains('cursor-filmstrip')) {
                 document.body.classList.remove('cursor-filmstrip');
-                var aperture = document.getElementById('cursor-aperture');
-                var label = document.getElementById('cursor-label');
-                if (aperture) aperture.style.opacity = '0';
-                if (label) { label.style.opacity = '0'; label.textContent = ''; }
+                var aperture2 = document.getElementById('cursor-aperture');
+                var label2 = document.getElementById('cursor-label');
+                if (aperture2) aperture2.style.opacity = '0';
+                if (label2) { label2.style.opacity = '0'; label2.textContent = ''; }
                 animateAperture(false);
               }
-              document.body.classList.toggle('cursor-hover', isHover && !isFilmstrip);
+              document.body.classList.toggle('cursor-hover', isHover);
             }
           }, { passive: true });
 

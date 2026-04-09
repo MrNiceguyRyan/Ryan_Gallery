@@ -260,7 +260,8 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                 <motion.div
                   key={photo._id}
                   id={`photo-${photo._id}`}
-                  className={`${layout.col} ${layout.aspect} overflow-hidden relative cursor-pointer bg-gray-50`}
+                  className={`${layout.col} ${layout.aspect} overflow-hidden relative cursor-pointer bg-gray-50 work-photo-item`}
+                  data-location={photo.title || photo.location?.city || collection.name}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5, delay: Math.min(i * 0.04, 0.5) }}
