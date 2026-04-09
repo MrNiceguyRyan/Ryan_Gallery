@@ -147,7 +147,7 @@ function FilmstripItem({
           <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-4xl sm:text-5xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.03] transition-transform duration-[2s] leading-none drop-shadow-lg">
+          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[2s] ease-out leading-none drop-shadow-lg will-change-transform">
             {collection.name}
           </h2>
           <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />

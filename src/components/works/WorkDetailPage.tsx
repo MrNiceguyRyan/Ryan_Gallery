@@ -98,6 +98,79 @@ function aspectClass(span: Span, index: number) {
   return 'aspect-[3/4]';
 }
 
+/* ─── Smart row builder based on actual photo aspect ratios ───
+ * landscape (w > h * 1.2) → full-width row alone
+ * portrait (h > w * 1.1) → pair two portraits side by side (half each)
+ *   if only one portrait remains → full-width
+ * square-ish → group 3 together (third each), or pair with portrait
+ */
+function isLandscape(p: Photo) {
+  if (!p.width || !p.height) return false;
+  return p.width / p.height > 1.2;
+}
+function isPortrait(p: Photo) {
+  if (!p.width || !p.height) return true; // default assume portrait
+  return p.height / p.width > 1.1;
+}
+
+interface RowItem { photo: Photo; i: number; span: Span; }
+
+function buildRows(photos: Photo[]): RowItem[][] {
+  const rows: RowItem[][] = [];
+  let i = 0;
+  while (i < photos.length) {
+    const p = photos[i];
+    if (isLandscape(p)) {
+      // Landscape alone: full width
+      rows.push([{ photo: p, i, span: 'full' }]);
+      i++;
+    } else if (isPortrait(p)) {
+      // Portrait: try to pair with next portrait
+      const next = photos[i + 1];
+      if (next && isPortrait(next)) {
+        rows.push([
+          { photo: p,    i,   span: 'half' },
+          { photo: next, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else if (next && !isLandscape(next)) {
+        // Next is square-ish: pair as half
+        rows.push([
+          { photo: p,    i,   span: 'half' },
+          { photo: next, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else {
+        // Portrait alone: full width
+        rows.push([{ photo: p, i, span: 'full' }]);
+        i++;
+      }
+    } else {
+      // Square-ish: group 3 as thirds, or 2 as half, or alone as full
+      const p2 = photos[i + 1];
+      const p3 = photos[i + 2];
+      if (p2 && !isLandscape(p2) && p3 && !isLandscape(p3)) {
+        rows.push([
+          { photo: p,  i,   span: 'third' },
+          { photo: p2, i: i+1, span: 'third' },
+          { photo: p3, i: i+2, span: 'third' },
+        ]);
+        i += 3;
+      } else if (p2 && !isLandscape(p2)) {
+        rows.push([
+          { photo: p,  i,   span: 'half' },
+          { photo: p2, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else {
+        rows.push([{ photo: p, i, span: 'full' }]);
+        i++;
+      }
+    }
+  }
+  return rows;
+}
+
 /* ═══════════════════════════════════════════════════════
  *  WorkDetailPage
  * ═══════════════════════════════════════════════════════ */
@@ -127,9 +200,31 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 
       {/* ── Top nav ── */}
       <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/80 backdrop-blur-2xl border-b border-black/5">
-        <a href="/" className="flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 hover:text-gray-900 hover:gap-5 transition-all duration-300">
-          <ArrowRight size={14} className="rotate-180" /> Back
-        </a>
+        <motion.a
+          href="/"
+          className="flex items-center gap-2.5 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 overflow-hidden"
+          whileHover="hovered"
+          initial="idle"
+        >
+          <motion.div
+            variants={{
+              idle:    { x: 0,  opacity: 0.5 },
+              hovered: { x: -3, opacity: 1   },
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+          >
+            <ArrowRight size={14} className="rotate-180" />
+          </motion.div>
+          <motion.span
+            variants={{
+              idle:    { x: 0, opacity: 0.5, color: '#9CA3AF' },
+              hovered: { x: 2, opacity: 1,   color: '#111827' },
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+          >
+            Back
+          </motion.span>
+        </motion.a>
         <span className="text-[11px] uppercase tracking-[0.6em] font-bold opacity-30">
           {collection.location || collection.name}
         </span>
@@ -298,67 +393,25 @@ export default function WorkDetailPage({ collection, photos }: Props) {
             </div>
           </div>
 
-          {/* ── 6-column magazine grid ── */}
-          <div className="space-y-1 md:space-y-2 p-[3px]">
-            {(() => {
-              const rows: React.ReactNode[] = [];
-              let i = 0;
-              let rowIdx = 0;
-              while (i < photos.length) {
-                const pattern = rowIdx % 4;
-                if (pattern === 0) {
-                  // full-width
-                  const photo = photos[i];
-                  rows.push(
-                    <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
-                      <PhotoCell photo={photo} collection={collection} i={i} span="full"
-                        isHovered={hoveredIndex === i}
-                        onHover={setHoveredIndex}
-                        onClick={setLightboxIndex} />
-                    </div>
-                  );
-                  i += 1;
-                } else if (pattern === 1) {
-                  // two halves
-                  const p1 = photos[i], p2 = photos[i + 1];
-                  rows.push(
-                    <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
-                      {p1 && <PhotoCell photo={p1} collection={collection} i={i} span="half"
-                        isHovered={hoveredIndex === i} onHover={setHoveredIndex} onClick={setLightboxIndex} />}
-                      {p2 && <PhotoCell photo={p2} collection={collection} i={i+1} span="half"
-                        isHovered={hoveredIndex === i+1} onHover={setHoveredIndex} onClick={setLightboxIndex} />}
-                    </div>
-                  );
-                  i += 2;
-                } else if (pattern === 2) {
-                  // full-width
-                  const photo = photos[i];
-                  rows.push(
-                    <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
-                      <PhotoCell photo={photo} collection={collection} i={i} span="full"
-                        isHovered={hoveredIndex === i} onHover={setHoveredIndex} onClick={setLightboxIndex} />
-                    </div>
-                  );
-                  i += 1;
-                } else {
-                  // three thirds
-                  const p1 = photos[i], p2 = photos[i+1], p3 = photos[i+2];
-                  rows.push(
-                    <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
-                      {p1 && <PhotoCell photo={p1} collection={collection} i={i} span="third"
-                        isHovered={hoveredIndex === i} onHover={setHoveredIndex} onClick={setLightboxIndex} />}
-                      {p2 && <PhotoCell photo={p2} collection={collection} i={i+1} span="third"
-                        isHovered={hoveredIndex === i+1} onHover={setHoveredIndex} onClick={setLightboxIndex} />}
-                      {p3 && <PhotoCell photo={p3} collection={collection} i={i+2} span="third"
-                        isHovered={hoveredIndex === i+2} onHover={setHoveredIndex} onClick={setLightboxIndex} />}
-                    </div>
-                  );
-                  i += 3;
-                }
-                rowIdx++;
-              }
-              return rows;
-            })()}
+          {/* ── Smart magazine grid based on photo aspect ratios ── */}
+          <div className="space-y-[3px] p-[3px]">
+            {buildRows(photos).map((row, rowIdx) => (
+              <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
+                {row.map(({ photo, i, span }) => (
+                  <PhotoCell
+                    key={photo._id}
+                    photo={photo}
+                    collection={collection}
+                    i={i}
+                    span={span}
+                    isHovered={hoveredIndex === i}
+                    onHover={setHoveredIndex}
+                    onClick={setLightboxIndex}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
           </div>
 
           {/* ── Back to top footer ── */}
@@ -396,12 +449,19 @@ function PhotoCell({
   photo: Photo; collection: Collection; i: number; span: Span;
   isHovered: boolean; onHover: (i: number | null) => void; onClick: (i: number) => void;
 }) {
-  const aspect = span === 'full' ? 'aspect-[16/7]' : span === 'half' ? 'aspect-[4/5]' : 'aspect-[3/4]';
+  // Compute aspect ratio via paddingTop trick (100% * h/w) — no Tailwind dynamic class needed
+  const ratio = photo.width && photo.height ? photo.height / photo.width : null;
+  const paddingTop = ratio
+    ? `${(ratio * 100).toFixed(2)}%`
+    : span === 'full' ? '56.25%'  // 16/9 fallback
+    : span === 'half' ? '125%'    // 4/5 fallback
+    : '133.33%';                  // 3/4 fallback
 
   return (
     <motion.div
       id={`photo-${photo._id}`}
-      className={`${colClass(span)} ${aspect} overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
+      className={`${colClass(span)} overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
+      style={{ paddingTop }}
       data-location={photo.title || photo.location?.city || collection.name}
       initial={{ opacity: 0 }}
       whileInView={{ opacity: 1 }}

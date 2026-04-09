@@ -50,6 +50,9 @@ export interface Photo {
   _id: string;
   title: string;
   imageUrl: string;
+  /** Image natural dimensions from Sanity asset metadata */
+  width?: number;
+  height?: number;
   camera?: string;
   focalLength?: string;
   aperture?: string;
