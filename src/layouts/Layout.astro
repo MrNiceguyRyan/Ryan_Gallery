@@ -59,35 +59,14 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden" style="cursor: none;">
     <!-- Custom cursor -->
     <div id="cursor-dot" aria-hidden="true"></div>
-    <div id="cursor-ring" aria-hidden="true">
-      <!-- Aperture SVG shown on filmstrip hover -->
-      <svg id="cursor-aperture" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"
-           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 0.4s ease">
-        <circle cx="20" cy="20" r="18" stroke="white" stroke-width="0.8" fill="none"/>
-        <path id="ap-blade-0" d="" fill="white"/>
-        <path id="ap-blade-1" d="" fill="white"/>
-        <path id="ap-blade-2" d="" fill="white"/>
-        <path id="ap-blade-3" d="" fill="white"/>
-        <path id="ap-blade-4" d="" fill="white"/>
-        <path id="ap-blade-5" d="" fill="white"/>
-      </svg>
-      <!-- Location label -->
-      <span id="cursor-label" style="
-        position:absolute;
-        bottom:-22px;
-        left:50%;
-        transform:translateX(-50%);
-        white-space:nowrap;
-        font-size:9px;
-        letter-spacing:0.2em;
-        text-transform:uppercase;
-        color:rgba(255,255,255,0.8);
-        font-family:ui-monospace,monospace;
-        opacity:0;
-        transition:opacity 0.4s ease;
-        pointer-events:none;
-      "></span>
-    </div>
+    <!-- Liquid ring: SVG ellipse that stretches with velocity -->
+    <svg id="cursor-ring" aria-hidden="true"
+      viewBox="0 0 40 40"
+      xmlns="http://www.w3.org/2000/svg"
+      style="position:fixed;top:0;left:0;width:36px;height:36px;pointer-events:none;z-index:9998;overflow:visible;mix-blend-mode:difference;opacity:0.55">
+      <ellipse id="cursor-ellipse" cx="20" cy="20" rx="18" ry="18"
+        fill="none" stroke="white" stroke-width="1"/>
+    </svg>
     <slot />
 
     <!-- Global image protection: prevent right-click, drag & long-press save -->
@@ -213,53 +192,10 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         mix-blend-mode: difference;
       }
 
-      #cursor-ring {
-        position: fixed;
-        top: 0; left: 0;
-        width: 32px; height: 32px;
-        margin: -16px 0 0 -16px;
-        border: 1px solid white;
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 9998;
-        will-change: left, top;
-        mix-blend-mode: difference;
-        opacity: 0.45;
-        transform-origin: center center;
-        transition: transform 0.5s cubic-bezier(0.16,1,0.3,1),
-                    border-width 0.4s cubic-bezier(0.16,1,0.3,1),
-                    opacity 0.4s ease;
-      }
+      /* Ring is now an SVG — positioned and shaped via JS */
+      #cursor-ring { will-change: left, top; }
 
-      body.cursor-hover #cursor-ring {
-        transform: scale(1.5);
-        border-width: 0.5px;
-        opacity: 0.28;
-      }
-      body.cursor-click #cursor-ring {
-        transform: scale(0.72);
-        border-width: 1.5px;
-        opacity: 0.9;
-        transition: transform 0.1s ease, opacity 0.1s ease;
-      }
-      /* Filmstrip / work-photo: large aperture cursor */
-      body.cursor-filmstrip #cursor-ring {
-        width: 68px;
-        height: 68px;
-        margin: -34px 0 0 -34px;
-        border-width: 0;
-        opacity: 1;
-        transform: scale(1);
-        transition: width 0.7s cubic-bezier(0.16,1,0.3,1),
-                    height 0.7s cubic-bezier(0.16,1,0.3,1),
-                    margin 0.7s cubic-bezier(0.16,1,0.3,1),
-                    border-width 0.3s ease,
-                    opacity 0.5s ease;
-      }
-      body.cursor-filmstrip #cursor-dot {
-        opacity: 0;
-        transition: opacity 0.3s ease;
-      }
+      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
 
@@ -270,152 +206,102 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     </style>
 
     <script is:inline>
-      // ── Custom cursor ──
+      // ── Custom cursor (liquid deformation) ──
       (function() {
-        var mouseX = -100, mouseY = -100;
-        var ringX  = -100, ringY  = -100;
+        var mouseX = -200, mouseY = -200;
+        var ringX  = -200, ringY  = -200;
+        var prevMouseX = -200, prevMouseY = -200;
+        var velX = 0, velY = 0;
+        var rxVal = 18, ryVal = 18, angleVal = 0;
         var raf = null;
         var initialized = false;
+        var isClick = false;
 
         function lerp(a, b, t) { return a + (b - a) * t; }
 
         function init() {
           var dot  = document.getElementById('cursor-dot');
           var ring = document.getElementById('cursor-ring');
-          if (!dot || !ring) return;
+          var ellipse = document.getElementById('cursor-ellipse');
+          if (!dot || !ring || !ellipse) return;
 
-          // Clean up previous raf loop before starting new one
           if (raf) { cancelAnimationFrame(raf); raf = null; }
-
-          // Reset classes on body
-          document.body.classList.remove('cursor-hover', 'cursor-click', 'cursor-hidden');
+          document.body.classList.remove('cursor-hover', 'cursor-hidden');
 
           function loop() {
-            ringX = lerp(ringX, mouseX, 0.12);
-            ringY = lerp(ringY, mouseY, 0.12);
-            // Use left/top so CSS transform:scale() has a stable origin at element center
-            ring.style.left = ringX + 'px';
-            ring.style.top  = ringY + 'px';
+            // Smooth ring position
+            ringX = lerp(ringX, mouseX, 0.13);
+            ringY = lerp(ringY, mouseY, 0.13);
+
+            // Velocity-based deformation
+            velX = lerp(velX, mouseX - prevMouseX, 0.25);
+            velY = lerp(velY, mouseY - prevMouseY, 0.25);
+            prevMouseX = lerp(prevMouseX, mouseX, 0.25);
+            prevMouseY = lerp(prevMouseY, mouseY, 0.25);
+
+            var speed = Math.sqrt(velX * velX + velY * velY);
+
+            // Stretch amount: faster = more elongated
+            var stretch = Math.min(speed * 0.55, 10);
+            var targetRx, targetRy, targetAngle;
+
+            if (isClick) {
+              targetRx = 11; targetRy = 11; targetAngle = 0;
+            } else {
+              targetRx = 18 + stretch;
+              targetRy = Math.max(18 - stretch * 0.5, 9);
+              // Angle follows velocity direction
+              targetAngle = speed > 0.5 ? Math.atan2(velY, velX) * 180 / Math.PI : angleVal;
+            }
+
+            rxVal    = lerp(rxVal,    targetRx,    0.18);
+            ryVal    = lerp(ryVal,    targetRy,    0.18);
+            angleVal = lerp(angleVal, targetAngle, 0.14);
+
+            // Position: center the SVG on cursor
+            ring.style.left = (ringX - 20) + 'px';
+            ring.style.top  = (ringY - 20) + 'px';
+
+            // Apply deformation to ellipse
+            ellipse.setAttribute('rx', rxVal.toFixed(2));
+            ellipse.setAttribute('ry', ryVal.toFixed(2));
+            ring.style.transform = 'rotate(' + angleVal.toFixed(1) + 'deg)';
+
+            // Opacity: normal 0.5, hover 0.3
+            var targetOpacity = document.body.classList.contains('cursor-hover') ? '0.3' : '0.5';
+            ring.style.opacity = targetOpacity;
+
             raf = requestAnimationFrame(loop);
           }
           loop();
 
-          if (initialized) return; // only attach document listeners once
+          if (initialized) return;
           initialized = true;
 
-          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select, label';
+          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .work-photo-item, .cursor-pointer, input, textarea, select, label';
 
           document.addEventListener('mousemove', function(e) {
             mouseX = e.clientX;
             mouseY = e.clientY;
-
-            // Dot: snap directly via left/top — no transform conflict
             var d = document.getElementById('cursor-dot');
             if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
-
-              // Hover state
             var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
-            // Both filmstrip bands AND work photo grid trigger aperture cursor
-            var apertureEl = e.target && e.target.closest &&
-              (e.target.closest('.filmstrip-item') || e.target.closest('.work-photo-item'));
-
-            if (apertureEl) {
-              document.body.classList.add('cursor-filmstrip');
-              document.body.classList.remove('cursor-hover');
-              var aperture = document.getElementById('cursor-aperture');
-              var label = document.getElementById('cursor-label');
-              if (aperture) aperture.style.opacity = '1';
-              if (label) {
-                var locationText = apertureEl.dataset.location || '';
-                label.textContent = locationText;
-                label.style.opacity = locationText ? '1' : '0';
-              }
-              animateAperture(true);
-            } else {
-              if (document.body.classList.contains('cursor-filmstrip')) {
-                document.body.classList.remove('cursor-filmstrip');
-                var aperture2 = document.getElementById('cursor-aperture');
-                var label2 = document.getElementById('cursor-label');
-                if (aperture2) aperture2.style.opacity = '0';
-                if (label2) { label2.style.opacity = '0'; label2.textContent = ''; }
-                animateAperture(false);
-              }
-              document.body.classList.toggle('cursor-hover', isHover);
-            }
+            document.body.classList.toggle('cursor-hover', isHover);
           }, { passive: true });
 
-          // Aperture blade animation
-          var apertureAngle = 60; // 60=closed, 0=open
-          var apertureRaf = null;
-          function animateAperture(opening) {
-            if (apertureRaf) cancelAnimationFrame(apertureRaf);
-            var target = opening ? 0 : 60;
-            // Slower lerp = more cinematic shutter feel (0.07 vs 0.12)
-            function step() {
-              apertureAngle += (target - apertureAngle) * 0.07;
-              if (Math.abs(apertureAngle - target) < 0.15) apertureAngle = target;
-              drawBlades(apertureAngle);
-              if (apertureAngle !== target) apertureRaf = requestAnimationFrame(step);
-            }
-            step();
-          }
-
-          function drawBlades(angleDeg) {
-            var cx = 20, cy = 20, R_o = 16.5, R_i = 4.8, n = 6;
-            var offset = angleDeg * Math.PI / 180;
-            for (var i = 0; i < n; i++) {
-              var a0  = (i * 60 - 22) * Math.PI / 180 + offset;
-              var a1  = (i * 60 + 68) * Math.PI / 180 + offset;
-              var ai0 = (i * 60 + 40) * Math.PI / 180 + offset;
-              var ai1 = (i * 60 + 130) * Math.PI / 180 + offset;
-
-              // Outer arc corners
-              var p1x = cx + R_o * Math.cos(a0), p1y = cy + R_o * Math.sin(a0);
-              var p2x = cx + R_o * Math.cos(a1), p2y = cy + R_o * Math.sin(a1);
-              // Inner arc corners
-              var p3x = cx + R_i * Math.cos(ai1), p3y = cy + R_i * Math.sin(ai1);
-              var p4x = cx + R_i * Math.cos(ai0), p4y = cy + R_i * Math.sin(ai0);
-
-              // Bezier control points for rounded outer edge
-              var aMid = (a0 + a1) / 2;
-              var coX = cx + R_o * 1.1 * Math.cos(aMid), coY = cy + R_o * 1.1 * Math.sin(aMid);
-              // Bezier control points for rounded inner edge
-              var aiMid = (ai0 + ai1) / 2;
-              var ciX = cx + R_i * 0.88 * Math.cos(aiMid), ciY = cy + R_i * 0.88 * Math.sin(aiMid);
-
-              var el = document.getElementById('ap-blade-' + i);
-              if (el) el.setAttribute('d',
-                // Move to start
-                'M ' + p1x.toFixed(2) + ',' + p1y.toFixed(2) +
-                // Rounded outer arc via quadratic bezier
-                ' Q ' + coX.toFixed(2) + ',' + coY.toFixed(2) + ' ' + p2x.toFixed(2) + ',' + p2y.toFixed(2) +
-                // Straight side
-                ' L ' + p3x.toFixed(2) + ',' + p3y.toFixed(2) +
-                // Rounded inner arc via quadratic bezier
-                ' Q ' + ciX.toFixed(2) + ',' + ciY.toFixed(2) + ' ' + p4x.toFixed(2) + ',' + p4y.toFixed(2) +
-                ' Z'
-              );
-            }
-          }
-          drawBlades(60); // init closed
-
           document.addEventListener('mousedown', function() {
-            if (!document.body.classList.contains('cursor-filmstrip')) {
-              document.body.classList.add('cursor-click');
-              document.body.classList.remove('cursor-hover');
-            }
+            isClick = true;
+            document.body.classList.add('cursor-click');
           });
           document.addEventListener('mouseup', function() {
+            isClick = false;
             document.body.classList.remove('cursor-click');
           });
           document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
           document.addEventListener('mouseenter', function() { document.body.classList.remove('cursor-hidden'); });
         }
 
-        // Run on first load
         init();
-
-        // Re-run after every Astro View Transition (page swap)
         document.addEventListener('astro:page-load', init);
       })();
 
