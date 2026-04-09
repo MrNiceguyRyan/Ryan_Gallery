@@ -56,7 +56,10 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     <ClientRouter />
   </head>
 
-  <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
+  <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden" style="cursor: none;">
+    <!-- Custom cursor -->
+    <div id="cursor-dot" aria-hidden="true"></div>
+    <div id="cursor-ring" aria-hidden="true"></div>
     <slot />
 
     <!-- Global image protection: prevent right-click, drag & long-press save -->
@@ -162,14 +165,124 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
       }
     </style>
 
+    <style is:inline>
+      /* Hide default cursor everywhere */
+      *, *::before, *::after { cursor: none !important; }
+
+      #cursor-dot {
+        position: fixed;
+        top: 0; left: 0;
+        width: 5px; height: 5px;
+        background: white;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 9999;
+        transform: translate(-50%, -50%);
+        will-change: transform;
+        mix-blend-mode: difference;
+      }
+
+      #cursor-ring {
+        position: fixed;
+        top: 0; left: 0;
+        width: 34px; height: 34px;
+        border: 1px solid white;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 9998;
+        transform: translate(-50%, -50%);
+        will-change: transform;
+        mix-blend-mode: difference;
+        opacity: 0.55;
+        transition: width 0.4s cubic-bezier(0.16,1,0.3,1),
+                    height 0.4s cubic-bezier(0.16,1,0.3,1),
+                    opacity 0.3s ease;
+      }
+
+      body.cursor-hover #cursor-ring {
+        width: 58px;
+        height: 58px;
+        opacity: 0.75;
+      }
+      body.cursor-click #cursor-ring {
+        width: 26px;
+        height: 26px;
+        opacity: 1;
+        transition: width 0.08s ease, height 0.08s ease;
+      }
+      body.cursor-hidden #cursor-dot,
+      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
+
+      @media (hover: none) {
+        #cursor-dot, #cursor-ring { display: none !important; }
+        *, *::before, *::after { cursor: auto !important; }
+      }
+    </style>
+
     <script is:inline>
-      // Block right-click context menu on all images
+      // ── Custom cursor ──
+      (function() {
+        var dot  = document.getElementById('cursor-dot');
+        var ring = document.getElementById('cursor-ring');
+        if (!dot || !ring) return;
+
+        var mouseX = -100, mouseY = -100;
+        var ringX  = -100, ringY  = -100;
+        var raf;
+
+        // Dot snaps immediately; ring follows with lerp
+        document.addEventListener('mousemove', function(e) {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+          dot.style.transform = 'translate(' + (mouseX - 2.5) + 'px, ' + (mouseY - 2.5) + 'px)';
+        }, { passive: true });
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function loop() {
+          ringX = lerp(ringX, mouseX, 0.12);
+          ringY = lerp(ringY, mouseY, 0.12);
+          ring.style.transform = 'translate(' + (ringX - 17) + 'px, ' + (ringY - 17) + 'px)';
+          raf = requestAnimationFrame(loop);
+        }
+        loop();
+
+        // Hover state: expand ring on interactive elements
+        var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select';
+        document.addEventListener('mouseover', function(e) {
+          if (e.target.closest(hoverEls)) {
+            document.body.classList.add('cursor-hover');
+          }
+        }, { passive: true });
+        document.addEventListener('mouseout', function(e) {
+          if (e.target.closest(hoverEls)) {
+            document.body.classList.remove('cursor-hover');
+          }
+        }, { passive: true });
+
+        // Click: briefly shrink
+        document.addEventListener('mousedown', function() {
+          document.body.classList.add('cursor-click');
+        });
+        document.addEventListener('mouseup', function() {
+          document.body.classList.remove('cursor-click');
+        });
+
+        // Hide when leaving window
+        document.addEventListener('mouseleave', function() {
+          document.body.classList.add('cursor-hidden');
+        });
+        document.addEventListener('mouseenter', function() {
+          document.body.classList.remove('cursor-hidden');
+        });
+      })();
+
+      // ── Image protection ──
       document.addEventListener('contextmenu', function(e) {
         if (e.target && e.target.tagName === 'IMG') {
           e.preventDefault();
         }
       }, true);
-      // Block drag-to-save on all images
       document.addEventListener('dragstart', function(e) {
         if (e.target && e.target.tagName === 'IMG') {
           e.preventDefault();
