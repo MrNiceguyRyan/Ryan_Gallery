@@ -32,9 +32,12 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
     };
     document.body.style.overflow = 'hidden';
+    // Hide custom cursor inside lightbox — dark overlay makes white dot distracting
+    document.body.classList.add('cursor-hidden');
     window.addEventListener('keydown', handleKey);
     return () => {
       document.body.style.overflow = '';
+      document.body.classList.remove('cursor-hidden');
       window.removeEventListener('keydown', handleKey);
     };
   }, [onClose, goNext, goPrev]);
@@ -55,6 +58,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
   return (
     <motion.div
       className={`fixed inset-0 ${zClass} bg-black/97 backdrop-blur-md flex items-center justify-center`}
+      style={{ cursor: 'default' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

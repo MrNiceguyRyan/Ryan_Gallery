@@ -166,8 +166,11 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     </style>
 
     <style is:inline>
-      /* Hide default cursor everywhere */
+      /* Hide default cursor everywhere except lightbox */
       *, *::before, *::after { cursor: none !important; }
+      /* Lightbox: restore default cursor (custom cursor is hidden via cursor-hidden class) */
+      .cursor-hidden ~ * { cursor: default; }
+      [style*="cursor: default"], [style*="cursor: default"] * { cursor: default !important; }
 
       #cursor-dot {
         position: fixed;
