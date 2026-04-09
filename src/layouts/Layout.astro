@@ -59,7 +59,35 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
   <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden" style="cursor: none;">
     <!-- Custom cursor -->
     <div id="cursor-dot" aria-hidden="true"></div>
-    <div id="cursor-ring" aria-hidden="true"></div>
+    <div id="cursor-ring" aria-hidden="true">
+      <!-- Aperture SVG shown on filmstrip hover -->
+      <svg id="cursor-aperture" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"
+           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity 0.4s ease">
+        <circle cx="20" cy="20" r="18" stroke="white" stroke-width="0.8" fill="none"/>
+        <path id="ap-blade-0" d="" fill="white"/>
+        <path id="ap-blade-1" d="" fill="white"/>
+        <path id="ap-blade-2" d="" fill="white"/>
+        <path id="ap-blade-3" d="" fill="white"/>
+        <path id="ap-blade-4" d="" fill="white"/>
+        <path id="ap-blade-5" d="" fill="white"/>
+      </svg>
+      <!-- Location label -->
+      <span id="cursor-label" style="
+        position:absolute;
+        bottom:-22px;
+        left:50%;
+        transform:translateX(-50%);
+        white-space:nowrap;
+        font-size:9px;
+        letter-spacing:0.2em;
+        text-transform:uppercase;
+        color:rgba(255,255,255,0.8);
+        font-family:ui-monospace,monospace;
+        opacity:0;
+        transition:opacity 0.4s ease;
+        pointer-events:none;
+      "></span>
+    </div>
     <slot />
 
     <!-- Global image protection: prevent right-click, drag & long-press save -->
@@ -214,6 +242,22 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         opacity: 0.9;
         transition: transform 0.1s ease, opacity 0.1s ease;
       }
+      /* Filmstrip: large aperture cursor */
+      body.cursor-filmstrip #cursor-ring {
+        width: 72px;
+        height: 72px;
+        margin: -36px 0 0 -36px;
+        border-width: 0;
+        opacity: 1;
+        transform: scale(1);
+        transition: width 0.5s cubic-bezier(0.16,1,0.3,1),
+                    height 0.5s cubic-bezier(0.16,1,0.3,1),
+                    margin 0.5s cubic-bezier(0.16,1,0.3,1),
+                    opacity 0.4s ease;
+      }
+      body.cursor-filmstrip #cursor-dot {
+        opacity: 0;
+      }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
 
@@ -267,14 +311,82 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
             var d = document.getElementById('cursor-dot');
             if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
 
-            // Hover state checked once per move
+              // Hover state
             var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
-            document.body.classList.toggle('cursor-hover', isHover);
+            var isFilmstrip = !!(e.target && e.target.closest && e.target.closest('.filmstrip-item'));
+
+            if (isFilmstrip) {
+              document.body.classList.add('cursor-filmstrip');
+              document.body.classList.remove('cursor-hover');
+              // Show aperture + label
+              var aperture = document.getElementById('cursor-aperture');
+              var label = document.getElementById('cursor-label');
+              if (aperture) aperture.style.opacity = '1';
+              // Get location from filmstrip item data attribute
+              var item = e.target.closest('.filmstrip-item');
+              if (label && item) {
+                var locationText = item.dataset.location || '';
+                label.textContent = locationText;
+                label.style.opacity = locationText ? '1' : '0';
+              }
+              // Animate aperture blades open
+              animateAperture(true);
+            } else {
+              if (document.body.classList.contains('cursor-filmstrip')) {
+                document.body.classList.remove('cursor-filmstrip');
+                var aperture = document.getElementById('cursor-aperture');
+                var label = document.getElementById('cursor-label');
+                if (aperture) aperture.style.opacity = '0';
+                if (label) { label.style.opacity = '0'; label.textContent = ''; }
+                animateAperture(false);
+              }
+              document.body.classList.toggle('cursor-hover', isHover && !isFilmstrip);
+            }
           }, { passive: true });
 
+          // Aperture blade animation
+          var apertureAngle = 60; // 60=closed, 0=open
+          var apertureRaf = null;
+          function animateAperture(opening) {
+            if (apertureRaf) cancelAnimationFrame(apertureRaf);
+            var target = opening ? 0 : 60;
+            function step() {
+              apertureAngle += (target - apertureAngle) * 0.12;
+              if (Math.abs(apertureAngle - target) < 0.3) apertureAngle = target;
+              drawBlades(apertureAngle);
+              if (apertureAngle !== target) apertureRaf = requestAnimationFrame(step);
+            }
+            step();
+          }
+
+          function drawBlades(angleDeg) {
+            var cx = 20, cy = 20, R_o = 17, R_i = 5.5, n = 6;
+            var offset = angleDeg * Math.PI / 180;
+            for (var i = 0; i < n; i++) {
+              var a0 = (i * 60 - 20) * Math.PI / 180 + offset;
+              var a1 = (i * 60 + 70) * Math.PI / 180 + offset;
+              var ai0 = (i * 60 + 42) * Math.PI / 180 + offset;
+              var ai1 = (i * 60 + 132) * Math.PI / 180 + offset;
+              var p1x = cx + R_o * Math.cos(a0), p1y = cy + R_o * Math.sin(a0);
+              var p2x = cx + R_o * Math.cos(a1), p2y = cy + R_o * Math.sin(a1);
+              var p3x = cx + R_i * Math.cos(ai1), p3y = cy + R_i * Math.sin(ai1);
+              var p4x = cx + R_i * Math.cos(ai0), p4y = cy + R_i * Math.sin(ai0);
+              var el = document.getElementById('ap-blade-' + i);
+              if (el) el.setAttribute('d',
+                'M ' + p1x.toFixed(2) + ' ' + p1y.toFixed(2) +
+                ' L ' + p2x.toFixed(2) + ' ' + p2y.toFixed(2) +
+                ' L ' + p3x.toFixed(2) + ' ' + p3y.toFixed(2) +
+                ' L ' + p4x.toFixed(2) + ' ' + p4y.toFixed(2) + ' Z'
+              );
+            }
+          }
+          drawBlades(60); // init closed
+
           document.addEventListener('mousedown', function() {
-            document.body.classList.add('cursor-click');
-            document.body.classList.remove('cursor-hover');
+            if (!document.body.classList.contains('cursor-filmstrip')) {
+              document.body.classList.add('cursor-click');
+              document.body.classList.remove('cursor-hover');
+            }
           });
           document.addEventListener('mouseup', function() {
             document.body.classList.remove('cursor-click');

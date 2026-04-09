@@ -119,6 +119,7 @@ function FilmstripItem({
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
       className="filmstrip-item group relative cursor-pointer block"
+      data-location={collection.location || collection.name}
     >
       {/* Cover image: motion.div handles y-parallax, plain img handles CSS hover zoom */}
       <div className="absolute inset-0 overflow-hidden">
