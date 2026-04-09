@@ -185,30 +185,30 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
       #cursor-ring {
         position: fixed;
         top: 0; left: 0;
-        width: 34px; height: 34px;
+        width: 32px; height: 32px;
         border: 1px solid white;
         border-radius: 50%;
         pointer-events: none;
         z-index: 9998;
-        transform: translate(-50%, -50%);
         will-change: transform;
         mix-blend-mode: difference;
-        opacity: 0.55;
-        transition: width 0.4s cubic-bezier(0.16,1,0.3,1),
-                    height 0.4s cubic-bezier(0.16,1,0.3,1),
-                    opacity 0.3s ease;
+        opacity: 0.45;
+        scale: 1;
+        transition: scale 0.5s cubic-bezier(0.16,1,0.3,1),
+                    border-width 0.4s cubic-bezier(0.16,1,0.3,1),
+                    opacity 0.4s ease;
       }
 
       body.cursor-hover #cursor-ring {
-        width: 58px;
-        height: 58px;
-        opacity: 0.75;
+        scale: 1.5;
+        border-width: 0.5px;
+        opacity: 0.28;
       }
       body.cursor-click #cursor-ring {
-        width: 26px;
-        height: 26px;
-        opacity: 1;
-        transition: width 0.08s ease, height 0.08s ease;
+        scale: 0.72;
+        border-width: 1.5px;
+        opacity: 0.9;
+        transition: scale 0.1s ease, opacity 0.1s ease;
       }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
@@ -242,7 +242,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         function loop() {
           ringX = lerp(ringX, mouseX, 0.12);
           ringY = lerp(ringY, mouseY, 0.12);
-          ring.style.transform = 'translate(' + (ringX - 17) + 'px, ' + (ringY - 17) + 'px)';
+          ring.style.transform = 'translate(' + (ringX - 16) + 'px, ' + (ringY - 16) + 'px)';
           raf = requestAnimationFrame(loop);
         }
         loop();
