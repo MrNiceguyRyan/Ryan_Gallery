@@ -242,21 +242,23 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         opacity: 0.9;
         transition: transform 0.1s ease, opacity 0.1s ease;
       }
-      /* Filmstrip: large aperture cursor */
+      /* Filmstrip / work-photo: large aperture cursor */
       body.cursor-filmstrip #cursor-ring {
-        width: 72px;
-        height: 72px;
-        margin: -36px 0 0 -36px;
+        width: 68px;
+        height: 68px;
+        margin: -34px 0 0 -34px;
         border-width: 0;
         opacity: 1;
         transform: scale(1);
-        transition: width 0.5s cubic-bezier(0.16,1,0.3,1),
-                    height 0.5s cubic-bezier(0.16,1,0.3,1),
-                    margin 0.5s cubic-bezier(0.16,1,0.3,1),
-                    opacity 0.4s ease;
+        transition: width 0.7s cubic-bezier(0.16,1,0.3,1),
+                    height 0.7s cubic-bezier(0.16,1,0.3,1),
+                    margin 0.7s cubic-bezier(0.16,1,0.3,1),
+                    border-width 0.3s ease,
+                    opacity 0.5s ease;
       }
       body.cursor-filmstrip #cursor-dot {
         opacity: 0;
+        transition: opacity 0.3s ease;
       }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
@@ -348,9 +350,10 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           function animateAperture(opening) {
             if (apertureRaf) cancelAnimationFrame(apertureRaf);
             var target = opening ? 0 : 60;
+            // Slower lerp = more cinematic shutter feel (0.07 vs 0.12)
             function step() {
-              apertureAngle += (target - apertureAngle) * 0.12;
-              if (Math.abs(apertureAngle - target) < 0.3) apertureAngle = target;
+              apertureAngle += (target - apertureAngle) * 0.07;
+              if (Math.abs(apertureAngle - target) < 0.15) apertureAngle = target;
               drawBlades(apertureAngle);
               if (apertureAngle !== target) apertureRaf = requestAnimationFrame(step);
             }
@@ -358,23 +361,39 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           }
 
           function drawBlades(angleDeg) {
-            var cx = 20, cy = 20, R_o = 17, R_i = 5.5, n = 6;
+            var cx = 20, cy = 20, R_o = 16.5, R_i = 4.8, n = 6;
             var offset = angleDeg * Math.PI / 180;
             for (var i = 0; i < n; i++) {
-              var a0 = (i * 60 - 20) * Math.PI / 180 + offset;
-              var a1 = (i * 60 + 70) * Math.PI / 180 + offset;
-              var ai0 = (i * 60 + 42) * Math.PI / 180 + offset;
-              var ai1 = (i * 60 + 132) * Math.PI / 180 + offset;
+              var a0  = (i * 60 - 22) * Math.PI / 180 + offset;
+              var a1  = (i * 60 + 68) * Math.PI / 180 + offset;
+              var ai0 = (i * 60 + 40) * Math.PI / 180 + offset;
+              var ai1 = (i * 60 + 130) * Math.PI / 180 + offset;
+
+              // Outer arc corners
               var p1x = cx + R_o * Math.cos(a0), p1y = cy + R_o * Math.sin(a0);
               var p2x = cx + R_o * Math.cos(a1), p2y = cy + R_o * Math.sin(a1);
+              // Inner arc corners
               var p3x = cx + R_i * Math.cos(ai1), p3y = cy + R_i * Math.sin(ai1);
               var p4x = cx + R_i * Math.cos(ai0), p4y = cy + R_i * Math.sin(ai0);
+
+              // Bezier control points for rounded outer edge
+              var aMid = (a0 + a1) / 2;
+              var coX = cx + R_o * 1.1 * Math.cos(aMid), coY = cy + R_o * 1.1 * Math.sin(aMid);
+              // Bezier control points for rounded inner edge
+              var aiMid = (ai0 + ai1) / 2;
+              var ciX = cx + R_i * 0.88 * Math.cos(aiMid), ciY = cy + R_i * 0.88 * Math.sin(aiMid);
+
               var el = document.getElementById('ap-blade-' + i);
               if (el) el.setAttribute('d',
-                'M ' + p1x.toFixed(2) + ' ' + p1y.toFixed(2) +
-                ' L ' + p2x.toFixed(2) + ' ' + p2y.toFixed(2) +
-                ' L ' + p3x.toFixed(2) + ' ' + p3y.toFixed(2) +
-                ' L ' + p4x.toFixed(2) + ' ' + p4y.toFixed(2) + ' Z'
+                // Move to start
+                'M ' + p1x.toFixed(2) + ',' + p1y.toFixed(2) +
+                // Rounded outer arc via quadratic bezier
+                ' Q ' + coX.toFixed(2) + ',' + coY.toFixed(2) + ' ' + p2x.toFixed(2) + ',' + p2y.toFixed(2) +
+                // Straight side
+                ' L ' + p3x.toFixed(2) + ',' + p3y.toFixed(2) +
+                // Rounded inner arc via quadratic bezier
+                ' Q ' + ciX.toFixed(2) + ',' + ciY.toFixed(2) + ' ' + p4x.toFixed(2) + ',' + p4y.toFixed(2) +
+                ' Z'
               );
             }
           }
