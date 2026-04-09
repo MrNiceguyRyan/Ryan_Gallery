@@ -254,22 +254,28 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           if (initialized) return; // only attach document listeners once
           initialized = true;
 
+          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select, label';
+
           document.addEventListener('mousemove', function(e) {
+            // Always use clientX/Y — viewport coordinates, correct for fixed elements
             mouseX = e.clientX;
             mouseY = e.clientY;
+
             var d = document.getElementById('cursor-dot');
             if (d) d.style.transform = 'translate(' + (mouseX - 2.5) + 'px, ' + (mouseY - 2.5) + 'px)';
+
+            // Check hover state on every move — most reliable approach
+            var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
+            document.body.classList.toggle('cursor-hover', isHover);
           }, { passive: true });
 
-          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select';
-          document.addEventListener('mouseover', function(e) {
-            if (e.target.closest(hoverEls)) document.body.classList.add('cursor-hover');
-          }, { passive: true });
-          document.addEventListener('mouseout', function(e) {
-            if (e.target.closest(hoverEls)) document.body.classList.remove('cursor-hover');
-          }, { passive: true });
-          document.addEventListener('mousedown', function() { document.body.classList.add('cursor-click'); });
-          document.addEventListener('mouseup',   function() { document.body.classList.remove('cursor-click'); });
+          document.addEventListener('mousedown', function() {
+            document.body.classList.add('cursor-click');
+            document.body.classList.remove('cursor-hover');
+          });
+          document.addEventListener('mouseup', function() {
+            document.body.classList.remove('cursor-click');
+          });
           document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
           document.addEventListener('mouseenter', function() { document.body.classList.remove('cursor-hidden'); });
         }
