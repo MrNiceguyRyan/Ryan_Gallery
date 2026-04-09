@@ -222,59 +222,60 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     <script is:inline>
       // ── Custom cursor ──
       (function() {
-        var dot  = document.getElementById('cursor-dot');
-        var ring = document.getElementById('cursor-ring');
-        if (!dot || !ring) return;
-
         var mouseX = -100, mouseY = -100;
         var ringX  = -100, ringY  = -100;
-        var raf;
-
-        // Dot snaps immediately; ring follows with lerp
-        document.addEventListener('mousemove', function(e) {
-          mouseX = e.clientX;
-          mouseY = e.clientY;
-          dot.style.transform = 'translate(' + (mouseX - 2.5) + 'px, ' + (mouseY - 2.5) + 'px)';
-        }, { passive: true });
+        var raf = null;
+        var initialized = false;
 
         function lerp(a, b, t) { return a + (b - a) * t; }
 
-        function loop() {
-          ringX = lerp(ringX, mouseX, 0.12);
-          ringY = lerp(ringY, mouseY, 0.12);
-          ring.style.transform = 'translate(' + (ringX - 16) + 'px, ' + (ringY - 16) + 'px)';
-          raf = requestAnimationFrame(loop);
+        function init() {
+          var dot  = document.getElementById('cursor-dot');
+          var ring = document.getElementById('cursor-ring');
+          if (!dot || !ring) return;
+
+          // Clean up previous raf loop before starting new one
+          if (raf) { cancelAnimationFrame(raf); raf = null; }
+
+          // Reset classes on body
+          document.body.classList.remove('cursor-hover', 'cursor-click', 'cursor-hidden');
+
+          function loop() {
+            ringX = lerp(ringX, mouseX, 0.12);
+            ringY = lerp(ringY, mouseY, 0.12);
+            ring.style.transform = 'translate(' + (ringX - 16) + 'px, ' + (ringY - 16) + 'px)';
+            raf = requestAnimationFrame(loop);
+          }
+          loop();
+
+          if (initialized) return; // only attach document listeners once
+          initialized = true;
+
+          document.addEventListener('mousemove', function(e) {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            var d = document.getElementById('cursor-dot');
+            if (d) d.style.transform = 'translate(' + (mouseX - 2.5) + 'px, ' + (mouseY - 2.5) + 'px)';
+          }, { passive: true });
+
+          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select';
+          document.addEventListener('mouseover', function(e) {
+            if (e.target.closest(hoverEls)) document.body.classList.add('cursor-hover');
+          }, { passive: true });
+          document.addEventListener('mouseout', function(e) {
+            if (e.target.closest(hoverEls)) document.body.classList.remove('cursor-hover');
+          }, { passive: true });
+          document.addEventListener('mousedown', function() { document.body.classList.add('cursor-click'); });
+          document.addEventListener('mouseup',   function() { document.body.classList.remove('cursor-click'); });
+          document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
+          document.addEventListener('mouseenter', function() { document.body.classList.remove('cursor-hidden'); });
         }
-        loop();
 
-        // Hover state: expand ring on interactive elements
-        var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select';
-        document.addEventListener('mouseover', function(e) {
-          if (e.target.closest(hoverEls)) {
-            document.body.classList.add('cursor-hover');
-          }
-        }, { passive: true });
-        document.addEventListener('mouseout', function(e) {
-          if (e.target.closest(hoverEls)) {
-            document.body.classList.remove('cursor-hover');
-          }
-        }, { passive: true });
+        // Run on first load
+        init();
 
-        // Click: briefly shrink
-        document.addEventListener('mousedown', function() {
-          document.body.classList.add('cursor-click');
-        });
-        document.addEventListener('mouseup', function() {
-          document.body.classList.remove('cursor-click');
-        });
-
-        // Hide when leaving window
-        document.addEventListener('mouseleave', function() {
-          document.body.classList.add('cursor-hidden');
-        });
-        document.addEventListener('mouseenter', function() {
-          document.body.classList.remove('cursor-hidden');
-        });
+        // Re-run after every Astro View Transition (page swap)
+        document.addEventListener('astro:page-load', init);
       })();
 
       // ── Image protection ──
