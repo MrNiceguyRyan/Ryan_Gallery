@@ -412,7 +412,6 @@ export default function WorkDetailPage({ collection, photos }: Props) {
               </div>
             ))}
           </div>
-          </div>
 
           {/* ── Back to top footer ── */}
           <footer className="pt-24 pb-16 text-center border-t border-black/5 mt-2">
