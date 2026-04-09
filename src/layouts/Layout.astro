@@ -176,12 +176,12 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         position: fixed;
         top: 0; left: 0;
         width: 5px; height: 5px;
+        margin: -2.5px 0 0 -2.5px;
         background: white;
         border-radius: 50%;
         pointer-events: none;
         z-index: 9999;
-        transform: translate(-50%, -50%);
-        will-change: transform;
+        will-change: left, top;
         mix-blend-mode: difference;
       }
 
@@ -189,29 +189,30 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         position: fixed;
         top: 0; left: 0;
         width: 32px; height: 32px;
+        margin: -16px 0 0 -16px;
         border: 1px solid white;
         border-radius: 50%;
         pointer-events: none;
         z-index: 9998;
-        will-change: transform;
+        will-change: left, top;
         mix-blend-mode: difference;
         opacity: 0.45;
-        scale: 1;
-        transition: scale 0.5s cubic-bezier(0.16,1,0.3,1),
+        transform-origin: center center;
+        transition: transform 0.5s cubic-bezier(0.16,1,0.3,1),
                     border-width 0.4s cubic-bezier(0.16,1,0.3,1),
                     opacity 0.4s ease;
       }
 
       body.cursor-hover #cursor-ring {
-        scale: 1.5;
+        transform: scale(1.5);
         border-width: 0.5px;
         opacity: 0.28;
       }
       body.cursor-click #cursor-ring {
-        scale: 0.72;
+        transform: scale(0.72);
         border-width: 1.5px;
         opacity: 0.9;
-        transition: scale 0.1s ease, opacity 0.1s ease;
+        transition: transform 0.1s ease, opacity 0.1s ease;
       }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
@@ -246,7 +247,9 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           function loop() {
             ringX = lerp(ringX, mouseX, 0.12);
             ringY = lerp(ringY, mouseY, 0.12);
-            ring.style.transform = 'translate(' + (ringX - 16) + 'px, ' + (ringY - 16) + 'px)';
+            // Use left/top so CSS transform:scale() has a stable origin at element center
+            ring.style.left = ringX + 'px';
+            ring.style.top  = ringY + 'px';
             raf = requestAnimationFrame(loop);
           }
           loop();
@@ -257,14 +260,14 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           var hoverEls = 'a, button, [role="button"], .filmstrip-item, .cursor-pointer, input, textarea, select, label';
 
           document.addEventListener('mousemove', function(e) {
-            // Always use clientX/Y — viewport coordinates, correct for fixed elements
             mouseX = e.clientX;
             mouseY = e.clientY;
 
+            // Dot: snap directly via left/top — no transform conflict
             var d = document.getElementById('cursor-dot');
-            if (d) d.style.transform = 'translate(' + (mouseX - 2.5) + 'px, ' + (mouseY - 2.5) + 'px)';
+            if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
 
-            // Check hover state on every move — most reliable approach
+            // Hover state checked once per move
             var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
             document.body.classList.toggle('cursor-hover', isHover);
           }, { passive: true });
