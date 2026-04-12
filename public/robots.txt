@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Block Sanity Studio — editor UI, not public content
+Disallow: /studio
+Disallow: /studio/
+
+Sitemap: https://ryangallery.com/sitemap-index.xml

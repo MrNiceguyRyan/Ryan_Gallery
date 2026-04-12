@@ -1,16 +1,31 @@
 import { motion } from 'framer-motion';
+import type { SiteSettings, TimelineItem } from '../../types';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
-const timeline = [
-  { year: '2025', title: 'Tokyo Neon Series', desc: 'Captured the duality of ancient temples and neon-lit streets across Japan.' },
-  { year: '2024', title: 'New York Stories', desc: 'A visual journey through the streets, architecture, and energy of New York City.' },
-  { year: '2024', title: 'Paris Lumière', desc: 'The timeless elegance and romantic atmosphere of Paris through a modern lens.' },
-  { year: '2024', title: 'Greek Islands', desc: 'Sun-kissed walls and endless blue of the Mediterranean under warm Aegean light.' },
-  { year: '2023', title: 'Started Photography', desc: 'Picked up my first camera and fell in love with the art of seeing.' },
+/** Fallback timeline shown when Sanity has no data yet */
+const FALLBACK_TIMELINE: TimelineItem[] = [
+  { year: '2025', title: 'Tokyo Neon Series', description: 'Captured the duality of ancient temples and neon-lit streets across Japan.' },
+  { year: '2024', title: 'New York Stories', description: 'A visual journey through the streets, architecture, and energy of New York City.' },
+  { year: '2024', title: 'Paris Lumière', description: 'The timeless elegance and romantic atmosphere of Paris through a modern lens.' },
+  { year: '2024', title: 'Greek Islands', description: 'Sun-kissed walls and endless blue of the Mediterranean under warm Aegean light.' },
+  { year: '2023', title: 'Started Photography', description: 'Picked up my first camera and fell in love with the art of seeing.' },
 ];
 
-export default function AboutPage() {
+interface Props {
+  settings?: SiteSettings;
+}
+
+export default function AboutPage({ settings }: Props) {
+  const name      = settings?.name      ?? 'Ryan Xu';
+  const bio       = settings?.bio       ?? null;
+  const avatarUrl = settings?.avatarUrl ?? 'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80';
+  const email     = settings?.email     ?? 'hello@ryanxu.com';
+  const instagram = settings?.instagram ?? 'https://instagram.com';
+  const timeline  = (settings?.timeline?.length ?? 0) > 0
+    ? settings!.timeline!
+    : FALLBACK_TIMELINE;
+
   return (
     <div className="bg-white">
 
@@ -25,9 +40,11 @@ export default function AboutPage() {
         >
           <div className="w-28 h-28 md:w-36 md:h-36 animate-blob-morph overflow-hidden bg-gray-100 shadow-lg">
             <img
-              src="https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80"
-              alt="Ryan Xu"
+              src={avatarUrl}
+              alt={name}
               className="w-full h-full object-cover object-right"
+              loading="eager"
+              decoding="async"
             />
           </div>
         </motion.div>
@@ -39,7 +56,7 @@ export default function AboutPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1, ease: expo }}
         >
-          Ryan Xu.
+          {name}.
         </motion.h1>
 
         {/* Subtitle */}
@@ -49,25 +66,38 @@ export default function AboutPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: expo }}
         >
-          Photographer · New York, NY · Nikon Zf
+          Photographer · New York, NY · Fujifilm X-T50 & Nikon Zf
         </motion.p>
 
         {/* Bio */}
-        <motion.div
-          className="mt-8 space-y-4 text-left md:text-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3, ease: expo }}
-        >
-          <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
-            I believe in capturing the quiet moments where light meets intention.
-            Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
-          </p>
-          <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
-            Based in New York, I shoot exclusively on the Nikon Zf. There's something about the weight of a real shutter,
-            the intention behind each exposure, that digital convenience can never replace.
-          </p>
-        </motion.div>
+        {bio ? (
+          <motion.div
+            className="mt-8 text-left md:text-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+          >
+            <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
+              {bio}
+            </p>
+          </motion.div>
+        ) : (
+          <motion.div
+            className="mt-8 space-y-4 text-left md:text-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+          >
+            <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
+              I believe in capturing the quiet moments where light meets intention.
+              Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
+            </p>
+            <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
+              Based in New York, I shoot on the Fujifilm X-T50 and Nikon Zf. There's something about the weight of a real shutter,
+              the intention behind each exposure, that digital convenience can never replace.
+            </p>
+          </motion.div>
+        )}
 
         <motion.div
           className="flex items-center gap-4 mt-5 justify-center"
@@ -113,7 +143,7 @@ export default function AboutPage() {
           <div className="flex gap-5 px-6 md:px-16 pb-4 overflow-x-auto no-scrollbar">
             {timeline.map((item, i) => (
               <motion.div
-                key={i}
+                key={`${item.year}-${i}`}
                 className="flex-shrink-0 w-56 md:w-64 group"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -121,15 +151,13 @@ export default function AboutPage() {
                 transition={{ duration: 0.5, delay: i * 0.07, ease: expo }}
               >
                 <div className="relative mb-5">
-                  <motion.div
-                    className="w-2.5 h-2.5 rounded-full border-2 border-gray-200 bg-white relative z-10 group-hover:border-gray-900 transition-colors duration-500"
-                  />
+                  <div className="w-2.5 h-2.5 rounded-full border-2 border-gray-200 bg-white relative z-10 group-hover:border-gray-900 transition-colors duration-500" />
                 </div>
                 <span className="text-[10px] font-mono text-gray-300 tracking-wider">{item.year}</span>
                 <h3 className="text-base font-[200] text-gray-900 mt-1 tracking-tight group-hover:translate-x-1 transition-transform duration-400">
                   {item.title}
                 </h3>
-                <p className="text-[13px] text-gray-400 font-light mt-1.5 leading-relaxed">{item.desc}</p>
+                <p className="text-[13px] text-gray-400 font-light mt-1.5 leading-relaxed">{item.description}</p>
               </motion.div>
             ))}
           </div>
@@ -157,7 +185,7 @@ export default function AboutPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <motion.a
-              href="mailto:hello@ryanxu.com"
+              href={`mailto:${email}`}
               className="group p-5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors duration-300 flex items-center gap-3"
               whileHover={{ y: -2, transition: { duration: 0.2 } }}
             >
@@ -165,12 +193,12 @@ export default function AboutPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
               <div>
-                <p className="text-sm font-light text-gray-900">hello@ryanxu.com</p>
+                <p className="text-sm font-light text-gray-900">{email}</p>
               </div>
             </motion.a>
 
             <motion.a
-              href="https://instagram.com"
+              href={instagram}
               target="_blank"
               rel="noopener noreferrer"
               className="group p-5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors duration-300 flex items-center gap-3"
@@ -181,7 +209,7 @@ export default function AboutPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
               </svg>
               <div>
-                <p className="text-sm font-light text-gray-900">@ryan.photography</p>
+                <p className="text-sm font-light text-gray-900">Instagram</p>
               </div>
             </motion.a>
 
@@ -209,7 +237,7 @@ export default function AboutPage() {
             transition={{ duration: 0.6, ease: expo }}
           >
             <a
-              href="mailto:hello@ryanxu.com"
+              href={`mailto:${email}`}
               className="inline-block px-7 py-2.5 bg-gray-900 text-white text-sm font-light tracking-wider rounded-full hover:bg-gray-700 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
             >
               Get in Touch
@@ -217,31 +245,6 @@ export default function AboutPage() {
           </motion.div>
         </div>
       </motion.section>
-
-      {/* ═══════ FOOTER ═══════ */}
-      <motion.footer
-        className="py-10 px-6 md:px-16 max-w-7xl mx-auto border-t border-gray-100"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.8 }}
-      >
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-light text-gray-900 tracking-tight">Visual Archive.</h2>
-            <p className="text-[10px] text-gray-400 mt-1 font-light">
-              &copy; {new Date().getFullYear()} Ryan. All rights reserved.
-            </p>
-          </div>
-          <div className="flex items-center gap-5 text-[10px] text-gray-400 font-mono">
-            <span>Nikon Zf</span>
-            <span className="text-gray-200">|</span>
-            <span>Astro + React</span>
-            <span className="text-gray-200">|</span>
-            <span>Sanity CMS</span>
-          </div>
-        </div>
-      </motion.footer>
     </div>
   );
 }

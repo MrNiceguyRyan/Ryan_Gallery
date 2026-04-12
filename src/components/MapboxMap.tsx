@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useEffect, Component, memo } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
 import MapGL, { Marker, NavigationControl, FullscreenControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
@@ -113,72 +113,13 @@ function formatCoord(v: number, pos: string, neg: string) {
   return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
 }
 
-// ─── Memoized Cluster Marker ───
-interface ClusterMarkerProps {
-  clusterId: number;
-  lng: number;
-  lat: number;
-  count: number;
-  onClusterClick: (clusterId: number, lng: number, lat: number) => void;
-}
-const ClusterMarker = memo(function ClusterMarker({ clusterId, lng, lat, count, onClusterClick }: ClusterMarkerProps) {
-  const size = count < 10 ? 40 : count < 30 ? 48 : 56;
-  return (
-    <Marker longitude={lng} latitude={lat} anchor="center" onClick={e => { e.originalEvent.stopPropagation(); onClusterClick(clusterId, lng, lat); }}>
-      <div className="relative flex items-center justify-center cursor-pointer group" style={{ width: size + 16, height: size + 16, willChange: 'transform' }}>
-        <div className="absolute rounded-full animate-ping opacity-15" style={{ width: size + 10, height: size + 10, backgroundColor: `rgba(${ACCENT_RGB},0.4)`, animationDuration: '2.5s' }} />
-        <div className="absolute rounded-full opacity-25 group-hover:opacity-40 transition-opacity duration-500" style={{ width: size + 4, height: size + 4, backgroundColor: `rgba(${ACCENT_RGB},0.25)` }} />
-        <div className="relative rounded-full flex items-center justify-center text-white font-bold shadow-lg border-[3px] border-white/60 group-hover:scale-110 transition-transform duration-300" style={{ width: size, height: size, fontSize: count < 10 ? 12 : 14, background: ACCENT, boxShadow: `0 8px 30px rgba(${ACCENT_RGB},0.35)` }}>
-          {count}
-        </div>
-      </div>
-    </Marker>
-  );
-});
-
-// ─── Memoized Photo Marker ───
-interface PhotoMarkerProps {
-  photo: Photo;
-  lng: number;
-  lat: number;
-  isActive: boolean;
-  isHovered: boolean;
-  onPhotoClick: (photo: Photo) => void;
-  onHoverChange: (photoId: string | null, city: string | null) => void;
-}
-const PhotoMarker = memo(function PhotoMarker({ photo, lng, lat, isActive, isHovered, onPhotoClick, onHoverChange }: PhotoMarkerProps) {
-  return (
-    <Marker longitude={lng} latitude={lat} anchor="center" onClick={e => { e.originalEvent.stopPropagation(); onPhotoClick(photo); }}>
-      <div
-        className="relative flex items-center justify-center cursor-pointer group"
-        style={{ width: 48, height: 48, willChange: 'transform' }}
-        onMouseEnter={() => onHoverChange(photo._id, photo.location?.city || null)}
-        onMouseLeave={() => onHoverChange(null, null)}
-      >
-        <div className={`absolute w-[48px] h-[48px] rounded-full transition-all duration-500 ${isActive ? 'scale-100' : 'scale-0 group-hover:scale-100'}`} style={{ backgroundColor: isActive ? `rgba(${ACCENT_RGB},0.15)` : `rgba(${ACCENT_RGB},0.1)` }} />
-        <div className={`relative z-10 rounded-full overflow-hidden shadow-lg transition-all duration-500 ease-out ${isActive ? 'w-10 h-10 ring-[3px] shadow-[0_0_20px_rgba(44,62,80,0.3)]' : 'w-7 h-7 ring-[2.5px] ring-white group-hover:w-9 group-hover:h-9 group-hover:shadow-xl'}`} style={isActive ? { ringColor: ACCENT } as any : undefined}>
-          <img src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt="" className="w-full h-full object-cover" draggable={false} />
-        </div>
-        <AnimatePresence>
-          {isHovered && !isActive && (
-            <motion.div initial={{ opacity: 0, y: -8, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.9 }} transition={{ duration: 0.2 }} className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-              <div className="px-3 py-1.5 text-white text-[10px] font-semibold rounded-full shadow-xl whitespace-nowrap tracking-wide" style={{ background: ACCENT }}>{photo.location?.city || photo.title}</div>
-              <div className="w-1.5 h-1.5 rotate-45 absolute -bottom-0.5 left-1/2 -translate-x-1/2" style={{ background: ACCENT }} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </Marker>
-  );
-});
-
 // ─── Main Inner Component ───
 function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
   const [viewState, setViewState] = useState({ latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 });
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
-  const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   // Bumped only on map idle/moveend so cluster recompute doesn't fire on every pan frame
   const [boundsKey, setBoundsKey] = useState(0);
@@ -283,7 +224,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     const cluster = cityClusters.find(c => c.city === city) || null;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
-    // Also expand the region containing this city
+    // Expand the region containing this city so the card is visible
     if (cluster) {
       const region = getRegion(cluster.country);
       setExpandedRegion(region);
@@ -298,21 +239,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       essential: true,
     });
     // Scroll sidebar to the city when the fly-to actually finishes
-    // (replaces an arbitrary setTimeout that desynced from the animation).
     if (map) {
       const onMoveEnd = () => {
         const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
       map.once('moveend', onMoveEnd);
     }
   }, [viewState.zoom, cityClusters]);
-
-  // Stable hover callback so memoized PhotoMarkers don't re-render on parent updates
-  const handleHoverChange = useCallback((photoId: string | null, city: string | null) => {
-    setHoveredPhotoId(photoId);
-    setHoveredCity(city);
-  }, []);
 
   // Sidebar city click
   const handleCityClick = useCallback((cluster: LocationCluster) => {
@@ -405,41 +339,145 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             <NavigationControl position="bottom-right" showCompass={false} />
             <FullscreenControl position="bottom-right" />
 
+            <AnimatePresence>
             {clusters.map((feature) => {
               const [lng, lat] = feature.geometry.coordinates;
               const props = feature.properties;
 
               if (props.cluster) {
                 return (
-                  <ClusterMarker
+                  <Marker
                     key={`cluster-${feature.id}`}
-                    clusterId={feature.id as number}
-                    lng={lng}
-                    lat={lat}
-                    count={props.point_count}
-                    onClusterClick={handleClusterClick}
-                  />
+                    longitude={lng}
+                    latitude={lat}
+                    anchor="center"
+                    style={{ zIndex: 2 }}
+                    onClick={e => { e.originalEvent.stopPropagation(); handleClusterClick(feature.id as number, lng, lat); }}
+                  >
+                    <motion.div
+                      className="relative flex items-center justify-center cursor-pointer group"
+                      style={{ width: size + 20, height: size + 20 }}
+                      initial={{ opacity: 0, scale: 0.4 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.4 }}
+                      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.94 }}
+                    >
+                      {/* Outer breathing ring */}
+                      <motion.div
+                        className="absolute rounded-full"
+                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${ACCENT_RGB},0.12)` }}
+                        animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.15, 0.5] }}
+                        transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                      {/* Inner halo */}
+                      <div
+                        className="absolute rounded-full"
+                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${ACCENT_RGB},0.18)` }}
+                      />
+                      {/* Core badge */}
+                      <div
+                        className="relative rounded-full flex items-center justify-center text-white font-bold shadow-lg border-[2.5px] border-white/50"
+                        style={{
+                          width: size, height: size,
+                          fontSize: count < 10 ? 13 : 14,
+                          background: ACCENT,
+                          boxShadow: `0 6px 24px rgba(${ACCENT_RGB},0.4)`,
+                        }}
+                      >
+                        <AnimatePresence mode="wait">
+                          <motion.span
+                            key={count}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            {count}
+                          </motion.span>
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  </Marker>
                 );
               }
 
               const photo = validPhotos[props.photoIndex];
               if (!photo) return null;
               const isActive = activeCluster?.city === photo.location?.city;
-              const isHovered = hoveredPhotoId === photo._id;
+              const isHovered = hoveredIdx === props.photoIndex;
+              const markerZ = isActive ? 3 : isHovered ? 2 : 1;
+              const containerSize = isActive ? 44 : isHovered ? 38 : 30;
 
               return (
-                <PhotoMarker
+                <Marker
                   key={`photo-${photo._id}`}
-                  photo={photo}
-                  lng={lng}
-                  lat={lat}
-                  isActive={isActive}
-                  isHovered={isHovered}
-                  onPhotoClick={handlePhotoClick}
-                  onHoverChange={handleHoverChange}
-                />
+                  longitude={lng}
+                  latitude={lat}
+                  anchor="center"
+                  style={{ zIndex: markerZ }}
+                  onClick={e => { e.originalEvent.stopPropagation(); handlePhotoClick(photo); }}
+                >
+                  <motion.div
+                    className="relative flex items-center justify-center cursor-pointer group"
+                    style={{ width: containerSize, height: containerSize }}
+                    initial={{ opacity: 0, scale: 0.3 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.3 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
+                    onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
+                    onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
+                  >
+                    {(isActive || isHovered) && (
+                      <div
+                        className="absolute inset-0 rounded-full transition-all duration-500"
+                        style={{ backgroundColor: `rgba(${ACCENT_RGB},${isActive ? 0.15 : 0.08})` }}
+                      />
+                    )}
+                    <div
+                      className="relative rounded-full overflow-hidden shadow-lg transition-all duration-300 ease-out"
+                      style={{
+                        width: isActive ? 40 : isHovered ? 34 : 26,
+                        height: isActive ? 40 : isHovered ? 34 : 26,
+                        outline: isActive
+                          ? `3px solid ${ACCENT}`
+                          : '2.5px solid rgba(255,255,255,0.9)',
+                        outlineOffset: '1px',
+                        boxShadow: isActive
+                          ? `0 0 20px rgba(${ACCENT_RGB},0.4), 0 4px 12px rgba(0,0,0,0.2)`
+                          : '0 2px 8px rgba(0,0,0,0.15)',
+                      }}
+                    >
+                      <img
+                        src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        draggable={false}
+                      />
+                    </div>
+                    <AnimatePresence>
+                      {isHovered && !isActive && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.9 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute -top-9 left-1/2 -translate-x-1/2 pointer-events-none"
+                          style={{ zIndex: 10 }}
+                        >
+                          <div className="px-3 py-1.5 text-white text-[10px] font-semibold rounded-full shadow-xl whitespace-nowrap tracking-wide" style={{ background: ACCENT }}>
+                            {photo.location?.city || photo.title}
+                          </div>
+                          <div className="w-1.5 h-1.5 rotate-45 absolute -bottom-0.5 left-1/2 -translate-x-1/2" style={{ background: ACCENT }} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                </Marker>
               );
             })}
+            </AnimatePresence>
           </MapGL>
 
           {/* ── Floating label ── */}

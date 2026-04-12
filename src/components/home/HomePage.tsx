@@ -4,6 +4,7 @@ import { ChevronLeft, ArrowRight, Search, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import { getMapboxToken } from '../../config/mapbox';
+import Lightbox from '../shared/Lightbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -13,142 +14,6 @@ const HERO_IMAGE =
 interface Props {
   collections: Collection[];
   photos: Photo[];
-}
-
-/* ═══════════════════════════════════════════════════════
- *  Lightbox — fullscreen photo viewer
- * ═══════════════════════════════════════════════════════ */
-function Lightbox({
-  photos,
-  initialIndex,
-  onClose,
-}: {
-  photos: Photo[];
-  initialIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(initialIndex);
-  const photo = photos[index];
-  const touchStartX = useRef(0);
-
-  const goNext = useCallback(
-    () => setIndex((i) => Math.min(i + 1, photos.length - 1)),
-    [photos.length],
-  );
-  const goPrev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
-    };
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKey);
-    return () => {
-      document.body.style.overflow = '';
-      window.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose, goNext, goPrev]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) goNext();
-      else goPrev();
-    }
-  };
-
-  return (
-    <motion.div
-      className="fixed inset-0 z-[60] bg-black/97 backdrop-blur-md flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      onClick={onClose}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      <button
-        onClick={onClose}
-        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-
-      <AnimatePresence mode="wait">
-        <motion.img
-          key={photo._id}
-          src={`${photo.imageUrl}?auto=format&w=1800&q=90`}
-          alt={photo.title || ''}
-          className="max-w-[92vw] max-h-[78vh] object-contain select-none"
-          initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          draggable={false}
-        />
-      </AnimatePresence>
-
-      {index > 0 && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goPrev(); }}
-          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
-        >
-          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
-      )}
-
-      {index < photos.length - 1 && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goNext(); }}
-          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
-        >
-          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
-      )}
-
-      <div
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-4">
-          {photo.title && (
-            <span className="text-white/60 text-sm font-light tracking-wide">{photo.title}</span>
-          )}
-          <span className="text-white/30 text-xs font-mono tracking-wider">
-            {index + 1} / {photos.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-4 text-[13px] text-white/35 font-mono tracking-wide">
-          {photo.camera && <span className="text-white/45">{photo.camera}</span>}
-          {photo.focalLength && (<><span className="text-white/15">|</span><span>{photo.focalLength}</span></>)}
-          {photo.aperture && (<><span className="text-white/15">|</span><span>{photo.aperture}</span></>)}
-          {photo.shutterSpeed && (<><span className="text-white/15">|</span><span>{photo.shutterSpeed}</span></>)}
-          {photo.iso && (<><span className="text-white/15">|</span><span>ISO {photo.iso}</span></>)}
-        </div>
-      </div>
-
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
-        <motion.div
-          className="h-full bg-white/25"
-          animate={{ width: `${((index + 1) / photos.length) * 100}%` }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-        />
-      </div>
-    </motion.div>
-  );
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -228,11 +93,9 @@ function PhotoBlock({
  * ═══════════════════════════════════════════════════════ */
 function FilmstripItem({
   collection,
-  onClick,
   index,
 }: {
   collection: Collection;
-  onClick: () => void;
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -251,44 +114,64 @@ function FilmstripItem({
   const photoCount = collection.photos?.length || collection.photoCount || 0;
 
   return (
-    <motion.div
+    <motion.a
+      href={`/works/${collection.slug}`}
       ref={ref}
       initial={{ opacity: 0, y: 100 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      onClick={onClick}
-      className="filmstrip-item group relative cursor-pointer"
+      className="filmstrip-item group relative cursor-pointer block"
+      data-location={collection.location || collection.name}
     >
+      {/* Cover image: motion.div handles y-parallax, plain img handles CSS hover zoom */}
       <div className="absolute inset-0 overflow-hidden">
-        {coverUrl && (
-          <motion.img
-            style={{ y }}
-            src={coverUrl}
-            alt={collection.name}
-            loading={index === 0 ? 'eager' : 'lazy'}
-            decoding="async"
-            className="filmstrip-image brightness-[0.85] group-hover:brightness-100 transition-all duration-[1200ms] ease-out scale-110 group-hover:scale-100"
-            draggable={false}
-          />
-        )}
-      </div>
-      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
-      <div className="relative z-10 text-center px-6">
-        <motion.div className="flex flex-col items-center gap-6">
-          <span className="text-[10px] uppercase tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-500">
-            {collection.location || collection.subtitle || ''}
-          </span>
-          <h2 className="text-6xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[1200ms] ease-out leading-none drop-shadow-lg">
-            {collection.name}
-          </h2>
-          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-700 opacity-40" />
+        <motion.div style={{ y }} className="absolute inset-0">
+          {coverUrl && (
+            <img
+              src={coverUrl}
+              alt={collection.name}
+              style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
+              className="filmstrip-image"
+              loading={index === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+              draggable={false}
+            />
+          )}
         </motion.div>
       </div>
-      <div className="absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-80 transition-all duration-500 translate-x-8 group-hover:translate-x-0 flex items-center gap-4 text-white font-bold">
-        Explore Story <ArrowRight size={14} />
+
+      {/* Static dark overlay — fades on hover */}
+      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+
+      {/* Title */}
+      <div className="relative z-10 text-center px-6">
+        <div className="flex flex-col items-center gap-3 md:gap-6">
+          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-500">
+            {collection.location || collection.subtitle || ''}
+          </span>
+          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[1200ms] ease-out leading-none drop-shadow-lg will-change-transform">
+            {collection.name}
+          </h2>
+          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-700 opacity-40" />
+        </div>
       </div>
-    </motion.div>
+
+      {/* Desktop CTA */}
+      <div className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-70 transition-all duration-1000 translate-x-6 group-hover:translate-x-0 items-center gap-3 text-white font-light">
+        View series <ArrowRight size={11} strokeWidth={1} />
+      </div>
+
+      {/* Mobile bottom bar */}
+      <div className="md:hidden absolute bottom-0 left-0 right-0 px-5 py-4 flex items-center justify-between bg-gradient-to-t from-black/60 to-transparent">
+        <span className="text-[9px] font-mono text-white/50 tracking-wider uppercase">
+          {photoCount} frames
+        </span>
+        <span className="text-[9px] font-mono text-white/50 tracking-wider uppercase flex items-center gap-1.5">
+          View <ArrowRight size={10} />
+        </span>
+      </div>
+    </motion.a>
   );
 }
 
@@ -480,6 +363,7 @@ function CollectionDetail({
             photos={collectionPhotos}
             initialIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
+            zIndex={60}
           />
         )}
       </AnimatePresence>
@@ -642,7 +526,6 @@ export default function HomePage({ collections, photos }: Props) {
             <FilmstripItem
               key={collection._id}
               collection={collection}
-              onClick={() => setSelectedCollection(collection)}
               index={index}
             />
           ))}
@@ -660,26 +543,18 @@ export default function HomePage({ collections, photos }: Props) {
       </AnimatePresence>
 
         {/* ── Footer ── */}
-        <footer className="py-32 px-6 md:px-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-50">
-          <div className="flex flex-col items-center md:items-start gap-6">
-            <span className="text-2xl font-display tracking-[0.12em] text-white">RYAN XU</span>
-            <p className="max-w-xs text-center md:text-left leading-loose">
-              A curated collection of visual narratives from across the globe.
-            </p>
-            <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
-              &copy; {new Date().getFullYear()} Ryan Xu. All rights reserved.
+        <footer className="py-20 px-6 md:px-12 border-t border-white/[0.06] mt-12">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div>
+              <h2 className="text-lg font-light text-white tracking-tight">Visual Archive.</h2>
+              <p className="text-xs text-white/30 mt-1 font-light">
+                &copy; {new Date().getFullYear()} Ryan. All rights reserved.
+              </p>
             </div>
-          </div>
-          <div className="flex gap-16">
-            <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Navigate</span>
-              <a href="/travel" className="hover:text-white transition-colors">Journal</a>
-              <a href="/about" className="hover:text-white transition-colors">About</a>
-            </div>
-            <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Tech</span>
+            <div className="flex items-center gap-4 text-xs text-white/30 font-mono">
+              <span>Fujifilm X-T50</span>
+              <span className="text-white/10">·</span>
               <span>Nikon Zf</span>
-              <span>Astro + React</span>
             </div>
           </div>
         </footer>

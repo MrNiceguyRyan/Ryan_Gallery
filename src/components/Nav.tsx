@@ -28,14 +28,34 @@ export default function Nav({ currentPath }: Props) {
   return (
     <>
       <nav
+        style={{ viewTransitionName: 'nav' }}
         className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
           scrolled
-            ? 'bg-white/80 backdrop-blur-2xl border-b border-gray-100/50'
-            : 'bg-transparent border-b border-transparent'
+            ? 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
+            : isHome
+              ? 'bg-black/20 backdrop-blur-xl border-b border-white/10'
+              : 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
         }`}
       >
-        {/* Left spacer for centering */}
-        <div className="flex-1" />
+        {/* Left: aperture logo */}
+        <div className="flex-1">
+          <a href="/" aria-label="Home">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"
+              className={`transition-opacity duration-700 hover:opacity-60 ${
+                scrolled ? 'opacity-70' : 'opacity-80'
+              }`}
+            >
+              <circle cx="16" cy="16" r="11" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+              <path d="M 16.00,11.80 L 19.64,13.90 L 19.64,18.10 L 16.00,20.20 L 12.36,18.10 L 12.36,13.90 Z" stroke="currentColor" strokeWidth="0.9" fill="none"/>
+              <line x1="16.00" y1="11.80" x2="21.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="19.64" y1="13.90" x2="27.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="19.64" y1="18.10" x2="21.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="16.00" y1="20.20" x2="10.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="12.36" y1="18.10" x2="5.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
+              <line x1="12.36" y1="13.90" x2="10.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
+            </svg>
+          </a>
+        </div>
 
         {/* Center: name */}
         <a
@@ -97,26 +117,55 @@ export default function Nav({ currentPath }: Props) {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            className="fixed inset-0 z-40 bg-white/95 backdrop-blur-2xl flex flex-col items-center justify-center gap-8 md:hidden"
+            className="fixed inset-0 z-40 bg-[#0A0A0A]/97 backdrop-blur-2xl flex flex-col items-center justify-center gap-0 md:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.25 }}
           >
-            {links.map((link, i) => (
-              <motion.a
-                key={link.href}
-                href={link.href}
-                className="text-lg uppercase tracking-[0.3em] font-medium text-gray-900"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ delay: i * 0.05, duration: 0.3 }}
-                onClick={() => setMobileOpen(false)}
-              >
-                {link.label}
-              </motion.a>
-            ))}
+            {/* Close button */}
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="absolute top-5 right-6 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors"
+              aria-label="Close menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Nav links */}
+            <div className="flex flex-col items-center gap-1 w-full px-10">
+              {links.map((link, i) => {
+                const isActive = currentPath === link.href || (link.href !== '/' && currentPath.startsWith(link.href));
+                return (
+                  <motion.a
+                    key={link.href}
+                    href={link.href}
+                    className={`w-full text-center py-5 text-2xl font-[200] tracking-[0.15em] transition-colors border-b border-white/5 last:border-0 ${
+                      isActive ? 'text-white' : 'text-white/40 hover:text-white/80'
+                    }`}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ delay: i * 0.06, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {link.label}
+                  </motion.a>
+                );
+              })}
+            </div>
+
+            {/* Footer in menu */}
+            <motion.p
+              className="absolute bottom-10 text-[10px] text-white/15 font-mono tracking-[0.3em] uppercase"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.35, duration: 0.4 }}
+            >
+              Ryan Xu · Visual Archive
+            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>

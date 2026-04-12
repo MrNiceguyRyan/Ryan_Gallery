@@ -56,10 +56,31 @@ export default defineType({
     }),
     defineField({
       name: 'description',
-      title: 'Description',
+      title: 'Short Description (SEO / meta)',
       type: 'text',
       rows: 3,
-      description: '系列简介',
+      description: '用于 SEO meta description 和 Open Graph 描述，1-2 句话',
+    }),
+    defineField({
+      name: 'introduction',
+      title: 'Editorial Introduction',
+      type: 'array',
+      of: [{
+        type: 'block',
+        styles: [
+          {title: 'Normal', value: 'normal'},
+          {title: 'Quote', value: 'blockquote'},
+        ],
+        marks: {
+          decorators: [
+            {title: 'Italic', value: 'em'},
+            {title: 'Strong', value: 'strong'},
+          ],
+          annotations: [],
+        },
+        lists: [],
+      }],
+      description: '在 Collection 页面侧边栏展示的精炼文案，支持段落和引用格式。建议 50-120 字，有文学感。',
     }),
     defineField({
       name: 'featured',

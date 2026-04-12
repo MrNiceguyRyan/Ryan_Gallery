@@ -1,425 +1,507 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Collection, Photo } from '../../types';
+import { MapPin, ArrowRight } from 'lucide-react';
+import type { Collection, Photo, PortableTextBlock } from '../../types';
+import Lightbox from '../shared/Lightbox';
+import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.16, 1, 0.3, 1] as const;
+const ACCENT = '#2c3e50';
 
 interface Props {
   collection: Collection;
   photos: Photo[];
 }
 
-/* ═══════════════════════════════════════════════════════
- *  Lightbox — fullscreen photo viewer
- *  Keyboard ← → navigate · Escape close · touch swipe
- * ═══════════════════════════════════════════════════════ */
-function Lightbox({
-  photos,
-  initialIndex,
-  onClose,
-}: {
-  photos: Photo[];
-  initialIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(initialIndex);
-  const photo = photos[index];
-  const touchStartX = useRef(0);
+/* ─── Fallback editorial introductions ─── */
+const EDITORIAL_FALLBACKS: Record<string, string[]> = {
+  'new-york-stories': [
+    'Manhattan light arrives sideways in the early hours, cutting between towers in long amber slabs that catch the steam rising from grates and the grime on fire escapes. By mid-morning the city is already hard-edged, every surface asserting itself.',
+    'Dusk compresses the borough into silhouette: water towers against violet sky, headlights smearing the wet street into something almost painterly. There is no softness here, only different kinds of contrast.',
+  ],
+  'page': [
+    'Inside Antelope Canyon the sandstone narrows until sound itself seems muffled. The walls have been smoothed by centuries of flash floods into curves that read more like fabric than rock — ochre folding into deep burgundy wherever a shaft of noon light finds the floor.',
+    'That light lasts minutes. It enters as a column, diffuse at the edges, and illuminates suspended dust so finely that the air appears solid. What remains is pure geological time rendered in color.',
+  ],
+  'zion-national-park': [
+    'The Virgin River runs cold and milky green through the canyon bottom, its sound constant and indifferent to the walls rising nearly a thousand meters on either side. In morning shadow the sandstone is the color of dried blood; by noon it goes copper.',
+    'What Zion enforces is a reckoning with scale. A single wall of Navajo sandstone erases the horizon and replaces it with texture — cross-bedded strata reading like handwriting from some earlier world.',
+  ],
+  'arizona': [
+    'The Sonoran at midday offers almost nothing to hide behind. Saguaro cast shadows barely wider than a hand, and the sky is so bleached it reads white rather than blue. The silence here has weight — oppressive to some, clarifying to others.',
+    'Dawn is the negotiation: the moment when the land is still cool and the light has not yet gone harsh, when long shadows of rock formations stretch west and the desert floor shows all its texture.',
+  ],
+  'orlando': [
+    'Florida afternoon light is relentless and democratic — it flattens shadows, bleaches signage, and turns every surface equally bright. In the parks it catches the spray of fountains in small prismatic bursts, indifferent to anything beneath it.',
+    'Away from the spectacle, Orlando is a city of retention ponds and palm trees bending in afternoon thunderstorm wind while the pavement still steams. The transition between the engineered and the accidental happens fast here.',
+  ],
+  'bryce-canyon-national-park': [
+    'The hoodoos at Bryce form a kind of frozen congregation — thousands of pink limestone spires standing close together, the tallest capped with harder dolomite that protected them while everything around eroded away. In fresh snow they are almost surreal.',
+    'Sunrise on the rim produces the most compressed range of tone — deep blue shadow filling the canyon floor, the spires above catching first light in amber and rust, the sky at the horizon going briefly gold before the whole amphitheater normalizes.',
+  ],
+  'miami': [
+    'Ocean Drive at dusk exists in two registers simultaneously: the pastel geometry of Art Deco facades going soft in the last natural light, and the neon beginning its slow assertion against the darkening sky. The sidewalk retains the day\'s heat long after the sun has gone.',
+    'South Beach operates on a logic of surfaces — the gloss of a rental car hood, reflections in hotel lobby glass, the particular turquoise of the Atlantic at noon when the sand below is still visible and the water seems lit from within.',
+  ],
+};
 
-  const goNext = useCallback(
-    () => setIndex((i) => Math.min(i + 1, photos.length - 1)),
-    [photos.length],
-  );
-  const goPrev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
-    };
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKey);
-    return () => {
-      document.body.style.overflow = '';
-      window.removeEventListener('keydown', handleKey);
-    };
-  }, [onClose, goNext, goPrev]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) goNext();
-      else goPrev();
+/* ─── Portable Text renderer ─── */
+function renderBlocks(blocks: PortableTextBlock[]): React.ReactNode {
+  return blocks.map((block) => {
+    const text = block.children.map((span) => {
+      let node: React.ReactNode = span.text;
+      if (span.marks?.includes('em')) node = <em key={span._key}>{node}</em>;
+      if (span.marks?.includes('strong')) node = <strong key={span._key}>{node}</strong>;
+      return node;
+    });
+    if (block.style === 'blockquote') {
+      return (
+        <blockquote key={block._key} className="border-l-2 border-gray-200 pl-4 my-4 text-gray-400 italic font-light text-[14px] leading-relaxed">
+          {text}
+        </blockquote>
+      );
     }
-  };
+    return (
+      <p key={block._key} className="text-gray-500 font-light text-[14px] leading-[1.9] mb-3 last:mb-0">
+        {text}
+      </p>
+    );
+  });
+}
 
-  return (
-    <motion.div
-      className="fixed inset-0 z-50 bg-black/97 backdrop-blur-md flex items-center justify-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-      onClick={onClose}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Close */}
-      <button
-        onClick={onClose}
-        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors duration-400"
-        aria-label="Close"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+function renderFallback(paragraphs: string[]): React.ReactNode {
+  return paragraphs.map((p, i) => (
+    <p key={i} className="text-gray-500 font-light text-[14px] leading-[1.9] mb-3 last:mb-0">{p}</p>
+  ));
+}
 
-      {/* Photo — larger display area */}
-      <AnimatePresence mode="wait">
-        <motion.img
-          key={photo._id}
-          src={`${photo.imageUrl}?auto=format&w=1800&q=90`}
-          alt={photo.title || ''}
-          className="max-w-[92vw] max-h-[78vh] object-contain select-none"
-          initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          draggable={false}
-        />
-      </AnimatePresence>
+/* ─── 6-column magazine photo layout ─── */
+type Span = 'full' | 'half' | 'third';
 
-      {/* Left arrow */}
-      {index > 0 && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goPrev(); }}
-          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-400"
-          aria-label="Previous"
-        >
-          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
-      )}
+interface PhotoLayout { span: Span; }
 
-      {/* Right arrow */}
-      {index < photos.length - 1 && (
-        <button
-          onClick={(e) => { e.stopPropagation(); goNext(); }}
-          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-400"
-          aria-label="Next"
-        >
-          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
-      )}
+function getLayout(index: number): PhotoLayout {
+  // Reference pattern from MagazineLayout: 0=full, 1-2=half/half, 3=full, 4-5-6=third/third/third
+  const patterns: Span[] = ['full', 'half', 'half', 'full', 'third', 'third', 'third'];
+  return { span: patterns[index % patterns.length] };
+}
 
-      {/* Bottom info — significantly larger and more readable */}
-      <div
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Title + counter */}
-        <div className="flex items-center gap-4">
-          {photo.title && (
-            <span className="text-white/60 text-sm font-light tracking-wide">
-              {photo.title}
-            </span>
-          )}
-          <span className="text-white/30 text-xs font-mono tracking-wider">
-            {index + 1} / {photos.length}
-          </span>
-        </div>
-        {/* EXIF data — bigger, spaced, readable */}
-        <div className="flex items-center gap-4 text-[13px] text-white/35 font-mono tracking-wide">
-          {photo.camera && (
-            <span className="text-white/45">{photo.camera}</span>
-          )}
-          {photo.focalLength && (
-            <>
-              <span className="text-white/15">|</span>
-              <span>{photo.focalLength}</span>
-            </>
-          )}
-          {photo.aperture && (
-            <>
-              <span className="text-white/15">|</span>
-              <span>{photo.aperture}</span>
-            </>
-          )}
-          {photo.shutterSpeed && (
-            <>
-              <span className="text-white/15">|</span>
-              <span>{photo.shutterSpeed}</span>
-            </>
-          )}
-          {photo.iso && (
-            <>
-              <span className="text-white/15">|</span>
-              <span>ISO {photo.iso}</span>
-            </>
-          )}
-        </div>
-      </div>
+function colClass(span: Span) {
+  if (span === 'full')  return 'col-span-6';
+  if (span === 'half')  return 'col-span-3';
+  return 'col-span-2';
+}
 
-      {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
-        <motion.div
-          className="h-full bg-white/25"
-          animate={{ width: `${((index + 1) / photos.length) * 100}%` }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-        />
-      </div>
-    </motion.div>
-  );
+function aspectClass(span: Span, index: number) {
+  if (span === 'full')  return 'aspect-[16/7]';
+  if (span === 'half')  return index % 2 === 0 ? 'aspect-[4/5]' : 'aspect-[4/5]';
+  return 'aspect-[3/4]';
+}
+
+/* ─── Smart row builder based on actual photo aspect ratios ───
+ * landscape (w > h * 1.2) → full-width row alone
+ * portrait (h > w * 1.1) → pair two portraits side by side (half each)
+ *   if only one portrait remains → full-width
+ * square-ish → group 3 together (third each), or pair with portrait
+ */
+function isLandscape(p: Photo) {
+  if (!p.width || !p.height) return false;
+  return p.width / p.height > 1.2;
+}
+function isPortrait(p: Photo) {
+  if (!p.width || !p.height) return true; // default assume portrait
+  return p.height / p.width > 1.1;
+}
+
+interface RowItem { photo: Photo; i: number; span: Span; }
+
+function buildRows(photos: Photo[]): RowItem[][] {
+  const rows: RowItem[][] = [];
+  let i = 0;
+  while (i < photos.length) {
+    const p = photos[i];
+    if (isLandscape(p)) {
+      // Landscape alone: full width
+      rows.push([{ photo: p, i, span: 'full' }]);
+      i++;
+    } else if (isPortrait(p)) {
+      // Portrait: try to pair with next portrait
+      const next = photos[i + 1];
+      if (next && isPortrait(next)) {
+        rows.push([
+          { photo: p,    i,   span: 'half' },
+          { photo: next, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else if (next && !isLandscape(next)) {
+        // Next is square-ish: pair as half
+        rows.push([
+          { photo: p,    i,   span: 'half' },
+          { photo: next, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else {
+        // Portrait alone: full width
+        rows.push([{ photo: p, i, span: 'full' }]);
+        i++;
+      }
+    } else {
+      // Square-ish: group 3 as thirds, or 2 as half, or alone as full
+      const p2 = photos[i + 1];
+      const p3 = photos[i + 2];
+      if (p2 && !isLandscape(p2) && p3 && !isLandscape(p3)) {
+        rows.push([
+          { photo: p,  i,   span: 'third' },
+          { photo: p2, i: i+1, span: 'third' },
+          { photo: p3, i: i+2, span: 'third' },
+        ]);
+        i += 3;
+      } else if (p2 && !isLandscape(p2)) {
+        rows.push([
+          { photo: p,  i,   span: 'half' },
+          { photo: p2, i: i+1, span: 'half' },
+        ]);
+        i += 2;
+      } else {
+        rows.push([{ photo: p, i, span: 'full' }]);
+        i++;
+      }
+    }
+  }
+  return rows;
 }
 
 /* ═══════════════════════════════════════════════════════
- *  WorkDetailPage — horizontal-scroll gallery + lightbox
- *  Sidebar info · uniform photo sizes · staggered offsets
+ *  WorkDetailPage
  * ═══════════════════════════════════════════════════════ */
 export default function WorkDetailPage({ collection, photos }: Props) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  /* ── Mouse-drag horizontal scroll with inertia ── */
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+  const collectionLocation = useMemo(() => {
+    const photo = photos.find(p => p.location?.lat != null && p.location?.lng != null);
+    return photo?.location ?? null;
+  }, [photos]);
 
-    let isDown = false;
-    let startX = 0;
-    let scrollLeft = 0;
-    let velX = 0;
-    let lastX = 0;
-    let lastTime = 0;
-    let raf = 0;
-
-    const onDown = (e: MouseEvent) => {
-      isDown = true;
-      startX = e.pageX - el.offsetLeft;
-      scrollLeft = el.scrollLeft;
-      lastX = e.pageX;
-      lastTime = Date.now();
-      velX = 0;
-      cancelAnimationFrame(raf);
-      el.style.cursor = 'grabbing';
-    };
-    const onMove = (e: MouseEvent) => {
-      if (!isDown) return;
-      e.preventDefault();
-      const x = e.pageX - el.offsetLeft;
-      const walk = (x - startX) * 1.2;
-      el.scrollLeft = scrollLeft - walk;
-
-      const now = Date.now();
-      const dt = now - lastTime;
-      if (dt > 0) {
-        velX = (e.pageX - lastX) / dt;
-        lastX = e.pageX;
-        lastTime = now;
-      }
-    };
-    const onUp = () => {
-      if (!isDown) return;
-      isDown = false;
-      el.style.cursor = '';
-      // Inertia
-      const decelerate = () => {
-        if (Math.abs(velX) < 0.01) return;
-        el.scrollLeft -= velX * 16;
-        velX *= 0.94;
-        raf = requestAnimationFrame(decelerate);
-      };
-      raf = requestAnimationFrame(decelerate);
-    };
-
-    el.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      el.removeEventListener('mousedown', onDown);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      cancelAnimationFrame(raf);
-    };
+  const mapboxToken = useMemo(() => {
+    try { return getMapboxToken(); } catch { return ''; }
   }, []);
 
-  /* ── Hash-based scroll to specific photo ── */
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.startsWith('#photo-')) {
-      const photoId = hash.slice(1);
-      const timer = setTimeout(() => {
-        const el = document.getElementById(photoId);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-        }
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+  const hasIntro = collection.introduction && collection.introduction.length > 0;
+  const fallbackParas = EDITORIAL_FALLBACKS[collection.slug] ?? null;
+
+  // Get camera info from first photo
+  const firstPhoto = photos[0];
+  const camera = firstPhoto?.camera;
+  const focalLength = firstPhoto?.focalLength;
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* ── Nav ── */}
-      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/80 backdrop-blur-xl border-b border-gray-100/50">
-        <a
+    <div className="min-h-screen bg-[#FDFDFB] text-[#1A1A1A]">
+
+      {/* ── Top nav ── */}
+      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/80 backdrop-blur-2xl border-b border-black/5">
+        <motion.a
           href="/"
-          className="font-serif italic text-sm text-gray-400 hover:text-gray-900 transition-colors duration-300"
+          className="flex items-center gap-2.5 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 overflow-hidden"
+          whileHover="hovered"
+          initial="idle"
         >
-          &larr; Ryan Xu.
-        </a>
-        <span className="text-[10px] font-mono text-gray-300 tracking-wider uppercase">
-          {collection.name} &middot; {photos.length}
+          <motion.div
+            variants={{
+              idle:    { x: 0,  opacity: 0.5 },
+              hovered: { x: -3, opacity: 1   },
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+          >
+            <ArrowRight size={14} className="rotate-180" />
+          </motion.div>
+          <motion.span
+            variants={{
+              idle:    { x: 0, opacity: 0.5, color: '#9CA3AF' },
+              hovered: { x: 2, opacity: 1,   color: '#111827' },
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+          >
+            Back
+          </motion.span>
+        </motion.a>
+        <span className="text-[11px] uppercase tracking-[0.6em] font-bold opacity-30">
+          {collection.location || collection.name}
         </span>
       </nav>
 
-      {/* ── Main layout: sidebar + horizontal gallery ── */}
-      <div className="flex min-h-screen pt-[56px]">
-        {/* LEFT — collection info sidebar (desktop) */}
-        <div className="hidden lg:flex flex-col justify-center w-[340px] xl:w-[380px] shrink-0 px-12 xl:px-16 border-r border-gray-100/50">
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 1, ease: expo }}
-          >
-            <h1 className="font-serif italic text-5xl xl:text-6xl text-gray-900 tracking-tight leading-[0.95]">
-              {collection.name}
-            </h1>
+      {/* ── Page body: sidebar + content ── */}
+      <div className="flex min-h-screen pt-[57px]">
 
-            <div className="flex items-center gap-3 mt-5 text-[10px] font-mono text-gray-300 tracking-wider uppercase">
-              {collection.year && <span>{collection.year}</span>}
-              {collection.location && (
-                <>
-                  <span>&middot;</span>
-                  <span>{collection.location}</span>
-                </>
-              )}
-            </div>
+        {/* ── LEFT SIDEBAR (desktop) ── */}
+        <aside className="hidden lg:flex flex-col w-[320px] xl:w-[360px] shrink-0 px-8 xl:px-12 border-r border-black/5 self-start sticky top-[57px] max-h-[calc(100vh-57px)] overflow-y-auto">
+          <div className="py-12 flex flex-col gap-0">
 
-            {collection.subtitle && (
-              <p className="mt-8 text-gray-500 font-light text-base leading-relaxed">
-                {collection.subtitle}
-              </p>
-            )}
-
-            {collection.description && (
-              <p className="mt-4 text-gray-400 font-light text-sm leading-relaxed">
-                {collection.description}
-              </p>
-            )}
-
-            <div className="mt-12 flex items-center gap-2 text-[9px] font-mono text-gray-300 tracking-wider">
-              <span>{photos.length} photographs</span>
-              <span>&middot;</span>
-              <span>Scroll &rarr;</span>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Mobile header (shown below nav) */}
-        <div className="lg:hidden fixed top-[56px] left-0 right-0 z-20 bg-white/90 backdrop-blur-xl px-6 py-4 border-b border-gray-100/50">
-          <h1 className="font-serif italic text-2xl text-gray-900 tracking-tight">
-            {collection.name}
-          </h1>
-          <div className="flex items-center gap-3 mt-1 text-[9px] font-mono text-gray-300 tracking-wider uppercase">
-            {collection.year && <span>{collection.year}</span>}
-            {collection.location && (
-              <>
-                <span>&middot;</span>
-                <span>{collection.location}</span>
-              </>
-            )}
-            <span>&middot;</span>
-            <span>{photos.length} photos</span>
-          </div>
-        </div>
-
-        {/* RIGHT — horizontal scroll gallery */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-x-auto overflow-y-hidden flex items-center gap-5 md:gap-7 px-6 md:px-10 cursor-grab select-none pt-[80px] lg:pt-0"
-          style={{
-            scrollBehavior: 'smooth',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-          }}
-        >
-          {/* Leading space */}
-          <div className="shrink-0 w-4 md:w-8" />
-
-          {photos.map((photo, i) => (
+            {/* Vol. label */}
             <motion.div
-              key={photo._id}
-              id={`photo-${photo._id}`}
-              className={`shrink-0 cursor-pointer group ${
-                i % 2 === 0 ? 'mt-8' : '-mt-8'
-              }`}
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.8,
-                delay: Math.min(i * 0.1, 0.8),
-                ease: [0.16, 1, 0.3, 1],
-              }}
-              whileHover={{ y: -3, transition: { type: 'spring', stiffness: 300, damping: 25 } }}
-              onClick={() => setLightboxIndex(i)}
+              className="flex items-center gap-4 mb-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
             >
-              {/* Uniform photo card — all same size */}
-              <div className="w-[260px] md:w-[300px] lg:w-[340px] aspect-[3/4] overflow-hidden bg-gray-50 rounded-sm">
-                <img
-                  src={`${photo.imageUrl}?auto=format&w=800&q=82`}
-                  alt={photo.title || collection.name}
-                  className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-[800ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-                  loading="lazy"
-                  draggable={false}
-                />
-              </div>
-
-              {/* Photo info below card */}
-              <div className="mt-4 px-1">
-                {photo.title && (
-                  <p className="text-sm text-gray-700 font-light truncate max-w-[260px] md:max-w-[300px] lg:max-w-[340px]">
-                    {photo.title}
-                  </p>
-                )}
-                <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400 font-mono tracking-wide">
-                  {photo.focalLength && <span>{photo.focalLength}</span>}
-                  {photo.aperture && <span>{photo.aperture}</span>}
-                  {photo.shutterSpeed && <span>{photo.shutterSpeed}</span>}
-                </div>
-              </div>
+              <span className="text-[9px] uppercase tracking-[0.6em] font-bold opacity-30">Vol. 01</span>
+              <div className="h-px flex-1 bg-black/10" />
             </motion.div>
-          ))}
 
-          {/* Trailing space */}
-          <div className="shrink-0 w-12 md:w-20" />
-        </div>
+            {/* Title — large italic */}
+            <motion.h1
+              className="font-serif italic text-6xl xl:text-7xl text-gray-900 tracking-tighter leading-[0.85]"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.9, ease: expo }}
+            >
+              {collection.name}
+            </motion.h1>
+
+            {/* Meta */}
+            <motion.div
+              className="flex items-center gap-3 mt-5 text-[10px] uppercase tracking-[0.4em] font-bold"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+            >
+              {collection.location && <span>{collection.location}</span>}
+              {collection.location && collection.year && <span className="w-1 h-1 rounded-full bg-black/20 inline-block" />}
+              {collection.year && <span className="opacity-40 font-mono italic">{collection.year}</span>}
+            </motion.div>
+
+            {/* Editorial text with large opening quote */}
+            <motion.div
+              className="mt-8"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.8, ease: expo }}
+            >
+              {(hasIntro || fallbackParas || collection.subtitle) && (
+                <div className="relative">
+                  <span className="text-6xl float-left mr-2 mt-1 font-serif not-italic leading-none opacity-10 select-none">"</span>
+                  <div className="text-[15px] leading-[1.9] font-serif italic opacity-70">
+                    {hasIntro
+                      ? renderBlocks(collection.introduction!)
+                      : fallbackParas
+                        ? renderFallback(fallbackParas)
+                        : <p>{collection.subtitle}</p>
+                    }
+                  </div>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Camera / lens info */}
+            {(camera || focalLength) && (
+              <motion.div
+                className="mt-8 pt-8 border-t border-black/5 grid grid-cols-2 gap-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7, duration: 0.5 }}
+              >
+                {camera && (
+                  <div className="space-y-1">
+                    <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Shot on</span>
+                    <p className="text-[10px] uppercase tracking-widest font-medium">{camera}</p>
+                  </div>
+                )}
+                {focalLength && (
+                  <div className="space-y-1">
+                    <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Lens</span>
+                    <p className="text-[10px] uppercase tracking-widest font-medium">{focalLength}</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Frame count */}
+            <motion.div
+              className="mt-8 flex items-center gap-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.9, duration: 0.5 }}
+            >
+              <div className="w-10 h-px bg-black opacity-10" />
+              <span className="text-[9px] uppercase tracking-[0.4em] font-mono opacity-30">
+                {photos.length} Captured Frames
+              </span>
+            </motion.div>
+
+            {/* ── Mini-map ── */}
+            {collectionLocation && mapboxToken && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7, duration: 0.8, ease: expo }}
+                className="mt-8 rounded-xl overflow-hidden border border-black/6 shadow-sm"
+              >
+                <motion.a
+                  href={`/travel#loc=${collectionLocation.lat},${collectionLocation.lng},8`}
+                  className="block relative h-36 overflow-hidden"
+                  whileHover="hovered"
+                  initial="idle"
+                >
+                  <motion.img
+                    src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/480x220@2x?access_token=${mapboxToken}`}
+                    alt={`Map of ${collectionLocation.city || collection.name}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    draggable={false}
+                    variants={{ idle: { scale: 1 }, hovered: { scale: 1.06 } }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/25 to-transparent" />
+                  <motion.div
+                    className="absolute inset-0 flex items-center justify-center"
+                    variants={{ idle: { opacity: 0 }, hovered: { opacity: 1 } }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <span className="text-white text-[9px] uppercase tracking-[0.2em] font-bold bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                      View on map
+                    </span>
+                  </motion.div>
+                </motion.a>
+                <div className="px-3.5 py-3 bg-white flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${ACCENT}12` }}>
+                    <MapPin size={12} style={{ color: ACCENT }} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-medium text-gray-900 truncate">{collectionLocation.city || collection.name}</p>
+                    <p className="text-[9px] font-mono text-gray-400">
+                      {Math.abs(collectionLocation.lat).toFixed(3)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}&nbsp;
+                      {Math.abs(collectionLocation.lng).toFixed(3)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+          </div>
+        </aside>
+
+        {/* ── RIGHT: photo grid ── */}
+        <main className="flex-1">
+
+          {/* Mobile header */}
+          <div className="lg:hidden sticky top-[57px] z-20 bg-white/95 backdrop-blur-xl px-5 py-3 border-b border-black/5">
+            <h1 className="font-serif italic text-xl text-gray-900 tracking-tight">{collection.name}</h1>
+            <div className="flex items-center gap-2 mt-0.5 text-[9px] font-mono text-gray-400 tracking-wider uppercase">
+              {collection.year && <span>{collection.year}</span>}
+              {collection.location && <><span>·</span><span>{collection.location}</span></>}
+              <span>·</span><span>{photos.length} frames</span>
+            </div>
+          </div>
+
+          {/* ── Smart magazine grid based on photo aspect ratios ── */}
+          <div className="space-y-[3px] p-[3px]">
+            {buildRows(photos).map((row, rowIdx) => (
+              <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
+                {row.map(({ photo, i, span }) => (
+                  <PhotoCell
+                    key={photo._id}
+                    photo={photo}
+                    collection={collection}
+                    i={i}
+                    span={span}
+                    isHovered={hoveredIndex === i}
+                    onHover={setHoveredIndex}
+                    onClick={setLightboxIndex}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* ── Back to top footer ── */}
+          <footer className="pt-24 pb-16 text-center border-t border-black/5 mt-2">
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="group flex flex-col items-center gap-4 mx-auto"
+            >
+              <div className="w-12 h-12 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-[#1A1A1A] group-hover:border-transparent group-hover:text-white transition-all duration-500">
+                <ArrowRight className="-rotate-90" size={16} />
+              </div>
+              <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity">
+                Back to Top
+              </span>
+            </button>
+          </footer>
+
+        </main>
       </div>
 
       {/* ── Lightbox ── */}
       <AnimatePresence>
         {lightboxIndex !== null && (
-          <Lightbox
-            photos={photos}
-            initialIndex={lightboxIndex}
-            onClose={() => setLightboxIndex(null)}
-          />
+          <Lightbox photos={photos} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
         )}
       </AnimatePresence>
-
-      {/* Hide scrollbar */}
-      <style>{`
-        div::-webkit-scrollbar { display: none; }
-      `}</style>
     </div>
+  );
+}
+
+/* ─── Single photo cell ─── */
+function PhotoCell({
+  photo, collection, i, span, isHovered, onHover, onClick
+}: {
+  photo: Photo; collection: Collection; i: number; span: Span;
+  isHovered: boolean; onHover: (i: number | null) => void; onClick: (i: number) => void;
+}) {
+  // Compute aspect ratio via paddingTop trick (100% * h/w) — no Tailwind dynamic class needed
+  const ratio = photo.width && photo.height ? photo.height / photo.width : null;
+  const paddingTop = ratio
+    ? `${(ratio * 100).toFixed(2)}%`
+    : span === 'full' ? '56.25%'  // 16/9 fallback
+    : span === 'half' ? '125%'    // 4/5 fallback
+    : '133.33%';                  // 3/4 fallback
+
+  return (
+    <motion.div
+      id={`photo-${photo._id}`}
+      className={`${colClass(span)} overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
+      style={{ paddingTop }}
+      data-location={photo.title || photo.location?.city || collection.name}
+      initial={{ opacity: 0 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true, margin: '-5%' }}
+      transition={{ duration: 0.6, delay: Math.min(i * 0.04, 0.4) }}
+      onHoverStart={() => onHover(i)}
+      onHoverEnd={() => onHover(null)}
+      onClick={() => onClick(i)}
+    >
+      <motion.img
+        src={`${photo.imageUrl}?auto=format&w=1200&q=85`}
+        alt={photo.title || collection.name}
+        className="w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+        style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+        loading={i < 4 ? 'eager' : 'lazy'}
+        decoding="async"
+        draggable={false}
+        animate={{ scale: isHovered ? 1.04 : 1 }}
+        transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 0.9 }}
+      />
+
+      <AnimatePresence>
+        {isHovered && (photo.title || photo.aperture) && (
+          <motion.div
+            className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/60 to-transparent"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2 }}
+          >
+            {photo.title && (
+              <p className="text-white/90 text-[11px] font-light truncate leading-tight">{photo.title}</p>
+            )}
+            <div className="flex items-center gap-1.5 mt-0.5 text-white/50 text-[9px] font-mono">
+              {photo.focalLength && <span>{photo.focalLength}</span>}
+              {photo.aperture && <><span>·</span><span>{photo.aperture}</span></>}
+              {photo.shutterSpeed && <><span>·</span><span>{photo.shutterSpeed}</span></>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

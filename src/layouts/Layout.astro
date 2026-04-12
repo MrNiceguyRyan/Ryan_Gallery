@@ -1,15 +1,22 @@
 ---
 import '../styles/global.css';
+import { ClientRouter } from 'astro:transitions';
 
 interface Props {
   title?: string;
   description?: string;
+  ogImage?: string;
+  ogType?: string;
 }
 
 const {
   title = 'Ryan | Visual Archive',
   description = 'A curated collection of photographic moments — shot on Nikon Zf, engineered with intention.',
+  ogImage = 'https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1200&q=85',
+  ogType = 'website',
 } = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangallery.com');
 ---
 
 <html lang="en">
@@ -21,11 +28,45 @@ const {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" rel="stylesheet" />
+
+    <!-- Primary Meta -->
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalURL} />
+    <meta name="theme-color" content="#0A0A0A" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="Ryan Xu | Visual Archive" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <!-- Astro View Transitions — smooth page navigation -->
+    <ClientRouter />
   </head>
 
-  <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden">
+  <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden" style="cursor: none;">
+    <!-- Custom cursor -->
+    <div id="cursor-dot" aria-hidden="true"></div>
+    <!-- Liquid ring: SVG ellipse that stretches with velocity -->
+    <svg id="cursor-ring" aria-hidden="true"
+      viewBox="0 0 40 40"
+      xmlns="http://www.w3.org/2000/svg"
+      style="position:fixed;top:0;left:0;width:40px;height:40px;pointer-events:none;z-index:9998;overflow:visible;mix-blend-mode:difference;opacity:0.55">
+      <ellipse id="cursor-ellipse" cx="20" cy="20" rx="18" ry="18"
+        fill="none" stroke="white" stroke-width="1"/>
+    </svg>
     <slot />
 
     <!-- Global image protection: prevent right-click, drag & long-press save -->
@@ -37,15 +78,240 @@ const {
         pointer-events: auto;
         -webkit-user-drag: none;
       }
+
+      /* ─── View Transition animations ─── */
+
+      /* Default page: fade + subtle lift */
+      ::view-transition-old(root) {
+        animation: vt-fade-out 0.35s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(root) {
+        animation: vt-fade-in 0.45s cubic-bezier(0, 0, 0.2, 1) both;
+      }
+
+      @keyframes vt-fade-out {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to   { opacity: 0; transform: translateY(-8px) scale(0.99); }
+      }
+      @keyframes vt-fade-in {
+        from { opacity: 0; transform: translateY(12px) scale(0.99); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* Nav bar: fast crossfade so color change feels intentional, not jarring */
+      ::view-transition-old(nav) {
+        animation: vt-fade-out 0.2s ease both;
+      }
+      ::view-transition-new(nav) {
+        animation: vt-fade-in 0.25s ease both;
+      }
+
+      /* Page title heading — slides in from below */
+      ::view-transition-old(page-title) {
+        animation: vt-title-out 0.3s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(page-title) {
+        animation: vt-title-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+      }
+
+      @keyframes vt-title-out {
+        from { opacity: 1; transform: translateY(0); }
+        to   { opacity: 0; transform: translateY(-20px); }
+      }
+      @keyframes vt-title-in {
+        from { opacity: 0; transform: translateY(24px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Hero image — scale crossfade */
+      ::view-transition-old(hero-image) {
+        animation: vt-hero-out 0.4s cubic-bezier(0.4, 0, 1, 1) both;
+      }
+      ::view-transition-new(hero-image) {
+        animation: vt-hero-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      @keyframes vt-hero-out {
+        from { opacity: 1; transform: scale(1); }
+        to   { opacity: 0; transform: scale(1.04); }
+      }
+      @keyframes vt-hero-in {
+        from { opacity: 0; transform: scale(1.04); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+
+
+      /* ─── Shared element: cover image flies into WorkDetailPage ─── */
+      /* The browser handles the morph automatically via the matching
+         viewTransitionName; we only tune the easing and duration here.  */
+      ::view-transition-old(cover-*),
+      ::view-transition-new(cover-*) {
+        animation-duration: 0.55s;
+        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+        /* Preserve the image's aspect during the morph */
+        object-fit: cover;
+        overflow: clip;
+      }
+      ::view-transition-new(cover-*) {
+        animation-name: none;          /* browser handles the geometry */
+      }
+      ::view-transition-old(cover-*) {
+        animation-name: none;
+      }
+
+      /* Reduce motion: instant transition for accessibility */
+      @media (prefers-reduced-motion: reduce) {
+        ::view-transition-old(root),
+        ::view-transition-new(root),
+        ::view-transition-old(page-title),
+        ::view-transition-new(page-title),
+        ::view-transition-old(hero-image),
+        ::view-transition-new(hero-image) {
+          animation: none;
+        }
+      }
     </style>
+
+    <style is:inline>
+      /* Hide default cursor everywhere except lightbox */
+      *, *::before, *::after { cursor: none !important; }
+      /* Lightbox: restore default cursor (custom cursor is hidden via cursor-hidden class) */
+      .cursor-hidden ~ * { cursor: default; }
+      [style*="cursor: default"], [style*="cursor: default"] * { cursor: default !important; }
+
+      #cursor-dot {
+        position: fixed;
+        top: 0; left: 0;
+        width: 5px; height: 5px;
+        margin: -2.5px 0 0 -2.5px;
+        background: white;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 9999;
+        will-change: left, top;
+        mix-blend-mode: difference;
+      }
+
+      /* Ring is now an SVG — positioned and shaped via JS */
+      #cursor-ring { will-change: left, top; }
+
+      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
+      body.cursor-hidden #cursor-dot,
+      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
+
+      @media (hover: none) {
+        #cursor-dot, #cursor-ring { display: none !important; }
+        *, *::before, *::after { cursor: auto !important; }
+      }
+    </style>
+
     <script is:inline>
-      // Block right-click context menu on all images
+      // ── Custom cursor (liquid deformation) ──
+      (function() {
+        var mouseX = -200, mouseY = -200;
+        var ringX  = -200, ringY  = -200;
+        var prevMouseX = -200, prevMouseY = -200;
+        var velX = 0, velY = 0;
+        var rxVal = 18, ryVal = 18, angleVal = 0;
+        var raf = null;
+        var initialized = false;
+        var isClick = false;
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function init() {
+          var dot  = document.getElementById('cursor-dot');
+          var ring = document.getElementById('cursor-ring');
+          var ellipse = document.getElementById('cursor-ellipse');
+          if (!dot || !ring || !ellipse) return;
+
+          if (raf) { cancelAnimationFrame(raf); raf = null; }
+          document.body.classList.remove('cursor-hover', 'cursor-hidden');
+
+          function loop() {
+            // Smooth ring position
+            ringX = lerp(ringX, mouseX, 0.13);
+            ringY = lerp(ringY, mouseY, 0.13);
+
+            // Velocity-based deformation
+            velX = lerp(velX, mouseX - prevMouseX, 0.25);
+            velY = lerp(velY, mouseY - prevMouseY, 0.25);
+            prevMouseX = lerp(prevMouseX, mouseX, 0.25);
+            prevMouseY = lerp(prevMouseY, mouseY, 0.25);
+
+            var speed = Math.sqrt(velX * velX + velY * velY);
+
+            // Stretch amount: faster = more elongated
+            var stretch = Math.min(speed * 0.55, 10);
+            var targetRx, targetRy, targetAngle;
+
+            if (isClick) {
+              targetRx = 11; targetRy = 11; targetAngle = 0;
+            } else {
+              targetRx = 18 + stretch;
+              targetRy = Math.max(18 - stretch * 0.5, 9);
+              // Angle follows velocity direction
+              targetAngle = speed > 0.5 ? Math.atan2(velY, velX) * 180 / Math.PI : angleVal;
+            }
+
+            rxVal    = lerp(rxVal,    targetRx,    0.18);
+            ryVal    = lerp(ryVal,    targetRy,    0.18);
+            angleVal = lerp(angleVal, targetAngle, 0.14);
+
+            // Position: center the SVG on cursor
+            ring.style.left = (ringX - 20) + 'px';
+            ring.style.top  = (ringY - 20) + 'px';
+
+            // Apply deformation to ellipse
+            ellipse.setAttribute('rx', rxVal.toFixed(2));
+            ellipse.setAttribute('ry', ryVal.toFixed(2));
+            ring.style.transformOrigin = '20px 20px';
+            ring.style.transform = 'rotate(' + angleVal.toFixed(1) + 'deg)';
+
+            // Opacity: normal 0.5, hover 0.3
+            var targetOpacity = document.body.classList.contains('cursor-hover') ? '0.3' : '0.5';
+            ring.style.opacity = targetOpacity;
+
+            raf = requestAnimationFrame(loop);
+          }
+          loop();
+
+          if (initialized) return;
+          initialized = true;
+
+          var hoverEls = 'a, button, [role="button"], .filmstrip-item, .work-photo-item, .cursor-pointer, input, textarea, select, label';
+
+          document.addEventListener('mousemove', function(e) {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            var d = document.getElementById('cursor-dot');
+            if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
+            var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
+            document.body.classList.toggle('cursor-hover', isHover);
+          }, { passive: true });
+
+          document.addEventListener('mousedown', function() {
+            isClick = true;
+            document.body.classList.add('cursor-click');
+          });
+          document.addEventListener('mouseup', function() {
+            isClick = false;
+            document.body.classList.remove('cursor-click');
+          });
+          document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
+          document.addEventListener('mouseenter', function() { document.body.classList.remove('cursor-hidden'); });
+        }
+
+        init();
+        document.addEventListener('astro:page-load', init);
+      })();
+
+      // ── Image protection ──
       document.addEventListener('contextmenu', function(e) {
         if (e.target && e.target.tagName === 'IMG') {
           e.preventDefault();
         }
       }, true);
-      // Block drag-to-save on all images
       document.addEventListener('dragstart', function(e) {
         if (e.target && e.target.tagName === 'IMG') {
           e.preventDefault();

@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../../types';
 import WorkDetailPage from '../../components/works/WorkDetailPage';
+import Footer from '../../components/Footer.astro';
 
 export async function getStaticPaths() {
   const collections = await sanityClient.fetch(`
@@ -28,16 +29,19 @@ const collection: Collection = await sanityClient.fetch(
     location,
     year,
     description,
+    introduction,
     gridSize
   }`,
   { slug },
 );
 
 const photos: Photo[] = await sanityClient.fetch(
-  `*[_type == "photo" && references($collectionId)] | order(_createdAt desc) {
+  `*[_type == "photo" && references($collectionId)] | order(_createdAt asc) {
     _id,
     title,
     "imageUrl": image.asset->url,
+    "width": image.asset->metadata.dimensions.width,
+    "height": image.asset->metadata.dimensions.height,
     camera,
     focalLength,
     aperture,
@@ -48,8 +52,41 @@ const photos: Photo[] = await sanityClient.fetch(
   }`,
   { collectionId: collection._id },
 );
+
+// ─── Build per-page SEO values ───
+const pageTitle = collection.year
+  ? `${collection.name} ${collection.year} | Ryan`
+  : `${collection.name} | Ryan`;
+
+const pageDescription = (() => {
+  if (collection.description) return collection.description;
+  if (collection.subtitle) return collection.subtitle;
+  const parts: string[] = [];
+  if (collection.location) parts.push(collection.location);
+  if (collection.year) parts.push(String(collection.year));
+  const suffix = `${photos.length} photograph${photos.length === 1 ? '' : 's'} by Ryan Xu.`;
+  return parts.length > 0
+    ? `${parts.join(' · ')} — ${suffix}`
+    : suffix;
+})();
+
+// Use cover image for OG; fall back to first photo; fall back to default
+const ogImage =
+  (collection.coverImageUrl
+    ? `${collection.coverImageUrl}?auto=format&w=1200&q=85`
+    : null) ??
+  (photos[0]?.imageUrl
+    ? `${photos[0].imageUrl}?auto=format&w=1200&q=85`
+    : null) ??
+  undefined;
 ---
 
-<Layout title={`${collection.name} | Ryan`} description={collection.description || collection.subtitle}>
+<Layout
+  title={pageTitle}
+  description={pageDescription}
+  ogImage={ogImage}
+  ogType="article"
+>
   <WorkDetailPage client:load collection={collection} photos={photos} />
+  <Footer />
 </Layout>

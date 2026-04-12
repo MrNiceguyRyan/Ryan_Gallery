@@ -2,11 +2,42 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import AboutPage from '../components/about/AboutPage';
+import Footer from '../components/Footer.astro';
+import { sanityClient } from 'sanity:client';
+import type { SiteSettings } from '../types';
 
 const currentPath = Astro.url.pathname;
+
+/**
+ * Fetch the single siteSettings document from Sanity.
+ * The timeline array and other global fields are managed there.
+ * Falls back gracefully if no document exists yet.
+ */
+const rawSettings = await sanityClient.fetch(`
+  *[_type == "siteSettings"][0] {
+    name,
+    bio,
+    "avatarUrl": avatar.asset->url,
+    email,
+    instagram,
+    skills,
+    timeline[] {
+      year,
+      title,
+      description
+    }
+  }
+`);
+
+const settings: SiteSettings = rawSettings ?? {};
 ---
 
-<Layout title="About | Ryan" description="Photographer based in New York. Visual storytelling through light and intention.">
+<Layout
+  title="About | Ryan"
+  description="Photographer based in New York. Visual storytelling through light and intention."
+  ogImage={settings.avatarUrl ?? undefined}
+>
   <Nav client:load currentPath={currentPath} />
-  <AboutPage client:load />
+  <AboutPage client:load settings={settings} />
+  <Footer />
 </Layout>
