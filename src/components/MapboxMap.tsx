@@ -121,6 +121,8 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
+  // Bumped only on map idle/moveend so cluster recompute doesn't fire on every pan frame
+  const [boundsKey, setBoundsKey] = useState(0);
   const [mapStyleIdx, setMapStyleIdx] = useState(0);
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
@@ -152,12 +154,16 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     return idx;
   }, [points]);
 
+  // Recompute clusters only when zoom level changes or map idles (boundsKey bumps).
+  // Avoids per-frame recomputation during pan/zoom drag, which was a major source of jank.
+  const zoomLevel = Math.floor(viewState.zoom);
   const clusters = useMemo(() => {
     const map = mapRef.current?.getMap();
-    if (!map) return clusterIndex.getClusters([-180, -85, 180, 85], Math.floor(viewState.zoom));
+    if (!map) return clusterIndex.getClusters([-180, -85, 180, 85], zoomLevel);
     const bounds = map.getBounds()?.toArray().flat() as [number, number, number, number];
-    return bounds ? clusterIndex.getClusters(bounds, Math.floor(viewState.zoom)) : [];
-  }, [clusterIndex, viewState.zoom, viewState.latitude, viewState.longitude]);
+    return bounds ? clusterIndex.getClusters(bounds, zoomLevel) : [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clusterIndex, zoomLevel, boundsKey]);
 
   // Apply globe + terrain on style load
   const applyGlobeSettings = useCallback((map: any) => {
@@ -182,12 +188,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     else map.once('style.load', () => applyGlobeSettings(map));
   }, [applyGlobeSettings]);
 
-  // Re-apply globe settings when style changes
+  // Re-apply globe settings when style changes — with proper listener cleanup
+  // so multiple style switches don't queue duplicate handlers.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
     const reapply = () => applyGlobeSettings(map);
     map.once('style.load', reapply);
+    return () => { map.off('style.load', reapply); };
   }, [mapStyleIdx, applyGlobeSettings]);
 
   // Cluster click → smooth expand to appropriate zoom
@@ -223,17 +231,21 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     }
     // Gentle center, don't zoom aggressively
     const targetZoom = Math.max(viewState.zoom, 6);
+    const map = mapRef.current?.getMap();
     mapRef.current?.flyTo({
       center: [photo.location!.lng, photo.location!.lat],
       zoom: targetZoom,
       duration: 1200,
       essential: true,
     });
-    // Wait for AnimatePresence region expand (300ms) before scrolling
-    setTimeout(() => {
-      const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 400);
+    // Scroll sidebar to the city when the fly-to actually finishes
+    if (map) {
+      const onMoveEnd = () => {
+        const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+      map.once('moveend', onMoveEnd);
+    }
   }, [viewState.zoom, cityClusters]);
 
   // Sidebar city click
@@ -246,36 +258,48 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     }
   }, [activeClusterCity]);
 
-  // Handle #loc= hash from mini-map navigation
+  // Handle #loc= hash from mini-map navigation — wait for the map to be ready
+  // (style loaded) instead of an arbitrary setTimeout, to avoid races with style.load.
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.startsWith('#loc=')) {
-      const parts = hash.replace('#loc=', '').split(',');
-      if (parts.length >= 2) {
-        const lat = parseFloat(parts[0]);
-        const lng = parseFloat(parts[1]);
-        const zoom = parts[2] ? parseFloat(parts[2]) : 8;
-        if (!isNaN(lat) && !isNaN(lng)) {
-          setTimeout(() => {
-            mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
-            // Find and highlight closest city
-            let closest: LocationCluster | null = null;
-            let minDist = Infinity;
-            for (const c of cityClusters) {
-              const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
-              if (d < minDist) { minDist = d; closest = c; }
-            }
-            if (closest && minDist < 2) {
-              setActiveClusterCity(closest.city);
-              setActiveCluster(closest);
-              setExpandedRegion(getRegion(closest.country));
-            }
-          }, 500);
-          // Clean the hash
-          window.history.replaceState(null, '', window.location.pathname);
-        }
+    if (!hash.startsWith('#loc=')) return;
+    const parts = hash.replace('#loc=', '').split(',');
+    if (parts.length < 2) return;
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    const zoom = parts[2] ? parseFloat(parts[2]) : 8;
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
+      let closest: LocationCluster | null = null;
+      let minDist = Infinity;
+      for (const c of cityClusters) {
+        const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
+        if (d < minDist) { minDist = d; closest = c; }
       }
+      if (closest && minDist < 2) {
+        setActiveClusterCity(closest.city);
+        setActiveCluster(closest);
+        setExpandedRegion(getRegion(closest.country));
+      }
+    };
+
+    const map = mapRef.current?.getMap();
+    if (map?.isStyleLoaded()) {
+      run();
+    } else if (map) {
+      map.once('load', run);
+    } else {
+      // Map ref not ready yet — retry on next frame
+      const raf = requestAnimationFrame(run);
+      return () => { cancelled = true; cancelAnimationFrame(raf); };
     }
+
+    window.history.replaceState(null, '', window.location.pathname);
+    return () => { cancelled = true; };
   }, [cityClusters]);
 
   const resetView = useCallback(() => {
@@ -302,6 +326,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             {...viewState}
             ref={mapRef}
             onMove={evt => setViewState(evt.viewState)}
+            onMoveEnd={() => setBoundsKey(k => k + 1)}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLES[mapStyleIdx].style}
             style={{ width: '100%', height: '100%' }}
@@ -319,10 +344,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               const [lng, lat] = feature.geometry.coordinates;
               const props = feature.properties;
 
-              // ── Cluster ──
               if (props.cluster) {
-                const count = props.point_count;
-                const size = count < 10 ? 40 : count < 30 ? 48 : 56;
                 return (
                   <Marker
                     key={`cluster-${feature.id}`}
@@ -381,15 +403,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                 );
               }
 
-              // ── Individual marker ──
               const photo = validPhotos[props.photoIndex];
               if (!photo) return null;
               const isActive = activeCluster?.city === photo.location?.city;
               const isHovered = hoveredIdx === props.photoIndex;
-              // Active markers sit above map labels; idle markers sit below
               const markerZ = isActive ? 3 : isHovered ? 2 : 1;
-              // Container size matches the visual element — avoids invisible hit area
-              // covering map place-name labels
               const containerSize = isActive ? 44 : isHovered ? 38 : 30;
 
               return (
@@ -411,7 +429,6 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
-                    {/* Glow ring — only shown when active or hovered */}
                     {(isActive || isHovered) && (
                       <div
                         className="absolute inset-0 rounded-full transition-all duration-500"
@@ -589,56 +606,60 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                   </div>
                                 </div>
                               </button>
-                              {/* Rich expanded card for selected city — with CSS transition */}
-                              <div
-                                className="bg-white border-b border-gray-100 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                                style={{
-                                  maxHeight: isSelected ? '500px' : '0px',
-                                  opacity: isSelected ? 1 : 0,
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                {/* Cover photo */}
-                                <div className="relative h-36 overflow-hidden">
-                                  <img
-                                    src={`${cluster.photos[0].imageUrl}?auto=format&w=600&q=80`}
-                                    alt={cluster.city}
-                                    className="w-full h-full object-cover"
-                                    draggable={false}
-                                  />
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                  <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
-                                    <div>
-                                      <p className="text-[9px] uppercase tracking-[0.15em] text-white/60 font-semibold">{cluster.country}</p>
-                                      <h4 className="text-lg font-serif italic text-white leading-tight">{cluster.city}</h4>
-                                    </div>
-                                    <span className="text-[10px] font-mono text-white/50">{cluster.photos.length} photos</span>
-                                  </div>
-                                </div>
-                                {/* Content */}
-                                <div className="p-4">
-                                  <p className="text-[10px] text-gray-400 font-mono tracking-wide mb-3">
-                                    {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
-                                  </p>
-                                  <div className="grid grid-cols-3 gap-1.5">
-                                    {cluster.photos.slice(0, 6).map((photo) => (
-                                      <div key={photo._id} className="aspect-square rounded-lg overflow-hidden">
-                                        <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" loading="lazy" draggable={false} />
+                              {/* Rich expanded card for selected city — Framer Motion height: auto for smooth, accurate sizing */}
+                              <AnimatePresence initial={false}>
+                                {isSelected && (
+                                  <motion.div
+                                    key="expanded"
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+                                    className="bg-white border-b border-gray-100 overflow-hidden"
+                                  >
+                                    {/* Cover photo */}
+                                    <div className="relative h-36 overflow-hidden">
+                                      <img
+                                        src={`${cluster.photos[0].imageUrl}?auto=format&w=600&q=80`}
+                                        alt={cluster.city}
+                                        className="w-full h-full object-cover"
+                                        draggable={false}
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                                      <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                                        <div>
+                                          <p className="text-[9px] uppercase tracking-[0.15em] text-white/60 font-semibold">{cluster.country}</p>
+                                          <h4 className="text-lg font-serif italic text-white leading-tight">{cluster.city}</h4>
+                                        </div>
+                                        <span className="text-[10px] font-mono text-white/50">{cluster.photos.length} photos</span>
                                       </div>
-                                    ))}
-                                  </div>
-                                  {cluster.photos[0]?.collection?.slug && (
-                                    <a
-                                      href={`/works/${cluster.photos[0].collection.slug}`}
-                                      className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-                                      style={{ background: ACCENT }}
-                                    >
-                                      Explore Story
-                                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
+                                    </div>
+                                    {/* Content */}
+                                    <div className="p-4">
+                                      <p className="text-[10px] text-gray-400 font-mono tracking-wide mb-3">
+                                        {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
+                                      </p>
+                                      <div className="grid grid-cols-3 gap-1.5">
+                                        {cluster.photos.slice(0, 6).map((photo) => (
+                                          <div key={photo._id} className="aspect-square rounded-lg overflow-hidden">
+                                            <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" loading="lazy" draggable={false} />
+                                          </div>
+                                        ))}
+                                      </div>
+                                      {cluster.photos[0]?.collection?.slug && (
+                                        <a
+                                          href={`/works/${cluster.photos[0].collection.slug}`}
+                                          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                                          style={{ background: ACCENT }}
+                                        >
+                                          Explore Story
+                                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                                        </a>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </div>
                           );
                         })}

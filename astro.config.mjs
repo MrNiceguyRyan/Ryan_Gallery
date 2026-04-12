@@ -10,6 +10,13 @@ export default defineConfig({
   output: 'static',
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      fs: {
+        // Allow serving files from the parent repo when running dev from a git worktree
+        // that links to the main checkout's node_modules.
+        allow: ['..', '../..', '../../..', '../../../..'],
+      },
+    },
     // Pre-bundle styled-components (pulled in by @sanity/astro) to avoid
     // the "Failed to resolve dependency" build warning in Vite 7
     optimizeDeps: {

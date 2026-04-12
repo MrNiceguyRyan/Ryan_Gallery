@@ -102,10 +102,13 @@ function FilmstripItem({
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
 
+  // Smaller initial size for off-screen items keeps mobile/initial load fast.
+  // The first item loads eagerly at full quality; the rest lazy-load.
+  const coverWidth = index === 0 ? 2000 : 1400;
   const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    ? `${collection.coverImageUrl}?auto=format&w=${coverWidth}&q=80`
     : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      ? `${collection.photos[0].imageUrl}?auto=format&w=${coverWidth}&q=80`
       : '';
 
   const photoCount = collection.photos?.length || collection.photoCount || 0;
@@ -130,7 +133,7 @@ function FilmstripItem({
               alt={collection.name}
               style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
               className="filmstrip-image"
-              loading="lazy"
+              loading={index === 0 ? 'eager' : 'lazy'}
               decoding="async"
               draggable={false}
             />
@@ -144,13 +147,13 @@ function FilmstripItem({
       {/* Title */}
       <div className="relative z-10 text-center px-6">
         <div className="flex flex-col items-center gap-3 md:gap-6">
-          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-500">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[2s] ease-out leading-none drop-shadow-lg will-change-transform">
+          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[1200ms] ease-out leading-none drop-shadow-lg will-change-transform">
             {collection.name}
           </h2>
-          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />
+          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-700 opacity-40" />
         </div>
       </div>
 
