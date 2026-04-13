@@ -90,7 +90,16 @@ function PhotoBlock({
 
 /* ═══════════════════════════════════════════════════════
  *  FilmstripItem — parallax collection band
+ *  Hover system: reverse-zoom image + apple-spring text
  * ═══════════════════════════════════════════════════════ */
+
+// Apple-spring: simulates iOS UIKit spring (snappy settle, no overshoot)
+const appleSpring = { type: 'spring' as const, damping: 30, stiffness: 200, mass: 0.8 };
+// Slow expo for image & overlay — "镜头聚焦" feel
+const slowExpo = { duration: 2.5, ease: [0.16, 1, 0.3, 1] as const };
+const medExpo  = { duration: 1.5, ease: [0.4, 0, 0.2, 1] as const };
+const fastExpo = { duration: 1.0, ease: [0.4, 0, 0.2, 1] as const };
+
 function FilmstripItem({
   collection,
   index,
@@ -98,6 +107,7 @@ function FilmstripItem({
   collection: Collection;
   index: number;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
   const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
@@ -118,14 +128,16 @@ function FilmstripItem({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
-      className="filmstrip-item group relative cursor-pointer block"
+      className="filmstrip-item relative cursor-pointer block"
       data-location={collection.location || collection.name}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
     >
-      {/* Cover image: motion.div handles y-parallax, plain img handles CSS hover zoom */}
+      {/* Cover image — starts zoomed-in + dark, "focuses" to 1:1 + bright on hover */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div style={{ y }} className="absolute inset-0">
           {coverUrl && (
-            <img
+            <motion.img
               src={coverUrl}
               alt={collection.name}
               style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
@@ -133,31 +145,64 @@ function FilmstripItem({
               loading="lazy"
               decoding="async"
               draggable={false}
+              animate={{
+                scale: isHovered ? 1 : 1.1,
+                filter: isHovered
+                  ? 'brightness(1) grayscale(0)'
+                  : 'brightness(0.6) grayscale(0.2)',
+              }}
+              transition={slowExpo}
             />
           )}
         </motion.div>
       </div>
 
-      {/* Static dark overlay — fades on hover */}
-      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      {/* Dark overlay — "拨云见日": bg-black/40 dissolves to transparent */}
+      <motion.div
+        className="absolute inset-0"
+        animate={{ backgroundColor: isHovered ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.4)' }}
+        transition={medExpo}
+      />
 
-      {/* Title */}
+      {/* Text block — "画卷展开" */}
       <div className="relative z-10 text-center px-6">
         <div className="flex flex-col items-center gap-3 md:gap-6">
-          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+
+          {/* Location — opacity-40 → opacity-100 (anchor point) */}
+          <motion.span
+            className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] font-bold text-white"
+            animate={{ opacity: isHovered ? 1 : 0.4 }}
+            transition={fastExpo}
+          >
             {collection.location || collection.subtitle || ''}
-          </span>
-          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[2s] ease-out leading-none drop-shadow-lg will-change-transform">
+          </motion.span>
+
+          {/* Title — floats upward with apple-spring (scale 1 → 1.05) */}
+          <motion.h2
+            className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white leading-none drop-shadow-lg will-change-transform"
+            animate={{ scale: isHovered ? 1.05 : 1 }}
+            transition={appleSpring}
+          >
             {collection.name}
-          </h2>
-          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />
+          </motion.h2>
+
+          {/* Decorative line — "画轴打开": unfurls from center */}
+          <motion.div
+            className="h-px bg-white"
+            animate={{ width: isHovered ? 128 : 0, opacity: isHovered ? 0.4 : 0 }}
+            transition={medExpo}
+          />
         </div>
       </div>
 
-      {/* Desktop CTA */}
-      <div className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-70 transition-all duration-1000 translate-x-6 group-hover:translate-x-0 items-center gap-3 text-white font-light">
-        View series <ArrowRight size={11} strokeWidth={1} />
-      </div>
+      {/* Desktop CTA — slides in from right */}
+      <motion.div
+        className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] items-center gap-3 text-white font-light"
+        animate={{ x: isHovered ? 0 : 32, opacity: isHovered ? 0.6 : 0 }}
+        transition={fastExpo}
+      >
+        Explore Story <ArrowRight size={11} strokeWidth={1} />
+      </motion.div>
 
       {/* Mobile bottom bar */}
       <div className="md:hidden absolute bottom-0 left-0 right-0 px-5 py-4 flex items-center justify-between bg-gradient-to-t from-black/60 to-transparent">
