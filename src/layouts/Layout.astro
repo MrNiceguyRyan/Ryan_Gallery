@@ -79,94 +79,52 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         -webkit-user-drag: none;
       }
 
-      /* ─── View Transition animations ─── */
+      /* ═══════════════════════════════════════════════════════
+       *  Cinematic Shutter Transition
+       *  — "快门式滑入" with atmospheric blur buffer
+       *  Bezier [0.32, 0, 0.07, 1]: extreme fast-start, elegant deceleration
+       * ═══════════════════════════════════════════════════════ */
 
-      /* Default page: fade + subtle lift */
+      /* Old page: atmospheric blur buffer ("光影缓冲") */
       ::view-transition-old(root) {
-        animation: vt-fade-out 0.35s cubic-bezier(0.4, 0, 1, 1) both;
+        animation: vt-atmospheric-blur 1.0s cubic-bezier(0.4, 0, 0.2, 1) both;
+        z-index: 1;
       }
+
+      /* New page: shutter slide-in from bottom ("快门式滑入") */
       ::view-transition-new(root) {
-        animation: vt-fade-in 0.45s cubic-bezier(0, 0, 0.2, 1) both;
+        animation: vt-shutter-in 0.85s cubic-bezier(0.32, 0, 0.07, 1) 0.15s both;
+        z-index: 2;
       }
 
-      @keyframes vt-fade-out {
-        from { opacity: 1; transform: translateY(0) scale(1); }
-        to   { opacity: 0; transform: translateY(-8px) scale(0.99); }
-      }
-      @keyframes vt-fade-in {
-        from { opacity: 0; transform: translateY(12px) scale(0.99); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-      }
-
-      /* Nav bar: fast crossfade so color change feels intentional, not jarring */
-      ::view-transition-old(nav) {
-        animation: vt-fade-out 0.2s ease both;
-      }
-      ::view-transition-new(nav) {
-        animation: vt-fade-in 0.25s ease both;
+      /* Atmospheric blur: dark ↔ light visual transfer station
+         Eliminates the jarring flash between dark homepage and light content pages */
+      @keyframes vt-atmospheric-blur {
+        0%   { opacity: 1; filter: blur(0px); transform: scale(1); }
+        35%  { opacity: 0.85; filter: blur(12px); transform: scale(0.99); }
+        100% { opacity: 0; filter: blur(24px); transform: scale(0.97); }
       }
 
-      /* Page title heading — slides in from below */
-      ::view-transition-old(page-title) {
-        animation: vt-title-out 0.3s cubic-bezier(0.4, 0, 1, 1) both;
-      }
-      ::view-transition-new(page-title) {
-        animation: vt-title-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
-      }
-
-      @keyframes vt-title-out {
-        from { opacity: 1; transform: translateY(0); }
-        to   { opacity: 0; transform: translateY(-20px); }
-      }
-      @keyframes vt-title-in {
-        from { opacity: 0; transform: translateY(24px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-
-      /* Hero image — scale crossfade */
-      ::view-transition-old(hero-image) {
-        animation: vt-hero-out 0.4s cubic-bezier(0.4, 0, 1, 1) both;
-      }
-      ::view-transition-new(hero-image) {
-        animation: vt-hero-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      @keyframes vt-hero-out {
-        from { opacity: 1; transform: scale(1); }
-        to   { opacity: 0; transform: scale(1.04); }
-      }
-      @keyframes vt-hero-in {
-        from { opacity: 0; transform: scale(1.04); }
-        to   { opacity: 1; transform: scale(1); }
-      }
-
-
-      /* ─── Shared element: cover image flies into WorkDetailPage ─── */
-      /* The browser handles the morph automatically via the matching
-         viewTransitionName; we only tune the easing and duration here.  */
-      ::view-transition-old(cover-*),
-      ::view-transition-new(cover-*) {
-        animation-duration: 0.55s;
-        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-        /* Preserve the image's aspect during the morph */
-        object-fit: cover;
-        overflow: clip;
-      }
-      ::view-transition-new(cover-*) {
-        animation-name: none;          /* browser handles the geometry */
-      }
-      ::view-transition-old(cover-*) {
-        animation-name: none;
+      /* Cinematic shutter: page enters like a thick art card from below,
+         with a subtle top-edge shadow for depth */
+      @keyframes vt-shutter-in {
+        0%   {
+          transform: translateY(100%);
+          opacity: 0;
+          box-shadow: 0 -40px 80px rgba(0, 0, 0, 0.18);
+        }
+        12%  { opacity: 1; }
+        100% {
+          transform: translateY(0);
+          opacity: 1;
+          box-shadow: none;
+        }
       }
 
       /* Reduce motion: instant transition for accessibility */
       @media (prefers-reduced-motion: reduce) {
         ::view-transition-old(root),
-        ::view-transition-new(root),
-        ::view-transition-old(page-title),
-        ::view-transition-new(page-title),
-        ::view-transition-old(hero-image),
-        ::view-transition-new(hero-image) {
+        ::view-transition-new(root) {
           animation: none;
         }
       }
@@ -317,6 +275,30 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           e.preventDefault();
         }
       }, true);
+
+      // ── Filmstrip scroll restoration ──
+      // Save scroll position when leaving homepage; restore when returning
+      document.addEventListener('astro:before-preparation', function(e) {
+        if (window.location.pathname === '/') {
+          sessionStorage.setItem('home-filmstrip-scroll', String(window.scrollY));
+        }
+      });
+      document.addEventListener('astro:page-load', function() {
+        if (window.location.pathname === '/') {
+          var saved = sessionStorage.getItem('home-filmstrip-scroll');
+          if (saved) {
+            sessionStorage.removeItem('home-filmstrip-scroll');
+            var y = parseInt(saved, 10);
+            // Only restore if user was past the hero (i.e., in the filmstrip area)
+            if (y > 100) {
+              // Delay to allow React hydration before scrolling
+              setTimeout(function() {
+                window.scrollTo({ top: y, behavior: 'instant' });
+              }, 120);
+            }
+          }
+        }
+      });
     </script>
   </body>
 </html>

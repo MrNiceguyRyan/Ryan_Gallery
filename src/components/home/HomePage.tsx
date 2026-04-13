@@ -140,7 +140,6 @@ function FilmstripItem({
             <motion.img
               src={coverUrl}
               alt={collection.name}
-              style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
               className="filmstrip-image"
               loading="lazy"
               decoding="async"
