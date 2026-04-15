@@ -177,7 +177,7 @@ function buildStoryRows(photos: Photo[]): RowItem[][] {
 }
 
 /* ═══════════════════════════════════════════════════════
- *  PhotoBlock — photo cell with natural aspect ratio
+ *  PhotoBlock — no-crop photo with natural aspect ratio
  * ═══════════════════════════════════════════════════════ */
 function PhotoBlock({
   photo,
@@ -189,10 +189,8 @@ function PhotoBlock({
   onClick: () => void;
 }) {
   const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
-  const ratio = photo.width && photo.height ? photo.height / photo.width : null;
-  const paddingTop = ratio
-    ? `${(ratio * 100).toFixed(2)}%`
-    : span === 'full' ? '56.25%' : span === 'half' ? '125%' : '133.33%';
+  const ar = photo.width && photo.height ? photo.width / photo.height : null;
+  const maxH = span === 'full' ? '75vh' : span === 'half' ? '65vh' : '55vh';
 
   return (
     <motion.div
@@ -200,8 +198,8 @@ function PhotoBlock({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ duration: 1.5, ease: expo }}
-      className={`${colSpan} group relative overflow-hidden cursor-pointer bg-gray-100`}
-      style={{ paddingTop }}
+      className={`${colSpan} group overflow-hidden cursor-pointer bg-[#f2f1ef] flex items-center justify-center`}
+      style={{ maxHeight: maxH }}
       onClick={onClick}
     >
       <motion.img
@@ -209,7 +207,8 @@ function PhotoBlock({
         transition={{ duration: 1.5, ease: expo }}
         src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
         alt={photo.title || ''}
-        className="absolute inset-0 w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+        className="w-full h-auto object-contain grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+        style={ar ? { aspectRatio: `${ar}`, maxHeight: maxH } : { maxHeight: maxH }}
         loading="lazy"
         draggable={false}
       />
