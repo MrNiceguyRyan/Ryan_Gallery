@@ -58,16 +58,76 @@ function Overlay({
         }`}>
           <button
             onClick={onClose}
-            className={`group flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold transition-all duration-300 hover:gap-5 ${
-              isDark ? 'text-white/50 hover:text-white' : 'text-black/50 hover:text-black/80'
+            className={`group flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold transition-all duration-500 hover:gap-5 hover:opacity-50 ${
+              isDark ? 'text-white/60 hover:text-white' : 'text-black/50 hover:text-black/80'
             }`}
           >
-            <ChevronLeft size={16} strokeWidth={1.5} /> Back
+            <ChevronLeft size={16} strokeWidth={1.5} className="transition-transform duration-500 group-hover:-translate-x-1" />
+            <span>Back</span>
           </button>
           <div className={`text-[11px] uppercase tracking-[0.6em] font-bold opacity-30`}>{title}</div>
         </div>
         <div className="px-6 md:px-12">{children}</div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  MiniMapCard — reusable location card (desktop sidebar + mobile)
+ * ═══════════════════════════════════════════════════════ */
+function MiniMapCard({ location, name, token, className = '' }: {
+  location: { lat: number; lng: number; city?: string; country?: string };
+  name: string;
+  token: string;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.8, ease: expo }}
+      className={`rounded-2xl overflow-hidden border border-black/5 ${className}`}
+    >
+      <a
+        href={`/travel#loc=${location.lat},${location.lng},8`}
+        className="block relative h-36 md:h-44 overflow-hidden group cursor-pointer"
+      >
+        <img
+          src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${location.lng},${location.lat})/${location.lng},${location.lat},3,0/500x260@2x?access_token=${token}`}
+          alt={`Map of ${location.city || name}`}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          loading="lazy"
+          draggable={false}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-500 flex items-center justify-center">
+          <span className="text-white text-[10px] uppercase tracking-[0.2em] font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full">
+            View on Journal Map
+          </span>
+        </div>
+      </a>
+      <div className="px-4 py-3 bg-white">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#2c3e50]/8 flex items-center justify-center flex-shrink-0">
+            <MapPin size={16} className="text-[#2c3e50]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-[#1A1A1A] truncate">
+              {location.city || name}
+            </p>
+            <p className="text-[11px] text-gray-400">
+              {location.country || ''}
+            </p>
+          </div>
+        </div>
+        <div className="mt-2 pt-2 border-t border-gray-100">
+          <p className="text-[10px] text-gray-400 font-mono tracking-wide">
+            {Math.abs(location.lat).toFixed(4)}&deg;{location.lat >= 0 ? 'N' : 'S'}, {Math.abs(location.lng).toFixed(4)}&deg;{location.lng >= 0 ? 'E' : 'W'}
+          </p>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -208,25 +268,25 @@ function FilmstripItem({
         </motion.div>
       </div>
 
-      {/* Static dark overlay — fades on hover */}
-      <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      {/* Dark overlay — fades on hover */}
+      <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-[1.5s]" />
 
-      {/* Title */}
+      {/* Title + decorative line */}
       <div className="relative z-10 text-center px-6">
         <div className="flex flex-col items-center gap-3 md:gap-6">
-          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-60 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
+          <span className="text-[9px] md:text-[10px] uppercase tracking-[0.5em] md:tracking-[0.8em] opacity-40 font-bold text-white group-hover:opacity-100 transition-opacity duration-1000">
             {collection.location || collection.subtitle || ''}
           </span>
-          <h2 className="text-3xl sm:text-4xl md:text-[8vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.06] transition-transform duration-[2s] ease-out leading-none drop-shadow-lg will-change-transform">
+          <h2 className="text-3xl sm:text-4xl md:text-[10vw] font-serif italic tracking-tighter text-white group-hover:scale-[1.05] transition-transform duration-[2s] apple-spring leading-none drop-shadow-lg will-change-transform">
             {collection.name}
           </h2>
-          <div className="w-0 group-hover:w-24 h-px bg-white transition-all duration-[1.5s] opacity-40" />
+          <div className="w-0 group-hover:w-32 h-[1px] bg-white transition-all duration-[1.5s] opacity-40" />
         </div>
       </div>
 
-      {/* Desktop CTA */}
-      <div className="hidden md:flex absolute bottom-10 right-10 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-70 transition-all duration-1000 translate-x-6 group-hover:translate-x-0 items-center gap-3 text-white font-light">
-        View series <ArrowRight size={11} strokeWidth={1} />
+      {/* Desktop CTA — slide in from right */}
+      <div className="hidden md:flex absolute bottom-12 right-12 text-[10px] uppercase tracking-[0.5em] opacity-0 group-hover:opacity-60 transition-all duration-1000 translate-x-8 group-hover:translate-x-0 items-center gap-4 text-white font-bold">
+        Explore Story <ArrowRight size={14} />
       </div>
 
       {/* Mobile bottom bar */}
@@ -309,53 +369,9 @@ function CollectionDetail({
                 </span>
               </div>
 
-              {/* Location mini-map card — wide country view, consistent with Journal map */}
+              {/* Location mini-map — desktop only (hidden on mobile, shown after grid instead) */}
               {collectionLocation && mapboxToken && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3, duration: 0.8, ease: expo }}
-                  className="mt-8 rounded-2xl overflow-hidden border border-black/5 shadow-md"
-                >
-                  <a
-                    href={`/travel#loc=${collectionLocation.lat},${collectionLocation.lng},8`}
-                    className="block relative h-44 overflow-hidden group cursor-pointer"
-                  >
-                    <img
-                      src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/500x260@2x?access_token=${mapboxToken}`}
-                      alt={`Map of ${collectionLocation.city || collection.name}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      draggable={false}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-500 flex items-center justify-center">
-                      <span className="text-white text-[10px] uppercase tracking-[0.2em] font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full">
-                        View on Journal Map
-                      </span>
-                    </div>
-                  </a>
-                  <div className="px-4 py-3 bg-white">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#2c3e50]/8 flex items-center justify-center flex-shrink-0">
-                        <MapPin size={16} className="text-[#2c3e50]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-semibold text-[#1A1A1A] truncate">
-                          {collectionLocation.city || collection.name}
-                        </p>
-                        <p className="text-[11px] text-gray-400">
-                          {collectionLocation.country || ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                      <p className="text-[10px] text-gray-400 font-mono tracking-wide">
-                        {Math.abs(collectionLocation.lat).toFixed(4)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}, {Math.abs(collectionLocation.lng).toFixed(4)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
+                <MiniMapCard location={collectionLocation} name={collection.name} token={mapboxToken} className="hidden lg:block mt-8" />
               )}
             </div>
 
@@ -379,8 +395,15 @@ function CollectionDetail({
                 </div>
               ))}
 
+              {/* Mobile mini-map — shown below photo grid on small screens */}
+              {collectionLocation && mapboxToken && (
+                <div className="lg:hidden px-2 pt-12">
+                  <MiniMapCard location={collectionLocation} name={collection.name} token={mapboxToken} />
+                </div>
+              )}
+
               {/* Return button */}
-              <footer className="pt-48 pb-24 text-center">
+              <footer className="pt-32 pb-24 text-center">
                 <button
                   onClick={() => {
                     onClose();
