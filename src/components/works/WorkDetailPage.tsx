@@ -305,16 +305,32 @@ export default function WorkDetailPage({ collection, photos }: Props) {
               )}
             </div>
 
-            {collection.subtitle && (
-              <p className="mt-8 text-gray-500 font-light text-base leading-relaxed">
-                {collection.subtitle}
-              </p>
-            )}
-
-            {collection.description && (
-              <p className="mt-4 text-gray-400 font-light text-sm leading-relaxed">
-                {collection.description}
-              </p>
+            {(collection.descriptionCN || collection.descriptionEN) ? (
+              <div className="mt-8 space-y-6">
+                {collection.descriptionCN && (
+                  <p className="text-base leading-relaxed font-sans text-gray-700 opacity-90">
+                    {collection.descriptionCN}
+                  </p>
+                )}
+                {collection.descriptionEN && (
+                  <p className="text-sm leading-relaxed font-serif italic text-gray-400 border-l border-gray-200 pl-4">
+                    {collection.descriptionEN}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                {collection.subtitle && (
+                  <p className="mt-8 text-gray-500 font-light text-base leading-relaxed">
+                    {collection.subtitle}
+                  </p>
+                )}
+                {collection.description && (
+                  <p className="mt-4 text-gray-400 font-light text-sm leading-relaxed">
+                    {collection.description}
+                  </p>
+                )}
+              </>
             )}
 
             <div className="mt-12 flex items-center gap-2 text-[9px] font-mono text-gray-300 tracking-wider">

@@ -18,6 +18,8 @@ const collections: Collection[] = await sanityClient.fetch(`
     location,
     year,
     description,
+    descriptionCN,
+    descriptionEN,
     gridSize,
     "photoCount": count(*[_type == "photo" && references(^._id)]),
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {

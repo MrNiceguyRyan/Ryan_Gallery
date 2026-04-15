@@ -9,6 +9,8 @@ export interface Collection {
   location?: string;
   year?: number;
   description?: string;
+  descriptionCN?: string;
+  descriptionEN?: string;
   introduction?: string;
   liveProjectUrl?: string;
   photos?: Photo[];

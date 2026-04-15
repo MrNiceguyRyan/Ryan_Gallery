@@ -59,7 +59,21 @@ export default defineType({
       title: 'Description',
       type: 'text',
       rows: 3,
-      description: '系列简介',
+      description: '系列简介（旧字段，兼容用）',
+    }),
+    defineField({
+      name: 'descriptionCN',
+      title: 'Description (Chinese)',
+      type: 'text',
+      rows: 3,
+      description: '中文系列描述 — 作为主文显示',
+    }),
+    defineField({
+      name: 'descriptionEN',
+      title: 'Description (English)',
+      type: 'text',
+      rows: 3,
+      description: 'English description — displayed as secondary text',
     }),
     defineField({
       name: 'featured',
