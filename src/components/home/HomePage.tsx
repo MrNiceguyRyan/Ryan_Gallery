@@ -73,7 +73,51 @@ function Overlay({
 }
 
 /* ═══════════════════════════════════════════════════════
- *  PhotoBlock — dynamic photo in grid
+ *  Smart row builder — aspect-ratio-aware magazine layout
+ * ═══════════════════════════════════════════════════════ */
+type Span = 'full' | 'half' | 'third';
+interface RowItem { photo: Photo; span: Span; }
+
+function isLandscape(p: Photo) { return (p.width && p.height) ? p.width / p.height > 1.2 : false; }
+function isPortrait(p: Photo) { return (p.width && p.height) ? p.height / p.width > 1.1 : true; }
+
+function buildStoryRows(photos: Photo[]): RowItem[][] {
+  const rows: RowItem[][] = [];
+  let i = 0;
+  while (i < photos.length) {
+    const p = photos[i];
+    if (isLandscape(p)) {
+      rows.push([{ photo: p, span: 'full' }]);
+      i++;
+    } else if (isPortrait(p)) {
+      const next = photos[i + 1];
+      if (next && (isPortrait(next) || (!isLandscape(next)))) {
+        rows.push([{ photo: p, span: 'half' }, { photo: next, span: 'half' }]);
+        i += 2;
+      } else {
+        rows.push([{ photo: p, span: 'full' }]);
+        i++;
+      }
+    } else {
+      const p2 = photos[i + 1];
+      const p3 = photos[i + 2];
+      if (p2 && !isLandscape(p2) && p3 && !isLandscape(p3)) {
+        rows.push([{ photo: p, span: 'third' }, { photo: p2, span: 'third' }, { photo: p3, span: 'third' }]);
+        i += 3;
+      } else if (p2 && !isLandscape(p2)) {
+        rows.push([{ photo: p, span: 'half' }, { photo: p2, span: 'half' }]);
+        i += 2;
+      } else {
+        rows.push([{ photo: p, span: 'full' }]);
+        i++;
+      }
+    }
+  }
+  return rows;
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  PhotoBlock — photo cell with natural aspect ratio
  * ═══════════════════════════════════════════════════════ */
 function PhotoBlock({
   photo,
@@ -81,17 +125,23 @@ function PhotoBlock({
   onClick,
 }: {
   photo: Photo;
-  span: 'full' | 'half' | 'third';
+  span: Span;
   onClick: () => void;
 }) {
   const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
+  const ratio = photo.width && photo.height ? photo.height / photo.width : null;
+  const paddingTop = ratio
+    ? `${(ratio * 100).toFixed(2)}%`
+    : span === 'full' ? '56.25%' : span === 'half' ? '125%' : '133.33%';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 60 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ duration: 1.5, ease: expo }}
-      className={`${colSpan} group relative overflow-hidden rounded-sm cursor-pointer`}
+      className={`${colSpan} group relative overflow-hidden cursor-pointer bg-gray-100`}
+      style={{ paddingTop }}
       onClick={onClick}
     >
       <motion.img
@@ -99,7 +149,7 @@ function PhotoBlock({
         transition={{ duration: 1.5, ease: expo }}
         src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
         alt={photo.title || ''}
-        className="w-full h-auto object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+        className="absolute inset-0 w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
         loading="lazy"
         draggable={false}
       />
@@ -215,42 +265,7 @@ function CollectionDetail({
     try { return getMapboxToken(); } catch { return ''; }
   }, []);
 
-  /* Build dynamic photo grid rows: hero / half / hero / thirds */
-  const rows: { photo: Photo; span: 'full' | 'half' | 'third' }[][] = [];
-  let i = 0;
-  while (i < collectionPhotos.length) {
-    const pattern = rows.length % 4;
-    if (pattern === 0 || pattern === 2) {
-      // Full-width hero
-      rows.push([{ photo: collectionPhotos[i], span: 'full' }]);
-      i += 1;
-    } else if (pattern === 1) {
-      // Two side-by-side
-      const row: { photo: Photo; span: 'full' | 'half' | 'third' }[] = [
-        { photo: collectionPhotos[i], span: 'half' },
-      ];
-      if (i + 1 < collectionPhotos.length) {
-        row.push({ photo: collectionPhotos[i + 1], span: 'half' });
-        i += 2;
-      } else {
-        row[0].span = 'full';
-        i += 1;
-      }
-      rows.push(row);
-    } else {
-      // Three in a row
-      const row: { photo: Photo; span: 'full' | 'half' | 'third' }[] = [
-        { photo: collectionPhotos[i], span: 'third' },
-      ];
-      if (i + 1 < collectionPhotos.length) row.push({ photo: collectionPhotos[i + 1], span: 'third' });
-      if (i + 2 < collectionPhotos.length) row.push({ photo: collectionPhotos[i + 2], span: 'third' });
-      // Adjust span if fewer than 3
-      if (row.length === 1) row[0].span = 'full';
-      else if (row.length === 2) { row[0].span = 'half'; row[1].span = 'half'; }
-      i += row.length;
-      rows.push(row);
-    }
-  }
+  const rows = useMemo(() => buildStoryRows(collectionPhotos), [collectionPhotos]);
 
   return (
     <>
@@ -344,10 +359,10 @@ function CollectionDetail({
               )}
             </div>
 
-            {/* Photo grid */}
-            <div className="space-y-24 md:space-y-48">
+            {/* Photo grid — tight magazine gaps */}
+            <div className="space-y-1 md:space-y-2">
               {rows.map((row, rowIdx) => (
-                <div key={rowIdx} className="grid grid-cols-6 gap-4 md:gap-8">
+                <div key={rowIdx} className="grid grid-cols-6 gap-1 md:gap-2">
                   {row.map((item, colIdx) => {
                     const globalIdx = rows
                       .slice(0, rowIdx)

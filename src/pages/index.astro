@@ -24,6 +24,8 @@ const collections: Collection[] = await sanityClient.fetch(`
       _id,
       title,
       "imageUrl": image.asset->url,
+      "width": image.asset->metadata.dimensions.width,
+      "height": image.asset->metadata.dimensions.height,
       camera,
       focalLength,
       aperture,
