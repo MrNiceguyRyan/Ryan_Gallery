@@ -1,8 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
-import type { Collection, Photo } from '../types';
+import type { Collection, Photo, SiteSettings } from '../types';
 import HomePage from '../components/home/HomePage';
+import { getMapboxToken } from '../config/mapbox';
 
 // ─── GROQ: All collections with photos + location data ───
 const collections: Collection[] = await sanityClient.fetch(`
@@ -53,8 +54,54 @@ const photos: Photo[] = await sanityClient.fetch(`
     }
   }
 `);
+
+// ─── GROQ: Photos with location (for Map overlay) ───
+const mapPhotos: Photo[] = await sanityClient.fetch(`
+  *[_type == "photo" && defined(location)] | order(_createdAt desc) {
+    _id,
+    title,
+    "imageUrl": image.asset->url,
+    camera,
+    focalLength,
+    aperture,
+    shutterSpeed,
+    iso,
+    styleCategory,
+    location,
+    collection->{
+      name,
+      "slug": slug.current
+    }
+  }
+`);
+
+// ─── GROQ: Site settings (for About overlay) ───
+const siteSettings: SiteSettings = await sanityClient.fetch(`
+  *[_type == "siteSettings"][0] {
+    name,
+    bio,
+    "avatarUrl": avatar.asset->url,
+    email,
+    instagram,
+    skills,
+    timeline[] {
+      year,
+      title,
+      description
+    }
+  }
+`) ?? {};
+
+const mapboxToken = getMapboxToken();
 ---
 
 <Layout>
-  <HomePage client:load collections={collections} photos={photos} />
+  <HomePage
+    client:load
+    collections={collections}
+    photos={photos}
+    mapPhotos={mapPhotos}
+    siteSettings={siteSettings}
+    mapboxToken={mapboxToken}
+  />
 </Layout>

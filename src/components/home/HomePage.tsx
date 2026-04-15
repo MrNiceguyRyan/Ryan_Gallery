@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { ChevronLeft, ArrowRight, Search, MapPin } from 'lucide-react';
-import type { Collection, Photo } from '../../types';
+import type { Collection, Photo, SiteSettings } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import { getMapboxToken } from '../../config/mapbox';
 import Lightbox from '../shared/Lightbox';
+import MapboxMap from '../MapboxMap';
+import AboutPage from '../about/AboutPage';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -14,41 +16,58 @@ const HERO_IMAGE =
 interface Props {
   collections: Collection[];
   photos: Photo[];
+  mapPhotos?: Photo[];
+  siteSettings?: SiteSettings;
+  mapboxToken?: string;
 }
 
 /* ═══════════════════════════════════════════════════════
- *  Overlay — full-screen container (light bg)
+ *  Overlay — cinematic vertical shutter with backdrop mask
  * ═══════════════════════════════════════════════════════ */
 function Overlay({
   title,
   children,
   onClose,
+  variant = 'light',
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  variant?: 'light' | 'dark';
 }) {
+  const isDark = variant === 'dark';
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 1.02, y: 20 }}
-      transition={{ type: 'spring', damping: 30, stiffness: 200 }}
-      className="fixed inset-0 z-50 bg-[#FDFDFB] text-[#1A1A1A] overflow-y-auto no-scrollbar"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm"
     >
-      <div className="sticky top-0 left-0 w-full z-10 px-6 py-5 md:px-12 flex justify-between items-center bg-white/80 backdrop-blur-3xl border-b border-black/5">
-        <button
-          onClick={onClose}
-          className="group flex items-center gap-2 px-4 py-2 -ml-4 rounded-full hover:bg-black/5 transition-all duration-300"
-        >
-          <div className="w-7 h-7 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-black group-hover:text-white group-hover:border-black transition-all duration-300">
-            <ChevronLeft size={14} strokeWidth={1.5} />
-          </div>
-          <span className="text-[11px] uppercase tracking-[0.2em] font-medium text-black/50 group-hover:text-black/80 transition-colors">Back</span>
-        </button>
-        <div className="text-[11px] uppercase tracking-[0.3em] font-medium opacity-25">{title}</div>
-      </div>
-      <div className="px-6 md:px-12">{children}</div>
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ duration: 0.9, ease: [0.32, 0, 0.07, 1] }}
+        className={`w-full h-full overflow-y-auto no-scrollbar relative ${
+          isDark ? 'bg-[#0A0A0A] text-[#FDFDFB]' : 'bg-[#FDFDFB] text-[#1A1A1A]'
+        }`}
+      >
+        <div className={`sticky top-0 left-0 w-full z-10 px-6 py-6 md:px-12 flex justify-between items-center backdrop-blur-3xl border-b transition-colors duration-700 ${
+          isDark ? 'bg-black/80 border-white/5' : 'bg-white/80 border-black/5'
+        }`}>
+          <button
+            onClick={onClose}
+            className={`group flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold transition-all duration-300 hover:gap-5 ${
+              isDark ? 'text-white/50 hover:text-white' : 'text-black/50 hover:text-black/80'
+            }`}
+          >
+            <ChevronLeft size={16} strokeWidth={1.5} /> Back
+          </button>
+          <div className={`text-[11px] uppercase tracking-[0.6em] font-bold opacity-30`}>{title}</div>
+        </div>
+        <div className="px-6 md:px-12">{children}</div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -93,9 +112,11 @@ function PhotoBlock({
  * ═══════════════════════════════════════════════════════ */
 function FilmstripItem({
   collection,
+  onClick,
   index,
 }: {
   collection: Collection;
+  onClick: () => void;
   index: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -111,13 +132,13 @@ function FilmstripItem({
   const photoCount = collection.photos?.length || collection.photoCount || 0;
 
   return (
-    <motion.a
-      href={`/works/${collection.slug}`}
+    <motion.div
       ref={ref}
       initial={{ opacity: 0, y: 100 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ delay: index * 0.1, duration: 1.5, ease: expo }}
+      onClick={onClick}
       className="filmstrip-item group relative cursor-pointer block"
       data-location={collection.location || collection.name}
     >
@@ -128,7 +149,6 @@ function FilmstripItem({
             <img
               src={coverUrl}
               alt={collection.name}
-              style={{ viewTransitionName: `cover-${collection.slug}` } as React.CSSProperties}
               className="filmstrip-image"
               loading="lazy"
               decoding="async"
@@ -168,7 +188,7 @@ function FilmstripItem({
           View <ArrowRight size={10} />
         </span>
       </div>
-    </motion.a>
+    </motion.div>
   );
 }
 
@@ -383,9 +403,13 @@ function CollectionDetail({
 /* ═══════════════════════════════════════════════════════
  *  HomePage — dark filmstrip archive
  * ═══════════════════════════════════════════════════════ */
-export default function HomePage({ collections, photos }: Props) {
+export default function HomePage({ collections, photos, mapPhotos, siteSettings, mapboxToken: externalMapboxToken }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [showOpening, setShowOpening] = useState(false);
+
+  const isAnyOverlayOpen = !!selectedCollection || showMap || showAbout;
 
   // Filter to collections that have photos
   const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
@@ -399,15 +423,20 @@ export default function HomePage({ collections, photos }: Props) {
     setShowOpening(false);
   }, []);
 
+  const closeAllOverlays = useCallback(() => {
+    setSelectedCollection(null);
+    setShowMap(false);
+    setShowAbout(false);
+  }, []);
+
   useEffect(() => {
-    const isOverlayOpen = !!selectedCollection;
-    document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
-    document.body.style.backgroundColor = isOverlayOpen ? '#FDFDFB' : '#0A0A0A';
+    document.body.style.overflow = isAnyOverlayOpen ? 'hidden' : 'auto';
+    document.body.style.backgroundColor = isAnyOverlayOpen ? '#FDFDFB' : '#0A0A0A';
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [selectedCollection]);
+  }, [isAnyOverlayOpen]);
 
   return (
     <>
@@ -423,60 +452,49 @@ export default function HomePage({ collections, photos }: Props) {
         }`}
       >
         {/* ── Nav — centered name + right links ── */}
-        <nav
-          className={`fixed top-0 left-0 w-full z-40 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
-            selectedCollection
-              ? 'bg-white/80 backdrop-blur-2xl border-b border-black/5'
-              : 'bg-transparent'
-          }`}
-        >
+        <nav className="fixed top-0 left-0 w-full z-40 px-6 py-5 md:px-12 flex items-center transition-all duration-700 bg-transparent">
           {/* Left spacer for centering */}
           <div className="flex-1" />
 
           {/* Center: name */}
           <button
             onClick={() => {
-              setSelectedCollection(null);
+              closeAllOverlays();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`text-xl md:text-2xl font-display tracking-[0.12em] hover:opacity-60 transition-all ${
-              selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
-            }`}
+            className="text-xl md:text-2xl font-display tracking-[0.12em] hover:opacity-60 transition-all text-white"
           >
             RYAN XU
           </button>
 
           {/* Right: nav links */}
           <div className="flex-1 flex justify-end items-center gap-6 md:gap-8">
-            <a
-              href="/"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
-                selectedCollection ? 'text-[#1A1A1A]' : 'text-white'
-              }`}
+            <button
+              onClick={() => {
+                closeAllOverlays();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 text-white"
             >
               Photography
-            </a>
-            <a
-              href="/travel"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
-                selectedCollection ? 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]' : 'text-white/50 hover:text-white'
-              }`}
+            </button>
+            <button
+              onClick={() => { closeAllOverlays(); setShowMap(true); }}
+              className="hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 text-white/50 hover:text-white"
             >
               Journal
-            </a>
-            <a
-              href="/about"
-              className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 ${
-                selectedCollection ? 'text-[#1A1A1A]/60 hover:text-[#1A1A1A]' : 'text-white/50 hover:text-white'
-              }`}
+            </button>
+            <button
+              onClick={() => { closeAllOverlays(); setShowAbout(true); }}
+              className="hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium hover:opacity-100 transition-all duration-700 text-white/50 hover:text-white"
             >
               About
-            </a>
+            </button>
             {/* Mobile: search icon as menu hint */}
             <div className="md:hidden flex items-center gap-4">
-              <a href="/travel" className="opacity-50 hover:opacity-100 transition-opacity">
-                <Search size={16} className={selectedCollection ? 'text-[#1A1A1A]' : 'text-white'} />
-              </a>
+              <button onClick={() => { closeAllOverlays(); setShowMap(true); }} className="opacity-50 hover:opacity-100 transition-opacity">
+                <Search size={16} className="text-white" />
+              </button>
             </div>
           </div>
         </nav>
@@ -535,19 +553,46 @@ export default function HomePage({ collections, photos }: Props) {
             <FilmstripItem
               key={collection._id}
               collection={collection}
+              onClick={() => setSelectedCollection(collection)}
               index={index}
             />
           ))}
         </div>
       </main>
 
-      {/* ── Collection detail overlay ── */}
+      {/* ── Backdrop blur buffer ── */}
       <AnimatePresence>
+        {isAnyOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="fixed inset-0 z-40 backdrop-blur-2xl bg-white/30 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Overlay panels ── */}
+      <AnimatePresence mode="wait">
         {selectedCollection && (
           <CollectionDetail
+            key="story"
             collection={selectedCollection}
             onClose={() => setSelectedCollection(null)}
           />
+        )}
+        {showMap && mapPhotos && externalMapboxToken && (
+          <Overlay key="map" title="Journal" variant="dark" onClose={() => setShowMap(false)}>
+            <section className="py-8 max-w-7xl mx-auto">
+              <MapboxMap photos={mapPhotos} mapboxToken={externalMapboxToken} showLocationList={true} />
+            </section>
+          </Overlay>
+        )}
+        {showAbout && (
+          <Overlay key="about" title="About" variant="light" onClose={() => setShowAbout(false)}>
+            <AboutPage settings={siteSettings} />
+          </Overlay>
         )}
       </AnimatePresence>
 
