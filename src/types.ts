@@ -38,6 +38,8 @@ export interface Collection {
   location?: string;
   year?: number;
   description?: string;
+  descriptionCN?: string;
+  descriptionEN?: string;
   /** Portable Text — editorial introduction shown in the collection sidebar */
   introduction?: PortableTextBlock[];
   liveProjectUrl?: string;

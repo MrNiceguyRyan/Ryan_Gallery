@@ -245,16 +245,28 @@ function CollectionDetail({
               <h2 className="text-7xl md:text-9xl font-serif italic tracking-tighter leading-[0.85]">
                 {collection.name}
               </h2>
-              {collection.description && (
+              {(collection.descriptionCN || collection.descriptionEN) ? (
+                <div className="space-y-8">
+                  {collection.descriptionCN && (
+                    <p className="text-lg leading-relaxed font-sans text-[#1A1A1A] opacity-90">
+                      {collection.descriptionCN}
+                    </p>
+                  )}
+                  {collection.descriptionEN && (
+                    <p className="text-sm leading-relaxed font-serif italic opacity-40 border-l border-black/10 pl-4">
+                      {collection.descriptionEN}
+                    </p>
+                  )}
+                </div>
+              ) : collection.description ? (
                 <p className="text-lg md:text-xl leading-relaxed font-light opacity-60 max-w-md italic">
                   &ldquo;{collection.description}&rdquo;
                 </p>
-              )}
-              {collection.subtitle && !collection.description && (
+              ) : collection.subtitle ? (
                 <p className="text-lg leading-relaxed font-light opacity-60 max-w-md italic">
                   {collection.subtitle}
                 </p>
-              )}
+              ) : null}
               <div className="flex items-center gap-6 pt-12">
                 <div className="w-16 h-[1px] bg-[#1A1A1A] opacity-10" />
                 <span className="text-[10px] uppercase tracking-[0.3em] font-mono opacity-40">

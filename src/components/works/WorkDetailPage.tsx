@@ -277,7 +277,20 @@ export default function WorkDetailPage({ collection, photos }: Props) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5, duration: 0.8, ease: expo }}
             >
-              {(hasIntro || fallbackParas || collection.subtitle) && (
+              {(collection.descriptionCN || collection.descriptionEN) ? (
+                <div className="space-y-6">
+                  {collection.descriptionCN && (
+                    <p className="text-[15px] leading-[1.9] font-sans opacity-80">
+                      {collection.descriptionCN}
+                    </p>
+                  )}
+                  {collection.descriptionEN && (
+                    <p className="text-sm leading-relaxed font-serif italic opacity-40 border-l border-black/10 pl-4">
+                      {collection.descriptionEN}
+                    </p>
+                  )}
+                </div>
+              ) : (hasIntro || fallbackParas || collection.subtitle) ? (
                 <div className="relative">
                   <span className="text-6xl float-left mr-2 mt-1 font-serif not-italic leading-none opacity-10 select-none">"</span>
                   <div className="text-[15px] leading-[1.9] font-serif italic opacity-70">
@@ -289,7 +302,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                     }
                   </div>
                 </div>
-              )}
+              ) : null}
             </motion.div>
 
             {/* Camera / lens info */}

@@ -62,6 +62,20 @@ export default defineType({
       description: '用于 SEO meta description 和 Open Graph 描述，1-2 句话',
     }),
     defineField({
+      name: 'descriptionCN',
+      title: 'Description (Chinese)',
+      type: 'text',
+      rows: 3,
+      description: '中文系列描述 — 作为主文显示',
+    }),
+    defineField({
+      name: 'descriptionEN',
+      title: 'Description (English)',
+      type: 'text',
+      rows: 3,
+      description: 'English description — displayed as secondary text',
+    }),
+    defineField({
       name: 'introduction',
       title: 'Editorial Introduction',
       type: 'array',

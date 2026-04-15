@@ -150,16 +150,32 @@ export default function WorksCarousel({ collections, onSelectWork }: Props) {
                 {activeCollection.name}
               </h3>
 
-              {activeCollection.subtitle && (
-                <p className="text-gray-400 text-lg font-light mt-3">
-                  {activeCollection.subtitle}
-                </p>
-              )}
-
-              {activeCollection.description && (
-                <p className="text-gray-400 text-sm font-light mt-4 leading-relaxed max-w-md">
-                  {activeCollection.description}
-                </p>
+              {(activeCollection.descriptionCN || activeCollection.descriptionEN) ? (
+                <div className="mt-4 space-y-6 max-w-md">
+                  {activeCollection.descriptionCN && (
+                    <p className="text-base leading-relaxed font-sans text-gray-700 opacity-90">
+                      {activeCollection.descriptionCN}
+                    </p>
+                  )}
+                  {activeCollection.descriptionEN && (
+                    <p className="text-sm leading-relaxed font-serif italic text-gray-400 border-l border-gray-200 pl-4">
+                      {activeCollection.descriptionEN}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {activeCollection.subtitle && (
+                    <p className="text-gray-400 text-lg font-light mt-3">
+                      {activeCollection.subtitle}
+                    </p>
+                  )}
+                  {activeCollection.description && (
+                    <p className="text-gray-400 text-sm font-light mt-4 leading-relaxed max-w-md">
+                      {activeCollection.description}
+                    </p>
+                  )}
+                </>
               )}
 
               <div className="flex items-center gap-4 mt-4 text-[10px] font-mono text-gray-300">
