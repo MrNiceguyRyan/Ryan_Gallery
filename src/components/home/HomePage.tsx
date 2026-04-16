@@ -97,7 +97,7 @@ function MiniMapCard({ location, name, token, className = '' }: {
         <img
           src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${location.lng},${location.lat})/${location.lng},${location.lat},3,0/500x260@2x?access_token=${token}`}
           alt={`Map of ${location.city || name}`}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
           loading="lazy"
           draggable={false}
         />
@@ -264,7 +264,7 @@ function FilmstripItem({
       </div>
 
       {/* Dark overlay — fades on hover */}
-      <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-[1.5s]" />
+      <div className="absolute inset-0 bg-black/30 group-hover:bg-transparent transition-colors duration-[1.5s]" />
 
       {/* Title + decorative line */}
       <div className="relative z-10 text-center px-6">
@@ -540,10 +540,10 @@ export default function HomePage({ collections, photos, mapPhotos, siteSettings,
             transition={{ duration: 2.5, ease: expo }}
             className="absolute inset-0 z-0"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-[#0A0A0A] z-10" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0A0A0A] z-10" />
             <img
               src={HERO_IMAGE}
-              className="w-full h-full object-cover opacity-50"
+              className="w-full h-full object-cover opacity-60"
               alt=""
               draggable={false}
             />
