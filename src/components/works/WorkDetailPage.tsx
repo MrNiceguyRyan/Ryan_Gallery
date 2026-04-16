@@ -196,7 +196,11 @@ export default function WorkDetailPage({ collection, photos }: Props) {
   const focalLength = firstPhoto?.focalLength;
 
   return (
-    <div className="min-h-screen bg-[#FDFDFB] text-[#1A1A1A]">
+    <div className="relative min-h-screen bg-[#FDFDFB] text-[#1A1A1A]">
+      <div
+        className="paper-grain pointer-events-none fixed inset-0 z-0 opacity-[0.032] mix-blend-multiply"
+        aria-hidden
+      />
 
       {/* ── Top nav ── */}
       <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/80 backdrop-blur-2xl border-b border-black/5">
@@ -231,7 +235,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
       </nav>
 
       {/* ── Page body: sidebar + content ── */}
-      <div className="flex min-h-screen pt-[57px]">
+      <div className="relative z-[1] flex min-h-screen pt-[57px]">
 
         {/* ── LEFT SIDEBAR (desktop) ── */}
         <aside className="hidden lg:flex flex-col w-[320px] xl:w-[360px] shrink-0 px-8 xl:px-12 border-r border-black/5 self-start sticky top-[57px] max-h-[calc(100vh-57px)] overflow-y-auto">
@@ -417,7 +421,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                     collection={collection}
                     i={i}
                     span={span}
-                    isHovered={hoveredIndex === i}
+                    hoveredIndex={hoveredIndex}
                     onHover={setHoveredIndex}
                     onClick={setLightboxIndex}
                   />
@@ -455,12 +459,26 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 }
 
 /* ─── Single photo cell ─── */
+function photoHasEditorialCaption(photo: Photo) {
+  return !!(
+    photo.title ||
+    photo.focalLength ||
+    photo.aperture ||
+    photo.shutterSpeed ||
+    photo.iso ||
+    photo.camera
+  );
+}
+
 function PhotoCell({
-  photo, collection, i, span, isHovered, onHover, onClick
+  photo, collection, i, span, hoveredIndex, onHover, onClick
 }: {
   photo: Photo; collection: Collection; i: number; span: Span;
-  isHovered: boolean; onHover: (i: number | null) => void; onClick: (i: number) => void;
+  hoveredIndex: number | null; onHover: (i: number | null) => void; onClick: (i: number) => void;
 }) {
+  const isHovered = hoveredIndex === i;
+  const isPeerFocused = hoveredIndex !== null && hoveredIndex !== i;
+
   // Compute aspect ratio via paddingTop trick (100% * h/w) — no Tailwind dynamic class needed
   const ratio = photo.width && photo.height ? photo.height / photo.width : null;
   const paddingTop = ratio
@@ -472,7 +490,7 @@ function PhotoCell({
   return (
     <motion.div
       id={`photo-${photo._id}`}
-      className={`${colClass(span)} overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
+      className={`${colClass(span)} group overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
       style={{ paddingTop }}
       data-location={photo.title || photo.location?.city || collection.name}
       initial={{ opacity: 0 }}
@@ -483,38 +501,58 @@ function PhotoCell({
       onHoverEnd={() => onHover(null)}
       onClick={() => onClick(i)}
     >
-      <motion.img
-        src={`${photo.imageUrl}?auto=format&w=1200&q=85`}
-        alt={photo.title || collection.name}
-        className="w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
-        style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
-        loading={i < 4 ? 'eager' : 'lazy'}
-        decoding="async"
-        draggable={false}
-        animate={{ scale: isHovered ? 1.04 : 1 }}
-        transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 0.9 }}
-      />
+      <motion.div
+        className="absolute inset-0 overflow-hidden"
+        animate={{
+          opacity: isPeerFocused ? 0.48 : 1,
+          filter: isPeerFocused ? 'blur(2px)' : 'blur(0px)',
+        }}
+        transition={{ duration: 0.42, ease: expo }}
+      >
+        <div
+          className="pointer-events-none absolute top-3 right-3 z-20 rounded-sm bg-black/40 px-1.5 py-0.5 text-[8px] font-mono tracking-[0.18em] text-white/90 opacity-[0.35] backdrop-blur-[2px] transition-opacity duration-700 group-hover:opacity-100"
+          aria-hidden
+        >
+          NO. {String(i + 1).padStart(2, '0')}
+        </div>
+        <motion.img
+          src={`${photo.imageUrl}?auto=format&w=1200&q=85`}
+          alt={photo.title || collection.name}
+          className="w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-none"
+          style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+          loading={i < 4 ? 'eager' : 'lazy'}
+          decoding="async"
+          draggable={false}
+          animate={{ scale: isHovered ? 1.04 : 1 }}
+          transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 0.9 }}
+        />
 
-      <AnimatePresence>
-        {isHovered && (photo.title || photo.aperture) && (
-          <motion.div
-            className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/60 to-transparent"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.2 }}
-          >
-            {photo.title && (
-              <p className="text-white/90 text-[11px] font-light truncate leading-tight">{photo.title}</p>
-            )}
-            <div className="flex items-center gap-1.5 mt-0.5 text-white/50 text-[9px] font-mono">
-              {photo.focalLength && <span>{photo.focalLength}</span>}
-              {photo.aperture && <><span>·</span><span>{photo.aperture}</span></>}
-              {photo.shutterSpeed && <><span>·</span><span>{photo.shutterSpeed}</span></>}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <AnimatePresence>
+          {isHovered && photoHasEditorialCaption(photo) && (
+            <motion.div
+              className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/60 to-transparent"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.2 }}
+            >
+              {photo.title && (
+                <p className="text-white/90 text-[11px] font-light truncate leading-tight">{photo.title}</p>
+              )}
+              {(() => {
+                const exif = [photo.focalLength, photo.aperture, photo.shutterSpeed, photo.iso].filter(Boolean);
+                if (exif.length === 0) return null;
+                return (
+                  <p className="mt-0.5 text-white/50 text-[9px] font-mono">{exif.join(' · ')}</p>
+                );
+              })()}
+              {photo.camera && (
+                <p className="mt-1 text-[9px] font-mono uppercase tracking-wider text-white/40">{photo.camera}</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </motion.div>
   );
 }

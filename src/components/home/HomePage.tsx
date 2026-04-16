@@ -53,6 +53,12 @@ function Overlay({
           isDark ? 'bg-[#0A0A0A] text-[#FDFDFB]' : 'bg-[#FDFDFB] text-[#1A1A1A]'
         }`}
       >
+        {!isDark && (
+          <div
+            className="paper-grain pointer-events-none absolute inset-x-0 top-0 min-h-full z-0 opacity-[0.032] mix-blend-multiply"
+            aria-hidden
+          />
+        )}
         <div className={`sticky top-0 left-0 w-full z-10 px-6 py-6 md:px-12 flex justify-between items-center backdrop-blur-3xl border-b transition-colors duration-700 ${
           isDark ? 'bg-black/80 border-white/5' : 'bg-white/80 border-black/5'
         }`}>
@@ -68,7 +74,7 @@ function Overlay({
           <div className={`text-[11px] uppercase tracking-[0.6em] font-bold opacity-30`}>{title}</div>
         </div>
         <motion.div
-          className="px-6 md:px-12"
+          className="relative z-[1] px-6 md:px-12"
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
@@ -195,16 +201,36 @@ function buildStoryRows(photos: Photo[]): RowItem[][] {
 /* ═══════════════════════════════════════════════════════
  *  PhotoBlock — full photo, no crop, no background box
  * ═══════════════════════════════════════════════════════ */
+function photoHasEditorialHover(photo: Photo) {
+  return !!(
+    photo.title ||
+    photo.focalLength ||
+    photo.aperture ||
+    photo.shutterSpeed ||
+    photo.iso ||
+    photo.camera
+  );
+}
+
 function PhotoBlock({
   photo,
   span,
+  globalIndex,
+  hoveredIndex,
+  onHover,
   onClick,
 }: {
   photo: Photo;
   span: Span;
+  globalIndex: number;
+  hoveredIndex: number | null;
+  onHover: (i: number | null) => void;
   onClick: () => void;
 }) {
   const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
+  const isActive = hoveredIndex === globalIndex;
+  const isPeerFocused = hoveredIndex !== null && hoveredIndex !== globalIndex;
+  const showCaption = isActive && photoHasEditorialHover(photo);
 
   return (
     <motion.div
@@ -212,18 +238,60 @@ function PhotoBlock({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ duration: 1.5, ease: expo }}
-      className={`${colSpan} group overflow-hidden cursor-pointer`}
+      className={`${colSpan} group relative overflow-hidden cursor-pointer`}
       onClick={onClick}
+      onHoverStart={() => onHover(globalIndex)}
+      onHoverEnd={() => onHover(null)}
     >
-      <motion.img
-        whileHover={{ scale: 1.03 }}
-        transition={{ duration: 1.5, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
-        alt={photo.title || ''}
-        className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
-        loading="lazy"
-        draggable={false}
-      />
+      <motion.div
+        className="relative"
+        animate={{
+          opacity: isPeerFocused ? 0.48 : 1,
+          filter: isPeerFocused ? 'blur(2px)' : 'blur(0px)',
+        }}
+        transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <div
+          className="pointer-events-none absolute top-3 right-3 z-20 rounded-sm bg-black/40 px-1.5 py-0.5 text-[8px] font-mono tracking-[0.18em] text-white/90 opacity-[0.35] backdrop-blur-[2px] transition-opacity duration-700 group-hover:opacity-100"
+          aria-hidden
+        >
+          NO. {String(globalIndex + 1).padStart(2, '0')}
+        </div>
+        <motion.img
+          whileHover={{ scale: 1.03 }}
+          transition={{ duration: 1.5, ease: expo }}
+          src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
+          alt={photo.title || ''}
+          className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+          loading="lazy"
+          draggable={false}
+        />
+        <AnimatePresence>
+          {showCaption && (
+            <motion.div
+              className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/55 to-transparent px-3 py-2.5"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.22 }}
+            >
+              {photo.title && (
+                <p className="text-[11px] font-light leading-tight text-white/90">{photo.title}</p>
+              )}
+              {(() => {
+                const exif = [photo.focalLength, photo.aperture, photo.shutterSpeed, photo.iso].filter(Boolean);
+                if (exif.length === 0) return null;
+                return (
+                  <p className="mt-0.5 text-[9px] font-mono text-white/55">{exif.join(' · ')}</p>
+                );
+              })()}
+              {photo.camera && (
+                <p className="mt-1 text-[9px] font-mono uppercase tracking-wider text-white/40">{photo.camera}</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </motion.div>
   );
 }
@@ -324,6 +392,7 @@ function CollectionDetail({
   onClose: () => void;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [hoveredPhotoIndex, setHoveredPhotoIndex] = useState<number | null>(null);
   const collectionPhotos = collection.photos || [];
 
   // Derive location from first geotagged photo
@@ -399,6 +468,9 @@ function CollectionDetail({
                         key={item.photo._id}
                         photo={item.photo}
                         span={item.span}
+                        globalIndex={globalIdx}
+                        hoveredIndex={hoveredPhotoIndex}
+                        onHover={setHoveredPhotoIndex}
                         onClick={() => setLightboxIndex(globalIdx)}
                       />
                     );
