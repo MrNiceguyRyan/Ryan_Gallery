@@ -1,0 +1,22 @@
+#!/bin/sh
+# After each local commit, push the current branch to origin.
+# Opt out for this commit only: SKIP_AUTO_PUSH=1 git commit ...
+# Opt out permanently: git config --unset core.hooksPath (or remove this hook)
+
+if [ "$SKIP_AUTO_PUSH" = "1" ]; then
+  exit 0
+fi
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
+if [ "$branch" = "HEAD" ]; then
+  exit 0
+fi
+
+if ! git remote get-url origin >/dev/null 2>&1; then
+  exit 0
+fi
+
+printf '\n[githooks] auto-push: origin %s\n' "$branch"
+if ! git push origin "$branch"; then
+  echo "[githooks] push failed — fix the issue and run: git push origin $branch" >&2
+fi
