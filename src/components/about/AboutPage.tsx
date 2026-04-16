@@ -3,6 +3,48 @@ import type { SiteSettings, TimelineItem } from '../../types';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
+const heroContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.12, delayChildren: 0.22 },
+  },
+};
+
+const heroAvatar = {
+  hidden: { opacity: 0, scale: 0.76, y: 44 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { type: 'spring' as const, stiffness: 128, damping: 15, mass: 0.85 },
+  },
+};
+
+const heroTitle = {
+  hidden: { opacity: 0, y: 32, filter: 'blur(10px)' },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: 0.78, ease: expo },
+  },
+};
+
+const heroSubtitle = {
+  hidden: { opacity: 0, y: 22 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.62, ease: expo } },
+};
+
+const heroBody = {
+  hidden: { opacity: 0, y: 28 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.72, ease: expo } },
+};
+
+const heroMeta = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.55, ease: expo } },
+};
+
 /** Fallback timeline shown when Sanity has no data yet */
 const FALLBACK_TIMELINE: TimelineItem[] = [
   { year: '2025', title: 'Tokyo Neon Series', description: 'Captured the duality of ancient temples and neon-lit streets across Japan.' },
@@ -30,14 +72,14 @@ export default function AboutPage({ settings }: Props) {
     <div className="bg-white">
 
       {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
-      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
-        {/* Avatar */}
-        <motion.div
-          className="flex justify-center mb-6"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, ease: expo }}
-        >
+      <motion.section
+        className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center"
+        variants={heroContainer}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Avatar — spring + slightly larger motion range */}
+        <motion.div className="flex justify-center mb-6" variants={heroAvatar}>
           <div className="w-28 h-28 md:w-36 md:h-36 animate-blob-morph overflow-hidden bg-gray-100 shadow-lg">
             <img
               src={avatarUrl}
@@ -49,45 +91,25 @@ export default function AboutPage({ settings }: Props) {
           </div>
         </motion.div>
 
-        {/* Name */}
         <motion.h1
-          className="text-4xl md:text-5xl font-[100] text-gray-900 tracking-tight leading-[0.95]"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1, ease: expo }}
+          className="text-4xl md:text-5xl font-[100] text-gray-900 tracking-tight leading-[0.95] will-change-[opacity,transform,filter]"
+          variants={heroTitle}
         >
           {name}.
         </motion.h1>
 
-        {/* Subtitle */}
-        <motion.p
-          className="text-xs text-gray-400 font-mono tracking-wider mt-3"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2, ease: expo }}
-        >
+        <motion.p className="text-xs text-gray-400 font-mono tracking-wider mt-3" variants={heroSubtitle}>
           Photographer · New York, NY · Fujifilm X-T50 & Nikon Zf
         </motion.p>
 
-        {/* Bio */}
         {bio ? (
-          <motion.div
-            className="mt-8 text-left md:text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
-          >
+          <motion.div className="mt-8 text-left md:text-center" variants={heroBody}>
             <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
               {bio}
             </p>
           </motion.div>
         ) : (
-          <motion.div
-            className="mt-8 space-y-4 text-left md:text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
-          >
+          <motion.div className="mt-8 space-y-4 text-left md:text-center" variants={heroBody}>
             <p className="text-[15px] text-gray-400 font-light leading-relaxed max-w-xl mx-auto">
               I believe in capturing the quiet moments where light meets intention.
               Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
@@ -99,17 +121,12 @@ export default function AboutPage({ settings }: Props) {
           </motion.div>
         )}
 
-        <motion.div
-          className="flex items-center gap-4 mt-5 justify-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
+        <motion.div className="flex items-center gap-4 mt-5 justify-center" variants={heroMeta}>
           <div className="w-10 h-px bg-gray-200" />
           <span className="text-[10px] text-gray-300 tracking-[0.3em] uppercase font-mono">Since 2023</span>
           <div className="w-10 h-px bg-gray-200" />
         </motion.div>
-      </section>
+      </motion.section>
 
       {/* ═══════ TIMELINE ═══════ */}
       <motion.section

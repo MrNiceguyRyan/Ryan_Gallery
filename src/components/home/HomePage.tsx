@@ -67,7 +67,18 @@ function Overlay({
           </button>
           <div className={`text-[11px] uppercase tracking-[0.6em] font-bold opacity-30`}>{title}</div>
         </div>
-        <div className="px-6 md:px-12">{children}</div>
+        <motion.div
+          className="px-6 md:px-12"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.55,
+            delay: isDark ? 0.42 : 0.36,
+            ease: [0.16, 1, 0.3, 1],
+          }}
+        >
+          {children}
+        </motion.div>
       </motion.div>
     </motion.div>
   );
@@ -94,16 +105,21 @@ function MiniMapCard({ location, name, token, className = '' }: {
         href={`/travel#loc=${location.lat},${location.lng},8`}
         className="block relative h-36 md:h-44 overflow-hidden group cursor-pointer"
       >
-        <img
+        {/* motion 控制缩放，避免与 global.css 里 img 的 transition 冲突 */}
+        <motion.img
           src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${location.lng},${location.lat})/${location.lng},${location.lat},3,0/500x260@2x?access_token=${token}`}
           alt={`Map of ${location.city || name}`}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[1400ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+          className="absolute inset-0 h-full w-full max-w-none object-cover will-change-transform [transform-origin:center_center] transition-none"
+          style={{ width: '115%', height: '115%', left: '-7.5%', top: '-7.5%' }}
           loading="lazy"
           draggable={false}
+          initial={{ scale: 1 }}
+          whileHover={{ scale: 1.12 }}
+          transition={{ duration: 2.4, ease: [0.16, 1, 0.3, 1] }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-500 flex items-center justify-center">
-          <span className="text-white text-[10px] uppercase tracking-[0.2em] font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/50 to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-[900ms] group-hover:bg-black/10 flex items-center justify-center">
+          <span className="text-white text-[10px] uppercase tracking-[0.2em] font-bold opacity-0 transition-opacity duration-[900ms] group-hover:opacity-100 bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full">
             View on Journal Map
           </span>
         </div>
