@@ -116,9 +116,11 @@ function formatCoord(v: number, pos: string, neg: string) {
 // ─── Main Inner Component ───
 function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
+  const mapSelectionHintTimerRef = useRef<number | null>(null);
   const [viewState, setViewState] = useState({ latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 });
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
+  const [mapSelectedCity, setMapSelectedCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   const [mapStyleIdx, setMapStyleIdx] = useState(0);
@@ -135,6 +137,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       setExpandedRegion(regionGroups[0].region);
     }
   }, [regionGroups]);
+
+  useEffect(() => {
+    return () => {
+      if (mapSelectionHintTimerRef.current !== null) {
+        window.clearTimeout(mapSelectionHintTimerRef.current);
+      }
+    };
+  }, []);
 
   // GeoJSON points for Supercluster
   const points = useMemo(() =>
@@ -216,6 +226,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     const cluster = cityClusters.find(c => c.city === city) || null;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
+    setMapSelectedCity(city);
+    if (mapSelectionHintTimerRef.current !== null) {
+      window.clearTimeout(mapSelectionHintTimerRef.current);
+    }
+    mapSelectionHintTimerRef.current = window.setTimeout(() => {
+      setMapSelectedCity(null);
+      mapSelectionHintTimerRef.current = null;
+    }, 2600);
     // Expand the region containing this city so the card is visible
     if (cluster) {
       const region = getRegion(cluster.country);
@@ -239,6 +257,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   // Sidebar city click
   const handleCityClick = useCallback((cluster: LocationCluster) => {
     const isSame = activeClusterCity === cluster.city;
+    setMapSelectedCity(null);
     setActiveClusterCity(isSame ? null : cluster.city);
     setActiveCluster(isSame ? null : cluster);
     if (!isSame) {
@@ -282,10 +301,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     mapRef.current?.flyTo({ center: [-40, 30], zoom: 2.2, pitch: 40, bearing: 0, duration: 2000 });
     setActiveCluster(null);
     setActiveClusterCity(null);
+    setMapSelectedCity(null);
   }, []);
 
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') { setActiveCluster(null); setActiveClusterCity(null); setShowStylePicker(false); } };
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') { setActiveCluster(null); setActiveClusterCity(null); setMapSelectedCity(null); setShowStylePicker(false); } };
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
   }, []);
@@ -524,12 +544,17 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {regionGroups.map((group) => {
               const isRegionOpen = expandedRegion === group.region;
+              const regionHasActive = group.clusters.some((cluster) => cluster.city === activeClusterCity);
               return (
                 <div key={group.region}>
                   {/* Region header */}
                   <button
                     onClick={() => setExpandedRegion(isRegionOpen ? null : group.region)}
-                    className="w-full text-left px-5 py-3 flex items-center justify-between bg-gray-50/80 border-b border-gray-100 hover:bg-gray-100/80 transition-colors"
+                    className={`w-full text-left px-5 py-3 flex items-center justify-between border-b transition-colors ${
+                      regionHasActive
+                        ? 'bg-[#2c3e50]/8 border-[#2c3e50]/10'
+                        : 'bg-gray-50/80 border-gray-100 hover:bg-gray-100/80'
+                    }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
@@ -561,6 +586,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                         {group.clusters.map((cluster) => {
                           const isSelected = activeClusterCity === cluster.city;
                           const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
+                          const isMapGuided = mapSelectedCity === cluster.city;
                           return (
                             <div key={cluster.city} id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}>
                               <button
@@ -574,16 +600,29 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                 }`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-[#2c3e50]/30 scale-105' : 'ring-gray-100'}`}>
+                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${
+                                    isSelected
+                                      ? 'ring-white/30 scale-110'
+                                      : isMapGuided
+                                        ? 'ring-[#2c3e50]/55 scale-110'
+                                        : isHoveredFromMap
+                                          ? 'ring-[#2c3e50]/30 scale-105'
+                                          : 'ring-gray-100'
+                                  }`}>
                                     <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : isHoveredFromMap ? 'text-[#2c3e50]' : 'text-gray-800'}`}>{cluster.city}</h3>
                                     <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/50' : 'text-gray-400'}`}>{cluster.country}</p>
+                                    {isMapGuided && (
+                                      <p className={`text-[9px] mt-1 font-mono tracking-wide ${isSelected ? 'text-white/65' : 'text-[#2c3e50]/75'}`}>
+                                        Collection story available
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <span className={`text-[10px] font-mono ${isSelected ? 'text-white/50' : 'text-gray-300'}`}>{cluster.photos.length}</span>
-                                    {(isSelected || isHoveredFromMap) && (
+                                    {(isSelected || isHoveredFromMap || isMapGuided) && (
                                       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/40' : 'bg-[#2c3e50]/30'}`} />
                                     )}
                                   </div>
@@ -617,6 +656,13 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                 </div>
                                 {/* Content */}
                                 <div className="p-4">
+                                  {isMapGuided && (
+                                    <div className="mb-3 rounded-lg bg-[#2c3e50]/8 px-3 py-2 border border-[#2c3e50]/10">
+                                      <p className="text-[10px] font-mono tracking-wide text-[#2c3e50]/75">
+                                        Selected from map point · Continue to collection story below
+                                      </p>
+                                    </div>
+                                  )}
                                   <p className="text-[10px] text-gray-400 font-mono tracking-wide mb-3">
                                     {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
                                   </p>
@@ -665,6 +711,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {group.clusters.map((cluster) => {
                 const isSelected = activeClusterCity === cluster.city;
+                const isMapGuided = mapSelectedCity === cluster.city;
                 return (
                   <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-gray-900 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100'}`}>
                     <div className="flex items-center gap-3">
@@ -674,6 +721,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                       <div className="flex-1 min-w-0">
                         <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>{cluster.city}</h3>
                         <p className={`text-[10px] ${isSelected ? 'text-white/40' : 'text-gray-400'}`}>{cluster.country}</p>
+                        {isMapGuided && (
+                          <p className={`text-[9px] mt-1 font-mono tracking-wide ${isSelected ? 'text-white/60' : 'text-[#2c3e50]/75'}`}>
+                            Collection story available
+                          </p>
+                        )}
                       </div>
                       <span className={`text-xs font-mono ${isSelected ? 'text-white/40' : 'text-gray-300'}`}>{cluster.photos.length}</span>
                     </div>

@@ -353,9 +353,9 @@ function FilmstripItem({
   const y = useTransform(scrollYProgress, [0, 1], ['-20%', '20%']);
 
   const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    ? `${collection.coverImageUrl}?auto=format&w=1600&q=75`
     : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      ? `${collection.photos[0].imageUrl}?auto=format&w=1600&q=75`
       : '';
 
   const photoCount = collection.photos?.length || collection.photoCount || 0;

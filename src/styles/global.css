@@ -212,6 +212,10 @@ img {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   /* Improve touch tap highlight */
   -webkit-tap-highlight-color: transparent;
+  /* Render offscreen sections lazily to reduce scroll jank */
+  content-visibility: auto;
+  contain: layout style paint;
+  contain-intrinsic-size: 320px;
 }
 
 @media (min-width: 640px) {
