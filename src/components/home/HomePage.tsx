@@ -160,6 +160,46 @@ function MiniMapCard({ location, name, token, className = '' }: {
 type Span = 'full' | 'half' | 'third';
 interface RowItem { photo: Photo; span: Span; }
 
+interface SubCategory {
+  id: string;
+  title: string;
+  count: number;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  landscape: 'City Landscape',
+  street: 'Street Photo',
+  portrait: 'Portrait Study',
+  architecture: 'Architecture',
+  abstract: 'Abstract',
+  uncategorized: 'Curated Selection',
+};
+
+function toChapterTitle(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function buildSubCategories(photos: Photo[]): SubCategory[] {
+  const order: string[] = [];
+  const counter = new Map<string, number>();
+
+  photos.forEach((photo) => {
+    const key = (photo.styleCategory || 'uncategorized').toLowerCase();
+    if (!counter.has(key)) order.push(key);
+    counter.set(key, (counter.get(key) ?? 0) + 1);
+  });
+
+  return order.map((id) => ({
+    id,
+    title: CATEGORY_LABELS[id] ?? toChapterTitle(id),
+    count: counter.get(id) ?? 0,
+  }));
+}
+
 function isLandscape(p: Photo) { return (p.width && p.height) ? p.width / p.height > 1.2 : false; }
 function isPortrait(p: Photo) { return (p.width && p.height) ? p.height / p.width > 1.1 : true; }
 
@@ -393,6 +433,7 @@ function CollectionDetail({
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [hoveredPhotoIndex, setHoveredPhotoIndex] = useState<number | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
   const collectionPhotos = collection.photos || [];
 
   // Derive location from first geotagged photo
@@ -405,7 +446,24 @@ function CollectionDetail({
     try { return getMapboxToken(); } catch { return ''; }
   }, []);
 
-  const rows = useMemo(() => buildStoryRows(collectionPhotos), [collectionPhotos]);
+  const subCategories = useMemo(() => buildSubCategories(collectionPhotos), [collectionPhotos]);
+  const displayedPhotos = useMemo(() => {
+    if (activeCategoryId === 'all') return collectionPhotos;
+    return collectionPhotos.filter((photo) => (photo.styleCategory || 'uncategorized').toLowerCase() === activeCategoryId);
+  }, [collectionPhotos, activeCategoryId]);
+
+  const rows = useMemo(() => buildStoryRows(displayedPhotos), [displayedPhotos]);
+
+  useEffect(() => {
+    if (activeCategoryId === 'all') return;
+    if (subCategories.some((cat) => cat.id === activeCategoryId)) return;
+    setActiveCategoryId('all');
+  }, [activeCategoryId, subCategories]);
+
+  useEffect(() => {
+    setHoveredPhotoIndex(null);
+    setLightboxIndex(null);
+  }, [activeCategoryId]);
 
   return (
     <>
@@ -442,10 +500,71 @@ function CollectionDetail({
                   {collection.subtitle}
                 </p>
               ) : null}
+              {subCategories.length > 0 && (
+                <div className="space-y-6 pb-10 border-b border-black/5">
+                  <div className="flex items-center gap-4">
+                    <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">Selection</span>
+                    <div className="h-[1px] flex-1 bg-black/5" />
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    <button
+                      onClick={() => setActiveCategoryId('all')}
+                      className="group flex items-center gap-6 text-left"
+                    >
+                      <span className={`text-[9px] font-mono transition-all duration-500 ${activeCategoryId === 'all' ? 'opacity-100' : 'opacity-20 group-hover:opacity-40'}`}>
+                        00
+                      </span>
+                      <div className="relative flex flex-col">
+                        <span className={`text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 ${
+                          activeCategoryId === 'all' ? 'opacity-100 translate-x-3' : 'opacity-20 group-hover:opacity-50 group-hover:translate-x-1'
+                        }`}>
+                          The Archive
+                        </span>
+                        {activeCategoryId === 'all' && (
+                          <motion.div
+                            layoutId="homeActiveChapterBar"
+                            className="absolute -left-3 top-1/2 -translate-y-1/2 w-1.5 h-[1px] bg-black"
+                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          />
+                        )}
+                      </div>
+                    </button>
+
+                    {subCategories.map((cat, idx) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setActiveCategoryId(cat.id)}
+                        className="group flex items-center gap-6 text-left"
+                      >
+                        <span className={`text-[9px] font-mono transition-all duration-500 ${
+                          activeCategoryId === cat.id ? 'opacity-100' : 'opacity-20 group-hover:opacity-40'
+                        }`}>
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <div className="relative flex flex-col">
+                          <span className={`text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 ${
+                            activeCategoryId === cat.id ? 'opacity-100 translate-x-3' : 'opacity-20 group-hover:opacity-50 group-hover:translate-x-1'
+                          }`}>
+                            {cat.title}
+                          </span>
+                          {activeCategoryId === cat.id && (
+                            <motion.div
+                              layoutId="homeActiveChapterBar"
+                              className="absolute -left-3 top-1/2 -translate-y-1/2 w-1.5 h-[1px] bg-black"
+                              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                            />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-6 pt-12">
                 <div className="w-16 h-[1px] bg-[#1A1A1A] opacity-10" />
                 <span className="text-[10px] uppercase tracking-[0.3em] font-mono opacity-40">
-                  {collectionPhotos.length} Captured Frames
+                  {displayedPhotos.length}{activeCategoryId !== 'all' ? ` / ${collectionPhotos.length}` : ''} Captured Frames
                 </span>
               </div>
 
@@ -457,6 +576,55 @@ function CollectionDetail({
 
             {/* Photo grid — tight magazine gaps */}
             <div className="space-y-1 md:space-y-2">
+              {subCategories.length > 0 && (
+                <div className="lg:hidden sticky top-[73px] z-[5] bg-[#FDFDFB]/95 backdrop-blur-xl border-b border-black/5 -mx-2 px-2 py-2 mb-3">
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-[#FDFDFB]/95 to-transparent z-[1]" />
+                    <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-[#FDFDFB]/95 to-transparent z-[1]" />
+                    <div className="overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth">
+                      <div className="flex items-center gap-4 min-w-max">
+                      <button
+                        onClick={() => setActiveCategoryId('all')}
+                        className="relative pb-1 text-left snap-start"
+                      >
+                        <span className={`text-[9px] uppercase tracking-[0.28em] font-bold transition-all duration-500 ${
+                          activeCategoryId === 'all' ? 'opacity-100' : 'opacity-25'
+                        }`}>
+                          00 THE ARCHIVE
+                        </span>
+                        {activeCategoryId === 'all' && (
+                          <motion.div
+                            layoutId="homeMobileChapterBar"
+                            className="absolute left-0 right-0 -bottom-[1px] h-[1px] bg-black/70"
+                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          />
+                        )}
+                      </button>
+                      {subCategories.map((cat, idx) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => setActiveCategoryId(cat.id)}
+                          className="relative pb-1 text-left snap-start"
+                        >
+                          <span className={`text-[9px] uppercase tracking-[0.28em] font-bold transition-all duration-500 ${
+                            activeCategoryId === cat.id ? 'opacity-100' : 'opacity-25'
+                          }`}>
+                            {String(idx + 1).padStart(2, '0')} {cat.title}
+                          </span>
+                          {activeCategoryId === cat.id && (
+                            <motion.div
+                              layoutId="homeMobileChapterBar"
+                              className="absolute left-0 right-0 -bottom-[1px] h-[1px] bg-black/70"
+                              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                            />
+                          )}
+                        </button>
+                      ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {rows.map((row, rowIdx) => (
                 <div key={rowIdx} className="grid grid-cols-6 gap-1 md:gap-2">
                   {row.map((item, colIdx) => {
@@ -510,7 +678,7 @@ function CollectionDetail({
       <AnimatePresence>
         {lightboxIndex !== null && (
           <Lightbox
-            photos={collectionPhotos}
+            photos={displayedPhotos}
             initialIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             zIndex={60}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, ArrowRight } from 'lucide-react';
 import type { Collection, Photo, PortableTextBlock } from '../../types';
@@ -73,6 +73,46 @@ function renderFallback(paragraphs: string[]): React.ReactNode {
   return paragraphs.map((p, i) => (
     <p key={i} className="text-gray-500 font-light text-[14px] leading-[1.9] mb-3 last:mb-0">{p}</p>
   ));
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  landscape: 'City Landscape',
+  street: 'Street Photo',
+  portrait: 'Portrait Study',
+  architecture: 'Architecture',
+  abstract: 'Abstract',
+  uncategorized: 'Curated Selection',
+};
+
+interface SubCategory {
+  id: string;
+  title: string;
+  count: number;
+}
+
+function toChapterTitle(value: string) {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function buildSubCategories(photos: Photo[]): SubCategory[] {
+  const order: string[] = [];
+  const counter = new Map<string, number>();
+
+  photos.forEach((photo) => {
+    const key = (photo.styleCategory || 'uncategorized').toLowerCase();
+    if (!counter.has(key)) order.push(key);
+    counter.set(key, (counter.get(key) ?? 0) + 1);
+  });
+
+  return order.map((id) => ({
+    id,
+    title: CATEGORY_LABELS[id] ?? toChapterTitle(id),
+    count: counter.get(id) ?? 0,
+  }));
 }
 
 /* ─── 6-column magazine photo layout ─── */
@@ -177,6 +217,7 @@ function buildRows(photos: Photo[]): RowItem[][] {
 export default function WorkDetailPage({ collection, photos }: Props) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
 
   const collectionLocation = useMemo(() => {
     const photo = photos.find(p => p.location?.lat != null && p.location?.lng != null);
@@ -187,6 +228,12 @@ export default function WorkDetailPage({ collection, photos }: Props) {
     try { return getMapboxToken(); } catch { return ''; }
   }, []);
 
+  const subCategories = useMemo(() => buildSubCategories(photos), [photos]);
+  const displayedPhotos = useMemo(() => {
+    if (activeCategoryId === 'all') return photos;
+    return photos.filter((photo) => (photo.styleCategory || 'uncategorized').toLowerCase() === activeCategoryId);
+  }, [photos, activeCategoryId]);
+
   const hasIntro = collection.introduction && collection.introduction.length > 0;
   const fallbackParas = EDITORIAL_FALLBACKS[collection.slug] ?? null;
 
@@ -194,6 +241,17 @@ export default function WorkDetailPage({ collection, photos }: Props) {
   const firstPhoto = photos[0];
   const camera = firstPhoto?.camera;
   const focalLength = firstPhoto?.focalLength;
+
+  useEffect(() => {
+    if (activeCategoryId === 'all') return;
+    if (subCategories.some((cat) => cat.id === activeCategoryId)) return;
+    setActiveCategoryId('all');
+  }, [subCategories, activeCategoryId]);
+
+  useEffect(() => {
+    setHoveredIndex(null);
+    setLightboxIndex(null);
+  }, [activeCategoryId]);
 
   return (
     <div className="relative min-h-screen bg-[#FDFDFB] text-[#1A1A1A]">
@@ -274,6 +332,74 @@ export default function WorkDetailPage({ collection, photos }: Props) {
               {collection.year && <span className="opacity-40 font-mono italic">{collection.year}</span>}
             </motion.div>
 
+            {/* Editorial TOC — indexed vertical chapter nav */}
+            {subCategories.length > 0 && (
+              <motion.div
+                className="space-y-6 pb-12 mt-10 border-b border-black/5"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.65, ease: expo }}
+              >
+                <div className="flex items-center gap-4">
+                  <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">Selection</span>
+                  <div className="h-[1px] flex-1 bg-black/5" />
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <button
+                    onClick={() => setActiveCategoryId('all')}
+                    className="group flex items-center gap-6 text-left"
+                  >
+                    <span className={`text-[9px] font-mono transition-all duration-500 ${activeCategoryId === 'all' ? 'opacity-100' : 'opacity-20 group-hover:opacity-40'}`}>
+                      00
+                    </span>
+                    <div className="relative flex flex-col">
+                      <span className={`text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 ${
+                        activeCategoryId === 'all' ? 'opacity-100 translate-x-3' : 'opacity-20 group-hover:opacity-50 group-hover:translate-x-1'
+                      }`}>
+                        The Archive
+                      </span>
+                      {activeCategoryId === 'all' && (
+                        <motion.div
+                          layoutId="activeChapterBar"
+                          className="absolute -left-3 top-1/2 -translate-y-1/2 w-1.5 h-[1px] bg-black"
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                    </div>
+                  </button>
+
+                  {subCategories.map((cat, idx) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setActiveCategoryId(cat.id)}
+                      className="group flex items-center gap-6 text-left"
+                    >
+                      <span className={`text-[9px] font-mono transition-all duration-500 ${
+                        activeCategoryId === cat.id ? 'opacity-100' : 'opacity-20 group-hover:opacity-40'
+                      }`}>
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div className="relative flex flex-col">
+                        <span className={`text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 ${
+                          activeCategoryId === cat.id ? 'opacity-100 translate-x-3' : 'opacity-20 group-hover:opacity-50 group-hover:translate-x-1'
+                        }`}>
+                          {cat.title}
+                        </span>
+                        {activeCategoryId === cat.id && (
+                          <motion.div
+                            layoutId="activeChapterBar"
+                            className="absolute -left-3 top-1/2 -translate-y-1/2 w-1.5 h-[1px] bg-black"
+                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
             {/* Editorial text with large opening quote */}
             <motion.div
               className="mt-8"
@@ -341,7 +467,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
             >
               <div className="w-10 h-px bg-black opacity-10" />
               <span className="text-[9px] uppercase tracking-[0.4em] font-mono opacity-30">
-                {photos.length} Captured Frames
+                {displayedPhotos.length}{activeCategoryId !== 'all' ? ` / ${photos.length}` : ''} Captured Frames
               </span>
             </motion.div>
 
@@ -406,13 +532,60 @@ export default function WorkDetailPage({ collection, photos }: Props) {
             <div className="flex items-center gap-2 mt-0.5 text-[9px] font-mono text-gray-400 tracking-wider uppercase">
               {collection.year && <span>{collection.year}</span>}
               {collection.location && <><span>·</span><span>{collection.location}</span></>}
-              <span>·</span><span>{photos.length} frames</span>
+              <span>·</span><span>{displayedPhotos.length}{activeCategoryId !== 'all' ? ` / ${photos.length}` : ''} frames</span>
             </div>
+            {subCategories.length > 0 && (
+              <div className="mt-3 -mx-1 relative">
+                <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-white/95 to-transparent z-[1]" />
+                <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white/95 to-transparent z-[1]" />
+                <div className="overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth">
+                  <div className="flex items-center gap-4 min-w-max px-1">
+                  <button
+                    onClick={() => setActiveCategoryId('all')}
+                    className="relative pb-1 text-left snap-start"
+                  >
+                    <span className={`text-[9px] uppercase tracking-[0.28em] font-bold transition-all duration-500 ${
+                      activeCategoryId === 'all' ? 'opacity-100' : 'opacity-25'
+                    }`}>
+                      00 THE ARCHIVE
+                    </span>
+                    {activeCategoryId === 'all' && (
+                      <motion.div
+                        layoutId="workMobileChapterBar"
+                        className="absolute left-0 right-0 -bottom-[1px] h-[1px] bg-black/70"
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      />
+                    )}
+                  </button>
+                  {subCategories.map((cat, idx) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setActiveCategoryId(cat.id)}
+                      className="relative pb-1 text-left snap-start"
+                    >
+                      <span className={`text-[9px] uppercase tracking-[0.28em] font-bold transition-all duration-500 ${
+                        activeCategoryId === cat.id ? 'opacity-100' : 'opacity-25'
+                      }`}>
+                        {String(idx + 1).padStart(2, '0')} {cat.title}
+                      </span>
+                      {activeCategoryId === cat.id && (
+                        <motion.div
+                          layoutId="workMobileChapterBar"
+                          className="absolute left-0 right-0 -bottom-[1px] h-[1px] bg-black/70"
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                    </button>
+                  ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Smart magazine grid based on photo aspect ratios ── */}
           <div className="space-y-[3px] p-[3px]">
-            {buildRows(photos).map((row, rowIdx) => (
+            {buildRows(displayedPhotos).map((row, rowIdx) => (
               <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
                 {row.map(({ photo, i, span }) => (
                   <PhotoCell
@@ -451,7 +624,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
       {/* ── Lightbox ── */}
       <AnimatePresence>
         {lightboxIndex !== null && (
-          <Lightbox photos={photos} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
+          <Lightbox photos={displayedPhotos} initialIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
         )}
       </AnimatePresence>
     </div>
