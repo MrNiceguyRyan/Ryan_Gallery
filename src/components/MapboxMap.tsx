@@ -248,8 +248,13 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     map.once('style.load', reapply);
   }, [mapStyleIdx, applyGlobeSettings]);
 
-  // Cluster click → smooth expand to appropriate zoom
+  // Cluster click → only zoom in (no sidebar card yet)
   const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
+    // When user is still in clustered view, keep sidebar neutral.
+    setActiveCluster(null);
+    setActiveClusterCity(null);
+    setMapSelectedCity(null);
+
     try {
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
       // Smooth step: don't jump too far, cap at +3 from current or expansionZoom, whichever is less
@@ -265,32 +270,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     } catch {
       mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: true });
     }
-    // Also guide sidebar to the most represented city in this map cluster.
-    try {
-      const leaves = clusterIndex.getLeaves(clusterId, 80);
-      const counts = new Map<string, number>();
-      for (const leaf of leaves as any[]) {
-        const idx = leaf?.properties?.photoIndex;
-        const p = typeof idx === 'number' ? validPhotos[idx] : null;
-        if (!p?.location) continue;
-        const key = toClusterKey(p.location.city, p.location.country);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      if (counts.size > 0) {
-        const topKey = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-        const target = cityClusters.find((c) => c.key === topKey) ?? null;
-        if (target) selectClusterFromMap(target);
-      } else {
-        setActiveCluster(null);
-        setActiveClusterCity(null);
-        setMapSelectedCity(null);
-      }
-    } catch {
-      setActiveCluster(null);
-      setActiveClusterCity(null);
-      setMapSelectedCity(null);
-    }
-  }, [clusterIndex, viewState.zoom, validPhotos, cityClusters, selectClusterFromMap]);
+  }, [clusterIndex, viewState.zoom]);
 
   // Photo marker click → highlight in sidebar (no map popup)
   const handlePhotoClick = useCallback((photo: Photo) => {
