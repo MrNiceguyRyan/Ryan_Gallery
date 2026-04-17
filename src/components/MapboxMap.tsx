@@ -71,6 +71,7 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 
 // ─── Sidebar location cluster ───
 interface LocationCluster {
+  key: string;
   city: string;
   country: string;
   lat: number;
@@ -90,7 +91,14 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
     if (p.location?.lat == null || p.location?.lng == null) continue;
     const key = `${p.location.city || ''}|${p.location.country || ''}`;
     if (!groups[key]) {
-      groups[key] = { city: p.location.city || 'Unknown', country: p.location.country || '', lat: p.location.lat, lng: p.location.lng, photos: [] };
+      groups[key] = {
+        key,
+        city: p.location.city || 'Unknown',
+        country: p.location.country || '',
+        lat: p.location.lat,
+        lng: p.location.lng,
+        photos: [],
+      };
     }
     groups[key].photos.push(p);
   }
@@ -113,12 +121,21 @@ function formatCoord(v: number, pos: string, neg: string) {
   return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
 }
 
+function toClusterKey(city?: string, country?: string) {
+  return `${city || ''}|${country || ''}`;
+}
+
+function clusterDomId(key: string) {
+  return `sidebar-city-${key.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-')}`;
+}
+
 // ─── Main Inner Component ───
 function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
   const mapSelectionHintTimerRef = useRef<number | null>(null);
   const [viewState, setViewState] = useState({ latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 });
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
+  // NOTE: these hold LocationCluster.key ("city|country"), kept names to minimize churn.
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [mapSelectedCity, setMapSelectedCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -169,6 +186,37 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     return bounds ? clusterIndex.getClusters(bounds, Math.floor(viewState.zoom)) : [];
   }, [clusterIndex, viewState.zoom, viewState.latitude, viewState.longitude]);
 
+  const selectClusterFromMap = useCallback((cluster: LocationCluster | null, zoomTo?: { lng: number; lat: number; zoom?: number }) => {
+    if (!cluster) return;
+    setActiveCluster(cluster);
+    setActiveClusterCity(cluster.key);
+    setMapSelectedCity(cluster.key);
+
+    if (mapSelectionHintTimerRef.current !== null) {
+      window.clearTimeout(mapSelectionHintTimerRef.current);
+    }
+    mapSelectionHintTimerRef.current = window.setTimeout(() => {
+      setMapSelectedCity(null);
+      mapSelectionHintTimerRef.current = null;
+    }, 2600);
+
+    setExpandedRegion(getRegion(cluster.country));
+
+    if (zoomTo) {
+      mapRef.current?.flyTo({
+        center: [zoomTo.lng, zoomTo.lat],
+        zoom: zoomTo.zoom ?? Math.max(viewState.zoom, 6),
+        duration: 1200,
+        essential: true,
+      });
+    }
+
+    setTimeout(() => {
+      const el = document.getElementById(clusterDomId(cluster.key));
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 400);
+  }, [viewState.zoom]);
+
   // Apply globe + terrain on style load
   const applyGlobeSettings = useCallback((map: any) => {
     map.setProjection('globe');
@@ -217,48 +265,49 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     } catch {
       mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: true });
     }
-    setActiveCluster(null);
-  }, [clusterIndex, viewState.zoom]);
+    // Also guide sidebar to the most represented city in this map cluster.
+    try {
+      const leaves = clusterIndex.getLeaves(clusterId, 80);
+      const counts = new Map<string, number>();
+      for (const leaf of leaves as any[]) {
+        const idx = leaf?.properties?.photoIndex;
+        const p = typeof idx === 'number' ? validPhotos[idx] : null;
+        if (!p?.location) continue;
+        const key = toClusterKey(p.location.city, p.location.country);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      if (counts.size > 0) {
+        const topKey = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        const target = cityClusters.find((c) => c.key === topKey) ?? null;
+        if (target) selectClusterFromMap(target);
+      } else {
+        setActiveCluster(null);
+        setActiveClusterCity(null);
+        setMapSelectedCity(null);
+      }
+    } catch {
+      setActiveCluster(null);
+      setActiveClusterCity(null);
+      setMapSelectedCity(null);
+    }
+  }, [clusterIndex, viewState.zoom, validPhotos, cityClusters, selectClusterFromMap]);
 
   // Photo marker click → highlight in sidebar (no map popup)
   const handlePhotoClick = useCallback((photo: Photo) => {
-    const city = photo.location?.city || '';
-    const cluster = cityClusters.find(c => c.city === city) || null;
-    setActiveCluster(cluster);
-    setActiveClusterCity(city);
-    setMapSelectedCity(city);
-    if (mapSelectionHintTimerRef.current !== null) {
-      window.clearTimeout(mapSelectionHintTimerRef.current);
-    }
-    mapSelectionHintTimerRef.current = window.setTimeout(() => {
-      setMapSelectedCity(null);
-      mapSelectionHintTimerRef.current = null;
-    }, 2600);
-    // Expand the region containing this city so the card is visible
-    if (cluster) {
-      const region = getRegion(cluster.country);
-      setExpandedRegion(region);
-    }
-    // Gentle center, don't zoom aggressively
-    const targetZoom = Math.max(viewState.zoom, 6);
-    mapRef.current?.flyTo({
-      center: [photo.location!.lng, photo.location!.lat],
-      zoom: targetZoom,
-      duration: 1200,
-      essential: true,
+    const key = toClusterKey(photo.location?.city, photo.location?.country);
+    const cluster = cityClusters.find((c) => c.key === key) || null;
+    selectClusterFromMap(cluster, {
+      lng: photo.location!.lng,
+      lat: photo.location!.lat,
+      zoom: Math.max(viewState.zoom, 6),
     });
-    // Wait for AnimatePresence region expand (300ms) before scrolling
-    setTimeout(() => {
-      const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 400);
-  }, [viewState.zoom, cityClusters]);
+  }, [viewState.zoom, cityClusters, selectClusterFromMap]);
 
   // Sidebar city click
   const handleCityClick = useCallback((cluster: LocationCluster) => {
-    const isSame = activeClusterCity === cluster.city;
+    const isSame = activeClusterCity === cluster.key;
     setMapSelectedCity(null);
-    setActiveClusterCity(isSame ? null : cluster.city);
+    setActiveClusterCity(isSame ? null : cluster.key);
     setActiveCluster(isSame ? null : cluster);
     if (!isSame) {
       mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: 1500, essential: true });
@@ -285,7 +334,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               if (d < minDist) { minDist = d; closest = c; }
             }
             if (closest && minDist < 2) {
-              setActiveClusterCity(closest.city);
+              setActiveClusterCity(closest.key);
               setActiveCluster(closest);
               setExpandedRegion(getRegion(closest.country));
             }
@@ -404,7 +453,8 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               // ── Individual marker ──
               const photo = validPhotos[props.photoIndex];
               if (!photo) return null;
-              const isActive = activeCluster?.city === photo.location?.city;
+              const markerKey = toClusterKey(photo.location?.city, photo.location?.country);
+              const isActive = activeCluster?.key === markerKey;
               const isHovered = hoveredIdx === props.photoIndex;
               // Active markers sit above map labels; idle markers sit below
               const markerZ = isActive ? 3 : isHovered ? 2 : 1;
@@ -428,7 +478,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.3 }}
                     transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
-                    onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
+                    onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(markerKey); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
                     {/* Glow ring — only shown when active or hovered */}
@@ -544,7 +594,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {regionGroups.map((group) => {
               const isRegionOpen = expandedRegion === group.region;
-              const regionHasActive = group.clusters.some((cluster) => cluster.city === activeClusterCity);
+              const regionHasActive = group.clusters.some((cluster) => cluster.key === activeClusterCity);
               return (
                 <div key={group.region}>
                   {/* Region header */}
@@ -584,11 +634,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                         className="overflow-hidden"
                       >
                         {group.clusters.map((cluster) => {
-                          const isSelected = activeClusterCity === cluster.city;
-                          const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
-                          const isMapGuided = mapSelectedCity === cluster.city;
+                          const isSelected = activeClusterCity === cluster.key;
+                          const isHoveredFromMap = hoveredCity === cluster.key && !isSelected;
+                          const isMapGuided = mapSelectedCity === cluster.key;
                           return (
-                            <div key={cluster.city} id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}>
+                            <div key={cluster.key} id={clusterDomId(cluster.key)}>
                               <button
                                 onClick={() => handleCityClick(cluster)}
                                 className={`w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
@@ -710,10 +760,10 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {group.clusters.map((cluster) => {
-                const isSelected = activeClusterCity === cluster.city;
-                const isMapGuided = mapSelectedCity === cluster.city;
+                const isSelected = activeClusterCity === cluster.key;
+                const isMapGuided = mapSelectedCity === cluster.key;
                 return (
-                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-gray-900 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                  <button key={cluster.key} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-gray-900 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-gray-200'}`}>
                         <img src={`${cluster.photos[0].imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
