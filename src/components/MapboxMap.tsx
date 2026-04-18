@@ -248,16 +248,46 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     map.once('style.load', reapply);
   }, [mapStyleIdx, applyGlobeSettings]);
 
-  // Cluster click → only zoom in (no sidebar card yet)
+  // Cluster click → usually zoom-in. But if the whole cluster belongs to a
+  // single city (e.g. 11 photos all pinned to Page), treat it as a city pick
+  // and open the sidebar story directly — otherwise users can never "reach"
+  // an individual marker for stacked coordinates.
   const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
-    // When user is still in clustered view, keep sidebar neutral.
+    let singleCityKey: string | null = null;
+    try {
+      const leaves = clusterIndex.getLeaves(clusterId, Infinity) as any[];
+      const keySet = new Set<string>();
+      for (const leaf of leaves) {
+        const idx = leaf?.properties?.photoIndex;
+        const p = typeof idx === 'number' ? validPhotos[idx] : null;
+        if (!p?.location) { keySet.add('__unknown__'); continue; }
+        keySet.add(toClusterKey(p.location.city, p.location.country));
+        if (keySet.size > 1) break;
+      }
+      if (keySet.size === 1) {
+        singleCityKey = [...keySet][0];
+      }
+    } catch { /* fall through to zoom */ }
+
+    if (singleCityKey) {
+      const target = cityClusters.find((c) => c.key === singleCityKey) ?? null;
+      if (target) {
+        selectClusterFromMap(target, {
+          lng,
+          lat,
+          zoom: Math.max(viewState.zoom, 6),
+        });
+        return;
+      }
+    }
+
+    // Mixed cluster → keep sidebar neutral, just zoom in.
     setActiveCluster(null);
     setActiveClusterCity(null);
     setMapSelectedCity(null);
 
     try {
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
-      // Smooth step: don't jump too far, cap at +3 from current or expansionZoom, whichever is less
       const targetZoom = Math.min(expansionZoom, viewState.zoom + 3.5, 14);
       mapRef.current?.flyTo({
         center: [lng, lat],
@@ -270,7 +300,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     } catch {
       mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: true });
     }
-  }, [clusterIndex, viewState.zoom]);
+  }, [clusterIndex, viewState.zoom, validPhotos, cityClusters, selectClusterFromMap]);
 
   // Photo marker click → highlight in sidebar (no map popup)
   const handlePhotoClick = useCallback((photo: Photo) => {
