@@ -706,15 +706,30 @@ function PhotoCell({
         >
           NO. {String(i + 1).padStart(2, '0')}
         </div>
-        <img
-          src={`${photo.imageUrl}?auto=format&w=1400&q=86`}
-          alt={photo.title || collection.name}
-          className="w-full h-full object-cover transition-[filter] duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] contrast-[1.02] saturate-[1.02] group-hover:contrast-[1.1] group-hover:saturate-[1.08]"
-          style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
-          loading={i < 4 ? 'eager' : 'lazy'}
-          decoding="async"
-          draggable={false}
-        />
+        {(() => {
+          const baseW = span === 'full' ? 2400 : span === 'half' ? 1600 : 1200;
+          const sizesAttr =
+            span === 'full'
+              ? '(min-width: 1280px) 1200px, 100vw'
+              : span === 'half'
+              ? '(min-width: 1280px) 600px, 50vw'
+              : '(min-width: 1280px) 400px, 33vw';
+          const url = (w: number, q: number) =>
+            `${photo.imageUrl}?auto=format&fit=max&w=${w}&q=${q}`;
+          return (
+            <img
+              src={url(baseW, 88)}
+              srcSet={`${url(baseW, 88)} 1x, ${url(Math.min(baseW * 2, 3200), 82)} 2x`}
+              sizes={sizesAttr}
+              alt={photo.title || collection.name}
+              className="w-full h-full object-cover transition-[filter] duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] contrast-[1.02] saturate-[1.02] group-hover:contrast-[1.1] group-hover:saturate-[1.08]"
+              style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+              loading={i < 4 ? 'eager' : 'lazy'}
+              decoding="async"
+              draggable={false}
+            />
+          );
+        })()}
 
         <AnimatePresence>
           {isHovered && photoHasEditorialCaption(photo) && (
