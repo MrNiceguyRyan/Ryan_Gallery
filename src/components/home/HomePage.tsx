@@ -270,7 +270,15 @@ function PhotoBlock({
   const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
   const isActive = hoveredIndex === globalIndex;
   const isPeerFocused = hoveredIndex !== null && hoveredIndex !== globalIndex;
+  const isAnyHovered = hoveredIndex !== null;
   const showCaption = isActive && photoHasEditorialHover(photo);
+  const tactileEase = [0.23, 1, 0.32, 1] as const;
+  const liftShadow =
+    '0 30px 60px -12px rgba(0,0,0,0.2), 0 18px 36px -18px rgba(0,0,0,0.25)';
+  const filmFilterDormant = 'grayscale(0.22) saturate(0.92) contrast(1.02)';
+  const filmFilterPeer =
+    'grayscale(0.58) saturate(0.72) brightness(0.9) contrast(0.94)';
+  const filmFilterActive = 'grayscale(0) saturate(1.06) contrast(1.06) brightness(1.02)';
 
   return (
     <motion.div
@@ -278,31 +286,40 @@ function PhotoBlock({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ duration: 1.5, ease: expo }}
-      className={`${colSpan} group relative overflow-hidden cursor-pointer`}
+      className={`${colSpan} group relative cursor-pointer`}
+      style={{ zIndex: isActive ? 20 : 1 }}
       onClick={onClick}
       onHoverStart={() => onHover(globalIndex)}
       onHoverEnd={() => onHover(null)}
     >
       <motion.div
-        className="relative"
+        className="relative rounded-sm bg-transparent"
         animate={{
-          opacity: isPeerFocused ? 0.48 : 1,
-          filter: isPeerFocused ? 'blur(2px)' : 'blur(0px)',
+          opacity: isPeerFocused ? 0.34 : 1,
+          filter: isPeerFocused ? filmFilterPeer : isAnyHovered && isActive ? filmFilterActive : filmFilterDormant,
+          scale: isPeerFocused ? 0.94 : 1,
         }}
-        transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        whileHover={{
+          scale: 1.045,
+          boxShadow: liftShadow,
+        }}
+        transition={{
+          duration: 0.8,
+          ease: tactileEase,
+          boxShadow: { duration: 0.4, ease: tactileEase },
+        }}
       >
+        <div className="relative overflow-hidden">
         <div
           className="pointer-events-none absolute top-3 right-3 z-20 rounded-sm bg-black/40 px-1.5 py-0.5 text-[8px] font-mono tracking-[0.18em] text-white/90 opacity-[0.35] backdrop-blur-[2px] transition-opacity duration-700 group-hover:opacity-100"
           aria-hidden
         >
           NO. {String(globalIndex + 1).padStart(2, '0')}
         </div>
-        <motion.img
-          whileHover={{ scale: 1.03 }}
-          transition={{ duration: 1.5, ease: expo }}
-          src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
+        <img
+          src={`${photo.imageUrl}?auto=format&w=1400&q=86`}
           alt={photo.title || ''}
-          className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
+          className="w-full h-auto block transition-[filter,transform] duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] contrast-[1.02] saturate-[1.02] group-hover:contrast-[1.1] group-hover:saturate-[1.08]"
           loading="lazy"
           draggable={false}
         />
@@ -331,6 +348,7 @@ function PhotoBlock({
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </motion.div>
     </motion.div>
   );
