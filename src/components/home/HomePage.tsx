@@ -767,6 +767,44 @@ export default function HomePage({ collections, photos, mapPhotos, siteSettings,
     };
   }, [isAnyOverlayOpen]);
 
+  // Deep-link: /?collection=<slug> opens the matching CollectionDetail overlay.
+  // Makes Journal map -> Explore Story reuse the home overlay instead of /works/[slug].
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const readSlug = () => {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('collection');
+    };
+    const applySlug = (slug: string | null) => {
+      if (!slug) {
+        setSelectedCollection(null);
+        return;
+      }
+      const match = activeCollections.find((c) => c.slug === slug);
+      if (match) {
+        setShowMap(false);
+        setShowAbout(false);
+        setSelectedCollection(match);
+      }
+    };
+    applySlug(readSlug());
+    const onPop = () => applySlug(readSlug());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [activeCollections]);
+
+  // Keep the URL in sync when the overlay opens/closes via UI.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get('collection');
+    const desired = selectedCollection?.slug ?? null;
+    if (current === desired) return;
+    if (desired) url.searchParams.set('collection', desired);
+    else url.searchParams.delete('collection');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [selectedCollection]);
+
   return (
     <>
       {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}

@@ -735,7 +735,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                   </div>
                                   {cluster.photos[0]?.collection?.slug && (
                                     <a
-                                      href={`/works/${cluster.photos[0].collection.slug}`}
+                                      href={`/?collection=${cluster.photos[0].collection.slug}`}
                                       className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
                                       style={{ background: ACCENT }}
                                     >
