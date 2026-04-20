@@ -374,9 +374,9 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
 
   return (
     <div>
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border border-gray-100 bg-white">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border border-gray-100 bg-white lg:h-[780px]">
         {/* ── Map ── */}
-        <div className="relative w-full lg:flex-1 h-[60vh] min-h-[400px] md:h-[600px] lg:h-[780px]">
+        <div className="relative w-full lg:flex-1 h-[60vh] min-h-[400px] md:h-[600px] lg:h-full">
           <MapGL
             {...viewState}
             ref={mapRef}
@@ -596,7 +596,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
         </div>
 
         {/* ── Desktop sidebar — grouped by region ── */}
-        <div className="hidden lg:flex flex-col w-[340px] border-l border-gray-100 bg-white">
+        <div className="hidden lg:flex flex-col w-[340px] lg:h-full border-l border-gray-100 bg-white">
           <div className="px-5 py-4 border-b border-gray-100">
             <p className="text-[10px] tracking-[0.3em] text-gray-400 uppercase font-light">Regions</p>
             <p className="text-xs text-gray-300 font-mono mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>

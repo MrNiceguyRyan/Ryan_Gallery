@@ -270,7 +270,6 @@ function PhotoBlock({
   const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
   const isActive = hoveredIndex === globalIndex;
   const isPeerFocused = hoveredIndex !== null && hoveredIndex !== globalIndex;
-  const isAnyHovered = hoveredIndex !== null;
   const showCaption = isActive && photoHasEditorialHover(photo);
   const tactileEase = [0.23, 1, 0.32, 1] as const;
   const liftShadow =
@@ -296,7 +295,6 @@ function PhotoBlock({
         className="relative rounded-sm bg-transparent"
         animate={{
           opacity: isPeerFocused ? 0.34 : 1,
-          filter: isPeerFocused ? filmFilterPeer : isAnyHovered && isActive ? filmFilterActive : filmFilterDormant,
           scale: isPeerFocused ? 0.94 : 1,
         }}
         whileHover={{
@@ -327,15 +325,23 @@ function PhotoBlock({
           const url = (w: number, q: number) =>
             `${photo.imageUrl}?auto=format&fit=max&w=${w}&q=${q}`;
           return (
-            <img
+            <motion.img
               src={url(baseW, 88)}
               srcSet={`${url(baseW, 88)} 1x, ${url(Math.min(baseW * 2, 3200), 82)} 2x`}
               sizes={sizesAttr}
               alt={photo.title || ''}
-              className="w-full h-auto block transition-[filter,transform] duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] contrast-[1.02] saturate-[1.02] group-hover:contrast-[1.1] group-hover:saturate-[1.08]"
+              className="w-full h-auto block"
               loading="lazy"
               decoding="async"
               draggable={false}
+              animate={{
+                filter: isPeerFocused
+                  ? filmFilterPeer
+                  : isActive
+                  ? filmFilterActive
+                  : filmFilterDormant,
+              }}
+              transition={{ duration: 0.8, ease: tactileEase }}
             />
           );
         })()}
