@@ -741,7 +741,10 @@ export default function HomePage({ collections, photos, mapPhotos, siteSettings,
   const isAnyOverlayOpen = !!selectedCollection || showMap || showAbout;
 
   // Filter to collections that have photos
-  const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
+  const activeCollections = useMemo(
+    () => collections.filter((c) => (c.photos?.length || 0) > 0),
+    [collections],
+  );
 
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
