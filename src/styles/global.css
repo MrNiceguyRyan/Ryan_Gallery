@@ -3,9 +3,10 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
   --font-display: "Cormorant Garamond", "Playfair Display", ui-serif, Georgia, serif;
+  --font-signature: "Mrs Saint Delafield", cursive;
 }
 
 /* ─── Base reset ─── */
@@ -231,6 +232,16 @@ img {
   will-change: transform, filter;
 }
 
+/* ─── Editorial photo cell: forced 4/5 on mobile, natural aspect on desktop ─── */
+.photo-slot {
+  aspect-ratio: 4 / 5;
+}
+@media (min-width: 768px) {
+  .photo-slot {
+    aspect-ratio: var(--photo-ar, 4 / 5);
+  }
+}
+
 /* Detail overlay grid */
 .detail-grid {
   display: grid;
@@ -262,4 +273,113 @@ img {
 
 .map-popup-custom .mapboxgl-popup-tip {
   border-top-color: white;
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  Atmospheric / Cinematic Homepage Effects
+ * ═══════════════════════════════════════════════════════ */
+
+.font-signature {
+  font-family: var(--font-signature);
+  font-weight: 400;
+}
+
+/* SVG-based noise grain overlay — subtle film texture */
+.noise-grain {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: 1000;
+  animation: grain-animation 0.5s steps(3) infinite;
+}
+
+/* Warm ambient glow — dual-radial orange/blue light */
+.ambient-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(255, 180, 100, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(100, 150, 255, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(10, 10, 10, 1) 0%, rgba(5, 5, 5, 1) 100%);
+  animation: glow-shift 20s ease-in-out infinite alternate;
+}
+
+/* Camera lens breathing — subtle scale/blur cycle */
+.lens-breathing {
+  animation: breath 15s ease-in-out infinite;
+}
+
+/* Shutter flicker — subtle brightness oscillation */
+.shutter-flicker {
+  animation: flicker 4s ease-in-out infinite;
+}
+
+/* Angled warm sunbeam light leak */
+.sunbeam {
+  position: absolute;
+  top: -20%;
+  left: 10%;
+  width: 30vw;
+  height: 150%;
+  background: linear-gradient(to right, rgba(255, 230, 180, 0.15) 0%, transparent 60%);
+  transform: rotate(25deg);
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: overlay;
+}
+
+/* Stardust paper texture */
+.paper-texture {
+  background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
+  opacity: 0.01;
+}
+
+@keyframes grain-animation {
+  0% { transform: translate(0, 0); }
+  33% { transform: translate(-5%, -5%); }
+  66% { transform: translate(5%, 5%); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes breath {
+  0%, 100% { filter: blur(0px); transform: scale(1); }
+  45% { filter: blur(2px); transform: scale(1.02); }
+  50% { filter: blur(10px); transform: scale(1.05); }
+  55% { filter: blur(2px); transform: scale(1.02); }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  30% { opacity: 0.95; }
+  32% { opacity: 1; }
+  80% { opacity: 0.97; }
+}
+
+@keyframes glow-shift {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
+}
+
+@keyframes dust-drift {
+  0% { transform: translateY(0) translateX(0); }
+  100% { transform: translateY(-200px) translateX(-100px); }
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.1; }
+  50% { transform: translate(20px, -20px) scale(1.1); opacity: 0.2; }
+  100% { transform: translate(-10px, 10px) scale(0.9); opacity: 0.1; }
+}
+
+@keyframes scanline {
+  0% { top: -10%; }
+  100% { top: 110%; }
 }

@@ -6,6 +6,7 @@ import Lightbox from '../shared/Lightbox';
 import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.16, 1, 0.3, 1] as const;
+const editorial = [0.23, 1, 0.32, 1] as const;
 const ACCENT = '#2c3e50';
 
 interface Props {
@@ -56,13 +57,13 @@ function renderBlocks(blocks: PortableTextBlock[]): React.ReactNode {
     });
     if (block.style === 'blockquote') {
       return (
-        <blockquote key={block._key} className="border-l-2 border-gray-200 pl-4 my-4 text-gray-400 italic font-light text-[14px] leading-relaxed">
+        <blockquote key={block._key} className="border-l-2 border-black/10 pl-4 my-4 italic opacity-60">
           {text}
         </blockquote>
       );
     }
     return (
-      <p key={block._key} className="text-gray-500 font-light text-[14px] leading-[1.9] mb-3 last:mb-0">
+      <p key={block._key} className="mb-4 last:mb-0">
         {text}
       </p>
     );
@@ -71,108 +72,55 @@ function renderBlocks(blocks: PortableTextBlock[]): React.ReactNode {
 
 function renderFallback(paragraphs: string[]): React.ReactNode {
   return paragraphs.map((p, i) => (
-    <p key={i} className="text-gray-500 font-light text-[14px] leading-[1.9] mb-3 last:mb-0">{p}</p>
+    <p key={i} className="mb-4 last:mb-0">{p}</p>
   ));
 }
 
-/* ─── 6-column magazine photo layout ─── */
-type Span = 'full' | 'half' | 'third';
-
-interface PhotoLayout { span: Span; }
-
-function getLayout(index: number): PhotoLayout {
-  // Reference pattern from MagazineLayout: 0=full, 1-2=half/half, 3=full, 4-5-6=third/third/third
-  const patterns: Span[] = ['full', 'half', 'half', 'full', 'third', 'third', 'third'];
-  return { span: patterns[index % patterns.length] };
-}
-
-function colClass(span: Span) {
-  if (span === 'full')  return 'col-span-6';
-  if (span === 'half')  return 'col-span-3';
-  return 'col-span-2';
-}
-
-function aspectClass(span: Span, index: number) {
-  if (span === 'full')  return 'aspect-[16/7]';
-  if (span === 'half')  return index % 2 === 0 ? 'aspect-[4/5]' : 'aspect-[4/5]';
-  return 'aspect-[3/4]';
-}
-
-/* ─── Smart row builder based on actual photo aspect ratios ───
- * landscape (w > h * 1.2) → full-width row alone
- * portrait (h > w * 1.1) → pair two portraits side by side (half each)
- *   if only one portrait remains → full-width
- * square-ish → group 3 together (third each), or pair with portrait
+/* ─── Fixed editorial row rhythm ───
+ * Mimics a physical magazine spread: full → halves → full → thirds, repeating.
+ * Deliberately NOT aspect-ratio aware — the rhythm itself carries the page.
  */
-function isLandscape(p: Photo) {
-  if (!p.width || !p.height) return false;
-  return p.width / p.height > 1.2;
-}
-function isPortrait(p: Photo) {
-  if (!p.width || !p.height) return true; // default assume portrait
-  return p.height / p.width > 1.1;
-}
-
+type Span = 'full' | 'half' | 'third';
 interface RowItem { photo: Photo; i: number; span: Span; }
+
+const ROW_RHYTHM: ('full' | 'halves' | 'thirds')[] = ['full', 'halves', 'full', 'thirds'];
 
 function buildRows(photos: Photo[]): RowItem[][] {
   const rows: RowItem[][] = [];
   let i = 0;
+  let r = 0;
   while (i < photos.length) {
-    const p = photos[i];
-    if (isLandscape(p)) {
-      // Landscape alone: full width
-      rows.push([{ photo: p, i, span: 'full' }]);
+    const type = ROW_RHYTHM[r % ROW_RHYTHM.length];
+    if (type === 'full') {
+      rows.push([{ photo: photos[i], i, span: 'full' }]);
       i++;
-    } else if (isPortrait(p)) {
-      // Portrait: try to pair with next portrait
-      const next = photos[i + 1];
-      if (next && isPortrait(next)) {
-        rows.push([
-          { photo: p,    i,   span: 'half' },
-          { photo: next, i: i+1, span: 'half' },
-        ]);
-        i += 2;
-      } else if (next && !isLandscape(next)) {
-        // Next is square-ish: pair as half
-        rows.push([
-          { photo: p,    i,   span: 'half' },
-          { photo: next, i: i+1, span: 'half' },
-        ]);
-        i += 2;
-      } else {
-        // Portrait alone: full width
-        rows.push([{ photo: p, i, span: 'full' }]);
-        i++;
+    } else if (type === 'halves') {
+      const row: RowItem[] = [];
+      for (let k = 0; k < 2 && i < photos.length; k++, i++) {
+        row.push({ photo: photos[i], i, span: 'half' });
       }
+      rows.push(row);
     } else {
-      // Square-ish: group 3 as thirds, or 2 as half, or alone as full
-      const p2 = photos[i + 1];
-      const p3 = photos[i + 2];
-      if (p2 && !isLandscape(p2) && p3 && !isLandscape(p3)) {
-        rows.push([
-          { photo: p,  i,   span: 'third' },
-          { photo: p2, i: i+1, span: 'third' },
-          { photo: p3, i: i+2, span: 'third' },
-        ]);
-        i += 3;
-      } else if (p2 && !isLandscape(p2)) {
-        rows.push([
-          { photo: p,  i,   span: 'half' },
-          { photo: p2, i: i+1, span: 'half' },
-        ]);
-        i += 2;
-      } else {
-        rows.push([{ photo: p, i, span: 'full' }]);
-        i++;
+      const row: RowItem[] = [];
+      for (let k = 0; k < 3 && i < photos.length; k++, i++) {
+        row.push({ photo: photos[i], i, span: 'third' });
       }
+      rows.push(row);
     }
+    r++;
   }
   return rows;
 }
 
+/* Natural aspect ratio helper — falls back to span-based defaults when
+ * photo dimensions are missing (e.g. legacy assets). */
+function aspectOf(photo: Photo, span: Span): number {
+  if (photo.width && photo.height) return photo.width / photo.height;
+  return span === 'full' ? 16 / 9 : span === 'half' ? 4 / 5 : 3 / 4;
+}
+
 /* ═══════════════════════════════════════════════════════
- *  WorkDetailPage
+ *  WorkDetailPage — High-End Photography Editorial Layout
  * ═══════════════════════════════════════════════════════ */
 export default function WorkDetailPage({ collection, photos }: Props) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -190,16 +138,14 @@ export default function WorkDetailPage({ collection, photos }: Props) {
   const hasIntro = collection.introduction && collection.introduction.length > 0;
   const fallbackParas = EDITORIAL_FALLBACKS[collection.slug] ?? null;
 
-  // Get camera info from first photo
   const firstPhoto = photos[0];
-  const camera = firstPhoto?.camera;
-  const focalLength = firstPhoto?.focalLength;
+  void firstPhoto; // camera always shown as NIKON ZF per design spec
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-[#1A1A1A]">
 
       {/* ── Top nav ── */}
-      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-white/80 backdrop-blur-2xl border-b border-black/5">
+      <nav className="fixed top-0 left-0 right-0 z-30 px-6 md:px-12 py-4 flex items-center justify-between bg-[#FDFDFB]/85 backdrop-blur-2xl border-b border-black/5">
         <motion.a
           href="/"
           className="flex items-center gap-2.5 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 overflow-hidden"
@@ -207,19 +153,13 @@ export default function WorkDetailPage({ collection, photos }: Props) {
           initial="idle"
         >
           <motion.div
-            variants={{
-              idle:    { x: 0,  opacity: 0.5 },
-              hovered: { x: -3, opacity: 1   },
-            }}
+            variants={{ idle: { x: 0, opacity: 0.5 }, hovered: { x: -3, opacity: 1 } }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
           >
             <ArrowRight size={14} className="rotate-180" />
           </motion.div>
           <motion.span
-            variants={{
-              idle:    { x: 0, opacity: 0.5, color: '#9CA3AF' },
-              hovered: { x: 2, opacity: 1,   color: '#111827' },
-            }}
+            variants={{ idle: { x: 0, opacity: 0.5, color: '#9CA3AF' }, hovered: { x: 2, opacity: 1, color: '#111827' } }}
             transition={{ type: 'spring', stiffness: 300, damping: 24 }}
           >
             Back
@@ -230,205 +170,164 @@ export default function WorkDetailPage({ collection, photos }: Props) {
         </span>
       </nav>
 
-      {/* ── Page body: sidebar + content ── */}
-      <div className="flex min-h-screen pt-[57px]">
+      {/* ── Magazine body: contained 12-col grid ── */}
+      <div className="max-w-7xl mx-auto px-6 md:px-10 pt-[100px] md:pt-[140px] pb-20">
+        <div className="grid lg:grid-cols-12 gap-10 md:gap-14">
 
-        {/* ── LEFT SIDEBAR (desktop) ── */}
-        <aside className="hidden lg:flex flex-col w-[320px] xl:w-[360px] shrink-0 px-8 xl:px-12 border-r border-black/5 self-start sticky top-[57px] max-h-[calc(100vh-57px)] overflow-y-auto">
-          <div className="py-12 flex flex-col gap-0">
+          {/* ── 1. EDITORIAL SIDEBAR (col-span-4, sticky on desktop) ── */}
+          <aside className="lg:col-span-4 lg:sticky lg:top-32 h-fit space-y-10 md:space-y-16">
 
-            {/* Vol. label */}
+            {/* Masthead */}
+            <div className="space-y-5 md:space-y-6">
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] uppercase tracking-[0.6em] font-bold opacity-30">Vol. 01</span>
+                <div className="h-px flex-1 bg-black/10" />
+              </div>
+
+              <motion.h1
+                className="font-serif italic text-5xl md:text-6xl xl:text-7xl tracking-tighter leading-[0.85] md:leading-[0.8] text-[#1A1A1A]"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.9, ease: expo }}
+              >
+                {collection.name}
+              </motion.h1>
+
+              <div className="flex items-center gap-4 pt-2 md:pt-4">
+                {collection.location && (
+                  <p className="text-[10px] uppercase tracking-[0.4em] font-bold">{collection.location}</p>
+                )}
+                {collection.location && collection.year && (
+                  <div className="w-1 h-1 rounded-full bg-black/20" />
+                )}
+                {collection.year && (
+                  <p className="text-[10px] uppercase tracking-[0.4em] opacity-40 font-mono italic">{collection.year}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Pull quote + equipment */}
             <motion.div
-              className="flex items-center gap-4 mb-6"
+              className="space-y-6 md:space-y-8"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
-            >
-              <span className="text-[9px] uppercase tracking-[0.6em] font-bold opacity-30">Vol. 01</span>
-              <div className="h-px flex-1 bg-black/10" />
-            </motion.div>
-
-            {/* Title — large italic */}
-            <motion.h1
-              className="font-serif italic text-6xl xl:text-7xl text-gray-900 tracking-tighter leading-[0.85]"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.9, ease: expo }}
-            >
-              {collection.name}
-            </motion.h1>
-
-            {/* Meta */}
-            <motion.div
-              className="flex items-center gap-3 mt-5 text-[10px] uppercase tracking-[0.4em] font-bold"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
-            >
-              {collection.location && <span>{collection.location}</span>}
-              {collection.location && collection.year && <span className="w-1 h-1 rounded-full bg-black/20 inline-block" />}
-              {collection.year && <span className="opacity-40 font-mono italic">{collection.year}</span>}
-            </motion.div>
-
-            {/* Editorial text with large opening quote */}
-            <motion.div
-              className="mt-8"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.8, ease: expo }}
+              transition={{ delay: 0.4, duration: 0.9, ease: expo }}
             >
               {(hasIntro || fallbackParas || collection.subtitle) && (
-                <div className="relative">
-                  <span className="text-6xl float-left mr-2 mt-1 font-serif not-italic leading-none opacity-10 select-none">"</span>
-                  <div className="text-[15px] leading-[1.9] font-serif italic opacity-70">
-                    {hasIntro
-                      ? renderBlocks(collection.introduction!)
-                      : fallbackParas
-                        ? renderFallback(fallbackParas)
-                        : <p>{collection.subtitle}</p>
-                    }
-                  </div>
+                <div className="text-[15px] md:text-base lg:text-lg leading-[1.75] font-serif italic opacity-70">
+                  <span className="text-4xl md:text-5xl float-left mr-2.5 mt-1 font-serif not-italic leading-none opacity-20 select-none">"</span>
+                  {hasIntro
+                    ? renderBlocks(collection.introduction!)
+                    : fallbackParas
+                      ? renderFallback(fallbackParas)
+                      : <p>{collection.subtitle}</p>
+                  }
                 </div>
               )}
-            </motion.div>
 
-            {/* Camera / lens info */}
-            {(camera || focalLength) && (
-              <motion.div
-                className="mt-8 pt-8 border-t border-black/5 grid grid-cols-2 gap-6"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.7, duration: 0.5 }}
-              >
-                {camera && (
-                  <div className="space-y-1">
-                    <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Shot on</span>
-                    <p className="text-[10px] uppercase tracking-widest font-medium">{camera}</p>
-                  </div>
-                )}
-                {focalLength && (
-                  <div className="space-y-1">
-                    <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Lens</span>
-                    <p className="text-[10px] uppercase tracking-widest font-medium">{focalLength}</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
+              <div className="pt-6 md:pt-8 border-t border-black/5">
+                <div className="space-y-1">
+                  <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Equipment</span>
+                  <p className="text-[10px] uppercase tracking-widest font-medium">NIKON ZF</p>
+                </div>
+              </div>
+            </motion.div>
 
             {/* Frame count */}
-            <motion.div
-              className="mt-8 flex items-center gap-6"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.9, duration: 0.5 }}
-            >
-              <div className="w-10 h-px bg-black opacity-10" />
-              <span className="text-[9px] uppercase tracking-[0.4em] font-mono opacity-30">
-                {photos.length} Captured Frames
-              </span>
-            </motion.div>
+            <div className="hidden lg:block">
+              <div className="flex items-center gap-6">
+                <div className="w-12 h-px bg-black opacity-10" />
+                <span className="text-[9px] uppercase tracking-[0.4em] font-mono opacity-30">
+                  {photos.length} Captured Frames
+                </span>
+              </div>
+            </div>
 
-            {/* ── Mini-map ── */}
+            {/* Mini-map — anchored to the masthead, not animated vertically */}
             {collectionLocation && mapboxToken && (
               <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7, duration: 0.8, ease: expo }}
-                className="mt-8 rounded-xl overflow-hidden border border-black/6 shadow-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7, duration: 0.9, ease: expo }}
+                className="hidden lg:block"
               >
                 <motion.a
                   href={`/travel#loc=${collectionLocation.lat},${collectionLocation.lng},8`}
-                  className="block relative h-36 overflow-hidden"
+                  data-astro-prefetch
+                  className="block relative overflow-hidden group"
                   whileHover="hovered"
                   initial="idle"
+                  onMouseEnter={() => { import('mapbox-gl').catch(() => {}); }}
                 >
-                  <motion.img
-                    src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/480x220@2x?access_token=${mapboxToken}`}
-                    alt={`Map of ${collectionLocation.city || collection.name}`}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    draggable={false}
-                    variants={{ idle: { scale: 1 }, hovered: { scale: 1.06 } }}
-                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-white/25 to-transparent" />
-                  <motion.div
-                    className="absolute inset-0 flex items-center justify-center"
-                    variants={{ idle: { opacity: 0 }, hovered: { opacity: 1 } }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <span className="text-white text-[9px] uppercase tracking-[0.2em] font-bold bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full">
-                      View on map
-                    </span>
-                  </motion.div>
+                  <div className="relative h-32 overflow-hidden">
+                    <motion.img
+                      src={`https://api.mapbox.com/styles/v1/mapbox/light-v11/static/pin-l+2c3e50(${collectionLocation.lng},${collectionLocation.lat})/${collectionLocation.lng},${collectionLocation.lat},3,0/600x220@2x?access_token=${mapboxToken}`}
+                      alt={`Map of ${collectionLocation.city || collection.name}`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      draggable={false}
+                      variants={{ idle: { scale: 1 }, hovered: { scale: 1.05 } }}
+                      transition={{ duration: 0.9, ease: editorial }}
+                    />
+                  </div>
+                  <div className="pt-3 flex items-center gap-3 border-t border-black/5 mt-3">
+                    <MapPin size={11} style={{ color: ACCENT }} className="opacity-70" />
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <p className="text-[10px] uppercase tracking-widest font-bold truncate">
+                        {collectionLocation.city || collection.name}
+                      </p>
+                      <span className="text-[9px] font-mono text-gray-400 ml-auto">
+                        {Math.abs(collectionLocation.lat).toFixed(2)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}
+                      </span>
+                    </div>
+                  </div>
                 </motion.a>
-                <div className="px-3.5 py-3 bg-white flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${ACCENT}12` }}>
-                    <MapPin size={12} style={{ color: ACCENT }} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-medium text-gray-900 truncate">{collectionLocation.city || collection.name}</p>
-                    <p className="text-[9px] font-mono text-gray-400">
-                      {Math.abs(collectionLocation.lat).toFixed(3)}°{collectionLocation.lat >= 0 ? 'N' : 'S'}&nbsp;
-                      {Math.abs(collectionLocation.lng).toFixed(3)}°{collectionLocation.lng >= 0 ? 'E' : 'W'}
-                    </p>
-                  </div>
-                </div>
               </motion.div>
             )}
+          </aside>
 
+          {/* ── 2. DYNAMIC PHOTO GRID (col-span-8) ── */}
+          <div className="lg:col-span-8 space-y-1 md:space-y-[2px]">
+
+            {buildRows(photos).map((row, rowIdx) => {
+              const ars = row.map(({ photo, span }) => aspectOf(photo, span));
+              const sumAR = ars.reduce((a, b) => a + b, 0);
+              return (
+                <div key={rowIdx} className="flex gap-1 md:gap-[2px]">
+                  {row.map(({ photo, i, span }, cellIdx) => (
+                    <PhotoCell
+                      key={photo._id}
+                      photo={photo}
+                      collection={collection}
+                      i={i}
+                      span={span}
+                      ar={ars[cellIdx]}
+                      widthPct={100 * ars[cellIdx] / sumAR}
+                      isHovered={hoveredIndex === i}
+                      onHover={setHoveredIndex}
+                      onClick={setLightboxIndex}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+
+            {/* Back to top */}
+            <footer className="pt-32 pb-12 text-center border-t border-black/5 mt-16">
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="group flex flex-col items-center gap-4 mx-auto"
+              >
+                <div className="w-12 h-12 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-[#1A1A1A] group-hover:border-transparent group-hover:text-white transition-all duration-500">
+                  <ArrowRight className="-rotate-90" size={16} />
+                </div>
+                <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity">
+                  Back to Top
+                </span>
+              </button>
+            </footer>
           </div>
-        </aside>
-
-        {/* ── RIGHT: photo grid ── */}
-        <main className="flex-1">
-
-          {/* Mobile header */}
-          <div className="lg:hidden sticky top-[57px] z-20 bg-white/95 backdrop-blur-xl px-5 py-3 border-b border-black/5">
-            <h1 className="font-serif italic text-xl text-gray-900 tracking-tight">{collection.name}</h1>
-            <div className="flex items-center gap-2 mt-0.5 text-[9px] font-mono text-gray-400 tracking-wider uppercase">
-              {collection.year && <span>{collection.year}</span>}
-              {collection.location && <><span>·</span><span>{collection.location}</span></>}
-              <span>·</span><span>{photos.length} frames</span>
-            </div>
-          </div>
-
-          {/* ── Smart magazine grid based on photo aspect ratios ── */}
-          <div className="space-y-[3px] p-[3px]">
-            {buildRows(photos).map((row, rowIdx) => (
-              <div key={rowIdx} className="grid grid-cols-6 gap-[3px]">
-                {row.map(({ photo, i, span }) => (
-                  <PhotoCell
-                    key={photo._id}
-                    photo={photo}
-                    collection={collection}
-                    i={i}
-                    span={span}
-                    isHovered={hoveredIndex === i}
-                    onHover={setHoveredIndex}
-                    onClick={setLightboxIndex}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* ── Back to top footer ── */}
-          <footer className="pt-24 pb-16 text-center border-t border-black/5 mt-2">
-            <button
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="group flex flex-col items-center gap-4 mx-auto"
-            >
-              <div className="w-12 h-12 rounded-full border border-black/10 flex items-center justify-center group-hover:bg-[#1A1A1A] group-hover:border-transparent group-hover:text-white transition-all duration-500">
-                <ArrowRight className="-rotate-90" size={16} />
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity">
-                Back to Top
-              </span>
-            </button>
-          </footer>
-
-        </main>
+        </div>
       </div>
 
       {/* ── Lightbox ── */}
@@ -443,58 +342,52 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 
 /* ─── Single photo cell ─── */
 function PhotoCell({
-  photo, collection, i, span, isHovered, onHover, onClick
+  photo, collection, i, span, ar, widthPct, isHovered, onHover, onClick
 }: {
-  photo: Photo; collection: Collection; i: number; span: Span;
+  photo: Photo; collection: Collection; i: number; span: Span; ar: number; widthPct: number;
   isHovered: boolean; onHover: (i: number | null) => void; onClick: (i: number) => void;
 }) {
-  // Compute aspect ratio via paddingTop trick (100% * h/w) — no Tailwind dynamic class needed
-  const ratio = photo.width && photo.height ? photo.height / photo.width : null;
-  const paddingTop = ratio
-    ? `${(ratio * 100).toFixed(2)}%`
-    : span === 'full' ? '56.25%'  // 16/9 fallback
-    : span === 'half' ? '125%'    // 4/5 fallback
-    : '133.33%';                  // 3/4 fallback
-
+  void span;
+  // Justified-gallery row math: widths are proportional to aspect ratios so
+  // every cell in a row ends up the same height — no cropping, no ragged bottoms.
   return (
     <motion.div
       id={`photo-${photo._id}`}
-      className={`${colClass(span)} overflow-hidden relative cursor-pointer bg-gray-100 work-photo-item`}
-      style={{ paddingTop }}
+      className="relative overflow-hidden cursor-pointer bg-[#F3F2EF] work-photo-item min-w-0"
+      style={{ flex: `${widthPct} 0 0`, aspectRatio: ar }}
       data-location={photo.title || photo.location?.city || collection.name}
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
-      viewport={{ once: true, margin: '-5%' }}
-      transition={{ duration: 0.6, delay: Math.min(i * 0.04, 0.4) }}
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-10%' }}
+      transition={{ duration: 1.2, ease: editorial, delay: (i % 3) * 0.1 }}
       onHoverStart={() => onHover(i)}
       onHoverEnd={() => onHover(null)}
       onClick={() => onClick(i)}
     >
       <motion.img
-        src={`${photo.imageUrl}?auto=format&w=1200&q=85`}
+        src={`${photo.imageUrl}?auto=format&w=1400&q=85`}
         alt={photo.title || collection.name}
-        className="w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-all duration-[1.5s]"
-        style={i === 0 ? { viewTransitionName: `cover-${collection.slug}` } : undefined}
+        className="absolute inset-0 w-full h-full object-cover grayscale-[0.1] hover:grayscale-0 transition-[filter] duration-1000"
         loading={i < 4 ? 'eager' : 'lazy'}
         decoding="async"
         draggable={false}
-        animate={{ scale: isHovered ? 1.04 : 1 }}
-        transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 0.9 }}
+        animate={{ scale: isHovered ? 1.03 : 1 }}
+        transition={{ duration: 1.5, ease: editorial }}
       />
 
       <AnimatePresence>
         {isHovered && (photo.title || photo.aperture) && (
           <motion.div
-            className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/60 to-transparent"
+            className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/55 to-transparent pointer-events-none"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.2 }}
           >
             {photo.title && (
-              <p className="text-white/90 text-[11px] font-light truncate leading-tight">{photo.title}</p>
+              <p className="text-white/95 text-[11px] font-light truncate leading-tight">{photo.title}</p>
             )}
-            <div className="flex items-center gap-1.5 mt-0.5 text-white/50 text-[9px] font-mono">
+            <div className="flex items-center gap-1.5 mt-0.5 text-white/60 text-[9px] font-mono">
               {photo.focalLength && <span>{photo.focalLength}</span>}
               {photo.aperture && <><span>·</span><span>{photo.aperture}</span></>}
               {photo.shutterSpeed && <><span>·</span><span>{photo.shutterSpeed}</span></>}

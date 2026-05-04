@@ -23,10 +23,15 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" sizes="32x32" />
+    <link rel="shortcut icon" href="/favicon.ico?v=3" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+    <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet" />
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" rel="stylesheet" />
 
     <!-- Primary Meta -->
@@ -80,45 +85,47 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
       }
 
       /* ═══════════════════════════════════════════════════════
-       *  Cinematic Shutter Transition
-       *  — "快门式滑入" with atmospheric blur buffer
-       *  Bezier [0.32, 0, 0.07, 1]: extreme fast-start, elegant deceleration
+       *  Directional Page Transition — "Card Stack" model
+       *  — Forward (click into a page): NEW page slides UP from below
+       *    (pops up on top of the current card)
+       *  — Back (leave / return):        OLD page slides DOWN off screen
+       *    (the top card falls, revealing the card behind)
+       *  Compositor-only transforms; no blur/box-shadow → smooth even
+       *  while leaving heavy pages (e.g. /travel with Mapbox).
        * ═══════════════════════════════════════════════════════ */
 
-      /* Old page: atmospheric blur buffer ("光影缓冲") */
+      /* ─────────────────────────────────────────────────
+       *  Forward nav (home → deep page):
+       *    Handled by Astro View Transitions — new page slides up on top.
+       *  Back nav (deep page → home / shallower):
+       *    Handled by DIY JS below — current <body> translates DOWN off screen,
+       *    then full-page navigation. This is the Framer-Motion
+       *    `exit={{ y: "100%" }}` pattern, implemented with a CSS transform.
+       *  ───────────────────────────────────────────────── */
       ::view-transition-old(root) {
-        animation: vt-atmospheric-blur 1.0s cubic-bezier(0.4, 0, 0.2, 1) both;
+        animation: vt-fade-out 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
         z-index: 1;
       }
-
-      /* New page: shutter slide-in from bottom ("快门式滑入") */
       ::view-transition-new(root) {
-        animation: vt-shutter-in 0.85s cubic-bezier(0.32, 0, 0.07, 1) 0.15s both;
+        animation: vt-slide-up-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
         z-index: 2;
       }
 
-      /* Atmospheric blur: dark ↔ light visual transfer station
-         Eliminates the jarring flash between dark homepage and light content pages */
-      @keyframes vt-atmospheric-blur {
-        0%   { opacity: 1; filter: blur(0px); transform: scale(1); }
-        35%  { opacity: 0.85; filter: blur(12px); transform: scale(0.99); }
-        100% { opacity: 0; filter: blur(24px); transform: scale(0.97); }
+      @keyframes vt-fade-out {
+        from { opacity: 1; }
+        to   { opacity: 0; }
+      }
+      @keyframes vt-slide-up-in {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0);    }
       }
 
-      /* Cinematic shutter: page enters like a thick art card from below,
-         with a subtle top-edge shadow for depth */
-      @keyframes vt-shutter-in {
-        0%   {
-          transform: translateY(100%);
-          opacity: 0;
-          box-shadow: 0 -40px 80px rgba(0, 0, 0, 0.18);
-        }
-        12%  { opacity: 1; }
-        100% {
-          transform: translateY(0);
-          opacity: 1;
-          box-shadow: none;
-        }
+      /* Back-nav slide-down: applied to <body> via JS. Uses compositor-only
+         `transform` so it stays smooth even with heavy pages (Mapbox etc.). */
+      body.vt-back-exit {
+        transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+        transform: translateY(100vh);
+        will-change: transform;
       }
 
       /* Reduce motion: instant transition for accessibility */
@@ -275,6 +282,106 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
           e.preventDefault();
         }
       }, true);
+
+      // ── Back-nav slide-down (DIY, Framer-Motion exit={{y:"100%"}} pattern) ──
+      // Why DIY: browsers' CSS View Transitions API proved unreliable for the
+      // "old-page slides down while new-page holds" pattern across Astro's
+      // ClientRouter swap. Instead, we cancel the ClientRouter navigation for
+      // back-direction clicks, animate <body> down with a CSS transform, and
+      // then do a normal navigation to the destination. The page beneath the
+      // sliding body is the browser background — set to match the destination
+      // (dark for home, light for light pages) so no jarring flash appears.
+      //
+      // Back detection:
+      //   1. Browser back/forward button (popstate)
+      //   2. Link click where dest is "/" or has fewer path segments
+      (function() {
+        var DUR = 550; // ms — must match CSS `body.vt-back-exit` transition
+        var EXITING = false;
+
+        function depth(path) { return path.split('/').filter(Boolean).length; }
+
+        function pathOf(u) {
+          if (!u) return '';
+          if (typeof u === 'string') {
+            try { return new URL(u, window.location.origin).pathname; }
+            catch (e) { return u; }
+          }
+          return u.pathname || '';
+        }
+
+        function isBackTo(toPath) {
+          if (!toPath) return false;
+          if (toPath === '/') return true;
+          return depth(toPath) < depth(window.location.pathname);
+        }
+
+        // Pick background color that will be revealed under the sliding body.
+        // Home is dark (#0A0A0A); other pages are light. When exiting TO home,
+        // show dark; else show light (#FDFDFB).
+        function bgFor(toPath) {
+          return toPath === '/' ? '#0A0A0A' : '#FDFDFB';
+        }
+
+        function runExit(href, bg) {
+          if (EXITING) return;
+          EXITING = true;
+          // Paint the background the destination page will use, so the strip
+          // exposed beneath the sliding body is the right color.
+          document.documentElement.style.backgroundColor = bg;
+          document.body.style.backgroundColor = getComputedStyle(document.body).backgroundColor || '';
+          // Kick the animation on the next frame so the transition has a
+          // clean starting state (transform:none → translateY(100vh))
+          requestAnimationFrame(function() {
+            document.body.classList.add('vt-back-exit');
+          });
+          setTimeout(function() {
+            // Full navigation — simpler than splicing into ClientRouter
+            window.location.href = href;
+          }, DUR + 20);
+        }
+
+        // 1) Intercept "back"-direction link clicks BEFORE Astro's ClientRouter
+        //    handler fires. Listener added on `document` in capture phase runs
+        //    earlier than ClientRouter's delegated click handler.
+        document.addEventListener('click', function(e) {
+          if (EXITING) { e.preventDefault(); return; }
+          if (e.defaultPrevented) return;
+          if (e.button !== 0) return;                 // only primary click
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+          if (!a) return;
+          if (a.target && a.target !== '' && a.target !== '_self') return;
+          if (a.hasAttribute('download')) return;
+          var href = a.getAttribute('href');
+          if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+          var url;
+          try { url = new URL(href, window.location.origin); } catch (err) { return; }
+          if (url.origin !== window.location.origin) return;
+          var toPath = url.pathname;
+          if (toPath === window.location.pathname) return;
+          if (!isBackTo(toPath)) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          runExit(url.pathname + url.search + url.hash, bgFor(toPath));
+        }, true); // capture phase — run before ClientRouter
+
+        // 2) Intercept browser Back/Forward button. `popstate` fires after
+        //    the URL has already changed, so we push the original URL back,
+        //    run the exit animation, then navigate for real.
+        var _lastPath = window.location.pathname;
+        window.addEventListener('popstate', function() {
+          var toPath = window.location.pathname;
+          if (!isBackTo.call(null, toPath)) { _lastPath = toPath; return; }
+          if (EXITING) return;
+          var target = window.location.href;
+          // Undo the popstate so the visible URL reflects the page we're still showing.
+          // We use replaceState with the _lastPath so history length stays sane.
+          history.pushState(null, '', _lastPath);
+          runExit(target, bgFor(toPath));
+        });
+      })();
 
       // ── Filmstrip scroll restoration ──
       // Save scroll position when leaving homepage; restore when returning

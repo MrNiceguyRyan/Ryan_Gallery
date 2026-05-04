@@ -8,6 +8,13 @@ export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
   site: 'https://ryangallery.com',
   output: 'static',
+  prefetch: {
+    // Enable Astro's built-in link prefetching. Opt-in via `data-astro-prefetch`
+    // on links (e.g. the collection mini-map → /travel) to warm the HTML cache
+    // so the cinematic shutter lands on an already-parsed target page.
+    prefetchAll: false,
+    defaultStrategy: 'hover',
+  },
   vite: {
     plugins: [tailwindcss()],
     // Pre-bundle styled-components (pulled in by @sanity/astro) to avoid
