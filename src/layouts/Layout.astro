@@ -7,6 +7,7 @@ interface Props {
   description?: string;
   ogImage?: string;
   ogType?: string;
+  dark?: boolean;
 }
 
 const {
@@ -14,6 +15,7 @@ const {
   description = 'A curated collection of photographic moments — shot on Nikon Zf, engineered with intention.',
   ogImage = 'https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1200&q=85',
   ogType = 'website',
+  dark = false,
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangallery.com');
@@ -61,7 +63,10 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
     <ClientRouter />
   </head>
 
-  <body class="bg-white min-h-screen text-gray-900 font-sans antialiased overflow-x-hidden" style="cursor: none;">
+  <body class:list={[
+    "min-h-screen font-sans antialiased overflow-x-hidden",
+    dark ? "bg-[#0A0A0A] text-[#FDFDFB]" : "bg-white text-gray-900"
+  ]} style="cursor: none;">
     <!-- Custom cursor -->
     <div id="cursor-dot" aria-hidden="true"></div>
     <!-- Liquid ring: SVG ellipse that stretches with velocity -->

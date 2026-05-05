@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, useScroll, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Share2, Check } from 'lucide-react';
+import { ArrowRight, Share2, Check, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
+import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -16,13 +17,17 @@ function PhotoCell({
   onClick,
 }: {
   photo: Photo;
-  span: 'full' | 'half' | 'third';
+  span: 'full' | 'half' | 'third' | 'two-third';
   index: number;
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
   onClick: () => void;
 }) {
-  const colSpan = span === 'full' ? 'col-span-6' : span === 'half' ? 'col-span-3' : 'col-span-2';
+  const colSpan =
+    span === 'full' ? 'col-span-6'
+    : span === 'two-third' ? 'col-span-4'
+    : span === 'half' ? 'col-span-3'
+    : 'col-span-2';
   const [isLoaded, setIsLoaded] = useState(false);
   const isAnyHovered = hoveredIndex !== null;
   const isThisHovered = hoveredIndex === index;
@@ -65,7 +70,7 @@ function PhotoCell({
         onLoad={() => setIsLoaded(true)}
         whileHover={{ scale: 1.04 }}
         transition={{ duration: 1.2, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=${span === 'full' ? 1400 : span === 'half' ? 900 : 600}&q=82`}
+        src={`${photo.imageUrl}?auto=format&w=${span === 'full' ? 1200 : span === 'two-third' ? 900 : span === 'half' ? 800 : 500}&q=82`}
         alt={photo.title || ''}
         animate={{ opacity: isLoaded ? 1 : 0 }}
         className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
@@ -130,6 +135,10 @@ export default function MagazineLayout({
     return p?.location || null;
   }, [photos]);
 
+  const mapboxToken = useMemo(() => {
+    try { return getMapboxToken(); } catch { return ''; }
+  }, []);
+
   const handleShare = async () => {
     const shareData = {
       title: `Ryan Xu | ${collection.name}`,
@@ -147,34 +156,56 @@ export default function MagazineLayout({
     } catch (_) {}
   };
 
-  /* Build photo grid rows — 7-item cycle: full, half+half, full, third×3 */
+  /* Build photo grid — bold artistic 10-item cycle:
+     third×3, half+half, third×3, half+half, third+two-third, repeat
+     No full-width heroes — keeps images compact and editorial */
   const rows = useMemo(() => {
-    const result: { photo: Photo; span: 'full' | 'half' | 'third'; globalIdx: number }[][] = [];
+    const result: { photo: Photo; span: 'full' | 'half' | 'third' | 'two-third'; globalIdx: number }[][] = [];
     let i = 0;
     while (i < photos.length) {
-      const p = i % 7;
-      if (p === 0) {
-        result.push([{ photo: photos[i], span: 'full', globalIdx: i }]);
-        i++;
-      } else if (p === 1 && i + 1 < photos.length) {
-        result.push([
-          { photo: photos[i], span: 'half', globalIdx: i },
-          { photo: photos[i + 1], span: 'half', globalIdx: i + 1 },
-        ]);
-        i += 2;
-      } else if (p === 3) {
-        result.push([{ photo: photos[i], span: 'full', globalIdx: i }]);
-        i++;
-      } else if (p === 4 && i + 2 < photos.length) {
+      const p = i % 10;
+      if (p === 0 && i + 2 < photos.length) {
+        // Row of 3 equal
         result.push([
           { photo: photos[i], span: 'third', globalIdx: i },
           { photo: photos[i + 1], span: 'third', globalIdx: i + 1 },
           { photo: photos[i + 2], span: 'third', globalIdx: i + 2 },
         ]);
         i += 3;
+      } else if (p === 3 && i + 1 < photos.length) {
+        // Half + half
+        result.push([
+          { photo: photos[i], span: 'half', globalIdx: i },
+          { photo: photos[i + 1], span: 'half', globalIdx: i + 1 },
+        ]);
+        i += 2;
+      } else if (p === 5 && i + 2 < photos.length) {
+        // Row of 3 equal
+        result.push([
+          { photo: photos[i], span: 'third', globalIdx: i },
+          { photo: photos[i + 1], span: 'third', globalIdx: i + 1 },
+          { photo: photos[i + 2], span: 'third', globalIdx: i + 2 },
+        ]);
+        i += 3;
+      } else if (p === 8 && i + 1 < photos.length) {
+        // Asymmetric: 1/3 + 2/3
+        result.push([
+          { photo: photos[i], span: 'third', globalIdx: i },
+          { photo: photos[i + 1], span: 'two-third', globalIdx: i + 1 },
+        ]);
+        i += 2;
       } else {
-        result.push([{ photo: photos[i], span: 'full', globalIdx: i }]);
-        i++;
+        // Fallback: half + half if pair, else single third
+        if (i + 1 < photos.length) {
+          result.push([
+            { photo: photos[i], span: 'half', globalIdx: i },
+            { photo: photos[i + 1], span: 'half', globalIdx: i + 1 },
+          ]);
+          i += 2;
+        } else {
+          result.push([{ photo: photos[i], span: 'half', globalIdx: i }]);
+          i++;
+        }
       }
     }
     return result;
@@ -247,18 +278,34 @@ export default function MagazineLayout({
                       </p>
                     )}
 
-                    <div className="pt-8 space-y-8 border-t border-white/5">
-                      <div className="grid grid-cols-2 gap-8">
-                        <div className="space-y-1">
-                          <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Equipment</span>
-                          <p className="text-[10px] uppercase tracking-widest font-medium">Nikon Zf</p>
+                    {/* Mini-map link to /travel */}
+                    {coords && mapboxToken && (
+                      <a
+                        href={`/travel#loc=${coords.lat},${coords.lng},8`}
+                        className="group block pt-8 border-t border-white/5"
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <MapPin size={12} className="opacity-30 group-hover:opacity-80 transition-opacity" />
+                          <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-80 transition-opacity">
+                            View on Journal Map
+                          </span>
                         </div>
-                        <div className="space-y-1">
-                          <span className="text-[9px] uppercase tracking-widest font-bold opacity-30">Optics</span>
-                          <p className="text-[10px] uppercase tracking-widest font-medium">40mm f/2</p>
+                        <div className="relative h-28 rounded-lg overflow-hidden bg-white/5 border border-white/5 group-hover:border-white/20 transition-colors">
+                          <img
+                            src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+ffffff(${coords.lng},${coords.lat})/${coords.lng},${coords.lat},5,0/400x160@2x?access_token=${mapboxToken}`}
+                            className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-105 transition-all duration-700"
+                            alt="Location map"
+                            draggable={false}
+                          />
+                          <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between">
+                            <span className="text-[8px] font-mono text-white/50 tracking-wider">
+                              {coords.lat.toFixed(4)}&deg;N, {Math.abs(coords.lng).toFixed(4)}&deg;{coords.lng >= 0 ? 'E' : 'W'}
+                            </span>
+                            <ArrowRight size={10} className="text-white/30 group-hover:text-white/80 group-hover:translate-x-1 transition-all" />
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </a>
+                    )}
 
                     {/* Scroll progress */}
                     <div className="pt-12 space-y-4">
