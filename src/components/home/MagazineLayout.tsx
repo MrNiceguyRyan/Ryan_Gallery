@@ -6,7 +6,7 @@ import Lightbox from '../shared/Lightbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
-/* ── Photo cell in the dense grid ── */
+/* ── Photo cell in the dense grid — respects natural dimensions, no cropping ── */
 function PhotoCell({
   photo,
   span,
@@ -29,48 +29,49 @@ function PhotoCell({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 60 }}
+      initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-10%' }}
+      viewport={{ once: true, margin: '-5%' }}
       onHoverStart={() => setHoveredIndex(index)}
       onHoverEnd={() => setHoveredIndex(null)}
       onClick={onClick}
       animate={{
         opacity: isAnyHovered && !isThisHovered ? 0.4 : 1,
         filter: isAnyHovered && !isThisHovered ? 'blur(2px)' : 'blur(0px)',
-        scale: isAnyHovered && !isThisHovered ? 0.96 : 1,
+        scale: isAnyHovered && !isThisHovered ? 0.97 : 1,
         zIndex: isThisHovered ? 20 : 1,
       }}
       whileHover={{
-        scale: 1.03,
-        boxShadow: '0 30px 60px -12px rgba(0,0,0,0.2), 0 18px 36px -18px rgba(0,0,0,0.25)',
+        scale: 1.02,
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
       }}
-      transition={{ duration: 0.8, ease: expo, boxShadow: { duration: 0.4 } }}
-      className={`${colSpan} group relative bg-white cursor-pointer`}
+      transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
+      className={`${colSpan} group relative bg-[#111] cursor-pointer overflow-hidden`}
     >
-      <div className="relative overflow-hidden w-full h-full">
-        <div className="absolute top-4 right-4 z-20 text-[8px] font-mono opacity-0 group-hover:opacity-40 transition-opacity duration-700 pointer-events-none">
-          NO. {String(index + 1).padStart(2, '0')}
-        </div>
-
-        <motion.div className="overflow-hidden aspect-[4/5] md:aspect-auto relative">
-          <motion.div
-            animate={{ opacity: isLoaded ? 0 : 1 }}
-            className="absolute inset-0 bg-[#F5F5F0] z-10 transition-opacity duration-1000"
-          />
-          <motion.img
-            onLoad={() => setIsLoaded(true)}
-            whileHover={{ scale: 1.05 }}
-            transition={{ duration: 1.5, ease: expo }}
-            src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
-            alt={photo.title || ''}
-            animate={{ opacity: isLoaded ? 1 : 0, scale: isLoaded ? 1 : 1.1 }}
-            className="w-full h-auto object-cover grayscale-[0.2] hover:grayscale-0 transition-all duration-[1.5s]"
-            loading="lazy"
-            draggable={false}
-          />
-        </motion.div>
+      {/* Index number */}
+      <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
+        {String(index + 1).padStart(2, '0')}
       </div>
+
+      {/* Loading placeholder */}
+      <motion.div
+        animate={{ opacity: isLoaded ? 0 : 1 }}
+        transition={{ duration: 0.6 }}
+        className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
+      />
+
+      {/* Image — natural aspect ratio, no cropping */}
+      <motion.img
+        onLoad={() => setIsLoaded(true)}
+        whileHover={{ scale: 1.04 }}
+        transition={{ duration: 1.2, ease: expo }}
+        src={`${photo.imageUrl}?auto=format&w=${span === 'full' ? 1400 : span === 'half' ? 900 : 600}&q=82`}
+        alt={photo.title || ''}
+        animate={{ opacity: isLoaded ? 1 : 0 }}
+        className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
+        loading="lazy"
+        draggable={false}
+      />
     </motion.div>
   );
 }
@@ -284,10 +285,10 @@ export default function MagazineLayout({
                   </div>
                 </aside>
 
-                {/* Photo Grid */}
-                <div className="lg:col-span-8 space-y-1 md:space-y-2">
+                {/* Photo Grid — generous spacing for breathing room */}
+                <div className="lg:col-span-8 space-y-3 md:space-y-4">
                   {rows.map((row, rowIdx) => (
-                    <div key={rowIdx} className="grid grid-cols-6 gap-1 md:gap-2">
+                    <div key={rowIdx} className="grid grid-cols-6 gap-3 md:gap-4 items-end">
                       {row.map((item) => (
                         <PhotoCell
                           key={item.photo._id}

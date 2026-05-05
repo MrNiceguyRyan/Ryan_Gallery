@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface Particle {
   x: number;
@@ -26,7 +26,9 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const particles = useRef<Particle[]>([]);
-  const mouse = useRef({ x: 0, y: 0, radius: 100 });
+  const mouse = useRef({ x: -9999, y: -9999, radius: 120 });
+  const animationRef = useRef<number>(0);
+  const isInitializedRef = useRef(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -59,7 +61,6 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Split text by <br/> if present
     const lines = text.split('<br/>');
     const lineHeight = fontSize * 0.9;
 
@@ -67,7 +68,7 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
       ctx.fillText(
         line.replace(/<[^>]*>?/gm, ''),
         dimensions.width / 2,
-        dimensions.height / 2 + (index - (lines.length - 1) / 2) * lineHeight
+        dimensions.height / 2 + (index - (lines.length - 1) / 2) * lineHeight,
       );
     });
 
@@ -83,27 +84,42 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
         const alpha = pixels[index + 3];
         if (alpha > 128) {
           if (newParticles.length > 25000) break;
+
+          // Initial bounce effect: particles start scattered far from origin
+          const isFirstInit = !isInitializedRef.current;
+          const scatterX = isFirstInit
+            ? dimensions.width / 2 + (Math.random() - 0.5) * dimensions.width * 1.5
+            : x + (Math.random() - 0.5) * 30;
+          const scatterY = isFirstInit
+            ? dimensions.height / 2 + (Math.random() - 0.5) * dimensions.height * 1.5
+            : y + (Math.random() - 0.5) * 30;
+
           newParticles.push({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
+            x: scatterX,
+            y: scatterY,
             originX: x,
             originY: y,
             color: 'white',
             size: 1.2,
-            vx: 0,
-            vy: 0,
+            // Initial velocity for bounce effect
+            vx: isFirstInit ? (Math.random() - 0.5) * 8 : 0,
+            vy: isFirstInit ? (Math.random() - 0.5) * 8 : 0,
             force: 0,
             angle: 0,
             distance: 0,
-            friction: 0.92,
-            ease: 0.08,
+            friction: 0.88, // Slightly lower friction for bouncier initial settle
+            ease: 0.06, // Slightly lower ease for more bounce overshoot
           });
         }
       }
     }
     particles.current = newParticles;
+    isInitializedRef.current = true;
 
-    let animationId: number;
+    // After initial bounce, gradually tighten spring to final values
+    let frameCount = 0;
+    const SETTLE_FRAMES = 120; // ~2 seconds at 60fps
+
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -111,6 +127,12 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
       const mouseY = mouse.current.y;
       const radius = mouse.current.radius;
       const radiusSq = radius * radius;
+
+      // Gradually increase friction and ease for settling effect
+      frameCount++;
+      const settleProgress = Math.min(frameCount / SETTLE_FRAMES, 1);
+      const currentFriction = 0.88 + settleProgress * 0.04; // 0.88 → 0.92
+      const currentEase = 0.06 + settleProgress * 0.02; // 0.06 → 0.08
 
       for (let i = 0; i < particles.current.length; i++) {
         const p = particles.current[i];
@@ -122,41 +144,51 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
           const distance = Math.sqrt(distSq);
           const force = (radius - distance) / radius;
           const angle = Math.atan2(dy, dx);
-          p.vx -= force * Math.cos(angle) * 3.5;
-          p.vy -= force * Math.sin(angle) * 3.5;
+          p.vx -= force * Math.cos(angle) * 4.0;
+          p.vy -= force * Math.sin(angle) * 4.0;
         }
 
-        p.vx += (p.originX - p.x) * p.ease;
-        p.vy += (p.originY - p.y) * p.ease;
-        p.vx *= p.friction;
-        p.vy *= p.friction;
+        // Spring physics with settling parameters
+        p.vx += (p.originX - p.x) * currentEase;
+        p.vy += (p.originY - p.y) * currentEase;
+        p.vx *= currentFriction;
+        p.vy *= currentFriction;
         p.x += p.vx;
         p.y += p.vy;
 
+        // Subtle alpha variation based on velocity for "energy" visualization
+        const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        const alpha = Math.min(1, 0.6 + speed * 0.15);
+
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
+      ctx.globalAlpha = 1;
 
-      animationId = requestAnimationFrame(render);
+      animationRef.current = requestAnimationFrame(render);
     };
 
     render();
-    return () => cancelAnimationFrame(animationId);
+    return () => cancelAnimationFrame(animationRef.current);
   }, [dimensions, text]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    mouse.current.x = e.clientX - rect.left;
-    mouse.current.y = e.clientY - rect.top;
-    if (onHover) onHover(true);
-  };
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      mouse.current.x = e.clientX - rect.left;
+      mouse.current.y = e.clientY - rect.top;
+      if (onHover) onHover(true);
+    },
+    [onHover],
+  );
 
-  const handleMouseLeave = () => {
-    mouse.current.x = -1000;
-    mouse.current.y = -1000;
+  const handleMouseLeave = useCallback(() => {
+    mouse.current.x = -9999;
+    mouse.current.y = -9999;
     if (onHover) onHover(false);
-  };
+  }, [onHover]);
 
   return (
     <div
@@ -165,10 +197,7 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      <canvas
-        ref={canvasRef}
-        style={{ width: '100%', height: '100%' }}
-      />
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </div>
   );
 };

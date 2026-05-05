@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
   currentPath: string;
+  dark?: boolean;
 }
 
 const links = [
@@ -11,19 +12,20 @@ const links = [
   { href: '/about', label: 'About' },
 ];
 
-export default function Nav({ currentPath }: Props) {
+export default function Nav({ currentPath, dark = false }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Home page has a dark hero — start transparent and transition to white on scroll
   const isHome = currentPath === '/';
-  const [scrolled, setScrolled] = useState(!isHome);
+  const [scrolled, setScrolled] = useState(!isHome && !dark);
 
   useEffect(() => {
-    if (!isHome) return;
+    if (!isHome && !dark) return;
+    if (dark) { setScrolled(false); return; }
     const handleScroll = () => setScrolled(window.scrollY > 80);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [isHome]);
+  }, [isHome, dark]);
 
   return (
     <>
@@ -31,7 +33,7 @@ export default function Nav({ currentPath }: Props) {
         className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
           scrolled
             ? 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
-            : isHome
+            : isHome || dark
               ? 'bg-black/20 backdrop-blur-xl border-b border-white/10'
               : 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
         }`}

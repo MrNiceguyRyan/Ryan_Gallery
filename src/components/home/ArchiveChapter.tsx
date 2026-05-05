@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
@@ -13,15 +13,19 @@ interface ArchiveChapterProps {
 
 export default function ArchiveChapter({ id, collection, onClick, index, isActive }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
+  const [isHovered, setIsHovered] = useState(false);
   const { scrollYProgress } = useScroll({
     target: chapterRef,
     offset: ['start end', 'end start'],
   });
 
-  const opacity = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0, 1, 1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.2], [1.02, 1]);
-  const y = useTransform(scrollYProgress, [0, 1], [0, -100]);
+  const opacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0, 1, 1, 0]);
+  // Dramatic zoom: starts at 1.08 and zooms down to 1 as it enters viewport
+  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.08, 1, 1, 0.98]);
+  const y = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const numberY = useTransform(scrollYProgress, [0, 1], [150, -150]);
+  // Parallax for the cover image inside its container
+  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-15%']);
 
   const coverUrl = collection.coverImageUrl
     ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
@@ -79,23 +83,30 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           </div>
         </div>
 
-        {/* Cover Image with HUD */}
-        <div className="relative group cursor-none w-full overflow-visible" onClick={onClick}>
+        {/* Cover Image with HUD — dramatic zoom on scroll + hover */}
+        <motion.div
+          className="relative group cursor-none w-full overflow-visible"
+          onClick={onClick}
+          onHoverStart={() => setIsHovered(true)}
+          onHoverEnd={() => setIsHovered(false)}
+        >
           <motion.div
             style={{ scale }}
             className="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-white/[0.02] border border-white/5"
           >
             {coverUrl && (
               <motion.img
-                style={{ y }}
+                style={{ y: imgY }}
                 src={coverUrl}
                 alt={collection.name}
-                transition={{ type: 'spring', stiffness: 50, damping: 25 }}
-                className={`absolute inset-0 w-full h-[150%] object-cover transition-all duration-[3s] ease-out ${
-                  isActive
-                    ? 'grayscale-0 brightness-110 scale-105'
-                    : 'grayscale group-hover:grayscale-0 group-hover:brightness-110 group-hover:scale-105'
-                }`}
+                animate={{
+                  scale: isHovered ? 1.12 : isActive ? 1.05 : 1,
+                  filter: isHovered || isActive
+                    ? 'grayscale(0) brightness(1.1)'
+                    : 'grayscale(1) brightness(0.8)',
+                }}
+                transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-0 w-full h-[130%] object-cover"
                 draggable={false}
               />
             )}
@@ -158,7 +169,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
 
         {/* Tech Metadata */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-16 pt-8 items-start text-left">

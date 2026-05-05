@@ -37,7 +37,7 @@ const settings: SiteSettings = rawSettings ?? {};
   description="Photographer based in New York. Visual storytelling through light and intention."
   ogImage={settings.avatarUrl ?? undefined}
 >
-  <Nav client:load currentPath={currentPath} />
+  <Nav client:load currentPath={currentPath} dark={true} />
   <AboutPage client:load settings={settings} />
   <Footer />
 </Layout>
