@@ -7,34 +7,27 @@ import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
-/* ── Photo cell in the dense grid — respects natural dimensions, no cropping ── */
+/* ── Photo cell — masonry column item, zero gaps, natural aspect ratio ── */
 function PhotoCell({
   photo,
-  span,
   index,
   hoveredIndex,
   setHoveredIndex,
   onClick,
 }: {
   photo: Photo;
-  span: 'full' | 'half' | 'third' | 'two-third';
   index: number;
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
   onClick: () => void;
 }) {
-  const colSpan =
-    span === 'full' ? 'col-span-6'
-    : span === 'two-third' ? 'col-span-4'
-    : span === 'half' ? 'col-span-3'
-    : 'col-span-2';
   const [isLoaded, setIsLoaded] = useState(false);
   const isAnyHovered = hoveredIndex !== null;
   const isThisHovered = hoveredIndex === index;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-5%' }}
       onHoverStart={() => setHoveredIndex(index)}
@@ -51,7 +44,8 @@ function PhotoCell({
         boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
       }}
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
-      className={`${colSpan} group relative bg-[#111] cursor-pointer overflow-hidden`}
+      className="group relative bg-[#0A0A0A] cursor-pointer overflow-hidden mb-[2px]"
+      style={{ breakInside: 'avoid' }}
     >
       {/* Index number */}
       <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
@@ -65,12 +59,12 @@ function PhotoCell({
         className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
       />
 
-      {/* Image — natural aspect ratio, no cropping */}
+      {/* Image — natural aspect ratio, no cropping, flush edges */}
       <motion.img
         onLoad={() => setIsLoaded(true)}
         whileHover={{ scale: 1.04 }}
         transition={{ duration: 1.2, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=${span === 'full' ? 1200 : span === 'two-third' ? 900 : span === 'half' ? 800 : 500}&q=82`}
+        src={`${photo.imageUrl}?auto=format&w=600&q=82`}
         alt={photo.title || ''}
         animate={{ opacity: isLoaded ? 1 : 0 }}
         className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
@@ -156,60 +150,7 @@ export default function MagazineLayout({
     } catch (_) {}
   };
 
-  /* Build photo grid — bold artistic 10-item cycle:
-     third×3, half+half, third×3, half+half, third+two-third, repeat
-     No full-width heroes — keeps images compact and editorial */
-  const rows = useMemo(() => {
-    const result: { photo: Photo; span: 'full' | 'half' | 'third' | 'two-third'; globalIdx: number }[][] = [];
-    let i = 0;
-    while (i < photos.length) {
-      const p = i % 10;
-      if (p === 0 && i + 2 < photos.length) {
-        // Row of 3 equal
-        result.push([
-          { photo: photos[i], span: 'third', globalIdx: i },
-          { photo: photos[i + 1], span: 'third', globalIdx: i + 1 },
-          { photo: photos[i + 2], span: 'third', globalIdx: i + 2 },
-        ]);
-        i += 3;
-      } else if (p === 3 && i + 1 < photos.length) {
-        // Half + half
-        result.push([
-          { photo: photos[i], span: 'half', globalIdx: i },
-          { photo: photos[i + 1], span: 'half', globalIdx: i + 1 },
-        ]);
-        i += 2;
-      } else if (p === 5 && i + 2 < photos.length) {
-        // Row of 3 equal
-        result.push([
-          { photo: photos[i], span: 'third', globalIdx: i },
-          { photo: photos[i + 1], span: 'third', globalIdx: i + 1 },
-          { photo: photos[i + 2], span: 'third', globalIdx: i + 2 },
-        ]);
-        i += 3;
-      } else if (p === 8 && i + 1 < photos.length) {
-        // Asymmetric: 1/3 + 2/3
-        result.push([
-          { photo: photos[i], span: 'third', globalIdx: i },
-          { photo: photos[i + 1], span: 'two-third', globalIdx: i + 1 },
-        ]);
-        i += 2;
-      } else {
-        // Fallback: half + half if pair, else single third
-        if (i + 1 < photos.length) {
-          result.push([
-            { photo: photos[i], span: 'half', globalIdx: i },
-            { photo: photos[i + 1], span: 'half', globalIdx: i + 1 },
-          ]);
-          i += 2;
-        } else {
-          result.push([{ photo: photos[i], span: 'half', globalIdx: i }]);
-          i++;
-        }
-      }
-    }
-    return result;
-  }, [photos]);
+  /* No rows needed — flat masonry via CSS columns */
 
   return (
     <>
@@ -332,22 +273,28 @@ export default function MagazineLayout({
                   </div>
                 </aside>
 
-                {/* Photo Grid — generous spacing for breathing room */}
-                <div className="lg:col-span-8 space-y-3 md:space-y-4">
-                  {rows.map((row, rowIdx) => (
-                    <div key={rowIdx} className="grid grid-cols-6 gap-3 md:gap-4 items-end">
-                      {row.map((item) => (
-                        <PhotoCell
-                          key={item.photo._id}
-                          photo={item.photo}
-                          span={item.span}
-                          index={item.globalIdx}
-                          hoveredIndex={hoveredIndex}
-                          setHoveredIndex={setHoveredIndex}
-                          onClick={() => setLightboxIndex(item.globalIdx)}
-                        />
-                      ))}
-                    </div>
+                {/* Photo Grid — masonry columns, zero whitespace */}
+                <div
+                  className="lg:col-span-8"
+                  style={{
+                    columns: 'var(--masonry-cols, 3)',
+                    columnGap: '2px',
+                  }}
+                >
+                  <style>{`
+                    @media (max-width: 640px) { :root { --masonry-cols: 2; } }
+                    @media (min-width: 641px) and (max-width: 1024px) { :root { --masonry-cols: 3; } }
+                    @media (min-width: 1025px) { :root { --masonry-cols: 3; } }
+                  `}</style>
+                  {photos.map((photo, idx) => (
+                    <PhotoCell
+                      key={photo._id}
+                      photo={photo}
+                      index={idx}
+                      hoveredIndex={hoveredIndex}
+                      setHoveredIndex={setHoveredIndex}
+                      onClick={() => setLightboxIndex(idx)}
+                    />
                   ))}
 
                   {/* Footer */}
