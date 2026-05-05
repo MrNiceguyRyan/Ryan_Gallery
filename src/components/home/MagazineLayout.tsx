@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, useScroll, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Share2, Check, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
@@ -7,20 +7,35 @@ import { getMapboxToken } from '../../config/mapbox';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
-/* ── Photo cell — masonry column item, zero gaps, natural aspect ratio ── */
+/* ── Photo cell — editorial grid item, dense cinematic contact-sheet ── */
 function PhotoCell({
   photo,
+  span,
   index,
   hoveredIndex,
   setHoveredIndex,
   onClick,
 }: {
   photo: Photo;
+  span: 'full' | 'half' | 'third';
   index: number;
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
   onClick: () => void;
 }) {
+  const colSpan =
+    span === 'full' ? 'col-span-6'
+    : span === 'half' ? 'col-span-3'
+    : 'col-span-2';
+
+  /* Full-width → cinematic wide, halves → portrait, thirds → tighter portrait */
+  const aspectClass =
+    span === 'full' ? 'aspect-[16/9]'
+    : span === 'half' ? 'aspect-[4/5]'
+    : 'aspect-[3/4]';
+
+  const imgWidth = span === 'full' ? 1400 : span === 'half' ? 800 : 500;
+
   const [isLoaded, setIsLoaded] = useState(false);
   const isAnyHovered = hoveredIndex !== null;
   const isThisHovered = hoveredIndex === index;
@@ -44,8 +59,7 @@ function PhotoCell({
         boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
       }}
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
-      className="group relative bg-[#0A0A0A] cursor-pointer overflow-hidden mb-[2px]"
-      style={{ breakInside: 'avoid' }}
+      className={`${colSpan} ${aspectClass} group relative bg-[#111] cursor-pointer overflow-hidden`}
     >
       {/* Index number */}
       <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
@@ -59,15 +73,15 @@ function PhotoCell({
         className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
       />
 
-      {/* Image — natural aspect ratio, no cropping, flush edges */}
+      {/* Image — fills cell completely, no gaps */}
       <motion.img
         onLoad={() => setIsLoaded(true)}
-        whileHover={{ scale: 1.04 }}
+        whileHover={{ scale: 1.06 }}
         transition={{ duration: 1.2, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=600&q=82`}
+        src={`${photo.imageUrl}?auto=format&w=${imgWidth}&q=82`}
         alt={photo.title || ''}
         animate={{ opacity: isLoaded ? 1 : 0 }}
-        className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
+        className="absolute inset-0 w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
         loading="lazy"
         draggable={false}
       />
@@ -150,7 +164,7 @@ export default function MagazineLayout({
     } catch (_) {}
   };
 
-  /* No rows needed — flat masonry via CSS columns */
+  /* 7-image editorial cycle: full → half×2 → full → third×3, repeat */
 
   return (
     <>
@@ -273,28 +287,55 @@ export default function MagazineLayout({
                   </div>
                 </aside>
 
-                {/* Photo Grid — masonry columns, zero whitespace */}
-                <div
-                  className="lg:col-span-8"
-                  style={{
-                    columns: 'var(--masonry-cols, 3)',
-                    columnGap: '2px',
-                  }}
-                >
-                  <style>{`
-                    @media (max-width: 640px) { :root { --masonry-cols: 2; } }
-                    @media (min-width: 641px) and (max-width: 1024px) { :root { --masonry-cols: 3; } }
-                    @media (min-width: 1025px) { :root { --masonry-cols: 3; } }
-                  `}</style>
-                  {photos.map((photo, idx) => (
-                    <PhotoCell
-                      key={photo._id}
-                      photo={photo}
-                      index={idx}
-                      hoveredIndex={hoveredIndex}
-                      setHoveredIndex={setHoveredIndex}
-                      onClick={() => setLightboxIndex(idx)}
-                    />
+                {/* Dense Photo Grid — 7-image editorial cycle, tight gaps */}
+                <div className="lg:col-span-8 space-y-2 md:space-y-3">
+                  {photos.reduce<React.ReactNode[][]>((acc, photo, idx) => {
+                    const p = idx % 7;
+                    /* Image 1: full-width hero */
+                    if (p === 0) {
+                      acc.push([
+                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                      ]);
+                    }
+                    /* Images 2 & 3: half + half */
+                    else if (p === 1) {
+                      const next = photos[idx + 1];
+                      const row: React.ReactNode[] = [
+                        <PhotoCell key={photo._id} photo={photo} span="half" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                      ];
+                      if (next) row.push(
+                        <PhotoCell key={next._id} photo={next} span="half" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} />,
+                      );
+                      acc.push(row);
+                    }
+                    else if (p === 2) { /* skip — handled by p===1 */ }
+                    /* Image 4: full-width hero */
+                    else if (p === 3) {
+                      acc.push([
+                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                      ]);
+                    }
+                    /* Images 5, 6 & 7: third + third + third */
+                    else if (p === 4) {
+                      const n1 = photos[idx + 1];
+                      const n2 = photos[idx + 2];
+                      const row: React.ReactNode[] = [
+                        <PhotoCell key={photo._id} photo={photo} span="third" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                      ];
+                      if (n1) row.push(
+                        <PhotoCell key={n1._id} photo={n1} span="third" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} />,
+                      );
+                      if (n2) row.push(
+                        <PhotoCell key={n2._id} photo={n2} span="third" index={idx + 2} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 2)} />,
+                      );
+                      acc.push(row);
+                    }
+                    else if (p === 5 || p === 6) { /* skip — handled by p===4 */ }
+                    return acc;
+                  }, []).map((row, rowIdx) => (
+                    <div key={rowIdx} className="grid grid-cols-6 gap-2 md:gap-3">
+                      {row}
+                    </div>
                   ))}
 
                   {/* Footer */}
