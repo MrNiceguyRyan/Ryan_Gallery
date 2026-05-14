@@ -7,111 +7,63 @@ interface Props {
 }
 
 const links = [
-  { href: '/', label: 'Photography' },
-  { href: '/travel', label: 'Journal' },
+  { href: '/', label: 'Home' },
+  { href: '/travel', label: 'Map' },
   { href: '/about', label: 'About' },
 ];
 
 export default function Nav({ currentPath, dark = false }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Home page has a dark hero — start transparent and transition to white on scroll
-  const isHome = currentPath === '/';
-  const [scrolled, setScrolled] = useState(!isHome && !dark);
-
-  useEffect(() => {
-    if (!isHome && !dark) return;
-    if (dark) { setScrolled(false); return; }
-    const handleScroll = () => setScrolled(window.scrollY > 80);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [isHome, dark]);
-
   return (
     <>
-      <nav
-        className={`fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 flex items-center transition-all duration-700 ${
-          scrolled
-            ? 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
-            : isHome || dark
-              ? 'bg-black/20 backdrop-blur-xl border-b border-white/10'
-              : 'bg-white/75 backdrop-blur-2xl border-b border-white/40 shadow-[0_1px_0_rgba(0,0,0,0.04)]'
-        }`}
-      >
-        {/* Left: aperture logo */}
-        <div className="flex-1">
-          <a href="/" aria-label="Home">
-            <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"
-              className={`transition-opacity duration-700 hover:opacity-60 ${
-                scrolled ? 'opacity-70' : 'opacity-80'
-              }`}
-            >
-              <circle cx="16" cy="16" r="11" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-              <path d="M 16.00,11.80 L 19.64,13.90 L 19.64,18.10 L 16.00,20.20 L 12.36,18.10 L 12.36,13.90 Z" stroke="currentColor" strokeWidth="0.9" fill="none"/>
-              <line x1="16.00" y1="11.80" x2="21.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
-              <line x1="19.64" y1="13.90" x2="27.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
-              <line x1="19.64" y1="18.10" x2="21.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
-              <line x1="16.00" y1="20.20" x2="10.50" y2="25.53" stroke="currentColor" strokeWidth="0.8"/>
-              <line x1="12.36" y1="18.10" x2="5.00" y2="16.00" stroke="currentColor" strokeWidth="0.8"/>
-              <line x1="12.36" y1="13.90" x2="10.50" y2="6.47" stroke="currentColor" strokeWidth="0.8"/>
-            </svg>
-          </a>
-        </div>
-
-        {/* Center: name */}
+      {/* Unified nav — matches homepage style: signature name left, pill buttons right */}
+      <nav className="fixed top-0 left-0 w-full z-50 px-6 py-6 md:px-12 flex justify-between items-center bg-transparent">
+        {/* Left: signature name */}
         <a
           href="/"
-          className={`text-xl md:text-2xl font-display tracking-[0.12em] hover:opacity-60 transition-all ${
-            scrolled ? 'text-gray-900' : 'text-white'
-          }`}
+          className="font-signature text-3xl md:text-4xl text-[#FDFDFB] mix-blend-difference hover:opacity-60 transition-all"
         >
-          RYAN XU
+          Ryan Xu
         </a>
 
-        {/* Right: nav links */}
-        <div className="flex-1 flex justify-end items-center gap-6 md:gap-8">
-          {links.map((link) => {
-            const isActive = currentPath === link.href || (link.href !== '/' && currentPath.startsWith(link.href));
-            return (
-              <a
-                key={link.href}
-                href={link.href}
-                className={`hidden md:block text-[11px] uppercase tracking-[0.2em] font-medium transition-all duration-700 hover:opacity-100 ${
-                  isActive
-                    ? scrolled ? 'text-gray-900' : 'text-white'
-                    : scrolled
-                      ? 'text-gray-400 hover:text-gray-900'
-                      : 'text-white/50 hover:text-white'
-                }`}
-              >
-                {link.label}
-              </a>
-            );
-          })}
-
-          {/* Mobile hamburger */}
-          <button
-            className="md:hidden flex flex-col gap-1.5 p-1"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label="Menu"
-          >
-            <motion.span
-              className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-              animate={mobileOpen ? { rotate: 45, y: 3.5 } : { rotate: 0, y: 0 }}
-              transition={{ duration: 0.3 }}
-            />
-            <motion.span
-              className={`block w-5 h-px transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-              animate={mobileOpen ? { opacity: 0 } : { opacity: 1 }}
-              transition={{ duration: 0.2 }}
-            />
-            <motion.span
-              className={`block w-5 h-px origin-center transition-colors duration-700 ${scrolled ? 'bg-gray-900' : 'bg-white'}`}
-              animate={mobileOpen ? { rotate: -45, y: -3.5 } : { rotate: 0, y: 0 }}
-              transition={{ duration: 0.3 }}
-            />
-          </button>
+        {/* Right: pill buttons (desktop) */}
+        <div className="hidden md:flex items-center gap-2 md:gap-3">
+          {links.filter(l => l.href !== currentPath).map((link) => (
+            <motion.a
+              key={link.href}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              href={link.href}
+              className="px-4 md:px-6 py-2 rounded-full text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md mix-blend-difference"
+            >
+              {link.label}
+            </motion.a>
+          ))}
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="md:hidden flex flex-col gap-1.5 p-1"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label="Menu"
+        >
+          <motion.span
+            className="block w-5 h-px origin-center bg-white mix-blend-difference"
+            animate={mobileOpen ? { rotate: 45, y: 3.5 } : { rotate: 0, y: 0 }}
+            transition={{ duration: 0.3 }}
+          />
+          <motion.span
+            className="block w-5 h-px bg-white mix-blend-difference"
+            animate={mobileOpen ? { opacity: 0 } : { opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          />
+          <motion.span
+            className="block w-5 h-px origin-center bg-white mix-blend-difference"
+            animate={mobileOpen ? { rotate: -45, y: -3.5 } : { rotate: 0, y: 0 }}
+            transition={{ duration: 0.3 }}
+          />
+        </button>
       </nav>
 
       {/* Mobile menu overlay */}

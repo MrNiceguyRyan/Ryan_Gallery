@@ -322,10 +322,9 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangall
         }
 
         // Pick background color that will be revealed under the sliding body.
-        // Home is dark (#0A0A0A); other pages are light. When exiting TO home,
-        // show dark; else show light (#FDFDFB).
+        // All pages use dark theme (#0A0A0A).
         function bgFor(toPath) {
-          return toPath === '/' ? '#0A0A0A' : '#FDFDFB';
+          return '#0A0A0A';
         }
 
         function runExit(href, bg) {

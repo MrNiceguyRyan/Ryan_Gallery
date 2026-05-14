@@ -58,10 +58,10 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-[50vh] min-h-[300px] rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-center px-8">
-          <p className="text-gray-400 text-sm font-light">Map failed to load</p>
-          <p className="text-gray-300 text-xs font-mono mt-2 max-w-sm">{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-4 px-5 py-2 text-xs tracking-wider rounded-full border border-gray-200 text-gray-500 hover:border-gray-900 hover:text-gray-900 transition-all duration-300">Retry</button>
+        <div className="h-[50vh] min-h-[300px] rounded-2xl bg-white/5 flex flex-col items-center justify-center text-center px-8">
+          <p className="text-white/40 text-sm font-light">Map failed to load</p>
+          <p className="text-white/20 text-xs font-mono mt-2 max-w-sm">{this.state.error?.message}</p>
+          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-4 px-5 py-2 text-xs tracking-wider rounded-full border border-white/10 text-white/50 hover:border-white/30 hover:text-white transition-all duration-300">Retry</button>
         </div>
       );
     }
@@ -121,7 +121,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-  const [mapStyleIdx, setMapStyleIdx] = useState(0);
+  const [mapStyleIdx, setMapStyleIdx] = useState(4); // default to dark style
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
 
@@ -290,12 +290,12 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     return () => window.removeEventListener('keydown', fn);
   }, []);
 
-  if (!mapboxToken) return <div className="h-[500px] rounded-2xl bg-gray-50 flex items-center justify-center"><p className="text-gray-400 text-sm">Mapbox token not configured</p></div>;
-  if (validPhotos.length === 0) return <div className="h-[500px] rounded-2xl bg-gray-50 flex items-center justify-center"><p className="text-gray-400 text-sm">No geotagged photos found</p></div>;
+  if (!mapboxToken) return <div className="h-[500px] rounded-2xl bg-white/5 flex items-center justify-center"><p className="text-white/40 text-sm">Mapbox token not configured</p></div>;
+  if (validPhotos.length === 0) return <div className="h-[500px] rounded-2xl bg-white/5 flex items-center justify-center"><p className="text-white/40 text-sm">No geotagged photos found</p></div>;
 
   return (
     <div>
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] border border-gray-100 bg-white">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.4)] border border-white/10 bg-[#111]">
         {/* ── Map ── */}
         <div className="relative w-full lg:flex-1 h-[60vh] min-h-[400px] md:h-[600px] lg:h-[780px]">
           <MapGL
@@ -465,20 +465,20 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
 
           {/* ── Floating label ── */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
-            <div className="bg-white/70 backdrop-blur-2xl px-5 py-3 rounded-2xl shadow-lg border border-white/30">
-              <h2 className="text-[9px] uppercase tracking-[0.3em] font-black text-black/35 mb-0.5">Journal Gallery</h2>
-              <p className="text-sm font-serif italic text-black/80">World Explorer</p>
+            <div className="bg-black/50 backdrop-blur-2xl px-5 py-3 rounded-2xl shadow-lg border border-white/10">
+              <h2 className="text-[9px] uppercase tracking-[0.3em] font-black text-white/35 mb-0.5">Journal Gallery</h2>
+              <p className="text-sm font-serif italic text-white/80">World Explorer</p>
             </div>
           </motion.div>
 
           {/* ── Top-right controls ── */}
           <div className="absolute top-6 right-6 z-10 flex flex-col gap-2">
-            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} onClick={resetView} className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-2xl border border-white/30 shadow-lg flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-white transition-all active:scale-90" title="Reset view">
+            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} onClick={resetView} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 transition-all active:scale-90" title="Reset view">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
             </motion.button>
 
             {/* Style switcher toggle */}
-            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} onClick={(e) => { e.stopPropagation(); setShowStylePicker(v => !v); }} className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-2xl border border-white/30 shadow-lg flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-white transition-all active:scale-90" title="Map style">
+            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} onClick={(e) => { e.stopPropagation(); setShowStylePicker(v => !v); }} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 transition-all active:scale-90" title="Map style">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0l4.179 2.25L12 17.25 2.25 12l4.179-2.25m11.142 0l-5.571 3-5.571-3m11.142 4.5L12 21.75l-5.571-3" /></svg>
             </motion.button>
           </div>
@@ -491,14 +491,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-[7.5rem] right-6 z-20 bg-white/90 backdrop-blur-2xl rounded-2xl shadow-xl border border-gray-100 p-2 min-w-[140px]"
+                className="absolute top-[7.5rem] right-6 z-20 bg-black/80 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/10 p-2 min-w-[140px]"
                 onClick={e => e.stopPropagation()}
               >
                 {MAP_STYLES.map((s, i) => (
                   <button
                     key={s.id}
                     onClick={() => { setMapStyleIdx(i); setShowStylePicker(false); }}
-                    className={`w-full text-left px-4 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-200 ${i === mapStyleIdx ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-200 ${i === mapStyleIdx ? 'bg-white text-black' : 'text-white/60 hover:bg-white/10'}`}
                   >
                     {s.label}
                   </button>
@@ -509,17 +509,17 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
 
           {/* ── Bottom label ── */}
           <div className="absolute bottom-6 left-6 z-10 pointer-events-none hidden lg:block">
-            <div className="bg-white/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-[9px] font-bold text-white/30 uppercase tracking-[0.2em]">
               Globe · 3D Terrain · {MAP_STYLES[mapStyleIdx].label}
             </div>
           </div>
         </div>
 
         {/* ── Desktop sidebar — grouped by region ── */}
-        <div className="hidden lg:flex flex-col w-[340px] border-l border-gray-100 bg-white">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <p className="text-[10px] tracking-[0.3em] text-gray-400 uppercase font-light">Regions</p>
-            <p className="text-xs text-gray-300 font-mono mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>
+        <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#0A0A0A]">
+          <div className="px-5 py-4 border-b border-white/5">
+            <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
+            <p className="text-xs text-white/20 font-mono mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>
           </div>
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {regionGroups.map((group) => {
@@ -529,17 +529,17 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                   {/* Region header */}
                   <button
                     onClick={() => setExpandedRegion(isRegionOpen ? null : group.region)}
-                    className="w-full text-left px-5 py-3 flex items-center justify-between bg-gray-50/80 border-b border-gray-100 hover:bg-gray-100/80 transition-colors"
+                    className="w-full text-left px-5 py-3 flex items-center justify-between bg-white/[0.02] border-b border-white/5 hover:bg-white/[0.05] transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
-                      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-600">{group.region}</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">{group.region}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-gray-300">{group.totalPhotos}</span>
+                      <span className="text-[10px] font-mono text-white/20">{group.totalPhotos}</span>
                       <motion.svg
                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                        className="text-gray-300"
+                        className="text-white/20"
                         animate={{ rotate: isRegionOpen ? 180 : 0 }}
                         transition={{ duration: 0.3 }}
                       >
@@ -567,31 +567,31 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                 onClick={() => handleCityClick(cluster)}
                                 className={`w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
                                   isSelected
-                                    ? 'bg-[#2c3e50] text-white hover:bg-[#2c3e50]/90 border-b-[#2c3e50]/30'
+                                    ? 'bg-white/10 text-white border-b-white/10'
                                     : isHoveredFromMap
-                                      ? 'bg-[#2c3e50]/8 border-b-[#2c3e50]/10'
-                                      : 'hover:bg-gray-50 border-b-gray-50'
+                                      ? 'bg-white/[0.04] border-b-white/5'
+                                      : 'hover:bg-white/[0.03] border-b-white/[0.03]'
                                 }`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-[#2c3e50]/30 scale-105' : 'ring-gray-100'}`}>
+                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
                                     <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : isHoveredFromMap ? 'text-[#2c3e50]' : 'text-gray-800'}`}>{cluster.city}</h3>
-                                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/50' : 'text-gray-400'}`}>{cluster.country}</p>
+                                    <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : isHoveredFromMap ? 'text-white/80' : 'text-white/60'}`}>{cluster.city}</h3>
+                                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`text-[10px] font-mono ${isSelected ? 'text-white/50' : 'text-gray-300'}`}>{cluster.photos.length}</span>
+                                    <span className={`text-[10px] font-mono ${isSelected ? 'text-white/50' : 'text-white/20'}`}>{cluster.photos.length}</span>
                                     {(isSelected || isHoveredFromMap) && (
-                                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/40' : 'bg-[#2c3e50]/30'}`} />
+                                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/40' : 'bg-white/20'}`} />
                                     )}
                                   </div>
                                 </div>
                               </button>
                               {/* Rich expanded card for selected city — with CSS transition */}
                               <div
-                                className="bg-white border-b border-gray-100 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                                className="bg-[#111] border-b border-white/5 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
                                 style={{
                                   maxHeight: isSelected ? '500px' : '0px',
                                   opacity: isSelected ? 1 : 0,
@@ -617,7 +617,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                 </div>
                                 {/* Content */}
                                 <div className="p-4">
-                                  <p className="text-[10px] text-gray-400 font-mono tracking-wide mb-3">
+                                  <p className="text-[10px] text-white/30 font-mono tracking-wide mb-3">
                                     {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
                                   </p>
                                   <div className="grid grid-cols-3 gap-1.5">
@@ -657,25 +657,25 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
         {regionGroups.map((group) => (
           <div key={group.region}>
             <div className="flex items-center gap-2 px-1 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ACCENT }} />
-              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-500">{group.region}</span>
-              <div className="flex-1 h-px bg-gray-100" />
-              <span className="text-[10px] font-mono text-gray-300">{group.totalPhotos}</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
+              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40">{group.region}</span>
+              <div className="flex-1 h-px bg-white/5" />
+              <span className="text-[10px] font-mono text-white/20">{group.totalPhotos}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {group.clusters.map((cluster) => {
                 const isSelected = activeClusterCity === cluster.city;
                 return (
-                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-gray-900 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-white/10 text-white shadow-lg' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-gray-200'}`}>
+                      <div className={`w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-white/5'}`}>
                         <img src={`${cluster.photos[0].imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-gray-800'}`}>{cluster.city}</h3>
-                        <p className={`text-[10px] ${isSelected ? 'text-white/40' : 'text-gray-400'}`}>{cluster.country}</p>
+                        <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{cluster.city}</h3>
+                        <p className={`text-[10px] ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
                       </div>
-                      <span className={`text-xs font-mono ${isSelected ? 'text-white/40' : 'text-gray-300'}`}>{cluster.photos.length}</span>
+                      <span className={`text-xs font-mono ${isSelected ? 'text-white/40' : 'text-white/20'}`}>{cluster.photos.length}</span>
                     </div>
                     <AnimatePresence>
                       {isSelected && (
