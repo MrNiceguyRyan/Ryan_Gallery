@@ -15,6 +15,7 @@ function PhotoCell({
   hoveredIndex,
   setHoveredIndex,
   onClick,
+  forceHero = false,
 }: {
   photo: Photo;
   span: 'full' | 'half' | 'third';
@@ -22,6 +23,8 @@ function PhotoCell({
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
   onClick: () => void;
+  /** Force cinematic landscape crop for the first image */
+  forceHero?: boolean;
 }) {
   const colSpan =
     span === 'full' ? 'col-span-6'
@@ -53,7 +56,7 @@ function PhotoCell({
         boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
       }}
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
-      className={`${colSpan} group relative bg-[#0A0A0A] cursor-pointer overflow-hidden`}
+      className={`${colSpan} group relative bg-[#0A0A0A] cursor-pointer overflow-hidden ${forceHero ? 'aspect-[21/9]' : ''}`}
     >
       {/* Index number */}
       <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
@@ -67,7 +70,7 @@ function PhotoCell({
         className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
       />
 
-      {/* Image — original aspect ratio, no cropping */}
+      {/* Image — hero uses landscape crop, others show original aspect ratio */}
       <motion.img
         onLoad={() => setIsLoaded(true)}
         whileHover={{ scale: 1.04 }}
@@ -75,7 +78,10 @@ function PhotoCell({
         src={`${photo.imageUrl}?auto=format&w=${imgWidth}&q=82`}
         alt={photo.title || ''}
         animate={{ opacity: isLoaded ? 1 : 0 }}
-        className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
+        className={forceHero
+          ? "absolute inset-0 w-full h-full object-cover grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
+          : "w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
+        }
         loading="lazy"
         draggable={false}
       />
@@ -315,10 +321,10 @@ export default function MagazineLayout({
                 <div className="lg:col-span-8 space-y-2 md:space-y-3">
                   {photos.reduce<React.ReactNode[][]>((acc, photo, idx) => {
                     const p = idx % 7;
-                    /* Image 1: full-width hero */
+                    /* Image 1: full-width hero (first image forced landscape) */
                     if (p === 0) {
                       acc.push([
-                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} forceHero={idx === 0} />,
                       ]);
                     }
                     /* Images 2 & 3: half + half */
