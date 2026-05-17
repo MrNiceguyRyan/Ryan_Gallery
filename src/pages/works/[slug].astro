@@ -79,6 +79,34 @@ const ogImage =
     ? `${photos[0].imageUrl}?auto=format&w=1200&q=85`
     : null) ??
   undefined;
+
+// ─── JSON-LD: ImageGallery + ImageObject[] ───
+const siteUrl = (Astro.site ?? new URL('https://ryangallery.com')).toString().replace(/\/$/, '');
+const pageUrl = `${siteUrl}/works/${collection.slug}`;
+
+const imageObjects = photos.slice(0, 12).map((p) => ({
+  '@type': 'ImageObject',
+  contentUrl: `${p.imageUrl}?auto=format&w=1600&q=85`,
+  thumbnailUrl: `${p.imageUrl}?auto=format&w=400&q=70`,
+  name: p.title || `${collection.name} — photograph`,
+  width: p.width ?? undefined,
+  height: p.height ?? undefined,
+  author: { '@type': 'Person', name: 'Ryan Xu' },
+  copyrightHolder: { '@type': 'Person', name: 'Ryan Xu' },
+  ...(p.camera ? { camera: p.camera } : {}),
+}));
+
+const collectionSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'ImageGallery',
+  name: collection.name,
+  description: pageDescription,
+  url: pageUrl,
+  ...(collection.year ? { datePublished: String(collection.year) } : {}),
+  ...(collection.location ? { contentLocation: { '@type': 'Place', name: collection.location } } : {}),
+  author: { '@type': 'Person', name: 'Ryan Xu' },
+  image: imageObjects,
+};
 ---
 
 <Layout
@@ -86,6 +114,7 @@ const ogImage =
   description={pageDescription}
   ogImage={ogImage}
   ogType="article"
+  jsonLd={collectionSchema}
 >
   <WorkDetailPage client:load collection={collection} photos={photos} />
   <Footer />

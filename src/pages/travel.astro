@@ -32,7 +32,7 @@ const photos: Photo[] = await sanityClient.fetch(`
 const mapboxToken = getMapboxToken();
 ---
 
-<Layout title="Travel | Ryan" description="The Interactive Geo-Map — photography locations around the world." dark={true}>
+<Layout title="Travel | Ryan" description="Geo-tagged photographic archive. Locations across the United States." dark={true} ogImage={photos[0]?.imageUrl ? `${photos[0].imageUrl}?auto=format&w=1200&q=85` : undefined}>
   <Nav client:load currentPath={currentPath} dark={true} />
 
   <!-- Parallax Hero -->
@@ -42,7 +42,7 @@ const mapboxToken = getMapboxToken();
     title="The Interactive"
     titleLine2="Geo-Map."
     label="Explore the coordinates"
-    meta={[`${photos.length} Locations`, 'Mapped worldwide']}
+    meta={[`${photos.length} Locations`, 'Mapped across the United States']}
     objectPosition="center 60%"
     dark={true}
   />

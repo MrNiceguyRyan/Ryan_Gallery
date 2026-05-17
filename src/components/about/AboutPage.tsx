@@ -3,13 +3,14 @@ import type { SiteSettings, TimelineItem } from '../../types';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
-/** Fallback timeline shown when Sanity has no data yet */
+/** Fallback timeline shown when Sanity has no data yet. Only entries
+ *  backed by real collections are listed. Future additions go through
+ *  Sanity Studio, not this fallback. */
 const FALLBACK_TIMELINE: TimelineItem[] = [
-  { year: '2025', title: 'Tokyo Neon Series', description: 'Captured the duality of ancient temples and neon-lit streets across Japan.' },
-  { year: '2024', title: 'New York Stories', description: 'A visual journey through the streets, architecture, and energy of New York City.' },
-  { year: '2024', title: 'Paris Lumière', description: 'The timeless elegance and romantic atmosphere of Paris through a modern lens.' },
-  { year: '2024', title: 'Greek Islands', description: 'Sun-kissed walls and endless blue of the Mediterranean under warm Aegean light.' },
-  { year: '2023', title: 'Started Photography', description: 'Picked up my first camera and fell in love with the art of seeing.' },
+  { year: '2024', title: 'New York Stories', description: 'Streets, architecture, and the off-hours light of the five boroughs.' },
+  { year: '2024', title: 'Southwest Sequence', description: 'Zion, Bryce Canyon, Page, and the Arizona high desert — sandstone under hard sun.' },
+  { year: '2024', title: 'Florida Coast', description: 'Miami and Orlando — humid blues, neon greens, salt-bleached pastels.' },
+  { year: '2023', title: 'Started Photography', description: 'First camera. First frame I cared about. Archive begins here.' },
 ];
 
 interface Props {
@@ -20,8 +21,8 @@ export default function AboutPage({ settings }: Props) {
   const name      = settings?.name      ?? 'Ryan Xu';
   const bio       = settings?.bio       ?? null;
   const avatarUrl = settings?.avatarUrl ?? 'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg?auto=format&w=400&h=400&fit=crop&crop=right&q=80';
-  const email     = settings?.email     ?? 'hello@ryanxu.com';
-  const instagram = settings?.instagram ?? 'https://instagram.com';
+  const email     = settings?.email     ?? 'ryan2420159421@gmail.com';
+  const instagram = settings?.instagram ?? 'https://www.instagram.com/ryan_photoo/';
   const timeline  = (settings?.timeline?.length ?? 0) > 0
     ? settings!.timeline!
     : FALLBACK_TIMELINE;
@@ -83,19 +84,23 @@ export default function AboutPage({ settings }: Props) {
           </motion.div>
         ) : (
           <motion.div
-            className="mt-8 space-y-4 text-left md:text-center"
+            className="mt-10 space-y-2.5 text-left max-w-lg mx-auto font-mono text-[12px]"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3, ease: expo }}
           >
-            <p className="text-[15px] text-white/50 font-light leading-relaxed max-w-xl mx-auto">
-              I believe in capturing the quiet moments where light meets intention.
-              Every frame is a conversation — between subject and space, stillness and motion, the seen and the felt.
-            </p>
-            <p className="text-[15px] text-white/50 font-light leading-relaxed max-w-xl mx-auto">
-              Based in New York, I shoot on the Fujifilm X-T50 and Nikon Zf. There's something about the weight of a real shutter,
-              the intention behind each exposure, that digital convenience can never replace.
-            </p>
+            <div className="flex items-baseline gap-4">
+              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
+              <span className="text-white/60">Light. Geometry. Stillness.</span>
+            </div>
+            <div className="flex items-baseline gap-4">
+              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
+              <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
+            </div>
+            <div className="flex items-baseline gap-4">
+              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
+              <span className="text-white/60">Personal archive · selected frames only.</span>
+            </div>
           </motion.div>
         )}
 
@@ -127,7 +132,7 @@ export default function AboutPage({ settings }: Props) {
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: expo }}
           >
-            A timeline of visual exploration.
+Timeline // Operations log.
           </motion.h2>
         </div>
 
@@ -180,7 +185,7 @@ export default function AboutPage({ settings }: Props) {
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: expo }}
           >
-            Contact Me
+Contact // Channels.
           </motion.h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -218,7 +223,7 @@ export default function AboutPage({ settings }: Props) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
               </svg>
-              <p className="text-sm font-light text-white/50">New York / Worldwide</p>
+              <p className="text-sm font-light text-white/50">New York, NY</p>
             </div>
 
             <div className="p-5 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">

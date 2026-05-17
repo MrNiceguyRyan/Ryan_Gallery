@@ -83,7 +83,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
         <motion.img
           key={photo._id}
           src={`${photo.imageUrl}?auto=format&w=1800&q=90`}
-          alt={photo.title || ''}
+          alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1} of ${photos.length}`}
           className="max-w-[92vw] max-h-[78vh] object-contain select-none"
           initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
           animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}

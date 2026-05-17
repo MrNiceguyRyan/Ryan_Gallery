@@ -73,7 +73,7 @@ function PhotoCell({
         whileHover={{ scale: 1.04 }}
         transition={{ duration: 1.2, ease: expo }}
         src={`${photo.imageUrl}?auto=format&w=${imgWidth}&q=82`}
-        alt={photo.title || ''}
+        alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
         animate={{ opacity: isLoaded ? 1 : 0 }}
         className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
         loading="lazy"

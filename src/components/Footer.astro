@@ -4,6 +4,10 @@ interface Props {
   dark?: boolean;
 }
 const { dark = false } = Astro.props;
+
+// Personal hub link (system-voice "node" link back to the user's main info hub).
+// Hidden gracefully when PUBLIC_HUB_URL env var is not set.
+const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 ---
 <footer class:list={[
   "py-20 px-6 md:px-16 max-w-7xl mx-auto border-t mt-12",
@@ -31,4 +35,23 @@ const { dark = false } = Astro.props;
       <span>Nikon Zf</span>
     </div>
   </div>
+
+  {hubUrl && (
+    <div class:list={[
+      "mt-8 pt-6 border-t flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.3em]",
+      dark ? "border-white/5 text-white/30" : "border-gray-100 text-gray-400"
+    ]}>
+      <span>node // photographic_archive</span>
+      <a
+        href={hubUrl}
+        rel="me"
+        class:list={[
+          "transition-colors duration-300",
+          dark ? "hover:text-white/80" : "hover:text-gray-900"
+        ]}
+      >
+        ← personal hub
+      </a>
+    </div>
+  )}
 </footer>

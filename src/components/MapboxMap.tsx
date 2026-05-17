@@ -434,7 +434,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     >
                       <img
                         src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`}
-                        alt=""
+                        alt={photo.title || photo.location?.city || 'Map location'}
                         className="w-full h-full object-cover"
                         draggable={false}
                       />

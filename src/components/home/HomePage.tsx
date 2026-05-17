@@ -41,9 +41,9 @@ function MobileFilmstripItem({
   const y = useTransform(smoothProgress, [0, 1], ['-35%', '35%']);
 
   const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    ? `${collection.coverImageUrl}?auto=format&w=1200&q=80`
     : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      ? `${collection.photos[0].imageUrl}?auto=format&w=1200&q=80`
       : '';
 
   return (
@@ -602,7 +602,7 @@ export default function HomePage({ collections, photos }: Props) {
               <span>Journal Gallery</span>
             </div>
             <p className="max-w-xs text-center md:text-left leading-loose">
-              A curated collection of visual narratives from across the globe.
+              Personal photographic archive · selected frames from across the United States.
             </p>
             <div className="text-[9px] uppercase tracking-[0.4em] opacity-40 mt-4">
               &copy; {new Date().getFullYear()} Journal Gallery
@@ -610,21 +610,20 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
           <div className="flex gap-16">
             <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Social</span>
-              <a href="#" className="hover:text-white transition-colors">
+              <span className="opacity-100 font-bold mb-2">Channels</span>
+              <a
+                href="https://www.instagram.com/ryan_photoo/"
+                target="_blank"
+                rel="noopener noreferrer me"
+                className="hover:text-white transition-colors"
+              >
                 Instagram
               </a>
-              <a href="#" className="hover:text-white transition-colors">
-                Vero
-              </a>
-            </div>
-            <div className="flex flex-col gap-4">
-              <span className="opacity-100 font-bold mb-2">Legal</span>
-              <a href="#" className="hover:text-white transition-colors">
-                Privacy
-              </a>
-              <a href="#" className="hover:text-white transition-colors">
-                Rights
+              <a
+                href="mailto:ryan2420159421@gmail.com"
+                className="hover:text-white transition-colors"
+              >
+                Email
               </a>
             </div>
           </div>

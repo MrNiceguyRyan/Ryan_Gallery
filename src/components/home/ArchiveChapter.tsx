@@ -28,9 +28,9 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-15%']);
 
   const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=2000&q=80`
+    ? `${collection.coverImageUrl}?auto=format&w=1400&q=80`
     : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=2000&q=80`
+      ? `${collection.photos[0].imageUrl}?auto=format&w=1400&q=80`
       : '';
 
   const coords = useMemo(() => {
