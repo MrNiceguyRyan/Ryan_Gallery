@@ -22,8 +22,8 @@ const {
   jsonLd,
 } = Astro.props;
 
-const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryangallery.com');
-const siteUrl = (Astro.site ?? new URL('https://ryangallery.com')).toString().replace(/\/$/, '');
+const canonicalURL = new URL(Astro.url.pathname, Astro.site ?? 'https://ryanxugallery.com');
+const siteUrl = (Astro.site ?? new URL('https://ryanxugallery.com')).toString().replace(/\/$/, '');
 
 // ─── Default JSON-LD: Person (Ryan Xu) + WebSite ───
 const personSchema = {

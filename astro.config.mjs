@@ -6,7 +6,7 @@ import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
-  site: 'https://ryangallery.com',
+  site: 'https://ryanxugallery.com',
   output: 'static',
   prefetch: {
     // Enable Astro's built-in link prefetching. Opt-in via `data-astro-prefetch`
@@ -39,7 +39,7 @@ export default defineConfig({
       customPages: [],
       serialize(item) {
         // Homepage: highest priority, daily
-        if (item.url === 'https://ryangallery.com/') {
+        if (item.url === 'https://ryanxugallery.com/') {
           return { ...item, priority: 1.0, changefreq: 'weekly' };
         }
         // Works collection pages: high priority, monthly
