@@ -131,14 +131,33 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     </svg>
     <slot />
 
-    <!-- Global image protection: prevent right-click, drag & long-press save -->
+    <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
     <style is:global>
       img {
         -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
         user-select: none;
         -webkit-touch-callout: none;
         pointer-events: auto;
         -webkit-user-drag: none;
+        -khtml-user-drag: none;
+        -moz-user-drag: none;
+        -o-user-drag: none;
+      }
+
+      /* When printing, hide all images so a Save → Print → PDF route doesn't
+         yield clean copies. Show a watermark in their place. */
+      @media print {
+        img, video, canvas, svg { display: none !important; }
+        body::before {
+          content: "© Ryan Xu · ryanxugallery.com — viewing copy, not for distribution.";
+          display: block;
+          padding: 2rem;
+          font-family: ui-monospace, monospace;
+          font-size: 12px;
+          color: #444;
+        }
       }
 
       /* ═══════════════════════════════════════════════════════
@@ -329,13 +348,26 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       })();
 
       // ── Image protection ──
+      // Block right-click anywhere on a photo (img tag OR a container that
+      // declares itself as wrapping a protected image via .work-photo-item /
+      // [data-protected] / nodes inside the lightbox).
+      function isProtectedTarget(t) {
+        if (!t || !t.closest) return false;
+        if (t.tagName === 'IMG') return true;
+        return !!t.closest('img, .work-photo-item, [data-protected], #lightbox, .photo-cell');
+      }
       document.addEventListener('contextmenu', function(e) {
-        if (e.target && e.target.tagName === 'IMG') {
-          e.preventDefault();
-        }
+        if (isProtectedTarget(e.target)) e.preventDefault();
       }, true);
       document.addEventListener('dragstart', function(e) {
-        if (e.target && e.target.tagName === 'IMG') {
+        if (isProtectedTarget(e.target)) e.preventDefault();
+      }, true);
+      // Block Cmd/Ctrl + S (save page) and Cmd/Ctrl + P (print).
+      // Power users can still bypass via DevTools — this is a deterrent
+      // for casual saving, not a security boundary.
+      document.addEventListener('keydown', function(e) {
+        var mod = e.metaKey || e.ctrlKey;
+        if (mod && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P')) {
           e.preventDefault();
         }
       }, true);

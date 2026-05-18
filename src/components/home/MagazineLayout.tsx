@@ -4,6 +4,7 @@ import { ArrowRight, Share2, Check, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
 import { getMapboxToken } from '../../config/mapbox';
+import { EDITORIAL_FALLBACKS, renderPortableText, renderFallback } from '../../lib/narratives';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -255,6 +256,23 @@ export default function MagazineLayout({
                         {collection.description}
                       </p>
                     )}
+
+                    {/* Editorial introduction — Sanity `introduction` block, with
+                         per-slug fallback. Edit this from Sanity Studio to
+                         override the fallback. */}
+                    {(() => {
+                      const hasIntro = collection.introduction && collection.introduction.length > 0;
+                      const fallbackParas = collection.slug ? EDITORIAL_FALLBACKS[collection.slug] : null;
+                      if (!hasIntro && !fallbackParas) return null;
+                      return (
+                        <div className="text-[15px] md:text-base leading-[1.75] font-serif italic opacity-70">
+                          <span className="text-4xl md:text-5xl float-left mr-2.5 mt-1 font-serif not-italic leading-none opacity-25 select-none">&ldquo;</span>
+                          {hasIntro
+                            ? renderPortableText(collection.introduction!, 'border-white/15')
+                            : renderFallback(fallbackParas!)}
+                        </div>
+                      );
+                    })()}
 
                     {/* Scroll progress */}
                     <div className="pt-12 space-y-4">

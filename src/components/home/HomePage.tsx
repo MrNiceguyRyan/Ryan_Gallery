@@ -315,68 +315,6 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* Corner System Status Labels */}
-          <div className="absolute top-12 left-12 z-50 pointer-events-none hidden md:block">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.2 }}
-              transition={{ delay: 1, duration: 2 }}
-              className="flex flex-col gap-1 font-mono text-[6px] tracking-[0.4em] uppercase"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-1 h-1 bg-white animate-pulse" />
-                <span>System.Core_Active</span>
-              </div>
-              <span className="opacity-50">Stability: 99.98%</span>
-            </motion.div>
-          </div>
-
-          <div className="absolute top-12 right-12 z-50 pointer-events-none hidden md:block">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.2 }}
-              transition={{ delay: 1.2, duration: 2 }}
-              className="flex flex-col items-end gap-1 font-mono text-[6px] tracking-[0.4em] uppercase"
-            >
-              <div className="flex items-center gap-2">
-                <span>Syncing_Archive</span>
-                <div className="w-1 h-3 border-l border-white/30 animate-[pulse_2s_infinite]" />
-              </div>
-              <span className="opacity-50">Encryption: AES-256</span>
-            </motion.div>
-          </div>
-
-          <div className="absolute bottom-12 right-12 z-50 pointer-events-none hidden md:block">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.2 }}
-              transition={{ delay: 1.5, duration: 2 }}
-              className="flex flex-col items-end gap-1 font-mono text-[6px] tracking-[0.4em] uppercase"
-            >
-              <span>Node_NRT.Gallery.V10</span>
-              <span className="opacity-50">Local_Time: {new Date().toLocaleTimeString()}</span>
-            </motion.div>
-          </div>
-
-          {/* Memory Assembly Intro (Metadata Flashes) */}
-          <motion.div
-            className="absolute inset-x-0 top-1/3 z-50 pointer-events-none flex flex-col items-center gap-2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 1, 0, 1, 0] }}
-            transition={{ duration: 0.8, times: [0, 0.2, 0.4, 0.6, 1], ease: 'linear' }}
-          >
-            <div className="flex gap-12 font-mono text-[8px] tracking-[0.5em] opacity-40">
-              <span>LAT 35.6895&deg; N</span>
-              <span>SHUTTER 1/125</span>
-              <span>F1.2</span>
-              <span>LONG 139.6917&deg; E</span>
-            </div>
-            <div className="w-64 h-[1px] bg-white/10" />
-            <div className="text-[7px] font-mono opacity-20 uppercase tracking-[1em]">
-              Scanning Archives...
-            </div>
-          </motion.div>
-
           {/* Header content */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -506,24 +444,13 @@ export default function HomePage({ collections, photos }: Props) {
                 <div className="pt-8 space-y-4">
                   <div className="space-y-2">
                     <span className="text-[7px] uppercase tracking-widest opacity-20 block font-mono">
-                      Archive_Stream
+                      Scroll Progress
                     </span>
                     <div className="w-full h-[1px] bg-white/5 relative overflow-hidden">
                       <motion.div
                         className="absolute top-0 left-0 h-full bg-white/40"
                         style={{ width: sidebarScrollWidth }}
                       />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 opacity-20 font-mono text-[6px] uppercase tracking-widest leading-relaxed">
-                    <div className="flex justify-between">
-                      <span>Stability:</span>
-                      <span>99%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Sync_ID:</span>
-                      <span className="text-white/60">OK</span>
                     </div>
                   </div>
                 </div>
