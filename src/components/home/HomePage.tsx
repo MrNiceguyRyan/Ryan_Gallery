@@ -4,7 +4,6 @@ import { ArrowRight, Camera } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import ParticleTitle from './ParticleTitle';
-import EtherealAudio from './EtherealAudio';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
@@ -109,7 +108,6 @@ function MobileFilmstripItem({
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [showOpening, setShowOpening] = useState(false);
-  const [isAudioTriggered, setIsAudioTriggered] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollYProgress } = useScroll();
 
@@ -399,11 +397,9 @@ export default function HomePage({ collections, photos }: Props) {
             </div>
 
             <div className="space-y-4 max-w-7xl w-full mx-auto">
-              <EtherealAudio isTriggered={isAudioTriggered} />
               <ParticleTitle
                 text="Journal <br/> Gallery"
                 className="h-64 md:h-96"
-                onHover={setIsAudioTriggered}
               />
 
               <motion.p
