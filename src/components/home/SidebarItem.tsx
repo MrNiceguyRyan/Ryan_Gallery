@@ -11,10 +11,11 @@ interface SidebarItemProps {
 export default function SidebarItem({ col, idx, isActive }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
+  // Hover thumbnail — physical box is 112×160 px so w=200 already covers Retina
   const coverUrl = col.coverImageUrl
-    ? `${col.coverImageUrl}?auto=format&w=400&q=60`
+    ? `${col.coverImageUrl}?auto=format&w=240&q=60`
     : col.photos?.[0]?.imageUrl
-      ? `${col.photos[0].imageUrl}?auto=format&w=400&q=60`
+      ? `${col.photos[0].imageUrl}?auto=format&w=240&q=60`
       : '';
 
   return (
@@ -37,7 +38,10 @@ export default function SidebarItem({ col, idx, isActive }: SidebarItemProps) {
           >
             <img
               src={coverUrl}
+              alt={col.name}
               className="w-full h-full object-cover grayscale brightness-125"
+              loading="lazy"
+              decoding="async"
               draggable={false}
             />
             <div className="absolute inset-0 bg-white/5 mix-blend-overlay" />

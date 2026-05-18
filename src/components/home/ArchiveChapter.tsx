@@ -27,11 +27,15 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   // Parallax for the cover image inside its container
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-15%']);
 
-  const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=1400&q=80`
-    : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=1400&q=80`
-      : '';
+  const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
+  // Desktop chapter cover — container caps at ~1100 px, Retina hits ~2200 px.
+  // Bracket 900 / 1400 / 1800; let the browser pick. (Mobile uses MobileFilmstripItem
+  // instead — this component is `hidden md:block`, and `loading="lazy"` below ensures
+  // mobile users never request these URLs.)
+  const coverUrl     = coverBase ? `${coverBase}?auto=format&w=1400&q=80` : '';
+  const coverSrcSet  = coverBase
+    ? `${coverBase}?auto=format&w=900&q=80 900w, ${coverBase}?auto=format&w=1400&q=80 1400w, ${coverBase}?auto=format&w=1800&q=78 1800w`
+    : undefined;
 
   const coords = useMemo(() => {
     const photo = collection.photos?.find(p => p.location?.lat != null && p.location?.lng != null);
@@ -98,7 +102,11 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               <motion.img
                 style={{ y: imgY }}
                 src={coverUrl}
+                srcSet={coverSrcSet}
+                sizes="(min-width: 1024px) 66vw, 100vw"
                 alt={collection.name}
+                loading="lazy"
+                decoding="async"
                 animate={{
                   scale: isHovered ? 1.12 : isActive ? 1.05 : 1,
                   filter: isHovered || isActive

@@ -28,7 +28,19 @@ function PhotoCell({
     : span === 'half' ? 'col-span-3'
     : 'col-span-2';
 
-  const imgWidth = span === 'full' ? 1400 : span === 'half' ? 800 : 500;
+  // Width brackets per span — Retina-aware. The browser picks based on `sizes`.
+  const widthLadder =
+    span === 'full' ? [900, 1400, 1800] :
+    span === 'half' ? [500, 800, 1200] :
+                      [300, 500, 800];
+  const fallbackWidth = widthLadder[1];
+  const srcSet = widthLadder
+    .map((w) => `${photo.imageUrl}?auto=format&w=${w}&q=82 ${w}w`)
+    .join(', ');
+  const sizesAttr =
+    span === 'full' ? '(min-width: 1024px) 60vw, 100vw' :
+    span === 'half' ? '(min-width: 1024px) 30vw, 50vw' :
+                      '(min-width: 1024px) 20vw, 33vw';
 
   const [isLoaded, setIsLoaded] = useState(false);
   const isAnyHovered = hoveredIndex !== null;
@@ -72,11 +84,14 @@ function PhotoCell({
         onLoad={() => setIsLoaded(true)}
         whileHover={{ scale: 1.04 }}
         transition={{ duration: 1.2, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=${imgWidth}&q=82`}
+        src={`${photo.imageUrl}?auto=format&w=${fallbackWidth}&q=82`}
+        srcSet={srcSet}
+        sizes={sizesAttr}
         alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
         animate={{ opacity: isLoaded ? 1 : 0 }}
         className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[1.2s]"
         loading="lazy"
+        decoding="async"
         draggable={false}
       />
     </motion.div>

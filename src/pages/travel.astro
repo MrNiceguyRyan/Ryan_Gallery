@@ -33,6 +33,14 @@ const mapboxToken = getMapboxToken();
 ---
 
 <Layout title="Travel | Ryan" description="Geo-tagged photographic archive. Locations across the United States." dark={true} ogImage={photos[0]?.imageUrl ? `${photos[0].imageUrl}?auto=format&w=1200&q=85` : undefined}>
+  {/* Mapbox-only head injections — these were moved off the global Layout so
+       /, /about, /works/[slug] no longer pay for them. */}
+  <Fragment slot="head">
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+    <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" />
+  </Fragment>
+
   <Nav client:load currentPath={currentPath} dark={true} />
 
   <!-- Parallax Hero -->
@@ -48,8 +56,9 @@ const mapboxToken = getMapboxToken();
   />
 
   <section class="py-16 px-6 md:px-16 max-w-7xl mx-auto animate-fade-in-up">
-    <!-- Map + integrated location cards -->
-    <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
+    {/* client:visible — Mapbox bundle (~250 KB gzipped) and its CSS only hydrate
+         when the user scrolls to the map section, not on page load. */}
+    <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
   </section>
 
   <Footer dark={true} />

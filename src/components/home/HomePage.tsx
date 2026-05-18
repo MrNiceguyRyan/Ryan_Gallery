@@ -8,6 +8,7 @@ import EtherealAudio from './EtherealAudio';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
+import BackgroundVideo from './BackgroundVideo';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -40,11 +41,13 @@ function MobileFilmstripItem({
 
   const y = useTransform(smoothProgress, [0, 1], ['-35%', '35%']);
 
-  const coverUrl = collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=1200&q=80`
-    : collection.photos?.[0]?.imageUrl
-      ? `${collection.photos[0].imageUrl}?auto=format&w=1200&q=80`
-      : '';
+  const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
+  // Mobile filmstrip — 100vw container, 28vh tall. Real device widths span 360–430 px
+  // and Retina hits ~860 px; bracket 600 / 900 / 1200 and let the browser pick.
+  const coverUrl     = coverBase ? `${coverBase}?auto=format&w=900&q=80` : '';
+  const coverSrcSet  = coverBase
+    ? `${coverBase}?auto=format&w=600&q=80 600w, ${coverBase}?auto=format&w=900&q=80 900w, ${coverBase}?auto=format&w=1200&q=78 1200w`
+    : undefined;
 
   return (
     <motion.div
@@ -58,6 +61,8 @@ function MobileFilmstripItem({
         <motion.img
           style={{ y }}
           src={coverUrl}
+          srcSet={coverSrcSet}
+          sizes="100vw"
           alt={collection.name}
           variants={{
             active: { scale: 1.1, filter: 'grayscale(0%)' },
@@ -65,6 +70,8 @@ function MobileFilmstripItem({
           initial={{ filter: 'grayscale(100%)', scale: 1 }}
           transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
           className="absolute inset-0 -top-[35%] w-full h-[170%] object-cover object-center"
+          loading="lazy"
+          decoding="async"
           draggable={false}
         />
       )}
@@ -182,18 +189,9 @@ export default function HomePage({ collections, photos }: Props) {
           <div className="absolute inset-0 bg-[#0A0A0A] z-0" />
 
           <div className="absolute inset-0 z-10 overflow-hidden lens-breathing shutter-flicker">
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover grayscale opacity-[0.22] contrast-125"
-            >
-              <source
-                src="https://assets.mixkit.co/videos/preview/mixkit-street-crosswalk-in-a-large-city-at-sunset-34305-preview.mp4"
-                type="video/mp4"
-              />
-            </video>
+            <BackgroundVideo
+              src="https://assets.mixkit.co/videos/preview/mixkit-street-crosswalk-in-a-large-city-at-sunset-34305-preview.mp4"
+            />
 
             {/* Light Leak Layer */}
             <div

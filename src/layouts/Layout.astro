@@ -70,11 +70,12 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     <link rel="shortcut icon" href="/favicon.ico?v=3" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
-    <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
+    {/* Sanity CDN — every image on the site comes through here, so warm the TLS */}
+    <link rel="preconnect" href="https://cdn.sanity.io" crossorigin />
+    {/* mapbox preconnect only on /travel */}
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet" />
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" rel="stylesheet" />
+    {/* mapbox-gl CSS is only needed on /travel — loaded by that page's head, not globally */}
 
     <!-- Primary Meta -->
     <title>{title}</title>
@@ -106,6 +107,9 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     {allJsonLd.map((schema) => (
       <script type="application/ld+json" set:html={JSON.stringify(schema)} />
     ))}
+
+    {/* Page-specific <head> injections (preconnects, stylesheets) */}
+    <slot name="head" />
 
     <!-- Astro View Transitions — smooth page navigation -->
     <ClientRouter />

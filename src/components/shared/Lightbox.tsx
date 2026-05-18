@@ -82,8 +82,11 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       <AnimatePresence mode="wait">
         <motion.img
           key={photo._id}
-          src={`${photo.imageUrl}?auto=format&w=1800&q=90`}
+          src={`${photo.imageUrl}?auto=format&w=1400&q=88`}
+          srcSet={`${photo.imageUrl}?auto=format&w=900&q=88 900w, ${photo.imageUrl}?auto=format&w=1400&q=88 1400w, ${photo.imageUrl}?auto=format&w=2000&q=85 2000w`}
+          sizes="92vw"
           alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1} of ${photos.length}`}
+          decoding="async"
           className="max-w-[92vw] max-h-[78vh] object-contain select-none"
           initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
           animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}

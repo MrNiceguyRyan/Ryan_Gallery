@@ -52,9 +52,20 @@ export default function ParallaxHero({
       >
         <motion.img
           src={imageUrl}
+          srcSet={(() => {
+            // Strip an existing ?w=... query so we can rebuild a srcset ladder.
+            const base = imageUrl.replace(/[?&]w=\d+/, '').replace(/\?$/, '');
+            const sep = base.includes('?') ? '&' : '?';
+            return [600, 1200, 1800, 2400]
+              .map((w) => `${base}${sep}w=${w} ${w}w`)
+              .join(', ');
+          })()}
+          sizes="100vw"
           alt={title}
           className="w-full h-[120%] object-cover"
           style={{ objectPosition }}
+          fetchPriority="high"
+          decoding="async"
           initial={{ scale: 1.15, filter: dark ? 'brightness(0.4) blur(4px)' : 'brightness(0.7) blur(4px)' }}
           animate={{ scale: 1, filter: dark ? 'brightness(0.7) blur(0px)' : 'brightness(1.05) blur(0px)' }}
           transition={{ duration: 5, ease: [0.25, 0, 0.2, 1] }}
