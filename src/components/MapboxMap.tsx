@@ -666,7 +666,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               {group.clusters.map((cluster) => {
                 const isSelected = activeClusterCity === cluster.city;
                 return (
-                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 ${isSelected ? 'bg-white/10 text-white shadow-lg' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}>
+                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 active:scale-[0.98] min-h-[60px] ${isSelected ? 'bg-white/10 text-white shadow-lg' : 'bg-white/[0.03] hover:bg-white/[0.06] active:bg-white/[0.08]'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-white/5'}`}>
                         <img src={`${cluster.photos[0].imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />

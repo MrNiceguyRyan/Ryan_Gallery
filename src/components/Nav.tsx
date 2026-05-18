@@ -17,12 +17,17 @@ export default function Nav({ currentPath, dark = false }: Props) {
 
   return (
     <>
-      {/* Unified nav — matches homepage style: signature name left, pill buttons right */}
-      <nav className="fixed top-0 left-0 w-full z-50 px-6 py-6 md:px-12 flex justify-between items-center bg-transparent">
+      {/* Unified nav — matches homepage style: signature name left, pill buttons right.
+           Top padding honors iOS notch safe-area-inset so the signature isn't clipped
+           under the dynamic island. */}
+      <nav
+        className="fixed top-0 left-0 w-full z-50 px-6 py-5 md:px-12 md:py-6 flex justify-between items-center bg-transparent"
+        style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
+      >
         {/* Left: signature name */}
         <a
           href="/"
-          className="font-signature text-3xl md:text-4xl text-[#FDFDFB] mix-blend-difference hover:opacity-60 transition-all"
+          className="font-signature text-[28px] md:text-4xl leading-none text-[#FDFDFB] mix-blend-difference hover:opacity-60 transition-opacity duration-200 py-1"
         >
           Ryan Xu
         </a>
@@ -42,9 +47,9 @@ export default function Nav({ currentPath, dark = false }: Props) {
           ))}
         </div>
 
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger — 44×44 tap target (Apple HIG minimum) */}
         <button
-          className="md:hidden flex flex-col gap-1.5 p-1"
+          className="md:hidden flex flex-col items-end justify-center gap-1.5 w-11 h-11 -mr-2"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Menu"
         >

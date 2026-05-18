@@ -53,7 +53,9 @@ function MobileFilmstripItem({
       ref={containerRef}
       onClick={onClick}
       whileInView="active"
+      whileTap={{ scale: 0.985 }}
       viewport={{ margin: '-25% 0px -25% 0px' }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="relative w-full h-[28vh] overflow-hidden cursor-pointer border-b border-white/5 block group"
     >
       {coverUrl && (
@@ -81,9 +83,9 @@ function MobileFilmstripItem({
         className="absolute inset-0 transition-colors"
       />
 
-      {/* Centered Title */}
-      <div className="absolute inset-0 flex items-center justify-center p-6 z-10 pointer-events-none">
-        <h3 className="text-4xl text-white font-serif italic tracking-tighter text-center mix-blend-difference drop-shadow-lg">
+      {/* Centered Title — clamps and shrinks to fit narrow screens */}
+      <div className="absolute inset-0 flex items-center justify-center px-5 py-6 z-10 pointer-events-none">
+        <h3 className="text-3xl sm:text-4xl text-white font-serif italic tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
           {collection.name}
         </h3>
       </div>
@@ -281,7 +283,10 @@ export default function HomePage({ collections, photos }: Props) {
         />
 
         {/* ── Nav — signature font + pill buttons ── */}
-        <nav className="fixed top-0 left-0 w-full z-50 px-6 py-8 md:px-12 flex justify-between items-center bg-transparent">
+        <nav
+          className="fixed top-0 left-0 w-full z-50 px-6 py-5 md:py-8 md:px-12 flex justify-between items-center bg-transparent"
+          style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
+        >
           <motion.button
             onClick={() => {
               setSelectedCollection(null);
@@ -290,7 +295,7 @@ export default function HomePage({ collections, photos }: Props) {
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.2, ease: expo }}
-            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-3xl md:text-4xl text-[#FDFDFB] mix-blend-difference"
+            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-[28px] md:text-4xl leading-none text-[#FDFDFB] mix-blend-difference py-1"
           >
             Ryan Xu
           </motion.button>
@@ -300,7 +305,7 @@ export default function HomePage({ collections, photos }: Props) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               href="/travel"
-              className="px-4 md:px-6 py-2 rounded-full text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+              className="px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
             >
               Map
             </motion.a>
@@ -309,7 +314,7 @@ export default function HomePage({ collections, photos }: Props) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               href="/about"
-              className="px-4 md:px-6 py-2 rounded-full text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+              className="px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
             >
               About
             </motion.a>

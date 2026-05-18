@@ -76,9 +76,10 @@ export default function ParallaxHero({
         {dark && <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]/50 to-transparent" />}
       </motion.div>
 
-      {/* Text overlay — bottom-left */}
+      {/* Text overlay — bottom-left, narrower on small screens so it doesn't
+           collide with the bottom edge / safe area */}
       <motion.div
-        className="absolute bottom-12 md:bottom-20 left-6 md:left-16 z-10 max-w-2xl"
+        className="absolute bottom-10 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-10 max-w-2xl"
         style={{ y: smoothTextY, opacity }}
       >
         {label && (

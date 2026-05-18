@@ -146,6 +146,17 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         -o-user-drag: none;
       }
 
+      /* Mobile-only: prevent rubber-band bounce on the body so atmospheric
+         fixed elements (video, sunbeam, grid) don't drift on iOS, and stop
+         double-tap zoom which fights the cinematic transitions. */
+      html, body {
+        overscroll-behavior-y: none;
+      }
+      /* Touch devices don't get hover, so they shouldn't pay for cursor:none */
+      @media (hover: none) {
+        body { touch-action: manipulation; }
+      }
+
       /* When printing, hide all images so a Save → Print → PDF route doesn't
          yield clean copies. Show a watermark in their place. */
       @media print {

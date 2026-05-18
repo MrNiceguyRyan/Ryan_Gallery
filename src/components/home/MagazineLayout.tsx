@@ -217,18 +217,21 @@ export default function MagazineLayout({
           ref={containerRef}
           className="w-full h-full overflow-y-auto no-scrollbar relative bg-[#0A0A0A] text-[#FDFDFB]"
         >
-          {/* Sticky header */}
-          <div className="sticky top-0 left-0 w-full z-10 px-6 py-6 md:px-12 flex justify-between items-center backdrop-blur-3xl bg-black/80 border-b border-white/5">
+          {/* Sticky header — top padding honors iOS notch safe-area */}
+          <div
+            className="sticky top-0 left-0 w-full z-10 px-5 py-4 md:px-12 md:py-6 flex justify-between items-center backdrop-blur-3xl bg-black/80 border-b border-white/5"
+            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+          >
             <motion.button
               onClick={onClose}
               whileHover={{ x: -2 }}
               whileTap={{ scale: 0.96, x: -4 }}
               transition={{ duration: 0.2, ease: expo }}
-              className="flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold hover:opacity-60 transition-opacity"
+              className="flex items-center gap-3 text-[10px] uppercase tracking-[0.4em] font-bold hover:opacity-60 transition-opacity min-h-[44px] -ml-1 pl-1 pr-2"
             >
               <ArrowRight size={16} className="rotate-180" /> Back
             </motion.button>
-            <div className="text-[11px] uppercase tracking-[0.6em] font-bold opacity-30">
+            <div className="text-[9px] md:text-[11px] uppercase tracking-[0.4em] md:tracking-[0.6em] font-bold opacity-30 truncate max-w-[55vw] md:max-w-none">
               {collection.location || collection.name}
             </div>
           </div>
@@ -248,9 +251,9 @@ export default function MagazineLayout({
                        and the sticky header (h-16 ≈ 4rem) plus breathing room,
                        so the whole sidebar fits inside the viewport with no
                        outer scrollbar. */}
-                <aside className="lg:col-span-4 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] flex flex-col gap-6 md:gap-8">
+                <aside className="lg:col-span-4 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:flex lg:flex-col gap-8 lg:gap-6 xl:gap-8 space-y-8 lg:space-y-0">
                   {/* TOP — header */}
-                  <header className="shrink-0 space-y-4">
+                  <header className="lg:shrink-0 space-y-4">
                     <div className="flex items-center gap-4">
                       <span className="text-[10px] uppercase tracking-[0.6em] font-bold opacity-30">
                         Vol. 01
@@ -284,7 +287,7 @@ export default function MagazineLayout({
                       return <div className="flex-1 min-h-0" />;
                     }
                     return (
-                      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pr-2 -mr-2 text-[14px] md:text-[15px] leading-[1.7] font-serif italic opacity-75">
+                      <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar lg:pr-2 lg:-mr-2 text-[14px] md:text-[15px] leading-[1.7] font-serif italic opacity-75">
                         <span className="text-4xl md:text-5xl float-left mr-2.5 mt-1 font-serif not-italic leading-none opacity-25 select-none">&ldquo;</span>
                         {hasIntro
                           ? renderPortableText(collection.introduction!, 'border-white/15')
@@ -296,7 +299,7 @@ export default function MagazineLayout({
                   })()}
 
                   {/* BOTTOM — pinned: scroll progress + frame count + mini-map */}
-                  <footer className="shrink-0 space-y-5">
+                  <footer className="lg:shrink-0 space-y-5">
                     {/* Scroll progress */}
                     <div className="space-y-2.5">
                       <div className="flex justify-between text-[9px] uppercase tracking-widest font-bold opacity-30">
@@ -327,7 +330,10 @@ export default function MagazineLayout({
                         whileTap={{ scale: 0.98 }}
                         transition={{ duration: 0.35, ease: expo }}
                       >
-                        <div className="relative h-32 lg:h-28 xl:h-32 overflow-hidden rounded-xl bg-white/[0.03]">
+                        {/* Aspect-locked: matches the Mapbox source aspect (600×320 ≈ 15:8)
+                             so the static map image renders edge-to-edge at any width
+                             without object-cover cropping the top/bottom. */}
+                        <div className="relative aspect-[15/8] lg:aspect-auto lg:h-28 xl:h-32 overflow-hidden rounded-xl bg-white/[0.03]">
                           <motion.img
                             src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+ffffff(${coords.lng},${coords.lat})/${coords.lng},${coords.lat},6,0/600x320@2x?access_token=${mapboxToken}`}
                             className="absolute inset-0 w-full h-full object-cover"

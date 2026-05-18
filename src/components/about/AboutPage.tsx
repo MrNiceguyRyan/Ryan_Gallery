@@ -166,11 +166,14 @@ Timeline // Operations log.
             transition={{ duration: 1.2, ease: expo }}
             style={{ transformOrigin: 'left' }}
           />
-          <div className="flex gap-5 px-6 md:px-16 pb-4 overflow-x-auto no-scrollbar">
+          <div
+            className="flex gap-5 px-6 md:px-16 pb-4 overflow-x-auto no-scrollbar snap-x snap-mandatory md:snap-none"
+            style={{ scrollPaddingInline: '1.5rem' }}
+          >
             {timeline.map((item, i) => (
               <motion.div
                 key={`${item.year}-${i}`}
-                className="flex-shrink-0 w-56 md:w-64 group"
+                className="flex-shrink-0 w-56 md:w-64 group snap-start"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-40px' }}

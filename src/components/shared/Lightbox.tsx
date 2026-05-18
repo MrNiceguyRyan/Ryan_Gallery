@@ -69,13 +69,14 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Close button */}
+      {/* Close button — 44px tap target, safe-area-aware on iOS */}
       <motion.button
         onClick={onClose}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors duration-200"
+        className="absolute right-4 md:right-6 z-10 w-11 h-11 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors duration-200"
+        style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}
         aria-label="Close"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -119,7 +120,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
           whileHover={{ scale: 1.15, x: -2 }}
           whileTap={{ scale: 0.9, x: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
+          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 hidden md:flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Previous photo"
         >
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
@@ -135,7 +136,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
           whileHover={{ scale: 1.15, x: 2 }}
           whileTap={{ scale: 0.9, x: 4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
+          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 hidden md:flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Next photo"
         >
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
@@ -157,20 +158,20 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
         </div>
       )}
 
-      {/* Bottom info */}
+      {/* Bottom info — wraps gracefully on narrow viewports */}
       <div
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+        className="absolute bottom-5 md:bottom-6 left-1/2 -translate-x-1/2 w-[90vw] max-w-3xl flex flex-col items-center gap-2 md:gap-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4 max-w-full">
           {photo.title && (
-            <span className="text-white/60 text-sm font-light tracking-wide">{photo.title}</span>
+            <span className="text-white/60 text-[13px] md:text-sm font-light tracking-wide truncate">{photo.title}</span>
           )}
-          <span className="text-white/30 text-xs font-mono tracking-wider">
+          <span className="text-white/30 text-[11px] md:text-xs font-mono tracking-wider shrink-0">
             {index + 1} / {photos.length}
           </span>
         </div>
-        <div className="flex items-center gap-4 text-[13px] text-white/35 font-mono tracking-wide">
+        <div className="flex items-center justify-center gap-2 md:gap-4 text-[11px] md:text-[13px] text-white/35 font-mono tracking-wide flex-wrap">
           {photo.camera && <span className="text-white/45">{photo.camera}</span>}
           {photo.focalLength && (<><span className="text-white/15">|</span><span>{photo.focalLength}</span></>)}
           {photo.aperture && (<><span className="text-white/15">|</span><span>{photo.aperture}</span></>)}
