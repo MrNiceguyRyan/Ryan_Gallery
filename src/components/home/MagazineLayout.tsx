@@ -157,6 +157,15 @@ export default function MagazineLayout({
     });
   }, [scrollYProgress]);
 
+  // Reset internal scroll position whenever the user switches to a new
+  // collection (e.g. clicks "Keep Reading"). Without this the next story
+  // opens at the bottom — wherever the user clicked from.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, behavior: 'auto' });
+  }, [collection._id]);
+
   // Next story
   const currentIndex = allCollections.findIndex((c) => c._id === collection._id);
   const nextCollection = allCollections[(currentIndex + 1) % allCollections.length];

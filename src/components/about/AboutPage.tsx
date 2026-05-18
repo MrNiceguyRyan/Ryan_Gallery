@@ -70,7 +70,8 @@ export default function AboutPage({ settings }: Props) {
           Photographer · New York, NY · Fujifilm X-T50 & Nikon Zf
         </motion.p>
 
-        {/* Bio */}
+        {/* Bio — prose section. Override the fallback by filling
+             `siteSettings.bio` in Sanity Studio. */}
         {bio ? (
           <motion.div
             className="mt-8 text-left md:text-center"
@@ -78,28 +79,48 @@ export default function AboutPage({ settings }: Props) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3, ease: expo }}
           >
-            <p className="text-[15px] text-white/50 font-light leading-relaxed max-w-xl mx-auto">
+            <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-xl mx-auto whitespace-pre-line">
               {bio}
             </p>
           </motion.div>
         ) : (
           <motion.div
-            className="mt-10 space-y-2.5 text-left max-w-lg mx-auto font-mono text-[12px]"
+            className="mt-10 space-y-8 max-w-xl mx-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3, ease: expo }}
           >
-            <div className="flex items-baseline gap-4">
-              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
-              <span className="text-white/60">Light. Geometry. Stillness.</span>
+            {/* Statement — prose introduction */}
+            <div className="space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] text-left">
+              <p>
+                A photographic record of moving through cities and landscapes —
+                from the high-contrast geometry of Manhattan to the geologic
+                time of the American Southwest. No commissioned work, no client
+                briefs. Frames selected on a slow timeline, organized by
+                location, dated.
+              </p>
+              <p>
+                Off the camera: engineering and AI research. The discipline of
+                careful observation transfers between the two — both reward
+                patience over output volume. This site is one node in a
+                personal archive, not a portfolio for hire.
+              </p>
             </div>
-            <div className="flex items-baseline gap-4">
-              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
-              <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
-            </div>
-            <div className="flex items-baseline gap-4">
-              <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
-              <span className="text-white/60">Personal archive · selected frames only.</span>
+
+            {/* Metadata block — terse system signature below the prose */}
+            <div className="space-y-2.5 text-left max-w-md font-mono text-[12px] pt-4 border-t border-white/5">
+              <div className="flex items-baseline gap-4">
+                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
+                <span className="text-white/60">Light. Geometry. Stillness.</span>
+              </div>
+              <div className="flex items-baseline gap-4">
+                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
+                <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
+              </div>
+              <div className="flex items-baseline gap-4">
+                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
+                <span className="text-white/60">Personal archive · selected frames only.</span>
+              </div>
             </div>
           </motion.div>
         )}
