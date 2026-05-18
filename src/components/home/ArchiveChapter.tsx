@@ -170,7 +170,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.8 + i * 0.2, duration: 1.5, ease: 'circOut' }}
-                  className="w-32 h-44 overflow-hidden border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] grayscale hover:grayscale-0 transition-all duration-1000 group-hover:translate-y-[-10px]"
+                  className="w-32 h-44 overflow-hidden border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] grayscale hover:grayscale-0 transition-all duration-500 group-hover:translate-y-[-10px]"
                 >
                   <img src={url} className="w-full h-full object-cover" draggable={false} />
                 </motion.div>

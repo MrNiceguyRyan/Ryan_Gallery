@@ -282,15 +282,18 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Nav — signature font + pill buttons ── */}
         <nav className="fixed top-0 left-0 w-full z-50 px-6 py-8 md:px-12 flex justify-between items-center bg-transparent">
-          <button
+          <motion.button
             onClick={() => {
               setSelectedCollection(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="flex items-center gap-3 hover:opacity-60 transition-all font-signature text-3xl md:text-4xl text-[#FDFDFB] mix-blend-difference"
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.2, ease: expo }}
+            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-3xl md:text-4xl text-[#FDFDFB] mix-blend-difference"
           >
             Ryan Xu
-          </button>
+          </motion.button>
 
           <div className="flex items-center gap-2 md:gap-3">
             <motion.a

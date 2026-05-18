@@ -26,6 +26,8 @@ export default function SidebarItem({ col, idx, isActive }: SidebarItemProps) {
         const el = document.getElementById(`archive-item-${col._id}`);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }}
+      whileTap={{ scale: 0.96, x: 2 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
       className="flex flex-col items-start gap-0.5 text-left relative group py-3 h-[52px]"
     >
       <AnimatePresence>

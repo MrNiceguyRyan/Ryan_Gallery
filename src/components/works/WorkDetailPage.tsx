@@ -308,7 +308,7 @@ function PhotoCell({
         srcSet={`${photo.imageUrl}?auto=format&w=600&q=85 600w, ${photo.imageUrl}?auto=format&w=1200&q=85 1200w, ${photo.imageUrl}?auto=format&w=1800&q=82 1800w`}
         sizes="(min-width: 1024px) 50vw, 100vw"
         alt={photo.title || collection.name}
-        className="absolute inset-0 w-full h-full object-cover grayscale-[0.1] hover:grayscale-0 transition-[filter] duration-1000"
+        className="absolute inset-0 w-full h-full object-cover grayscale-[0.1] hover:grayscale-0 transition-[filter] duration-[600ms]"
         loading={i < 4 ? 'eager' : 'lazy'}
         decoding="async"
         draggable={false}

@@ -70,15 +70,18 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       onTouchEnd={handleTouchEnd}
     >
       {/* Close button */}
-      <button
+      <motion.button
         onClick={onClose}
-        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors"
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.92 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="absolute top-5 right-6 z-10 w-10 h-10 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors duration-200"
         aria-label="Close"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
-      </button>
+      </motion.button>
 
       {/* Photo (+ subtle anti-screenshot watermark overlay) */}
       <div className="relative" onClick={(e) => e.stopPropagation()}>
@@ -111,28 +114,34 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
 
       {/* Left arrow */}
       {index > 0 && (
-        <button
+        <motion.button
           onClick={(e) => { e.stopPropagation(); goPrev(); }}
-          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
+          whileHover={{ scale: 1.15, x: -2 }}
+          whileTap={{ scale: 0.9, x: -4 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Previous photo"
         >
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
-        </button>
+        </motion.button>
       )}
 
       {/* Right arrow */}
       {index < photos.length - 1 && (
-        <button
+        <motion.button
           onClick={(e) => { e.stopPropagation(); goNext(); }}
-          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors"
+          whileHover={{ scale: 1.15, x: 2 }}
+          whileTap={{ scale: 0.9, x: 4 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Next photo"
         >
           <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-        </button>
+        </motion.button>
       )}
 
       {/* Mobile swipe hint — shown only when there are more photos */}
