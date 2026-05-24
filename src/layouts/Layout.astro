@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
+import { serializeJsonLd } from '../lib/jsonLd';
 
 interface Props {
   title?: string;
@@ -105,7 +106,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
     {/* ── Structured data: Person + WebSite + page-specific blocks ── */}
     {allJsonLd.map((schema) => (
-      <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+      <script type="application/ld+json" set:html={serializeJsonLd(schema)} />
     ))}
 
     {/* Page-specific <head> injections (preconnects, stylesheets) */}
