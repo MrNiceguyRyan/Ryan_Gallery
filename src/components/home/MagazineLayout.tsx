@@ -5,6 +5,7 @@ import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
 import { getMapboxToken } from '../../config/mapbox';
 import { EDITORIAL_FALLBACKS, renderPortableText, renderFallback } from '../../lib/narratives';
+import { useHoverCapable } from '../../lib/useHoverCapable';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -16,6 +17,7 @@ function PhotoCell({
   hoveredIndex,
   setHoveredIndex,
   onClick,
+  canHover,
 }: {
   photo: Photo;
   span: 'full' | 'half' | 'third';
@@ -23,6 +25,9 @@ function PhotoCell({
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
   onClick: () => void;
+  /** When false (touch device), skip hover-driven dim/blur — there's
+   *  no way for the user to trigger or escape it cleanly. */
+  canHover: boolean;
 }) {
   const colSpan =
     span === 'full' ? 'col-span-6'
@@ -44,26 +49,36 @@ function PhotoCell({
                       '(min-width: 1024px) 20vw, 33vw';
 
   const [isLoaded, setIsLoaded] = useState(false);
-  const isAnyHovered = hoveredIndex !== null;
-  const isThisHovered = hoveredIndex === index;
+  // On touch devices we treat the grid as if no one is hovered: every
+  // photo stays at full clarity, no blur/scale-down ever fires. We also
+  // skip the hover handlers entirely so a tap → onHoverStart → flash of
+  // dim doesn't happen before the lightbox opens.
+  const isAnyHovered = canHover && hoveredIndex !== null;
+  const isThisHovered = canHover && hoveredIndex === index;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-5%' }}
-      onHoverStart={() => setHoveredIndex(index)}
-      onHoverEnd={() => setHoveredIndex(null)}
+      {...(canHover && {
+        onHoverStart: () => setHoveredIndex(index),
+        onHoverEnd: () => setHoveredIndex(null),
+        whileHover: {
+          scale: 1.02,
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
+        },
+        whileTap: { scale: 0.99 },
+      })}
+      {...(!canHover && {
+        whileTap: { scale: 0.98 },
+      })}
       onClick={onClick}
       animate={{
         opacity: isAnyHovered && !isThisHovered ? 0.4 : 1,
         filter: isAnyHovered && !isThisHovered ? 'blur(2px)' : 'blur(0px)',
         scale: isAnyHovered && !isThisHovered ? 0.97 : 1,
         zIndex: isThisHovered ? 20 : 1,
-      }}
-      whileHover={{
-        scale: 1.02,
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3), 0 12px 24px -8px rgba(0,0,0,0.2)',
       }}
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
       className={`${colSpan} group relative bg-[#0A0A0A] cursor-pointer overflow-hidden`}
@@ -80,17 +95,18 @@ function PhotoCell({
         className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
       />
 
-      {/* Image — original aspect ratio, no cropping */}
+      {/* Image — original aspect ratio, no cropping. Inner zoom on hover
+           only applies when the device actually supports hover. */}
       <motion.img
         onLoad={() => setIsLoaded(true)}
-        whileHover={{ scale: 1.04 }}
+        {...(canHover && { whileHover: { scale: 1.04 } })}
         transition={{ duration: 1.2, ease: expo }}
         src={`${photo.imageUrl}?auto=format&w=${fallbackWidth}&q=82`}
         srcSet={srcSet}
         sizes={sizesAttr}
         alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
         animate={{ opacity: isLoaded ? 1 : 0 }}
-        className="w-full h-auto block grayscale-[0.15] hover:grayscale-0 transition-[filter] duration-[600ms]"
+        className={`w-full h-auto block grayscale-[0.15] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
         loading="lazy"
         decoding="async"
         draggable={false}
@@ -134,6 +150,10 @@ export default function MagazineLayout({
   const [isShared, setIsShared] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Touch devices: skip the "dim every other photo when one is hovered"
+  // effect — the user can't trigger or escape it cleanly, and the hover
+  // handler firing on tap causes a flash of dim before the lightbox opens.
+  const canHover = useHoverCapable();
 
   // Reorder photos so the first landscape (horizontal) photo leads the story
   const photos = useMemo(() => {
@@ -388,17 +408,17 @@ export default function MagazineLayout({
                     /* Image 1: full-width (first photo is always landscape via reorder) */
                     if (p === 0) {
                       acc.push([
-                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} canHover={canHover} />,
                       ]);
                     }
                     /* Images 2 & 3: half + half */
                     else if (p === 1) {
                       const next = photos[idx + 1];
                       const row: React.ReactNode[] = [
-                        <PhotoCell key={photo._id} photo={photo} span="half" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                        <PhotoCell key={photo._id} photo={photo} span="half" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} canHover={canHover} />,
                       ];
                       if (next) row.push(
-                        <PhotoCell key={next._id} photo={next} span="half" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} />,
+                        <PhotoCell key={next._id} photo={next} span="half" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} canHover={canHover} />,
                       );
                       acc.push(row);
                     }
@@ -406,7 +426,7 @@ export default function MagazineLayout({
                     /* Image 4: full-width hero */
                     else if (p === 3) {
                       acc.push([
-                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                        <PhotoCell key={photo._id} photo={photo} span="full" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} canHover={canHover} />,
                       ]);
                     }
                     /* Images 5, 6 & 7: third + third + third */
@@ -414,13 +434,13 @@ export default function MagazineLayout({
                       const n1 = photos[idx + 1];
                       const n2 = photos[idx + 2];
                       const row: React.ReactNode[] = [
-                        <PhotoCell key={photo._id} photo={photo} span="third" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} />,
+                        <PhotoCell key={photo._id} photo={photo} span="third" index={idx} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx)} canHover={canHover} />,
                       ];
                       if (n1) row.push(
-                        <PhotoCell key={n1._id} photo={n1} span="third" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} />,
+                        <PhotoCell key={n1._id} photo={n1} span="third" index={idx + 1} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 1)} canHover={canHover} />,
                       );
                       if (n2) row.push(
-                        <PhotoCell key={n2._id} photo={n2} span="third" index={idx + 2} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 2)} />,
+                        <PhotoCell key={n2._id} photo={n2} span="third" index={idx + 2} hoveredIndex={hoveredIndex} setHoveredIndex={setHoveredIndex} onClick={() => setLightboxIndex(idx + 2)} canHover={canHover} />,
                       );
                       acc.push(row);
                     }

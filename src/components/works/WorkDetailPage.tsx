@@ -5,6 +5,7 @@ import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
 import { getMapboxToken } from '../../config/mapbox';
 import { EDITORIAL_FALLBACKS, renderPortableText, renderFallback } from '../../lib/narratives';
+import { useHoverCapable } from '../../lib/useHoverCapable';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 const editorial = [0.23, 1, 0.32, 1] as const;
@@ -64,6 +65,9 @@ function aspectOf(photo: Photo, span: Span): number {
 export default function WorkDetailPage({ collection, photos }: Props) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  // Touch users skip the hover-driven scale + metadata flash on each
+  // cell; they go straight from tap to lightbox (which shows EXIF).
+  const canHover = useHoverCapable();
 
   const collectionLocation = useMemo(() => {
     const photo = photos.find(p => p.location?.lat != null && p.location?.lng != null);
@@ -245,6 +249,7 @@ export default function WorkDetailPage({ collection, photos }: Props) {
                       isHovered={hoveredIndex === i}
                       onHover={setHoveredIndex}
                       onClick={setLightboxIndex}
+                      canHover={canHover}
                     />
                   ))}
                 </div>
@@ -281,14 +286,19 @@ export default function WorkDetailPage({ collection, photos }: Props) {
 
 /* ─── Single photo cell ─── */
 function PhotoCell({
-  photo, collection, i, span, ar, widthPct, isHovered, onHover, onClick
+  photo, collection, i, span, ar, widthPct, isHovered, onHover, onClick, canHover,
 }: {
   photo: Photo; collection: Collection; i: number; span: Span; ar: number; widthPct: number;
   isHovered: boolean; onHover: (i: number | null) => void; onClick: (i: number) => void;
+  /** Skip hover-driven scale + metadata flash on touch devices. */
+  canHover: boolean;
 }) {
   void span;
   // Justified-gallery row math: widths are proportional to aspect ratios so
   // every cell in a row ends up the same height — no cropping, no ragged bottoms.
+  // On touch devices we treat the cell as if never hovered, so the scale-up and
+  // metadata overlay never flash on a tap-to-open.
+  const effectiveHovered = canHover && isHovered;
   return (
     <motion.div
       id={`photo-${photo._id}`}
@@ -299,8 +309,11 @@ function PhotoCell({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-10%' }}
       transition={{ duration: 1.2, ease: editorial, delay: (i % 3) * 0.1 }}
-      onHoverStart={() => onHover(i)}
-      onHoverEnd={() => onHover(null)}
+      {...(canHover && {
+        onHoverStart: () => onHover(i),
+        onHoverEnd: () => onHover(null),
+      })}
+      whileTap={{ scale: 0.99 }}
       onClick={() => onClick(i)}
     >
       <motion.img
@@ -308,16 +321,16 @@ function PhotoCell({
         srcSet={`${photo.imageUrl}?auto=format&w=600&q=85 600w, ${photo.imageUrl}?auto=format&w=1200&q=85 1200w, ${photo.imageUrl}?auto=format&w=1800&q=82 1800w`}
         sizes="(min-width: 1024px) 50vw, 100vw"
         alt={photo.title || collection.name}
-        className="absolute inset-0 w-full h-full object-cover grayscale-[0.1] hover:grayscale-0 transition-[filter] duration-[600ms]"
+        className={`absolute inset-0 w-full h-full object-cover grayscale-[0.1] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
         loading={i < 4 ? 'eager' : 'lazy'}
         decoding="async"
         draggable={false}
-        animate={{ scale: isHovered ? 1.03 : 1 }}
+        animate={{ scale: effectiveHovered ? 1.03 : 1 }}
         transition={{ duration: 1.5, ease: editorial }}
       />
 
       <AnimatePresence>
-        {isHovered && (photo.title || photo.aperture) && (
+        {effectiveHovered && (photo.title || photo.aperture) && (
           <motion.div
             className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/55 to-transparent pointer-events-none"
             initial={{ opacity: 0, y: 6 }}
