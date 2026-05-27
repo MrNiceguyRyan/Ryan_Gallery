@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import { useRef } from 'react';
+import ViewfinderBrackets from './shared/ViewfinderBrackets';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -19,6 +20,10 @@ interface Props {
   objectPosition?: string;
   /** Dark theme variant */
   dark?: boolean;
+  /** When true, frame the hero with 4 corner viewfinder brackets — same
+   *  primitive as the homepage hero. Use on dark / atmospheric heroes
+   *  (e.g. /travel) for site-wide visual cohesion. */
+  showViewfinder?: boolean;
 }
 
 export default function ParallaxHero({
@@ -30,6 +35,7 @@ export default function ParallaxHero({
   heightClass = 'h-[70vh] md:h-[85vh]',
   objectPosition = 'center',
   dark = false,
+  showViewfinder = false,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
@@ -45,6 +51,12 @@ export default function ParallaxHero({
 
   return (
     <section ref={ref} className={`relative ${heightClass} overflow-hidden ${dark ? 'bg-[#0A0A0A]' : 'bg-gray-100'}`}>
+      {showViewfinder && (
+        <ViewfinderBrackets
+          insetClass="top-[5vh] left-[4vw] right-[4vw] bottom-[5vh]"
+          color={dark ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' : 'rgba(0,0,0,0.45)'}
+        />
+      )}
       {/* Ken Burns parallax image */}
       <motion.div
         className="absolute inset-0"

@@ -9,6 +9,7 @@ import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
+import ViewfinderBrackets from '../shared/ViewfinderBrackets';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
  * narratives in src/lib/narratives.tsx. The hero cycles through these
@@ -377,39 +378,9 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* ── Cinematic viewfinder brackets — frame the hero like a camera
-                 finder. Four L-shapes at the corners with subtle accent-tinted
-                 opacity, gently breathing in/out to match the page's living
-                 quality. Inset 5vw / 7vh so they read as photographic framing
-                 rather than chrome. */}
-          {[
-            { pos: 'top-[7vh] left-[5vw]', path: 'M0 28V0H28' },
-            { pos: 'top-[7vh] right-[5vw]', path: 'M28 28V0H0' },
-            { pos: 'bottom-[7vh] left-[5vw]', path: 'M0 0V28H28' },
-            { pos: 'bottom-[7vh] right-[5vw]', path: 'M28 0V28H0' },
-          ].map((b, i) => (
-            <motion.svg
-              key={i}
-              className={`absolute ${b.pos} w-[28px] h-[28px] md:w-[40px] md:h-[40px] pointer-events-none`}
-              viewBox="0 0 28 28"
-              fill="none"
-              animate={{ opacity: [0.18, 0.32, 0.18] }}
-              transition={{
-                duration: 7,
-                delay: i * 0.4,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-              style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-            >
-              <path
-                d={b.path}
-                stroke="currentColor"
-                strokeWidth="0.8"
-                strokeLinecap="square"
-              />
-            </motion.svg>
-          ))}
+          {/* Cinematic viewfinder brackets — shared with /about and /travel
+               heroes so the whole site reads as composed inside a camera finder. */}
+          <ViewfinderBrackets insetClass="top-[7vh] left-[5vw] right-[5vw] bottom-[7vh]" />
 
           {/* Header content */}
           <motion.div
@@ -649,12 +620,12 @@ export default function HomePage({ collections, photos }: Props) {
                 ))}
               </div>
 
-              {/* End-of-archive terminator — a tight visual full-stop so the
-                   page has a clear boundary instead of trailing off into the
-                   footer. Mono small-caps + a thin line, accent-tinted. */}
-              <div className="pt-16 pb-4 flex flex-col items-center gap-3 opacity-30">
+              {/* End-of-archive terminator — visual full-stop above the footer.
+                   Tightened gap so the page caps cleanly at the footer's
+                   bottom edge instead of trailing off into dead space. */}
+              <div className="pt-8 pb-2 flex flex-col items-center gap-3 opacity-30">
                 <div
-                  className="w-px h-12"
+                  className="w-px h-10"
                   style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
                 />
                 <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
@@ -737,6 +708,22 @@ export default function HomePage({ collections, photos }: Props) {
             </div>
           </div>
         </footer>
+
+        {/* Hard floor — a thin accent-tinted line + tiny "// SIGNAL TERMINATED"
+             tag sit flush against the bottom edge of the page. Combined with the
+             body-level `overscroll-behavior-y: none` (Layout.astro), the page
+             feels like it has a definite floor: scrolling reaches this line and
+             stops. Same primitive used on /about and /travel for cohesion. */}
+        <div className="relative">
+          <div
+            className="h-px w-full"
+            style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.18)' }}
+          />
+          <div className="flex items-center justify-between px-6 md:px-12 py-3 text-[8px] uppercase tracking-[0.5em] font-mono opacity-30">
+            <span>// signal terminated</span>
+            <span>ryanxugallery.com</span>
+          </div>
+        </div>
       </div>
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}

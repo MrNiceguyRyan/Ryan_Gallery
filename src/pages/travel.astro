@@ -53,6 +53,7 @@ const mapboxToken = getMapboxToken();
     meta={[`${photos.length} Locations`, 'Mapped across the United States']}
     objectPosition="center 60%"
     dark={true}
+    showViewfinder={true}
   />
 
   <section class="py-16 px-6 md:px-16 max-w-7xl mx-auto animate-fade-in-up">
@@ -60,6 +61,22 @@ const mapboxToken = getMapboxToken();
          when the user scrolls to the map section, not on page load. */}
     <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
   </section>
+
+  {/* End-of-mapped-frames terminator — matches the homepage's "End of archive"
+       and the about page's "End of file" markers. Same visual signature
+       across all three pages. */}
+  <div class="pt-8 pb-2 flex flex-col items-center gap-3 opacity-30">
+    <div
+      class="w-px h-10"
+      style="background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)"
+    />
+    <span class="text-[9px] uppercase tracking-[0.5em] font-mono">
+      End of mapped frames
+    </span>
+    <span class="text-[8px] font-mono opacity-60">
+      // {photos.length} coordinates
+    </span>
+  </div>
 
   <Footer dark={true} />
 </Layout>
