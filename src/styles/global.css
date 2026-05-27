@@ -187,6 +187,41 @@ img {
   display: none;
 }
 
+/* ─── Dynamic accent color (per-chapter retint on homepage) ───
+ *  CSS custom properties registered as <number> so the browser can natively
+ *  interpolate between integer values. HomePage updates these three vars on
+ *  the wrapper as the user scrolls between ArchiveChapter components; any
+ *  descendant referencing `rgb(var(--accent-r), var(--accent-g),
+ *  var(--accent-b))` will crossfade smoothly without JS lerping.
+ *
+ *  Safari 16.4+ / Chrome 85+ / Firefox 128+. Older browsers fall back to a
+ *  step transition (still works visually, just no interpolation).
+ *
+ *  Default value of 255 makes the unscrolled hero render identically to the
+ *  pre-accent code (white accents). */
+@property --accent-r {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 255;
+}
+@property --accent-g {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 255;
+}
+@property --accent-b {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 255;
+}
+
+.accent-tint-transition {
+  transition:
+    --accent-r 1.2s ease-out,
+    --accent-g 1.2s ease-out,
+    --accent-b 1.2s ease-out;
+}
+
 /* ═══════════════════════════════════════════════════════
  *  Journal Gallery — filmstrip layout
  * ═══════════════════════════════════════════════════════ */

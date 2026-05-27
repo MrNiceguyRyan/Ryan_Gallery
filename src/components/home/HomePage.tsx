@@ -8,6 +8,7 @@ import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
+import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -163,14 +164,33 @@ export default function HomePage({ collections, photos }: Props) {
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
 
+  // ── Per-chapter dynamic accent color ──
+  // Resolve the currently visible chapter's color palette → RGB. When no
+  // chapter intersects (hero state), fall back to neutral white so the page
+  // looks unchanged at scrollY=0. The `accent-tint-transition` class on the
+  // wrapper interpolates these three CSS vars over 1.2s as `activeArchiveId`
+  // flips, giving a slow crossfade between "rooms".
+  const accentRgb = useMemo(() => {
+    if (!activeArchiveId) return ACCENT_NEUTRAL;
+    const active = activeCollections.find((c) => c._id === activeArchiveId);
+    return active ? accentFromPalette(active.palette) : ACCENT_NEUTRAL;
+  }, [activeArchiveId, activeCollections]);
+
   return (
     <>
       {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
 
       <div
-        className={`min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0A0A0A] text-[#FDFDFB] ${
+        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0A0A0A] text-[#FDFDFB] ${
           showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
         }`}
+        style={{
+          // Drive per-chapter retint. The browser interpolates these natively
+          // thanks to @property registration in global.css.
+          ['--accent-r' as never]: accentRgb.r,
+          ['--accent-g' as never]: accentRgb.g,
+          ['--accent-b' as never]: accentRgb.b,
+        }}
       >
         {/* ── Global Grain & Texture Overlay ── */}
         <div className="noise-grain" />
@@ -364,14 +384,20 @@ export default function HomePage({ collections, photos }: Props) {
               transition={{ delay: 1.5, duration: 1 }}
               className="flex items-center justify-center gap-16 pt-16"
             >
-              <div className="w-16 h-[1px] bg-white opacity-5" />
+              <div
+                className="w-16 h-[1px]"
+                style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
+              />
               <div className="flex items-center gap-6">
                 <span className="text-[9px] font-mono opacity-20">REF &numero;</span>
                 <span className="text-[10px] uppercase tracking-[0.4em] opacity-30 font-bold">
                   Vol. {activeCollections.length} Archive
                 </span>
               </div>
-              <div className="w-16 h-[1px] bg-white opacity-5" />
+              <div
+                className="w-16 h-[1px]"
+                style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
+              />
             </motion.div>
           </motion.div>
         </header>
@@ -380,6 +406,20 @@ export default function HomePage({ collections, photos }: Props) {
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-64 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
+            {/* Accent halo — soft radial driven by the page-level --accent-* vars.
+                 Always mounted (no AnimatePresence churn); opacity fades on
+                 activeArchiveId so the hero remains neutral. The accent vars
+                 themselves crossfade via the accent-tint-transition class on
+                 the outer wrapper. */}
+            <div
+              className="absolute inset-0 transition-opacity duration-[1500ms] ease-out"
+              style={{
+                opacity: activeArchiveId ? 1 : 0,
+                background:
+                  'radial-gradient(60vmax 60vmax at 20% 80%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10), transparent 70%)',
+              }}
+            />
+
             <AnimatePresence mode="wait">
               {activeArchiveId && (
                 <motion.div
@@ -417,9 +457,12 @@ export default function HomePage({ collections, photos }: Props) {
             {/* Side Navigation */}
             <aside className="hidden lg:block lg:w-48 sticky top-24 h-fit shrink-0 z-50">
               <div className="relative pl-8 border-l border-white/5 space-y-8">
-                {/* Active Indicator Line */}
+                {/* Active Indicator Line — tinted with the per-chapter accent
+                     color via the global --accent-* CSS vars, so the bar shifts
+                     hue as the user scrolls between rooms. */}
                 <motion.div
-                  className="absolute left-[-1px] w-[2px] bg-white z-10"
+                  className="absolute left-[-1px] w-[2px] z-10"
+                  style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                   animate={{
                     y: activeArchiveId
                       ? activeCollections.findIndex((c) => c._id === activeArchiveId) * 52
@@ -456,8 +499,11 @@ export default function HomePage({ collections, photos }: Props) {
                     </span>
                     <div className="w-full h-[1px] bg-white/5 relative overflow-hidden">
                       <motion.div
-                        className="absolute top-0 left-0 h-full bg-white/40"
-                        style={{ width: sidebarScrollWidth }}
+                        className="absolute top-0 left-0 h-full"
+                        style={{
+                          width: sidebarScrollWidth,
+                          background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.55)',
+                        }}
                       />
                     </div>
                   </div>
