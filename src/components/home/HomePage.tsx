@@ -126,7 +126,14 @@ export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
-  const { scrollYProgress } = useScroll();
+  const { scrollY, scrollYProgress } = useScroll();
+  // Progressive halo onset — opacity follows actual scroll past the hero
+  // instead of toggling from a binary IntersectionObserver state. This makes
+  // the color wash arrive gradually as the user moves out of the hero,
+  // matching the user's "渐进" request. Maps the first 700 px of scroll to
+  // [0, 1]; remains at 1 deeper in the page.
+  const haloOpacity = useTransform(scrollY, [0, 700], [0, 1], { clamp: true });
+  const haloOpacitySecondary = useTransform(scrollY, [80, 780], [0, 1], { clamp: true });
 
   // Filter to collections that have photos
   const activeCollections = useMemo(
@@ -370,6 +377,40 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
+          {/* ── Cinematic viewfinder brackets — frame the hero like a camera
+                 finder. Four L-shapes at the corners with subtle accent-tinted
+                 opacity, gently breathing in/out to match the page's living
+                 quality. Inset 5vw / 7vh so they read as photographic framing
+                 rather than chrome. */}
+          {[
+            { pos: 'top-[7vh] left-[5vw]', path: 'M0 28V0H28' },
+            { pos: 'top-[7vh] right-[5vw]', path: 'M28 28V0H0' },
+            { pos: 'bottom-[7vh] left-[5vw]', path: 'M0 0V28H28' },
+            { pos: 'bottom-[7vh] right-[5vw]', path: 'M28 0V28H0' },
+          ].map((b, i) => (
+            <motion.svg
+              key={i}
+              className={`absolute ${b.pos} w-[28px] h-[28px] md:w-[40px] md:h-[40px] pointer-events-none`}
+              viewBox="0 0 28 28"
+              fill="none"
+              animate={{ opacity: [0.18, 0.32, 0.18] }}
+              transition={{
+                duration: 7,
+                delay: i * 0.4,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+              style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+            >
+              <path
+                d={b.path}
+                stroke="currentColor"
+                strokeWidth="0.8"
+                strokeLinecap="square"
+              />
+            </motion.svg>
+          ))}
+
           {/* Header content */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -452,53 +493,38 @@ export default function HomePage({ collections, photos }: Props) {
         </header>
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
-        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-64 relative z-10">
+        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-24 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
             {/* Accent halo — large soft radial driven by the page-level --accent-*
-                 vars. Always mounted (no AnimatePresence churn). Two layers
-                 give the room a "color temperature breath": the bottom-left
-                 halo is the primary tint, a counter-positioned top-right halo
-                 oscillates out of phase so the page feels like it's slowly
-                 inhaling/exhaling color. Opacity gates on activeArchiveId so
-                 the hero stays neutral until the first chapter intersects. */}
+                 vars. Two layers oscillating out of phase give the room a
+                 color-temperature "breath." Opacity is scroll-driven via
+                 haloOpacity / haloOpacitySecondary so the wash appears
+                 PROGRESSIVELY as the user leaves the hero, instead of popping
+                 in when the first chapter's IntersectionObserver fires. The
+                 breathing scale animation runs independently on a 9–11 s
+                 loop and multiplies onto the scroll-driven opacity. */}
             <motion.div
-              className="absolute inset-0 transition-opacity duration-[1500ms] ease-out"
+              className="absolute inset-0"
               style={{
-                opacity: activeArchiveId ? 1 : 0,
+                opacity: haloOpacity,
                 background:
                   'radial-gradient(80vmax 80vmax at 18% 82%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.14), transparent 70%)',
                 willChange: 'transform',
               }}
-              animate={{
-                scale: [1, 1.08, 1],
-                opacity: activeArchiveId ? [0.85, 1, 0.85] : 0,
-              }}
-              transition={{
-                scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' },
-                opacity: activeArchiveId
-                  ? { duration: 9, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 1.5, ease: 'easeOut' },
-              }}
+              animate={{ scale: [1, 1.08, 1] }}
+              transition={{ scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' } }}
             />
             <motion.div
-              className="absolute inset-0 transition-opacity duration-[1500ms] ease-out"
+              className="absolute inset-0"
               style={{
-                opacity: activeArchiveId ? 1 : 0,
+                opacity: haloOpacitySecondary,
                 background:
                   'radial-gradient(70vmax 70vmax at 85% 12%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08), transparent 70%)',
                 willChange: 'transform',
               }}
-              animate={{
-                scale: [1.05, 1, 1.05],
-                opacity: activeArchiveId ? [0.7, 0.95, 0.7] : 0,
-              }}
-              transition={{
-                scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' },
-                opacity: activeArchiveId
-                  ? { duration: 11, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 1.5, ease: 'easeOut' },
-              }}
+              animate={{ scale: [1.05, 1, 1.05] }}
+              transition={{ scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' } }}
             />
 
             <AnimatePresence mode="wait">
@@ -593,7 +619,7 @@ export default function HomePage({ collections, photos }: Props) {
             </aside>
 
             {/* Exhibition Content */}
-            <div className="flex-1 space-y-32 md:space-y-48">
+            <div className="flex-1 space-y-24 md:space-y-32">
               <div className="space-y-4 max-w-2xl">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
@@ -610,7 +636,7 @@ export default function HomePage({ collections, photos }: Props) {
                 </h2>
               </div>
 
-              <div className="space-y-32 md:space-y-64">
+              <div className="space-y-24 md:space-y-40">
                 {activeCollections.map((collection, index) => (
                   <ArchiveChapter
                     key={collection._id}
@@ -621,6 +647,22 @@ export default function HomePage({ collections, photos }: Props) {
                     index={index}
                   />
                 ))}
+              </div>
+
+              {/* End-of-archive terminator — a tight visual full-stop so the
+                   page has a clear boundary instead of trailing off into the
+                   footer. Mono small-caps + a thin line, accent-tinted. */}
+              <div className="pt-16 pb-4 flex flex-col items-center gap-3 opacity-30">
+                <div
+                  className="w-px h-12"
+                  style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
+                />
+                <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
+                  End of archive
+                </span>
+                <span className="text-[8px] font-mono opacity-60">
+                  // {activeCollections.length} of {activeCollections.length}
+                </span>
               </div>
             </div>
           </div>
@@ -635,6 +677,17 @@ export default function HomePage({ collections, photos }: Props) {
               onClick={() => setSelectedCollection(collection)}
             />
           ))}
+
+          {/* Mobile end-of-archive terminator */}
+          <div className="pt-12 pb-2 flex flex-col items-center gap-3 opacity-30">
+            <div
+              className="w-px h-10"
+              style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
+            />
+            <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
+              End of archive
+            </span>
+          </div>
 
           {/* Mobile Minimal Footer */}
           <footer className="pt-24 pb-12 px-6 flex flex-col items-center gap-6 text-center border-t border-white/5 opacity-50 mt-12">
@@ -651,7 +704,7 @@ export default function HomePage({ collections, photos }: Props) {
         </div>
 
         {/* ── Desktop Footer ── */}
-        <footer className="hidden md:flex py-32 px-6 md:px-12 border-t border-white/5 flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
+        <footer className="hidden md:flex py-16 px-6 md:px-12 border-t border-white/5 flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
           <div className="flex flex-col items-center md:items-start gap-6">
             <div className="flex items-center gap-3 text-2xl font-serif italic tracking-tighter text-white">
               <Camera size={24} className="opacity-40" />
