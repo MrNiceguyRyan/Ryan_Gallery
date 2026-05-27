@@ -4,7 +4,8 @@
  *        node scripts/upload-photos.mjs Florida            (upload one state)
  *        node scripts/upload-photos.mjs Florida/Miami      (upload one city)
  *
- * Requires: ANTHROPIC_API_KEY env var for AI naming (optional)
+ * Requires: SANITY_TOKEN env var with write access.
+ * Optional: ANTHROPIC_API_KEY env var for AI naming.
  */
 
 import { createClient } from '@sanity/client';
@@ -15,8 +16,13 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Set it to a Sanity write token before running this upload script.');
+  process.exit(1);
+}
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
@@ -193,21 +199,24 @@ function parseCameraInfo(exif) {
 
 // ─── Upload a single city folder ─────────────────────────────────────────────
 async function uploadCity(stateName, cityFolderName) {
-  const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
+  const cityDisplayName = cityFolderName === '.' ? stateName : cityFolderName;
+  const cityPath = cityFolderName === '.'
+    ? join(PHOTO_ROOT, stateName)
+    : join(PHOTO_ROOT, stateName, cityFolderName);
+  const locationKey = cityDisplayName.toLowerCase().trim();
   const locationInfo = LOCATION_MAP[locationKey];
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
   const files = readdirSync(cityPath).filter(isImage);
   if (files.length === 0) {
-    console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
+    console.log(`    ⚠️  No images in ${cityDisplayName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${cityDisplayName}: ${files.length} images`);
 
   // Find or create collection
-  const collectionId = await findOrCreateCollection(cityFolderName, stateName);
+  const collectionId = await findOrCreateCollection(cityDisplayName, stateName);
 
   // Check existing photos — get filenames to skip duplicates
   const existingPhotos = await sanity.fetch(
@@ -242,7 +251,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(cityDisplayName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
