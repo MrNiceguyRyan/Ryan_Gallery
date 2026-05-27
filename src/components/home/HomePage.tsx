@@ -10,6 +10,20 @@ import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
 
+/* Hero epigraphs — first sentences distilled from the per-collection
+ * narratives in src/lib/narratives.tsx. The hero cycles through these
+ * so the page itself "previews" what's in the archive, instead of
+ * showing a single static tagline that says nothing specific. */
+const HERO_EPIGRAPHS = [
+  'Manhattan light arrives sideways in the early hours.',
+  'Sandstone narrows until sound itself goes muffled.',
+  'The Virgin River runs cold and milky green.',
+  'The Sonoran at midday offers nothing to hide behind.',
+  'Pink limestone spires standing close together.',
+  'Florida afternoon light is relentless and democratic.',
+  'Ocean Drive at dusk exists in two registers.',
+];
+
 const expo = [0.23, 1, 0.32, 1] as const;
 
 interface Props {
@@ -163,6 +177,19 @@ export default function HomePage({ collections, photos }: Props) {
 
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
+
+  // ── Rotating hero epigraph ──
+  // Cycles through HERO_EPIGRAPHS once every ~6.5s with a crossfade.
+  // Starts on a random index so different visits feel different.
+  const [epigraphIdx, setEpigraphIdx] = useState(() =>
+    Math.floor(Math.random() * HERO_EPIGRAPHS.length),
+  );
+  useEffect(() => {
+    const t = setInterval(() => {
+      setEpigraphIdx((i) => (i + 1) % HERO_EPIGRAPHS.length);
+    }, 6500);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Per-chapter dynamic accent color ──
   // Resolve the currently visible chapter's color palette → RGB. When no
@@ -368,14 +395,36 @@ export default function HomePage({ collections, photos }: Props) {
                 className="h-64 md:h-96"
               />
 
-              <motion.p
+              {/* ── Rotating epigraph — narrative bridge from hero into archive ──
+                   A small label sits constant ("From the archive"), and beneath
+                   it a serif-italic line crossfades every ~6.5 s through real
+                   first-lines drawn from each chapter's narrative. Gives the
+                   hero a sense of "this place actually contains specific stories"
+                   instead of a single static tagline. */}
+              <motion.div
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.4 }}
+                animate={{ opacity: 1 }}
                 transition={{ delay: 1.2, duration: 1 }}
-                className="text-[10px] md:text-[12px] uppercase tracking-[0.6em] font-medium max-w-sm mx-auto leading-relaxed pt-12"
+                className="pt-10 md:pt-12 flex flex-col items-center gap-3"
               >
-                Capturing the microscopic eternity <br /> between light and dust.
-              </motion.p>
+                <p className="text-[9px] uppercase tracking-[0.5em] font-medium opacity-25">
+                  From the archive
+                </p>
+                <div className="relative w-full max-w-[40rem] mx-auto h-12 md:h-10">
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={epigraphIdx}
+                      initial={{ opacity: 0, y: 6, filter: 'blur(3px)' }}
+                      animate={{ opacity: 0.65, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -6, filter: 'blur(3px)' }}
+                      transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute inset-x-0 text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#FDFDFB]"
+                    >
+                      &ldquo;{HERO_EPIGRAPHS[epigraphIdx]}&rdquo;
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+              </motion.div>
             </div>
 
             <motion.div
@@ -406,17 +455,49 @@ export default function HomePage({ collections, photos }: Props) {
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-64 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-            {/* Accent halo — soft radial driven by the page-level --accent-* vars.
-                 Always mounted (no AnimatePresence churn); opacity fades on
-                 activeArchiveId so the hero remains neutral. The accent vars
-                 themselves crossfade via the accent-tint-transition class on
-                 the outer wrapper. */}
-            <div
+            {/* Accent halo — large soft radial driven by the page-level --accent-*
+                 vars. Always mounted (no AnimatePresence churn). Two layers
+                 give the room a "color temperature breath": the bottom-left
+                 halo is the primary tint, a counter-positioned top-right halo
+                 oscillates out of phase so the page feels like it's slowly
+                 inhaling/exhaling color. Opacity gates on activeArchiveId so
+                 the hero stays neutral until the first chapter intersects. */}
+            <motion.div
               className="absolute inset-0 transition-opacity duration-[1500ms] ease-out"
               style={{
                 opacity: activeArchiveId ? 1 : 0,
                 background:
-                  'radial-gradient(60vmax 60vmax at 20% 80%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10), transparent 70%)',
+                  'radial-gradient(80vmax 80vmax at 18% 82%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.14), transparent 70%)',
+                willChange: 'transform',
+              }}
+              animate={{
+                scale: [1, 1.08, 1],
+                opacity: activeArchiveId ? [0.85, 1, 0.85] : 0,
+              }}
+              transition={{
+                scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' },
+                opacity: activeArchiveId
+                  ? { duration: 9, repeat: Infinity, ease: 'easeInOut' }
+                  : { duration: 1.5, ease: 'easeOut' },
+              }}
+            />
+            <motion.div
+              className="absolute inset-0 transition-opacity duration-[1500ms] ease-out"
+              style={{
+                opacity: activeArchiveId ? 1 : 0,
+                background:
+                  'radial-gradient(70vmax 70vmax at 85% 12%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08), transparent 70%)',
+                willChange: 'transform',
+              }}
+              animate={{
+                scale: [1.05, 1, 1.05],
+                opacity: activeArchiveId ? [0.7, 0.95, 0.7] : 0,
+              }}
+              transition={{
+                scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' },
+                opacity: activeArchiveId
+                  ? { duration: 11, repeat: Infinity, ease: 'easeInOut' }
+                  : { duration: 1.5, ease: 'easeOut' },
               }}
             />
 
