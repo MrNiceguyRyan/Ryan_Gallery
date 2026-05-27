@@ -129,6 +129,27 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       <ellipse id="cursor-ellipse" cx="20" cy="20" rx="18" ry="18"
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
+
+    <!-- Page transition overlay: 4 viewfinder corner brackets + scan line.
+         Parked outside the viewport. Astro view-transition events toggle
+         `body.transitioning`, which converges them to a tight inset and
+         then retracts them on the new page's first paint. -->
+    <div id="page-transition-overlay" aria-hidden="true">
+      <svg class="pt-bracket tl" viewBox="0 0 28 28" fill="none">
+        <path d="M0 28V0H28" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
+      </svg>
+      <svg class="pt-bracket tr" viewBox="0 0 28 28" fill="none">
+        <path d="M28 28V0H0" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
+      </svg>
+      <svg class="pt-bracket bl" viewBox="0 0 28 28" fill="none">
+        <path d="M0 0V28H28" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
+      </svg>
+      <svg class="pt-bracket br" viewBox="0 0 28 28" fill="none">
+        <path d="M28 0V28H0" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
+      </svg>
+      <div class="pt-scanline"></div>
+    </div>
+
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -183,28 +204,123 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
       /* ─────────────────────────────────────────────────
        *  Forward nav (home → deep page):
-       *    Handled by Astro View Transitions — new page slides up on top.
+       *    Handled by Astro View Transitions. The old page does a slow
+       *    "viewfinder closure breath" — scale-in slightly + blur + fade —
+       *    while the corner brackets in the #page-transition-overlay
+       *    converge to a tight inset. Then the new page exhales open:
+       *    scale-out from slightly large + de-blur + fade in, while the
+       *    brackets retract back outside. The whole sequence is ~750 ms,
+       *    paced to match the homepage's halo breathing tempo.
+       *
        *  Back nav (deep page → home / shallower):
-       *    Handled by DIY JS below — current <body> translates DOWN off screen,
-       *    then full-page navigation. This is the Framer-Motion
-       *    `exit={{ y: "100%" }}` pattern, implemented with a CSS transform.
+       *    Handled by DIY JS below — current <body> translates DOWN off
+       *    screen, then full-page navigation. The transition overlay also
+       *    runs (via the .transitioning body class).
        *  ───────────────────────────────────────────────── */
       ::view-transition-old(root) {
-        animation: vt-fade-out 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+        animation: vt-shutter-close 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
         z-index: 1;
+        transform-origin: center;
       }
       ::view-transition-new(root) {
-        animation: vt-slide-up-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: vt-shutter-open 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
         z-index: 2;
+        transform-origin: center;
       }
 
-      @keyframes vt-fade-out {
-        from { opacity: 1; }
-        to   { opacity: 0; }
+      /* Old page "inhales": pulls inward slightly, softens, fades. */
+      @keyframes vt-shutter-close {
+        0%   { opacity: 1; transform: scale(1);     filter: blur(0); }
+        100% { opacity: 0; transform: scale(0.985); filter: blur(4px); }
       }
-      @keyframes vt-slide-up-in {
-        from { transform: translateY(100%); }
-        to   { transform: translateY(0);    }
+      /* New page "exhales open": starts slightly oversized + soft, settles
+         to its real geometry. The slight overshoot is what reads as
+         "breath" rather than a flat fade. */
+      @keyframes vt-shutter-open {
+        0%   { opacity: 0; transform: scale(1.04);  filter: blur(8px); }
+        55%  { opacity: 0.7; transform: scale(1.012); filter: blur(2px); }
+        100% { opacity: 1; transform: scale(1);     filter: blur(0); }
+      }
+
+      /* ═══════════════════════════════════════════════════════
+       *  Page transition overlay — viewfinder closure
+       *  Four corner L-brackets (same primitive as the homepage hero
+       *  ViewfinderBrackets) live just below the cursor at z-9999.
+       *  Default: parked outside the viewport so they're invisible.
+       *  Body.transitioning: converge to a tight inset around center,
+       *  with a soft accent glow + scan-line. JS removes the class on
+       *  the next astro:page-load, retracting them off-screen again.
+       * ═══════════════════════════════════════════════════════ */
+      #page-transition-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.35s ease-out;
+        color: rgb(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255));
+      }
+      body.transitioning #page-transition-overlay { opacity: 1; }
+
+      .pt-bracket {
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        color: inherit;
+        transition:
+          top    0.65s cubic-bezier(0.22, 1, 0.36, 1),
+          right  0.65s cubic-bezier(0.22, 1, 0.36, 1),
+          bottom 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+          left   0.65s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.4s ease-out;
+        opacity: 0.5;
+        filter: drop-shadow(0 0 12px currentColor);
+      }
+      .pt-bracket.tl { top: -8vh;  left: -8vw;  }
+      .pt-bracket.tr { top: -8vh;  right: -8vw; }
+      .pt-bracket.bl { bottom: -8vh; left: -8vw; }
+      .pt-bracket.br { bottom: -8vh; right: -8vw; }
+
+      /* Converged state — frames a ~50vw × 50vh window centered on the page.
+         The brackets at this inset feel like a viewfinder closing on the
+         scene before it gets replaced. */
+      body.transitioning .pt-bracket.tl { top: 28vh;    left: 28vw;   }
+      body.transitioning .pt-bracket.tr { top: 28vh;    right: 28vw;  }
+      body.transitioning .pt-bracket.bl { bottom: 28vh; left: 28vw;   }
+      body.transitioning .pt-bracket.br { bottom: 28vh; right: 28vw;  }
+      body.transitioning .pt-bracket    { opacity: 0.85; }
+
+      /* Horizontal scan-line — a thin accent-tinted line that sweeps
+         vertically through the centered frame during transition,
+         echoing the chapter-card's scanline aesthetic. */
+      .pt-scanline {
+        position: absolute;
+        left: 0; right: 0;
+        height: 1px;
+        background: currentColor;
+        opacity: 0;
+        top: 50%;
+        transform: scaleX(0);
+        transform-origin: center;
+        transition:
+          top       0.7s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.35s ease-out,
+          opacity   0.3s ease-out;
+      }
+      body.transitioning .pt-scanline {
+        opacity: 0.35;
+        transform: scaleX(1);
+        top: 72%;
+      }
+
+      /* Reduced-motion: skip the choreography. Just fade. */
+      @media (prefers-reduced-motion: reduce) {
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+          animation: none;
+        }
+        .pt-bracket, .pt-scanline { transition: none; }
+        #page-transition-overlay { display: none; }
       }
 
       /* Back-nav slide-down: applied to <body> via JS. Uses compositor-only
@@ -504,6 +620,35 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
             }
           }
         }
+      });
+
+      // ── Page transition overlay choreography ──
+      // body.transitioning is added at navigation start (Astro forward nav
+      // via the View Transitions API, or DIY back-nav which calls runExit).
+      // The class triggers the bracket convergence + scan-line sweep that
+      // overlay the actual page swap. We remove the class on the new
+      // page's first paint (rAF after astro:page-load) so the brackets
+      // retract back outside the viewport.
+      document.addEventListener('astro:before-preparation', function() {
+        document.body.classList.add('transitioning');
+      });
+      document.addEventListener('astro:page-load', function() {
+        // Two rAF ticks: one for the new page's initial paint, one to
+        // let the body class' removal trigger the retract transition.
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            document.body.classList.remove('transitioning');
+          });
+        });
+      });
+      // Safety: if anything goes wrong with the transition, ensure the
+      // overlay isn't stuck visible. Auto-clear after 2s.
+      var ptSafetyTimer = null;
+      document.addEventListener('astro:before-preparation', function() {
+        clearTimeout(ptSafetyTimer);
+        ptSafetyTimer = setTimeout(function() {
+          document.body.classList.remove('transitioning');
+        }, 2000);
       });
     </script>
   </body>
