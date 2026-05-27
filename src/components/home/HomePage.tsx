@@ -464,7 +464,7 @@ export default function HomePage({ collections, photos }: Props) {
         </header>
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
-        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-24 relative z-10">
+        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-8 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
             {/* Accent halo — large soft radial driven by the page-level --accent-*
@@ -590,7 +590,7 @@ export default function HomePage({ collections, photos }: Props) {
             </aside>
 
             {/* Exhibition Content */}
-            <div className="flex-1 space-y-24 md:space-y-32">
+            <div className="flex-1 space-y-12 md:space-y-20">
               <div className="space-y-4 max-w-2xl">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
@@ -607,7 +607,7 @@ export default function HomePage({ collections, photos }: Props) {
                 </h2>
               </div>
 
-              <div className="space-y-24 md:space-y-40">
+              <div className="space-y-12 md:space-y-20">
                 {activeCollections.map((collection, index) => (
                   <ArchiveChapter
                     key={collection._id}
@@ -675,7 +675,7 @@ export default function HomePage({ collections, photos }: Props) {
         </div>
 
         {/* ── Desktop Footer ── */}
-        <footer className="hidden md:flex py-16 px-6 md:px-12 border-t border-white/5 flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
+        <footer className="hidden md:flex py-10 px-6 md:px-12 border-t border-white/5 flex-col md:flex-row justify-between items-center gap-16 text-[10px] uppercase tracking-[0.4em] opacity-30">
           <div className="flex flex-col items-center md:items-start gap-6">
             <div className="flex items-center gap-3 text-2xl font-serif italic tracking-tighter text-white">
               <Camera size={24} className="opacity-40" />

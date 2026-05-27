@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
-import ViewfinderBrackets from '../shared/ViewfinderBrackets';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -29,39 +28,10 @@ export default function AboutPage({ settings }: Props) {
     : FALLBACK_TIMELINE;
 
   return (
-    <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-screen relative">
-
-      {/* ── Ambient halos — gentle breath of the page's neutral accent.
-           Static white-ish on /about (no per-chapter color shift here),
-           matching the homepage's atmospheric character without the noise
-           of changing tones. */}
-      <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(70vmax 70vmax at 18% 82%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08), transparent 70%)',
-          }}
-          animate={{ scale: [1, 1.06, 1], opacity: [0.7, 0.95, 0.7] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(60vmax 60vmax at 82% 18%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.05), transparent 70%)',
-          }}
-          animate={{ scale: [1.04, 1, 1.04], opacity: [0.6, 0.85, 0.6] }}
-          transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      </div>
+    <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-screen">
 
       {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
-      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center relative">
-        {/* Viewfinder brackets — same primitive as homepage hero, framing
-             the avatar + name + bio block. Inset is tight (3vw / 4vh) since
-             the hero block is narrower than the homepage's full viewport. */}
-        <ViewfinderBrackets insetClass="top-[2vh] left-[-2vw] right-[-2vw] bottom-[-2vh]" hideOnMobile />
+      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
         {/* Avatar */}
         <motion.div
           className="flex justify-center mb-6"
@@ -304,21 +274,6 @@ Contact // Channels.
           </motion.div>
         </div>
       </motion.section>
-
-      {/* End-of-file terminator — matches the homepage's "End of archive"
-           marker so all three pages share the same closing signature. */}
-      <div className="pt-16 pb-6 flex flex-col items-center gap-3 opacity-30">
-        <div
-          className="w-px h-10"
-          style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
-        />
-        <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
-          End of file
-        </span>
-        <span className="text-[8px] font-mono opacity-60">
-          // operator_log
-        </span>
-      </div>
     </div>
   );
 }

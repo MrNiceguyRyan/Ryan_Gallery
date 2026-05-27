@@ -53,7 +53,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
       id={id}
       ref={chapterRef}
       style={{ opacity }}
-      className="relative pb-24 lg:pb-40"
+      className="relative pb-12 lg:pb-16"
     >
       {/* Massive Background Number */}
       <motion.div
