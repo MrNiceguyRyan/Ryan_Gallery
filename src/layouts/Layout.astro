@@ -130,11 +130,14 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
 
-    <!-- Page transition overlay: 4 viewfinder corner brackets + scan line.
+    <!-- Page transition overlay: 4 viewfinder corner brackets + center flash.
          Parked outside the viewport. Astro view-transition events toggle
-         `body.transitioning`, which converges them to a tight inset and
-         then retracts them on the new page's first paint. -->
+         `body.transitioning`, which converges the brackets to a tight inset
+         framing the closing iris (handled via view-transition keyframes)
+         and pulses a bright accent flash at center — the "lens fired" beat
+         between the old scene closing and the new one opening. -->
     <div id="page-transition-overlay" aria-hidden="true">
+      <div class="pt-flash"></div>
       <svg class="pt-bracket tl" viewBox="0 0 28 28" fill="none">
         <path d="M0 28V0H28" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
       </svg>
@@ -147,7 +150,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       <svg class="pt-bracket br" viewBox="0 0 28 28" fill="none">
         <path d="M28 0V28H0" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
       </svg>
-      <div class="pt-scanline"></div>
     </div>
 
     <slot />
@@ -203,53 +205,103 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
        * ═══════════════════════════════════════════════════════ */
 
       /* ─────────────────────────────────────────────────
-       *  Forward nav (home → deep page):
-       *    Handled by Astro View Transitions. The old page does a slow
-       *    "viewfinder closure breath" — scale-in slightly + blur + fade —
-       *    while the corner brackets in the #page-transition-overlay
-       *    converge to a tight inset. Then the new page exhales open:
-       *    scale-out from slightly large + de-blur + fade in, while the
-       *    brackets retract back outside. The whole sequence is ~750 ms,
-       *    paced to match the homepage's halo breathing tempo.
+       *  Forward nav (home → deep page) — Iris Aperture
+       *
+       *  The old page is clipped by an 8-blade octagonal polygon that
+       *  collapses from "completely off-screen, framing nothing" down to
+       *  a 1 % dot at center. It's a real camera shutter closure: the
+       *  scene is geometrically masked out, not just faded.
+       *
+       *  At the same moment a punchy accent-colored radial flash bursts
+       *  at center (the "lens fired" moment), and the four corner
+       *  brackets snap inward to frame the closing iris like a viewfinder.
+       *
+       *  The new page is clipped by the same polygon running in reverse:
+       *  from the 1 % center dot expanding out past the viewport edges,
+       *  revealing the destination scene blade-by-blade.
+       *
+       *  Total wall time ≈ 1.0 s (0.45 s close, 0.55 s open, with a brief
+       *  overlap at the dark center).
        *
        *  Back nav (deep page → home / shallower):
-       *    Handled by DIY JS below — current <body> translates DOWN off
-       *    screen, then full-page navigation. The transition overlay also
-       *    runs (via the .transitioning body class).
+       *    Still handled by DIY JS below — body translates DOWN, then
+       *    hard nav. The overlay still fires via .transitioning class so
+       *    the brackets + flash still play.
        *  ───────────────────────────────────────────────── */
+
+      /* CSS variables for the iris polygon. Defining them here lets the
+         keyframes interpolate the points directly. Note: clip-path animates
+         well between polygon definitions with the same point count. */
+
       ::view-transition-old(root) {
-        animation: vt-shutter-close 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+        animation: vt-iris-close 0.45s cubic-bezier(0.55, 0, 0.85, 0.35) both;
         z-index: 1;
         transform-origin: center;
       }
       ::view-transition-new(root) {
-        animation: vt-shutter-open 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: vt-iris-open 0.55s cubic-bezier(0.22, 0.7, 0.3, 1) both;
+        animation-delay: 0.35s;
         z-index: 2;
         transform-origin: center;
       }
 
-      /* Old page "inhales": pulls inward slightly, softens, fades. */
-      @keyframes vt-shutter-close {
-        0%   { opacity: 1; transform: scale(1);     filter: blur(0); }
-        100% { opacity: 0; transform: scale(0.985); filter: blur(4px); }
+      /* Octagonal aperture, 8 blades. Open state: points extend well past
+         viewport corners so no edge is visible. Closed: 1 % dot at center. */
+      @keyframes vt-iris-close {
+        0% {
+          clip-path: polygon(
+            50% -60%,  115% -15%, 160% 50%,  115% 115%,
+            50% 160%,  -15% 115%, -60% 50%,  -15% -15%
+          );
+          filter: blur(0);
+          opacity: 1;
+        }
+        70% {
+          filter: blur(6px);
+          opacity: 0.9;
+        }
+        100% {
+          clip-path: polygon(
+            50% 49.5%, 50.3% 49.7%, 50.5% 50%,  50.3% 50.3%,
+            50% 50.5%, 49.7% 50.3%, 49.5% 50%,  49.7% 49.7%
+          );
+          filter: blur(10px);
+          opacity: 0;
+        }
       }
-      /* New page "exhales open": starts slightly oversized + soft, settles
-         to its real geometry. The slight overshoot is what reads as
-         "breath" rather than a flat fade. */
-      @keyframes vt-shutter-open {
-        0%   { opacity: 0; transform: scale(1.04);  filter: blur(8px); }
-        55%  { opacity: 0.7; transform: scale(1.012); filter: blur(2px); }
-        100% { opacity: 1; transform: scale(1);     filter: blur(0); }
+
+      @keyframes vt-iris-open {
+        0% {
+          clip-path: polygon(
+            50% 49.5%, 50.3% 49.7%, 50.5% 50%,  50.3% 50.3%,
+            50% 50.5%, 49.7% 50.3%, 49.5% 50%,  49.7% 49.7%
+          );
+          filter: blur(10px);
+          opacity: 1;
+        }
+        30% {
+          filter: blur(6px);
+        }
+        100% {
+          clip-path: polygon(
+            50% -60%,  115% -15%, 160% 50%,  115% 115%,
+            50% 160%,  -15% 115%, -60% 50%,  -15% -15%
+          );
+          filter: blur(0);
+          opacity: 1;
+        }
       }
 
       /* ═══════════════════════════════════════════════════════
-       *  Page transition overlay — viewfinder closure
-       *  Four corner L-brackets (same primitive as the homepage hero
-       *  ViewfinderBrackets) live just below the cursor at z-9999.
-       *  Default: parked outside the viewport so they're invisible.
-       *  Body.transitioning: converge to a tight inset around center,
-       *  with a soft accent glow + scan-line. JS removes the class on
-       *  the next astro:page-load, retracting them off-screen again.
+       *  Page transition overlay — bracket frame + iris flash
+       *
+       *  The iris closure does the heavy lifting. The overlay adds two
+       *  supporting actors:
+       *    - 4 corner brackets that snap inward to a tight inset (35 vh
+       *      / 35 vw) so they frame the iris like a viewfinder mark on
+       *      the visible portion of the closing shutter.
+       *    - A bright accent-colored radial flash that pulses at center
+       *      during the dark interval, reading as "the lens just fired."
        * ═══════════════════════════════════════════════════════ */
       #page-transition-overlay {
         position: fixed;
@@ -264,54 +316,63 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
       .pt-bracket {
         position: absolute;
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         color: inherit;
         transition:
-          top    0.65s cubic-bezier(0.22, 1, 0.36, 1),
-          right  0.65s cubic-bezier(0.22, 1, 0.36, 1),
-          bottom 0.65s cubic-bezier(0.22, 1, 0.36, 1),
-          left   0.65s cubic-bezier(0.22, 1, 0.36, 1),
-          opacity 0.4s ease-out;
-        opacity: 0.5;
-        filter: drop-shadow(0 0 12px currentColor);
+          top    0.5s cubic-bezier(0.55, 0, 0.3, 1),
+          right  0.5s cubic-bezier(0.55, 0, 0.3, 1),
+          bottom 0.5s cubic-bezier(0.55, 0, 0.3, 1),
+          left   0.5s cubic-bezier(0.55, 0, 0.3, 1),
+          opacity 0.3s ease-out;
+        opacity: 0.4;
+        filter: drop-shadow(0 0 14px currentColor);
       }
-      .pt-bracket.tl { top: -8vh;  left: -8vw;  }
-      .pt-bracket.tr { top: -8vh;  right: -8vw; }
-      .pt-bracket.bl { bottom: -8vh; left: -8vw; }
-      .pt-bracket.br { bottom: -8vh; right: -8vw; }
+      .pt-bracket.tl { top: -10vh;  left: -10vw;  }
+      .pt-bracket.tr { top: -10vh;  right: -10vw; }
+      .pt-bracket.bl { bottom: -10vh; left: -10vw; }
+      .pt-bracket.br { bottom: -10vh; right: -10vw; }
 
-      /* Converged state — frames a ~50vw × 50vh window centered on the page.
-         The brackets at this inset feel like a viewfinder closing on the
-         scene before it gets replaced. */
-      body.transitioning .pt-bracket.tl { top: 28vh;    left: 28vw;   }
-      body.transitioning .pt-bracket.tr { top: 28vh;    right: 28vw;  }
-      body.transitioning .pt-bracket.bl { bottom: 28vh; left: 28vw;   }
-      body.transitioning .pt-bracket.br { bottom: 28vh; right: 28vw;  }
-      body.transitioning .pt-bracket    { opacity: 0.85; }
+      /* Brackets snap to tight inset to frame the closed iris. */
+      body.transitioning .pt-bracket.tl { top: 35vh;    left: 35vw;    }
+      body.transitioning .pt-bracket.tr { top: 35vh;    right: 35vw;   }
+      body.transitioning .pt-bracket.bl { bottom: 35vh; left: 35vw;    }
+      body.transitioning .pt-bracket.br { bottom: 35vh; right: 35vw;   }
+      body.transitioning .pt-bracket    { opacity: 1; }
 
-      /* Horizontal scan-line — a thin accent-tinted line that sweeps
-         vertically through the centered frame during transition,
-         echoing the chapter-card's scanline aesthetic. */
-      .pt-scanline {
+      /* Iris flash — bright accent burst at center during the dark moment.
+         Uses screen blend mode so it lights up on the black background
+         without flat-painting the page. Pulse: 0 → bright → fade. */
+      .pt-flash {
         position: absolute;
-        left: 0; right: 0;
-        height: 1px;
-        background: currentColor;
+        inset: 0;
+        background: radial-gradient(
+          18vmax 18vmax at 50% 50%,
+          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.55),
+          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0) 70%
+        );
         opacity: 0;
-        top: 50%;
-        transform: scaleX(0);
-        transform-origin: center;
+        transform: scale(0.4);
         transition:
-          top       0.7s cubic-bezier(0.22, 1, 0.36, 1),
-          transform 0.35s ease-out,
-          opacity   0.3s ease-out;
+          opacity 0.3s ease-out,
+          transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        mix-blend-mode: screen;
+        will-change: opacity, transform;
       }
-      body.transitioning .pt-scanline {
-        opacity: 0.35;
-        transform: scaleX(1);
-        top: 72%;
+      body.transitioning .pt-flash {
+        animation: pt-flash-pulse 0.95s cubic-bezier(0.22, 0.7, 0.3, 1) both;
       }
+      @keyframes pt-flash-pulse {
+        0%   { opacity: 0;    transform: scale(0.4); }
+        30%  { opacity: 1;    transform: scale(1.0); }
+        50%  { opacity: 0.85; transform: scale(1.4); }
+        100% { opacity: 0;    transform: scale(2.0); }
+      }
+
+      /* Legacy: keep the .pt-scanline selector defined so old HTML doesn't
+         render broken if it's still in the DOM after a deploy. The element
+         exists in markup but we no longer animate it — the iris is enough. */
+      .pt-scanline { display: none; }
 
       /* Reduced-motion: skip the choreography. Just fade. */
       @media (prefers-reduced-motion: reduce) {
@@ -319,7 +380,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         ::view-transition-new(root) {
           animation: none;
         }
-        .pt-bracket, .pt-scanline { transition: none; }
+        .pt-bracket, .pt-flash { transition: none; animation: none; }
         #page-transition-overlay { display: none; }
       }
 
