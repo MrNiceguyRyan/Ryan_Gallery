@@ -130,26 +130,22 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
 
-    <!-- Page transition overlay: 4 viewfinder corner brackets + center flash.
-         Parked outside the viewport. Astro view-transition events toggle
-         `body.transitioning`, which converges the brackets to a tight inset
-         framing the closing iris (handled via view-transition keyframes)
-         and pulses a bright accent flash at center — the "lens fired" beat
-         between the old scene closing and the new one opening. -->
-    <div id="page-transition-overlay" aria-hidden="true">
-      <div class="pt-flash"></div>
-      <svg class="pt-bracket tl" viewBox="0 0 28 28" fill="none">
-        <path d="M0 28V0H28" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
-      </svg>
-      <svg class="pt-bracket tr" viewBox="0 0 28 28" fill="none">
-        <path d="M28 28V0H0" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
-      </svg>
-      <svg class="pt-bracket bl" viewBox="0 0 28 28" fill="none">
-        <path d="M0 0V28H28" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
-      </svg>
-      <svg class="pt-bracket br" viewBox="0 0 28 28" fill="none">
-        <path d="M28 0V28H0" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>
-      </svg>
+    <!-- Page Title Takeover overlay — destination-aware identity card.
+         JS sets body[data-takeover="<key>"] on navigation, which triggers
+         the CSS reveal of the .ptt-card contents below. Content is
+         repopulated per-destination via #page-title-takeover .ptt-*
+         text nodes before the class flip. -->
+    <div id="page-title-takeover" aria-hidden="true">
+      <div class="ptt-card">
+        <span class="ptt-label" data-ptt-label>// destination</span>
+        <h1 class="ptt-title" data-ptt-title>Journal Gallery</h1>
+        <div class="ptt-meta">
+          <span data-ptt-meta-a>Index</span>
+          <span class="ptt-meta-dot"></span>
+          <span data-ptt-meta-b>Loading</span>
+        </div>
+        <div class="ptt-progress"></div>
+      </div>
     </div>
 
     <slot />
@@ -205,183 +201,202 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
        * ═══════════════════════════════════════════════════════ */
 
       /* ─────────────────────────────────────────────────
-       *  Forward nav (home → deep page) — Iris Aperture
+       *  Forward nav — Page Title Takeover
        *
-       *  The old page is clipped by an 8-blade octagonal polygon that
-       *  collapses from "completely off-screen, framing nothing" down to
-       *  a 1 % dot at center. It's a real camera shutter closure: the
-       *  scene is geometrically masked out, not just faded.
+       *  Replaces the old iris/bracket/flash theatrics with a
+       *  destination-announcing overlay: the new page's identity
+       *  (label + giant italic serif title + system metadata) holds
+       *  the viewport while Astro swaps DOM behind it, then lifts away
+       *  to reveal the new scene already in place. Photography sites
+       *  use this pattern because it's useful (you know where you're
+       *  going) and quiet (no decorative noise).
        *
-       *  At the same moment a punchy accent-colored radial flash bursts
-       *  at center (the "lens fired" moment), and the four corner
-       *  brackets snap inward to frame the closing iris like a viewfinder.
+       *  The actual page swap stays minimal — a near-imperceptible
+       *  fade — because the title overlay is doing the storytelling.
        *
-       *  The new page is clipped by the same polygon running in reverse:
-       *  from the 1 % center dot expanding out past the viewport edges,
-       *  revealing the destination scene blade-by-blade.
-       *
-       *  Total wall time ≈ 1.0 s (0.45 s close, 0.55 s open, with a brief
-       *  overlap at the dark center).
-       *
-       *  Back nav (deep page → home / shallower):
-       *    Still handled by DIY JS below — body translates DOWN, then
-       *    hard nav. The overlay still fires via .transitioning class so
-       *    the brackets + flash still play.
+       *  Back nav still uses the DIY body-slide-down path; it does
+       *  NOT play the takeover (it's a fast return, not an arrival).
        *  ───────────────────────────────────────────────── */
-
-      /* CSS variables for the iris polygon. Defining them here lets the
-         keyframes interpolate the points directly. Note: clip-path animates
-         well between polygon definitions with the same point count. */
-
       ::view-transition-old(root) {
-        animation: vt-iris-close 0.45s cubic-bezier(0.55, 0, 0.85, 0.35) both;
+        animation: vt-fade-out 0.35s ease-out both;
         z-index: 1;
-        transform-origin: center;
       }
       ::view-transition-new(root) {
-        animation: vt-iris-open 0.55s cubic-bezier(0.22, 0.7, 0.3, 1) both;
-        animation-delay: 0.35s;
+        animation: vt-fade-in 0.35s ease-in both;
         z-index: 2;
-        transform-origin: center;
       }
-
-      /* Octagonal aperture, 8 blades. Open state: points extend well past
-         viewport corners so no edge is visible. Closed: 1 % dot at center. */
-      @keyframes vt-iris-close {
-        0% {
-          clip-path: polygon(
-            50% -60%,  115% -15%, 160% 50%,  115% 115%,
-            50% 160%,  -15% 115%, -60% 50%,  -15% -15%
-          );
-          filter: blur(0);
-          opacity: 1;
-        }
-        70% {
-          filter: blur(6px);
-          opacity: 0.9;
-        }
-        100% {
-          clip-path: polygon(
-            50% 49.5%, 50.3% 49.7%, 50.5% 50%,  50.3% 50.3%,
-            50% 50.5%, 49.7% 50.3%, 49.5% 50%,  49.7% 49.7%
-          );
-          filter: blur(10px);
-          opacity: 0;
-        }
-      }
-
-      @keyframes vt-iris-open {
-        0% {
-          clip-path: polygon(
-            50% 49.5%, 50.3% 49.7%, 50.5% 50%,  50.3% 50.3%,
-            50% 50.5%, 49.7% 50.3%, 49.5% 50%,  49.7% 49.7%
-          );
-          filter: blur(10px);
-          opacity: 1;
-        }
-        30% {
-          filter: blur(6px);
-        }
-        100% {
-          clip-path: polygon(
-            50% -60%,  115% -15%, 160% 50%,  115% 115%,
-            50% 160%,  -15% 115%, -60% 50%,  -15% -15%
-          );
-          filter: blur(0);
-          opacity: 1;
-        }
-      }
+      @keyframes vt-fade-out { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes vt-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 
       /* ═══════════════════════════════════════════════════════
-       *  Page transition overlay — bracket frame + iris flash
+       *  Page Title Takeover overlay
        *
-       *  The iris closure does the heavy lifting. The overlay adds two
-       *  supporting actors:
-       *    - 4 corner brackets that snap inward to a tight inset (35 vh
-       *      / 35 vw) so they frame the iris like a viewfinder mark on
-       *      the visible portion of the closing shutter.
-       *    - A bright accent-colored radial flash that pulses at center
-       *      during the dark interval, reading as "the lens just fired."
+       *  Lives at body root, parked invisible. When body[data-takeover]
+       *  is set to a destination key, the overlay fades in showing that
+       *  destination's identity card. Set in JS BEFORE astro starts
+       *  preparing the new page, cleared two paint frames after
+       *  astro:page-load to give the new DOM time to settle.
+       *
+       *  Structure (centered, ~40vh tall total):
+       *    // tiny mono label   ("// archive" / "// territory" / etc.)
+       *    Giant italic serif title (the destination's display name)
+       *    Coordinates / system metadata (small mono)
+       *    A thin progress line
        * ═══════════════════════════════════════════════════════ */
-      #page-transition-overlay {
+      #page-title-takeover {
         position: fixed;
         inset: 0;
-        pointer-events: none;
         z-index: 9999;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(10, 10, 10, 0);
+        backdrop-filter: blur(0);
+        -webkit-backdrop-filter: blur(0);
         opacity: 0;
-        transition: opacity 0.35s ease-out;
-        color: rgb(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255));
-      }
-      body.transitioning #page-transition-overlay { opacity: 1; }
-
-      .pt-bracket {
-        position: absolute;
-        width: 32px;
-        height: 32px;
-        color: inherit;
+        visibility: hidden;
         transition:
-          top    0.5s cubic-bezier(0.55, 0, 0.3, 1),
-          right  0.5s cubic-bezier(0.55, 0, 0.3, 1),
-          bottom 0.5s cubic-bezier(0.55, 0, 0.3, 1),
-          left   0.5s cubic-bezier(0.55, 0, 0.3, 1),
-          opacity 0.3s ease-out;
-        opacity: 0.4;
-        filter: drop-shadow(0 0 14px currentColor);
+          background 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
+          backdrop-filter 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
+          opacity 0.35s ease-out,
+          visibility 0s linear 0.45s;
       }
-      .pt-bracket.tl { top: -10vh;  left: -10vw;  }
-      .pt-bracket.tr { top: -10vh;  right: -10vw; }
-      .pt-bracket.bl { bottom: -10vh; left: -10vw; }
-      .pt-bracket.br { bottom: -10vh; right: -10vw; }
+      body[data-takeover] #page-title-takeover {
+        opacity: 1;
+        visibility: visible;
+        background: rgba(10, 10, 10, 0.96);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        transition:
+          background 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
+          backdrop-filter 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
+          opacity 0.35s ease-out,
+          visibility 0s linear 0s;
+      }
 
-      /* Brackets snap to tight inset to frame the closed iris. */
-      body.transitioning .pt-bracket.tl { top: 35vh;    left: 35vw;    }
-      body.transitioning .pt-bracket.tr { top: 35vh;    right: 35vw;   }
-      body.transitioning .pt-bracket.bl { bottom: 35vh; left: 35vw;    }
-      body.transitioning .pt-bracket.br { bottom: 35vh; right: 35vw;   }
-      body.transitioning .pt-bracket    { opacity: 1; }
-
-      /* Iris flash — bright accent burst at center during the dark moment.
-         Uses screen blend mode so it lights up on the black background
-         without flat-painting the page. Pulse: 0 → bright → fade. */
-      .pt-flash {
+      /* Subtle accent halo behind the title text, breathing in sync with
+         the rest of the homepage's color identity. Quiet — adds depth
+         rather than drama. */
+      #page-title-takeover::before {
+        content: '';
         position: absolute;
         inset: 0;
         background: radial-gradient(
-          18vmax 18vmax at 50% 50%,
-          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.55),
-          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0) 70%
+          40vmax 30vmax at 50% 50%,
+          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.10),
+          transparent 70%
         );
         opacity: 0;
-        transform: scale(0.4);
+        transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      body[data-takeover] #page-title-takeover::before { opacity: 1; }
+
+      .ptt-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+        padding: 0 6vw;
+        max-width: 90vw;
+        text-align: center;
+      }
+
+      .ptt-label {
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.5em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.35);
+        opacity: 0;
+        transform: translateY(8px);
         transition:
-          opacity 0.3s ease-out,
-          transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        mix-blend-mode: screen;
-        will-change: opacity, transform;
+          opacity 0.5s ease-out 0.05s,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
       }
-      body.transitioning .pt-flash {
-        animation: pt-flash-pulse 0.95s cubic-bezier(0.22, 0.7, 0.3, 1) both;
+      body[data-takeover] .ptt-label { opacity: 1; transform: translateY(0); }
+
+      .ptt-title {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-weight: 400;
+        font-size: clamp(56px, 14vw, 220px);
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        color: rgba(255, 255, 255, 0.97);
+        margin: 0;
+        opacity: 0;
+        transform: translateY(24px) scale(0.96);
+        filter: blur(8px);
+        transition:
+          opacity 0.7s ease-out 0.1s,
+          transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
+          filter 0.7s ease-out 0.1s;
       }
-      @keyframes pt-flash-pulse {
-        0%   { opacity: 0;    transform: scale(0.4); }
-        30%  { opacity: 1;    transform: scale(1.0); }
-        50%  { opacity: 0.85; transform: scale(1.4); }
-        100% { opacity: 0;    transform: scale(2.0); }
+      body[data-takeover] .ptt-title {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
       }
 
-      /* Legacy: keep the .pt-scanline selector defined so old HTML doesn't
-         render broken if it's still in the DOM after a deploy. The element
-         exists in markup but we no longer animate it — the iris is enough. */
-      .pt-scanline { display: none; }
+      .ptt-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.35);
+        opacity: 0;
+        transform: translateY(8px);
+        transition:
+          opacity 0.5s ease-out 0.2s,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s;
+      }
+      body[data-takeover] .ptt-meta { opacity: 1; transform: translateY(0); }
+      .ptt-meta-dot {
+        width: 3px; height: 3px; border-radius: 50%;
+        background: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.6);
+      }
 
-      /* Reduced-motion: skip the choreography. Just fade. */
+      .ptt-progress {
+        position: relative;
+        width: clamp(120px, 18vw, 220px);
+        height: 1px;
+        background: rgba(255, 255, 255, 0.08);
+        margin-top: 1rem;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.4s ease-out 0.25s;
+      }
+      body[data-takeover] .ptt-progress { opacity: 1; }
+      .ptt-progress::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.85),
+          transparent
+        );
+        transform: translateX(-100%);
+        transition: transform 0.55s cubic-bezier(0.22, 0.7, 0.3, 1) 0.35s;
+      }
+      body[data-takeover] .ptt-progress::after { transform: translateX(100%); }
+
+      /* Reduced-motion: instant takeover with no animations. */
       @media (prefers-reduced-motion: reduce) {
         ::view-transition-old(root),
         ::view-transition-new(root) {
           animation: none;
         }
-        .pt-bracket, .pt-flash { transition: none; animation: none; }
-        #page-transition-overlay { display: none; }
+        #page-title-takeover,
+        .ptt-label, .ptt-title, .ptt-meta, .ptt-progress {
+          transition: none;
+        }
       }
 
       /* Back-nav slide-down: applied to <body> via JS. Uses compositor-only
@@ -683,34 +698,95 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
       });
 
-      // ── Page transition overlay choreography ──
-      // body.transitioning is added at navigation start (Astro forward nav
-      // via the View Transitions API, or DIY back-nav which calls runExit).
-      // The class triggers the bracket convergence + scan-line sweep that
-      // overlay the actual page swap. We remove the class on the new
-      // page's first paint (rAF after astro:page-load) so the brackets
-      // retract back outside the viewport.
-      document.addEventListener('astro:before-preparation', function() {
-        document.body.classList.add('transitioning');
-      });
-      document.addEventListener('astro:page-load', function() {
-        // Two rAF ticks: one for the new page's initial paint, one to
-        // let the body class' removal trigger the retract transition.
-        requestAnimationFrame(function() {
+      // ── Page Title Takeover choreography ──
+      // On forward nav, populate the takeover card with the destination's
+      // identity and toggle body[data-takeover] which triggers the CSS
+      // reveal. After astro:page-load (new DOM ready), wait a beat then
+      // clear data-takeover so the overlay fades away revealing the new
+      // page. Skip on back-nav (handled by body.vt-back-exit, a different
+      // metaphor) and on same-route clicks.
+      (function() {
+        // Destination metadata. Each entry drives one identity card.
+        // Keys match `new URL(href).pathname` (with trailing-slash
+        // normalization). Add entries here as new top-level routes are
+        // added.
+        var DEST = {
+          '/':       { label: '// archive',     title: 'Journal Gallery', a: 'Index',       b: 'Home' },
+          '/about':  { label: '// operator',    title: 'Ryan Xu',         a: 'Profile',     b: 'New York' },
+          '/travel': { label: '// territory',   title: 'Geo · Map',       a: 'Coordinates', b: 'United States' },
+        };
+
+        function normalize(path) {
+          if (!path) return '/';
+          if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
+          return path;
+        }
+
+        function metaFor(pathname) {
+          var key = normalize(pathname);
+          return DEST[key] || null;
+        }
+
+        function populate(meta) {
+          var labelEl  = document.querySelector('[data-ptt-label]');
+          var titleEl  = document.querySelector('[data-ptt-title]');
+          var metaAEl  = document.querySelector('[data-ptt-meta-a]');
+          var metaBEl  = document.querySelector('[data-ptt-meta-b]');
+          if (labelEl) labelEl.textContent = meta.label;
+          if (titleEl) titleEl.textContent = meta.title;
+          if (metaAEl) metaAEl.textContent = meta.a;
+          if (metaBEl) metaBEl.textContent = meta.b;
+        }
+
+        var safetyTimer = null;
+
+        function startTakeover(toPath) {
+          var meta = metaFor(toPath);
+          if (!meta) return; // unknown destination — skip the takeover
+          populate(meta);
+          // rAF so the populate paints before the data attribute flip
+          // triggers the CSS reveal — otherwise text can pop in already
+          // visible at the final state.
           requestAnimationFrame(function() {
-            document.body.classList.remove('transitioning');
+            document.body.setAttribute('data-takeover', normalize(toPath));
           });
+          clearTimeout(safetyTimer);
+          safetyTimer = setTimeout(function() {
+            document.body.removeAttribute('data-takeover');
+          }, 3000);
+        }
+
+        function endTakeover() {
+          // Two rAF ticks so the new page paints under the overlay before
+          // we begin fading the overlay out — avoids any flash of
+          // unstyled / loading content.
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              setTimeout(function() {
+                document.body.removeAttribute('data-takeover');
+                clearTimeout(safetyTimer);
+              }, 180);
+            });
+          });
+        }
+
+        // Astro forward nav. e.to is the destination URL.
+        document.addEventListener('astro:before-preparation', function(e) {
+          if (e && e.to) {
+            var toPath = '';
+            try { toPath = new URL(e.to, window.location.origin).pathname; }
+            catch (err) { return; }
+            // Don't play takeover on same-route clicks or when the user
+            // is going BACK (depth decreasing) — that path uses the
+            // body slide-down which has its own visual signature.
+            if (toPath === window.location.pathname) return;
+            var depth = function(p) { return p.split('/').filter(Boolean).length; };
+            if (depth(toPath) < depth(window.location.pathname) || toPath === '/') return;
+            startTakeover(toPath);
+          }
         });
-      });
-      // Safety: if anything goes wrong with the transition, ensure the
-      // overlay isn't stuck visible. Auto-clear after 2s.
-      var ptSafetyTimer = null;
-      document.addEventListener('astro:before-preparation', function() {
-        clearTimeout(ptSafetyTimer);
-        ptSafetyTimer = setTimeout(function() {
-          document.body.classList.remove('transitioning');
-        }, 2000);
-      });
+        document.addEventListener('astro:page-load', endTakeover);
+      })();
     </script>
   </body>
 </html>
