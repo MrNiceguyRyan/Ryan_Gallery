@@ -143,6 +143,8 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
          the old body. State is driven by classes ON THIS ELEMENT, never a
          body attribute (which the swap would discard). -->
     <div id="page-transition" aria-hidden="true" transition:persist="page-transition">
+      {/* Newsprint halftone screen — the "printed page" grain */}
+      <div class="pt-grain newsprint-screen" aria-hidden="true"></div>
       {/* Newspaper column rules drawn behind the editorial block */}
       <div class="pt-columns" aria-hidden="true">
         <span></span><span></span><span></span><span></span>
@@ -279,6 +281,14 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         border-bottom: 1px solid rgba(255, 255, 255, 0.12);
         pointer-events: none;
       }
+      /* Newsprint halftone screen overlaying the whole sheet */
+      .pt-grain {
+        position: absolute;
+        inset: 0;
+        opacity: 0.06;
+        pointer-events: none;
+        z-index: 1;
+      }
       /* Accent wash bottom-left, tied to the homepage color identity */
       #page-transition::before {
         content: '';
@@ -351,7 +361,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         justify-content: space-between;
         gap: 1rem;
         padding-bottom: 0.9rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        border-bottom: 3px double rgba(255, 255, 255, 0.22);
         font-family: ui-monospace, monospace;
         font-size: 10px;
         letter-spacing: 0.42em;
@@ -444,7 +454,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         justify-content: space-between;
         gap: 1rem;
         padding-top: 0.9rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        border-top: 3px double rgba(255, 255, 255, 0.22);
         font-family: ui-monospace, monospace;
         font-size: 10px;
         letter-spacing: 0.42em;

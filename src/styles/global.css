@@ -377,6 +377,18 @@ img {
   opacity: 0.01;
 }
 
+/* Newsprint halftone — fine dot screen, the "printed page" grain. Used on
+   editorial transition sheets (page-transition + MagazineLayout cover). */
+.newsprint-halftone {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.5) 0.5px, transparent 0.6px);
+  background-size: 4px 4px;
+}
+/* Coarser ink screen for large display areas — reads as offset print */
+.newsprint-screen {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.5) 0.6px, transparent 0.7px);
+  background-size: 6px 6px;
+}
+
 @keyframes grain-animation {
   0% { transform: translate(0, 0); }
   33% { transform: translate(-5%, -5%); }

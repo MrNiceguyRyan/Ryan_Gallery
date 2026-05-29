@@ -155,6 +155,17 @@ export default function MagazineLayout({
   // handler firing on tap causes a flash of dim before the lightbox opens.
   const canHover = useHoverCapable();
 
+  // Editorial cover intro — a printed "front page" that holds the screen as
+  // the story opens (collection name as masthead headline + column rules +
+  // folio + newsprint halftone), then peels up to reveal the grid. Replays
+  // whenever the collection changes (e.g. "Keep Reading" → next story).
+  const [coverGone, setCoverGone] = useState(false);
+  useEffect(() => {
+    setCoverGone(false);
+    const t = setTimeout(() => setCoverGone(true), 1150);
+    return () => clearTimeout(t);
+  }, [collection._id]);
+
   // Reorder photos so the first landscape (horizontal) photo leads the story
   const photos = useMemo(() => {
     const raw = collection.photos || [];
@@ -189,6 +200,8 @@ export default function MagazineLayout({
   // Next story
   const currentIndex = allCollections.findIndex((c) => c._id === collection._id);
   const nextCollection = allCollections[(currentIndex + 1) % allCollections.length];
+  // Folio / dispatch number for the editorial cover (1-based, zero-padded)
+  const folio = String((currentIndex >= 0 ? currentIndex : 0) + 1).padStart(2, '0');
 
   // Coords from first geotagged photo
   const coords = useMemo(() => {
@@ -519,6 +532,107 @@ export default function MagazineLayout({
             </div>
           </div>
         </motion.div>
+
+        {/* ── Editorial cover intro — printed "front page" that holds the
+             screen as the story opens, then peels up to reveal the grid.
+             Strong newspaper character: masthead + double rule + column
+             rules + halftone screen + folio. ── */}
+        <AnimatePresence>
+          {!coverGone && (
+            <motion.div
+              key={`cover-${collection._id}`}
+              initial={{ y: 0 }}
+              exit={{ y: '-100%' }}
+              transition={{ duration: 0.82, ease: [0.76, 0, 0.24, 1] }}
+              className="absolute inset-0 z-[75] bg-[#0A0A0A] text-[#FDFDFB] overflow-hidden pointer-events-none"
+            >
+              {/* Newsprint halftone screen */}
+              <div className="absolute inset-0 newsprint-screen opacity-[0.06] pointer-events-none" />
+              {/* Accent wash bottom-left */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: 'radial-gradient(50vmax 40vmax at 18% 110%, rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.10), transparent 68%)' }}
+              />
+
+              {/* Newspaper column rules */}
+              <div className="absolute inset-0 grid grid-cols-4 opacity-50 pointer-events-none">
+                {[0, 1, 2, 3].map((i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ scaleY: 0 }}
+                    animate={{ scaleY: 1 }}
+                    transition={{ duration: 0.7, delay: 0.06 + i * 0.06, ease: expo }}
+                    className="origin-top"
+                    style={{ borderRight: i === 3 ? '0' : '1px solid rgba(255,255,255,0.05)' }}
+                  />
+                ))}
+              </div>
+
+              {/* Masthead / running head + double rule */}
+              <motion.div
+                initial={{ clipPath: 'inset(0 100% 0 0)' }}
+                animate={{ clipPath: 'inset(0 0% 0 0)' }}
+                transition={{ duration: 0.65, delay: 0.1, ease: expo }}
+                className="absolute"
+                style={{ top: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
+              >
+                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase">
+                  <span className="font-medium text-white/60">The Journal Gallery</span>
+                  <span className="text-white/35">Vol. 01 · {collection.year || '—'}</span>
+                </div>
+                <div className="mt-[3px] border-b border-white/10" />
+              </motion.div>
+
+              {/* Center editorial block */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
+                <motion.span
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.22, ease: expo }}
+                  className="font-mono text-[11px] tracking-[0.5em] uppercase"
+                  style={{ color: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.85)' }}
+                >
+                  // dispatch № {folio}
+                </motion.span>
+                <h2 className="m-0 overflow-hidden" style={{ padding: '0.04em 0.02em' }}>
+                  <motion.span
+                    initial={{ y: '110%' }}
+                    animate={{ y: '0%' }}
+                    transition={{ duration: 0.85, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                    className="inline-block font-serif italic font-normal leading-[0.92] tracking-tight text-white/[0.98]"
+                    style={{ fontSize: 'clamp(48px,11vw,168px)' }}
+                  >
+                    {collection.name}
+                  </motion.span>
+                </h2>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.46, ease: expo }}
+                  className="flex items-center gap-3 font-mono text-[10px] tracking-[0.34em] uppercase text-white/40"
+                >
+                  {collection.location && <span>{collection.location}</span>}
+                  {collection.location && (
+                    <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.7)' }} />
+                  )}
+                  <span>{photos.length} Frames</span>
+                </motion.div>
+              </div>
+
+              {/* Folio / page number */}
+              <motion.div
+                initial={{ clipPath: 'inset(0 0 0 100%)' }}
+                animate={{ clipPath: 'inset(0 0 0 0%)' }}
+                transition={{ duration: 0.65, delay: 0.12, ease: expo }}
+                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase text-white/35"
+                style={{ bottom: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
+              >
+                <span className="text-[13px] tracking-[0.2em] text-white/55">{folio}</span>
+                <span>The Story Begins</span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* Lightbox */}
