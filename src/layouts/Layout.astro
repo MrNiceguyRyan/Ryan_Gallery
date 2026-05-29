@@ -130,21 +130,45 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
 
-    <!-- Page Title Takeover overlay — destination-aware identity card.
-         JS sets body[data-takeover="<key>"] on navigation, which triggers
-         the CSS reveal of the .ptt-card contents below. Content is
-         repopulated per-destination via #page-title-takeover .ptt-*
-         text nodes before the class flip. -->
-    <div id="page-title-takeover" aria-hidden="true">
-      <div class="ptt-card">
-        <span class="ptt-label" data-ptt-label>// destination</span>
-        <h1 class="ptt-title" data-ptt-title>Journal Gallery</h1>
-        <div class="ptt-meta">
-          <span data-ptt-meta-a>Index</span>
-          <span class="ptt-meta-dot"></span>
-          <span data-ptt-meta-b>Loading</span>
+    <!-- Editorial "press sheet" page transition — a printed spread that
+         rises to cover the viewport, sets its masthead + headline + column
+         rules like a magazine being laid out, then lifts up and away to
+         reveal the new page. JS adds .pt-active (entrance/hold) then
+         .pt-exit (lift-away) to this node. Content is repopulated
+         per-destination via the [data-pt-*] nodes before the entrance.
+
+         transition:persist — the SAME DOM node is carried across Astro's
+         body swap, so its mid-flight class state (pt-active) survives and
+         the sheet can lift away *after* the swap instead of vanishing with
+         the old body. State is driven by classes ON THIS ELEMENT, never a
+         body attribute (which the swap would discard). -->
+    <div id="page-transition" aria-hidden="true" transition:persist="page-transition">
+      {/* Newspaper column rules drawn behind the editorial block */}
+      <div class="pt-columns" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+
+      {/* Running head / masthead */}
+      <div class="pt-masthead">
+        <span class="pt-mast-name">The Journal Gallery</span>
+        <span class="pt-mast-edition" data-pt-edition>Edition</span>
+      </div>
+
+      {/* Center editorial block */}
+      <div class="pt-stage">
+        <span class="pt-kicker" data-pt-kicker>// section</span>
+        <h1 class="pt-headline"><span class="pt-headline-inner" data-pt-title>Journal Gallery</span></h1>
+        <div class="pt-dateline">
+          <span data-pt-meta-a>Index</span>
+          <span class="pt-dateline-dot"></span>
+          <span data-pt-meta-b>Home</span>
         </div>
-        <div class="ptt-progress"></div>
+      </div>
+
+      {/* Folio / page number */}
+      <div class="pt-folio">
+        <span class="pt-folio-no" data-pt-folio>00</span>
+        <span class="pt-folio-label">Turning the page</span>
       </div>
     </div>
 
@@ -201,201 +225,253 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
        * ═══════════════════════════════════════════════════════ */
 
       /* ─────────────────────────────────────────────────
-       *  Forward nav — Page Title Takeover
+       *  Forward nav — root swap stays invisible.
        *
-       *  Replaces the old iris/bracket/flash theatrics with a
-       *  destination-announcing overlay: the new page's identity
-       *  (label + giant italic serif title + system metadata) holds
-       *  the viewport while Astro swaps DOM behind it, then lifts away
-       *  to reveal the new scene already in place. Photography sites
-       *  use this pattern because it's useful (you know where you're
-       *  going) and quiet (no decorative noise).
-       *
-       *  The actual page swap stays minimal — a near-imperceptible
-       *  fade — because the title overlay is doing the storytelling.
-       *
-       *  Back nav still uses the DIY body-slide-down path; it does
-       *  NOT play the takeover (it's a fast return, not an arrival).
+       *  The editorial "press sheet" overlay (below) fully covers the
+       *  viewport during the DOM swap, so the underlying ::view-transition
+       *  fade only needs to be instant — no competing cross-fade.
        *  ───────────────────────────────────────────────── */
-      ::view-transition-old(root) {
-        animation: vt-fade-out 0.35s ease-out both;
-        z-index: 1;
-      }
+      ::view-transition-old(root),
       ::view-transition-new(root) {
-        animation: vt-fade-in 0.35s ease-in both;
-        z-index: 2;
+        animation: none;
+        mix-blend-mode: normal;
       }
-      @keyframes vt-fade-out { from { opacity: 1; } to { opacity: 0; } }
-      @keyframes vt-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 
       /* ═══════════════════════════════════════════════════════
-       *  Page Title Takeover overlay
+       *  Editorial "press sheet" transition
        *
-       *  Lives at body root, parked invisible. When body[data-takeover]
-       *  is set to a destination key, the overlay fades in showing that
-       *  destination's identity card. Set in JS BEFORE astro starts
-       *  preparing the new page, cleared two paint frames after
-       *  astro:page-load to give the new DOM time to settle.
+       *  A printed magazine spread that travels UP through the viewport
+       *  in one continuous motion across the whole navigation:
+       *    1. ENTRANCE  — rises from the bottom edge to cover the screen
+       *                   (.pt-active); as it settles it "sets" the
+       *                   masthead, column rules, kinetic headline and
+       *                   folio like a page being laid out.
+       *    2. HOLD      — Astro swaps the DOM behind the opaque sheet.
+       *    3. LIFT-AWAY — the sheet continues upward and off the top edge
+       *                   (.pt-exit), revealing the new page
+       *                   beneath. One direction of travel → reads fluid,
+       *                   not a yo-yo fade.
        *
-       *  Structure (centered, ~40vh tall total):
-       *    // tiny mono label   ("// archive" / "// territory" / etc.)
-       *    Giant italic serif title (the destination's display name)
-       *    Coordinates / system metadata (small mono)
-       *    A thin progress line
+       *  Back nav uses the DIY body-slide-down path (a fast return), so it
+       *  deliberately skips this sheet.
        * ═══════════════════════════════════════════════════════ */
-      #page-title-takeover {
+      #page-transition {
         position: fixed;
         inset: 0;
         z-index: 9999;
         pointer-events: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(10, 10, 10, 0);
-        backdrop-filter: blur(0);
-        -webkit-backdrop-filter: blur(0);
-        opacity: 0;
+        overflow: hidden;
+        background: #0A0A0A;
+        color: #FDFDFB;
         visibility: hidden;
+        transform: translateY(100%);
         transition:
-          background 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
-          backdrop-filter 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
-          opacity 0.35s ease-out,
-          visibility 0s linear 0.45s;
+          transform 0.62s cubic-bezier(0.76, 0, 0.24, 1),
+          visibility 0s linear 0.62s;
       }
-      body[data-takeover] #page-title-takeover {
-        opacity: 1;
-        visibility: visible;
-        background: rgba(10, 10, 10, 0.96);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
-        transition:
-          background 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
-          backdrop-filter 0.45s cubic-bezier(0.22, 0.7, 0.3, 1),
-          opacity 0.35s ease-out,
-          visibility 0s linear 0s;
+      /* Faint paper-edge hairlines top & bottom of the sheet */
+      #page-transition::after {
+        content: '';
+        position: absolute;
+        left: 0; right: 0; top: 0;
+        height: 100%;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        pointer-events: none;
       }
-
-      /* Subtle accent halo behind the title text, breathing in sync with
-         the rest of the homepage's color identity. Quiet — adds depth
-         rather than drama. */
-      #page-title-takeover::before {
+      /* Accent wash bottom-left, tied to the homepage color identity */
+      #page-transition::before {
         content: '';
         position: absolute;
         inset: 0;
         background: radial-gradient(
-          40vmax 30vmax at 50% 50%,
+          50vmax 40vmax at 18% 110%,
           rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.10),
-          transparent 70%
+          transparent 68%
         );
         opacity: 0;
-        transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: opacity 0.7s ease-out 0.08s;
       }
-      body[data-takeover] #page-title-takeover::before { opacity: 1; }
+      #page-transition.pt-active {
+        visibility: visible;
+        transform: translateY(0);
+        transition:
+          transform 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+          visibility 0s linear 0s;
+      }
+      #page-transition.pt-active::before { opacity: 1; }
 
-      .ptt-card {
-        position: relative;
+      /* LIFT-AWAY — continue travelling up and off the top */
+      #page-transition.pt-exit {
+        visibility: visible;
+        transform: translateY(-100%);
+        transition:
+          transform 0.72s cubic-bezier(0.76, 0, 0.24, 1),
+          visibility 0s linear 0.72s;
+      }
+
+      /* Instant reset — used to snap the sheet back to its parked state
+         after the lift-away without animating it back down through view. */
+      #page-transition.pt-instant,
+      #page-transition.pt-instant *,
+      #page-transition.pt-instant::before {
+        transition: none !important;
+      }
+
+      /* ── Newspaper column rules ── */
+      .pt-columns {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .pt-columns span {
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        transform: scaleY(0);
+        transform-origin: top;
+        transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .pt-columns span:last-child { border-right: 0; }
+      .pt-columns span:nth-child(1) { transition-delay: 0.06s; }
+      .pt-columns span:nth-child(2) { transition-delay: 0.12s; }
+      .pt-columns span:nth-child(3) { transition-delay: 0.18s; }
+      .pt-columns span:nth-child(4) { transition-delay: 0.24s; }
+      #page-transition.pt-active .pt-columns span { transform: scaleY(1); }
+
+      /* ── Masthead / running head ── */
+      .pt-masthead {
+        position: absolute;
+        top: clamp(1.5rem, 4vh, 3rem);
+        left: clamp(1.5rem, 5vw, 4rem);
+        right: clamp(1.5rem, 5vw, 4rem);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 0.9rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.42em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+        /* draw the rule from the left */
+        clip-path: inset(0 100% 0 0);
+        transition: clip-path 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
+      }
+      .pt-masthead .pt-mast-name { font-weight: 500; }
+      .pt-masthead .pt-mast-edition { color: rgba(255, 255, 255, 0.35); }
+      #page-transition.pt-active .pt-masthead { clip-path: inset(0 0 0 0); }
+
+      /* ── Center editorial block ── */
+      .pt-stage {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1.5rem;
+        justify-content: center;
+        gap: 1.4rem;
         padding: 0 6vw;
-        max-width: 90vw;
         text-align: center;
       }
 
-      .ptt-label {
+      .pt-kicker {
         font-family: ui-monospace, monospace;
-        font-size: 10px;
+        font-size: 11px;
         letter-spacing: 0.5em;
         text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.35);
+        color: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.85);
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(10px);
         transition:
-          opacity 0.5s ease-out 0.05s,
-          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
+          opacity 0.5s ease-out 0.22s,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.22s;
       }
-      body[data-takeover] .ptt-label { opacity: 1; transform: translateY(0); }
+      #page-transition.pt-active .pt-kicker { opacity: 1; transform: translateY(0); }
 
-      .ptt-title {
+      /* Headline rises out of a baseline mask, like type being set */
+      .pt-headline {
+        margin: 0;
+        overflow: hidden;
+        padding: 0.04em 0.02em;
+      }
+      .pt-headline-inner {
+        display: inline-block;
         font-family: 'Instrument Serif', serif;
         font-style: italic;
         font-weight: 400;
-        font-size: clamp(56px, 14vw, 220px);
-        line-height: 0.95;
+        font-size: clamp(52px, 13vw, 200px);
+        line-height: 0.92;
         letter-spacing: -0.02em;
-        color: rgba(255, 255, 255, 0.97);
-        margin: 0;
-        opacity: 0;
-        transform: translateY(24px) scale(0.96);
-        filter: blur(8px);
-        transition:
-          opacity 0.7s ease-out 0.1s,
-          transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
-          filter 0.7s ease-out 0.1s;
+        color: rgba(255, 255, 255, 0.98);
+        transform: translateY(110%);
+        transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
       }
-      body[data-takeover] .ptt-title {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
-      }
+      #page-transition.pt-active .pt-headline-inner { transform: translateY(0); }
 
-      .ptt-meta {
+      .pt-dateline {
         display: flex;
         align-items: center;
         gap: 1rem;
         font-family: ui-monospace, monospace;
         font-size: 10px;
-        letter-spacing: 0.3em;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.4);
+        opacity: 0;
+        transform: translateY(10px);
+        transition:
+          opacity 0.5s ease-out 0.36s,
+          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.36s;
+      }
+      #page-transition.pt-active .pt-dateline { opacity: 1; transform: translateY(0); }
+      .pt-dateline-dot {
+        width: 3px; height: 3px; border-radius: 50%;
+        background: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.7);
+      }
+
+      /* ── Folio / page number ── */
+      .pt-folio {
+        position: absolute;
+        bottom: clamp(1.5rem, 4vh, 3rem);
+        left: clamp(1.5rem, 5vw, 4rem);
+        right: clamp(1.5rem, 5vw, 4rem);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        font-family: ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.42em;
         text-transform: uppercase;
         color: rgba(255, 255, 255, 0.35);
-        opacity: 0;
-        transform: translateY(8px);
-        transition:
-          opacity 0.5s ease-out 0.2s,
-          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s;
+        clip-path: inset(0 0 0 100%);
+        transition: clip-path 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
       }
-      body[data-takeover] .ptt-meta { opacity: 1; transform: translateY(0); }
-      .ptt-meta-dot {
-        width: 3px; height: 3px; border-radius: 50%;
-        background: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.6);
+      .pt-folio .pt-folio-no {
+        font-size: 13px;
+        letter-spacing: 0.2em;
+        color: rgba(255, 255, 255, 0.55);
       }
+      #page-transition.pt-active .pt-folio { clip-path: inset(0 0 0 0); }
 
-      .ptt-progress {
-        position: relative;
-        width: clamp(120px, 18vw, 220px);
-        height: 1px;
-        background: rgba(255, 255, 255, 0.08);
-        margin-top: 1rem;
-        overflow: hidden;
-        opacity: 0;
-        transition: opacity 0.4s ease-out 0.25s;
-      }
-      body[data-takeover] .ptt-progress { opacity: 1; }
-      .ptt-progress::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.85),
-          transparent
-        );
-        transform: translateX(-100%);
-        transition: transform 0.55s cubic-bezier(0.22, 0.7, 0.3, 1) 0.35s;
-      }
-      body[data-takeover] .ptt-progress::after { transform: translateX(100%); }
-
-      /* Reduced-motion: instant takeover with no animations. */
+      /* Reduced-motion: instant cover/reveal, no travel or stagger. */
       @media (prefers-reduced-motion: reduce) {
-        ::view-transition-old(root),
-        ::view-transition-new(root) {
-          animation: none;
-        }
-        #page-title-takeover,
-        .ptt-label, .ptt-title, .ptt-meta, .ptt-progress {
-          transition: none;
+        #page-transition,
+        .pt-columns span,
+        .pt-masthead,
+        .pt-kicker,
+        .pt-headline-inner,
+        .pt-dateline,
+        .pt-folio,
+        #page-transition::before {
+          transition-duration: 0.01s !important;
+          transition-delay: 0s !important;
         }
       }
 
@@ -698,23 +774,27 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
       });
 
-      // ── Page Title Takeover choreography ──
-      // On forward nav, populate the takeover card with the destination's
-      // identity and toggle body[data-takeover] which triggers the CSS
-      // reveal. After astro:page-load (new DOM ready), wait a beat then
-      // clear data-takeover so the overlay fades away revealing the new
-      // page. Skip on back-nav (handled by body.vt-back-exit, a different
-      // metaphor) and on same-route clicks.
+      // ── Editorial "press sheet" transition choreography ──
+      // On forward nav, populate the sheet with the destination's editorial
+      // identity and add .pt-active to the (persisted) #page-transition node,
+      // which raises the sheet from the bottom and "sets" the masthead /
+      // headline / folio. Astro swaps the DOM behind the opaque sheet — and
+      // because the node uses transition:persist, the SAME element (with its
+      // .pt-active class) survives the swap. After astro:page-load (new DOM
+      // ready) — but never before a minimum hold so the editorial beat always
+      // plays — we add .pt-exit which lifts the sheet up and off the top,
+      // revealing the new page, then reset it to its parked state.
+      // Skip on back-nav (handled by body.vt-back-exit) and same-route clicks.
       (function() {
-        // Destination metadata. Each entry drives one identity card.
-        // Keys match `new URL(href).pathname` (with trailing-slash
-        // normalization). Add entries here as new top-level routes are
-        // added.
+        // Destination metadata. Each entry drives one editorial sheet.
+        // Keys match `new URL(href).pathname` (trailing-slash normalized).
         var DEST = {
-          '/':       { label: '// archive',     title: 'Journal Gallery', a: 'Index',       b: 'Home' },
-          '/about':  { label: '// operator',    title: 'Ryan Xu',         a: 'Profile',     b: 'New York' },
-          '/travel': { label: '// territory',   title: 'Geo · Map',       a: 'Coordinates', b: 'United States' },
+          '/':       { kicker: '// the index',     title: 'Journal Gallery', a: 'Volume',  b: 'Complete Works', edition: 'Home Edition', folio: '01' },
+          '/about':  { kicker: '// the operator',  title: 'Ryan Xu',         a: 'Profile', b: 'New York',       edition: 'The Profile',  folio: '02' },
+          '/travel': { kicker: '// the territory', title: 'Geo · Map',       a: 'Atlas',   b: 'United States',  edition: 'Field Notes',  folio: '03' },
         };
+
+        var MIN_HOLD = 820; // ms — guarantees the editorial reveal completes
 
         function normalize(path) {
           if (!path) return '/';
@@ -723,49 +803,81 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
 
         function metaFor(pathname) {
-          var key = normalize(pathname);
-          return DEST[key] || null;
+          return DEST[normalize(pathname)] || null;
+        }
+
+        function set(sel, val) {
+          var el = document.querySelector(sel);
+          if (el) el.textContent = val;
         }
 
         function populate(meta) {
-          var labelEl  = document.querySelector('[data-ptt-label]');
-          var titleEl  = document.querySelector('[data-ptt-title]');
-          var metaAEl  = document.querySelector('[data-ptt-meta-a]');
-          var metaBEl  = document.querySelector('[data-ptt-meta-b]');
-          if (labelEl) labelEl.textContent = meta.label;
-          if (titleEl) titleEl.textContent = meta.title;
-          if (metaAEl) metaAEl.textContent = meta.a;
-          if (metaBEl) metaBEl.textContent = meta.b;
+          set('[data-pt-kicker]', meta.kicker);
+          set('[data-pt-title]', meta.title);
+          set('[data-pt-meta-a]', meta.a);
+          set('[data-pt-meta-b]', meta.b);
+          set('[data-pt-edition]', meta.edition);
+          set('[data-pt-folio]', meta.folio);
         }
 
         var safetyTimer = null;
+        var startedAt = 0;
+        var active = false;
 
-        function startTakeover(toPath) {
+        function sheet() { return document.getElementById('page-transition'); }
+
+        function startTransition(toPath) {
           var meta = metaFor(toPath);
-          if (!meta) return; // unknown destination — skip the takeover
+          if (!meta) return; // unknown destination — skip the sheet
+          var el = sheet();
+          if (!el) return;
           populate(meta);
-          // rAF so the populate paints before the data attribute flip
-          // triggers the CSS reveal — otherwise text can pop in already
-          // visible at the final state.
+          active = true;
+          startedAt = Date.now();
+          // rAF so the populated text paints at its hidden start state
+          // before the class flip triggers the entrance.
           requestAnimationFrame(function() {
-            document.body.setAttribute('data-takeover', normalize(toPath));
+            el.classList.remove('pt-instant', 'pt-exit');
+            el.classList.add('pt-active');
           });
           clearTimeout(safetyTimer);
-          safetyTimer = setTimeout(function() {
-            document.body.removeAttribute('data-takeover');
-          }, 3000);
+          safetyTimer = setTimeout(clearAll, 4500); // failsafe
         }
 
-        function endTakeover() {
-          // Two rAF ticks so the new page paints under the overlay before
-          // we begin fading the overlay out — avoids any flash of
-          // unstyled / loading content.
+        function clearAll() {
+          var el = sheet();
+          active = false;
+          clearTimeout(safetyTimer);
+          if (!el) return;
+          // Snap back to the parked state WITHOUT animating the sheet back
+          // down through the viewport: kill transitions, drop the state
+          // classes, then re-enable transitions a couple of frames later.
+          el.classList.add('pt-instant');
+          el.classList.remove('pt-active', 'pt-exit');
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              el.classList.remove('pt-instant');
+            });
+          });
+        }
+
+        function endTransition() {
+          if (!active) return;
+          var elapsed = Date.now() - startedAt;
+          var wait = Math.max(MIN_HOLD - elapsed, 0);
+          // Two rAF ticks so the new page has painted under the opaque
+          // sheet, then honour the minimum hold, then lift the sheet away.
           requestAnimationFrame(function() {
             requestAnimationFrame(function() {
               setTimeout(function() {
-                document.body.removeAttribute('data-takeover');
-                clearTimeout(safetyTimer);
-              }, 180);
+                var el = sheet();
+                if (el) {
+                  el.classList.remove('pt-active');
+                  el.classList.add('pt-exit');
+                }
+                // Clear once the lift-away travel (0.72s) finishes.
+                setTimeout(clearAll, 760);
+              }, wait);
             });
           });
         }
@@ -776,16 +888,15 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
             var toPath = '';
             try { toPath = new URL(e.to, window.location.origin).pathname; }
             catch (err) { return; }
-            // Don't play takeover on same-route clicks or when the user
-            // is going BACK (depth decreasing) — that path uses the
-            // body slide-down which has its own visual signature.
+            // Skip same-route clicks and BACK-direction nav (depth
+            // decreasing, or to home) — back uses the body slide-down.
             if (toPath === window.location.pathname) return;
             var depth = function(p) { return p.split('/').filter(Boolean).length; };
             if (depth(toPath) < depth(window.location.pathname) || toPath === '/') return;
-            startTakeover(toPath);
+            startTransition(toPath);
           }
         });
-        document.addEventListener('astro:page-load', endTakeover);
+        document.addEventListener('astro:page-load', endTransition);
       })();
     </script>
   </body>
