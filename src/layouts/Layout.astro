@@ -268,14 +268,18 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       }
       html[data-axis="forward"]::view-transition-new(root) {
         animation: sa-new-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5));
+        /* depth shadow + a bright light seam riding the leading edge */
+        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5))
+                drop-shadow(-2px 0 14px rgba(255, 255, 255, 0.5));
       }
       html[data-axis="back"]::view-transition-old(root) {
         animation: sa-old-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
       }
       html[data-axis="back"]::view-transition-new(root) {
         animation: sa-new-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5));
+        /* depth shadow + a bright light seam riding the leading edge */
+        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5))
+                drop-shadow(2px 0 14px rgba(255, 255, 255, 0.5));
       }
       @keyframes sa-new-fwd  { from { transform: translateX(100%); }  to { transform: translateX(0); } }
       @keyframes sa-old-fwd  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-22%); opacity: 0.4; } }
