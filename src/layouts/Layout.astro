@@ -184,6 +184,25 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       <span class="fx-ring fx-ring-2"></span>
     </div>
 
+    {/* Viewfinder Lock-On — camera autofocus framing for lateral section
+        switches (Map ↔ About). Four corner brackets snap inward to frame
+        the arriving section while a mono "// section" readout resolves
+        from blur, like a lens locking focus on a new subject. Populated
+        per-destination in astro:after-swap; only animates when reached via
+        html[data-axis="forward"|"back"]. Non-persisted, pointer-none. */}
+    <div id="section-lock" aria-hidden="true">
+      <div class="sl-frame">
+        <span class="sl-c sl-tl"></span>
+        <span class="sl-c sl-tr"></span>
+        <span class="sl-c sl-bl"></span>
+        <span class="sl-c sl-br"></span>
+        <div class="sl-text">
+          <span class="sl-label" data-sl-label>// section</span>
+          <span class="sl-sub" data-sl-sub>—</span>
+        </div>
+      </div>
+    </div>
+
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -268,18 +287,14 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       }
       html[data-axis="forward"]::view-transition-new(root) {
         animation: sa-new-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        /* depth shadow + a bright light seam riding the leading edge */
-        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5))
-                drop-shadow(-2px 0 14px rgba(255, 255, 255, 0.5));
+        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5));
       }
       html[data-axis="back"]::view-transition-old(root) {
         animation: sa-old-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
       }
       html[data-axis="back"]::view-transition-new(root) {
         animation: sa-new-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        /* depth shadow + a bright light seam riding the leading edge */
-        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5))
-                drop-shadow(2px 0 14px rgba(255, 255, 255, 0.5));
+        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5));
       }
       @keyframes sa-new-fwd  { from { transform: translateX(100%); }  to { transform: translateX(0); } }
       @keyframes sa-old-fwd  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-22%); opacity: 0.4; } }
@@ -366,6 +381,109 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         0%   { opacity: 0;   transform: scale(0.25); }
         22%  { opacity: 0.7; }
         100% { opacity: 0;   transform: scale(1.7); }
+      }
+
+      /* ── Viewfinder Lock-On (lateral Map ↔ About) ── */
+      #section-lock {
+        position: fixed;
+        inset: 0;
+        z-index: 9997;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+      }
+      .sl-frame {
+        position: relative;
+        width: min(60vw, 540px);
+        height: min(32vh, 230px);
+      }
+      /* Warm "focus" tone — falls back to the site's amber atmosphere when
+         no per-chapter accent is set (Map / About don't define one). */
+      .sl-c {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        opacity: 0;
+        border-color: rgba(var(--accent-r, 255), var(--accent-g, 200), var(--accent-b, 130), 0.9);
+        border-style: solid;
+        border-width: 0;
+      }
+      .sl-tl { top: 0;    left: 0;  border-left-width: 1.5px; border-top-width: 1.5px; }
+      .sl-tr { top: 0;    right: 0; border-right-width: 1.5px; border-top-width: 1.5px; }
+      .sl-bl { bottom: 0; left: 0;  border-left-width: 1.5px; border-bottom-width: 1.5px; }
+      .sl-br { bottom: 0; right: 0; border-right-width: 1.5px; border-bottom-width: 1.5px; }
+      .sl-text {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.7rem;
+        text-align: center;
+      }
+      .sl-label {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5em;
+        color: rgba(var(--accent-r, 255), var(--accent-g, 200), var(--accent-b, 130), 0.95);
+        opacity: 0;
+      }
+      .sl-sub {
+        font-family: ui-monospace, monospace;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.34em;
+        color: rgba(255, 255, 255, 0.45);
+        opacity: 0;
+      }
+
+      /* Trigger only on lateral nav (forward / back), not the depth zoom. */
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock {
+        animation: sl-window 1.15s linear 0.26s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-tl {
+        animation: sl-tl 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-tr {
+        animation: sl-tr 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-bl {
+        animation: sl-bl 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-br {
+        animation: sl-br 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-label {
+        animation: sl-resolve 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.42s both;
+      }
+      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-sub {
+        animation: sl-resolve-sub 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.52s both;
+      }
+
+      /* Container visibility window: snap in, hold, fade out. */
+      @keyframes sl-window {
+        0%   { opacity: 0; }
+        14%  { opacity: 1; }
+        70%  { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      /* Corner brackets converge inward (autofocus lock). */
+      @keyframes sl-tl { from { opacity: 0; transform: translate(-22px, -22px); } to { opacity: 1; transform: translate(0, 0); } }
+      @keyframes sl-tr { from { opacity: 0; transform: translate( 22px, -22px); } to { opacity: 1; transform: translate(0, 0); } }
+      @keyframes sl-bl { from { opacity: 0; transform: translate(-22px,  22px); } to { opacity: 1; transform: translate(0, 0); } }
+      @keyframes sl-br { from { opacity: 0; transform: translate( 22px,  22px); } to { opacity: 1; transform: translate(0, 0); } }
+      /* Readout resolves from blur + wide tracking (lens pulling focus). */
+      @keyframes sl-resolve {
+        from { opacity: 0; filter: blur(6px); letter-spacing: 0.9em; }
+        to   { opacity: 1; filter: blur(0);   letter-spacing: 0.5em; }
+      }
+      @keyframes sl-resolve-sub {
+        from { opacity: 0; filter: blur(5px); letter-spacing: 0.6em; }
+        to   { opacity: 1; filter: blur(0);   letter-spacing: 0.34em; }
       }
 
       /* ═══════════════════════════════════════════════════════
@@ -618,6 +736,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
         #enter-fx .fx-bloom,
         #enter-fx .fx-ring {
+          animation: none !important;
+        }
+        #section-lock,
+        #section-lock * {
           animation: none !important;
         }
       }
@@ -1034,7 +1156,21 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         // and →Home keeps the body slide-down. Only Map↔About is lateral, and
         // it gets the Apple/Material shared-axis push instead of the sheet.
         var LATERAL = { '/travel': 1, '/about': 2 };
-        var pendingAxis = null; // 'forward' | 'back' — re-asserted post-swap
+        var pendingAxis = null; // 'forward' | 'back' | 'enter' — re-asserted post-swap
+
+        // Per-section identity shown by the Viewfinder Lock-On on lateral nav.
+        var SECTIONS = {
+          '/travel': { label: '// the territory', sub: 'Geo · Map — United States' },
+          '/about':  { label: '// the operator',  sub: 'Profile — New York' },
+        };
+        function populateLock(path) {
+          var meta = SECTIONS[normalize(path)];
+          if (!meta) return;
+          var l = document.querySelector('[data-sl-label]');
+          var s = document.querySelector('[data-sl-sub]');
+          if (l) l.textContent = meta.label;
+          if (s) s.textContent = meta.sub;
+        }
 
         // Astro forward nav. e.to is the destination URL.
         document.addEventListener('astro:before-preparation', function(e) {
@@ -1077,6 +1213,11 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         // wipe, before the new snapshot is styled) — re-assert it here.
         document.addEventListener('astro:after-swap', function() {
           if (pendingAxis) {
+            // Populate the lock-on readout for lateral nav BEFORE flipping
+            // the attribute, so its animation starts with the right text.
+            if (pendingAxis === 'forward' || pendingAxis === 'back') {
+              populateLock(window.location.pathname);
+            }
             document.documentElement.setAttribute('data-axis', pendingAxis);
           }
         });
