@@ -239,6 +239,39 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         mix-blend-mode: normal;
       }
 
+      /* ───────────────────────────────────────────────
+       *  Lateral sibling nav (Map ↔ About) — shared-axis push.
+       *
+       *  Apple / Material-grade peer-tab transition: the incoming page
+       *  slides in OPAQUE over the outgoing one, which parallax-drifts the
+       *  other way and dims. No full-screen masthead — switching between
+       *  two peer sections should feel like a continuous spatial move, not
+       *  an interruption. Direction (`forward` / `back`) is set on <html>
+       *  by JS from the route order, and re-asserted in astro:after-swap
+       *  (Astro wipes root attributes during the DOM swap).
+       *  ─────────────────────────────────────────────── */
+      html[data-axis]::view-transition-old(root) { z-index: 1; }
+      html[data-axis]::view-transition-new(root) { z-index: 2; }
+
+      html[data-axis="forward"]::view-transition-old(root) {
+        animation: sa-old-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+      }
+      html[data-axis="forward"]::view-transition-new(root) {
+        animation: sa-new-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5));
+      }
+      html[data-axis="back"]::view-transition-old(root) {
+        animation: sa-old-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+      }
+      html[data-axis="back"]::view-transition-new(root) {
+        animation: sa-new-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5));
+      }
+      @keyframes sa-new-fwd  { from { transform: translateX(100%); }  to { transform: translateX(0); } }
+      @keyframes sa-old-fwd  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-22%); opacity: 0.4; } }
+      @keyframes sa-new-back { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+      @keyframes sa-old-back { from { transform: translateX(0); opacity: 1; } to { transform: translateX(22%);  opacity: 0.4; } }
+
       /* ═══════════════════════════════════════════════════════
        *  Editorial "press sheet" transition
        *
@@ -482,6 +515,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         #page-transition::before {
           transition-duration: 0.01s !important;
           transition-delay: 0s !important;
+        }
+        html[data-axis]::view-transition-old(root),
+        html[data-axis]::view-transition-new(root) {
+          animation: none !important;
         }
       }
 
@@ -892,18 +929,49 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           });
         }
 
+        // Route order for LATERAL sibling nav (Map ↔ About). Home is not a
+        // sibling: Home→section keeps the editorial press sheet (an arrival),
+        // and →Home keeps the body slide-down. Only Map↔About is lateral, and
+        // it gets the Apple/Material shared-axis push instead of the sheet.
+        var LATERAL = { '/travel': 1, '/about': 2 };
+        var pendingAxis = null; // 'forward' | 'back' — re-asserted post-swap
+
         // Astro forward nav. e.to is the destination URL.
         document.addEventListener('astro:before-preparation', function(e) {
-          if (e && e.to) {
-            var toPath = '';
-            try { toPath = new URL(e.to, window.location.origin).pathname; }
-            catch (err) { return; }
-            // Skip same-route clicks and BACK-direction nav (depth
-            // decreasing, or to home) — back uses the body slide-down.
-            if (toPath === window.location.pathname) return;
-            var depth = function(p) { return p.split('/').filter(Boolean).length; };
-            if (depth(toPath) < depth(window.location.pathname) || toPath === '/') return;
-            startTransition(toPath);
+          if (!(e && e.to)) return;
+          var toPath = '';
+          try { toPath = new URL(e.to, window.location.origin).pathname; }
+          catch (err) { return; }
+          var nf = normalize(window.location.pathname);
+          var nt = normalize(toPath);
+          // Clear any stale axis from a previous navigation.
+          document.documentElement.removeAttribute('data-axis');
+          pendingAxis = null;
+          if (nt === nf) return;
+
+          // Lateral sibling nav (Map ↔ About): shared-axis push via
+          // ::view-transition(root). Skip the editorial sheet — peer tabs
+          // shouldn't be interrupted by a full-screen masthead.
+          if (LATERAL[nf] && LATERAL[nt]) {
+            pendingAxis = LATERAL[nt] > LATERAL[nf] ? 'forward' : 'back';
+            document.documentElement.setAttribute('data-axis', pendingAxis);
+            return;
+          }
+
+          // Otherwise: editorial press sheet on forward/descent nav only.
+          var depth = function(p) { return p.split('/').filter(Boolean).length; };
+          if (depth(nt) < depth(nf) || nt === '/') return;
+          startTransition(nt);
+        });
+
+        // Astro wipes <html> attributes during the DOM swap, so the axis set
+        // in before-preparation is gone by the time the browser computes the
+        // ::view-transition animation. astro:after-swap runs synchronously
+        // inside the view-transition update callback (after the attribute
+        // wipe, before the new snapshot is styled) — re-assert it here.
+        document.addEventListener('astro:after-swap', function() {
+          if (pendingAxis) {
+            document.documentElement.setAttribute('data-axis', pendingAxis);
           }
         });
         document.addEventListener('astro:page-load', endTransition);
