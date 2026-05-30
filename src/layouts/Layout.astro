@@ -174,6 +174,16 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       </div>
     </div>
 
+    {/* Arrival shockwave — accent bloom + expanding ring that pulses
+        outward as a depth-zoom ("enter") destination lands. Non-persisted
+        (fresh per page) and pointer-none; only animates when the page was
+        reached via html[data-axis="enter"]. */}
+    <div id="enter-fx" aria-hidden="true">
+      <span class="fx-bloom"></span>
+      <span class="fx-ring"></span>
+      <span class="fx-ring fx-ring-2"></span>
+    </div>
+
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -282,22 +292,76 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
        *  to it. (Map↔About stays lateral; this is descent into depth.)
        *  ─────────────────────────────────────────────── */
       html[data-axis="enter"]::view-transition-old(root) {
-        animation: enter-old 0.72s cubic-bezier(0.4, 0, 0.2, 1) both;
-        transform-origin: 50% 48%;
+        /* Home rushes out — accelerating away, blowing up, over-exposing
+           into a bright bloom as you punch through it. */
+        animation: enter-old 0.8s cubic-bezier(0.7, 0, 0.84, 0) both;
+        transform-origin: 50% 46%;
       }
       html[data-axis="enter"]::view-transition-new(root) {
-        animation: enter-new 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
-        transform-origin: 50% 48%;
+        /* Destination warps in from far away with motion blur that clears,
+           overshoots, then snaps to rest. */
+        animation: enter-new 0.86s cubic-bezier(0.16, 1, 0.3, 1) both;
+        transform-origin: 50% 46%;
       }
       @keyframes enter-old {
-        0%   { opacity: 1; transform: scale(1);    filter: blur(0); }
-        60%  { opacity: 0; }
-        100% { opacity: 0; transform: scale(1.15); filter: blur(9px); }
+        0%   { opacity: 1; transform: scale(1)   rotate(0deg);   filter: blur(0)    brightness(1); }
+        100% { opacity: 0; transform: scale(1.7) rotate(1.5deg); filter: blur(24px) brightness(1.8); }
       }
       @keyframes enter-new {
-        0%   { opacity: 0; transform: scale(0.88); }
-        35%  { opacity: 0; }
-        100% { opacity: 1; transform: scale(1); }
+        0%   { opacity: 0; transform: scale(0.5)  rotate(-4deg);  filter: blur(18px) brightness(1.7) saturate(1.5); }
+        45%  { opacity: 1; }
+        78%  { opacity: 1; transform: scale(1.05) rotate(0.5deg); filter: blur(0)    brightness(1.14) saturate(1.08); }
+        100% { opacity: 1; transform: scale(1)    rotate(0deg);   filter: blur(0)    brightness(1)    saturate(1); }
+      }
+
+      /* ── Arrival shockwave (depth-zoom only) ── */
+      #enter-fx {
+        position: fixed;
+        inset: 0;
+        z-index: 9997;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #enter-fx .fx-bloom,
+      #enter-fx .fx-ring {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+      #enter-fx .fx-bloom {
+        width: 55vmax; height: 55vmax;
+        background: radial-gradient(
+          circle,
+          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.55),
+          transparent 62%
+        );
+      }
+      #enter-fx .fx-ring {
+        width: 26vmax; height: 26vmax;
+        border: 1.5px solid rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.6);
+      }
+      /* Only fires when the destination was reached via the depth zoom. */
+      html[data-axis="enter"] #enter-fx .fx-bloom {
+        animation: fx-bloom 1.0s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+      }
+      html[data-axis="enter"] #enter-fx .fx-ring {
+        animation: fx-ring 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
+      }
+      html[data-axis="enter"] #enter-fx .fx-ring-2 {
+        animation: fx-ring 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.68s both;
+      }
+      @keyframes fx-bloom {
+        0%   { opacity: 0;    transform: scale(0.4); }
+        28%  { opacity: 0.55; }
+        100% { opacity: 0;    transform: scale(1.8); }
+      }
+      @keyframes fx-ring {
+        0%   { opacity: 0;   transform: scale(0.25); }
+        22%  { opacity: 0.7; }
+        100% { opacity: 0;   transform: scale(1.7); }
       }
 
       /* ═══════════════════════════════════════════════════════
@@ -546,6 +610,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
         html[data-axis]::view-transition-old(root),
         html[data-axis]::view-transition-new(root) {
+          animation: none !important;
+        }
+        #enter-fx .fx-bloom,
+        #enter-fx .fx-ring {
           animation: none !important;
         }
       }
