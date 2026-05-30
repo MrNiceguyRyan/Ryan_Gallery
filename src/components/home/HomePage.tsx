@@ -9,7 +9,6 @@ import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
-import ViewfinderBrackets from '../shared/ViewfinderBrackets';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
  * narratives in src/lib/narratives.tsx. The hero cycles through these
@@ -378,10 +377,6 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* Cinematic viewfinder brackets — shared with /about and /travel
-               heroes so the whole site reads as composed inside a camera finder. */}
-          <ViewfinderBrackets insetClass="top-[7vh] left-[5vw] right-[5vw] bottom-[7vh]" />
-
           {/* Header content */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}

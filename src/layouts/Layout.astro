@@ -272,6 +272,34 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       @keyframes sa-new-back { from { transform: translateX(-100%); } to { transform: translateX(0); } }
       @keyframes sa-old-back { from { transform: translateX(0); opacity: 1; } to { transform: translateX(22%);  opacity: 0.4; } }
 
+      /* ───────────────────────────────────────────────
+       *  Enter a section from Home (Home → Map / About) — Apple depth zoom.
+       *
+       *  A strong, intuitive "push forward into the destination": the new
+       *  page rushes toward you, growing from smaller to full while fading
+       *  in; the Home page recedes — scaling up past the camera and
+       *  blurring out. Reads as moving INTO the content, not sliding next
+       *  to it. (Map↔About stays lateral; this is descent into depth.)
+       *  ─────────────────────────────────────────────── */
+      html[data-axis="enter"]::view-transition-old(root) {
+        animation: enter-old 0.72s cubic-bezier(0.4, 0, 0.2, 1) both;
+        transform-origin: 50% 48%;
+      }
+      html[data-axis="enter"]::view-transition-new(root) {
+        animation: enter-new 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+        transform-origin: 50% 48%;
+      }
+      @keyframes enter-old {
+        0%   { opacity: 1; transform: scale(1);    filter: blur(0); }
+        60%  { opacity: 0; }
+        100% { opacity: 0; transform: scale(1.15); filter: blur(9px); }
+      }
+      @keyframes enter-new {
+        0%   { opacity: 0; transform: scale(0.88); }
+        35%  { opacity: 0; }
+        100% { opacity: 1; transform: scale(1); }
+      }
+
       /* ═══════════════════════════════════════════════════════
        *  Editorial "press sheet" transition
        *
@@ -950,18 +978,24 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           if (nt === nf) return;
 
           // Lateral sibling nav (Map ↔ About): shared-axis push via
-          // ::view-transition(root). Skip the editorial sheet — peer tabs
-          // shouldn't be interrupted by a full-screen masthead.
+          // ::view-transition(root). Peer tabs slide; they don't zoom.
           if (LATERAL[nf] && LATERAL[nt]) {
             pendingAxis = LATERAL[nt] > LATERAL[nf] ? 'forward' : 'back';
             document.documentElement.setAttribute('data-axis', pendingAxis);
             return;
           }
 
-          // Otherwise: editorial press sheet on forward/descent nav only.
-          var depth = function(p) { return p.split('/').filter(Boolean).length; };
-          if (depth(nt) < depth(nf) || nt === '/') return;
-          startTransition(nt);
+          // Enter a section from Home (Home → Map / About): Apple depth zoom.
+          // A strong forward push into the destination — far more direct than
+          // the old editorial sheet. (→Home is the DIY slide-down and never
+          // reaches ClientRouter; opening a story is the React cover.)
+          if (nf === '/' && LATERAL[nt]) {
+            pendingAxis = 'enter';
+            document.documentElement.setAttribute('data-axis', pendingAxis);
+            return;
+          }
+          // Any other forward/descent route would fall back to the editorial
+          // press sheet, but no such route exists in the current site.
         });
 
         // Astro wipes <html> attributes during the DOM swap, so the axis set
