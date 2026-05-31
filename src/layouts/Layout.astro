@@ -130,50 +130,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
 
-    <!-- Editorial "press sheet" page transition — a printed spread that
-         rises to cover the viewport, sets its masthead + headline + column
-         rules like a magazine being laid out, then lifts up and away to
-         reveal the new page. JS adds .pt-active (entrance/hold) then
-         .pt-exit (lift-away) to this node. Content is repopulated
-         per-destination via the [data-pt-*] nodes before the entrance.
-
-         transition:persist — the SAME DOM node is carried across Astro's
-         body swap, so its mid-flight class state (pt-active) survives and
-         the sheet can lift away *after* the swap instead of vanishing with
-         the old body. State is driven by classes ON THIS ELEMENT, never a
-         body attribute (which the swap would discard). -->
-    <div id="page-transition" aria-hidden="true" transition:persist="page-transition">
-      {/* Newsprint halftone screen — the "printed page" grain */}
-      <div class="pt-grain newsprint-screen" aria-hidden="true"></div>
-      {/* Newspaper column rules drawn behind the editorial block */}
-      <div class="pt-columns" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
-      </div>
-
-      {/* Running head / masthead */}
-      <div class="pt-masthead">
-        <span class="pt-mast-name">The Journal Gallery</span>
-        <span class="pt-mast-edition" data-pt-edition>Edition</span>
-      </div>
-
-      {/* Center editorial block */}
-      <div class="pt-stage">
-        <span class="pt-kicker" data-pt-kicker>// section</span>
-        <h1 class="pt-headline"><span class="pt-headline-inner" data-pt-title>Journal Gallery</span></h1>
-        <div class="pt-dateline">
-          <span data-pt-meta-a>Index</span>
-          <span class="pt-dateline-dot"></span>
-          <span data-pt-meta-b>Home</span>
-        </div>
-      </div>
-
-      {/* Folio / page number */}
-      <div class="pt-folio">
-        <span class="pt-folio-no" data-pt-folio>00</span>
-        <span class="pt-folio-label">Turning the page</span>
-      </div>
-    </div>
-
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -227,11 +183,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
        * ═══════════════════════════════════════════════════════ */
 
       /* ─────────────────────────────────────────────────
-       *  Forward nav — root swap stays invisible.
-       *
-       *  The editorial "press sheet" overlay (below) fully covers the
-       *  viewport during the DOM swap, so the underlying ::view-transition
-       *  fade only needs to be instant — no competing cross-fade.
+       *  Default root swap — no animation. Directional motion is opted into
+       *  per-navigation via html[data-axis] (below): "enter" depth-zoom for
+       *  Home→section, "forward"/"back" shared-axis push for Map↔About.
+       *  Everything else (e.g. →Home via the DIY slide-down) swaps instantly.
        *  ───────────────────────────────────────────────── */
       ::view-transition-old(root),
       ::view-transition-new(root) {
@@ -319,250 +274,8 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         100% { opacity: 1; transform: scale(1);    filter: blur(0)    brightness(1)    saturate(1); }
       }
 
-      /* ═══════════════════════════════════════════════════════
-       *  Editorial "press sheet" transition
-       *
-       *  A printed magazine spread that travels UP through the viewport
-       *  in one continuous motion across the whole navigation:
-       *    1. ENTRANCE  — rises from the bottom edge to cover the screen
-       *                   (.pt-active); as it settles it "sets" the
-       *                   masthead, column rules, kinetic headline and
-       *                   folio like a page being laid out.
-       *    2. HOLD      — Astro swaps the DOM behind the opaque sheet.
-       *    3. LIFT-AWAY — the sheet continues upward and off the top edge
-       *                   (.pt-exit), revealing the new page
-       *                   beneath. One direction of travel → reads fluid,
-       *                   not a yo-yo fade.
-       *
-       *  Back nav uses the DIY body-slide-down path (a fast return), so it
-       *  deliberately skips this sheet.
-       * ═══════════════════════════════════════════════════════ */
-      #page-transition {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        pointer-events: none;
-        overflow: hidden;
-        background: #0A0A0A;
-        color: #FDFDFB;
-        visibility: hidden;
-        transform: translateY(100%);
-        transition:
-          transform 0.62s cubic-bezier(0.76, 0, 0.24, 1),
-          visibility 0s linear 0.62s;
-      }
-      /* Faint paper-edge hairlines top & bottom of the sheet */
-      #page-transition::after {
-        content: '';
-        position: absolute;
-        left: 0; right: 0; top: 0;
-        height: 100%;
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-        pointer-events: none;
-      }
-      /* Newsprint halftone screen overlaying the whole sheet */
-      .pt-grain {
-        position: absolute;
-        inset: 0;
-        opacity: 0.06;
-        pointer-events: none;
-        z-index: 1;
-      }
-      /* Accent wash bottom-left, tied to the homepage color identity */
-      #page-transition::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: radial-gradient(
-          50vmax 40vmax at 18% 110%,
-          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.10),
-          transparent 68%
-        );
-        opacity: 0;
-        transition: opacity 0.7s ease-out 0.08s;
-      }
-      #page-transition.pt-active {
-        visibility: visible;
-        transform: translateY(0);
-        transition:
-          transform 0.62s cubic-bezier(0.22, 1, 0.36, 1),
-          visibility 0s linear 0s;
-      }
-      #page-transition.pt-active::before { opacity: 1; }
-
-      /* LIFT-AWAY — continue travelling up and off the top */
-      #page-transition.pt-exit {
-        visibility: visible;
-        transform: translateY(-100%);
-        transition:
-          transform 0.72s cubic-bezier(0.76, 0, 0.24, 1),
-          visibility 0s linear 0.72s;
-      }
-
-      /* Instant reset — used to snap the sheet back to its parked state
-         after the lift-away without animating it back down through view. */
-      #page-transition.pt-instant,
-      #page-transition.pt-instant *,
-      #page-transition.pt-instant::before {
-        transition: none !important;
-      }
-
-      /* ── Newspaper column rules ── */
-      .pt-columns {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        opacity: 0.5;
-        pointer-events: none;
-      }
-      .pt-columns span {
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
-        transform: scaleY(0);
-        transform-origin: top;
-        transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      .pt-columns span:last-child { border-right: 0; }
-      .pt-columns span:nth-child(1) { transition-delay: 0.06s; }
-      .pt-columns span:nth-child(2) { transition-delay: 0.12s; }
-      .pt-columns span:nth-child(3) { transition-delay: 0.18s; }
-      .pt-columns span:nth-child(4) { transition-delay: 0.24s; }
-      #page-transition.pt-active .pt-columns span { transform: scaleY(1); }
-
-      /* ── Masthead / running head ── */
-      .pt-masthead {
-        position: absolute;
-        top: clamp(1.5rem, 4vh, 3rem);
-        left: clamp(1.5rem, 5vw, 4rem);
-        right: clamp(1.5rem, 5vw, 4rem);
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 1rem;
-        padding-bottom: 0.9rem;
-        border-bottom: 3px double rgba(255, 255, 255, 0.22);
-        font-family: ui-monospace, monospace;
-        font-size: 10px;
-        letter-spacing: 0.42em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.55);
-        /* draw the rule from the left */
-        clip-path: inset(0 100% 0 0);
-        transition: clip-path 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
-      }
-      .pt-masthead .pt-mast-name { font-weight: 500; }
-      .pt-masthead .pt-mast-edition { color: rgba(255, 255, 255, 0.35); }
-      #page-transition.pt-active .pt-masthead { clip-path: inset(0 0 0 0); }
-
-      /* ── Center editorial block ── */
-      .pt-stage {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 1.4rem;
-        padding: 0 6vw;
-        text-align: center;
-      }
-
-      .pt-kicker {
-        font-family: ui-monospace, monospace;
-        font-size: 11px;
-        letter-spacing: 0.5em;
-        text-transform: uppercase;
-        color: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.85);
-        opacity: 0;
-        transform: translateY(10px);
-        transition:
-          opacity 0.5s ease-out 0.22s,
-          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.22s;
-      }
-      #page-transition.pt-active .pt-kicker { opacity: 1; transform: translateY(0); }
-
-      /* Headline rises out of a baseline mask, like type being set */
-      .pt-headline {
-        margin: 0;
-        overflow: hidden;
-        padding: 0.04em 0.02em;
-      }
-      .pt-headline-inner {
-        display: inline-block;
-        font-family: 'Instrument Serif', serif;
-        font-style: italic;
-        font-weight: 400;
-        font-size: clamp(52px, 13vw, 200px);
-        line-height: 0.92;
-        letter-spacing: -0.02em;
-        color: rgba(255, 255, 255, 0.98);
-        transform: translateY(110%);
-        transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.18s;
-      }
-      #page-transition.pt-active .pt-headline-inner { transform: translateY(0); }
-
-      .pt-dateline {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        font-family: ui-monospace, monospace;
-        font-size: 10px;
-        letter-spacing: 0.34em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.4);
-        opacity: 0;
-        transform: translateY(10px);
-        transition:
-          opacity 0.5s ease-out 0.36s,
-          transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.36s;
-      }
-      #page-transition.pt-active .pt-dateline { opacity: 1; transform: translateY(0); }
-      .pt-dateline-dot {
-        width: 3px; height: 3px; border-radius: 50%;
-        background: rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.7);
-      }
-
-      /* ── Folio / page number ── */
-      .pt-folio {
-        position: absolute;
-        bottom: clamp(1.5rem, 4vh, 3rem);
-        left: clamp(1.5rem, 5vw, 4rem);
-        right: clamp(1.5rem, 5vw, 4rem);
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 1rem;
-        padding-top: 0.9rem;
-        border-top: 3px double rgba(255, 255, 255, 0.22);
-        font-family: ui-monospace, monospace;
-        font-size: 10px;
-        letter-spacing: 0.42em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.35);
-        clip-path: inset(0 0 0 100%);
-        transition: clip-path 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
-      }
-      .pt-folio .pt-folio-no {
-        font-size: 13px;
-        letter-spacing: 0.2em;
-        color: rgba(255, 255, 255, 0.55);
-      }
-      #page-transition.pt-active .pt-folio { clip-path: inset(0 0 0 0); }
-
-      /* Reduced-motion: instant cover/reveal, no travel or stagger. */
+      /* Reduced-motion: disable the directional view transitions. */
       @media (prefers-reduced-motion: reduce) {
-        #page-transition,
-        .pt-columns span,
-        .pt-masthead,
-        .pt-kicker,
-        .pt-headline-inner,
-        .pt-dateline,
-        .pt-folio,
-        #page-transition::before {
-          transition-duration: 0.01s !important;
-          transition-delay: 0s !important;
-        }
         html[data-axis]::view-transition-old(root),
         html[data-axis]::view-transition-new(root) {
           animation: none !important;
@@ -868,122 +581,24 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
       });
 
-      // ── Editorial "press sheet" transition choreography ──
-      // On forward nav, populate the sheet with the destination's editorial
-      // identity and add .pt-active to the (persisted) #page-transition node,
-      // which raises the sheet from the bottom and "sets" the masthead /
-      // headline / folio. Astro swaps the DOM behind the opaque sheet — and
-      // because the node uses transition:persist, the SAME element (with its
-      // .pt-active class) survives the swap. After astro:page-load (new DOM
-      // ready) — but never before a minimum hold so the editorial beat always
-      // plays — we add .pt-exit which lifts the sheet up and off the top,
-      // revealing the new page, then reset it to its parked state.
-      // Skip on back-nav (handled by body.vt-back-exit) and same-route clicks.
+      // ── Page-transition direction (View Transitions) ──
+      // Sets html[data-axis] from the route relationship so the global
+      // ::view-transition(root) rules animate the right way:
+      //   Home → Map/About : depth zoom ("enter")
+      //   Map ↔ About      : shared-axis push ("forward" / "back")
+      // (→Home is the DIY body slide-down; opening a story is the React
+      // MagazineLayout cover — neither uses this.)
       (function() {
-        // Destination metadata. Each entry drives one editorial sheet.
-        // Keys match `new URL(href).pathname` (trailing-slash normalized).
-        var DEST = {
-          '/':       { kicker: '// the index',     title: 'Journal Gallery', a: 'Volume',  b: 'Complete Works', edition: 'Home Edition', folio: '01' },
-          '/about':  { kicker: '// the operator',  title: 'Ryan Xu',         a: 'Profile', b: 'New York',       edition: 'The Profile',  folio: '02' },
-          '/travel': { kicker: '// the territory', title: 'Geo · Map',       a: 'Atlas',   b: 'United States',  edition: 'Field Notes',  folio: '03' },
-        };
-
-        var MIN_HOLD = 820; // ms — guarantees the editorial reveal completes
-
         function normalize(path) {
           if (!path) return '/';
           if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
           return path;
         }
 
-        function metaFor(pathname) {
-          return DEST[normalize(pathname)] || null;
-        }
-
-        function set(sel, val) {
-          var el = document.querySelector(sel);
-          if (el) el.textContent = val;
-        }
-
-        function populate(meta) {
-          set('[data-pt-kicker]', meta.kicker);
-          set('[data-pt-title]', meta.title);
-          set('[data-pt-meta-a]', meta.a);
-          set('[data-pt-meta-b]', meta.b);
-          set('[data-pt-edition]', meta.edition);
-          set('[data-pt-folio]', meta.folio);
-        }
-
-        var safetyTimer = null;
-        var startedAt = 0;
-        var active = false;
-
-        function sheet() { return document.getElementById('page-transition'); }
-
-        function startTransition(toPath) {
-          var meta = metaFor(toPath);
-          if (!meta) return; // unknown destination — skip the sheet
-          var el = sheet();
-          if (!el) return;
-          populate(meta);
-          active = true;
-          startedAt = Date.now();
-          // rAF so the populated text paints at its hidden start state
-          // before the class flip triggers the entrance.
-          requestAnimationFrame(function() {
-            el.classList.remove('pt-instant', 'pt-exit');
-            el.classList.add('pt-active');
-          });
-          clearTimeout(safetyTimer);
-          safetyTimer = setTimeout(clearAll, 4500); // failsafe
-        }
-
-        function clearAll() {
-          var el = sheet();
-          active = false;
-          clearTimeout(safetyTimer);
-          if (!el) return;
-          // Snap back to the parked state WITHOUT animating the sheet back
-          // down through the viewport: kill transitions, drop the state
-          // classes, then re-enable transitions a couple of frames later.
-          el.classList.add('pt-instant');
-          el.classList.remove('pt-active', 'pt-exit');
-          requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-              el.classList.remove('pt-instant');
-            });
-          });
-        }
-
-        function endTransition() {
-          if (!active) return;
-          var elapsed = Date.now() - startedAt;
-          var wait = Math.max(MIN_HOLD - elapsed, 0);
-          // Two rAF ticks so the new page has painted under the opaque
-          // sheet, then honour the minimum hold, then lift the sheet away.
-          requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-              setTimeout(function() {
-                var el = sheet();
-                if (el) {
-                  el.classList.remove('pt-active');
-                  el.classList.add('pt-exit');
-                }
-                // Clear once the lift-away travel (0.72s) finishes.
-                setTimeout(clearAll, 760);
-              }, wait);
-            });
-          });
-        }
-
-        // Route order for LATERAL sibling nav (Map ↔ About). Home is not a
-        // sibling: Home→section keeps the editorial press sheet (an arrival),
-        // and →Home keeps the body slide-down. Only Map↔About is lateral, and
-        // it gets the Apple/Material shared-axis push instead of the sheet.
+        // Route order for lateral sibling nav (Map ↔ About).
         var LATERAL = { '/travel': 1, '/about': 2 };
-        var pendingAxis = null; // 'forward' | 'back' | 'enter' — re-asserted post-swap
+        var pendingAxis = null; // 'forward' | 'back' | 'enter'
 
-        // Astro forward nav. e.to is the destination URL.
         document.addEventListener('astro:before-preparation', function(e) {
           if (!(e && e.to)) return;
           var toPath = '';
@@ -991,30 +606,21 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           catch (err) { return; }
           var nf = normalize(window.location.pathname);
           var nt = normalize(toPath);
-          // Clear any stale axis from a previous navigation.
           document.documentElement.removeAttribute('data-axis');
           pendingAxis = null;
           if (nt === nf) return;
 
-          // Lateral sibling nav (Map ↔ About): shared-axis push via
-          // ::view-transition(root). Peer tabs slide; they don't zoom.
+          // Lateral sibling nav (Map ↔ About): shared-axis push.
           if (LATERAL[nf] && LATERAL[nt]) {
             pendingAxis = LATERAL[nt] > LATERAL[nf] ? 'forward' : 'back';
             document.documentElement.setAttribute('data-axis', pendingAxis);
             return;
           }
-
-          // Enter a section from Home (Home → Map / About): Apple depth zoom.
-          // A strong forward push into the destination — far more direct than
-          // the old editorial sheet. (→Home is the DIY slide-down and never
-          // reaches ClientRouter; opening a story is the React cover.)
+          // Enter a section from Home (Home → Map / About): depth zoom.
           if (nf === '/' && LATERAL[nt]) {
             pendingAxis = 'enter';
             document.documentElement.setAttribute('data-axis', pendingAxis);
-            return;
           }
-          // Any other forward/descent route would fall back to the editorial
-          // press sheet, but no such route exists in the current site.
         });
 
         // Astro wipes <html> attributes during the DOM swap, so the axis set
@@ -1027,7 +633,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
             document.documentElement.setAttribute('data-axis', pendingAxis);
           }
         });
-        document.addEventListener('astro:page-load', endTransition);
       })();
     </script>
   </body>

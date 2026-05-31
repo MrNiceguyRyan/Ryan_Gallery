@@ -528,7 +528,7 @@ export default function HomePage({ collections, photos }: Props) {
         </header>
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
-        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pb-8 relative z-10">
+        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
             {/* Accent halo — large soft radial driven by the page-level --accent-*
@@ -715,7 +715,7 @@ export default function HomePage({ collections, photos }: Props) {
         </main>
 
         {/* ── Mobile Filmstrip Waterfall ── */}
-        <div className="block md:hidden pb-12">
+        <div className="block md:hidden pt-12 pb-12">
           {activeCollections.map((collection) => (
             <MobileFilmstripItem
               key={collection._id}
