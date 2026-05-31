@@ -2,8 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../../types';
-import WorkDetailPage from '../../components/works/WorkDetailPage';
-import Footer from '../../components/Footer.astro';
+import WorkStory from '../../components/works/WorkStory';
 
 export async function getStaticPaths() {
   const collections = await sanityClient.fetch(`
@@ -19,39 +18,44 @@ export async function getStaticPaths() {
 
 const { slug } = Astro.params;
 
-const collection: Collection = await sanityClient.fetch(
-  `*[_type == "collection" && slug.current == $slug][0] {
+// Fetch ALL collections (with embedded photos) exactly as the homepage does,
+// so the story experience — and "Keep Reading" order — matches the homepage
+// overlay. The visited collection is found within this list by slug.
+const collections: Collection[] = await sanityClient.fetch(`
+  *[_type == "collection"] | order(year desc) {
     _id,
     name,
     "slug": slug.current,
     subtitle,
     "coverImageUrl": coverImage.asset->url,
+    "palette": coverImage.asset->metadata.palette,
     location,
     year,
     description,
     introduction,
-    gridSize
-  }`,
-  { slug },
-);
+    gridSize,
+    "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
+      _id,
+      title,
+      "imageUrl": image.asset->url,
+      "width": image.asset->metadata.dimensions.width,
+      "height": image.asset->metadata.dimensions.height,
+      camera,
+      focalLength,
+      aperture,
+      shutterSpeed,
+      iso,
+      styleCategory,
+      location
+    }
+  }
+`);
 
-const photos: Photo[] = await sanityClient.fetch(
-  `*[_type == "photo" && references($collectionId)] | order(_createdAt asc) {
-    _id,
-    title,
-    "imageUrl": image.asset->url,
-    "width": image.asset->metadata.dimensions.width,
-    "height": image.asset->metadata.dimensions.height,
-    camera,
-    focalLength,
-    aperture,
-    shutterSpeed,
-    iso,
-    styleCategory,
-    location
-  }`,
-  { collectionId: collection._id },
-);
+// Collections that actually have photos drive "Keep Reading" (mirrors the
+// homepage's activeCollections).
+const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
+const collection = collections.find((c) => c.slug === slug) ?? collections[0];
+const photos: Photo[] = collection.photos ?? [];
 
 // ─── Build per-page SEO values ───
 const pageTitle = collection.year
@@ -114,8 +118,11 @@ const collectionSchema = {
   description={pageDescription}
   ogImage={ogImage}
   ogType="article"
+  dark={true}
   jsonLd={collectionSchema}
 >
-  <WorkDetailPage client:load collection={collection} photos={photos} />
-  <Footer />
+  {/* Same MagazineLayout story used by the homepage overlay — so arriving
+       from the Map's "Explore Story" link is identical to opening a story
+       on the homepage. */}
+  <WorkStory client:load collection={collection} allCollections={activeCollections} />
 </Layout>

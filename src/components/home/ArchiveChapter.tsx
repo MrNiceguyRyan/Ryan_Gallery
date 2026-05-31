@@ -133,15 +133,6 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             />
           </motion.div>
 
-          {/* Persistent "View Story" affordance — always visible so the cover
-               clearly reads as openable; inverts to solid on hover. */}
-          <div className="absolute bottom-4 left-4 md:bottom-5 md:left-5 z-30 pointer-events-none">
-            <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/40 backdrop-blur-md px-4 py-2 text-white group-hover:bg-white group-hover:text-black group-hover:border-white transition-all duration-500">
-              <span className="text-[9px] uppercase tracking-[0.3em] font-bold">View Story</span>
-              <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform duration-500" />
-            </div>
-          </div>
-
           {/* HUD Overlay on Hover */}
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden">
             <div className="absolute top-8 left-8 w-6 h-6 border-l border-t border-white/30" />
