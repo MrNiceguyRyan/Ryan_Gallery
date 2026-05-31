@@ -150,6 +150,10 @@ export default function HomePage({ collections, photos }: Props) {
   const heroScale = useTransform(scrollY, [0, 600], [1, 1.06], { clamp: true });
   const scrollCueOpacity = useTransform(scrollY, [0, 160], [1, 0], { clamp: true });
 
+  // The cinematic film-open plays once the first-visit intro is gone (or
+  // immediately on a return visit, when no intro shows).
+  const introReady = !showOpening;
+
   // Filter to collections that have photos
   const activeCollections = useMemo(
     () => collections.filter((c) => (c.photos?.length || 0) > 0),
@@ -401,16 +405,38 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
+          {/* ── Cinematic film-open: letterbox bars sweep in to frame the
+               title, hold, then retract to open into the page. Plays once on
+               arrival (and after the first-visit intro). ── */}
+          <motion.div
+            className="fixed top-0 inset-x-0 z-[45] bg-black pointer-events-none"
+            initial={{ height: '0vh' }}
+            animate={{ height: introReady ? ['0vh', '13vh', '13vh', '0vh'] : '0vh' }}
+            transition={{ duration: 2.1, times: [0, 0.26, 0.62, 1], ease: [0.76, 0, 0.24, 1] }}
+            aria-hidden="true"
+          />
+          <motion.div
+            className="fixed bottom-0 inset-x-0 z-[45] bg-black pointer-events-none"
+            initial={{ height: '0vh' }}
+            animate={{ height: introReady ? ['0vh', '13vh', '13vh', '0vh'] : '0vh' }}
+            transition={{ duration: 2.1, times: [0, 0.26, 0.62, 1], ease: [0.76, 0, 0.24, 1] }}
+            aria-hidden="true"
+          />
+
           {/* Scroll-linked cinematic exit wrapper — recedes on scroll */}
           <motion.div
             style={{ opacity: heroOpacity, y: heroY, scale: heroScale }}
             className="relative z-10 w-full flex justify-center"
           >
-          {/* Header content */}
+          {/* Header content — cinematic push-in (defocus → focus, slow dolly).
+               Held hidden until the first-visit intro clears (introReady), so
+               the push-in plays WITH the letterbox open, not under the intro. */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 1, ease: expo }}
+            initial={{ opacity: 0, scale: 1.08, filter: 'blur(9px)' }}
+            animate={introReady
+              ? { opacity: 1, scale: 1, filter: 'blur(0px)' }
+              : { opacity: 0, scale: 1.08, filter: 'blur(9px)' }}
+            transition={{ delay: 0.15, duration: 1.7, ease: expo }}
             className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
@@ -426,10 +452,22 @@ export default function HomePage({ collections, photos }: Props) {
             </div>
 
             <div className="space-y-4 max-w-7xl w-full mx-auto">
-              <ParticleTitle
-                text="Journal <br/> Gallery"
-                className="h-64 md:h-96"
-              />
+              <div className="relative">
+                <ParticleTitle
+                  text="Journal <br/> Gallery"
+                  className="h-64 md:h-96"
+                />
+                {/* Anamorphic light sweep across the title (one-shot on open) */}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
+                  <motion.div
+                    className="absolute top-0 bottom-0 w-1/3 -skew-x-12"
+                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.16), transparent)' }}
+                    initial={{ x: '-160%' }}
+                    animate={{ x: introReady ? '420%' : '-160%' }}
+                    transition={{ duration: 1.2, delay: introReady ? 0.75 : 0, ease: [0.5, 0, 0.2, 1] }}
+                  />
+                </div>
+              </div>
 
               {/* ── Rotating epigraph — narrative bridge from hero into archive ──
                    A small label sits constant ("From the archive"), and beneath
