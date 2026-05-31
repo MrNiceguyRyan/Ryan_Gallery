@@ -153,6 +153,13 @@ export default function HomePage({ collections, photos }: Props) {
     [collections],
   );
 
+  // Index of the active chapter — drives the "route rail" fill in the
+  // sidebar (−1 while still in the hero). Each sidebar row is 52 px tall.
+  const ROW_H = 52;
+  const activeRouteIndex = activeArchiveId
+    ? activeCollections.findIndex((c) => c._id === activeArchiveId)
+    : -1;
+
   // IntersectionObserver for sidebar active state
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -591,29 +598,32 @@ export default function HomePage({ collections, photos }: Props) {
           <div className="flex flex-col lg:flex-row gap-16 md:gap-24">
             {/* Side Navigation */}
             <aside className="hidden lg:block lg:w-48 sticky top-24 h-fit shrink-0 z-50">
-              <div className="relative pl-8 border-l border-white/5 space-y-8">
-                {/* Active Indicator Line — tinted with the per-chapter accent
-                     color via the global --accent-* CSS vars, so the bar shifts
-                     hue as the user scrolls between rooms. */}
-                <motion.div
-                  className="absolute left-[-1px] w-[2px] z-10"
-                  style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                  animate={{
-                    y: activeArchiveId
-                      ? activeCollections.findIndex((c) => c._id === activeArchiveId) * 52
-                      : 0,
-                    height: activeArchiveId ? 24 : 0,
-                  }}
-                  transition={{ type: 'spring', stiffness: 350, damping: 35 }}
-                />
+              <div className="relative space-y-8">
+                {/* Header — reframed as a route/itinerary */}
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
+                  <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
+                    The Route // {activeCollections.length} stops
+                  </span>
+                </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
-                    <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
-                      Archive // V1.0
-                    </span>
-                  </div>
+                {/* Route rail — a vertical itinerary line with a waypoint node
+                     per chapter. The line fills with the accent up to the
+                     active node (distance "traveled"); passed nodes are filled,
+                     the active node pulses, upcoming nodes stay hollow. */}
+                <div className="relative">
+                  {/* base rail */}
+                  <span className="absolute left-[4px] top-0 bottom-0 w-px bg-white/10" />
+                  {/* traveled rail */}
+                  <motion.span
+                    className="absolute left-[4px] top-0 w-px"
+                    style={{
+                      background:
+                        'linear-gradient(to bottom, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.15), rgb(var(--accent-r), var(--accent-g), var(--accent-b)))',
+                    }}
+                    animate={{ height: activeRouteIndex >= 0 ? activeRouteIndex * ROW_H + ROW_H / 2 : 0 }}
+                    transition={{ type: 'spring', stiffness: 220, damping: 32 }}
+                  />
 
                   <div className="flex flex-col">
                     {activeCollections.map((col, idx) => (
@@ -621,16 +631,24 @@ export default function HomePage({ collections, photos }: Props) {
                         key={col._id}
                         col={col}
                         idx={idx}
-                        isActive={activeArchiveId === col._id}
+                        state={
+                          activeRouteIndex < 0
+                            ? 'future'
+                            : idx < activeRouteIndex
+                              ? 'past'
+                              : idx === activeRouteIndex
+                                ? 'active'
+                                : 'future'
+                        }
                       />
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-8 space-y-4">
+                <div className="pt-2 space-y-4">
                   <div className="space-y-2">
                     <span className="text-[7px] uppercase tracking-widest opacity-20 block font-mono">
-                      Scroll Progress
+                      Journey Progress
                     </span>
                     <div className="w-full h-[1px] bg-white/5 relative overflow-hidden">
                       <motion.div
