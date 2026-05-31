@@ -5,7 +5,6 @@ import Footer from '../components/Footer.astro';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
-import ParallaxHero from '../components/ParallaxHero';
 import AtlasIndex from '../components/AtlasIndex';
 import { getMapboxToken } from '../config/mapbox';
 
@@ -69,18 +68,79 @@ const cityNames = [
 
   <Nav client:load currentPath={currentPath} dark={true} />
 
-  <!-- ── Hero ── -->
-  <ParallaxHero
-    client:load
-    imageUrl="https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg?auto=format&w=1800&q=85"
-    title="Mapping the"
-    titleLine2="Archive."
-    label="// the territory"
-    meta={[`${locations} Locations`, `${frames} Frames`, 'United States']}
-    objectPosition="center 60%"
-    dark={true}
-    showViewfinder={false}
-  />
+  <!-- ── Hero — kinetic place-name "light band" in the background ── -->
+  <section class="relative h-[82vh] md:h-[90vh] overflow-hidden bg-[#0A0A0A]">
+    <!-- Dimmed photo backdrop with slow zoom -->
+    <img
+      src="https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg?auto=format&w=1800&q=85"
+      alt="Map"
+      class="hero-zoom absolute inset-0 w-full h-full object-cover"
+      style="object-position: center 60%; filter: brightness(0.4) saturate(0.85);"
+      fetchpriority="high"
+      decoding="async"
+      draggable="false"
+    />
+
+    <!-- Background light band: two opposing rows of outlined place names -->
+    {cityNames.length > 0 && (
+      <div class="absolute inset-0 z-[1] flex flex-col justify-center gap-2 md:gap-4 pointer-events-none select-none">
+        <div class="atlas-marquee">
+          <div class="atlas-marquee-track atlas-row-a flex whitespace-nowrap will-change-transform">
+            {[0, 1].map(() => (
+              <div class="flex items-center shrink-0" aria-hidden="true">
+                {cityNames.map((city) => (
+                  <span class="flex items-center">
+                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif italic tracking-tight">{city}</span>
+                    <span class="band-dot">&bull;</span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div class="atlas-marquee">
+          <div class="atlas-marquee-track atlas-row-b flex whitespace-nowrap will-change-transform">
+            {[0, 1].map(() => (
+              <div class="flex items-center shrink-0" aria-hidden="true">
+                {cityNames.map((city) => (
+                  <span class="flex items-center">
+                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif italic tracking-tight">{city}</span>
+                    <span class="band-dot">&bull;</span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+
+    <!-- Legibility gradients -->
+    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/55 to-[#0A0A0A]/75"></div>
+    <div class="absolute inset-0 z-[2] bg-gradient-to-r from-[#0A0A0A]/60 to-transparent"></div>
+
+    <!-- Foreground content -->
+    <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl animate-fade-in-up">
+      <p class="font-mono text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
+        // the territory
+      </p>
+      <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight leading-[0.9] text-[#FDFDFB]">
+        Mapping the<br />Archive.
+      </h1>
+      <div class="flex items-center gap-4 md:gap-5 mt-6 flex-wrap font-mono text-[11px] md:text-xs text-white/45 tracking-wider">
+        <span>{locations} Locations</span>
+        <span class="w-5 h-px bg-white/25"></span>
+        <span>{frames} Frames</span>
+        <span class="w-5 h-px bg-white/25"></span>
+        <span>United States</span>
+      </div>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-[3]">
+      <div class="hero-scroll w-px h-7 bg-white/30 origin-top"></div>
+    </div>
+  </section>
 
   <!-- ── Atlas intro + live stats masthead ── -->
   <section class="max-w-7xl mx-auto px-6 md:px-16 pt-20 md:pt-28 animate-fade-in-up">
@@ -122,26 +182,6 @@ const cityNames = [
       })}
     </div>
   </section>
-
-  <!-- ── Kinetic place-name marquee (artistic typographic band) ── -->
-  {cityNames.length > 0 && (
-    <div class="atlas-marquee relative overflow-hidden py-10 md:py-16 mt-16 md:mt-24 border-y border-white/5 select-none">
-      <div class="atlas-marquee-track flex whitespace-nowrap will-change-transform">
-        {[0, 1].map(() => (
-          <div class="flex items-center shrink-0" aria-hidden="true">
-            {cityNames.map((city) => (
-              <span class="flex items-center">
-                <span class="px-6 md:px-10 text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight text-white/[0.08]">
-                  {city}
-                </span>
-                <span class="text-white/[0.12] text-2xl md:text-4xl">✦</span>
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
 
   <!-- ── Interactive Atlas (the map — core functionality, unchanged) ── -->
   <section
@@ -193,19 +233,53 @@ const cityNames = [
 </Layout>
 
 <style>
-  /* Kinetic place-name marquee — seamless loop (track holds two copies). */
-  .atlas-marquee-track {
-    animation: atlas-marquee 42s linear infinite;
+  /* ── Kinetic place-name "light band" (hero background) ──
+     Two opposing rows of outlined serif type with glowing LED-like dots,
+     each row edge-faded to read as a band of light. Seamless loop (each
+     track holds two identical copies → translateX(-50%) repeats). */
+  .atlas-marquee {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
   }
-  .atlas-marquee:hover .atlas-marquee-track {
-    animation-play-state: paused;
+  .atlas-marquee-track {
+    animation: atlas-marquee 22s linear infinite;
+  }
+  .atlas-row-b {
+    animation-duration: 30s;
+    animation-direction: reverse;
   }
   @keyframes atlas-marquee {
     from { transform: translateX(0); }
     to   { transform: translateX(-50%); }
   }
+
+  /* Outlined "light" type */
+  .band-name {
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.22);
+    text-shadow: 0 0 26px rgba(255, 255, 255, 0.05);
+  }
+  /* Glowing amber LED dot between names */
+  .band-dot {
+    padding: 0 0.15em;
+    font-size: 0.5em;
+    color: rgba(255, 200, 130, 0.7);
+    text-shadow: 0 0 12px rgba(255, 200, 130, 0.6), 0 0 4px rgba(255, 200, 130, 0.8);
+    transform: translateY(-0.35em);
+    display: inline-block;
+  }
+
+  /* Hero photo slow zoom + scroll indicator */
+  .hero-zoom { animation: hero-zoom 22s ease-out forwards; }
+  @keyframes hero-zoom { from { transform: scale(1.12); } to { transform: scale(1); } }
+  .hero-scroll { animation: hero-scroll 1.8s ease-in-out infinite; }
+  @keyframes hero-scroll { 0%, 100% { transform: scaleY(0); } 50% { transform: scaleY(1); } }
+
   @media (prefers-reduced-motion: reduce) {
-    .atlas-marquee-track { animation: none; }
+    .atlas-marquee-track,
+    .hero-zoom,
+    .hero-scroll { animation: none; }
   }
 </style>
 
