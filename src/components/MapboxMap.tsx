@@ -471,7 +471,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
             <div className="bg-black/50 backdrop-blur-2xl px-5 py-3 rounded-2xl shadow-lg border border-white/10">
               <h2 className="text-[9px] uppercase tracking-[0.3em] font-black text-white/35 mb-0.5">Journal Gallery</h2>
-              <p className="text-sm font-serif italic text-white/80">World Explorer</p>
+              <p className="text-sm font-serif italic text-white/80">United States</p>
             </div>
           </motion.div>
 

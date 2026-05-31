@@ -14,14 +14,17 @@ import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
  * narratives in src/lib/narratives.tsx. The hero cycles through these
  * so the page itself "previews" what's in the archive, instead of
  * showing a single static tagline that says nothing specific. */
+// Field-notes that open the homepage "journey" — each dispatch is grounded
+// to the real place it was made, so the hero reads like a sequence of entries
+// from across the archive rather than free-floating taglines.
 const HERO_EPIGRAPHS = [
-  'Manhattan light arrives sideways in the early hours.',
-  'Sandstone narrows until sound itself goes muffled.',
-  'The Virgin River runs cold and milky green.',
-  'The Sonoran at midday offers nothing to hide behind.',
-  'Pink limestone spires standing close together.',
-  'Florida afternoon light is relentless and democratic.',
-  'Ocean Drive at dusk exists in two registers.',
+  { line: 'Manhattan light arrives sideways in the early hours.', place: 'New York' },
+  { line: 'Sandstone narrows until sound itself goes muffled.', place: 'Zion' },
+  { line: 'The Virgin River runs cold and milky green.', place: 'Zion' },
+  { line: 'The Sonoran at midday offers nothing to hide behind.', place: 'Arizona' },
+  { line: 'Pink limestone spires standing close together.', place: 'Bryce Canyon' },
+  { line: 'Florida afternoon light is relentless and democratic.', place: 'Orlando' },
+  { line: 'Ocean Drive at dusk exists in two registers.', place: 'Miami' },
 ];
 
 const expo = [0.23, 1, 0.32, 1] as const;
@@ -200,12 +203,14 @@ export default function HomePage({ collections, photos }: Props) {
   const [epigraphIdx, setEpigraphIdx] = useState(() =>
     Math.floor(Math.random() * HERO_EPIGRAPHS.length),
   );
+  // setTimeout keyed on the current index so the dwell time re-arms cleanly
+  // after a manual jump (clicking a position dot) instead of double-firing.
   useEffect(() => {
-    const t = setInterval(() => {
+    const t = setTimeout(() => {
       setEpigraphIdx((i) => (i + 1) % HERO_EPIGRAPHS.length);
     }, 6500);
-    return () => clearInterval(t);
-  }, []);
+    return () => clearTimeout(t);
+  }, [epigraphIdx]);
 
   // ── Per-chapter dynamic accent color ──
   // Resolve the currently visible chapter's color palette → RGB. When no
@@ -431,19 +436,48 @@ export default function HomePage({ collections, photos }: Props) {
                 <p className="text-[9px] uppercase tracking-[0.5em] font-medium opacity-25">
                   From the archive
                 </p>
-                <div className="relative w-full max-w-[40rem] mx-auto h-12 md:h-10">
+                <div className="relative w-full max-w-[40rem] mx-auto h-20 md:h-16">
                   <AnimatePresence mode="wait">
-                    <motion.p
+                    <motion.div
                       key={epigraphIdx}
-                      initial={{ opacity: 0, y: 6, filter: 'blur(3px)' }}
-                      animate={{ opacity: 0.65, y: 0, filter: 'blur(0px)' }}
-                      exit={{ opacity: 0, y: -6, filter: 'blur(3px)' }}
-                      transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-                      className="absolute inset-x-0 text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#FDFDFB]"
+                      initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -8, filter: 'blur(3px)' }}
+                      transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute inset-x-0 flex flex-col items-center gap-2.5"
                     >
-                      &ldquo;{HERO_EPIGRAPHS[epigraphIdx]}&rdquo;
-                    </motion.p>
+                      <p className="text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#FDFDFB] opacity-[0.72]">
+                        &ldquo;{HERO_EPIGRAPHS[epigraphIdx].line}&rdquo;
+                      </p>
+                      <p className="font-mono text-[9px] tracking-[0.4em] uppercase opacity-30">
+                        &mdash;&ensp;{HERO_EPIGRAPHS[epigraphIdx].place}
+                      </p>
+                    </motion.div>
                   </AnimatePresence>
+                </div>
+
+                {/* Journey position — clickable dots to step through the entries */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  {HERO_EPIGRAPHS.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setEpigraphIdx(i)}
+                      aria-label={`Archive entry ${i + 1}`}
+                      className="p-1.5 -m-1.5 cursor-pointer"
+                    >
+                      <span
+                        className="block w-1.5 h-1.5 rounded-full transition-all duration-500"
+                        style={{
+                          background:
+                            i === epigraphIdx
+                              ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))'
+                              : 'rgba(255,255,255,0.2)',
+                          transform: i === epigraphIdx ? 'scale(1.4)' : 'scale(1)',
+                        }}
+                      />
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             </div>
