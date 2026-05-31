@@ -108,15 +108,18 @@ function MobileFilmstripItem({
         </h3>
       </div>
 
-      {/* Right Slide-in Arrow */}
+      {/* Tap affordance — always visible (touch has no hover), brightens
+           and slides in when the card is the active one in view. */}
       <motion.div
         variants={{ active: { opacity: 1, x: 0 } }}
-        initial={{ opacity: 0, x: 20 }}
+        initial={{ opacity: 0.6, x: 0 }}
         transition={{ duration: 0.7 }}
-        className="absolute right-6 bottom-8 flex items-center gap-2 z-10 text-white mix-blend-difference drop-shadow-md"
+        className="absolute right-5 bottom-6 flex items-center gap-2 z-10 text-white"
       >
-        <span className="text-[9px] uppercase tracking-[0.4em] font-bold">Explore Story</span>
-        <ArrowRight size={14} />
+        <span className="rounded-full border border-white/25 bg-black/40 backdrop-blur-md px-3.5 py-1.5 text-[8px] uppercase tracking-[0.3em] font-bold flex items-center gap-1.5">
+          Tap to open
+          <ArrowRight size={11} />
+        </span>
       </motion.div>
     </motion.div>
   );
@@ -680,6 +683,19 @@ export default function HomePage({ collections, photos }: Props) {
                   Curating the world through a{' '}
                   <span className="opacity-50">distilled lens.</span>
                 </h2>
+                <div className="flex items-center gap-2.5 pt-2 text-[10px] font-mono uppercase tracking-[0.3em] text-white/35">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span
+                      className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+                      style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                    />
+                    <span
+                      className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                      style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                    />
+                  </span>
+                  <span>Select any frame to enter its story</span>
+                </div>
               </div>
 
               <div className="space-y-12 md:space-y-20">

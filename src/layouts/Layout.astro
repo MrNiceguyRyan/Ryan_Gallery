@@ -129,6 +129,9 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       <ellipse id="cursor-ellipse" cx="20" cy="20" rx="18" ry="18"
         fill="none" stroke="white" stroke-width="1"/>
     </svg>
+    <!-- Contextual cursor label — shows e.g. "View Story" when hovering a
+         work, so the affordance to open it is unmistakable on desktop. -->
+    <span id="cursor-label" aria-hidden="true">View</span>
 
     <slot />
 
@@ -322,12 +325,40 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       /* Ring is now an SVG — positioned and shaped via JS */
       #cursor-ring { will-change: left, top; }
 
+      /* Contextual cursor label ("View Story", etc.) */
+      #cursor-label {
+        position: fixed;
+        top: 0; left: 0;
+        z-index: 9999;
+        pointer-events: none;
+        font-family: ui-monospace, monospace;
+        font-size: 8.5px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #0A0A0A;
+        background: #FDFDFB;
+        padding: 6px 11px;
+        border-radius: 999px;
+        white-space: nowrap;
+        opacity: 0;
+        transform: translate(14px, 14px) scale(0.7);
+        transform-origin: top left;
+        transition: opacity 0.22s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: left, top, transform, opacity;
+      }
+      body.cursor-label-on #cursor-label {
+        opacity: 1;
+        transform: translate(16px, 16px) scale(1);
+      }
+
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
       body.cursor-hidden #cursor-dot,
       body.cursor-hidden #cursor-ring { opacity: 0 !important; }
+      body.cursor-hidden #cursor-label { opacity: 0 !important; }
 
       @media (hover: none) {
-        #cursor-dot, #cursor-ring { display: none !important; }
+        #cursor-dot, #cursor-ring, #cursor-label { display: none !important; }
         *, *::before, *::after { cursor: auto !important; }
       }
     </style>
@@ -353,7 +384,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           if (!dot || !ring || !ellipse) return;
 
           if (raf) { cancelAnimationFrame(raf); raf = null; }
-          document.body.classList.remove('cursor-hover', 'cursor-hidden');
+          document.body.classList.remove('cursor-hover', 'cursor-hidden', 'cursor-label-on');
 
           function loop() {
             // Smooth ring position
@@ -415,6 +446,22 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
             if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
             var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
             document.body.classList.toggle('cursor-hover', isHover);
+
+            // Contextual label: when over a [data-cursor] element (a work),
+            // show its prompt (e.g. "View Story") pinned to the cursor.
+            var label = document.getElementById('cursor-label');
+            if (label) {
+              label.style.left = mouseX + 'px';
+              label.style.top = mouseY + 'px';
+              var ct = e.target && e.target.closest ? e.target.closest('[data-cursor]') : null;
+              if (ct) {
+                var txt = ct.getAttribute('data-cursor') || 'View';
+                if (label.textContent !== txt) label.textContent = txt;
+                document.body.classList.add('cursor-label-on');
+              } else {
+                document.body.classList.remove('cursor-label-on');
+              }
+            }
           }, { passive: true });
 
           document.addEventListener('mousedown', function() {
