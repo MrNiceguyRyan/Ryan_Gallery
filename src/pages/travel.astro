@@ -68,18 +68,15 @@ const cityNames = [
 
   <Nav client:load currentPath={currentPath} dark={true} />
 
-  <!-- ── Hero — kinetic place-name "light band" in the background ── -->
-  <section class="relative h-[82vh] md:h-[90vh] overflow-hidden bg-[#0A0A0A]">
-    <!-- Dimmed photo backdrop with slow zoom -->
-    <img
-      src="https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg?auto=format&w=1800&q=85"
-      alt="Map"
-      class="hero-zoom absolute inset-0 w-full h-full object-cover"
-      style="object-position: center 60%; filter: brightness(0.4) saturate(0.85);"
-      fetchpriority="high"
-      decoding="async"
-      draggable="false"
-    />
+  <!-- ── Hero — pure-typographic kinetic "light band" over dark ── -->
+  <section class="relative h-[78vh] md:h-[86vh] overflow-hidden bg-[#0A0A0A]">
+    <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
+    <div
+      class="absolute inset-0 z-0 hero-glow"
+      style="background: radial-gradient(58vmax 46vmax at 50% 44%, rgba(255,200,130,0.07), transparent 70%);"
+    ></div>
+    <!-- Faint coordinate hairlines for atlas texture -->
+    <div class="absolute inset-0 z-0 opacity-[0.04] hidden md:block" style="background-image: linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px); background-size: 120px 120px;"></div>
 
     <!-- Background light band: two opposing rows of outlined place names -->
     {cityNames.length > 0 && (
@@ -115,9 +112,10 @@ const cityNames = [
       </div>
     )}
 
-    <!-- Legibility gradients -->
-    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/55 to-[#0A0A0A]/75"></div>
-    <div class="absolute inset-0 z-[2] bg-gradient-to-r from-[#0A0A0A]/60 to-transparent"></div>
+    <!-- Title-legibility wash: solid dark anchored bottom-left, fading up/right
+         so the band stays visible elsewhere; plus a soft top/bottom vignette. -->
+    <div class="absolute inset-0 z-[2] bg-gradient-to-tr from-[#0A0A0A] via-[#0A0A0A]/65 to-transparent"></div>
+    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#0A0A0A] via-transparent to-[#0A0A0A]/55"></div>
 
     <!-- Foreground content -->
     <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl animate-fade-in-up">
@@ -254,31 +252,32 @@ const cityNames = [
     to   { transform: translateX(-50%); }
   }
 
-  /* Outlined "light" type */
+  /* Outlined "light" type — slightly brighter now that it's the hero's
+     primary visual (no photo behind it). */
   .band-name {
     color: transparent;
-    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.22);
-    text-shadow: 0 0 26px rgba(255, 255, 255, 0.05);
+    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.30);
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.06);
   }
   /* Glowing amber LED dot between names */
   .band-dot {
     padding: 0 0.15em;
     font-size: 0.5em;
-    color: rgba(255, 200, 130, 0.7);
-    text-shadow: 0 0 12px rgba(255, 200, 130, 0.6), 0 0 4px rgba(255, 200, 130, 0.8);
+    color: rgba(255, 200, 130, 0.75);
+    text-shadow: 0 0 12px rgba(255, 200, 130, 0.65), 0 0 4px rgba(255, 200, 130, 0.85);
     transform: translateY(-0.35em);
     display: inline-block;
   }
 
-  /* Hero photo slow zoom + scroll indicator */
-  .hero-zoom { animation: hero-zoom 22s ease-out forwards; }
-  @keyframes hero-zoom { from { transform: scale(1.12); } to { transform: scale(1); } }
+  /* Hero atmosphere glow breath + scroll indicator */
+  .hero-glow { animation: hero-glow 9s ease-in-out infinite; }
+  @keyframes hero-glow { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
   .hero-scroll { animation: hero-scroll 1.8s ease-in-out infinite; }
   @keyframes hero-scroll { 0%, 100% { transform: scaleY(0); } 50% { transform: scaleY(1); } }
 
   @media (prefers-reduced-motion: reduce) {
     .atlas-marquee-track,
-    .hero-zoom,
+    .hero-glow,
     .hero-scroll { animation: none; }
   }
 </style>
