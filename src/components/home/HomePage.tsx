@@ -135,6 +135,15 @@ export default function HomePage({ collections, photos }: Props) {
   const haloOpacity = useTransform(scrollY, [0, 700], [0, 1], { clamp: true });
   const haloOpacitySecondary = useTransform(scrollY, [80, 780], [0, 1], { clamp: true });
 
+  // Cinematic hero exit — as the user scrolls past the opening, the title
+  // recedes (lifts, scales up slightly, fades) like a camera pulling back,
+  // instead of flatly scrolling off. Scroll-linked, so it reads as a
+  // continuous move into the archive.
+  const heroOpacity = useTransform(scrollY, [0, 600], [1, 0], { clamp: true });
+  const heroY = useTransform(scrollY, [0, 600], [0, -100], { clamp: true });
+  const heroScale = useTransform(scrollY, [0, 600], [1, 1.06], { clamp: true });
+  const scrollCueOpacity = useTransform(scrollY, [0, 160], [1, 0], { clamp: true });
+
   // Filter to collections that have photos
   const activeCollections = useMemo(
     () => collections.filter((c) => (c.photos?.length || 0) > 0),
@@ -377,12 +386,17 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
+          {/* Scroll-linked cinematic exit wrapper — recedes on scroll */}
+          <motion.div
+            style={{ opacity: heroOpacity, y: heroY, scale: heroScale }}
+            className="relative z-10 w-full flex justify-center"
+          >
           {/* Header content */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 1, ease: expo }}
-            className="relative z-10 space-y-12"
+            className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
               <motion.span
@@ -455,6 +469,20 @@ export default function HomePage({ collections, photos }: Props) {
                 style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
               />
             </motion.div>
+          </motion.div>
+          </motion.div>
+
+          {/* Scroll cue — invites entry into the archive, fades on first scroll */}
+          <motion.div
+            style={{ opacity: scrollCueOpacity }}
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10 pointer-events-none"
+          >
+            <span className="text-[9px] uppercase tracking-[0.5em] font-mono opacity-40">Scroll</span>
+            <motion.div
+              className="w-px h-8 bg-white/30 origin-top"
+              animate={{ scaleY: [0, 1, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            />
           </motion.div>
         </header>
 
