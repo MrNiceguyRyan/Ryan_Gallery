@@ -174,35 +174,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       </div>
     </div>
 
-    {/* Arrival shockwave — accent bloom + expanding ring that pulses
-        outward as a depth-zoom ("enter") destination lands. Non-persisted
-        (fresh per page) and pointer-none; only animates when the page was
-        reached via html[data-axis="enter"]. */}
-    <div id="enter-fx" aria-hidden="true">
-      <span class="fx-bloom"></span>
-      <span class="fx-ring"></span>
-      <span class="fx-ring fx-ring-2"></span>
-    </div>
-
-    {/* Viewfinder Lock-On — camera autofocus framing for lateral section
-        switches (Map ↔ About). Four corner brackets snap inward to frame
-        the arriving section while a mono "// section" readout resolves
-        from blur, like a lens locking focus on a new subject. Populated
-        per-destination in astro:after-swap; only animates when reached via
-        html[data-axis="forward"|"back"]. Non-persisted, pointer-none. */}
-    <div id="section-lock" aria-hidden="true">
-      <div class="sl-frame">
-        <span class="sl-c sl-tl"></span>
-        <span class="sl-c sl-tr"></span>
-        <span class="sl-c sl-bl"></span>
-        <span class="sl-c sl-br"></span>
-        <div class="sl-text">
-          <span class="sl-label" data-sl-label>// section</span>
-          <span class="sl-sub" data-sl-sub>—</span>
-        </div>
-      </div>
-    </div>
-
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -283,23 +254,38 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       html[data-axis]::view-transition-new(root) { z-index: 2; }
 
       html[data-axis="forward"]::view-transition-old(root) {
-        animation: sa-old-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+        animation: sa-old-fwd 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
       }
       html[data-axis="forward"]::view-transition-new(root) {
-        animation: sa-new-fwd 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        filter: drop-shadow(-18px 0 36px rgba(0, 0, 0, 0.5));
+        animation: sa-new-fwd 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
       }
       html[data-axis="back"]::view-transition-old(root) {
-        animation: sa-old-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
+        animation: sa-old-back 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
       }
       html[data-axis="back"]::view-transition-new(root) {
-        animation: sa-new-back 0.58s cubic-bezier(0.32, 0.72, 0, 1) both;
-        filter: drop-shadow(18px 0 36px rgba(0, 0, 0, 0.5));
+        animation: sa-new-back 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
       }
-      @keyframes sa-new-fwd  { from { transform: translateX(100%); }  to { transform: translateX(0); } }
-      @keyframes sa-old-fwd  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-22%); opacity: 0.4; } }
-      @keyframes sa-new-back { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-      @keyframes sa-old-back { from { transform: translateX(0); opacity: 1; } to { transform: translateX(22%);  opacity: 0.4; } }
+      /* Whip/swish pan: both frames streak across with horizontal motion
+         blur + a slight horizontal stretch, crossing blurred at mid-point
+         then resolving — a fast camera pan between two scenes. */
+      @keyframes sa-old-fwd  {
+        0%   { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+        100% { transform: translateX(-60%) scaleX(1.08); opacity: 0; filter: blur(20px); }
+      }
+      @keyframes sa-new-fwd  {
+        0%   { transform: translateX(60%)  scaleX(1.08); opacity: 0; filter: blur(20px); }
+        45%  { opacity: 1; }
+        100% { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+      }
+      @keyframes sa-old-back {
+        0%   { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+        100% { transform: translateX(60%)  scaleX(1.08); opacity: 0; filter: blur(20px); }
+      }
+      @keyframes sa-new-back {
+        0%   { transform: translateX(-60%) scaleX(1.08); opacity: 0; filter: blur(20px); }
+        45%  { opacity: 1; }
+        100% { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+      }
 
       /* ───────────────────────────────────────────────
        *  Enter a section from Home (Home → Map / About) — Apple depth zoom.
@@ -323,167 +309,14 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         transform-origin: 50% 46%;
       }
       @keyframes enter-old {
-        0%   { opacity: 1; transform: scale(1)   rotate(0deg);   filter: blur(0)    brightness(1); }
-        100% { opacity: 0; transform: scale(1.7) rotate(1.5deg); filter: blur(24px) brightness(1.8); }
+        0%   { opacity: 1; transform: scale(1);   filter: blur(0)    brightness(1); }
+        100% { opacity: 0; transform: scale(1.6); filter: blur(22px) brightness(1.5); }
       }
       @keyframes enter-new {
-        0%   { opacity: 0; transform: scale(0.5)  rotate(-4deg);  filter: blur(18px) brightness(1.7) saturate(1.5); }
+        0%   { opacity: 0; transform: scale(0.55); filter: blur(16px) brightness(1.4) saturate(1.25); }
         45%  { opacity: 1; }
-        78%  { opacity: 1; transform: scale(1.05) rotate(0.5deg); filter: blur(0)    brightness(1.14) saturate(1.08); }
-        100% { opacity: 1; transform: scale(1)    rotate(0deg);   filter: blur(0)    brightness(1)    saturate(1); }
-      }
-
-      /* ── Arrival shockwave (depth-zoom only) ── */
-      #enter-fx {
-        position: fixed;
-        inset: 0;
-        z-index: 9997;
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      #enter-fx .fx-bloom,
-      #enter-fx .fx-ring {
-        position: absolute;
-        border-radius: 50%;
-        opacity: 0;
-        will-change: transform, opacity;
-      }
-      #enter-fx .fx-bloom {
-        width: 55vmax; height: 55vmax;
-        background: radial-gradient(
-          circle,
-          rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.55),
-          transparent 62%
-        );
-      }
-      #enter-fx .fx-ring {
-        width: 26vmax; height: 26vmax;
-        border: 1.5px solid rgba(var(--accent-r, 255), var(--accent-g, 255), var(--accent-b, 255), 0.6);
-      }
-      /* Only fires when the destination was reached via the depth zoom. */
-      html[data-axis="enter"] #enter-fx .fx-bloom {
-        animation: fx-bloom 1.0s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
-      }
-      html[data-axis="enter"] #enter-fx .fx-ring {
-        animation: fx-ring 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.55s both;
-      }
-      html[data-axis="enter"] #enter-fx .fx-ring-2 {
-        animation: fx-ring 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.68s both;
-      }
-      @keyframes fx-bloom {
-        0%   { opacity: 0;    transform: scale(0.4); }
-        28%  { opacity: 0.55; }
-        100% { opacity: 0;    transform: scale(1.8); }
-      }
-      @keyframes fx-ring {
-        0%   { opacity: 0;   transform: scale(0.25); }
-        22%  { opacity: 0.7; }
-        100% { opacity: 0;   transform: scale(1.7); }
-      }
-
-      /* ── Viewfinder Lock-On (lateral Map ↔ About) ── */
-      #section-lock {
-        position: fixed;
-        inset: 0;
-        z-index: 9997;
-        pointer-events: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-      }
-      .sl-frame {
-        position: relative;
-        width: min(60vw, 540px);
-        height: min(32vh, 230px);
-      }
-      /* Warm "focus" tone — falls back to the site's amber atmosphere when
-         no per-chapter accent is set (Map / About don't define one). */
-      .sl-c {
-        position: absolute;
-        width: 26px;
-        height: 26px;
-        opacity: 0;
-        border-color: rgba(var(--accent-r, 255), var(--accent-g, 200), var(--accent-b, 130), 0.9);
-        border-style: solid;
-        border-width: 0;
-      }
-      .sl-tl { top: 0;    left: 0;  border-left-width: 1.5px; border-top-width: 1.5px; }
-      .sl-tr { top: 0;    right: 0; border-right-width: 1.5px; border-top-width: 1.5px; }
-      .sl-bl { bottom: 0; left: 0;  border-left-width: 1.5px; border-bottom-width: 1.5px; }
-      .sl-br { bottom: 0; right: 0; border-right-width: 1.5px; border-bottom-width: 1.5px; }
-      .sl-text {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.7rem;
-        text-align: center;
-      }
-      .sl-label {
-        font-family: ui-monospace, monospace;
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.5em;
-        color: rgba(var(--accent-r, 255), var(--accent-g, 200), var(--accent-b, 130), 0.95);
-        opacity: 0;
-      }
-      .sl-sub {
-        font-family: ui-monospace, monospace;
-        font-size: 9px;
-        text-transform: uppercase;
-        letter-spacing: 0.34em;
-        color: rgba(255, 255, 255, 0.45);
-        opacity: 0;
-      }
-
-      /* Trigger only on lateral nav (forward / back), not the depth zoom. */
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock {
-        animation: sl-window 1.15s linear 0.26s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-tl {
-        animation: sl-tl 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-tr {
-        animation: sl-tr 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-bl {
-        animation: sl-bl 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-br {
-        animation: sl-br 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-label {
-        animation: sl-resolve 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.42s both;
-      }
-      html:is([data-axis="forward"], [data-axis="back"]) #section-lock .sl-sub {
-        animation: sl-resolve-sub 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.52s both;
-      }
-
-      /* Container visibility window: snap in, hold, fade out. */
-      @keyframes sl-window {
-        0%   { opacity: 0; }
-        14%  { opacity: 1; }
-        70%  { opacity: 1; }
-        100% { opacity: 0; }
-      }
-      /* Corner brackets converge inward (autofocus lock). */
-      @keyframes sl-tl { from { opacity: 0; transform: translate(-22px, -22px); } to { opacity: 1; transform: translate(0, 0); } }
-      @keyframes sl-tr { from { opacity: 0; transform: translate( 22px, -22px); } to { opacity: 1; transform: translate(0, 0); } }
-      @keyframes sl-bl { from { opacity: 0; transform: translate(-22px,  22px); } to { opacity: 1; transform: translate(0, 0); } }
-      @keyframes sl-br { from { opacity: 0; transform: translate( 22px,  22px); } to { opacity: 1; transform: translate(0, 0); } }
-      /* Readout resolves from blur + wide tracking (lens pulling focus). */
-      @keyframes sl-resolve {
-        from { opacity: 0; filter: blur(6px); letter-spacing: 0.9em; }
-        to   { opacity: 1; filter: blur(0);   letter-spacing: 0.5em; }
-      }
-      @keyframes sl-resolve-sub {
-        from { opacity: 0; filter: blur(5px); letter-spacing: 0.6em; }
-        to   { opacity: 1; filter: blur(0);   letter-spacing: 0.34em; }
+        80%  { opacity: 1; transform: scale(1.04); filter: blur(0)    brightness(1.08) saturate(1.04); }
+        100% { opacity: 1; transform: scale(1);    filter: blur(0)    brightness(1)    saturate(1); }
       }
 
       /* ═══════════════════════════════════════════════════════
@@ -732,14 +565,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
         html[data-axis]::view-transition-old(root),
         html[data-axis]::view-transition-new(root) {
-          animation: none !important;
-        }
-        #enter-fx .fx-bloom,
-        #enter-fx .fx-ring {
-          animation: none !important;
-        }
-        #section-lock,
-        #section-lock * {
           animation: none !important;
         }
       }
@@ -1158,20 +983,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         var LATERAL = { '/travel': 1, '/about': 2 };
         var pendingAxis = null; // 'forward' | 'back' | 'enter' — re-asserted post-swap
 
-        // Per-section identity shown by the Viewfinder Lock-On on lateral nav.
-        var SECTIONS = {
-          '/travel': { label: '// the territory', sub: 'Geo · Map — United States' },
-          '/about':  { label: '// the operator',  sub: 'Profile — New York' },
-        };
-        function populateLock(path) {
-          var meta = SECTIONS[normalize(path)];
-          if (!meta) return;
-          var l = document.querySelector('[data-sl-label]');
-          var s = document.querySelector('[data-sl-sub]');
-          if (l) l.textContent = meta.label;
-          if (s) s.textContent = meta.sub;
-        }
-
         // Astro forward nav. e.to is the destination URL.
         document.addEventListener('astro:before-preparation', function(e) {
           if (!(e && e.to)) return;
@@ -1213,11 +1024,6 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         // wipe, before the new snapshot is styled) — re-assert it here.
         document.addEventListener('astro:after-swap', function() {
           if (pendingAxis) {
-            // Populate the lock-on readout for lateral nav BEFORE flipping
-            // the attribute, so its animation starts with the right text.
-            if (pendingAxis === 'forward' || pendingAxis === 'back') {
-              populateLock(window.location.pathname);
-            }
             document.documentElement.setAttribute('data-axis', pendingAxis);
           }
         });
