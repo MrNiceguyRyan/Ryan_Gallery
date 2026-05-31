@@ -246,36 +246,40 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     }
   }, [activeClusterCity]);
 
-  // Handle #loc= hash from mini-map navigation
+  // Handle #loc= hash navigation — from the mini-map AND the on-page Atlas
+  // Index. Runs on mount and on every hashchange so an already-mounted map
+  // still flies when the index sets a new #loc= hash.
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.startsWith('#loc=')) {
+    const goToHash = () => {
+      const hash = window.location.hash;
+      if (!hash.startsWith('#loc=')) return;
       const parts = hash.replace('#loc=', '').split(',');
-      if (parts.length >= 2) {
-        const lat = parseFloat(parts[0]);
-        const lng = parseFloat(parts[1]);
-        const zoom = parts[2] ? parseFloat(parts[2]) : 8;
-        if (!isNaN(lat) && !isNaN(lng)) {
-          setTimeout(() => {
-            mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
-            // Find and highlight closest city
-            let closest: LocationCluster | null = null;
-            let minDist = Infinity;
-            for (const c of cityClusters) {
-              const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
-              if (d < minDist) { minDist = d; closest = c; }
-            }
-            if (closest && minDist < 2) {
-              setActiveClusterCity(closest.city);
-              setActiveCluster(closest);
-              setExpandedRegion(getRegion(closest.country));
-            }
-          }, 500);
-          // Clean the hash
-          window.history.replaceState(null, '', window.location.pathname);
+      if (parts.length < 2) return;
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+      const zoom = parts[2] ? parseFloat(parts[2]) : 8;
+      if (isNaN(lat) || isNaN(lng)) return;
+      setTimeout(() => {
+        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
+        // Find and highlight closest city
+        let closest: LocationCluster | null = null;
+        let minDist = Infinity;
+        for (const c of cityClusters) {
+          const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
+          if (d < minDist) { minDist = d; closest = c; }
         }
-      }
-    }
+        if (closest && minDist < 2) {
+          setActiveClusterCity(closest.city);
+          setActiveCluster(closest);
+          setExpandedRegion(getRegion(closest.country));
+        }
+      }, 300);
+      // Clean the hash so it doesn't re-fire on reload
+      window.history.replaceState(null, '', window.location.pathname);
+    };
+    goToHash();
+    window.addEventListener('hashchange', goToHash);
+    return () => window.removeEventListener('hashchange', goToHash);
   }, [cityClusters]);
 
   const resetView = useCallback(() => {

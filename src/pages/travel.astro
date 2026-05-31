@@ -6,6 +6,7 @@ import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
 import ParallaxHero from '../components/ParallaxHero';
+import AtlasIndex from '../components/AtlasIndex';
 import { getMapboxToken } from '../config/mapbox';
 
 const currentPath = Astro.url.pathname;
@@ -47,6 +48,13 @@ const stats = [
   { value: String(frames).padStart(2, '0'), label: 'Frames' },
   { value: String(collections).padStart(2, '0'), label: 'Collections' },
   { value: 'US', label: 'Coverage' },
+];
+
+// City names for the kinetic marquee (artistic typographic band).
+const cityNames = [
+  ...new Set(
+    photos.map((p) => p.location?.city).filter((c): c is string => !!c)
+  ),
 ];
 ---
 
@@ -96,21 +104,51 @@ const stats = [
 
     <!-- Stats row -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-6 pt-12 md:pt-16">
-      {stats.map((s, i) => (
-        <div class={`flex flex-col gap-2 ${i > 0 ? 'md:border-l md:border-white/10 md:pl-8' : ''}`}>
-          <span class="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tight text-[#FDFDFB] leading-none">
-            {s.value}
-          </span>
-          <span class="font-mono text-[9px] tracking-[0.4em] uppercase text-white/35">
-            {s.label}
-          </span>
-        </div>
-      ))}
+      {stats.map((s, i) => {
+        const numeric = /^\d+$/.test(s.value);
+        return (
+          <div class={`flex flex-col gap-2 ${i > 0 ? 'md:border-l md:border-white/10 md:pl-8' : ''}`}>
+            <span
+              class="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tight text-[#FDFDFB] leading-none tabular-nums"
+              data-countup={numeric ? s.value : undefined}
+            >
+              {s.value}
+            </span>
+            <span class="font-mono text-[9px] tracking-[0.4em] uppercase text-white/35">
+              {s.label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   </section>
 
+  <!-- ── Kinetic place-name marquee (artistic typographic band) ── -->
+  {cityNames.length > 0 && (
+    <div class="atlas-marquee relative overflow-hidden py-10 md:py-16 mt-16 md:mt-24 border-y border-white/5 select-none">
+      <div class="atlas-marquee-track flex whitespace-nowrap will-change-transform">
+        {[0, 1].map(() => (
+          <div class="flex items-center shrink-0" aria-hidden="true">
+            {cityNames.map((city) => (
+              <span class="flex items-center">
+                <span class="px-6 md:px-10 text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight text-white/[0.08]">
+                  {city}
+                </span>
+                <span class="text-white/[0.12] text-2xl md:text-4xl">✦</span>
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
   <!-- ── Interactive Atlas (the map — core functionality, unchanged) ── -->
-  <section class="max-w-7xl mx-auto px-6 md:px-16 pt-16 md:pt-24 pb-12">
+  <section
+    id="atlas-map"
+    class="max-w-7xl mx-auto px-6 md:px-16 pt-16 md:pt-24 pb-12"
+    style="scroll-margin-top: 5.5rem;"
+  >
     <div class="flex items-end justify-between mb-5 md:mb-6">
       <div class="flex items-center gap-3">
         <span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>
@@ -134,6 +172,11 @@ const stats = [
     </div>
   </section>
 
+  <!-- ── Interactive coordinate index (drives the map above) ── -->
+  <section class="max-w-7xl mx-auto px-6 md:px-16 pt-8 md:pt-12 pb-16">
+    <AtlasIndex client:visible photos={photos} />
+  </section>
+
   {/* End-of-mapped-frames terminator — matches the homepage's "End of archive"
        and the about page's markers. Same visual signature across pages. */}
   <div class="pt-10 pb-4 flex flex-col items-center gap-3 opacity-30">
@@ -148,3 +191,50 @@ const stats = [
 
   <Footer dark={true} />
 </Layout>
+
+<style>
+  /* Kinetic place-name marquee — seamless loop (track holds two copies). */
+  .atlas-marquee-track {
+    animation: atlas-marquee 42s linear infinite;
+  }
+  .atlas-marquee:hover .atlas-marquee-track {
+    animation-play-state: paused;
+  }
+  @keyframes atlas-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .atlas-marquee-track { animation: none; }
+  }
+</style>
+
+<script>
+  // Count-up the atlas stats when they scroll into view.
+  function runAtlasCountUps() {
+    const els = document.querySelectorAll<HTMLElement>('[data-countup]');
+    if (!els.length) return;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target as HTMLElement;
+        io.unobserve(el);
+        const raw = el.getAttribute('data-countup') || '';
+        const target = parseInt(raw, 10);
+        const pad = raw.length;
+        if (isNaN(target)) return;
+        const dur = 1100;
+        const start = performance.now();
+        const tick = (now: number) => {
+          const t = Math.min((now - start) / dur, 1);
+          const eased = 1 - Math.pow(1 - t, 3);
+          el.textContent = String(Math.round(eased * target)).padStart(pad, '0');
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }, { threshold: 0.5 });
+    els.forEach((el) => io.observe(el));
+  }
+  document.addEventListener('astro:page-load', runAtlasCountUps);
+</script>
