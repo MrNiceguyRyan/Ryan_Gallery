@@ -6,6 +6,7 @@ import Lightbox from '../shared/Lightbox';
 import { getMapboxToken } from '../../config/mapbox';
 import { EDITORIAL_FALLBACKS, renderPortableText, renderFallback } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
+import Magnetic from '../shared/Magnetic';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
@@ -58,9 +59,6 @@ function PhotoCell({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-5%' }}
       {...(canHover && {
         onHoverStart: () => setHoveredIndex(index),
         onHoverEnd: () => setHoveredIndex(null),
@@ -83,34 +81,44 @@ function PhotoCell({
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
       className={`${colSpan} group relative bg-[#0A0A0A] cursor-pointer overflow-hidden`}
     >
-      {/* Index number */}
-      <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
-        {String(index + 1).padStart(2, '0')}
-      </div>
-
-      {/* Loading placeholder */}
+      {/* Entrance reveal — image rises out of a baseline clip (separate from
+          the hover-dim above so the timings don't fight). */}
       <motion.div
-        animate={{ opacity: isLoaded ? 0 : 1 }}
-        transition={{ duration: 0.6 }}
-        className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
-      />
+        className="relative"
+        initial={{ opacity: 0, y: 38, clipPath: 'inset(14% 0% 14% 0%)' }}
+        whileInView={{ opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' }}
+        viewport={{ once: true, margin: '-8%' }}
+        transition={{ duration: 1.0, delay: Math.min(index * 0.035, 0.28), ease: expo }}
+      >
+        {/* Index number */}
+        <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
+          {String(index + 1).padStart(2, '0')}
+        </div>
 
-      {/* Image — original aspect ratio, no cropping. Inner zoom on hover
-           only applies when the device actually supports hover. */}
-      <motion.img
-        onLoad={() => setIsLoaded(true)}
-        {...(canHover && { whileHover: { scale: 1.04 } })}
-        transition={{ duration: 1.2, ease: expo }}
-        src={`${photo.imageUrl}?auto=format&w=${fallbackWidth}&q=82`}
-        srcSet={srcSet}
-        sizes={sizesAttr}
-        alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
-        animate={{ opacity: isLoaded ? 1 : 0 }}
-        className={`w-full h-auto block grayscale-[0.15] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
-        loading="lazy"
-        decoding="async"
-        draggable={false}
-      />
+        {/* Loading placeholder */}
+        <motion.div
+          animate={{ opacity: isLoaded ? 0 : 1 }}
+          transition={{ duration: 0.6 }}
+          className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
+        />
+
+        {/* Image — original aspect ratio, no cropping. Inner zoom on hover
+             only applies when the device actually supports hover. */}
+        <motion.img
+          onLoad={() => setIsLoaded(true)}
+          {...(canHover && { whileHover: { scale: 1.04 } })}
+          transition={{ duration: 1.2, ease: expo }}
+          src={`${photo.imageUrl}?auto=format&w=${fallbackWidth}&q=82`}
+          srcSet={srcSet}
+          sizes={sizesAttr}
+          alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
+          animate={{ opacity: isLoaded ? 1 : 0 }}
+          className={`w-full h-auto block grayscale-[0.15] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      </motion.div>
     </motion.div>
   );
 }
@@ -293,8 +301,16 @@ export default function MagazineLayout({
                       </span>
                       <div className="h-[1px] flex-1 bg-white/10" />
                     </div>
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tighter leading-[0.85]">
-                      {collection.name}
+                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tighter leading-[0.85] overflow-hidden py-1">
+                      <motion.span
+                        key={collection._id}
+                        className="block"
+                        initial={{ y: '110%' }}
+                        animate={{ y: '0%' }}
+                        transition={{ duration: 0.85, delay: 0.1, ease: expo }}
+                      >
+                        {collection.name}
+                      </motion.span>
                     </h2>
                     <div className="flex items-center gap-4">
                       <p className="text-[10px] uppercase tracking-[0.4em] font-bold">
@@ -477,9 +493,19 @@ export default function MagazineLayout({
                           Keep Reading
                         </span>
                         <div className="flex flex-col items-center gap-8">
-                          <h3 className="text-4xl md:text-6xl font-serif italic tracking-tighter hover:scale-105 transition-transform duration-500">
-                            {nextCollection.name}
-                          </h3>
+                          <Magnetic strength={0.4}>
+                            <h3 className="text-4xl md:text-6xl font-serif italic tracking-tighter overflow-hidden py-1">
+                              <motion.span
+                                className="block"
+                                initial={{ y: '115%' }}
+                                whileInView={{ y: '0%' }}
+                                viewport={{ once: true, margin: '-10%' }}
+                                transition={{ duration: 0.8, ease: expo }}
+                              >
+                                {nextCollection.name}
+                              </motion.span>
+                            </h3>
+                          </Magnetic>
                           {nextCollection.coverImageUrl && (
                             <div className="w-48 h-32 overflow-hidden opacity-40 group-hover:opacity-100 transition-opacity duration-500">
                               <img
