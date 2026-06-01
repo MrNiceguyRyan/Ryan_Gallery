@@ -1,14 +1,24 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'framer-motion';
-import { ArrowRight, Camera } from 'lucide-react';
+import { ArrowRight, Camera, Layers } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
+import StateChapter from './StateChapter';
+import StateHub from './StateHub';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
+import {
+  groupByState,
+  homeItemKey,
+  homeItemRep,
+  collectionCover,
+  stateCovers,
+  type HomeItem,
+} from '../../lib/stateGrouping';
 import ViewfinderBrackets from '../shared/ViewfinderBrackets';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -36,10 +46,15 @@ interface Props {
  *  MobileFilmstripItem — parallax mobile card
  * ═══════════════════════════════════════════════════════ */
 function MobileFilmstripItem({
-  collection,
+  coverBase,
+  title,
+  badge,
   onClick,
 }: {
-  collection: Collection;
+  coverBase: string;
+  title: string;
+  /** Optional pill, e.g. "3 Cities" for a clustered state. */
+  badge?: string;
   onClick: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,7 +71,6 @@ function MobileFilmstripItem({
 
   const y = useTransform(smoothProgress, [0, 1], ['-35%', '35%']);
 
-  const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
   // Mobile filmstrip — 100vw container, 28vh tall. Real device widths span 360–430 px
   // and Retina hits ~860 px; bracket 600 / 900 / 1200 and let the browser pick.
   const coverUrl     = coverBase ? `${coverBase}?auto=format&w=900&q=80` : '';
@@ -80,7 +94,7 @@ function MobileFilmstripItem({
           src={coverUrl}
           srcSet={coverSrcSet}
           sizes="100vw"
-          alt={collection.name}
+          alt={title}
           variants={{
             active: { scale: 1.1, filter: 'grayscale(0%)' },
           }}
@@ -99,10 +113,18 @@ function MobileFilmstripItem({
         className="absolute inset-0 transition-colors"
       />
 
+      {/* Optional cluster badge */}
+      {badge && (
+        <div className="absolute top-5 left-5 z-10 px-2.5 py-1 border border-white/30 bg-black/30 backdrop-blur-md flex items-center gap-1.5">
+          <Layers size={10} className="text-white/70" />
+          <span className="text-[8px] uppercase tracking-[0.3em] font-bold text-white/80">{badge}</span>
+        </div>
+      )}
+
       {/* Centered Title — clamps and shrinks to fit narrow screens */}
       <div className="absolute inset-0 flex items-center justify-center px-5 py-6 z-10 pointer-events-none">
         <h3 className="text-3xl sm:text-4xl text-white font-serif italic tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
-          {collection.name}
+          {title}
         </h3>
       </div>
 
@@ -125,6 +147,7 @@ function MobileFilmstripItem({
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [selectedState, setSelectedState] = useState<{ state: string; collections: Collection[] } | null>(null);
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
@@ -142,6 +165,22 @@ export default function HomePage({ collections, photos }: Props) {
     [collections],
   );
 
+  // Group into homepage items — multi-city states collapse into one
+  // clustered chapter; single cities / un-stated collections stay flat.
+  const homeItems = useMemo<HomeItem[]>(
+    () => groupByState(activeCollections),
+    [activeCollections],
+  );
+
+  // Lookup by observer key → { item, index, rep } for accent/cover/sidebar.
+  const itemByKey = useMemo(() => {
+    const m = new Map<string, { item: HomeItem; index: number; rep: Collection }>();
+    homeItems.forEach((item, index) => {
+      m.set(homeItemKey(item), { item, index, rep: homeItemRep(item) });
+    });
+    return m;
+  }, [homeItems]);
+
   // IntersectionObserver for sidebar active state
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -156,13 +195,13 @@ export default function HomePage({ collections, photos }: Props) {
       { threshold: 0.1, rootMargin: '-30% 0px -30% 0px' },
     );
 
-    activeCollections.forEach((c) => {
-      const el = document.getElementById(`archive-item-${c._id}`);
+    homeItems.forEach((item) => {
+      const el = document.getElementById(`archive-item-${homeItemKey(item)}`);
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, [activeCollections]);
+  }, [homeItems]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
@@ -174,14 +213,14 @@ export default function HomePage({ collections, photos }: Props) {
   }, []);
 
   useEffect(() => {
-    const isOverlayOpen = !!selectedCollection;
+    const isOverlayOpen = !!selectedCollection || !!selectedState;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
     document.body.style.backgroundColor = '#0A0A0A';
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [selectedCollection]);
+  }, [selectedCollection, selectedState]);
 
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
@@ -207,9 +246,9 @@ export default function HomePage({ collections, photos }: Props) {
   // flips, giving a slow crossfade between "rooms".
   const accentRgb = useMemo(() => {
     if (!activeArchiveId) return ACCENT_NEUTRAL;
-    const active = activeCollections.find((c) => c._id === activeArchiveId);
-    return active ? accentFromPalette(active.palette) : ACCENT_NEUTRAL;
-  }, [activeArchiveId, activeCollections]);
+    const active = itemByKey.get(activeArchiveId);
+    return active ? accentFromPalette(active.rep.palette) : ACCENT_NEUTRAL;
+  }, [activeArchiveId, itemByKey]);
 
   return (
     <>
@@ -509,8 +548,8 @@ export default function HomePage({ collections, photos }: Props) {
                   className="absolute inset-0"
                 >
                   {(() => {
-                    const activeCol = activeCollections.find((c) => c._id === activeArchiveId);
-                    const bgUrl = activeCol?.coverImageUrl || activeCol?.photos?.[0]?.imageUrl;
+                    const activeRep = activeArchiveId ? itemByKey.get(activeArchiveId)?.rep : undefined;
+                    const bgUrl = activeRep ? collectionCover(activeRep) : undefined;
                     return bgUrl ? (
                       <>
                         <img
@@ -543,7 +582,7 @@ export default function HomePage({ collections, photos }: Props) {
                   style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                   animate={{
                     y: activeArchiveId
-                      ? activeCollections.findIndex((c) => c._id === activeArchiveId) * 52
+                      ? (itemByKey.get(activeArchiveId)?.index ?? 0) * 52
                       : 0,
                     height: activeArchiveId ? 24 : 0,
                   }}
@@ -559,14 +598,21 @@ export default function HomePage({ collections, photos }: Props) {
                   </div>
 
                   <div className="flex flex-col">
-                    {activeCollections.map((col, idx) => (
-                      <SidebarItem
-                        key={col._id}
-                        col={col}
-                        idx={idx}
-                        isActive={activeArchiveId === col._id}
-                      />
-                    ))}
+                    {homeItems.map((item, idx) => {
+                      const key = homeItemKey(item);
+                      const rep = homeItemRep(item);
+                      return (
+                        <SidebarItem
+                          key={key}
+                          name={item.kind === 'state' ? item.state : item.collection.name}
+                          targetId={`archive-item-${key}`}
+                          coverUrl={collectionCover(rep)}
+                          sublabel={item.kind === 'state' ? `${item.collections.length} Cities` : undefined}
+                          idx={idx}
+                          isActive={activeArchiveId === key}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -608,16 +654,35 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
 
               <div className="space-y-12 md:space-y-20">
-                {activeCollections.map((collection, index) => (
-                  <ArchiveChapter
-                    key={collection._id}
-                    id={`archive-item-${collection._id}`}
-                    collection={collection}
-                    isActive={activeArchiveId === collection._id}
-                    onClick={() => setSelectedCollection(collection)}
-                    index={index}
-                  />
-                ))}
+                {homeItems.map((item, index) => {
+                  const key = homeItemKey(item);
+                  // Alternating horizontal stagger — gently offsets chapters
+                  // left/right on large screens so the archive reads as a
+                  // rhythm instead of a monotonous single column.
+                  const rhythm = index % 2 === 0 ? 'lg:mr-[5%]' : 'lg:ml-[5%]';
+                  return (
+                    <div key={key} className={rhythm}>
+                      {item.kind === 'state' ? (
+                        <StateChapter
+                          id={`archive-item-${key}`}
+                          state={item.state}
+                          collections={item.collections}
+                          isActive={activeArchiveId === key}
+                          onClick={() => setSelectedState({ state: item.state, collections: item.collections })}
+                          index={index}
+                        />
+                      ) : (
+                        <ArchiveChapter
+                          id={`archive-item-${key}`}
+                          collection={item.collection}
+                          isActive={activeArchiveId === key}
+                          onClick={() => setSelectedCollection(item.collection)}
+                          index={index}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* End-of-archive terminator — visual full-stop above the footer.
@@ -632,7 +697,7 @@ export default function HomePage({ collections, photos }: Props) {
                   End of archive
                 </span>
                 <span className="text-[8px] font-mono opacity-60">
-                  // {activeCollections.length} of {activeCollections.length}
+                  // {homeItems.length} of {homeItems.length}
                 </span>
               </div>
             </div>
@@ -641,13 +706,28 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Mobile Filmstrip Waterfall ── */}
         <div className="block md:hidden pb-12">
-          {activeCollections.map((collection) => (
-            <MobileFilmstripItem
-              key={collection._id}
-              collection={collection}
-              onClick={() => setSelectedCollection(collection)}
-            />
-          ))}
+          {homeItems.map((item) => {
+            const key = homeItemKey(item);
+            if (item.kind === 'state') {
+              return (
+                <MobileFilmstripItem
+                  key={key}
+                  coverBase={stateCovers(item.collections, 1)[0] ?? ''}
+                  title={item.state}
+                  badge={`${item.collections.length} Cities`}
+                  onClick={() => setSelectedState({ state: item.state, collections: item.collections })}
+                />
+              );
+            }
+            return (
+              <MobileFilmstripItem
+                key={key}
+                coverBase={collectionCover(item.collection)}
+                title={item.collection.name}
+                onClick={() => setSelectedCollection(item.collection)}
+              />
+            );
+          })}
 
           {/* Mobile end-of-archive terminator */}
           <div className="pt-12 pb-2 flex flex-col items-center gap-3 opacity-30">
@@ -725,6 +805,22 @@ export default function HomePage({ collections, photos }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── State hub overlay (L2 — lists every city in a region) ──
+           Rendered before the MagazineLayout overlay so that, at equal
+           z-index, opening a city story stacks on top via DOM order, and
+           closing it returns the user to the hub rather than all the way
+           home. */}
+      <AnimatePresence>
+        {selectedState && (
+          <StateHub
+            state={selectedState.state}
+            collections={selectedState.collections}
+            onSelectCollection={setSelectedCollection}
+            onClose={() => setSelectedState(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}
       <AnimatePresence>
