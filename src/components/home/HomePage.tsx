@@ -405,21 +405,23 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* ── Cinematic film-open: letterbox bars sweep in to frame the
-               title, hold, then retract to open into the page. Plays once on
-               arrival (and after the first-visit intro). ── */}
+          {/* ── Shutter-open: the black blades slam fully shut (the click),
+               hold for the exposure beat, then snap open as the image
+               develops in. Plays once on arrival (and after the first-visit
+               intro). The full close is momentary, so it never holds over
+               the title. ── */}
           <motion.div
             className="fixed top-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '17vh', '17vh', '0vh'] : '0vh' }}
-            transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
+            animate={{ height: introReady ? ['0vh', '50vh', '50vh', '0vh'] : '0vh' }}
+            transition={{ duration: 1.6, times: [0, 0.08, 0.2, 0.46], ease: [0.7, 0, 0.2, 1] }}
             aria-hidden="true"
           />
           <motion.div
             className="fixed bottom-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '17vh', '17vh', '0vh'] : '0vh' }}
-            transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
+            animate={{ height: introReady ? ['0vh', '50vh', '50vh', '0vh'] : '0vh' }}
+            transition={{ duration: 1.6, times: [0, 0.08, 0.2, 0.46], ease: [0.7, 0, 0.2, 1] }}
             aria-hidden="true"
           />
           {/* Exposure flash — a hard pop of light at the moment the letterbox
@@ -427,8 +429,8 @@ export default function HomePage({ collections, photos }: Props) {
           <motion.div
             className="fixed inset-0 z-[44] bg-white pointer-events-none mix-blend-overlay"
             initial={{ opacity: 0 }}
-            animate={{ opacity: introReady ? [0, 0, 0.62, 0] : 0 }}
-            transition={{ duration: 2.0, times: [0, 0.52, 0.58, 0.76], ease: 'easeOut' }}
+            animate={{ opacity: introReady ? [0, 0, 0.7, 0] : 0 }}
+            transition={{ duration: 1.6, times: [0, 0.2, 0.28, 0.5], ease: 'easeOut' }}
             aria-hidden="true"
           />
           {/* Cinematic vignette — darkened edges fade in for depth */}
@@ -450,24 +452,31 @@ export default function HomePage({ collections, photos }: Props) {
                Held hidden until the first-visit intro clears (introReady), so
                the push-in plays WITH the letterbox open, not under the intro. */}
           <motion.div
-            initial={{ opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0, y: 0 }}
+            initial={{ opacity: 0, scale: 1.18, filter: 'blur(26px) brightness(1.7) saturate(0.3)', x: 0, y: 0 }}
             animate={introReady
               ? {
-                  opacity: [0, 1, 1],
-                  scale: [1.3, 0.97, 1],
-                  x: [0, 0, -14, 11, -7, 4, 0],
-                  y: [0, 0, 7, -6, 3, -1, 0],
-                  filter: ['blur(22px) brightness(2)', 'blur(0px) brightness(1.2)', 'blur(0px) brightness(1)'],
+                  /* Held hidden behind the closed shutter, then DEVELOPS in as
+                     the blades open — out of defocus + desaturation, the
+                     latent image resolving. */
+                  opacity: [0, 0, 1, 1],
+                  scale: [1.18, 1.18, 0.985, 1],
+                  x: [0, 0, -15, 12, -7, 4, 0],
+                  y: [0, 0, 8, -6, 3, -1, 0],
+                  filter: [
+                    'blur(26px) brightness(1.7) saturate(0.3)',
+                    'blur(26px) brightness(1.7) saturate(0.3)',
+                    'blur(0px) brightness(1.15) saturate(1.05)',
+                    'blur(0px) brightness(1) saturate(1)',
+                  ],
                 }
-              : { opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0, y: 0 }}
+              : { opacity: 0, scale: 1.18, filter: 'blur(26px) brightness(1.7) saturate(0.3)', x: 0, y: 0 }}
             transition={{
-              opacity: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
-              scale: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
-              filter: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
-              /* Two-axis camera-jolt — a hard kick the instant the letterbox
-                 snaps open and the flash hits. */
-              x: { delay: 1.0, duration: 0.55, times: [0, 0.1, 0.3, 0.52, 0.74, 0.88, 1], ease: 'easeOut' },
-              y: { delay: 1.0, duration: 0.55, times: [0, 0.1, 0.3, 0.52, 0.74, 0.88, 1], ease: 'easeOut' },
+              opacity: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
+              scale: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
+              filter: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
+              /* Two-axis shutter kick — a hard mechanical jolt at the click. */
+              x: { delay: 0.1, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
+              y: { delay: 0.1, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
             }}
             className="space-y-12"
           >
