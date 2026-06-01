@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
@@ -15,6 +15,20 @@ interface ArchiveChapterProps {
 export default function ArchiveChapter({ id, collection, onClick, index, isActive }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
+
+  // Liquid light-sheen that follows the cursor across the cover (Zajno-style
+  // hover) — an additive highlight overlay, so the photo itself is never
+  // distorted. Spring-smoothed so it trails the cursor like liquid.
+  const sheenX = useMotionValue(50);
+  const sheenY = useMotionValue(50);
+  const sx = useSpring(sheenX, { stiffness: 150, damping: 20, mass: 0.4 });
+  const sy = useSpring(sheenY, { stiffness: 150, damping: 20, mass: 0.4 });
+  const sheen = useMotionTemplate`radial-gradient(28% 38% at ${sx}% ${sy}%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, transparent 70%)`;
+  const onCoverMove = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    sheenX.set(((e.clientX - r.left) / r.width) * 100);
+    sheenY.set(((e.clientY - r.top) / r.height) * 100);
+  };
   const { scrollYProgress } = useScroll({
     target: chapterRef,
     offset: ['start end', 'end start'],
@@ -94,6 +108,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           onClick={onClick}
           onHoverStart={() => setIsHovered(true)}
           onHoverEnd={() => setIsHovered(false)}
+          onMouseMove={onCoverMove}
           data-cursor="View Story"
           role="button"
           aria-label={`View story: ${collection.name}`}
@@ -131,6 +146,13 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               className={`absolute inset-0 transition-opacity duration-1000 bg-gradient-to-t from-black/60 via-transparent to-transparent ${
                 isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
+            />
+
+            {/* Liquid light-sheen following the cursor (hover only) */}
+            <motion.div
+              className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-soft-light"
+              style={{ background: sheen }}
+              aria-hidden="true"
             />
           </motion.div>
 
