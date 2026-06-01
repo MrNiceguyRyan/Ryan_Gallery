@@ -8,7 +8,6 @@ import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
-import JourneyIntro from './JourneyIntro';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -611,10 +610,6 @@ export default function HomePage({ collections, photos }: Props) {
             />
           </motion.div>
         </header>
-
-        {/* ── Cinematic journey intro — scroll-driven narrative over real
-             archive photos, bridging the hero into the works ── */}
-        <JourneyIntro collections={activeCollections} />
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
