@@ -301,6 +301,18 @@ export default function HomePage({ collections, photos }: Props) {
 
         <div className="fixed inset-0 pointer-events-none opacity-[0.03] mix-blend-multiply z-[1] paper-texture" />
 
+        {/* ── Continuous cinematic vignette ──
+             A page-level fixed frame (not hero-bound) so the cinematic
+             darkening is the SAME from the opening through the whole archive
+             — the "journey" and the content below share one frame instead of
+             a vignetted hero meeting an un-vignetted page. */}
+        <div
+          className={`fixed inset-0 pointer-events-none z-[2] transition-opacity duration-1000 ${
+            selectedCollection ? 'opacity-0' : 'opacity-100'
+          }`}
+          style={{ background: 'radial-gradient(125% 95% at 50% 38%, transparent 50%, rgba(0,0,0,0.62) 100%)' }}
+        />
+
         {/* ── Cinematic Atmospheric Layers ── */}
         <div
           className={`fixed inset-0 pointer-events-none overflow-hidden z-[2] transition-opacity duration-1000 ${
@@ -433,16 +445,6 @@ export default function HomePage({ collections, photos }: Props) {
             transition={{ duration: 1.6, times: [0, 0.2, 0.28, 0.5], ease: 'easeOut' }}
             aria-hidden="true"
           />
-          {/* Cinematic vignette — darkened edges fade in for depth */}
-          <motion.div
-            className="absolute inset-0 z-[3] pointer-events-none"
-            style={{ background: 'radial-gradient(115% 85% at 50% 45%, transparent 52%, rgba(0,0,0,0.66) 100%)' }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: introReady ? 1 : 0 }}
-            transition={{ duration: 1.4, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            aria-hidden="true"
-          />
-
           {/* Scroll-linked cinematic exit wrapper — recedes on scroll */}
           <motion.div
             style={{ opacity: heroOpacity, y: heroY, scale: heroScale }}
