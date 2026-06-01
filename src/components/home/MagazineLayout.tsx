@@ -15,6 +15,12 @@ const expo = [0.23, 1, 0.32, 1] as const;
  *  files degrade gracefully (the cover stays dark). */
 const COVER_BG: Record<string, string> = {
   miami: '/textures/miami-map.jpg',
+  'new-york-stories': '/textures/new-york-map.jpg',
+  'zion-national-park': '/textures/zion-map.jpg',
+  page: '/textures/page-map.jpg',
+  arizona: '/textures/arizona-map.jpg',
+  orlando: '/textures/orlando-map.jpg',
+  'bryce-canyon-national-park': '/textures/bryce-map.jpg',
 };
 
 /* ── Photo cell — editorial grid item, original aspect ratio, no cropping ── */
