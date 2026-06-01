@@ -10,17 +10,17 @@ const expo = [0.16, 1, 0.3, 1] as const;
 // arrays run at different tempos so the inner photo and outer halo are never
 // perfectly in sync — the surface-tension shimmer.
 const DROP_INNER = [
-  '60% 40% 33% 67% / 62% 35% 65% 38%',
-  '42% 58% 60% 40% / 45% 62% 38% 55%',
-  '55% 45% 48% 52% / 38% 55% 45% 62%',
-  '38% 62% 58% 42% / 60% 42% 58% 40%',
-  '60% 40% 33% 67% / 62% 35% 65% 38%',
+  '64% 36% 27% 73% / 66% 28% 72% 34%',
+  '33% 67% 66% 34% / 36% 70% 30% 64%',
+  '58% 42% 44% 56% / 26% 64% 36% 74%',
+  '28% 72% 64% 36% / 68% 34% 66% 32%',
+  '64% 36% 27% 73% / 66% 28% 72% 34%',
 ];
 const DROP_OUTER = [
-  '50% 50% 42% 58% / 55% 48% 52% 45%',
-  '62% 38% 55% 45% / 40% 60% 40% 60%',
-  '40% 60% 45% 55% / 58% 42% 60% 40%',
-  '50% 50% 42% 58% / 55% 48% 52% 45%',
+  '52% 48% 36% 64% / 60% 42% 58% 40%',
+  '66% 34% 58% 42% / 34% 66% 36% 64%',
+  '36% 64% 48% 52% / 62% 38% 64% 36%',
+  '52% 48% 36% 64% / 60% 42% 58% 40%',
 ];
 
 /** Fallback timeline shown when Sanity has no data yet. Only entries
@@ -47,6 +47,7 @@ export default function AboutPage({ settings }: Props) {
     ? settings!.timeline!
     : FALLBACK_TIMELINE;
   const reduce = useReducedMotion();
+  const igHandle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'instagram');
 
   // Editorial "contributor cover" entrance — plays once on arrival, then
   // peels away to reveal the page.
@@ -184,8 +185,8 @@ export default function AboutPage({ settings }: Props) {
             <motion.div
               className="relative w-full h-full overflow-hidden bg-white/5 shadow-xl ring-1 ring-white/15"
               style={{ borderRadius: DROP_INNER[0] }}
-              animate={reduce ? undefined : { borderRadius: DROP_INNER }}
-              transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+              animate={reduce ? undefined : { borderRadius: DROP_INNER, scale: [1, 1.045, 0.99, 1] }}
+              transition={{ duration: 7.5, repeat: Infinity, ease: 'easeInOut' }}
             >
               <img
                 src={avatarUrl}
@@ -195,13 +196,13 @@ export default function AboutPage({ settings }: Props) {
                 decoding="async"
                 draggable={false}
               />
-              {/* Specular gloss — the water-drop sheen, top-left */}
+              {/* Specular gloss — the water-drop sheen, top-left (subtle) */}
               <div
                 aria-hidden
                 className="absolute inset-0 pointer-events-none mix-blend-screen"
                 style={{
                   background:
-                    'radial-gradient(42% 32% at 30% 22%, rgba(255,255,255,0.38), rgba(255,255,255,0.08) 45%, transparent 64%)',
+                    'radial-gradient(40% 30% at 30% 22%, rgba(255,255,255,0.16), rgba(255,255,255,0.03) 46%, transparent 64%)',
                 }}
               />
             </motion.div>
@@ -342,7 +343,7 @@ export default function AboutPage({ settings }: Props) {
                 transition={{ duration: 0.5, delay: i * 0.07, ease: expo }}
               >
                 <div className="relative mb-5">
-                  <div className="w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] relative z-10 group-hover:border-white transition-colors duration-500" />
+                  <div className="w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] relative z-10 transition-all duration-500 group-hover:border-[rgba(255,200,130,0.9)] group-hover:shadow-[0_0_10px_rgba(255,200,130,0.5)]" />
                 </div>
                 <span className="text-[10px] font-mono text-white/30 tracking-wider">{item.year}</span>
                 <h3 className="text-base font-light text-[#FDFDFB] mt-1 tracking-tight group-hover:translate-x-1 transition-transform duration-400">
@@ -376,49 +377,57 @@ export default function AboutPage({ settings }: Props) {
             </motion.span>
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
             <motion.a
               href={`mailto:${email}`}
-              className="group p-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors duration-300 flex items-center gap-3"
-              whileHover={{ y: -2, transition: { duration: 0.2 } }}
+              className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              whileHover={{ transition: { duration: 0.2 } }}
             >
-              <svg className="w-4 h-4 text-white/30 shrink-0 group-hover:text-white/60 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
-              <div>
-                <p className="text-sm font-light text-white/80">{email}</p>
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Email</p>
+                <p className="text-sm font-light text-white/80 truncate">{email}</p>
               </div>
+              <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
             </motion.a>
 
             <motion.a
               href={instagram}
               target="_blank"
               rel="noopener noreferrer"
-              className="group p-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors duration-300 flex items-center gap-3"
-              whileHover={{ y: -2, transition: { duration: 0.2 } }}
+              className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              whileHover={{ transition: { duration: 0.2 } }}
             >
-              <svg className="w-4 h-4 text-white/30 shrink-0 group-hover:text-white/60 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
               </svg>
-              <div>
-                <p className="text-sm font-light text-white/80">Instagram</p>
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Social</p>
+                <p className="text-sm font-light text-white/80 truncate">{igHandle}</p>
               </div>
+              <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
             </motion.a>
 
-            <div className="p-5 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
-              <svg className="w-4 h-4 text-white/30 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+            <div className="p-5 bg-[#0A0A0A] flex items-center gap-3.5">
+              <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
               </svg>
-              <p className="text-sm font-light text-white/50">New York, NY</p>
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Based</p>
+                <p className="text-sm font-light text-white/55">New York, NY</p>
+              </div>
             </div>
 
-            <div className="p-5 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
-              <svg className="w-4 h-4 text-white/30 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-              </svg>
-              <p className="text-sm font-light text-white/50">Open for collaborations</p>
+            <div className="p-5 bg-[#0A0A0A] flex items-center gap-3.5">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 ml-[5px] mr-[5px]" style={{ background: 'rgba(255,200,130,0.85)', boxShadow: '0 0 8px rgba(255,200,130,0.6)' }} />
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Status</p>
+                <p className="text-sm font-light text-white/55">Open for collaborations</p>
+              </div>
             </div>
           </div>
 
