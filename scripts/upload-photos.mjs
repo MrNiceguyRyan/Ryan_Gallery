@@ -121,14 +121,26 @@ async function findOrCreateCollection(cityFolderName, stateName) {
   const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
   const displayCity = locationInfo.city || cityFolderName;
 
+  // Normalize the state label (folder name → "Florida"). Skip the synthetic
+  // "." used when photos live directly in the state folder.
+  const stateLabel = stateName && stateName !== '.' ? stateName.trim() : '';
+
   // Search for existing collection by slug or name
   const existing = await sanity.fetch(
-    `*[_type == "collection" && (slug.current == $slug || lower(name) == $lowerName)][0]{ _id, name }`,
+    `*[_type == "collection" && (slug.current == $slug || lower(name) == $lowerName)][0]{ _id, name, state }`,
     { slug, lowerName: displayCity.toLowerCase() }
   );
 
   if (existing) {
     console.log(`  ✓ Found existing collection: "${existing.name}" (${existing._id})`);
+    // Backfill the `state` field on pre-existing collections so older data
+    // also participates in homepage clustering.
+    if (stateLabel && !existing.state) {
+      try {
+        await sanity.patch(existing._id).set({ state: stateLabel }).commit();
+        console.log(`    ✓ Backfilled state: "${stateLabel}"`);
+      } catch { /* non-fatal */ }
+    }
     return existing._id;
   }
 
@@ -139,6 +151,7 @@ async function findOrCreateCollection(cityFolderName, stateName) {
     slug: { _type: 'slug', current: slug },
     subtitle: `${displayCity}, ${locationInfo.country || stateName}`,
     location: displayCity,
+    ...(stateLabel && { state: stateLabel }),
     year: new Date().getFullYear(),
     description: `A visual journey through ${displayCity}.`,
     featured: false,
