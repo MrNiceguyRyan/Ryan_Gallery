@@ -62,6 +62,9 @@ export interface Collection {
    *  to drive a per-chapter accent color crossfade. */
   palette?: SanityImagePalette | null;
   location?: string;
+  /** Region/cluster label (e.g. "Florida", "Arizona", "DMV"). Used by the
+   *  homepage to group multi-place regions into a single region chapter/hub. */
+  region?: string;
   year?: number;
   description?: string;
   /** Portable Text — editorial introduction shown in the collection sidebar */

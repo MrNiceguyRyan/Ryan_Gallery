@@ -49,6 +49,12 @@ export default defineType({
       description: 'e.g. "Paris, France" — 显示在卡片上的地点文字',
     }),
     defineField({
+      name: 'region',
+      title: 'Region / Cluster',
+      type: 'string',
+      description: 'e.g. "Florida", "Arizona", "DMV", "Macau" — 用于首页按区域聚类（同一 region 的多个城市会归到一个区域中枢）',
+    }),
+    defineField({
       name: 'year',
       title: 'Year',
       type: 'number',

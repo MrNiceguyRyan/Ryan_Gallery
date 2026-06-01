@@ -75,6 +75,24 @@ function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+// Normalize a state-folder name into a clean Region label for clustering.
+// Special-cased acronyms/casing, otherwise Title Case ("New york" → "New York").
+const REGION_DISPLAY = {
+  'dmv': 'DMV',
+  'new york': 'New York',
+  'dc': 'DMV',
+};
+function regionLabel(stateName) {
+  if (!stateName) return undefined;
+  const key = stateName.toLowerCase().trim();
+  if (REGION_DISPLAY[key]) return REGION_DISPLAY[key];
+  return stateName
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 // AI-powered title generation using Claude API
 async function generateTitle(cityName, stateName, index, exifData) {
   const locationInfo = LOCATION_MAP[cityName.toLowerCase()] || {};
@@ -127,8 +145,14 @@ async function findOrCreateCollection(cityFolderName, stateName) {
     { slug, lowerName: displayCity.toLowerCase() }
   );
 
+  const region = regionLabel(stateName);
+
   if (existing) {
     console.log(`  ✓ Found existing collection: "${existing.name}" (${existing._id})`);
+    // Backfill region on existing docs without overwriting a manual value.
+    if (region) {
+      await sanity.patch(existing._id).setIfMissing({ region }).commit().catch(() => {});
+    }
     return existing._id;
   }
 
@@ -139,6 +163,7 @@ async function findOrCreateCollection(cityFolderName, stateName) {
     slug: { _type: 'slug', current: slug },
     subtitle: `${displayCity}, ${locationInfo.country || stateName}`,
     location: displayCity,
+    ...(region && { region }),
     year: new Date().getFullYear(),
     description: `A visual journey through ${displayCity}.`,
     featured: false,
