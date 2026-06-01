@@ -657,6 +657,11 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           pendingAxis = null;
           if (nt === nf) return;
 
+          // Arriving at About has its own editorial "contributor cover"
+          // entrance (in AboutPage), so skip the root axis animation there —
+          // no double reveal. (Leaving About still animates normally.)
+          if (nt === '/about') return;
+
           // Lateral sibling nav (Map ↔ About): shared-axis push.
           if (LATERAL[nf] && LATERAL[nt]) {
             pendingAxis = LATERAL[nt] > LATERAL[nf] ? 'forward' : 'back';

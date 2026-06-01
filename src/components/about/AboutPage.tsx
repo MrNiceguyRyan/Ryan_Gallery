@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
 
@@ -28,8 +29,110 @@ export default function AboutPage({ settings }: Props) {
     ? settings!.timeline!
     : FALLBACK_TIMELINE;
 
+  // Editorial "contributor cover" entrance — plays once on arrival, then
+  // peels away to reveal the page.
+  const [coverGone, setCoverGone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setCoverGone(true), 1150);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-screen">
+      {/* ═══════ Entrance — magazine "contributor" cover ═══════ */}
+      <AnimatePresence>
+        {!coverGone && (
+          <motion.div
+            key="about-cover"
+            initial={{ y: 0 }}
+            exit={{ y: '-100%' }}
+            transition={{ duration: 0.85, ease: [0.76, 0, 0.24, 1] }}
+            className="fixed inset-0 z-[60] bg-[#0A0A0A] text-[#FDFDFB] overflow-hidden"
+          >
+            {/* Newsprint halftone + warm accent wash */}
+            <div className="absolute inset-0 newsprint-screen opacity-[0.05] pointer-events-none" />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: 'radial-gradient(52vmax 42vmax at 20% 112%, rgba(255,200,130,0.10), transparent 68%)' }}
+            />
+            {/* Newspaper column rules */}
+            <div className="absolute inset-0 grid grid-cols-4 opacity-50 pointer-events-none">
+              {[0, 1, 2, 3].map((i) => (
+                <motion.span
+                  key={i}
+                  className="origin-top"
+                  style={{ borderRight: i === 3 ? '0' : '1px solid rgba(255,255,255,0.05)' }}
+                  initial={{ scaleY: 0 }}
+                  animate={{ scaleY: 1 }}
+                  transition={{ duration: 0.7, delay: 0.05 + i * 0.06, ease: expo }}
+                />
+              ))}
+            </div>
+
+            {/* Masthead */}
+            <motion.div
+              className="absolute"
+              style={{ top: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
+              initial={{ clipPath: 'inset(0 100% 0 0)' }}
+              animate={{ clipPath: 'inset(0 0% 0 0)' }}
+              transition={{ duration: 0.65, delay: 0.1, ease: expo }}
+            >
+              <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase">
+                <span className="font-medium text-white/60">The Journal Gallery</span>
+                <span className="text-white/35">The Profile</span>
+              </div>
+              <div className="mt-[3px] border-b border-white/10" />
+            </motion.div>
+
+            {/* Center block */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
+              <motion.span
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.22, ease: expo }}
+                className="font-mono text-[11px] tracking-[0.5em] uppercase"
+                style={{ color: 'rgba(255,200,130,0.85)' }}
+              >
+                // the operator
+              </motion.span>
+              <h1 className="m-0 overflow-hidden" style={{ padding: '0.04em 0.02em' }}>
+                <motion.span
+                  initial={{ y: '110%' }}
+                  animate={{ y: '0%' }}
+                  transition={{ duration: 0.85, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                  className="inline-block font-serif italic font-normal leading-[0.92] tracking-tight text-white/[0.98]"
+                  style={{ fontSize: 'clamp(52px,12vw,150px)' }}
+                >
+                  {name}
+                </motion.span>
+              </h1>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.46, ease: expo }}
+                className="flex items-center gap-3 font-mono text-[10px] tracking-[0.34em] uppercase text-white/40"
+              >
+                <span>Photographer</span>
+                <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'rgba(255,200,130,0.7)' }} />
+                <span>New York</span>
+              </motion.div>
+            </div>
+
+            {/* Folio — camera EXIF line for the photography theme */}
+            <motion.div
+              className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase text-white/35"
+              style={{ bottom: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
+              initial={{ clipPath: 'inset(0 0 0 100%)' }}
+              animate={{ clipPath: 'inset(0 0 0 0%)' }}
+              transition={{ duration: 0.65, delay: 0.12, ease: expo }}
+            >
+              <span className="text-[13px] tracking-[0.2em] text-white/55">Contributor</span>
+              <span className="hidden sm:block">Nikon Zf · Fujifilm X-T50</span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
 
       {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
       <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
