@@ -470,11 +470,41 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             </AnimatePresence>
           </MapGL>
 
-          {/* ── Floating label ── */}
+          {/* ── Instrument frame — viewfinder corner brackets (accent-tinted),
+               the same camera-finder motif used across the site. Pointer-none
+               so they never block map drag. ── */}
+          <div className="absolute inset-0 z-[5] pointer-events-none">
+            {[
+              'top-4 left-4 border-l border-t',
+              'top-4 right-4 border-r border-t',
+              'bottom-4 left-4 border-l border-b',
+              'bottom-4 right-4 border-r border-b',
+            ].map((pos, i) => (
+              <motion.span
+                key={i}
+                className={`absolute w-7 h-7 ${pos}`}
+                style={{ borderColor: `rgba(${ACCENT_RGB},0.55)` }}
+                initial={{ opacity: 0, scale: 1.4 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.4 + i * 0.06, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              />
+            ))}
+          </div>
+
+          {/* ── Floating status badge ── */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
-            <div className="bg-black/50 backdrop-blur-2xl px-5 py-3 rounded-2xl shadow-lg border border-white/10">
-              <h2 className="text-[9px] uppercase tracking-[0.3em] font-black text-white/35 mb-0.5">Journal Gallery</h2>
-              <p className="text-sm font-serif italic text-white/80">United States</p>
+            <div className="bg-black/50 backdrop-blur-2xl px-5 py-3.5 rounded-2xl shadow-lg border border-white/10">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full opacity-70 animate-ping" style={{ background: ACCENT }} />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: ACCENT }} />
+                </span>
+                <span className="text-[8px] uppercase tracking-[0.4em] font-black text-white/40">Live Atlas</span>
+              </div>
+              <p className="text-sm font-serif italic text-white/85 leading-none">United States</p>
+              <p className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/30 mt-1.5">
+                {cityClusters.length} coordinates · {photos.length} frames
+              </p>
             </div>
           </motion.div>
 
@@ -576,7 +606,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                 onClick={() => handleCityClick(cluster)}
                                 onMouseEnter={() => setHoveredCity(cluster.city)}
                                 onMouseLeave={() => setHoveredCity(null)}
-                                className={`w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
+                                className={`relative w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
                                   isSelected
                                     ? 'bg-white/10 text-white border-b-white/10 translate-x-0'
                                     : isHoveredFromMap
@@ -584,6 +614,11 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                       : 'hover:bg-white/[0.03] border-b-white/[0.03]'
                                 }`}
                               >
+                                {/* Accent rail — lights up when this city is active or hovered (list ↔ map) */}
+                                <span
+                                  className="absolute left-0 top-0 bottom-0 w-[2px] transition-all duration-300"
+                                  style={{ background: isSelected || isHoveredFromMap ? ACCENT : 'transparent' }}
+                                />
                                 <div className="flex items-center gap-3">
                                   <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
                                     <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
