@@ -49,6 +49,13 @@ export default defineType({
       description: 'e.g. "Paris, France" — 显示在卡片上的地点文字',
     }),
     defineField({
+      name: 'state',
+      title: 'State / Region',
+      type: 'string',
+      description:
+        'e.g. "Florida"、"California" — 用于首页聚类。同一个 State 下的多个城市会被聚合成一个"州章节"，点进去是该州下所有城市的中枢页。留空则该 Collection 在首页单独平铺（向后兼容）。',
+    }),
+    defineField({
       name: 'year',
       title: 'Year',
       type: 'number',

@@ -62,6 +62,11 @@ export interface Collection {
    *  to drive a per-chapter accent color crossfade. */
   palette?: SanityImagePalette | null;
   location?: string;
+  /** State / region used to cluster collections on the homepage. Multiple
+   *  collections sharing a `state` collapse into one "state chapter" whose
+   *  hub lists every city inside. Optional — collections without a `state`
+   *  render standalone (backward compatible). */
+  state?: string;
   year?: number;
   description?: string;
   /** Portable Text — editorial introduction shown in the collection sidebar */
