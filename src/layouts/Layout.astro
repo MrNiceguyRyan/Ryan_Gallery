@@ -119,16 +119,8 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     "min-h-screen font-sans antialiased overflow-x-hidden",
     dark ? "bg-[#0A0A0A] text-[#FDFDFB]" : "bg-white text-gray-900"
   ]} style="cursor: none;">
-    <!-- Custom cursor -->
+    <!-- Custom cursor — a minimal dot (no ring) -->
     <div id="cursor-dot" aria-hidden="true"></div>
-    <!-- Liquid ring: SVG ellipse that stretches with velocity -->
-    <svg id="cursor-ring" aria-hidden="true"
-      viewBox="0 0 40 40"
-      xmlns="http://www.w3.org/2000/svg"
-      style="position:fixed;top:0;left:0;width:40px;height:40px;pointer-events:none;z-index:9998;overflow:visible;mix-blend-mode:difference;opacity:0.55">
-      <ellipse id="cursor-ellipse" cx="20" cy="20" rx="18" ry="18"
-        fill="none" stroke="white" stroke-width="1"/>
-    </svg>
     <!-- Contextual cursor label — shows e.g. "View Story" when hovering a
          work, so the affordance to open it is unmistakable on desktop. -->
     <span id="cursor-label" aria-hidden="true">View</span>
@@ -312,18 +304,20 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       #cursor-dot {
         position: fixed;
         top: 0; left: 0;
-        width: 5px; height: 5px;
-        margin: -2.5px 0 0 -2.5px;
+        width: 7px; height: 7px;
+        margin: -3.5px 0 0 -3.5px;
         background: white;
         border-radius: 50%;
         pointer-events: none;
         z-index: 9999;
-        will-change: left, top;
+        will-change: left, top, transform;
         mix-blend-mode: difference;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
       }
-
-      /* Ring is now an SVG — positioned and shaped via JS */
-      #cursor-ring { will-change: left, top; }
+      /* Over interactive elements the dot swells into a soft point; on press
+         it tucks in — the affordance the ring used to carry, minus the ring. */
+      body.cursor-hover #cursor-dot { transform: scale(2.4); }
+      body.cursor-click #cursor-dot { transform: scale(1.3); }
 
       /* Contextual cursor label ("View Story", etc.) */
       #cursor-label {
@@ -352,87 +346,26 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         transform: translate(16px, 16px) scale(1);
       }
 
-      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
-      body.cursor-hidden #cursor-dot,
-      body.cursor-hidden #cursor-ring { opacity: 0 !important; }
+      body.cursor-hidden #cursor-dot { opacity: 0 !important; }
       body.cursor-hidden #cursor-label { opacity: 0 !important; }
 
       @media (hover: none) {
-        #cursor-dot, #cursor-ring, #cursor-label { display: none !important; }
+        #cursor-dot, #cursor-label { display: none !important; }
         *, *::before, *::after { cursor: auto !important; }
       }
     </style>
 
     <script is:inline>
-      // ── Custom cursor (liquid deformation) ──
+      // ── Custom cursor (minimal dot + contextual label) ──
       (function() {
         var mouseX = -200, mouseY = -200;
-        var ringX  = -200, ringY  = -200;
-        var prevMouseX = -200, prevMouseY = -200;
-        var velX = 0, velY = 0;
-        var rxVal = 18, ryVal = 18, angleVal = 0;
-        var raf = null;
         var initialized = false;
-        var isClick = false;
-
-        function lerp(a, b, t) { return a + (b - a) * t; }
 
         function init() {
-          var dot  = document.getElementById('cursor-dot');
-          var ring = document.getElementById('cursor-ring');
-          var ellipse = document.getElementById('cursor-ellipse');
-          if (!dot || !ring || !ellipse) return;
+          var dot = document.getElementById('cursor-dot');
+          if (!dot) return;
 
-          if (raf) { cancelAnimationFrame(raf); raf = null; }
-          document.body.classList.remove('cursor-hover', 'cursor-hidden', 'cursor-label-on');
-
-          function loop() {
-            // Smooth ring position
-            ringX = lerp(ringX, mouseX, 0.13);
-            ringY = lerp(ringY, mouseY, 0.13);
-
-            // Velocity-based deformation
-            velX = lerp(velX, mouseX - prevMouseX, 0.25);
-            velY = lerp(velY, mouseY - prevMouseY, 0.25);
-            prevMouseX = lerp(prevMouseX, mouseX, 0.25);
-            prevMouseY = lerp(prevMouseY, mouseY, 0.25);
-
-            var speed = Math.sqrt(velX * velX + velY * velY);
-
-            // Stretch amount: faster = more elongated
-            var stretch = Math.min(speed * 0.55, 10);
-            var targetRx, targetRy, targetAngle;
-
-            if (isClick) {
-              targetRx = 11; targetRy = 11; targetAngle = 0;
-            } else {
-              targetRx = 18 + stretch;
-              targetRy = Math.max(18 - stretch * 0.5, 9);
-              // Angle follows velocity direction
-              targetAngle = speed > 0.5 ? Math.atan2(velY, velX) * 180 / Math.PI : angleVal;
-            }
-
-            rxVal    = lerp(rxVal,    targetRx,    0.18);
-            ryVal    = lerp(ryVal,    targetRy,    0.18);
-            angleVal = lerp(angleVal, targetAngle, 0.14);
-
-            // Position: center the SVG on cursor
-            ring.style.left = (ringX - 20) + 'px';
-            ring.style.top  = (ringY - 20) + 'px';
-
-            // Apply deformation to ellipse
-            ellipse.setAttribute('rx', rxVal.toFixed(2));
-            ellipse.setAttribute('ry', ryVal.toFixed(2));
-            ring.style.transformOrigin = '20px 20px';
-            ring.style.transform = 'rotate(' + angleVal.toFixed(1) + 'deg)';
-
-            // Opacity: normal 0.5, hover 0.3
-            var targetOpacity = document.body.classList.contains('cursor-hover') ? '0.3' : '0.5';
-            ring.style.opacity = targetOpacity;
-
-            raf = requestAnimationFrame(loop);
-          }
-          loop();
+          document.body.classList.remove('cursor-hover', 'cursor-hidden', 'cursor-label-on', 'cursor-click');
 
           if (initialized) return;
           initialized = true;
@@ -465,11 +398,9 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           }, { passive: true });
 
           document.addEventListener('mousedown', function() {
-            isClick = true;
             document.body.classList.add('cursor-click');
           });
           document.addEventListener('mouseup', function() {
-            isClick = false;
             document.body.classList.remove('cursor-click');
           });
           document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
