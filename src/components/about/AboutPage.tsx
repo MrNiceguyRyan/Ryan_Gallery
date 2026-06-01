@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
+import Magnetic from '../shared/Magnetic';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -32,33 +33,40 @@ export default function AboutPage({ settings }: Props) {
 
       {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
       <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
-        {/* Avatar */}
+        {/* Avatar — settles in, then breathes with a gentle float */}
         <motion.div
           className="flex justify-center mb-6"
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, ease: expo }}
         >
-          <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden bg-white/5 shadow-lg border border-white/10">
+          <motion.div
+            className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden bg-white/5 shadow-lg border border-white/10"
+            animate={{ y: [0, -7, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          >
             <img
               src={avatarUrl}
               alt={name}
               className="w-full h-full object-cover object-right"
               loading="eager"
               decoding="async"
+              draggable={false}
             />
-          </div>
+          </motion.div>
         </motion.div>
 
-        {/* Name */}
-        <motion.h1
-          className="text-4xl md:text-5xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[0.95]"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1, ease: expo }}
-        >
-          {name}.
-        </motion.h1>
+        {/* Name — mask reveal */}
+        <h1 className="text-4xl md:text-5xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[0.95] overflow-hidden py-1">
+          <motion.span
+            className="block"
+            initial={{ y: '110%' }}
+            animate={{ y: '0%' }}
+            transition={{ duration: 0.9, delay: 0.15, ease: expo }}
+          >
+            {name}.
+          </motion.span>
+        </h1>
 
         {/* Subtitle */}
         <motion.p
@@ -146,15 +154,17 @@ export default function AboutPage({ settings }: Props) {
         transition={{ duration: 0.8, ease: expo }}
       >
         <div className="px-6 md:px-16 max-w-5xl mx-auto mb-8">
-          <motion.h2
-            className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter"
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7, ease: expo }}
-          >
-Timeline // Operations log.
-          </motion.h2>
+          <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter overflow-hidden py-1">
+            <motion.span
+              className="block"
+              initial={{ y: '120%' }}
+              whileInView={{ y: '0%' }}
+              viewport={{ once: true, margin: '-10%' }}
+              transition={{ duration: 0.8, ease: expo }}
+            >
+              Timeline // Operations log.
+            </motion.span>
+          </h2>
         </div>
 
         <div className="relative">
@@ -202,15 +212,17 @@ Timeline // Operations log.
         transition={{ duration: 0.8, ease: expo }}
       >
         <div className="max-w-3xl mx-auto">
-          <motion.h2
-            className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter mb-6"
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7, ease: expo }}
-          >
-Contact // Channels.
-          </motion.h2>
+          <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter mb-6 overflow-hidden py-1">
+            <motion.span
+              className="block"
+              initial={{ y: '120%' }}
+              whileInView={{ y: '0%' }}
+              viewport={{ once: true, margin: '-10%' }}
+              transition={{ duration: 0.8, ease: expo }}
+            >
+              Contact // Channels.
+            </motion.span>
+          </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <motion.a
@@ -265,12 +277,14 @@ Contact // Channels.
             viewport={{ once: true }}
             transition={{ duration: 0.6, ease: expo }}
           >
-            <a
-              href={`mailto:${email}`}
-              className="inline-block px-7 py-2.5 bg-white text-black text-sm font-light tracking-wider rounded-full hover:bg-white/80 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
-            >
-              Get in Touch
-            </a>
+            <Magnetic strength={0.5}>
+              <a
+                href={`mailto:${email}`}
+                className="inline-block px-7 py-2.5 bg-white text-black text-sm font-light tracking-wider rounded-full hover:bg-white/80 transition-colors duration-300"
+              >
+                Get in Touch
+              </a>
+            </Magnetic>
           </motion.div>
         </div>
       </motion.section>
