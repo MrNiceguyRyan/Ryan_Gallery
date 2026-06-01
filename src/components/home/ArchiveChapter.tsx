@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTe
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
+import LiquidImage from './LiquidImage';
 
 interface ArchiveChapterProps {
   id: string;
@@ -136,6 +137,12 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
                 className="absolute inset-0 w-full h-[130%] object-cover"
                 draggable={false}
               />
+            )}
+
+            {/* WebGL liquid displacement — hover-only overlay; falls back to
+                 the image above if WebGL/CORS is unavailable. */}
+            {coverUrl && (
+              <LiquidImage src={coverUrl} active={isHovered} mx={sheenX} my={sheenY} />
             )}
 
             {/* Tech Scanlines */}
