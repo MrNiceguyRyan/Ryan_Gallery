@@ -552,8 +552,9 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             </div>
           </div>
 
-          {/* ── Live coordinate readout — updates as the map pans/zooms (read-only) ── */}
-          <div className="absolute bottom-6 right-6 z-10 pointer-events-none hidden md:block">
+          {/* ── Live coordinate readout — bottom-center so it clears the
+               bottom-right Mapbox nav/fullscreen controls. Updates on pan/zoom. ── */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none hidden md:block">
             <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 font-mono text-[9px] tracking-[0.12em] text-white/40 tabular-nums flex items-center gap-2.5">
               <span style={{ color: ACCENT }}>◉</span>
               <span>LAT {viewState.latitude.toFixed(2)}°</span>
@@ -625,11 +626,11 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                 onClick={() => handleCityClick(cluster)}
                                 onMouseEnter={() => setHoveredCity(cluster.city)}
                                 onMouseLeave={() => setHoveredCity(null)}
-                                className={`relative w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
+                                className={`relative w-full text-left px-5 py-3.5 border-b transition-[transform,background-color,border-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                                   isSelected
                                     ? 'bg-white/10 text-white border-b-white/10 translate-x-0'
                                     : isHoveredFromMap
-                                      ? 'bg-white/[0.05] border-b-white/5 translate-x-1.5'
+                                      ? 'bg-white/[0.05] border-b-white/5 translate-x-2'
                                       : 'hover:bg-white/[0.03] border-b-white/[0.03]'
                                 }`}
                               >
@@ -646,7 +647,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                                 />
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
+                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-[transform,box-shadow,outline-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
                                     <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                                   </div>
                                   <div className="flex-1 min-w-0">
