@@ -413,9 +413,14 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                     className="relative flex items-center justify-center cursor-pointer group"
                     style={{ width: containerSize, height: containerSize }}
                     initial={{ opacity: 0, scale: 0.3 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{
+                      // Dim the rest of the field when a city is selected, so the
+                      // active one (and any hovered one) reads as the focus.
+                      opacity: activeCluster && !isActive && !isHovered ? 0.35 : 1,
+                      scale: 1,
+                    }}
                     exit={{ opacity: 0, scale: 0.3 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12, opacity: { duration: 0.5 } }}
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
@@ -424,6 +429,18 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                       <div
                         className="absolute inset-0 rounded-full transition-all duration-500"
                         style={{ backgroundColor: `rgba(${ACCENT_RGB},${isActive ? 0.15 : 0.08})` }}
+                      />
+                    )}
+
+                    {/* Pulse ring — pings outward while the city is hovered (incl.
+                        from the list), reinforcing the list ↔ map linkage. */}
+                    {isHovered && !isActive && (
+                      <motion.span
+                        className="absolute inset-0 rounded-full"
+                        style={{ border: `1.5px solid rgba(${ACCENT_RGB},0.6)` }}
+                        initial={{ scale: 0.7, opacity: 0.6 }}
+                        animate={{ scale: [0.7, 1.9], opacity: [0.55, 0] }}
+                        transition={{ duration: 1.3, repeat: Infinity, ease: 'easeOut' }}
                       />
                     )}
                     <div
@@ -534,6 +551,18 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
               Globe · 3D Terrain · {MAP_STYLES[mapStyleIdx].label}
             </div>
           </div>
+
+          {/* ── Live coordinate readout — updates as the map pans/zooms (read-only) ── */}
+          <div className="absolute bottom-6 right-6 z-10 pointer-events-none hidden md:block">
+            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 font-mono text-[9px] tracking-[0.12em] text-white/40 tabular-nums flex items-center gap-2.5">
+              <span style={{ color: ACCENT }}>◉</span>
+              <span>LAT {viewState.latitude.toFixed(2)}°</span>
+              <span className="opacity-30">·</span>
+              <span>LNG {viewState.longitude.toFixed(2)}°</span>
+              <span className="opacity-30">·</span>
+              <span>Z {viewState.zoom.toFixed(1)}</span>
+            </div>
+          </div>
         </div>
 
         {/* ── Desktop sidebar — grouped by region (optional; off when an
@@ -564,7 +593,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                         className="text-white/20"
                         animate={{ rotate: isRegionOpen ? 180 : 0 }}
-                        transition={{ duration: 0.3 }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                       </motion.svg>
@@ -578,7 +607,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], opacity: { duration: 0.35 } }}
                         className="overflow-hidden"
                       >
                         {group.clusters.map((cluster, ci) => {
