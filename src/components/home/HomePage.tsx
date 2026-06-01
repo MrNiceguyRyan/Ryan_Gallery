@@ -411,14 +411,14 @@ export default function HomePage({ collections, photos }: Props) {
           <motion.div
             className="fixed top-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '26vh', '26vh', '0vh'] : '0vh' }}
+            animate={{ height: introReady ? ['0vh', '17vh', '17vh', '0vh'] : '0vh' }}
             transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
             aria-hidden="true"
           />
           <motion.div
             className="fixed bottom-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '26vh', '26vh', '0vh'] : '0vh' }}
+            animate={{ height: introReady ? ['0vh', '17vh', '17vh', '0vh'] : '0vh' }}
             transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
             aria-hidden="true"
           />
@@ -427,14 +427,14 @@ export default function HomePage({ collections, photos }: Props) {
           <motion.div
             className="fixed inset-0 z-[44] bg-white pointer-events-none mix-blend-overlay"
             initial={{ opacity: 0 }}
-            animate={{ opacity: introReady ? [0, 0, 0.32, 0] : 0 }}
-            transition={{ duration: 2.0, times: [0, 0.5, 0.6, 0.82], ease: 'easeOut' }}
+            animate={{ opacity: introReady ? [0, 0, 0.5, 0] : 0 }}
+            transition={{ duration: 2.0, times: [0, 0.52, 0.6, 0.8], ease: 'easeOut' }}
             aria-hidden="true"
           />
           {/* Cinematic vignette — darkened edges fade in for depth */}
           <motion.div
             className="absolute inset-0 z-[3] pointer-events-none"
-            style={{ background: 'radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,0.55) 100%)' }}
+            style={{ background: 'radial-gradient(115% 85% at 50% 45%, transparent 52%, rgba(0,0,0,0.66) 100%)' }}
             initial={{ opacity: 0 }}
             animate={{ opacity: introReady ? 1 : 0 }}
             transition={{ duration: 1.4, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -450,15 +450,23 @@ export default function HomePage({ collections, photos }: Props) {
                Held hidden until the first-visit intro clears (introReady), so
                the push-in plays WITH the letterbox open, not under the intro. */}
           <motion.div
-            initial={{ opacity: 0, scale: 1.2, filter: 'blur(16px) brightness(1.7)' }}
+            initial={{ opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0 }}
             animate={introReady
               ? {
                   opacity: [0, 1, 1],
-                  scale: [1.2, 0.985, 1],
-                  filter: ['blur(16px) brightness(1.7)', 'blur(0px) brightness(1.15)', 'blur(0px) brightness(1)'],
+                  scale: [1.3, 0.97, 1],
+                  x: [0, 0, -9, 7, -4, 2, 0],
+                  filter: ['blur(22px) brightness(2)', 'blur(0px) brightness(1.2)', 'blur(0px) brightness(1)'],
                 }
-              : { opacity: 0, scale: 1.2, filter: 'blur(16px) brightness(1.7)' }}
-            transition={{ delay: 0.15, duration: 1.85, times: [0, 0.72, 1], ease: expo }}
+              : { opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0 }}
+            transition={{
+              opacity: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
+              scale: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
+              filter: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
+              /* Camera-jolt — a quick lateral kick the instant the letterbox
+                 snaps open and the flash hits. */
+              x: { delay: 1.0, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
+            }}
             className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
@@ -483,10 +491,10 @@ export default function HomePage({ collections, photos }: Props) {
                 <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
                   <motion.div
                     className="absolute top-0 bottom-0 w-2/5 -skew-x-12"
-                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.34), transparent)' }}
+                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.45), transparent)' }}
                     initial={{ x: '-170%' }}
                     animate={{ x: introReady ? '440%' : '-170%' }}
-                    transition={{ duration: 0.95, delay: introReady ? 0.72 : 0, ease: [0.5, 0, 0.15, 1] }}
+                    transition={{ duration: 0.9, delay: introReady ? 0.7 : 0, ease: [0.5, 0, 0.15, 1] }}
                   />
                 </div>
               </div>
