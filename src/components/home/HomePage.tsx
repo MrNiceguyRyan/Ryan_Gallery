@@ -411,15 +411,33 @@ export default function HomePage({ collections, photos }: Props) {
           <motion.div
             className="fixed top-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '13vh', '13vh', '0vh'] : '0vh' }}
-            transition={{ duration: 2.1, times: [0, 0.26, 0.62, 1], ease: [0.76, 0, 0.24, 1] }}
+            animate={{ height: introReady ? ['0vh', '26vh', '26vh', '0vh'] : '0vh' }}
+            transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
             aria-hidden="true"
           />
           <motion.div
             className="fixed bottom-0 inset-x-0 z-[45] bg-black pointer-events-none"
             initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '13vh', '13vh', '0vh'] : '0vh' }}
-            transition={{ duration: 2.1, times: [0, 0.26, 0.62, 1], ease: [0.76, 0, 0.24, 1] }}
+            animate={{ height: introReady ? ['0vh', '26vh', '26vh', '0vh'] : '0vh' }}
+            transition={{ duration: 2.0, times: [0, 0.2, 0.56, 1], ease: [0.85, 0, 0.15, 1] }}
+            aria-hidden="true"
+          />
+          {/* Exposure flash — a hard pop of light at the moment the letterbox
+               snaps open. mix-blend so it blooms the scene, not a whiteout. */}
+          <motion.div
+            className="fixed inset-0 z-[44] bg-white pointer-events-none mix-blend-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: introReady ? [0, 0, 0.32, 0] : 0 }}
+            transition={{ duration: 2.0, times: [0, 0.5, 0.6, 0.82], ease: 'easeOut' }}
+            aria-hidden="true"
+          />
+          {/* Cinematic vignette — darkened edges fade in for depth */}
+          <motion.div
+            className="absolute inset-0 z-[3] pointer-events-none"
+            style={{ background: 'radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0,0,0,0.55) 100%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: introReady ? 1 : 0 }}
+            transition={{ duration: 1.4, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
             aria-hidden="true"
           />
 
@@ -432,11 +450,15 @@ export default function HomePage({ collections, photos }: Props) {
                Held hidden until the first-visit intro clears (introReady), so
                the push-in plays WITH the letterbox open, not under the intro. */}
           <motion.div
-            initial={{ opacity: 0, scale: 1.08, filter: 'blur(9px)' }}
+            initial={{ opacity: 0, scale: 1.2, filter: 'blur(16px) brightness(1.7)' }}
             animate={introReady
-              ? { opacity: 1, scale: 1, filter: 'blur(0px)' }
-              : { opacity: 0, scale: 1.08, filter: 'blur(9px)' }}
-            transition={{ delay: 0.15, duration: 1.7, ease: expo }}
+              ? {
+                  opacity: [0, 1, 1],
+                  scale: [1.2, 0.985, 1],
+                  filter: ['blur(16px) brightness(1.7)', 'blur(0px) brightness(1.15)', 'blur(0px) brightness(1)'],
+                }
+              : { opacity: 0, scale: 1.2, filter: 'blur(16px) brightness(1.7)' }}
+            transition={{ delay: 0.15, duration: 1.85, times: [0, 0.72, 1], ease: expo }}
             className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
@@ -460,11 +482,11 @@ export default function HomePage({ collections, photos }: Props) {
                 {/* Anamorphic light sweep across the title (one-shot on open) */}
                 <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
                   <motion.div
-                    className="absolute top-0 bottom-0 w-1/3 -skew-x-12"
-                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.16), transparent)' }}
-                    initial={{ x: '-160%' }}
-                    animate={{ x: introReady ? '420%' : '-160%' }}
-                    transition={{ duration: 1.2, delay: introReady ? 0.75 : 0, ease: [0.5, 0, 0.2, 1] }}
+                    className="absolute top-0 bottom-0 w-2/5 -skew-x-12"
+                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.34), transparent)' }}
+                    initial={{ x: '-170%' }}
+                    animate={{ x: introReady ? '440%' : '-170%' }}
+                    transition={{ duration: 0.95, delay: introReady ? 0.72 : 0, ease: [0.5, 0, 0.15, 1] }}
                   />
                 </div>
               </div>
