@@ -10,6 +10,13 @@ import Magnetic from '../shared/Magnetic';
 
 const expo = [0.23, 1, 0.32, 1] as const;
 
+/** Optional per-collection background for the story cover transition.
+ *  Drop the asset in `public/` and map the collection slug here. Missing
+ *  files degrade gracefully (the cover stays dark). */
+const COVER_BG: Record<string, string> = {
+  miami: '/textures/miami-map.jpg',
+};
+
 /* ── Photo cell — editorial grid item, original aspect ratio, no cropping ── */
 function PhotoCell({
   photo,
@@ -572,6 +579,26 @@ export default function MagazineLayout({
               transition={{ duration: 0.82, ease: [0.76, 0, 0.24, 1] }}
               className="absolute inset-0 z-[75] bg-[#0A0A0A] text-[#FDFDFB] overflow-hidden pointer-events-none"
             >
+              {/* Optional per-collection background image (e.g. Miami street map),
+                  dimmed + slow zoom so the editorial type stays legible. */}
+              {collection.slug && COVER_BG[collection.slug] && (
+                <motion.div
+                  className="absolute inset-0 pointer-events-none"
+                  initial={{ scale: 1.12, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 1.7, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <img
+                    src={COVER_BG[collection.slug]}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0 bg-[#0A0A0A]/55" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/15 to-[#0A0A0A]/55" />
+                </motion.div>
+              )}
+
               {/* Newsprint halftone screen */}
               <div className="absolute inset-0 newsprint-screen opacity-[0.06] pointer-events-none" />
               {/* Accent wash bottom-left */}
