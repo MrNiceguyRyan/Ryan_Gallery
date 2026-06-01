@@ -1,9 +1,27 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
 
 const expo = [0.16, 1, 0.3, 1] as const;
+
+// Organic "water-droplet" frame: a border-radius that morphs through a few
+// asymmetric blob states so the avatar wobbles like a settling drop. The two
+// arrays run at different tempos so the inner photo and outer halo are never
+// perfectly in sync — the surface-tension shimmer.
+const DROP_INNER = [
+  '60% 40% 33% 67% / 62% 35% 65% 38%',
+  '42% 58% 60% 40% / 45% 62% 38% 55%',
+  '55% 45% 48% 52% / 38% 55% 45% 62%',
+  '38% 62% 58% 42% / 60% 42% 58% 40%',
+  '60% 40% 33% 67% / 62% 35% 65% 38%',
+];
+const DROP_OUTER = [
+  '50% 50% 42% 58% / 55% 48% 52% 45%',
+  '62% 38% 55% 45% / 40% 60% 40% 60%',
+  '40% 60% 45% 55% / 58% 42% 60% 40%',
+  '50% 50% 42% 58% / 55% 48% 52% 45%',
+];
 
 /** Fallback timeline shown when Sanity has no data yet. Only entries
  *  backed by real collections are listed. Future additions go through
@@ -28,6 +46,7 @@ export default function AboutPage({ settings }: Props) {
   const timeline  = (settings?.timeline?.length ?? 0) > 0
     ? settings!.timeline!
     : FALLBACK_TIMELINE;
+  const reduce = useReducedMotion();
 
   // Editorial "contributor cover" entrance — plays once on arrival, then
   // peels away to reveal the page.
@@ -136,7 +155,8 @@ export default function AboutPage({ settings }: Props) {
 
       {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
       <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
-        {/* Avatar — settles in, then breathes with a gentle float */}
+        {/* Avatar — a water-droplet frame: settles in, then floats while its
+            edge morphs like a slowly wobbling drop, wrapped in a soft halo. */}
         <motion.div
           className="flex justify-center mb-6"
           initial={{ opacity: 0, scale: 0.8 }}
@@ -144,18 +164,47 @@ export default function AboutPage({ settings }: Props) {
           transition={{ duration: 0.8, ease: expo }}
         >
           <motion.div
-            className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden bg-white/5 shadow-lg border border-white/10"
-            animate={{ y: [0, -7, 0] }}
+            className="relative w-28 h-28 md:w-36 md:h-36"
+            animate={reduce ? undefined : { y: [0, -7, 0] }}
             transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <img
-              src={avatarUrl}
-              alt={name}
-              className="w-full h-full object-cover object-right"
-              loading="eager"
-              decoding="async"
-              draggable={false}
+            {/* Liquid halo — morphs out of phase + drifts, for surface tension */}
+            <motion.div
+              aria-hidden
+              className="absolute -inset-3 -z-10 blur-xl"
+              style={{
+                borderRadius: DROP_OUTER[0],
+                background:
+                  'radial-gradient(circle at 36% 30%, rgba(255,200,130,0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
+              }}
+              animate={reduce ? undefined : { borderRadius: DROP_OUTER, rotate: [0, 7, 0], scale: [1, 1.06, 1] }}
+              transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
             />
+            {/* The droplet — morphing border-radius clips the photo */}
+            <motion.div
+              className="relative w-full h-full overflow-hidden bg-white/5 shadow-xl ring-1 ring-white/15"
+              style={{ borderRadius: DROP_INNER[0] }}
+              animate={reduce ? undefined : { borderRadius: DROP_INNER }}
+              transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <img
+                src={avatarUrl}
+                alt={name}
+                className="w-full h-full object-cover object-right scale-105"
+                loading="eager"
+                decoding="async"
+                draggable={false}
+              />
+              {/* Specular gloss — the water-drop sheen, top-left */}
+              <div
+                aria-hidden
+                className="absolute inset-0 pointer-events-none mix-blend-screen"
+                style={{
+                  background:
+                    'radial-gradient(42% 32% at 30% 22%, rgba(255,255,255,0.38), rgba(255,255,255,0.08) 45%, transparent 64%)',
+                }}
+              />
+            </motion.div>
           </motion.div>
         </motion.div>
 
