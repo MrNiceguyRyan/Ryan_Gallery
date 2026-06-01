@@ -5,6 +5,7 @@ import type { MapRef } from 'react-map-gl/mapbox';
 import Supercluster from 'supercluster';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Photo } from '../types';
+import Magnetic from './shared/Magnetic';
 
 // ─── Accent color (unified warm dark tone) ───
 const ACCENT = '#2c3e50';
@@ -470,27 +471,6 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             </AnimatePresence>
           </MapGL>
 
-          {/* ── Instrument frame — viewfinder corner brackets (accent-tinted),
-               the same camera-finder motif used across the site. Pointer-none
-               so they never block map drag. ── */}
-          <div className="absolute inset-0 z-[5] pointer-events-none">
-            {[
-              'top-4 left-4 border-l border-t',
-              'top-4 right-4 border-r border-t',
-              'bottom-4 left-4 border-l border-b',
-              'bottom-4 right-4 border-r border-b',
-            ].map((pos, i) => (
-              <motion.span
-                key={i}
-                className={`absolute w-7 h-7 ${pos}`}
-                style={{ borderColor: `rgba(${ACCENT_RGB},0.55)` }}
-                initial={{ opacity: 0, scale: 1.4 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.4 + i * 0.06, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              />
-            ))}
-          </div>
-
           {/* ── Floating status badge ── */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
             <div className="bg-black/50 backdrop-blur-2xl px-5 py-3.5 rounded-2xl shadow-lg border border-white/10">
@@ -509,15 +489,19 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           </motion.div>
 
           {/* ── Top-right controls ── */}
-          <div className="absolute top-6 right-6 z-10 flex flex-col gap-2">
-            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} onClick={resetView} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 transition-all active:scale-90" title="Reset view">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
-            </motion.button>
+          <div className="absolute top-6 right-6 z-10 flex flex-col gap-2.5">
+            <Magnetic strength={0.4}>
+              <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }} onClick={resetView} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 hover:border-white/30 transition-colors duration-300" title="Reset view">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+              </motion.button>
+            </Magnetic>
 
             {/* Style switcher toggle */}
-            <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} onClick={(e) => { e.stopPropagation(); setShowStylePicker(v => !v); }} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 transition-all active:scale-90" title="Map style">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0l4.179 2.25L12 17.25 2.25 12l4.179-2.25m11.142 0l-5.571 3-5.571-3m11.142 4.5L12 21.75l-5.571-3" /></svg>
-            </motion.button>
+            <Magnetic strength={0.4}>
+              <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setShowStylePicker(v => !v); }} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 hover:border-white/30 transition-colors duration-300" title="Map style">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0l4.179 2.25L12 17.25 2.25 12l4.179-2.25m11.142 0l-5.571 3-5.571-3m11.142 4.5L12 21.75l-5.571-3" /></svg>
+              </motion.button>
+            </Magnetic>
           </div>
 
           {/* ── Style picker dropdown ── */}
@@ -597,11 +581,17 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                         className="overflow-hidden"
                       >
-                        {group.clusters.map((cluster) => {
+                        {group.clusters.map((cluster, ci) => {
                           const isSelected = activeClusterCity === cluster.city;
                           const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
                           return (
-                            <div key={cluster.city} id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}>
+                            <motion.div
+                              key={cluster.city}
+                              id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}
+                              initial={{ opacity: 0, x: -14 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.04 + ci * 0.05, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                            >
                               <button
                                 onClick={() => handleCityClick(cluster)}
                                 onMouseEnter={() => setHoveredCity(cluster.city)}
@@ -614,10 +604,17 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                       : 'hover:bg-white/[0.03] border-b-white/[0.03]'
                                 }`}
                               >
-                                {/* Accent rail — lights up when this city is active or hovered (list ↔ map) */}
-                                <span
-                                  className="absolute left-0 top-0 bottom-0 w-[2px] transition-all duration-300"
-                                  style={{ background: isSelected || isHoveredFromMap ? ACCENT : 'transparent' }}
+                                {/* Accent rail — grows in from the middle when this city is
+                                    active or hovered (list ↔ map), soft-eased not a hard toggle */}
+                                <motion.span
+                                  className="absolute left-0 top-1 bottom-1 w-[2px] origin-center rounded-full"
+                                  style={{ background: ACCENT }}
+                                  initial={false}
+                                  animate={{
+                                    scaleY: isSelected || isHoveredFromMap ? 1 : 0,
+                                    opacity: isSelected || isHoveredFromMap ? 1 : 0,
+                                  }}
+                                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                                 />
                                 <div className="flex items-center gap-3">
                                   <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-all duration-300 ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
@@ -685,7 +682,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   )}
                                 </div>
                               </div>
-                            </div>
+                            </motion.div>
                           );
                         })}
                       </motion.div>
