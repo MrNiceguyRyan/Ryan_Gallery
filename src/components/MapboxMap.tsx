@@ -301,7 +301,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     <div>
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.4)] border border-white/10 bg-[#111]">
         {/* ── Map ── */}
-        <div className="relative w-full lg:flex-1 h-[60vh] min-h-[400px] md:h-[600px] lg:h-[780px]">
+        <div className="relative w-full lg:flex-1 h-[62vh] min-h-[420px] md:h-[78vh] lg:h-[88vh]">
           <MapGL
             {...viewState}
             ref={mapRef}

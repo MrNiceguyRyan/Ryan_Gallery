@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
 import { ArrowRight, Camera } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
@@ -154,6 +154,13 @@ export default function HomePage({ collections, photos }: Props) {
   // The cinematic film-open plays once the first-visit intro is gone (or
   // immediately on a return visit, when no intro shows).
   const introReady = !showOpening;
+
+  // Scroll-velocity skew (Zajno-style "weighty" scroll) — the archive content
+  // leans slightly with scroll speed and settles when you stop. Scoped to the
+  // content column so it never touches the sticky route rail or fixed bg.
+  const scrollVelocity = useVelocity(scrollY);
+  const skewRaw = useTransform(scrollVelocity, [-2600, 0, 2600], [2.4, 0, -2.4], { clamp: true });
+  const contentSkew = useSpring(skewRaw, { stiffness: 180, damping: 28, mass: 0.5 });
 
   // Filter to collections that have photos
   const activeCollections = useMemo(
@@ -753,8 +760,8 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
             </aside>
 
-            {/* Exhibition Content */}
-            <div className="flex-1 space-y-12 md:space-y-20">
+            {/* Exhibition Content — leans subtly with scroll velocity */}
+            <motion.div style={{ skewY: contentSkew }} className="flex-1 space-y-12 md:space-y-20">
               <div className="space-y-4 max-w-2xl">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
@@ -820,7 +827,7 @@ export default function HomePage({ collections, photos }: Props) {
                   // {activeCollections.length} of {activeCollections.length}
                 </span>
               </div>
-            </div>
+            </motion.div>
           </div>
         </main>
 
