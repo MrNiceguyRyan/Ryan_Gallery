@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Magnetic from './shared/Magnetic';
 
 interface Props {
   currentPath: string;
@@ -35,15 +36,16 @@ export default function Nav({ currentPath, dark = false }: Props) {
         {/* Right: pill buttons (desktop) */}
         <div className="hidden md:flex items-center gap-2 md:gap-3">
           {links.filter(l => l.href !== currentPath).map((link) => (
-            <motion.a
-              key={link.href}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              href={link.href}
-              className="px-4 md:px-6 py-2 rounded-full text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md mix-blend-difference"
-            >
-              {link.label}
-            </motion.a>
+            <Magnetic key={link.href} strength={0.5}>
+              <motion.a
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                href={link.href}
+                className="inline-block px-4 md:px-6 py-2 rounded-full text-[10px] uppercase tracking-[0.3em] font-bold transition-all duration-500 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md mix-blend-difference"
+              >
+                {link.label}
+              </motion.a>
+            </Magnetic>
           ))}
         </div>
 

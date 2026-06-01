@@ -2,6 +2,7 @@ import { useRef, useMemo, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
+import Magnetic from '../shared/Magnetic';
 
 interface ArchiveChapterProps {
   id: string;
@@ -226,17 +227,19 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           </div>
 
           <div className="md:col-span-2 flex md:justify-end">
-            <motion.button
-              whileHover={{ scale: 1.1, rotate: 5 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={onClick}
-              className="group relative"
-            >
-              <div className="w-24 h-24 rounded-none border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all duration-500">
-                <ArrowRight size={32} />
-              </div>
-              <div className="absolute inset-0 border border-white/5 translate-x-2 translate-y-2 -z-10 group-hover:translate-x-0 group-hover:translate-y-0 transition-transform" />
-            </motion.button>
+            <Magnetic strength={0.45}>
+              <motion.button
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onClick}
+                className="group relative"
+              >
+                <div className="w-24 h-24 rounded-none border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all duration-500">
+                  <ArrowRight size={32} />
+                </div>
+                <div className="absolute inset-0 border border-white/5 translate-x-2 translate-y-2 -z-10 group-hover:translate-x-0 group-hover:translate-y-0 transition-transform" />
+              </motion.button>
+            </Magnetic>
           </div>
         </div>
       </div>

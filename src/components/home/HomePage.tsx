@@ -8,6 +8,7 @@ import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
+import Magnetic from '../shared/Magnetic';
 import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -395,23 +396,27 @@ export default function HomePage({ collections, photos }: Props) {
           </motion.button>
 
           <div className="flex items-center gap-2 md:gap-3">
-            <motion.a
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              href="/travel"
-              className="px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
-            >
-              Map
-            </motion.a>
+            <Magnetic strength={0.5}>
+              <motion.a
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                href="/travel"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+              >
+                Map
+              </motion.a>
+            </Magnetic>
 
-            <motion.a
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              href="/about"
-              className="px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
-            >
-              About
-            </motion.a>
+            <Magnetic strength={0.5}>
+              <motion.a
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                href="/about"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+              >
+                About
+              </motion.a>
+            </Magnetic>
           </div>
         </nav>
 
@@ -760,9 +765,17 @@ export default function HomePage({ collections, photos }: Props) {
                   <div className="w-8 h-px bg-white/30" />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="text-4xl md:text-7xl font-serif italic tracking-tighter leading-tight">
-                  Curating the world through a{' '}
-                  <span className="opacity-50">distilled lens.</span>
+                <h2 className="text-4xl md:text-7xl font-serif italic tracking-tighter leading-tight overflow-hidden pb-2">
+                  <motion.span
+                    className="block"
+                    initial={{ y: '115%' }}
+                    whileInView={{ y: '0%' }}
+                    viewport={{ once: true, margin: '-12%' }}
+                    transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    Curating the world through a{' '}
+                    <span className="opacity-50">distilled lens.</span>
+                  </motion.span>
                 </h2>
                 <div className="flex items-center gap-2.5 pt-2 text-[10px] font-mono uppercase tracking-[0.3em] text-white/35">
                   <span className="relative flex h-1.5 w-1.5">
