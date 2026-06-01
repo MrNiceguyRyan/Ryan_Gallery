@@ -590,8 +590,8 @@ export default function MagazineLayout({
               {collection.slug && COVER_BG[collection.slug] && (
                 <motion.div
                   className="absolute inset-0 pointer-events-none"
-                  initial={{ scale: 1.22, opacity: 0 }}
-                  animate={{ scale: 1.08, opacity: 1 }}
+                  initial={{ scale: 1.12, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 1.7, ease: [0.16, 1, 0.3, 1] }}
                 >
                   <img
