@@ -139,10 +139,17 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               />
             )}
 
-            {/* WebGL liquid displacement — hover-only overlay; falls back to
-                 the image above if WebGL/CORS is unavailable. */}
+            {/* WebGL liquid displacement — hover-only overlay. Wrapped in a box
+                 that matches the <img>'s exact 130% crop + parallax so the
+                 WebGL framing aligns with the photo underneath. Falls back to
+                 the image if WebGL/CORS is unavailable. */}
             {coverUrl && (
-              <LiquidImage src={coverUrl} active={isHovered} mx={sheenX} my={sheenY} />
+              <motion.div
+                style={{ y: imgY }}
+                className="absolute inset-0 w-full h-[130%] overflow-hidden pointer-events-none"
+              >
+                <LiquidImage src={coverUrl} active={isHovered} mx={sheenX} my={sheenY} />
+              </motion.div>
             )}
 
             {/* Tech Scanlines */}

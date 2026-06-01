@@ -25,11 +25,11 @@ void main(){
   vec2 d = uv - uMouse;
   float dist = length(d);
   float falloff = smoothstep(0.5, 0.0, dist);
-  float ripple = sin(dist * 34.0 - uTime * 5.0);
-  vec2 disp = normalize(d + 0.0001) * ripple * 0.02 * falloff;
-  disp += vec2(sin(uv.y * 7.0 + uTime * 1.2), cos(uv.x * 7.0 + uTime)) * 0.004;
+  float ripple = sin(dist * 34.0 - uTime * 4.0);
+  vec2 disp = normalize(d + 0.0001) * ripple * 0.010 * falloff;
+  disp += vec2(sin(uv.y * 7.0 + uTime), cos(uv.x * 7.0 + uTime * 0.9)) * 0.0020;
   uv += disp * uIntensity;
-  float ca = 0.005 * uIntensity * falloff;
+  float ca = 0.0024 * uIntensity * falloff;
   float r = texture2D(uTex, uv + vec2(ca, 0.0)).r;
   float g = texture2D(uTex, uv).g;
   float b = texture2D(uTex, uv - vec2(ca, 0.0)).b;

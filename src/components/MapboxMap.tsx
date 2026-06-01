@@ -389,7 +389,10 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
               const photo = validPhotos[props.photoIndex];
               if (!photo) return null;
               const isActive = activeCluster?.city === photo.location?.city;
-              const isHovered = hoveredIdx === props.photoIndex;
+              // Highlight on direct marker hover OR when its city is hovered in
+              // the right-hand list (bidirectional list ↔ map linkage).
+              const isHovered = hoveredIdx === props.photoIndex
+                || (hoveredCity != null && photo.location?.city === hoveredCity);
               // Active markers sit above map labels; idle markers sit below
               const markerZ = isActive ? 3 : isHovered ? 2 : 1;
               // Container size matches the visual element — avoids invisible hit area
@@ -571,11 +574,13 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                             <div key={cluster.city} id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}>
                               <button
                                 onClick={() => handleCityClick(cluster)}
+                                onMouseEnter={() => setHoveredCity(cluster.city)}
+                                onMouseLeave={() => setHoveredCity(null)}
                                 className={`w-full text-left px-5 py-3.5 border-b transition-all duration-300 ${
                                   isSelected
-                                    ? 'bg-white/10 text-white border-b-white/10'
+                                    ? 'bg-white/10 text-white border-b-white/10 translate-x-0'
                                     : isHoveredFromMap
-                                      ? 'bg-white/[0.04] border-b-white/5'
+                                      ? 'bg-white/[0.05] border-b-white/5 translate-x-1.5'
                                       : 'hover:bg-white/[0.03] border-b-white/[0.03]'
                                 }`}
                               >
