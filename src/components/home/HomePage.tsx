@@ -6,6 +6,8 @@ import OpeningAnimation from './OpeningAnimation';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
+import RegionChapter from './RegionChapter';
+import RegionHub from './RegionHub';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import Magnetic from '../shared/Magnetic';
@@ -35,14 +37,27 @@ interface Props {
   photos: Photo[];
 }
 
+/* A homepage render unit — either a single place (one collection) or a region
+ * cluster (≥2 collections sharing a `region`). Single-place regions collapse
+ * back to a single unit, so the flat list stays back-compatible. */
+type HomeUnit =
+  | { type: 'single'; id: string; collection: Collection }
+  | { type: 'region'; id: string; region: string; collections: Collection[]; cover: string };
+type RegionUnit = Extract<HomeUnit, { type: 'region' }>;
+
 /* ═══════════════════════════════════════════════════════
  *  MobileFilmstripItem — parallax mobile card
  * ═══════════════════════════════════════════════════════ */
 function MobileFilmstripItem({
-  collection,
+  coverBase,
+  title,
+  caption,
   onClick,
 }: {
-  collection: Collection;
+  coverBase: string;
+  title: string;
+  /** Optional sub-label, e.g. "2 places · 47 frames" for a region card. */
+  caption?: string;
   onClick: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +74,6 @@ function MobileFilmstripItem({
 
   const y = useTransform(smoothProgress, [0, 1], ['-35%', '35%']);
 
-  const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
   // Mobile filmstrip — 100vw container, 28vh tall. Real device widths span 360–430 px
   // and Retina hits ~860 px; bracket 600 / 900 / 1200 and let the browser pick.
   const coverUrl     = coverBase ? `${coverBase}?auto=format&w=900&q=80` : '';
@@ -83,7 +97,7 @@ function MobileFilmstripItem({
           src={coverUrl}
           srcSet={coverSrcSet}
           sizes="100vw"
-          alt={collection.name}
+          alt={title}
           variants={{
             active: { scale: 1.1, filter: 'grayscale(0%)' },
           }}
@@ -103,10 +117,15 @@ function MobileFilmstripItem({
       />
 
       {/* Centered Title — clamps and shrinks to fit narrow screens */}
-      <div className="absolute inset-0 flex items-center justify-center px-5 py-6 z-10 pointer-events-none">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-5 py-6 z-10 pointer-events-none">
         <h3 className="text-3xl sm:text-4xl text-white font-serif italic tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
-          {collection.name}
+          {title}
         </h3>
+        {caption && (
+          <span className="font-mono text-[8px] uppercase tracking-[0.35em] text-white/75 mix-blend-difference">
+            {caption}
+          </span>
+        )}
       </div>
 
       {/* Tap affordance — always visible (touch has no hover), brightens
@@ -131,6 +150,7 @@ function MobileFilmstripItem({
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionUnit | null>(null);
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
@@ -168,34 +188,65 @@ export default function HomePage({ collections, photos }: Props) {
     [collections],
   );
 
-  // Index of the active chapter — drives the "route rail" fill in the
-  // sidebar (−1 while still in the hero). Each sidebar row is 52 px tall.
+  // Group active collections into render units by `region`. A region with ≥2
+  // active members becomes a region unit (→ RegionChapter + hub); everything
+  // else (no region, or a region with a single member) stays a single unit
+  // (→ ArchiveChapter). Order follows first appearance (already year-desc).
+  const units = useMemo<HomeUnit[]>(() => {
+    const groups = new Map<string, Collection[]>();
+    const order: string[] = [];
+    for (const c of activeCollections) {
+      const key = c.region?.trim() ? `r:${c.region.trim()}` : `s:${c._id}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key)!.push(c);
+    }
+    return order.map((key) => {
+      const cols = groups.get(key)!;
+      if (key.startsWith('r:') && cols.length >= 2) {
+        const region = cols[0].region!.trim();
+        const slug = region.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        return {
+          type: 'region',
+          id: `region-${slug}`,
+          region,
+          collections: cols,
+          cover: cols[0].coverImageUrl ?? cols[0].photos?.[0]?.imageUrl ?? '',
+        };
+      }
+      const col = cols[0];
+      return { type: 'single', id: `archive-item-${col._id}`, collection: col };
+    });
+  }, [activeCollections]);
+
+  // Index of the active unit — drives the "route rail" fill in the sidebar
+  // (−1 while still in the hero). Each sidebar row is 52 px tall.
+  // `activeArchiveId` holds the active unit's full DOM id.
   const ROW_H = 52;
   const activeRouteIndex = activeArchiveId
-    ? activeCollections.findIndex((c) => c._id === activeArchiveId)
+    ? units.findIndex((u) => u.id === activeArchiveId)
     : -1;
 
-  // IntersectionObserver for sidebar active state
+  // IntersectionObserver for sidebar active state — observes each unit's root.
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const id = entry.target.id.replace('archive-item-', '');
-            setActiveArchiveId(id);
-          }
+          if (entry.isIntersecting) setActiveArchiveId(entry.target.id);
         });
       },
       { threshold: 0.1, rootMargin: '-30% 0px -30% 0px' },
     );
 
-    activeCollections.forEach((c) => {
-      const el = document.getElementById(`archive-item-${c._id}`);
+    units.forEach((u) => {
+      const el = document.getElementById(u.id);
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, [activeCollections]);
+  }, [units]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
@@ -207,14 +258,14 @@ export default function HomePage({ collections, photos }: Props) {
   }, []);
 
   useEffect(() => {
-    const isOverlayOpen = !!selectedCollection;
+    const isOverlayOpen = !!selectedCollection || !!selectedRegion;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
     document.body.style.backgroundColor = '#0A0A0A';
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [selectedCollection]);
+  }, [selectedCollection, selectedRegion]);
 
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
@@ -242,9 +293,11 @@ export default function HomePage({ collections, photos }: Props) {
   // flips, giving a slow crossfade between "rooms".
   const accentRgb = useMemo(() => {
     if (!activeArchiveId) return ACCENT_NEUTRAL;
-    const active = activeCollections.find((c) => c._id === activeArchiveId);
-    return active ? accentFromPalette(active.palette) : ACCENT_NEUTRAL;
-  }, [activeArchiveId, activeCollections]);
+    const unit = units.find((u) => u.id === activeArchiveId);
+    if (!unit) return ACCENT_NEUTRAL;
+    const rep = unit.type === 'single' ? unit.collection : unit.collections[0];
+    return accentFromPalette(rep.palette);
+  }, [activeArchiveId, units]);
 
   return (
     <>
@@ -669,8 +722,12 @@ export default function HomePage({ collections, photos }: Props) {
                   className="absolute inset-0"
                 >
                   {(() => {
-                    const activeCol = activeCollections.find((c) => c._id === activeArchiveId);
-                    const bgUrl = activeCol?.coverImageUrl || activeCol?.photos?.[0]?.imageUrl;
+                    const activeUnit = units.find((u) => u.id === activeArchiveId);
+                    const bgUrl = activeUnit
+                      ? activeUnit.type === 'single'
+                        ? activeUnit.collection.coverImageUrl || activeUnit.collection.photos?.[0]?.imageUrl
+                        : activeUnit.cover
+                      : undefined;
                     return bgUrl ? (
                       <>
                         <img
@@ -699,7 +756,7 @@ export default function HomePage({ collections, photos }: Props) {
                 <div className="flex items-center gap-3">
                   <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
                   <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
-                    The Route // {activeCollections.length} stops
+                    The Route // {units.length} stops
                   </span>
                 </div>
 
@@ -722,10 +779,16 @@ export default function HomePage({ collections, photos }: Props) {
                   />
 
                   <div className="flex flex-col">
-                    {activeCollections.map((col, idx) => (
+                    {units.map((unit, idx) => (
                       <SidebarItem
-                        key={col._id}
-                        col={col}
+                        key={unit.id}
+                        id={unit.id}
+                        label={unit.type === 'region' ? unit.region : unit.collection.name}
+                        coverBase={
+                          unit.type === 'region'
+                            ? unit.cover
+                            : unit.collection.coverImageUrl ?? unit.collection.photos?.[0]?.imageUrl ?? ''
+                        }
                         idx={idx}
                         state={
                           activeRouteIndex < 0
@@ -800,16 +863,28 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
 
               <div className="space-y-12 md:space-y-20">
-                {activeCollections.map((collection, index) => (
-                  <ArchiveChapter
-                    key={collection._id}
-                    id={`archive-item-${collection._id}`}
-                    collection={collection}
-                    isActive={activeArchiveId === collection._id}
-                    onClick={() => setSelectedCollection(collection)}
-                    index={index}
-                  />
-                ))}
+                {units.map((unit, index) =>
+                  unit.type === 'single' ? (
+                    <ArchiveChapter
+                      key={unit.id}
+                      id={unit.id}
+                      collection={unit.collection}
+                      isActive={activeArchiveId === unit.id}
+                      onClick={() => setSelectedCollection(unit.collection)}
+                      index={index}
+                    />
+                  ) : (
+                    <RegionChapter
+                      key={unit.id}
+                      id={unit.id}
+                      region={unit.region}
+                      collections={unit.collections}
+                      isActive={activeArchiveId === unit.id}
+                      onOpen={() => setSelectedRegion(unit)}
+                      index={index}
+                    />
+                  ),
+                )}
               </div>
 
               {/* End-of-archive terminator — visual full-stop above the footer.
@@ -833,13 +908,27 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Mobile Filmstrip Waterfall ── */}
         <div className="block md:hidden pt-12 pb-12">
-          {activeCollections.map((collection) => (
-            <MobileFilmstripItem
-              key={collection._id}
-              collection={collection}
-              onClick={() => setSelectedCollection(collection)}
-            />
-          ))}
+          {units.map((unit) =>
+            unit.type === 'single' ? (
+              <MobileFilmstripItem
+                key={unit.id}
+                coverBase={unit.collection.coverImageUrl ?? unit.collection.photos?.[0]?.imageUrl ?? ''}
+                title={unit.collection.name}
+                onClick={() => setSelectedCollection(unit.collection)}
+              />
+            ) : (
+              <MobileFilmstripItem
+                key={unit.id}
+                coverBase={unit.cover}
+                title={unit.region}
+                caption={`${unit.collections.length} places · ${unit.collections.reduce(
+                  (n, c) => n + (c.photoCount ?? c.photos?.length ?? 0),
+                  0,
+                )} frames`}
+                onClick={() => setSelectedRegion(unit)}
+              />
+            ),
+          )}
 
           {/* Mobile end-of-archive terminator */}
           <div className="pt-12 pb-2 flex flex-col items-center gap-3 opacity-30">
@@ -918,12 +1007,25 @@ export default function HomePage({ collections, photos }: Props) {
         </div>
       </div>
 
-      {/* ── Collection detail overlay (MagazineLayout) ── */}
+      {/* ── Region hub overlay (L2) — sits below the story overlay so opening
+           a place layers the story on top and closing it returns to the hub. */}
+      <AnimatePresence>
+        {selectedRegion && (
+          <RegionHub
+            region={selectedRegion.region}
+            collections={selectedRegion.collections}
+            onSelectCollection={setSelectedCollection}
+            onClose={() => setSelectedRegion(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Collection detail overlay (MagazineLayout, L3) ── */}
       <AnimatePresence>
         {selectedCollection && (
           <MagazineLayout
             collection={selectedCollection}
-            allCollections={activeCollections}
+            allCollections={selectedRegion ? selectedRegion.collections : activeCollections}
             onSelectCollection={setSelectedCollection}
             onClose={() => setSelectedCollection(null)}
           />

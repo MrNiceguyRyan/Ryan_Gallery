@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Collection } from '../../types';
 
 type RouteState = 'past' | 'active' | 'future';
 
 interface SidebarItemProps {
-  col: Collection;
+  /** DOM id of the unit's root element to scroll to. */
+  id: string;
+  /** Display label (collection name or region name). */
+  label: string;
+  /** Cover image base URL (without query) for the hover thumbnail. */
+  coverBase: string;
   idx: number;
   /** Position on the route relative to the active chapter. */
   state: RouteState;
@@ -13,23 +17,19 @@ interface SidebarItemProps {
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 
-export default function SidebarItem({ col, idx, state }: SidebarItemProps) {
+export default function SidebarItem({ id, label, coverBase, idx, state }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isActive = state === 'active';
 
   // Hover thumbnail — physical box is 112×160 px so w=240 covers Retina
-  const coverUrl = col.coverImageUrl
-    ? `${col.coverImageUrl}?auto=format&w=240&q=60`
-    : col.photos?.[0]?.imageUrl
-      ? `${col.photos[0].imageUrl}?auto=format&w=240&q=60`
-      : '';
+  const coverUrl = coverBase ? `${coverBase}?auto=format&w=240&q=60` : '';
 
   return (
     <motion.button
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
-        const el = document.getElementById(`archive-item-${col._id}`);
+        const el = document.getElementById(id);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }}
       whileTap={{ scale: 0.96, x: 2 }}
@@ -47,7 +47,7 @@ export default function SidebarItem({ col, idx, state }: SidebarItemProps) {
           >
             <img
               src={coverUrl}
-              alt={col.name}
+              alt={label}
               className="w-full h-full object-cover grayscale brightness-125"
               loading="lazy"
               decoding="async"
@@ -99,7 +99,7 @@ export default function SidebarItem({ col, idx, state }: SidebarItemProps) {
             : 'opacity-25 group-hover:opacity-100 group-hover:translate-x-0.5'
         }`}
       >
-        {col.name}
+        {label}
       </span>
     </motion.button>
   );
