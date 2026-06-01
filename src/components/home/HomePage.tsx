@@ -427,8 +427,8 @@ export default function HomePage({ collections, photos }: Props) {
           <motion.div
             className="fixed inset-0 z-[44] bg-white pointer-events-none mix-blend-overlay"
             initial={{ opacity: 0 }}
-            animate={{ opacity: introReady ? [0, 0, 0.5, 0] : 0 }}
-            transition={{ duration: 2.0, times: [0, 0.52, 0.6, 0.8], ease: 'easeOut' }}
+            animate={{ opacity: introReady ? [0, 0, 0.62, 0] : 0 }}
+            transition={{ duration: 2.0, times: [0, 0.52, 0.58, 0.76], ease: 'easeOut' }}
             aria-hidden="true"
           />
           {/* Cinematic vignette — darkened edges fade in for depth */}
@@ -450,22 +450,24 @@ export default function HomePage({ collections, photos }: Props) {
                Held hidden until the first-visit intro clears (introReady), so
                the push-in plays WITH the letterbox open, not under the intro. */}
           <motion.div
-            initial={{ opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0 }}
+            initial={{ opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0, y: 0 }}
             animate={introReady
               ? {
                   opacity: [0, 1, 1],
                   scale: [1.3, 0.97, 1],
-                  x: [0, 0, -9, 7, -4, 2, 0],
+                  x: [0, 0, -14, 11, -7, 4, 0],
+                  y: [0, 0, 7, -6, 3, -1, 0],
                   filter: ['blur(22px) brightness(2)', 'blur(0px) brightness(1.2)', 'blur(0px) brightness(1)'],
                 }
-              : { opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0 }}
+              : { opacity: 0, scale: 1.3, filter: 'blur(22px) brightness(2)', x: 0, y: 0 }}
             transition={{
               opacity: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
               scale: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
               filter: { delay: 0.15, duration: 1.9, times: [0, 0.68, 1], ease: expo },
-              /* Camera-jolt — a quick lateral kick the instant the letterbox
+              /* Two-axis camera-jolt — a hard kick the instant the letterbox
                  snaps open and the flash hits. */
-              x: { delay: 1.0, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
+              x: { delay: 1.0, duration: 0.55, times: [0, 0.1, 0.3, 0.52, 0.74, 0.88, 1], ease: 'easeOut' },
+              y: { delay: 1.0, duration: 0.55, times: [0, 0.1, 0.3, 0.52, 0.74, 0.88, 1], ease: 'easeOut' },
             }}
             className="space-y-12"
           >
