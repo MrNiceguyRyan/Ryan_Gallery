@@ -201,7 +201,9 @@ const cityNames = [
 
     {/* client:visible — Mapbox bundle (~250 KB gzipped) and its CSS only hydrate
          when the user scrolls to the map section, not on page load. */}
-    <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
+    {/* showLocationList=false → full-width map; the AtlasIndex below is the
+         single navigator (it flies the map via #loc= and shows previews). */}
+    <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} showLocationList={false} />
 
     <!-- Caption -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-5 font-mono text-[9px] tracking-[0.3em] uppercase text-white/25">

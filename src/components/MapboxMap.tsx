@@ -114,7 +114,7 @@ function formatCoord(v: number, pos: string, neg: string) {
 }
 
 // ─── Main Inner Component ───
-function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
+function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { photos: Photo[]; mapboxToken: string; showLocationList?: boolean }) {
   const mapRef = useRef<MapRef>(null);
   const [viewState, setViewState] = useState({ latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 });
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
@@ -519,7 +519,9 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
           </div>
         </div>
 
-        {/* ── Desktop sidebar — grouped by region ── */}
+        {/* ── Desktop sidebar — grouped by region (optional; off when an
+             external index drives the map, e.g. /travel's AtlasIndex) ── */}
+        {showLocationList && (
         <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#0A0A0A]">
           <div className="px-5 py-4 border-b border-white/5">
             <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
@@ -654,9 +656,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             })}
           </div>
         </div>
+        )}
       </div>
 
-      {/* ── Mobile city list — grouped by region ── */}
+      {/* ── Mobile city list — grouped by region (gated with the panel) ── */}
+      {showLocationList && (
       <div className="lg:hidden mt-4 space-y-4">
         {regionGroups.map((group) => (
           <div key={group.region}>
@@ -701,10 +705,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
 
 export default function MapboxMap(props: { photos: Photo[]; mapboxToken: string; showLocationList?: boolean }) {
-  return <MapErrorBoundary><MapboxMapInner photos={props.photos} mapboxToken={props.mapboxToken} /></MapErrorBoundary>;
+  return <MapErrorBoundary><MapboxMapInner photos={props.photos} mapboxToken={props.mapboxToken} showLocationList={props.showLocationList} /></MapErrorBoundary>;
 }
