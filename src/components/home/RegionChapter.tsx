@@ -5,6 +5,10 @@ import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
 
 const expo = [0.16, 1, 0.3, 1] as const;
+const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
+const accentSoft = (a: number) => `rgba(var(--accent-r), var(--accent-g), var(--accent-b), ${a})`;
+// Editorial rest weights — hero-led so the montage is composed before any hover.
+const REST_WEIGHT = [1.75, 1.05, 0.95, 0.85];
 
 interface RegionChapterProps {
   id: string;
@@ -98,8 +102,10 @@ export default function RegionChapter({
         >
           {tiles.map((c, i) => {
             const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
-            const grow = hovered === null ? 1 : hovered === i ? 2.6 : 0.78;
-            const lit = hovered === i || (hovered === null && isActive);
+            const grow = hovered === null ? (REST_WEIGHT[i] ?? 1) : hovered === i ? 2.8 : 0.72;
+            // Hero tile (or the active chapter) stays in colour at rest so the
+            // row reads as composed before any hover; the rest wake on hover.
+            const lit = hovered === i || (hovered === null && (isActive || i === 0));
             return (
               <motion.button
                 key={c._id}
@@ -131,6 +137,14 @@ export default function RegionChapter({
                   />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+                {/* Accent seam — wipes in along the bottom of the focused tile */}
+                <motion.span
+                  className="absolute left-0 right-0 bottom-0 h-[2px] origin-left"
+                  style={{ background: ACCENT }}
+                  animate={{ scaleX: hovered === i ? 1 : 0, opacity: hovered === i ? 1 : 0 }}
+                  transition={{ duration: 0.55, ease: expo }}
+                />
 
                 {/* Label */}
                 <motion.div
@@ -190,7 +204,8 @@ export default function RegionChapter({
               whileTap={{ scale: 0.94 }}
               onClick={onOpen}
               data-cursor="View Region"
-              className="group shrink-0 inline-flex items-center gap-3 px-6 py-3.5 border border-white/15 hover:border-white/40 bg-white/[0.02] hover:bg-white/[0.06] transition-colors duration-500 cursor-none"
+              style={{ ['--btn-accent' as never]: accentSoft(0.16), ['--btn-edge' as never]: accentSoft(0.5) }}
+              className="group shrink-0 inline-flex items-center gap-3 px-6 py-3.5 border border-white/15 bg-white/[0.02] transition-colors duration-500 cursor-none hover:bg-[var(--btn-accent)] hover:border-[var(--btn-edge)]"
               aria-label={`Enter region ${region}`}
             >
               <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-white/70 group-hover:text-white transition-colors">

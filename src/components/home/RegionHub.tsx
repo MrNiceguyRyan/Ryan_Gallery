@@ -12,6 +12,8 @@ interface RegionHubProps {
 }
 
 const expo = [0.16, 1, 0.3, 1] as const;
+const ACCENT = 'rgb(var(--accent-r,255), var(--accent-g,255), var(--accent-b,255))';
+const accentSoft = (a: number) => `rgba(var(--accent-r,255), var(--accent-g,255), var(--accent-b,255), ${a})`;
 
 /**
  * RegionHub — the L2 overlay for a multi-place region. Full-screen dark
@@ -163,7 +165,11 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
               Places in {region}
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          <div
+            className={`grid grid-cols-1 gap-4 md:gap-6 ${
+              collections.length >= 3 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'
+            }`}
+          >
             {collections.map((c, i) => {
               const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
               const count = c.photoCount ?? c.photos?.length ?? 0;
@@ -176,9 +182,10 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
                   transition={{ duration: 0.6, delay: 0.06 * i, ease: expo }}
                   whileHover={{ y: -6 }}
                   data-cursor="View Story"
+                  style={{ ['--edge' as never]: accentSoft(0.5), ['--dot' as never]: ACCENT }}
                   className="group relative text-left cursor-none"
                 >
-                  <div className="relative aspect-[3/4] overflow-hidden border border-white/10 bg-white/[0.02]">
+                  <div className="relative aspect-[3/4] overflow-hidden border border-white/10 bg-white/[0.02] transition-colors duration-500 group-hover:border-[var(--edge)]">
                     {url && (
                       <img
                         src={`${url}?auto=format&w=700&q=75`}
@@ -186,10 +193,12 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
                         loading="lazy"
                         decoding="async"
                         draggable={false}
-                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 scale-105 group-hover:scale-100 transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                        className="w-full h-full object-cover grayscale group-hover:grayscale-0 scale-100 group-hover:scale-[1.06] transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
                       />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                    {/* accent base-line wipes in on hover */}
+                    <span className="absolute left-0 bottom-0 h-[2px] w-full origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]" style={{ background: ACCENT }} />
                     <div className="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between gap-3">
                       <div>
                         <h3 className="font-serif italic text-2xl md:text-3xl tracking-tight text-white leading-none">
@@ -199,7 +208,7 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
                           {count} frames{c.location ? ` · ${c.location}` : ''}
                         </p>
                       </div>
-                      <span className="shrink-0 w-9 h-9 rounded-full border border-white/20 flex items-center justify-center text-white/70 group-hover:bg-white group-hover:text-black transition-all duration-500">
+                      <span className="shrink-0 w-9 h-9 rounded-full border border-white/20 flex items-center justify-center text-white/70 transition-all duration-500 group-hover:text-black group-hover:border-[var(--dot)] group-hover:bg-[var(--dot)] group-hover:-rotate-45">
                         <ArrowRight size={16} />
                       </span>
                     </div>
