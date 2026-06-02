@@ -3,7 +3,8 @@ import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTe
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
-import LiquidImage from './LiquidImage';
+
+const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 
 interface ArchiveChapterProps {
   id: string;
@@ -103,7 +104,10 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           </div>
         </div>
 
-        {/* Cover Image with HUD — dramatic zoom on scroll + hover */}
+        {/* Cover Image — calm reveal + clear "View Story" affordance.
+             A single dim layer lifts on hover (cheap opacity, no janky filter
+             or WebGL), the image eases up gently, and a persistent cue makes
+             it obvious the cover opens a story. */}
         <motion.div
           className="relative group cursor-none w-full overflow-visible"
           onClick={onClick}
@@ -116,7 +120,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
         >
           <motion.div
             style={{ scale }}
-            className="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-white/[0.02] border border-white/5"
+            className="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
           >
             {coverUrl && (
               <motion.img
@@ -127,78 +131,54 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
                 alt={collection.name}
                 loading="lazy"
                 decoding="async"
-                animate={{
-                  scale: isHovered ? 1.12 : isActive ? 1.05 : 1,
-                  filter: isHovered || isActive
-                    ? 'grayscale(0) brightness(1.1)'
-                    : 'grayscale(1) brightness(0.8)',
-                }}
-                transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
+                animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
+                transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
                 className="absolute inset-0 w-full h-[130%] object-cover"
                 draggable={false}
               />
             )}
 
-            {/* WebGL liquid displacement — hover-only overlay. Wrapped in a box
-                 that matches the <img>'s exact 130% crop + parallax so the
-                 WebGL framing aligns with the photo underneath. Falls back to
-                 the image if WebGL/CORS is unavailable. */}
-            {coverUrl && (
-              <motion.div
-                style={{ y: imgY }}
-                className="absolute inset-0 w-full h-[130%] overflow-hidden pointer-events-none"
-              >
-                <LiquidImage src={coverUrl} active={isHovered} mx={sheenX} my={sheenY} />
-              </motion.div>
-            )}
-
-            {/* Tech Scanlines */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
-
-            {/* Gradient overlay */}
-            <div
-              className={`absolute inset-0 transition-opacity duration-1000 bg-gradient-to-t from-black/60 via-transparent to-transparent ${
-                isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
+            {/* Dim layer — covers sit muted at rest, brighten when active, and
+                 fully clear on hover. Animating opacity only = silky + cheap. */}
+            <motion.div
+              className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
+              animate={{ opacity: isHovered ? 0.08 : isActive ? 0.24 : 0.46 }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             />
 
-            {/* Liquid light-sheen following the cursor (hover only) */}
+            {/* Bottom legibility gradient (always on, for the affordance) */}
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+
+            {/* Soft cursor-following sheen (hover only) */}
             <motion.div
-              className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-soft-light"
+              className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500 mix-blend-soft-light"
               style={{ background: sheen }}
               aria-hidden="true"
             />
+
+            {/* Accent baseline wipes in on hover — a quiet, clear "active" cue */}
+            <div
+              className="absolute left-0 right-0 bottom-0 h-[2px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+              style={{ background: ACCENT }}
+            />
+
+            {/* Persistent "View Story" affordance — pulsing accent dot + label +
+                 arrow; always visible (so it's obviously interactive), brightens
+                 and nudges on hover. */}
+            <div className="absolute left-5 md:left-7 bottom-5 md:bottom-7 z-20 flex items-center gap-3 pointer-events-none">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full opacity-70 animate-ping" style={{ background: ACCENT }} />
+                <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: ACCENT }} />
+              </span>
+              <span className="font-mono text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/70 group-hover:text-white transition-colors duration-500">
+                View Story
+              </span>
+              <ArrowRight
+                size={15}
+                className="text-white/55 group-hover:text-white transition-all duration-500 group-hover:translate-x-1.5"
+              />
+            </div>
           </motion.div>
-
-          {/* HUD Overlay on Hover */}
-          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden">
-            <div className="absolute top-8 left-8 w-6 h-6 border-l border-t border-white/30" />
-            <div className="absolute top-8 right-8 w-6 h-6 border-r border-t border-white/30" />
-            <div className="absolute bottom-8 left-8 w-6 h-6 border-l border-b border-white/30" />
-            <div className="absolute bottom-8 right-8 w-6 h-6 border-r border-b border-white/30" />
-
-            {/* Center Crosshair */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-              <div className="w-32 h-32 border border-white/[0.03] rounded-full" />
-              <div className="w-1 h-32 bg-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-              <div className="w-32 h-1 bg-white/[0.03] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-            </div>
-
-            {/* Data Feed */}
-            <div className="absolute top-12 left-12 font-mono text-[7px] space-y-1 text-white/40 tracking-[0.3em] hidden md:block">
-              <p>OBJ_DETECTION: {(collection.location || collection.name).toUpperCase()}</p>
-              <p>RESOLUTION: 8K_UNCOMPRESSED</p>
-              <p>SIGNAL_STRENGTH: 98.4%</p>
-            </div>
-
-            {coords && (
-              <div className="absolute bottom-12 right-12 text-right font-mono text-[7px] space-y-1 text-white/40 tracking-[0.3em] hidden md:block">
-                <p>LAT: {coords.lat.toFixed(4)}</p>
-                <p>LNG: {coords.lng.toFixed(4)}</p>
-                <p>SYS_STAMP: {new Date().getFullYear()}/05/04</p>
-              </div>
-            )}
-          </div>
 
           {/* Contact Sheet Thumbnails */}
           {thumbnails.length > 0 && (
