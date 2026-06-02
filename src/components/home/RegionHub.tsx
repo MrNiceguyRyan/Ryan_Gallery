@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, X, MapPin } from 'lucide-react';
 import type { Collection } from '../../types';
@@ -9,6 +9,8 @@ interface RegionHubProps {
   collections: Collection[];
   onSelectCollection: (c: Collection) => void;
   onClose: () => void;
+  /** True while an L3 story is layered on top — the hub recedes for depth. */
+  pushed?: boolean;
 }
 
 const expo = [0.16, 1, 0.3, 1] as const;
@@ -23,7 +25,10 @@ const accentSoft = (a: number) => `rgba(var(--accent-r,255), var(--accent-g,255)
  * hidden. A city card opens its L3 story (MagazineLayout) layered on top, and
  * a "View on map" link drops to /travel — the flat, everything-at-once index.
  */
-export default function RegionHub({ region, collections, onSelectCollection, onClose }: RegionHubProps) {
+export default function RegionHub({ region, collections, onSelectCollection, onClose, pushed = false }: RegionHubProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragWidth, setDragWidth] = useState(0);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -46,15 +51,41 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
     [collections],
   );
 
+  // Measure the draggable overflow of the featured track so the inertia drag
+  // stops exactly at the last frame.
+  useEffect(() => {
+    const measure = () => {
+      const el = trackRef.current;
+      if (el) setDragWidth(Math.max(0, el.scrollWidth - el.offsetWidth));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [featured]);
+
   return (
     <motion.div
       key="region-hub"
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      animate={{ opacity: 1, scale: pushed ? 0.96 : 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.5, ease: expo }}
+      transition={{ duration: 0.55, ease: expo }}
+      style={{ transformOrigin: 'center 35%' }}
       className="fixed inset-0 z-50 bg-[#0A0A0A] text-[#FDFDFB] overflow-y-auto overflow-x-hidden"
     >
+      {/* Ceremonial unveil — a dark blade wipes up off the hub on open, with an
+          accent seam riding its trailing edge (one-shot). */}
+      <motion.div
+        className="fixed inset-0 z-[60] pointer-events-none"
+        initial={{ y: 0 }}
+        animate={{ y: '-100%' }}
+        transition={{ duration: 0.72, delay: 0.06, ease: [0.76, 0, 0.24, 1] }}
+        aria-hidden="true"
+      >
+        <div className="absolute inset-0 bg-[#0A0A0A]" />
+        <div className="absolute bottom-0 left-0 right-0 h-px" style={{ background: accentSoft(0.85) }} />
+      </motion.div>
+
       {/* Newsprint halftone + accent wash */}
       <div className="fixed inset-0 newsprint-screen opacity-[0.05] pointer-events-none" />
       <div
@@ -123,36 +154,53 @@ export default function RegionHub({ region, collections, onSelectCollection, onC
         {/* Featured frames strip */}
         {featured.length > 0 && (
           <section className="py-8 md:py-10 border-b border-white/10">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-8 h-px bg-white/30" />
-              <span className="text-[9px] uppercase tracking-[0.5em] font-bold opacity-30">Highlights</span>
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-px bg-white/30" />
+                <span className="text-[9px] uppercase tracking-[0.5em] font-bold opacity-30">Highlights</span>
+              </div>
+              {dragWidth > 0 && (
+                <span className="font-mono text-[8px] tracking-[0.3em] uppercase opacity-25 hidden md:inline">
+                  Drag &#8596;
+                </span>
+              )}
             </div>
-            <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x pb-2 -mx-1 px-1">
-              {featured.map(({ photo, collection }, i) => (
-                <motion.button
-                  key={photo._id}
-                  onClick={() => onSelectCollection(collection)}
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.05 * i, ease: expo }}
-                  whileHover={{ y: -4 }}
-                  data-cursor="View Story"
-                  className="group relative shrink-0 w-44 md:w-56 aspect-[4/5] overflow-hidden border border-white/10 snap-start cursor-none"
-                >
-                  <img
-                    src={`${photo.imageUrl}?auto=format&w=500&q=70`}
-                    alt={photo.title || collection.name}
-                    loading="lazy"
-                    decoding="async"
-                    draggable={false}
-                    className="w-full h-full object-cover grayscale group-hover:grayscale-0 scale-105 group-hover:scale-100 transition-all duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                  <span className="absolute bottom-3 left-3 right-3 font-mono text-[9px] tracking-[0.25em] uppercase text-white/70 truncate">
-                    {collection.name.trim()}
-                  </span>
-                </motion.button>
-              ))}
+            {/* Draggable track with inertia (framer flings + settles) */}
+            <div className="overflow-hidden -mx-1 px-1">
+              <motion.div
+                ref={trackRef}
+                drag="x"
+                dragConstraints={{ left: -dragWidth, right: 0 }}
+                dragElastic={0.08}
+                dragTransition={{ power: 0.3, timeConstant: 320, bounceStiffness: 300, bounceDamping: 40 }}
+                className="flex gap-3 pb-2 w-max cursor-grab active:cursor-grabbing"
+              >
+                {featured.map(({ photo, collection }, i) => (
+                  <motion.button
+                    key={photo._id}
+                    onClick={() => onSelectCollection(collection)}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.05 * i, ease: expo }}
+                    whileHover={{ y: -4 }}
+                    data-cursor="View Story"
+                    className="group relative shrink-0 w-44 md:w-56 aspect-[4/5] overflow-hidden border border-white/10 cursor-none"
+                  >
+                    <img
+                      src={`${photo.imageUrl}?auto=format&w=500&q=70`}
+                      alt={photo.title || collection.name}
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
+                      className="w-full h-full object-cover grayscale group-hover:grayscale-0 scale-105 group-hover:scale-100 transition-all duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                    <span className="absolute bottom-3 left-3 right-3 font-mono text-[9px] tracking-[0.25em] uppercase text-white/70 truncate">
+                      {collection.name.trim()}
+                    </span>
+                  </motion.button>
+                ))}
+              </motion.div>
             </div>
           </section>
         )}

@@ -74,6 +74,8 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 interface LocationCluster {
   city: string;
   country: string;
+  /** Fine-grained region from the collection (e.g. "Florida", "Arizona"). */
+  region: string;
   lat: number;
   lng: number;
   photos: Photo[];
@@ -91,8 +93,10 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
     if (p.location?.lat == null || p.location?.lng == null) continue;
     const key = `${p.location.city || ''}|${p.location.country || ''}`;
     if (!groups[key]) {
-      groups[key] = { city: p.location.city || 'Unknown', country: p.location.country || '', lat: p.location.lat, lng: p.location.lng, photos: [] };
+      groups[key] = { city: p.location.city || 'Unknown', country: p.location.country || '', region: p.collection?.region?.trim() || '', lat: p.location.lat, lng: p.location.lng, photos: [] };
     }
+    // Backfill region if the first photo of a city lacked a collection region.
+    if (!groups[key].region && p.collection?.region?.trim()) groups[key].region = p.collection.region.trim();
     groups[key].photos.push(p);
   }
   return Object.values(groups).sort((a, b) => b.photos.length - a.photos.length);
@@ -101,7 +105,9 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
 function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
   const map: Record<string, LocationCluster[]> = {};
   for (const c of clusters) {
-    const region = getRegion(c.country);
+    // Prefer the collection's fine-grained region (Florida, Arizona, DMV…);
+    // fall back to the country→continent map for anything untagged.
+    const region = c.region || getRegion(c.country);
     if (!map[region]) map[region] = [];
     map[region].push(c);
   }

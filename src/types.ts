@@ -90,6 +90,7 @@ export interface Photo {
   collection?: {
     name: string;
     slug: string;
+    region?: string;
   };
   styleCategory?: string;
   location?: {

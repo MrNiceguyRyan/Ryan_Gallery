@@ -863,29 +863,35 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
 
               <div className="space-y-12 md:space-y-20">
-                {units.map((unit, index) =>
-                  unit.type === 'single' ? (
-                    <ArchiveChapter
-                      key={unit.id}
-                      id={unit.id}
-                      collection={unit.collection}
-                      isActive={activeArchiveId === unit.id}
-                      onClick={() => setSelectedCollection(unit.collection)}
-                      index={index}
-                    />
-                  ) : (
-                    <RegionChapter
-                      key={unit.id}
-                      id={unit.id}
-                      region={unit.region}
-                      collections={unit.collections}
-                      isActive={activeArchiveId === unit.id}
-                      onOpen={() => setSelectedRegion(unit)}
-                      onOpenCity={(c) => setSelectedCollection(c)}
-                      index={index}
-                    />
-                  ),
-                )}
+                {units.map((unit, index) => (
+                  // Editorial rhythm — chapters alternate a subtle offset + width
+                  // (lg only) so the column reads as composed spreads instead of
+                  // a dead-centre stack. Mobile/tablet stay full-width.
+                  <div
+                    key={unit.id}
+                    className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
+                  >
+                    {unit.type === 'single' ? (
+                      <ArchiveChapter
+                        id={unit.id}
+                        collection={unit.collection}
+                        isActive={activeArchiveId === unit.id}
+                        onClick={() => setSelectedCollection(unit.collection)}
+                        index={index}
+                      />
+                    ) : (
+                      <RegionChapter
+                        id={unit.id}
+                        region={unit.region}
+                        collections={unit.collections}
+                        isActive={activeArchiveId === unit.id}
+                        onOpen={() => setSelectedRegion(unit)}
+                        onOpenCity={(c) => setSelectedCollection(c)}
+                        index={index}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
 
               {/* End-of-archive terminator — visual full-stop above the footer.
@@ -1017,6 +1023,7 @@ export default function HomePage({ collections, photos }: Props) {
             collections={selectedRegion.collections}
             onSelectCollection={setSelectedCollection}
             onClose={() => setSelectedRegion(null)}
+            pushed={!!selectedCollection}
           />
         )}
       </AnimatePresence>

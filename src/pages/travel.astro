@@ -23,7 +23,8 @@ const photos: Photo[] = await sanityClient.fetch(`
     location,
     collection->{
       name,
-      "slug": slug.current
+      "slug": slug.current,
+      region
     }
   }
 `);
