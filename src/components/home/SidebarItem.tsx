@@ -13,11 +13,14 @@ interface SidebarItemProps {
   idx: number;
   /** Position on the route relative to the active chapter. */
   state: RouteState;
+  /** Optional override for click (e.g. expand a collapsed region, then scroll).
+   *  When provided, it replaces the default scroll-to-id behaviour. */
+  onActivate?: () => void;
 }
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 
-export default function SidebarItem({ id, label, coverBase, idx, state }: SidebarItemProps) {
+export default function SidebarItem({ id, label, coverBase, idx, state, onActivate }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isActive = state === 'active';
 
@@ -29,6 +32,10 @@ export default function SidebarItem({ id, label, coverBase, idx, state }: Sideba
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
+        if (onActivate) {
+          onActivate();
+          return;
+        }
         const el = document.getElementById(id);
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }}

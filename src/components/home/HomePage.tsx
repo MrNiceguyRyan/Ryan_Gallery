@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
-import { ArrowRight, Camera } from 'lucide-react';
+import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import OpeningAnimation from './OpeningAnimation';
 import ParticleTitle from './ParticleTitle';
@@ -148,10 +148,61 @@ function MobileFilmstripItem({
 }
 
 /* ═══════════════════════════════════════════════════════
+ *  CollapsedRegionStrip — compact "stowed" view of a region
+ * ═══════════════════════════════════════════════════════ */
+function CollapsedRegionStrip({
+  cities,
+  onOpen,
+}: {
+  cities: Collection[];
+  onOpen: (c: Collection) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3 lg:w-[95%]">
+      {cities.map((c) => {
+        const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
+        return (
+          <button
+            key={c._id}
+            onClick={() => onOpen(c)}
+            data-cursor="View Story"
+            aria-label={`View ${c.name.trim()}`}
+            className="group relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border border-white/10 cursor-none"
+          >
+            {url && (
+              <img
+                src={`${url}?auto=format&w=600&q=70`}
+                alt={c.name}
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 scale-105 group-hover:scale-100 transition-all duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
+              <span className="font-serif italic text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
+                {c.name.trim()}
+              </span>
+              <span className="font-mono text-[9px] text-white/50 tracking-widest shrink-0">
+                {c.photoCount ?? c.photos?.length ?? 0}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
  *  HomePage — atmospheric dark archive
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  // Region collapse ("收纳") — set of collapsed section keys. Empty by default,
+  // so the page looks unchanged until the user stows a region.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
@@ -222,6 +273,48 @@ export default function HomePage({ collections, photos }: Props) {
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
+  // ── Region collapse helpers ──
+  const sectionKeyOfCity = useMemo(() => {
+    const m = new Map<string, string>();
+    sections.forEach((s) => s.cities.forEach((c) => m.set(c._id, s.key)));
+    return m;
+  }, [sections]);
+
+  const toggleRegion = useCallback((key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Rail click for a city in a collapsed region: expand it, then scroll.
+  const jumpToCity = useCallback(
+    (c: Collection) => {
+      const key = sectionKeyOfCity.get(c._id);
+      if (key) {
+        setCollapsed((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          document.getElementById(`archive-item-${c._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }),
+      );
+    },
+    [sectionKeyOfCity],
+  );
+
+  const collapsibleKeys = useMemo(() => sections.filter((s) => s.showHeader).map((s) => s.key), [sections]);
+  const allCollapsed = collapsibleKeys.length > 0 && collapsibleKeys.every((k) => collapsed.has(k));
+  const toggleAll = useCallback(() => {
+    setCollapsed(allCollapsed ? new Set() : new Set(collapsibleKeys));
+  }, [allCollapsed, collapsibleKeys]);
+
   // Index of the active city — drives the "route rail" fill (−1 in the hero).
   // `activeArchiveId` holds the active city's full DOM id. Each row is 52 px.
   const ROW_H = 52;
@@ -246,7 +339,8 @@ export default function HomePage({ collections, photos }: Props) {
     });
 
     return () => observer.disconnect();
-  }, [orderedCities]);
+    // Re-observe when a region collapses/expands (chapters mount/unmount).
+  }, [orderedCities, collapsed]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
@@ -747,11 +841,26 @@ export default function HomePage({ collections, photos }: Props) {
             <aside className="hidden lg:block lg:w-48 sticky top-24 h-fit shrink-0 z-50">
               <div className="relative space-y-8">
                 {/* Header — reframed as a route/itinerary */}
-                <div className="flex items-center gap-3">
-                  <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
-                  <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
-                    The Route // {orderedCities.length} stops
-                  </span>
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
+                    <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
+                      The Route // {orderedCities.length} stops
+                    </span>
+                  </div>
+                  {collapsibleKeys.length > 0 && (
+                    <button
+                      onClick={toggleAll}
+                      data-cursor={allCollapsed ? 'Expand' : 'Collapse'}
+                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-mono text-white/30 hover:text-white/70 transition-colors cursor-none"
+                    >
+                      <ChevronDown
+                        size={11}
+                        className={`transition-transform duration-300 ${allCollapsed ? '' : 'rotate-180'}`}
+                      />
+                      {allCollapsed ? 'Expand regions' : 'Collapse regions'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Route rail — a vertical itinerary line with a waypoint node
@@ -780,6 +889,7 @@ export default function HomePage({ collections, photos }: Props) {
                         label={city.name}
                         coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
                         idx={idx}
+                        onActivate={() => jumpToCity(city)}
                         state={
                           activeRouteIndex < 0
                             ? 'future'
@@ -853,39 +963,63 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
 
               <div className="space-y-12 md:space-y-20">
-                {sections.flatMap((section) => {
-                  const els: React.ReactNode[] = [];
-                  // Region divider header (multi-city regions only).
-                  if (section.showHeader && section.region) {
-                    els.push(
-                      <RegionHeader
-                        key={`h-${section.key}`}
-                        region={section.region}
-                        placeCount={section.cities.length}
-                        frameCount={section.frameCount}
-                      />,
-                    );
-                  }
-                  // City chapters — alternating lg offset for editorial rhythm.
-                  section.cities.forEach((city) => {
-                    const index = orderedCities.indexOf(city);
-                    const domId = `archive-item-${city._id}`;
-                    els.push(
-                      <div
-                        key={city._id}
-                        className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
-                      >
-                        <ArchiveChapter
-                          id={domId}
-                          collection={city}
-                          isActive={activeArchiveId === domId}
-                          onClick={() => setSelectedCollection(city)}
-                          index={index}
+                {sections.map((section) => {
+                  const isCollapsed = section.showHeader && collapsed.has(section.key);
+                  return (
+                    <div key={section.key} className="space-y-12 md:space-y-20">
+                      {section.showHeader && section.region && (
+                        <RegionHeader
+                          region={section.region}
+                          placeCount={section.cities.length}
+                          frameCount={section.frameCount}
+                          collapsible
+                          collapsed={isCollapsed}
+                          onToggle={() => toggleRegion(section.key)}
                         />
-                      </div>,
-                    );
-                  });
-                  return els;
+                      )}
+                      <AnimatePresence initial={false} mode="wait">
+                        {isCollapsed ? (
+                          <motion.div
+                            key="strip"
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                          >
+                            <CollapsedRegionStrip cities={section.cities} onOpen={setSelectedCollection} />
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="full"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                            className="space-y-12 md:space-y-20"
+                          >
+                            {section.cities.map((city) => {
+                              const index = orderedCities.indexOf(city);
+                              const domId = `archive-item-${city._id}`;
+                              return (
+                                <div
+                                  key={city._id}
+                                  className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
+                                >
+                                  <ArchiveChapter
+                                    id={domId}
+                                    collection={city}
+                                    isActive={activeArchiveId === domId}
+                                    onClick={() => setSelectedCollection(city)}
+                                    index={index}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
                 })}
               </div>
 
@@ -912,9 +1046,15 @@ export default function HomePage({ collections, photos }: Props) {
         <div className="block md:hidden pt-12 pb-12">
           {sections.flatMap((section) => {
             const els: React.ReactNode[] = [];
+            const isCollapsed = section.showHeader && collapsed.has(section.key);
             if (section.showHeader && section.region) {
               els.push(
-                <div key={`mh-${section.key}`} className="px-5 pt-10 pb-4 flex items-center gap-3">
+                <button
+                  key={`mh-${section.key}`}
+                  onClick={() => toggleRegion(section.key)}
+                  className="w-full px-5 pt-10 pb-4 flex items-center gap-3 text-left"
+                  aria-expanded={!isCollapsed}
+                >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0"
                     style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
@@ -925,19 +1065,25 @@ export default function HomePage({ collections, photos }: Props) {
                   <span className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase text-white/35">
                     {section.cities.length} places
                   </span>
-                </div>,
+                  <ChevronDown
+                    size={15}
+                    className={`text-white/40 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}
+                  />
+                </button>,
               );
             }
-            section.cities.forEach((city) => {
-              els.push(
-                <MobileFilmstripItem
-                  key={city._id}
-                  coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
-                  title={city.name}
-                  onClick={() => setSelectedCollection(city)}
-                />,
-              );
-            });
+            if (!isCollapsed) {
+              section.cities.forEach((city) => {
+                els.push(
+                  <MobileFilmstripItem
+                    key={city._id}
+                    coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
+                    title={city.name}
+                    onClick={() => setSelectedCollection(city)}
+                  />,
+                );
+              });
+            }
             return els;
           })}
 
