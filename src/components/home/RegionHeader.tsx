@@ -22,13 +22,12 @@ export default function RegionHeader({
 }) {
   return (
     <section className="relative pt-10 lg:pt-20 select-none" aria-label={`Region: ${region}`}>
-      {/* Hairline rule wipes in */}
+      {/* Hairline rule wipes in (mount-triggered so it always renders) */}
       <motion.div
         className="h-px w-full origin-left"
         style={{ background: accentSoft(0.28) }}
         initial={{ scaleX: 0 }}
-        whileInView={{ scaleX: 1 }}
-        viewport={{ once: true, margin: '-10%' }}
+        animate={{ scaleX: 1 }}
         transition={{ duration: 1.1, ease: expo }}
       />
 
@@ -36,8 +35,7 @@ export default function RegionHeader({
         <div className="overflow-hidden">
           <motion.div
             initial={{ y: '108%' }}
-            whileInView={{ y: '0%' }}
-            viewport={{ once: true, margin: '-10%' }}
+            animate={{ y: '0%' }}
             transition={{ duration: 0.95, ease: expo }}
           >
             <span
@@ -58,8 +56,7 @@ export default function RegionHeader({
 
         <motion.div
           initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.7, delay: 0.2 }}
           className="hidden md:block text-right pb-2 shrink-0 font-mono text-[11px] tracking-[0.25em] uppercase text-white/40 leading-relaxed"
         >
