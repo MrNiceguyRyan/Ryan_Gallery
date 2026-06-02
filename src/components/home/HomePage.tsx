@@ -881,6 +881,7 @@ export default function HomePage({ collections, photos }: Props) {
                       collections={unit.collections}
                       isActive={activeArchiveId === unit.id}
                       onOpen={() => setSelectedRegion(unit)}
+                      onOpenCity={(c) => setSelectedCollection(c)}
                       index={index}
                     />
                   ),
