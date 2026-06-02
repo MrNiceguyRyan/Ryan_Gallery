@@ -6,8 +6,7 @@ import OpeningAnimation from './OpeningAnimation';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
-import RegionChapter from './RegionChapter';
-import RegionHub from './RegionHub';
+import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import BackgroundVideo from './BackgroundVideo';
 import Magnetic from '../shared/Magnetic';
@@ -37,13 +36,16 @@ interface Props {
   photos: Photo[];
 }
 
-/* A homepage render unit — either a single place (one collection) or a region
- * cluster (≥2 collections sharing a `region`). Single-place regions collapse
- * back to a single unit, so the flat list stays back-compatible. */
-type HomeUnit =
-  | { type: 'single'; id: string; collection: Collection }
-  | { type: 'region'; id: string; region: string; collections: Collection[]; cover: string };
-type RegionUnit = Extract<HomeUnit, { type: 'region' }>;
+/* A homepage section — a run of city chapters that share a `region`. Sections
+ * with ≥2 cities get a divider header; single-city/untagged ones don't. Cities
+ * stay the clickable unit (each opens its story directly). */
+interface RegionSection {
+  key: string;
+  region: string | null;
+  showHeader: boolean;
+  frameCount: number;
+  cities: Collection[];
+}
 
 /* ═══════════════════════════════════════════════════════
  *  MobileFilmstripItem — parallax mobile card
@@ -150,7 +152,6 @@ function MobileFilmstripItem({
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<RegionUnit | null>(null);
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
@@ -188,11 +189,11 @@ export default function HomePage({ collections, photos }: Props) {
     [collections],
   );
 
-  // Group active collections into render units by `region`. A region with ≥2
-  // active members becomes a region unit (→ RegionChapter + hub); everything
-  // else (no region, or a region with a single member) stays a single unit
-  // (→ ArchiveChapter). Order follows first appearance (already year-desc).
-  const units = useMemo<HomeUnit[]>(() => {
+  // Group active cities into ordered region sections. A section shows a
+  // divider HEADER only when it has ≥2 cities; single-city regions (and
+  // untagged collections) just render their chapter — no redundant header.
+  // Cities remain the unit everywhere (observer, rail, accent, story).
+  const sections = useMemo<RegionSection[]>(() => {
     const groups = new Map<string, Collection[]>();
     const order: string[] = [];
     for (const c of activeCollections) {
@@ -204,32 +205,31 @@ export default function HomePage({ collections, photos }: Props) {
       groups.get(key)!.push(c);
     }
     return order.map((key) => {
-      const cols = groups.get(key)!;
-      if (key.startsWith('r:') && cols.length >= 2) {
-        const region = cols[0].region!.trim();
-        const slug = region.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        return {
-          type: 'region',
-          id: `region-${slug}`,
-          region,
-          collections: cols,
-          cover: cols[0].coverImageUrl ?? cols[0].photos?.[0]?.imageUrl ?? '',
-        };
-      }
-      const col = cols[0];
-      return { type: 'single', id: `archive-item-${col._id}`, collection: col };
+      const cities = groups.get(key)!;
+      const isRegion = key.startsWith('r:') && cities.length >= 2;
+      return {
+        key,
+        region: isRegion ? cities[0].region!.trim() : null,
+        showHeader: isRegion,
+        frameCount: cities.reduce((n, c) => n + (c.photoCount ?? c.photos?.length ?? 0), 0),
+        cities,
+      };
     });
   }, [activeCollections]);
 
-  // Index of the active unit — drives the "route rail" fill in the sidebar
-  // (−1 while still in the hero). Each sidebar row is 52 px tall.
-  // `activeArchiveId` holds the active unit's full DOM id.
+  // Flat city list in on-screen order (region members grouped adjacent) — the
+  // route rail + observer index against this.
+  const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
+  const cityDomId = (c: Collection) => `archive-item-${c._id}`;
+
+  // Index of the active city — drives the "route rail" fill (−1 in the hero).
+  // `activeArchiveId` holds the active city's full DOM id. Each row is 52 px.
   const ROW_H = 52;
   const activeRouteIndex = activeArchiveId
-    ? units.findIndex((u) => u.id === activeArchiveId)
+    ? orderedCities.findIndex((c) => cityDomId(c) === activeArchiveId)
     : -1;
 
-  // IntersectionObserver for sidebar active state — observes each unit's root.
+  // IntersectionObserver for sidebar active state — observes each city chapter.
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -240,13 +240,13 @@ export default function HomePage({ collections, photos }: Props) {
       { threshold: 0.1, rootMargin: '-30% 0px -30% 0px' },
     );
 
-    units.forEach((u) => {
-      const el = document.getElementById(u.id);
+    orderedCities.forEach((c) => {
+      const el = document.getElementById(cityDomId(c));
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, [units]);
+  }, [orderedCities]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
@@ -258,14 +258,14 @@ export default function HomePage({ collections, photos }: Props) {
   }, []);
 
   useEffect(() => {
-    const isOverlayOpen = !!selectedCollection || !!selectedRegion;
+    const isOverlayOpen = !!selectedCollection;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
     document.body.style.backgroundColor = '#0A0A0A';
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [selectedCollection, selectedRegion]);
+  }, [selectedCollection]);
 
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
@@ -293,11 +293,9 @@ export default function HomePage({ collections, photos }: Props) {
   // flips, giving a slow crossfade between "rooms".
   const accentRgb = useMemo(() => {
     if (!activeArchiveId) return ACCENT_NEUTRAL;
-    const unit = units.find((u) => u.id === activeArchiveId);
-    if (!unit) return ACCENT_NEUTRAL;
-    const rep = unit.type === 'single' ? unit.collection : unit.collections[0];
-    return accentFromPalette(rep.palette);
-  }, [activeArchiveId, units]);
+    const city = orderedCities.find((c) => `archive-item-${c._id}` === activeArchiveId);
+    return city ? accentFromPalette(city.palette) : ACCENT_NEUTRAL;
+  }, [activeArchiveId, orderedCities]);
 
   return (
     <>
@@ -722,12 +720,8 @@ export default function HomePage({ collections, photos }: Props) {
                   className="absolute inset-0"
                 >
                   {(() => {
-                    const activeUnit = units.find((u) => u.id === activeArchiveId);
-                    const bgUrl = activeUnit
-                      ? activeUnit.type === 'single'
-                        ? activeUnit.collection.coverImageUrl || activeUnit.collection.photos?.[0]?.imageUrl
-                        : activeUnit.cover
-                      : undefined;
+                    const activeCity = orderedCities.find((c) => `archive-item-${c._id}` === activeArchiveId);
+                    const bgUrl = activeCity?.coverImageUrl || activeCity?.photos?.[0]?.imageUrl;
                     return bgUrl ? (
                       <>
                         <img
@@ -756,7 +750,7 @@ export default function HomePage({ collections, photos }: Props) {
                 <div className="flex items-center gap-3">
                   <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
                   <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
-                    The Route // {units.length} stops
+                    The Route // {orderedCities.length} stops
                   </span>
                 </div>
 
@@ -779,16 +773,12 @@ export default function HomePage({ collections, photos }: Props) {
                   />
 
                   <div className="flex flex-col">
-                    {units.map((unit, idx) => (
+                    {orderedCities.map((city, idx) => (
                       <SidebarItem
-                        key={unit.id}
-                        id={unit.id}
-                        label={unit.type === 'region' ? unit.region : unit.collection.name}
-                        coverBase={
-                          unit.type === 'region'
-                            ? unit.cover
-                            : unit.collection.coverImageUrl ?? unit.collection.photos?.[0]?.imageUrl ?? ''
-                        }
+                        key={city._id}
+                        id={`archive-item-${city._id}`}
+                        label={city.name}
+                        coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
                         idx={idx}
                         state={
                           activeRouteIndex < 0
@@ -863,35 +853,40 @@ export default function HomePage({ collections, photos }: Props) {
               </div>
 
               <div className="space-y-12 md:space-y-20">
-                {units.map((unit, index) => (
-                  // Editorial rhythm — chapters alternate a subtle offset + width
-                  // (lg only) so the column reads as composed spreads instead of
-                  // a dead-centre stack. Mobile/tablet stay full-width.
-                  <div
-                    key={unit.id}
-                    className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
-                  >
-                    {unit.type === 'single' ? (
-                      <ArchiveChapter
-                        id={unit.id}
-                        collection={unit.collection}
-                        isActive={activeArchiveId === unit.id}
-                        onClick={() => setSelectedCollection(unit.collection)}
-                        index={index}
-                      />
-                    ) : (
-                      <RegionChapter
-                        id={unit.id}
-                        region={unit.region}
-                        collections={unit.collections}
-                        isActive={activeArchiveId === unit.id}
-                        onOpen={() => setSelectedRegion(unit)}
-                        onOpenCity={(c) => setSelectedCollection(c)}
-                        index={index}
-                      />
-                    )}
-                  </div>
-                ))}
+                {sections.flatMap((section) => {
+                  const els: React.ReactNode[] = [];
+                  // Region divider header (multi-city regions only).
+                  if (section.showHeader && section.region) {
+                    els.push(
+                      <RegionHeader
+                        key={`h-${section.key}`}
+                        region={section.region}
+                        placeCount={section.cities.length}
+                        frameCount={section.frameCount}
+                      />,
+                    );
+                  }
+                  // City chapters — alternating lg offset for editorial rhythm.
+                  section.cities.forEach((city) => {
+                    const index = orderedCities.indexOf(city);
+                    const domId = `archive-item-${city._id}`;
+                    els.push(
+                      <div
+                        key={city._id}
+                        className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
+                      >
+                        <ArchiveChapter
+                          id={domId}
+                          collection={city}
+                          isActive={activeArchiveId === domId}
+                          onClick={() => setSelectedCollection(city)}
+                          index={index}
+                        />
+                      </div>,
+                    );
+                  });
+                  return els;
+                })}
               </div>
 
               {/* End-of-archive terminator — visual full-stop above the footer.
@@ -915,27 +910,36 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Mobile Filmstrip Waterfall ── */}
         <div className="block md:hidden pt-12 pb-12">
-          {units.map((unit) =>
-            unit.type === 'single' ? (
-              <MobileFilmstripItem
-                key={unit.id}
-                coverBase={unit.collection.coverImageUrl ?? unit.collection.photos?.[0]?.imageUrl ?? ''}
-                title={unit.collection.name}
-                onClick={() => setSelectedCollection(unit.collection)}
-              />
-            ) : (
-              <MobileFilmstripItem
-                key={unit.id}
-                coverBase={unit.cover}
-                title={unit.region}
-                caption={`${unit.collections.length} places · ${unit.collections.reduce(
-                  (n, c) => n + (c.photoCount ?? c.photos?.length ?? 0),
-                  0,
-                )} frames`}
-                onClick={() => setSelectedRegion(unit)}
-              />
-            ),
-          )}
+          {sections.flatMap((section) => {
+            const els: React.ReactNode[] = [];
+            if (section.showHeader && section.region) {
+              els.push(
+                <div key={`mh-${section.key}`} className="px-5 pt-10 pb-4 flex items-center gap-3">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                  />
+                  <span className="font-serif italic text-2xl tracking-tight text-white leading-none">
+                    {section.region}
+                  </span>
+                  <span className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase text-white/35">
+                    {section.cities.length} places
+                  </span>
+                </div>,
+              );
+            }
+            section.cities.forEach((city) => {
+              els.push(
+                <MobileFilmstripItem
+                  key={city._id}
+                  coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
+                  title={city.name}
+                  onClick={() => setSelectedCollection(city)}
+                />,
+              );
+            });
+            return els;
+          })}
 
           {/* Mobile end-of-archive terminator */}
           <div className="pt-12 pb-2 flex flex-col items-center gap-3 opacity-30">
@@ -1014,26 +1018,12 @@ export default function HomePage({ collections, photos }: Props) {
         </div>
       </div>
 
-      {/* ── Region hub overlay (L2) — sits below the story overlay so opening
-           a place layers the story on top and closing it returns to the hub. */}
-      <AnimatePresence>
-        {selectedRegion && (
-          <RegionHub
-            region={selectedRegion.region}
-            collections={selectedRegion.collections}
-            onSelectCollection={setSelectedCollection}
-            onClose={() => setSelectedRegion(null)}
-            pushed={!!selectedCollection}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Collection detail overlay (MagazineLayout, L3) ── */}
+      {/* ── Collection detail overlay (MagazineLayout) ── */}
       <AnimatePresence>
         {selectedCollection && (
           <MagazineLayout
             collection={selectedCollection}
-            allCollections={selectedRegion ? selectedRegion.collections : activeCollections}
+            allCollections={activeCollections}
             onSelectCollection={setSelectedCollection}
             onClose={() => setSelectedCollection(null)}
           />
