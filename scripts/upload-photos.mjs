@@ -4,18 +4,19 @@
  *        node scripts/upload-photos.mjs Florida            (upload one state)
  *        node scripts/upload-photos.mjs Florida/Miami      (upload one city)
  *
- * Requires: ANTHROPIC_API_KEY env var for AI naming (optional)
+ * Requires: SANITY_TOKEN env var for Sanity writes.
+ * Optional: ANTHROPIC_API_KEY env var for AI naming.
  */
 
 import { createClient } from '@sanity/client';
 import exifr from 'exifr';
-import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { createReadStream, readdirSync, statSync, existsSync } from 'fs';
 import { join, extname, basename } from 'path';
-import { createReadStream } from 'fs';
+import { pathToFileURL } from 'url';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
@@ -58,13 +59,22 @@ const STATE_STYLE_MAP = {
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG', '.HEIC', '.heic']);
 
 // ─── Sanity client ───────────────────────────────────────────────────────────
-const sanity = createClient({
-  projectId: 'z610fooo',
-  dataset: 'production',
-  apiVersion: '2024-03-16',
-  token: SANITY_TOKEN,
-  useCdn: false,
-});
+let sanityClient;
+function getSanityClient() {
+  if (!SANITY_TOKEN) {
+    throw new Error('Missing SANITY_TOKEN. Set SANITY_TOKEN in the environment before running upload-photos.mjs.');
+  }
+  if (!sanityClient) {
+    sanityClient = createClient({
+      projectId: 'z610fooo',
+      dataset: 'production',
+      apiVersion: '2024-03-16',
+      token: SANITY_TOKEN,
+      useCdn: false,
+    });
+  }
+  return sanityClient;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isImage(file) {
@@ -73,6 +83,16 @@ function isImage(file) {
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function buildCityUploadTarget(stateName, cityFolderName, cityPathOverride) {
+  const cityName = cityFolderName === '.' ? stateName : cityFolderName;
+  return {
+    cityName,
+    cityPath: cityPathOverride || (cityFolderName === '.'
+      ? join(PHOTO_ROOT, stateName)
+      : join(PHOTO_ROOT, stateName, cityFolderName)),
+  };
 }
 
 // AI-powered title generation using Claude API
@@ -117,6 +137,7 @@ async function generateTitle(cityName, stateName, index, exifData) {
 
 // Find or create a collection for the city
 async function findOrCreateCollection(cityFolderName, stateName) {
+  const sanity = getSanityClient();
   const slug = slugify(cityFolderName);
   const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
   const displayCity = locationInfo.city || cityFolderName;
@@ -157,6 +178,7 @@ function sleep(ms) {
 
 // Upload a single image file to Sanity with retry logic
 async function uploadImage(filePath, retries = 3) {
+  const sanity = getSanityClient();
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const stream = createReadStream(filePath);
@@ -192,22 +214,23 @@ function parseCameraInfo(exif) {
 }
 
 // ─── Upload a single city folder ─────────────────────────────────────────────
-async function uploadCity(stateName, cityFolderName) {
-  const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
+async function uploadCity(stateName, cityFolderName, cityPathOverride) {
+  const { cityName, cityPath } = buildCityUploadTarget(stateName, cityFolderName, cityPathOverride);
+  const sanity = getSanityClient();
+  const locationKey = cityName.toLowerCase().trim();
   const locationInfo = LOCATION_MAP[locationKey];
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
   const files = readdirSync(cityPath).filter(isImage);
   if (files.length === 0) {
-    console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
+    console.log(`    ⚠️  No images in ${cityName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${cityName}: ${files.length} images`);
 
   // Find or create collection
-  const collectionId = await findOrCreateCollection(cityFolderName, stateName);
+  const collectionId = await findOrCreateCollection(cityName, stateName);
 
   // Check existing photos — get filenames to skip duplicates
   const existingPhotos = await sanity.fetch(
@@ -242,7 +265,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(cityName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -330,7 +353,7 @@ async function uploadState(stateName) {
     if (directPhotos.length > 0) {
       console.log(`  📷 Photos directly in ${stateName} (no city subfolders)`);
       // Treat state as city
-      await uploadCity(stateName, '.');
+      await uploadCity(stateName, stateName, statePath);
     } else {
       console.log(`  ⚠️  No city folders or photos found, skipping.`);
     }
@@ -351,6 +374,7 @@ async function main() {
   console.log(`   AI naming: ${ANTHROPIC_API_KEY ? '✓ enabled (Claude API)' : '✗ disabled (using city+index)'}`);
 
   try {
+    getSanityClient();
     if (target) {
       if (target.includes('/')) {
         // Specific city: "Florida/Miami"
@@ -382,4 +406,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
