@@ -219,7 +219,7 @@ function CollapsedRegionStrip({
   onOpen: (c: Collection) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-3 lg:w-[95%]">
+    <div className="flex flex-wrap gap-3 w-full">
       {cities.map((c) => (
         <StripCard key={c._id} c={c} onOpen={onOpen} />
       ))}
@@ -1033,18 +1033,14 @@ export default function HomePage({ collections, photos }: Props) {
                               const index = orderedCities.indexOf(city);
                               const domId = `archive-item-${city._id}`;
                               return (
-                                <div
+                                <ArchiveChapter
                                   key={city._id}
-                                  className={`lg:w-[95%] ${index % 2 === 1 ? 'lg:ml-auto' : 'lg:mr-auto'}`}
-                                >
-                                  <ArchiveChapter
-                                    id={domId}
-                                    collection={city}
-                                    isActive={activeArchiveId === domId}
-                                    onClick={() => setSelectedCollection(city)}
-                                    index={index}
-                                  />
-                                </div>
+                                  id={domId}
+                                  collection={city}
+                                  isActive={activeArchiveId === domId}
+                                  onClick={() => setSelectedCollection(city)}
+                                  index={index}
+                                />
                               );
                             })}
                           </motion.div>
