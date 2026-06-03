@@ -5,6 +5,7 @@ import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
+const expo = [0.16, 1, 0.3, 1] as const;
 
 interface ArchiveChapterProps {
   id: string;
@@ -14,251 +15,148 @@ interface ArchiveChapterProps {
   isActive: boolean;
 }
 
+/**
+ * ArchiveChapter — a collection's homepage entry, composed as a MAGAZINE COVER:
+ * a tall full-bleed photo with the collection name set large ON the image, an
+ * editorial kicker (Dispatch Nº / place · year) at the top, and the frame
+ * count + "View Story" CTA woven into the masthead. Type lives on the photo —
+ * it reads as a cover, not a captioned card. Hover is a calm opacity dim-lift +
+ * gentle scale + cursor sheen (no filter/WebGL jank).
+ */
 export default function ArchiveChapter({ id, collection, onClick, index, isActive }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Liquid light-sheen that follows the cursor across the cover (Zajno-style
-  // hover) — an additive highlight overlay, so the photo itself is never
-  // distorted. Spring-smoothed so it trails the cursor like liquid.
+  // Cursor-following light sheen (spring-smoothed) layered over the cover.
   const sheenX = useMotionValue(50);
   const sheenY = useMotionValue(50);
   const sx = useSpring(sheenX, { stiffness: 150, damping: 20, mass: 0.4 });
   const sy = useSpring(sheenY, { stiffness: 150, damping: 20, mass: 0.4 });
-  const sheen = useMotionTemplate`radial-gradient(28% 38% at ${sx}% ${sy}%, rgba(255,255,255,0.22), rgba(255,255,255,0.05) 45%, transparent 70%)`;
+  const sheen = useMotionTemplate`radial-gradient(32% 42% at ${sx}% ${sy}%, rgba(255,255,255,0.20), rgba(255,255,255,0.04) 45%, transparent 70%)`;
   const onCoverMove = (e: React.MouseEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
     sheenX.set(((e.clientX - r.left) / r.width) * 100);
     sheenY.set(((e.clientY - r.top) / r.height) * 100);
   };
+
   const { scrollYProgress } = useScroll({
     target: chapterRef,
     offset: ['start end', 'end start'],
   });
-
   const opacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0, 1, 1, 0]);
-  // Dramatic zoom: starts at 1.08 and zooms down to 1 as it enters viewport
-  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.08, 1, 1, 0.98]);
-  const y = useTransform(scrollYProgress, [0, 1], [0, -120]);
-  const numberY = useTransform(scrollYProgress, [0, 1], [150, -150]);
-  // Parallax for the cover image inside its container
-  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-15%']);
+  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.06, 1, 1, 0.99]);
+  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-14%']);
 
   const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
-  // Desktop chapter cover — container caps at ~1100 px, Retina hits ~2200 px.
-  // Bracket 900 / 1400 / 1800; let the browser pick. (Mobile uses MobileFilmstripItem
-  // instead — this component is `hidden md:block`, and `loading="lazy"` below ensures
-  // mobile users never request these URLs.)
-  const coverUrl     = coverBase ? `${coverBase}?auto=format&w=1400&q=80` : '';
-  const coverSrcSet  = coverBase
-    ? `${coverBase}?auto=format&w=900&q=80 900w, ${coverBase}?auto=format&w=1400&q=80 1400w, ${coverBase}?auto=format&w=1800&q=78 1800w`
+  // Full-bleed cover — wide (≈92vw) up to a large container. Bracket Retina.
+  const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
+  const coverSrcSet = coverBase
+    ? `${coverBase}?auto=format&w=1000&q=82 1000w, ${coverBase}?auto=format&w=1600&q=82 1600w, ${coverBase}?auto=format&w=2000&q=78 2000w`
     : undefined;
 
   const coords = useMemo(() => {
-    const photo = collection.photos?.find(p => p.location?.lat != null && p.location?.lng != null);
+    const photo = collection.photos?.find((p) => p.location?.lat != null && p.location?.lng != null);
     return photo?.location || null;
   }, [collection.photos]);
 
-  const thumbnails = useMemo(() => {
-    return (collection.photos || [])
-      .slice(1, 4)
-      .map(p => `${p.imageUrl}?auto=format&w=400&q=60`);
-  }, [collection.photos]);
+  const frames = collection.photoCount ?? collection.photos?.length ?? 0;
+  const dateline = collection.location || collection.region || 'United States';
 
   return (
-    <motion.section
-      id={id}
-      ref={chapterRef}
-      style={{ opacity }}
-      className="relative pb-12 lg:pb-16"
-    >
-      {/* Massive Background Number */}
+    <motion.section id={id} ref={chapterRef} style={{ opacity }} className="relative pb-12 lg:pb-16">
       <motion.div
-        style={{ y: numberY }}
-        className="absolute -left-20 lg:-left-40 top-0 select-none pointer-events-none z-0"
+        className="relative group cursor-none w-full overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
+        onClick={onClick}
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        onMouseMove={onCoverMove}
+        data-cursor="View Story"
+        role="button"
+        aria-label={`View story: ${collection.name}`}
       >
-        <span className="text-[35vw] md:text-[25vw] font-black leading-none text-white/[0.03] italic tracking-tighter">
-          {String(index + 1).padStart(2, '0')}
-        </span>
-      </motion.div>
-
-      {/* Main Container */}
-      <div className="relative z-10 space-y-12">
-        {/* Title Bar */}
-        <div className="flex items-end justify-between border-b border-white/10 pb-6">
-          <motion.h3
-            initial={{ x: -50, opacity: 0 }}
-            whileInView={{ x: 0, opacity: 1 }}
-            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl md:text-6xl lg:text-[8.5rem] font-serif italic tracking-tighter leading-[0.8] text-white"
-          >
-            {collection.name}
-          </motion.h3>
-          <div className="hidden lg:block text-right pb-4">
-            <span className="block font-mono text-[10px] opacity-20 uppercase tracking-[0.5em]">
-              Sequence_Data
-            </span>
-            <span className="block font-mono text-[12px] opacity-40 uppercase tracking-widest">
-              {collection.year || ''} // ARC.V10
-            </span>
-          </div>
-        </div>
-
-        {/* Cover Image — calm reveal + clear "View Story" affordance.
-             A single dim layer lifts on hover (cheap opacity, no janky filter
-             or WebGL), the image eases up gently, and a persistent cue makes
-             it obvious the cover opens a story. */}
-        <motion.div
-          className="relative group cursor-none w-full overflow-visible"
-          onClick={onClick}
-          onHoverStart={() => setIsHovered(true)}
-          onHoverEnd={() => setIsHovered(false)}
-          onMouseMove={onCoverMove}
-          data-cursor="View Story"
-          role="button"
-          aria-label={`View story: ${collection.name}`}
-        >
-          <motion.div
-            style={{ scale }}
-            className="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
-          >
-            {coverUrl && (
-              <motion.img
-                style={{ y: imgY }}
-                src={coverUrl}
-                srcSet={coverSrcSet}
-                sizes="(min-width: 1024px) 66vw, 100vw"
-                alt={collection.name}
-                loading="lazy"
-                decoding="async"
-                animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
-                transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-0 w-full h-[130%] object-cover"
-                draggable={false}
-              />
-            )}
-
-            {/* Dim layer — covers sit muted at rest, brighten when active, and
-                 fully clear on hover. Animating opacity only = silky + cheap. */}
-            <motion.div
-              className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
-              animate={{ opacity: isHovered ? 0.08 : isActive ? 0.24 : 0.46 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        {/* Tall full-bleed cover photo */}
+        <motion.div style={{ scale }} className="relative aspect-[4/5] sm:aspect-[16/11] lg:aspect-[16/10] overflow-hidden">
+          {coverUrl && (
+            <motion.img
+              style={{ y: imgY }}
+              src={coverUrl}
+              srcSet={coverSrcSet}
+              sizes="(min-width: 768px) 92vw, 100vw"
+              alt={collection.name}
+              loading="lazy"
+              decoding="async"
+              animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
+              transition={{ duration: 1.1, ease: expo }}
+              className="absolute inset-0 w-full h-[125%] object-cover"
+              draggable={false}
             />
-
-            {/* Bottom legibility gradient (always on, for the affordance) */}
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-
-            {/* Soft cursor-following sheen (hover only) */}
-            <motion.div
-              className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500 mix-blend-soft-light"
-              style={{ background: sheen }}
-              aria-hidden="true"
-            />
-
-            {/* Accent baseline wipes in on hover — a quiet, clear "active" cue */}
-            <div
-              className="absolute left-0 right-0 bottom-0 h-[2px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-              style={{ background: ACCENT }}
-            />
-
-            {/* Persistent "View Story" affordance — pulsing accent dot + label +
-                 arrow; always visible (so it's obviously interactive), brightens
-                 and nudges on hover. */}
-            <div className="absolute left-5 md:left-7 bottom-5 md:bottom-7 z-20 flex items-center gap-3 pointer-events-none">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full rounded-full opacity-70 animate-ping" style={{ background: ACCENT }} />
-                <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: ACCENT }} />
-              </span>
-              <span className="font-mono text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/70 group-hover:text-white transition-colors duration-500">
-                View Story
-              </span>
-              <ArrowRight
-                size={15}
-                className="text-white/55 group-hover:text-white transition-all duration-500 group-hover:translate-x-1.5"
-              />
-            </div>
-          </motion.div>
-
-          {/* Contact Sheet Thumbnails */}
-          {thumbnails.length > 0 && (
-            <div className="absolute -bottom-20 left-12 hidden xl:flex gap-8 z-40">
-              {thumbnails.map((url, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 40, rotate: i % 2 === 0 ? 5 : -5 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.8 + i * 0.2, duration: 1.5, ease: 'circOut' }}
-                  className="w-32 h-44 overflow-hidden border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.5)] grayscale hover:grayscale-0 transition-all duration-500 group-hover:translate-y-[-10px]"
-                >
-                  <img src={url} className="w-full h-full object-cover" draggable={false} />
-                </motion.div>
-              ))}
-            </div>
           )}
+
+          {/* Calm dim-lift on hover (opacity only) */}
+          <motion.div
+            className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
+            animate={{ opacity: isHovered ? 0.12 : isActive ? 0.28 : 0.5 }}
+            transition={{ duration: 0.8, ease: expo }}
+          />
+
+          {/* Masthead scrims — top for the kicker, bottom for the title */}
+          <div className="absolute inset-x-0 top-0 h-1/3 pointer-events-none bg-gradient-to-b from-black/55 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-3/4 pointer-events-none bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+          {/* Cursor sheen (hover only) */}
+          <motion.div
+            className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500 mix-blend-soft-light"
+            style={{ background: sheen }}
+            aria-hidden="true"
+          />
         </motion.div>
 
-        {/* Tech Metadata */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-16 pt-8 items-start text-left">
-          <div className="md:col-span-1 hidden lg:block">
-            <div className="rotate-90 origin-left translate-y-24 w-max whitespace-nowrap">
-              <span className="font-mono text-[8px] opacity-10 uppercase tracking-[1em]">
-                SYSTEM_MONITOR_CALIBRATED
-              </span>
-            </div>
-          </div>
+        {/* ── Kicker (top) ── */}
+        <div className="absolute inset-x-0 top-0 p-5 md:p-8 flex items-start justify-between font-mono text-[10px] md:text-[11px] tracking-[0.4em] uppercase">
+          <span className="flex items-center gap-2 text-white/70">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
+            Dispatch&nbsp;Nº&nbsp;{String(index + 1).padStart(2, '0')}
+          </span>
+          <span className="text-white/45 text-right">
+            {dateline}
+            {collection.year ? ` · ${collection.year}` : ''}
+          </span>
+        </div>
 
-          <div className="md:col-span-5 flex flex-col justify-end h-full">
-            <div className="flex gap-16 text-left">
-              <div className="space-y-2">
-                <span className="text-[9px] uppercase tracking-widest opacity-20 block font-mono">Territory</span>
-                <span className="text-[14px] font-black tracking-[0.2em] uppercase block text-white/90">
-                  {collection.location || collection.name}
-                </span>
-              </div>
+        {/* ── Masthead title + meta + CTA (bottom, over the photo) ── */}
+        <div className="absolute inset-x-0 bottom-0 p-5 md:p-8 lg:p-10">
+          <h3
+            className="font-serif italic text-white tracking-tighter leading-[0.82] drop-shadow-[0_2px_40px_rgba(0,0,0,0.55)]"
+            style={{ fontSize: 'clamp(46px, 8.5vw, 132px)' }}
+          >
+            {collection.name}
+          </h3>
+          <div className="mt-4 md:mt-6 flex items-end justify-between gap-6">
+            <div className="font-mono text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>{frames} frames</span>
               {coords && (
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-widest opacity-20 block font-mono">Geo_Link</span>
-                  <span className="text-[11px] font-mono opacity-40 block tracking-tighter italic">
-                    {coords.lat.toFixed(6)}&deg; N
-                    <br />
-                    {coords.lng.toFixed(6)}&deg; E
-                  </span>
-                </div>
+                <span className="text-white/35">
+                  {coords.lat.toFixed(3)}°, {coords.lng.toFixed(3)}°
+                </span>
               )}
             </div>
-          </div>
-
-          <div className="md:col-span-4 flex items-center justify-end md:justify-start gap-8">
-            <div className="h-32 w-px bg-white/5 mx-auto hidden md:block" />
-            <div className="space-y-4 text-left">
-              <span className="text-[9px] uppercase tracking-widest opacity-20 block font-mono">Archive_Ref</span>
-              <div className="font-mono text-[10px] space-y-1 opacity-40 uppercase tracking-widest leading-relaxed text-left">
-                <p>ISO_100_S.DYN</p>
-                <p>RAW_COMPRESSED</p>
-                <p>ENCRYPTION_AES_256</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="md:col-span-2 flex md:justify-end">
-            <Magnetic strength={0.45}>
-              <motion.button
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={onClick}
-                className="group relative"
-              >
-                <div className="w-24 h-24 rounded-none border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all duration-500">
-                  <ArrowRight size={32} />
-                </div>
-                <div className="absolute inset-0 border border-white/5 translate-x-2 translate-y-2 -z-10 group-hover:translate-x-0 group-hover:translate-y-0 transition-transform" />
-              </motion.button>
+            <Magnetic strength={0.4}>
+              <span className="shrink-0 inline-flex items-center gap-3 font-mono text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 group-hover:text-white transition-colors duration-500">
+                View Story
+                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-white group-hover:bg-white group-hover:text-black transition-all duration-500">
+                  <ArrowRight size={16} />
+                </span>
+              </span>
             </Magnetic>
           </div>
         </div>
-      </div>
+
+        {/* Accent baseline wipes in on hover */}
+        <div
+          className="absolute left-0 right-0 bottom-0 h-[3px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+          style={{ background: ACCENT }}
+        />
+      </motion.div>
     </motion.section>
   );
 }
