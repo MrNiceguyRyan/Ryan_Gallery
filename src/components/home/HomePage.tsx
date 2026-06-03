@@ -150,6 +150,67 @@ function MobileFilmstripItem({
 /* ═══════════════════════════════════════════════════════
  *  CollapsedRegionStrip — compact "stowed" view of a region
  * ═══════════════════════════════════════════════════════ */
+const STRIP_ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
+
+/** A single stowed-region card. Hover is driven by Framer off one hover state
+ *  so the dim-lift + gentle scale animate TOGETHER on one synced, eased
+ *  timeline — no "flash then scale", identical feel to the collection covers. */
+function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => void }) {
+  const [hovered, setHovered] = useState(false);
+  const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
+  // One shared, gentle timeline for every hover property → moves as one piece.
+  const ease = [0.16, 1, 0.3, 1] as const;
+  const tween = { duration: 0.9, ease };
+
+  return (
+    <motion.button
+      onClick={() => onOpen(c)}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      data-cursor="View Story"
+      aria-label={`View ${c.name.trim()}`}
+      animate={{ borderColor: hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' }}
+      transition={tween}
+      className="relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border cursor-none"
+    >
+      {url && (
+        <motion.img
+          src={`${url}?auto=format&w=600&q=70`}
+          alt={c.name}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          animate={{ scale: hovered ? 1.05 : 1 }}
+          transition={tween}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+      {/* Dim lift — opacity only, same timeline as the scale (no filter jank). */}
+      <motion.div
+        className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
+        animate={{ opacity: hovered ? 0.12 : 0.42 }}
+        transition={tween}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent pointer-events-none" />
+      {/* Accent baseline wipes in on hover */}
+      <motion.span
+        className="absolute left-0 right-0 bottom-0 h-[2px] origin-left"
+        style={{ background: STRIP_ACCENT }}
+        animate={{ scaleX: hovered ? 1 : 0 }}
+        transition={tween}
+      />
+      <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
+        <span className="font-serif italic text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
+          {c.name.trim()}
+        </span>
+        <span className="font-mono text-[9px] text-white/50 tracking-widest shrink-0">
+          {c.photoCount ?? c.photos?.length ?? 0}
+        </span>
+      </div>
+    </motion.button>
+  );
+}
+
 function CollapsedRegionStrip({
   cities,
   onOpen,
@@ -159,46 +220,9 @@ function CollapsedRegionStrip({
 }) {
   return (
     <div className="flex flex-wrap gap-3 lg:w-[95%]">
-      {cities.map((c) => {
-        const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
-        return (
-          <button
-            key={c._id}
-            onClick={() => onOpen(c)}
-            data-cursor="View Story"
-            aria-label={`View ${c.name.trim()}`}
-            className="group relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border border-white/10 group-hover:border-white/20 transition-colors duration-700 cursor-none"
-          >
-            {url && (
-              <img
-                src={`${url}?auto=format&w=600&q=70`}
-                alt={c.name}
-                loading="lazy"
-                decoding="async"
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-cover scale-100 group-hover:scale-[1.04] transition-transform duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-              />
-            )}
-            {/* Calm reveal — dim layer lifts on hover (opacity only, no filter
-                jank, no sudden scale), matching the collection covers. */}
-            <div className="absolute inset-0 bg-[#0A0A0A] opacity-[0.42] group-hover:opacity-[0.1] transition-opacity duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent pointer-events-none" />
-            {/* Accent baseline wipes in on hover */}
-            <div
-              className="absolute left-0 right-0 bottom-0 h-[2px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-              style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-            />
-            <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
-              <span className="font-serif italic text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
-                {c.name.trim()}
-              </span>
-              <span className="font-mono text-[9px] text-white/50 tracking-widest shrink-0">
-                {c.photoCount ?? c.photos?.length ?? 0}
-              </span>
-            </div>
-          </button>
-        );
-      })}
+      {cities.map((c) => (
+        <StripCard key={c._id} c={c} onOpen={onOpen} />
+      ))}
     </div>
   );
 }
