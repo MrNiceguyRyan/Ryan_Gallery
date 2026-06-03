@@ -167,7 +167,7 @@ function CollapsedRegionStrip({
             onClick={() => onOpen(c)}
             data-cursor="View Story"
             aria-label={`View ${c.name.trim()}`}
-            className="group relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border border-white/10 cursor-none"
+            className="group relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border border-white/10 group-hover:border-white/20 transition-colors duration-700 cursor-none"
           >
             {url && (
               <img
@@ -176,10 +176,18 @@ function CollapsedRegionStrip({
                 loading="lazy"
                 decoding="async"
                 draggable={false}
-                className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 scale-105 group-hover:scale-100 transition-all duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="absolute inset-0 w-full h-full object-cover scale-100 group-hover:scale-[1.04] transition-transform duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+            {/* Calm reveal — dim layer lifts on hover (opacity only, no filter
+                jank, no sudden scale), matching the collection covers. */}
+            <div className="absolute inset-0 bg-[#0A0A0A] opacity-[0.42] group-hover:opacity-[0.1] transition-opacity duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent pointer-events-none" />
+            {/* Accent baseline wipes in on hover */}
+            <div
+              className="absolute left-0 right-0 bottom-0 h-[2px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+              style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+            />
             <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
               <span className="font-serif italic text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
                 {c.name.trim()}
