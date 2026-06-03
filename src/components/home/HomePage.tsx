@@ -232,9 +232,22 @@ function CollapsedRegionStrip({
  * ═══════════════════════════════════════════════════════ */
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
-  // Region collapse ("收纳") — set of collapsed section keys. Empty by default,
-  // so the page looks unchanged until the user stows a region.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
+  // multi-city region starts collapsed, so the homepage opens as a compact
+  // index the visitor expands. Computed from the props up-front (no flash).
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    const counts = new Map<string, number>();
+    for (const c of collections) {
+      if ((c.photos?.length || 0) === 0) continue;
+      const r = c.region?.trim();
+      if (r) counts.set(r, (counts.get(r) || 0) + 1);
+    }
+    const init = new Set<string>();
+    counts.forEach((n, r) => {
+      if (n >= 2) init.add(`r:${r}`);
+    });
+    return init;
+  });
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
@@ -1090,13 +1103,31 @@ export default function HomePage({ collections, photos }: Props) {
                   <span className="font-serif italic text-2xl tracking-tight text-white leading-none">
                     {section.region}
                   </span>
-                  <span className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase text-white/35">
-                    {section.cities.length} places
-                  </span>
-                  <ChevronDown
-                    size={15}
-                    className={`text-white/40 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}
-                  />
+                  {isCollapsed && (
+                    <motion.span
+                      className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase"
+                      style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                      animate={{ opacity: [0.45, 1, 0.45] }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      Tap to expand
+                    </motion.span>
+                  )}
+                  <motion.span
+                    className={`flex items-center justify-center w-9 h-9 rounded-full border ${isCollapsed ? '' : 'ml-auto'}`}
+                    style={{
+                      borderColor: isCollapsed ? 'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.7)' : 'rgba(255,255,255,0.15)',
+                      color: isCollapsed ? 'rgb(var(--accent-r),var(--accent-g),var(--accent-b))' : 'rgba(255,255,255,0.4)',
+                      boxShadow: isCollapsed ? '0 0 18px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)' : 'none',
+                    }}
+                    animate={isCollapsed ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                    transition={isCollapsed ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+                  >
+                    <ChevronDown
+                      size={15}
+                      className={`transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}
+                    />
+                  </motion.span>
                 </button>,
               );
             }

@@ -84,18 +84,37 @@ export default function RegionHeader({
             {frameCount} frames
           </div>
           {collapsible && (
-            <span
-              className="flex items-center justify-center w-9 h-9 rounded-full border border-white/15 text-white/55 transition-colors duration-300 group-hover/region:text-white group-hover/region:border-white/40"
-              style={collapsed ? undefined : { borderColor: accentSoft(0.4), color: ACCENT }}
-            >
+            <div className="flex items-center gap-3">
+              {/* Strong, unmistakable cue to open when collapsed */}
+              {collapsed && (
+                <motion.span
+                  className="hidden sm:inline font-mono text-[10px] tracking-[0.35em] uppercase"
+                  style={{ color: ACCENT }}
+                  animate={{ opacity: [0.45, 1, 0.45] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  Tap to expand
+                </motion.span>
+              )}
               <motion.span
-                animate={{ rotate: collapsed ? 0 : 180 }}
-                transition={{ duration: 0.4, ease: expo }}
-                className="flex"
+                className="flex items-center justify-center w-11 h-11 rounded-full border transition-colors duration-300"
+                style={{
+                  borderColor: collapsed ? accentSoft(0.7) : 'rgba(255,255,255,0.15)',
+                  color: collapsed ? ACCENT : 'rgba(255,255,255,0.55)',
+                  boxShadow: collapsed ? `0 0 22px ${accentSoft(0.45)}` : 'none',
+                }}
+                animate={collapsed ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                transition={collapsed ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
               >
-                <ChevronDown size={16} />
+                <motion.span
+                  animate={{ rotate: collapsed ? 0 : 180 }}
+                  transition={{ duration: 0.4, ease: expo }}
+                  className="flex"
+                >
+                  <ChevronDown size={18} />
+                </motion.span>
               </motion.span>
-            </span>
+            </div>
           )}
         </motion.div>
       </Tag>
