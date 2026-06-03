@@ -95,13 +95,16 @@ function PhotoCell({
       className={`${colSpan} group relative bg-[#0A0A0A] cursor-pointer overflow-hidden`}
     >
       {/* Entrance reveal — image rises out of a baseline clip (separate from
-          the hover-dim above so the timings don't fight). */}
+          the hover-dim above so the timings don't fight). Mount-triggered
+          (not whileInView): inside the story's own scroll container the
+          intersection observer fired unreliably and left photos stuck at
+          opacity 0 (invisible) — especially on mobile. `animate` guarantees
+          every cell reaches full opacity; the index stagger still cascades. */}
       <motion.div
         className="relative"
         initial={{ opacity: 0, y: 38, clipPath: 'inset(14% 0% 14% 0%)' }}
-        whileInView={{ opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' }}
-        viewport={{ once: true, margin: '-8%' }}
-        transition={{ duration: 1.0, delay: Math.min(index * 0.035, 0.28), ease: expo }}
+        animate={{ opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' }}
+        transition={{ duration: 1.0, delay: Math.min(index * 0.04, 0.5), ease: expo }}
       >
         {/* Index number */}
         <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
@@ -125,12 +128,16 @@ function PhotoCell({
           srcSet={srcSet}
           sizes={sizesAttr}
           alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
-          animate={{ opacity: isLoaded ? 1 : 0 }}
           className={`w-full h-auto block grayscale-[0.15] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
-          loading="lazy"
+          loading="eager"
           decoding="async"
           draggable={false}
         />
+        {/* NOTE: the image is no longer opacity-gated on `isLoaded` — inside the
+            story's inner scroll container that (plus lazy loading) left
+            below-fold photos invisible. The placeholder above still fades on
+            load; eager loading guarantees every photo in an opened story
+            actually loads. */}
       </motion.div>
     </motion.div>
   );
@@ -511,8 +518,7 @@ export default function MagazineLayout({
                               <motion.span
                                 className="block"
                                 initial={{ y: '115%' }}
-                                whileInView={{ y: '0%' }}
-                                viewport={{ once: true, margin: '-10%' }}
+                                animate={{ y: '0%' }}
                                 transition={{ duration: 0.8, ease: expo }}
                               >
                                 {nextCollection.name}
