@@ -12,10 +12,11 @@ import exifr from 'exifr';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { createReadStream } from 'fs';
+import { pathToFileURL } from 'url';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
@@ -71,8 +72,23 @@ function isImage(file) {
   return IMAGE_EXTS.has(extname(file));
 }
 
-function slugify(text) {
+export function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function getCollectionIdentity(stateName, cityFolderName) {
+  const isDirectStateFolder = cityFolderName === '.';
+  const locationKey = (isDirectStateFolder ? stateName : cityFolderName).toLowerCase().trim();
+  const locationInfo = LOCATION_MAP[locationKey];
+  const displayCity = locationInfo?.city || (isDirectStateFolder ? stateName : cityFolderName);
+  const slugSource = isDirectStateFolder ? stateName : cityFolderName;
+
+  return {
+    locationKey,
+    locationInfo,
+    displayCity,
+    slug: slugify(slugSource),
+  };
 }
 
 // AI-powered title generation using Claude API
@@ -117,9 +133,7 @@ async function generateTitle(cityName, stateName, index, exifData) {
 
 // Find or create a collection for the city
 async function findOrCreateCollection(cityFolderName, stateName) {
-  const slug = slugify(cityFolderName);
-  const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
-  const displayCity = locationInfo.city || cityFolderName;
+  const { slug, locationInfo, displayCity } = getCollectionIdentity(stateName, cityFolderName);
 
   // Search for existing collection by slug or name
   const existing = await sanity.fetch(
@@ -194,8 +208,7 @@ function parseCameraInfo(exif) {
 // ─── Upload a single city folder ─────────────────────────────────────────────
 async function uploadCity(stateName, cityFolderName) {
   const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
-  const locationInfo = LOCATION_MAP[locationKey];
+  const { locationInfo, displayCity } = getCollectionIdentity(stateName, cityFolderName);
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
@@ -204,7 +217,7 @@ async function uploadCity(stateName, cityFolderName) {
     console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${displayCity}: ${files.length} images`);
 
   // Find or create collection
   const collectionId = await findOrCreateCollection(cityFolderName, stateName);
@@ -242,7 +255,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(displayCity, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -351,6 +364,10 @@ async function main() {
   console.log(`   AI naming: ${ANTHROPIC_API_KEY ? '✓ enabled (Claude API)' : '✗ disabled (using city+index)'}`);
 
   try {
+    if (!SANITY_TOKEN) {
+      throw new Error('SANITY_TOKEN environment variable is required for uploads.');
+    }
+
     if (target) {
       if (target.includes('/')) {
         // Specific city: "Florida/Miami"
@@ -382,4 +399,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
