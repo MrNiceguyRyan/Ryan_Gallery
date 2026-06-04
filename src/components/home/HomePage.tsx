@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
-import OpeningAnimation from './OpeningAnimation';
+import HeroEntrance from './HeroEntrance';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
@@ -438,7 +438,15 @@ export default function HomePage({ collections, photos }: Props) {
 
   return (
     <>
-      {showOpening && <OpeningAnimation onComplete={handleOpeningComplete} />}
+      {showOpening && (
+        <HeroEntrance
+          onComplete={handleOpeningComplete}
+          images={activeCollections
+            .slice(0, 5)
+            .map((c) => c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '')
+            .filter(Boolean)}
+        />
+      )}
 
       <div
         className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0A0A0A] text-[#FDFDFB] ${
