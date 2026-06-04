@@ -627,34 +627,10 @@ export default function HomePage({ collections, photos }: Props) {
 
         {/* ── Hero Header ── */}
         <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* ── Shutter-open: the black blades slam fully shut (the click),
-               hold for the exposure beat, then snap open as the image
-               develops in. Plays once on arrival (and after the first-visit
-               intro). The full close is momentary, so it never holds over
-               the title. ── */}
-          <motion.div
-            className="fixed top-0 inset-x-0 z-[45] bg-black pointer-events-none"
-            initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '50vh', '50vh', '0vh'] : '0vh' }}
-            transition={{ duration: 1.6, times: [0, 0.08, 0.2, 0.46], ease: [0.7, 0, 0.2, 1] }}
-            aria-hidden="true"
-          />
-          <motion.div
-            className="fixed bottom-0 inset-x-0 z-[45] bg-black pointer-events-none"
-            initial={{ height: '0vh' }}
-            animate={{ height: introReady ? ['0vh', '50vh', '50vh', '0vh'] : '0vh' }}
-            transition={{ duration: 1.6, times: [0, 0.08, 0.2, 0.46], ease: [0.7, 0, 0.2, 1] }}
-            aria-hidden="true"
-          />
-          {/* Exposure flash — a hard pop of light at the moment the letterbox
-               snaps open. mix-blend so it blooms the scene, not a whiteout. */}
-          <motion.div
-            className="fixed inset-0 z-[44] bg-white pointer-events-none mix-blend-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: introReady ? [0, 0, 0.7, 0] : 0 }}
-            transition={{ duration: 1.6, times: [0, 0.2, 0.28, 0.5], ease: 'easeOut' }}
-            aria-hidden="true"
-          />
+          {/* The dramatic opening now lives entirely in HeroEntrance (the GSAP
+               intro). The hero no longer slams its own shutter / exposure flash —
+               it settles in as a calm continuation, so the entrance and the
+               hero read as ONE connected sequence. */}
           {/* Scroll-linked cinematic exit wrapper — recedes on scroll */}
           <motion.div
             style={{ opacity: heroOpacity, y: heroY, scale: heroScale }}
@@ -663,33 +639,15 @@ export default function HomePage({ collections, photos }: Props) {
           {/* Header content — cinematic push-in (defocus → focus, slow dolly).
                Held hidden until the first-visit intro clears (introReady), so
                the push-in plays WITH the letterbox open, not under the intro. */}
+          {/* Calm settle — the hero rises gently out of a soft defocus as the
+               entrance hands off. No jolt; reads as the entrance landing into
+               the gallery. */}
           <motion.div
-            initial={{ opacity: 0, scale: 1.18, filter: 'blur(26px) brightness(1.7) saturate(0.3)', x: 0, y: 0 }}
+            initial={{ opacity: 0, y: 30, scale: 1.03, filter: 'blur(9px)' }}
             animate={introReady
-              ? {
-                  /* Held hidden behind the closed shutter, then DEVELOPS in as
-                     the blades open — out of defocus + desaturation, the
-                     latent image resolving. */
-                  opacity: [0, 0, 1, 1],
-                  scale: [1.18, 1.18, 0.985, 1],
-                  x: [0, 0, -15, 12, -7, 4, 0],
-                  y: [0, 0, 8, -6, 3, -1, 0],
-                  filter: [
-                    'blur(26px) brightness(1.7) saturate(0.3)',
-                    'blur(26px) brightness(1.7) saturate(0.3)',
-                    'blur(0px) brightness(1.15) saturate(1.05)',
-                    'blur(0px) brightness(1) saturate(1)',
-                  ],
-                }
-              : { opacity: 0, scale: 1.18, filter: 'blur(26px) brightness(1.7) saturate(0.3)', x: 0, y: 0 }}
-            transition={{
-              opacity: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
-              scale: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
-              filter: { duration: 1.9, times: [0, 0.22, 0.72, 1], ease: expo },
-              /* Two-axis shutter kick — a hard mechanical jolt at the click. */
-              x: { delay: 0.1, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
-              y: { delay: 0.1, duration: 0.5, times: [0, 0.12, 0.32, 0.55, 0.78, 0.9, 1], ease: 'easeOut' },
-            }}
+              ? { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }
+              : { opacity: 0, y: 30, scale: 1.03, filter: 'blur(9px)' }}
+            transition={{ duration: 1.5, ease: expo, delay: 0.1 }}
             className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
