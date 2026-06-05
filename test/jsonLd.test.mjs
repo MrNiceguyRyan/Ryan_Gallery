@@ -16,5 +16,5 @@ test('serializeJsonLd prevents script-tag breakout from CMS strings', () => {
   assert.equal(serialized.includes('</script>'), false);
   assert.equal(serialized.includes('<script>'), false);
   assert.equal(serialized.includes('&'), false);
-  assert.equal(JSON.parse(serialized), payload);
+  assert.deepEqual(JSON.parse(serialized), payload);
 });
