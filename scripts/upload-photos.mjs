@@ -12,16 +12,12 @@ import exifr from 'exifr';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { createReadStream } from 'fs';
+import { pathToFileURL } from 'url';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
 const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
-if (!SANITY_TOKEN) {
-  console.error('Fatal error: SANITY_TOKEN environment variable is required for uploads.');
-  process.exit(1);
-}
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
@@ -78,6 +74,13 @@ function isImage(file) {
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function getDirectStateUploadTarget(stateName, statePath) {
+  return {
+    cityFolderName: stateName,
+    options: { cityPath: statePath },
+  };
 }
 
 // AI-powered title generation using Claude API
@@ -334,8 +337,9 @@ async function uploadState(stateName) {
     const directPhotos = readdirSync(statePath).filter(isImage);
     if (directPhotos.length > 0) {
       console.log(`  📷 Photos directly in ${stateName} (no city subfolders)`);
-      // Treat state as city
-      await uploadCity(stateName, stateName, { cityPath: statePath });
+      // Treat state as city while reading from the state folder itself.
+      const target = getDirectStateUploadTarget(stateName, statePath);
+      await uploadCity(stateName, target.cityFolderName, target.options);
     } else {
       console.log(`  ⚠️  No city folders or photos found, skipping.`);
     }
@@ -349,6 +353,11 @@ async function uploadState(stateName) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
+  if (!SANITY_TOKEN) {
+    console.error('Fatal error: SANITY_TOKEN environment variable is required for uploads.');
+    process.exit(1);
+  }
+
   const target = process.argv[2]; // optional: "Florida" or "Florida/Miami"
 
   console.log('🚀 Batch Photo Upload (State → City)');
@@ -387,4 +396,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
