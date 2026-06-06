@@ -4,7 +4,8 @@
  *        node scripts/upload-photos.mjs Florida            (upload one state)
  *        node scripts/upload-photos.mjs Florida/Miami      (upload one city)
  *
- * Requires: ANTHROPIC_API_KEY env var for AI naming (optional)
+ * Requires: SANITY_TOKEN env var for Sanity writes.
+ * Optional: ANTHROPIC_API_KEY env var for AI naming.
  */
 
 import { createClient } from '@sanity/client';
@@ -15,7 +16,6 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
@@ -58,21 +58,49 @@ const STATE_STYLE_MAP = {
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG', '.HEIC', '.heic']);
 
 // ─── Sanity client ───────────────────────────────────────────────────────────
-const sanity = createClient({
-  projectId: 'z610fooo',
-  dataset: 'production',
-  apiVersion: '2024-03-16',
-  token: SANITY_TOKEN,
-  useCdn: false,
-});
+let sanityClient;
+
+export function resolveSanityToken(env = process.env) {
+  const token = env.SANITY_TOKEN?.trim();
+  if (!token) {
+    throw new Error('SANITY_TOKEN environment variable is required for Sanity writes.');
+  }
+  return token;
+}
+
+function getSanityClient() {
+  if (!sanityClient) {
+    sanityClient = createClient({
+      projectId: 'z610fooo',
+      dataset: 'production',
+      apiVersion: '2024-03-16',
+      token: resolveSanityToken(),
+      useCdn: false,
+    });
+  }
+  return sanityClient;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isImage(file) {
   return IMAGE_EXTS.has(extname(file));
 }
 
-function slugify(text) {
+export function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function collectionNameForCityFolder(cityFolderName, stateName) {
+  return cityFolderName === '.' ? stateName : cityFolderName;
+}
+
+export function collectionSlugForCityFolder(cityFolderName, stateName) {
+  const collectionName = collectionNameForCityFolder(cityFolderName, stateName);
+  const slug = slugify(collectionName);
+  if (!slug) {
+    throw new Error(`Cannot derive a non-empty collection slug from "${collectionName}".`);
+  }
+  return slug;
 }
 
 // AI-powered title generation using Claude API
@@ -117,12 +145,13 @@ async function generateTitle(cityName, stateName, index, exifData) {
 
 // Find or create a collection for the city
 async function findOrCreateCollection(cityFolderName, stateName) {
-  const slug = slugify(cityFolderName);
-  const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
-  const displayCity = locationInfo.city || cityFolderName;
+  const slug = collectionSlugForCityFolder(cityFolderName, stateName);
+  const collectionName = collectionNameForCityFolder(cityFolderName, stateName);
+  const locationInfo = LOCATION_MAP[collectionName.toLowerCase()] || {};
+  const displayCity = locationInfo.city || collectionName;
 
   // Search for existing collection by slug or name
-  const existing = await sanity.fetch(
+  const existing = await getSanityClient().fetch(
     `*[_type == "collection" && (slug.current == $slug || lower(name) == $lowerName)][0]{ _id, name }`,
     { slug, lowerName: displayCity.toLowerCase() }
   );
@@ -145,7 +174,7 @@ async function findOrCreateCollection(cityFolderName, stateName) {
     gridSize: 'medium',
   };
 
-  const created = await sanity.create(doc);
+  const created = await getSanityClient().create(doc);
   console.log(`  ✓ Created new collection: "${displayCity}" (${created._id})`);
   return created._id;
 }
@@ -160,7 +189,7 @@ async function uploadImage(filePath, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const stream = createReadStream(filePath);
-      const asset = await sanity.assets.upload('image', stream, {
+      const asset = await getSanityClient().assets.upload('image', stream, {
         filename: basename(filePath),
       });
       return asset._id;
@@ -194,23 +223,24 @@ function parseCameraInfo(exif) {
 // ─── Upload a single city folder ─────────────────────────────────────────────
 async function uploadCity(stateName, cityFolderName) {
   const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
+  const collectionName = collectionNameForCityFolder(cityFolderName, stateName);
+  const locationKey = collectionName.toLowerCase().trim();
   const locationInfo = LOCATION_MAP[locationKey];
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
   const files = readdirSync(cityPath).filter(isImage);
   if (files.length === 0) {
-    console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
+    console.log(`    ⚠️  No images in ${collectionName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${collectionName}: ${files.length} images`);
 
   // Find or create collection
   const collectionId = await findOrCreateCollection(cityFolderName, stateName);
 
   // Check existing photos — get filenames to skip duplicates
-  const existingPhotos = await sanity.fetch(
+  const existingPhotos = await getSanityClient().fetch(
     `*[_type == "photo" && collection._ref == $id]{ title, image { asset-> { originalFilename } } }`,
     { id: collectionId }
   );
@@ -242,7 +272,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(collectionName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -275,7 +305,7 @@ async function uploadCity(stateName, cityFolderName) {
         ...(cam.iso && { iso: cam.iso }),
       };
 
-      const created = await sanity.create(photoDoc);
+      const created = await getSanityClient().create(photoDoc);
       uploaded++;
       console.log(`✓ "${title}"`);
 
@@ -291,17 +321,17 @@ async function uploadCity(stateName, cityFolderName) {
 
   // Set collection cover image to first photo if not set
   try {
-    const col = await sanity.fetch(
+    const col = await getSanityClient().fetch(
       `*[_type == "collection" && _id == $id][0]{ coverImage }`,
       { id: collectionId }
     );
     if (!col?.coverImage) {
-      const firstPhoto = await sanity.fetch(
+      const firstPhoto = await getSanityClient().fetch(
         `*[_type == "photo" && collection._ref == $id][0]{ image }`,
         { id: collectionId }
       );
       if (firstPhoto?.image) {
-        await sanity.patch(collectionId).set({ coverImage: firstPhoto.image }).commit();
+        await getSanityClient().patch(collectionId).set({ coverImage: firstPhoto.image }).commit();
         console.log(`    ✓ Set collection cover image`);
       }
     }
@@ -382,4 +412,6 @@ async function main() {
   }
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
