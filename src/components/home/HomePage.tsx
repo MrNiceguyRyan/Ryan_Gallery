@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
@@ -62,20 +62,6 @@ function MobileFilmstripItem({
   caption?: string;
   onClick: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ['start end', 'end start'],
-  });
-
-  const smoothProgress = useSpring(scrollYProgress, {
-    stiffness: 70,
-    damping: 20,
-    restDelta: 0.001,
-  });
-
-  const y = useTransform(smoothProgress, [0, 1], ['-35%', '35%']);
-
   // Mobile filmstrip — 100vw container, 28vh tall. Real device widths span 360–430 px
   // and Retina hits ~860 px; bracket 600 / 900 / 1200 and let the browser pick.
   const coverUrl     = coverBase ? `${coverBase}?auto=format&w=900&q=80` : '';
@@ -85,7 +71,6 @@ function MobileFilmstripItem({
 
   return (
     <motion.div
-      ref={containerRef}
       onClick={onClick}
       whileInView="active"
       whileTap={{ scale: 0.985 }}
@@ -95,17 +80,16 @@ function MobileFilmstripItem({
     >
       {coverUrl && (
         <motion.img
-          style={{ y }}
           src={coverUrl}
           srcSet={coverSrcSet}
           sizes="100vw"
           alt={title}
           variants={{
-            active: { scale: 1.1, filter: 'grayscale(0%)' },
+            active: { scale: 1.08, filter: 'grayscale(0%)' },
           }}
-          initial={{ filter: 'grayscale(100%)', scale: 1 }}
+          initial={{ filter: 'grayscale(100%)', scale: 1.02 }}
           transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute inset-0 -top-[35%] w-full h-[170%] object-cover object-center"
+          className="absolute inset-0 w-full h-full object-cover object-center"
           loading="lazy"
           decoding="async"
           draggable={false}

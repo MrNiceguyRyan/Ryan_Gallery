@@ -87,6 +87,7 @@ export default function HeroEntrance({
         scale: 0.82,
         rotation: 0,
         transformOrigin: '50% 135%', // low pivot → fan swings open from the base
+        zIndex: (i) => 50 - Math.round(Math.abs(i - mid) * 10), // centre card on top
       });
       gsap.set(textLines, { yPercent: 110 });
 
@@ -119,7 +120,9 @@ export default function HeroEntrance({
         cardEls,
         {
           opacity: 1,
-          scale: 1,
+          // Z-depth: the centre card sits forward (scale 1) while the outer
+          // cards recede slightly — a subtle parallax in the fan.
+          scale: (i) => 1 - Math.abs(i - mid) * 0.07,
           rotation: (i) => (i - mid) * 11,
           x: (i) => (i - mid) * 86,
           y: (i) => Math.abs(i - mid) * 14,
