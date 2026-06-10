@@ -114,9 +114,21 @@ function formatCoord(v: number, pos: string, neg: string) {
 }
 
 // ─── Main Inner Component ───
+// ─── Intro camera framing ───
+const INTRO_VIEW = { latitude: 20, longitude: -40, zoom: 0.5, pitch: 0, bearing: -12 };
+const FINAL_VIEW = { latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 };
+const INTRO_DURATION = 1800;
+
 function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
-  const [viewState, setViewState] = useState({ latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 });
+  const prefersReduced = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+  const [viewState, setViewState] = useState(prefersReduced ? FINAL_VIEW : INTRO_VIEW);
+  // Gates the marker bloom until the dive-in settles, so markers don't pop
+  // mid-flight. Reduced-motion users skip the dive entirely.
+  const [introDone, setIntroDone] = useState(prefersReduced);
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -178,9 +190,25 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    if (map.isStyleLoaded()) applyGlobeSettings(map);
-    else map.once('style.load', () => applyGlobeSettings(map));
-  }, [applyGlobeSettings]);
+    const start = () => {
+      applyGlobeSettings(map);
+      if (prefersReduced) return;
+      // Dive in from space: zoom + tilt + a touch of rotation settle.
+      map.flyTo({
+        center: [FINAL_VIEW.longitude, FINAL_VIEW.latitude],
+        zoom: FINAL_VIEW.zoom,
+        pitch: FINAL_VIEW.pitch,
+        bearing: FINAL_VIEW.bearing,
+        duration: INTRO_DURATION,
+        curve: 1.5,
+        essential: true,
+      });
+      // Let markers bloom just before the camera fully settles.
+      window.setTimeout(() => setIntroDone(true), INTRO_DURATION - 250);
+    };
+    if (map.isStyleLoaded()) start();
+    else map.once('style.load', start);
+  }, [applyGlobeSettings, prefersReduced]);
 
   // Re-apply globe settings when style changes
   useEffect(() => {
@@ -319,6 +347,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               const [lng, lat] = feature.geometry.coordinates;
               const props = feature.properties;
 
+              // Bloom outward from the framed center once the dive settles —
+              // near markers first, distant ones trailing. Random jitter keeps
+              // it organic rather than a rigid ripple.
+              const dx = lng - viewState.longitude;
+              const dy = lat - viewState.latitude;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const bloomDelay = introDone ? Math.min(dist * 0.006, 0.5) + Math.random() * 0.08 : 0;
+
               // ── Cluster ──
               if (props.cluster) {
                 const count = props.point_count;
@@ -336,9 +372,9 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                       className="relative flex items-center justify-center cursor-pointer group"
                       style={{ width: size + 20, height: size + 20 }}
                       initial={{ opacity: 0, scale: 0.4 }}
-                      animate={{ opacity: 1, scale: 1 }}
+                      animate={introDone ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.4 }}
                       exit={{ opacity: 0, scale: 0.4 }}
-                      transition={{ type: 'spring', stiffness: 320, damping: 22 }}
+                      transition={{ type: 'spring', stiffness: 320, damping: 22, delay: bloomDelay }}
                       whileHover={{ scale: 1.08 }}
                       whileTap={{ scale: 0.94 }}
                     >
@@ -405,9 +441,9 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     className="relative flex items-center justify-center cursor-pointer group"
                     style={{ width: containerSize, height: containerSize }}
                     initial={{ opacity: 0, scale: 0.3 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={introDone ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.3 }}
                     exit={{ opacity: 0, scale: 0.3 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: Math.random() * 0.12 }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: bloomDelay }}
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
