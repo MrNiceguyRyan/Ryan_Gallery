@@ -631,7 +631,7 @@ export default function HomePage({ collections, photos }: Props) {
             animate={introReady
               ? { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }
               : { opacity: 0, y: 30, scale: 1.03, filter: 'blur(9px)' }}
-            transition={{ duration: 1.5, ease: expo, delay: 0.1 }}
+            transition={{ duration: 1.25, ease: expo, delay: 0.05 }}
             className="space-y-12"
           >
             <div className="flex flex-col items-center gap-6">
