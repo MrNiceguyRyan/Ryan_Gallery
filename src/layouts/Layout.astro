@@ -73,8 +73,9 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     {/* Sanity CDN — every image on the site comes through here, so warm the TLS */}
     <link rel="preconnect" href="https://cdn.sanity.io" crossorigin />
     {/* mapbox preconnect only on /travel */}
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+    {/* One combined request; dropped the unused Noto Sans SC (Chinese) family
+        that was a ~91 KB render-blocking stylesheet for nothing. */}
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Mrs+Saint+Delafield&display=swap" rel="stylesheet" />
     {/* mapbox-gl CSS is only needed on /travel — loaded by that page's head, not globally */}
 
     <!-- Primary Meta -->
