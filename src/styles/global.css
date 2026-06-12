@@ -430,3 +430,19 @@ img {
   0% { top: -10%; }
   100% { top: 110%; }
 }
+
+/* ── Global motion-accessibility guard ──
+   Neutralises every CSS @keyframes animation + transition for visitors who ask
+   for reduced motion (sunbeam, noise-grain, ambient-glow, lens-breathing,
+   dust-drift, float, scanline, etc.). Framer's JS-driven `repeat: Infinity`
+   loops are gated separately in the components via useReducedMotion(). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

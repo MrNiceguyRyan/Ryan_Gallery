@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 type RouteState = 'past' | 'active' | 'future';
 
@@ -23,6 +23,7 @@ const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 export default function SidebarItem({ id, label, coverBase, idx, state, onActivate }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isActive = state === 'active';
+  const reduce = useReducedMotion();
 
   // Hover thumbnail — physical box is 112×160 px so w=240 covers Retina
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=240&q=60` : '';
@@ -67,7 +68,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
 
       {/* Waypoint node on the route rail (rail sits at left-[4px]) */}
       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[9px] h-[9px] flex items-center justify-center">
-        {isActive && (
+        {isActive && !reduce && (
           <motion.span
             className="absolute inset-0 rounded-full"
             style={{ border: `1px solid ${ACCENT}` }}

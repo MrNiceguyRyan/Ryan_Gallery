@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 
 const expo = [0.16, 1, 0.3, 1] as const;
@@ -29,6 +29,7 @@ export default function RegionHeader({
   onToggle?: () => void;
 }) {
   const Tag = collapsible ? 'button' : 'div';
+  const reduce = useReducedMotion();
   return (
     <section className="relative pt-10 lg:pt-20 select-none" aria-label={`Region: ${region}`}>
       {/* Hairline rule wipes in (mount-triggered so it always renders) */}
@@ -90,8 +91,8 @@ export default function RegionHeader({
                 <motion.span
                   className="hidden sm:inline font-mono text-[10px] tracking-[0.35em] uppercase"
                   style={{ color: ACCENT }}
-                  animate={{ opacity: [0.45, 1, 0.45] }}
-                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                  animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
+                  transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                 >
                   Tap to expand
                 </motion.span>
@@ -103,8 +104,8 @@ export default function RegionHeader({
                   color: collapsed ? ACCENT : 'rgba(255,255,255,0.55)',
                   boxShadow: collapsed ? `0 0 22px ${accentSoft(0.45)}` : 'none',
                 }}
-                animate={collapsed ? { scale: [1, 1.1, 1] } : { scale: 1 }}
-                transition={collapsed ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+                animate={collapsed && !reduce ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                transition={collapsed && !reduce ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
               >
                 <motion.span
                   animate={{ rotate: collapsed ? 0 : 180 }}

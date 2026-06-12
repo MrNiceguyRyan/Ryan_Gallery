@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import HeroEntrance from './HeroEntrance';
@@ -256,6 +256,9 @@ export default function HomePage({ collections, photos }: Props) {
   // immediately on a return visit, when no intro shows).
   const introReady = !showOpening;
 
+  // Honour "reduce motion": skip the always-on ambient animations entirely.
+  const reduce = useReducedMotion();
+
   // Scroll-velocity skew (Zajno-style "weighty" scroll) — the archive content
   // leans slightly with scroll speed and settles when you stop. Scoped to the
   // content column so it never touches the sticky route rail or fixed bg.
@@ -509,8 +512,8 @@ export default function HomePage({ collections, photos }: Props) {
             selectedCollection ? 'opacity-0' : 'opacity-100'
           }`}
         >
-          {/* Floating Digital Dust Particles */}
-          {[...Array(40)].map((_, i) => (
+          {/* Floating Digital Dust Particles (skipped when reduced-motion) */}
+          {!reduce && [...Array(40)].map((_, i) => (
             <motion.div
               key={i}
               className="absolute w-[1px] h-[1px] bg-white rounded-full opacity-[0.08]"
@@ -532,8 +535,8 @@ export default function HomePage({ collections, photos }: Props) {
             />
           ))}
 
-          {/* Floating Parallax Grid Elements */}
-          {[...Array(3)].map((_, i) => (
+          {/* Floating Parallax Grid Elements (skipped when reduced-motion) */}
+          {!reduce && [...Array(3)].map((_, i) => (
             <motion.div
               key={`grid-${i}`}
               className="absolute inset-0 opacity-[0.02]"
@@ -757,8 +760,8 @@ export default function HomePage({ collections, photos }: Props) {
             <span className="text-[9px] uppercase tracking-[0.5em] font-mono opacity-40">Scroll</span>
             <motion.div
               className="w-px h-8 bg-white/30 origin-top"
-              animate={{ scaleY: [0, 1, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              animate={reduce ? { scaleY: 1 } : { scaleY: [0, 1, 0] }}
+              transition={reduce ? { duration: 0.3 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
             />
           </motion.div>
         </header>
@@ -783,8 +786,8 @@ export default function HomePage({ collections, photos }: Props) {
                   'radial-gradient(80vmax 80vmax at 18% 82%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.14), transparent 70%)',
                 willChange: 'transform',
               }}
-              animate={{ scale: [1, 1.08, 1] }}
-              transition={{ scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' } }}
+              animate={reduce ? undefined : { scale: [1, 1.08, 1] }}
+              transition={reduce ? undefined : { scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' } }}
             />
             <motion.div
               className="absolute inset-0"
@@ -794,8 +797,8 @@ export default function HomePage({ collections, photos }: Props) {
                   'radial-gradient(70vmax 70vmax at 85% 12%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08), transparent 70%)',
                 willChange: 'transform',
               }}
-              animate={{ scale: [1.05, 1, 1.05] }}
-              transition={{ scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' } }}
+              animate={reduce ? undefined : { scale: [1.05, 1, 1.05] }}
+              transition={reduce ? undefined : { scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' } }}
             />
 
             <AnimatePresence mode="wait">
@@ -1057,8 +1060,8 @@ export default function HomePage({ collections, photos }: Props) {
                     <motion.span
                       className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase"
                       style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                      animate={{ opacity: [0.45, 1, 0.45] }}
-                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                      animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
+                      transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                     >
                       Tap to expand
                     </motion.span>
@@ -1070,8 +1073,8 @@ export default function HomePage({ collections, photos }: Props) {
                       color: isCollapsed ? 'rgb(var(--accent-r),var(--accent-g),var(--accent-b))' : 'rgba(255,255,255,0.4)',
                       boxShadow: isCollapsed ? '0 0 18px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)' : 'none',
                     }}
-                    animate={isCollapsed ? { scale: [1, 1.1, 1] } : { scale: 1 }}
-                    transition={isCollapsed ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+                    animate={isCollapsed && !reduce ? { scale: [1, 1.1, 1] } : { scale: 1 }}
+                    transition={isCollapsed && !reduce ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
                   >
                     <ChevronDown
                       size={15}

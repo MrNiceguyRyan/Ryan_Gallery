@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface Props {
   /** Tailwind inset utilities for the four bracket positions.
@@ -55,6 +55,7 @@ export default function ViewfinderBrackets({
     }
   }
 
+  const reduce = useReducedMotion();
   return (
     <>
       {corners.map((b, i) => (
@@ -63,8 +64,8 @@ export default function ViewfinderBrackets({
           className={`absolute ${cornerPositioning(b.corner)} w-[28px] h-[28px] md:w-[40px] md:h-[40px] pointer-events-none ${hideOnMobile ? 'hidden md:block' : ''}`}
           viewBox="0 0 28 28"
           fill="none"
-          animate={{ opacity: [0.18, 0.32, 0.18] }}
-          transition={{
+          animate={reduce ? { opacity: 0.25 } : { opacity: [0.18, 0.32, 0.18] }}
+          transition={reduce ? { duration: 0.3 } : {
             duration: 7,
             delay: i * 0.4,
             repeat: Infinity,
