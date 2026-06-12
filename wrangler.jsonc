@@ -3,5 +3,16 @@
 	"compatibility_date": "2026-04-07",
 	"assets": {
 		"directory": "./dist"
+	},
+	// Named env for the CI "Deploy Preview" job (`wrangler deploy --env preview`).
+	// Named envs do NOT inherit top-level `assets`, so it's re-declared here.
+	// Publishes a separate `ryan-gallery-preview` worker — never touches prod.
+	"env": {
+		"preview": {
+			"name": "ryan-gallery-preview",
+			"assets": {
+				"directory": "./dist"
+			}
+		}
 	}
 }
