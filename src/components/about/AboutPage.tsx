@@ -28,8 +28,8 @@ const DROP_OUTER = [
  *  Sanity Studio, not this fallback. */
 const FALLBACK_TIMELINE: TimelineItem[] = [
   { year: '2024', title: 'New York Stories', description: 'Streets, architecture, and the off-hours light of the five boroughs.' },
-  { year: '2024', title: 'Southwest Sequence', description: 'Zion, Bryce Canyon, Page, and the Arizona high desert — sandstone under hard sun.' },
-  { year: '2024', title: 'Florida Coast', description: 'Miami and Orlando — humid blues, neon greens, salt-bleached pastels.' },
+  { year: '2024', title: 'Southwest Sequence', description: 'Zion, Bryce Canyon, Page, and the Arizona high desert. Sandstone under hard sun.' },
+  { year: '2024', title: 'Florida Coast', description: 'Miami and Orlando. Humid blues, neon greens, salt-bleached pastels.' },
   { year: '2023', title: 'Started Photography', description: 'First camera. First frame I cared about. Archive begins here.' },
 ];
 
@@ -58,7 +58,7 @@ export default function AboutPage({ settings }: Props) {
   }, []);
 
   return (
-    <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-screen">
+    <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-[100dvh]">
       {/* ═══════ Entrance — magazine "contributor" cover ═══════ */}
       <AnimatePresence>
         {!coverGone && (
@@ -113,7 +113,7 @@ export default function AboutPage({ settings }: Props) {
                 className="font-mono text-[11px] tracking-[0.5em] uppercase"
                 style={{ color: 'rgba(255,200,130,0.85)' }}
               >
-                // the operator
+                Photographer
               </motion.span>
               <h1 className="m-0 overflow-hidden" style={{ padding: '0.04em 0.02em' }}>
                 <motion.span
@@ -132,9 +132,7 @@ export default function AboutPage({ settings }: Props) {
                 transition={{ duration: 0.5, delay: 0.46, ease: expo }}
                 className="flex items-center gap-3 font-mono text-[10px] tracking-[0.34em] uppercase text-white/40"
               >
-                <span>Photographer</span>
-                <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'rgba(255,200,130,0.7)' }} />
-                <span>New York</span>
+                <span>New York, NY</span>
               </motion.div>
             </div>
 
@@ -154,148 +152,151 @@ export default function AboutPage({ settings }: Props) {
       </AnimatePresence>
 
 
-      {/* ═══════ HERO — Avatar + Name centered top ═══════ */}
-      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-3xl mx-auto text-center">
-        {/* Avatar — a water-droplet frame: settles in, then floats while its
-            edge morphs like a slowly wobbling drop, wrapped in a soft halo. */}
-        <motion.div
-          className="flex justify-center mb-6"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, ease: expo }}
-        >
-          <motion.div
-            className="relative w-28 h-28 md:w-36 md:h-36"
-            animate={reduce ? undefined : { y: [0, -7, 0] }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            {/* Liquid halo — morphs out of phase + drifts, for surface tension */}
+      {/* ═══════ HERO — editorial split: portrait left, profile right ═══════ */}
+      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-5xl mx-auto">
+        <div className="grid md:grid-cols-12 gap-10 md:gap-12 items-start">
+
+          {/* ── LEFT: water-droplet portrait + stacked meta ── */}
+          <div className="md:col-span-5 flex flex-col items-start gap-7">
+            {/* Avatar — a water-droplet frame: settles in, then floats while its
+                edge morphs like a slowly wobbling drop, wrapped in a soft halo. */}
             <motion.div
-              aria-hidden
-              className="absolute -inset-3 -z-10 blur-xl"
-              style={{
-                borderRadius: DROP_OUTER[0],
-                background:
-                  'radial-gradient(circle at 36% 30%, rgba(255,200,130,0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
-              }}
-              animate={reduce ? undefined : { borderRadius: DROP_OUTER, rotate: [0, 7, 0], scale: [1, 1.06, 1] }}
-              transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            {/* The droplet — morphing border-radius clips the photo */}
-            <motion.div
-              className="relative w-full h-full overflow-hidden bg-white/5 shadow-xl ring-1 ring-white/15"
-              style={{ borderRadius: DROP_INNER[0] }}
-              animate={reduce ? undefined : { borderRadius: DROP_INNER, scale: [1, 1.045, 0.99, 1] }}
-              transition={{ duration: 7.5, repeat: Infinity, ease: 'easeInOut' }}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, ease: expo }}
             >
-              <img
-                src={avatarUrl}
-                alt={name}
-                className="w-full h-full object-cover object-right scale-105"
-                loading="eager"
-                decoding="async"
-                draggable={false}
-              />
-              {/* Specular gloss — the water-drop sheen, top-left (subtle) */}
-              <div
-                aria-hidden
-                className="absolute inset-0 pointer-events-none mix-blend-screen"
-                style={{
-                  background:
-                    'radial-gradient(40% 30% at 30% 22%, rgba(255,255,255,0.16), rgba(255,255,255,0.03) 46%, transparent 64%)',
-                }}
-              />
+              <motion.div
+                className="relative w-40 h-40 md:w-52 md:h-52"
+                animate={reduce ? undefined : { y: [0, -7, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                {/* Liquid halo — morphs out of phase + drifts, for surface tension */}
+                <motion.div
+                  aria-hidden
+                  className="absolute -inset-3 -z-10 blur-xl"
+                  style={{
+                    borderRadius: DROP_OUTER[0],
+                    background:
+                      'radial-gradient(circle at 36% 30%, rgba(255,200,130,0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
+                  }}
+                  animate={reduce ? undefined : { borderRadius: DROP_OUTER, rotate: [0, 7, 0], scale: [1, 1.06, 1] }}
+                  transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                {/* The droplet — morphing border-radius clips the photo */}
+                <motion.div
+                  className="relative w-full h-full overflow-hidden bg-white/5 shadow-xl ring-1 ring-white/15"
+                  style={{ borderRadius: DROP_INNER[0] }}
+                  animate={reduce ? undefined : { borderRadius: DROP_INNER, scale: [1, 1.045, 0.99, 1] }}
+                  transition={{ duration: 7.5, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <img
+                    src={avatarUrl}
+                    alt={name}
+                    className="w-full h-full object-cover object-right scale-105"
+                    loading="eager"
+                    decoding="async"
+                    draggable={false}
+                  />
+                  {/* Specular gloss — the water-drop sheen, top-left (subtle) */}
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 pointer-events-none mix-blend-screen"
+                    style={{
+                      background:
+                        'radial-gradient(40% 30% at 30% 22%, rgba(255,255,255,0.16), rgba(255,255,255,0.03) 46%, transparent 64%)',
+                    }}
+                  />
+                </motion.div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        </motion.div>
 
-        {/* Name — mask reveal */}
-        <h1 className="text-4xl md:text-5xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[0.95] overflow-hidden py-1">
-          <motion.span
-            className="block"
-            initial={{ y: '110%' }}
-            animate={{ y: '0%' }}
-            transition={{ duration: 0.9, delay: 0.15, ease: expo }}
-          >
-            {name}.
-          </motion.span>
-        </h1>
-
-        {/* Subtitle */}
-        <motion.p
-          className="text-xs text-white/40 font-mono tracking-wider mt-3"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2, ease: expo }}
-        >
-          Photographer · New York, NY · Fujifilm X-T50 & Nikon Zf
-        </motion.p>
-
-        {/* Bio — prose section. Override the fallback by filling
-             `siteSettings.bio` in Sanity Studio. */}
-        {bio ? (
-          <motion.div
-            className="mt-8 text-left md:text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
-          >
-            <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-xl mx-auto whitespace-pre-line">
-              {bio}
-            </p>
-          </motion.div>
-        ) : (
-          <motion.div
-            className="mt-10 space-y-8 max-w-xl mx-auto"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: expo }}
-          >
-            {/* Statement — prose introduction */}
-            <div className="space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] text-left">
-              <p>
-                A photographic record of moving through cities and landscapes —
-                from the high-contrast geometry of Manhattan to the geologic
-                time of the American Southwest. No commissioned work, no client
-                briefs. Frames selected on a slow timeline, organized by
-                location, dated.
-              </p>
-              <p>
-                Off the camera: engineering and AI research. The discipline of
-                careful observation transfers between the two — both reward
-                patience over output volume. This site is one node in a
-                personal archive, not a portfolio for hire.
-              </p>
-            </div>
-
-            {/* Metadata block — terse system signature below the prose */}
-            <div className="space-y-2.5 text-left max-w-md font-mono text-[12px] pt-4 border-t border-white/5">
-              <div className="flex items-baseline gap-4">
-                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
-                <span className="text-white/60">Light. Geometry. Stillness.</span>
+            {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
+            <motion.dl
+              className="font-mono text-[11px] leading-relaxed text-white/45 space-y-1.5"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3, ease: expo }}
+            >
+              <div className="text-white/70">Photographer</div>
+              <div>New York, NY</div>
+              <div>Fujifilm X-T50 · Nikon Zf</div>
+              <div className="pt-2.5 mt-1 border-t border-white/10 tracking-[0.3em] uppercase text-white/30 text-[10px]">
+                Since 2023
               </div>
-              <div className="flex items-baseline gap-4">
-                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
-                <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
-              </div>
-              <div className="flex items-baseline gap-4">
-                <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
-                <span className="text-white/60">Personal archive · selected frames only.</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.dl>
+          </div>
 
-        <motion.div
-          className="flex items-center gap-4 mt-5 justify-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
-          <div className="w-10 h-px bg-white/10" />
-          <span className="text-[10px] text-white/30 tracking-[0.3em] uppercase font-mono">Since 2023</span>
-          <div className="w-10 h-px bg-white/10" />
-        </motion.div>
+          {/* ── RIGHT: name + bio ── */}
+          <div className="md:col-span-7">
+            {/* Name — mask reveal. leading-[1.1] keeps the italic 'y' descender
+                clear of the overflow-hidden mask. */}
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[1.1] overflow-hidden pb-2">
+              <motion.span
+                className="block"
+                initial={{ y: '110%' }}
+                animate={{ y: '0%' }}
+                transition={{ duration: 0.9, delay: 0.15, ease: expo }}
+              >
+                {name}.
+              </motion.span>
+            </h1>
+
+            {/* Bio — prose section. Override the fallback by filling
+                 `siteSettings.bio` in Sanity Studio. */}
+            {bio ? (
+              <motion.div
+                className="mt-7"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+              >
+                <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-[60ch] whitespace-pre-line">
+                  {bio}
+                </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                className="mt-7 space-y-8"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+              >
+                {/* Statement — prose introduction */}
+                <div className="space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]">
+                  <p>
+                    A photographic record of moving through cities and
+                    landscapes, from the high-contrast geometry of Manhattan to
+                    the geologic time of the American Southwest. No commissioned
+                    work, no client briefs. Frames selected on a slow timeline,
+                    organized by location, dated.
+                  </p>
+                  <p>
+                    Off the camera: engineering and AI research. The discipline
+                    of careful observation transfers between the two; both
+                    reward patience over output volume. This site is one node in
+                    a personal archive, not a portfolio for hire.
+                  </p>
+                </div>
+
+                {/* Metadata block — terse system signature below the prose */}
+                <div className="space-y-2.5 max-w-md font-mono text-[12px] pt-4 border-t border-white/5">
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
+                    <span className="text-white/60">Light. Geometry. Stillness.</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
+                    <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
+                    <span className="text-white/60">Personal archive, selected frames only.</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* ═══════ TIMELINE ═══════ */}
@@ -315,7 +316,7 @@ export default function AboutPage({ settings }: Props) {
               viewport={{ once: true, margin: '-10%' }}
               transition={{ duration: 0.8, ease: expo }}
             >
-              Timeline // Operations log.
+              Timeline.
             </motion.span>
           </h2>
         </div>
@@ -373,7 +374,7 @@ export default function AboutPage({ settings }: Props) {
               viewport={{ once: true, margin: '-10%' }}
               transition={{ duration: 0.8, ease: expo }}
             >
-              Contact // Channels.
+              Contact.
             </motion.span>
           </h2>
 
@@ -423,10 +424,12 @@ export default function AboutPage({ settings }: Props) {
             </div>
 
             <div className="p-5 bg-[#0A0A0A] flex items-center gap-3.5">
-              <span className="w-1.5 h-1.5 rounded-full shrink-0 ml-[5px] mr-[5px]" style={{ background: 'rgba(255,200,130,0.85)', boxShadow: '0 0 8px rgba(255,200,130,0.6)' }} />
+              <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" />
+              </svg>
               <div className="min-w-0">
-                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Status</p>
-                <p className="text-sm font-light text-white/55">Open for collaborations</p>
+                <p className="font-mono text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Reply</p>
+                <p className="text-sm font-light text-white/55">Open to conversation, not client briefs</p>
               </div>
             </div>
           </div>
