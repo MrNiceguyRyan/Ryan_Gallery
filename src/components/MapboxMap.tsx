@@ -336,7 +336,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     <div>
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.4)] border border-white/10 bg-[#111]">
         {/* ── Map ── */}
-        <div className="relative w-full lg:flex-1 h-[62vh] min-h-[420px] md:h-[78vh] lg:h-[88vh]">
+        <div className="relative w-full lg:flex-1 h-[54vh] min-h-[360px] md:h-[64vh] lg:h-[72vh]">
           <MapGL
             {...viewState}
             ref={mapRef}
@@ -537,13 +537,6 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           {/* ── Floating status badge ── */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
             <div className="bg-black/50 backdrop-blur-2xl px-5 py-3.5 rounded-2xl shadow-lg border border-white/10">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full opacity-70 animate-ping" style={{ background: ACCENT }} />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: ACCENT }} />
-                </span>
-                <span className="text-[8px] uppercase tracking-[0.4em] font-black text-white/40">Live Atlas</span>
-              </div>
               <p className="text-sm font-serif italic text-white/85 leading-none">United States</p>
               <p className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/30 mt-1.5">
                 {cityClusters.length} coordinates · {photos.length} frames
@@ -631,7 +624,6 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                     className="w-full text-left px-5 py-3 flex items-center justify-between bg-white/[0.02] border-b border-white/5 hover:bg-white/[0.05] transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
                       <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">{group.region}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -778,7 +770,6 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
         {regionGroups.map((group) => (
           <div key={group.region}>
             <div className="flex items-center gap-2 px-1 mb-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
               <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40">{group.region}</span>
               <div className="flex-1 h-px bg-white/5" />
               <span className="text-[10px] font-mono text-white/20">{group.totalPhotos}</span>
