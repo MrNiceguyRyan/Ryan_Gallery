@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
@@ -214,6 +214,28 @@ function CollapsedRegionStrip({
 /* ═══════════════════════════════════════════════════════
  *  HomePage — atmospheric dark archive
  * ═══════════════════════════════════════════════════════ */
+/* Native-IO reveal trigger. The page-transition view-transition snapshot can
+ * leave framer's `whileInView` observer stuck at `initial` (content never
+ * un-hides), so below-fold reveals flip a flag from a real IntersectionObserver
+ * instead — guaranteed to fire. Mirrors the Reveal pattern in AboutPage. */
+function useInViewOnce<T extends Element>(rootMargin = '0px 0px -12% 0px') {
+  const ref = useRef<T>(null);
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (reduce) { setShown(true); return; }
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }),
+      { rootMargin, threshold: 0.12 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [reduce]);
+  return [ref, shown] as const;
+}
+
 export default function HomePage({ collections, photos }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
@@ -258,6 +280,8 @@ export default function HomePage({ collections, photos }: Props) {
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
+  // "Selected Works" heading block — reliable scroll reveal (not whileInView).
+  const [selectedWorksRef, selectedWorksShown] = useInViewOnce<HTMLDivElement>();
 
   // Scroll-velocity skew (Zajno-style "weighty" scroll) — the archive content
   // leans slightly with scroll speed and settles when you stop. Scoped to the
@@ -923,11 +947,11 @@ export default function HomePage({ collections, photos }: Props) {
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
             <motion.div style={{ skewY: contentSkew }} className="flex-1 space-y-12 md:space-y-20">
-              <div className="space-y-4 max-w-2xl">
+              <div ref={selectedWorksRef} className="space-y-4 max-w-2xl">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
+                  animate={selectedWorksShown ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold opacity-30"
                 >
                   <div className="w-8 h-px bg-white/30" />
@@ -937,8 +961,7 @@ export default function HomePage({ collections, photos }: Props) {
                   <motion.span
                     className="block"
                     initial={{ y: '115%' }}
-                    whileInView={{ y: '0%' }}
-                    viewport={{ once: true, margin: '-12%' }}
+                    animate={selectedWorksShown ? { y: '0%' } : { y: '115%' }}
                     transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
                   >
                     Curating the world through a{' '}
