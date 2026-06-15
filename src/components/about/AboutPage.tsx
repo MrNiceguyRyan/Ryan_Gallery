@@ -1,14 +1,55 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
+// Hero entrance item: fades up. `custom` is the per-element delay so the hero
+// text emerges top-to-bottom once the cover has lifted.
+const heroItem = {
+  hidden: { opacity: 0, y: 22 },
+  show: (d: number = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.62, delay: d, ease: expo } }),
+};
+
+/**
+ * Scroll-reveal wrapper driven by a native IntersectionObserver. The project's
+ * page-transition transform breaks framer's `whileInView`, so we observe
+ * directly and flip a flag — guaranteed to fire. Content fades up on enter.
+ * Reduced-motion users get the content immediately, no transform.
+ */
+function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNode; className?: string; y?: number; delay?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (reduce) { setShown(true); return; }
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }),
+      { rootMargin: '0px 0px -12% 0px', threshold: 0.12 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [reduce]);
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      initial={{ opacity: 0, y }}
+      animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y }}
+      transition={{ duration: 0.6, delay, ease: expo }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 // Organic "water-droplet" frame: a border-radius that morphs through a few
 // asymmetric blob states so the avatar wobbles like a settling drop. The two
 // arrays run at different tempos so the inner photo and outer halo are never
-// perfectly in sync — the surface-tension shimmer.
+// perfectly in sync, for the surface-tension shimmer.
 const DROP_INNER = [
   '64% 36% 27% 73% / 66% 28% 72% 34%',
   '33% 67% 66% 34% / 36% 70% 30% 64%',
@@ -58,7 +99,17 @@ export default function AboutPage({ settings }: Props) {
   }, []);
 
   return (
-    <div className="bg-[#0A0A0A] text-[#FDFDFB] min-h-[100dvh]">
+    <div className="relative bg-[#0A0A0A] text-[#FDFDFB] min-h-[100dvh]">
+      {/* ═══════ Ambient texture — keeps the all-black page from reading flat.
+           Warm amber washes (the site accent) + a faint dot grid + grain, all
+           fixed-behind and pointer-events-none. ═══════ */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(60vmax 50vmax at 12% 6%, rgba(255,200,130,0.055), transparent 60%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(55vmax 46vmax at 100% 100%, rgba(255,200,130,0.04), transparent 62%)' }} />
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.65) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
+        <div className="absolute inset-0 newsprint-screen opacity-[0.035]" />
+      </div>
+
       {/* ═══════ Entrance — magazine "contributor" cover ═══════ */}
       <AnimatePresence>
         {!coverGone && (
@@ -151,9 +202,23 @@ export default function AboutPage({ settings }: Props) {
         )}
       </AnimatePresence>
 
+      {/* ═══════ Page content (above the texture layer) ═══════ */}
+      <div className="relative z-10">
 
       {/* ═══════ HERO — editorial split: portrait left, profile right ═══════ */}
-      <section className="pt-28 md:pt-36 pb-10 px-6 md:px-16 max-w-5xl mx-auto">
+      <section className="pt-28 md:pt-36 pb-10 md:pb-14 px-6 md:px-16 max-w-5xl mx-auto">
+        {/* Running head / folio bar */}
+        <motion.div
+          className="flex items-baseline justify-between border-b border-white/10 pb-3 mb-10 md:mb-14 font-mono text-[10px] tracking-[0.32em] uppercase text-white/35"
+          variants={heroItem}
+          custom={0}
+          initial="hidden"
+          animate={coverGone ? 'show' : 'hidden'}
+        >
+          <span className="text-white/55">The Profile</span>
+          <span>New York · Since 2023</span>
+        </motion.div>
+
         <div className="grid md:grid-cols-12 gap-10 md:gap-12 items-start">
 
           {/* ── LEFT: water-droplet portrait + stacked meta ── */}
@@ -161,9 +226,9 @@ export default function AboutPage({ settings }: Props) {
             {/* Avatar — a water-droplet frame: settles in, then floats while its
                 edge morphs like a slowly wobbling drop, wrapped in a soft halo. */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, ease: expo }}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={coverGone ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.7, delay: 0.1, ease: expo }}
             >
               <motion.div
                 className="relative w-40 h-40 md:w-52 md:h-52"
@@ -213,9 +278,10 @@ export default function AboutPage({ settings }: Props) {
             {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
             <motion.dl
               className="font-mono text-[11px] leading-relaxed text-white/45 space-y-1.5"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3, ease: expo }}
+              variants={heroItem}
+              custom={0.34}
+              initial="hidden"
+              animate={coverGone ? 'show' : 'hidden'}
             >
               <div className="text-white/70">Photographer</div>
               <div>New York, NY</div>
@@ -226,29 +292,39 @@ export default function AboutPage({ settings }: Props) {
             </motion.dl>
           </div>
 
-          {/* ── RIGHT: name + bio ── */}
+          {/* ── RIGHT: name + lede + bio ── */}
           <div className="md:col-span-7">
-            {/* Name — mask reveal. leading-[1.1] keeps the italic 'y' descender
-                clear of the overflow-hidden mask. */}
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[1.1] overflow-hidden pb-2">
-              <motion.span
-                className="block"
-                initial={{ y: '110%' }}
-                animate={{ y: '0%' }}
-                transition={{ duration: 0.9, delay: 0.15, ease: expo }}
-              >
-                {name}.
-              </motion.span>
-            </h1>
+            {/* Name — fades up as part of the top-to-bottom entrance cascade */}
+            <motion.h1
+              className="text-6xl md:text-7xl lg:text-8xl font-serif italic text-[#FDFDFB] tracking-tighter leading-[1.1] pb-2"
+              variants={heroItem}
+              custom={0.1}
+              initial="hidden"
+              animate={coverGone ? 'show' : 'hidden'}
+            >
+              {name}.
+            </motion.h1>
+
+            {/* Lede — a single serif statement, the page thesis */}
+            <motion.p
+              className="mt-5 font-serif italic text-xl md:text-2xl text-white/75 leading-snug max-w-[24ch]"
+              variants={heroItem}
+              custom={0.22}
+              initial="hidden"
+              animate={coverGone ? 'show' : 'hidden'}
+            >
+              Cities and landscapes, one frame at a time.
+            </motion.p>
 
             {/* Bio — prose section. Override the fallback by filling
                  `siteSettings.bio` in Sanity Studio. */}
             {bio ? (
               <motion.div
                 className="mt-7"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+                variants={heroItem}
+                custom={0.34}
+                initial="hidden"
+                animate={coverGone ? 'show' : 'hidden'}
               >
                 <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-[60ch] whitespace-pre-line">
                   {bio}
@@ -256,30 +332,28 @@ export default function AboutPage({ settings }: Props) {
               </motion.div>
             ) : (
               <motion.div
-                className="mt-7 space-y-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.3, ease: expo }}
+                className="mt-7 space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]"
+                variants={heroItem}
+                custom={0.34}
+                initial="hidden"
+                animate={coverGone ? 'show' : 'hidden'}
               >
-                {/* Statement — prose introduction */}
-                <div className="space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]">
-                  <p>
-                    A photographic record of moving through cities and
-                    landscapes, from the high-contrast geometry of Manhattan to
-                    the geologic time of the American Southwest. No commissioned
-                    work, no client briefs. Frames selected on a slow timeline,
-                    organized by location, dated.
-                  </p>
-                  <p>
-                    Off the camera: engineering and AI research. The discipline
-                    of careful observation transfers between the two; both
-                    reward patience over output volume. This site is one node in
-                    a personal archive, not a portfolio for hire.
-                  </p>
-                </div>
+                <p>
+                  A photographic record of moving through cities and
+                  landscapes, from the high-contrast geometry of Manhattan to
+                  the geologic time of the American Southwest. No commissioned
+                  work, no client briefs. Frames selected on a slow timeline,
+                  organized by location, dated.
+                </p>
+                <p>
+                  Off the camera: engineering and AI research. The discipline
+                  of careful observation transfers between the two; both
+                  reward patience over output volume. This site is one node in
+                  a personal archive, not a portfolio for hire.
+                </p>
 
-                {/* Metadata block — terse system signature below the prose */}
-                <div className="space-y-2.5 max-w-md font-mono text-[12px] pt-4 border-t border-white/5">
+                {/* Terse system signature below the prose */}
+                <div className="space-y-2.5 max-w-md font-mono text-[12px] pt-5 mt-1 border-t border-white/5">
                   <div className="flex items-baseline gap-4">
                     <span className="text-white/30 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
                     <span className="text-white/60">Light. Geometry. Stillness.</span>
@@ -299,90 +373,49 @@ export default function AboutPage({ settings }: Props) {
         </div>
       </section>
 
-      {/* ═══════ TIMELINE ═══════ */}
-      <motion.section
-        className="py-12 md:py-16 overflow-hidden border-t border-white/5"
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-60px' }}
-        transition={{ duration: 0.8, ease: expo }}
-      >
-        <div className="px-6 md:px-16 max-w-5xl mx-auto mb-8">
-          <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter overflow-hidden py-1">
-            <motion.span
-              className="block"
-              initial={{ y: '120%' }}
-              whileInView={{ y: '0%' }}
-              viewport={{ once: true, margin: '-10%' }}
-              transition={{ duration: 0.8, ease: expo }}
-            >
-              Timeline.
-            </motion.span>
+      {/* ═══════ TIMELINE — vertical editorial log ═══════ */}
+      <section className="px-6 md:px-16 max-w-3xl mx-auto py-12 md:py-16 border-t border-white/5">
+        <Reveal>
+          <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter py-1 mb-8">
+            Timeline.
           </h2>
-        </div>
+        </Reveal>
 
-        <div className="relative">
-          <motion.div
-            className="absolute top-[20px] left-0 right-0 h-px bg-white/10"
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1.2, ease: expo }}
-            style={{ transformOrigin: 'left' }}
-          />
-          <div
-            className="flex gap-5 px-6 md:px-16 pb-4 overflow-x-auto no-scrollbar snap-x snap-mandatory md:snap-none"
-            style={{ scrollPaddingInline: '1.5rem' }}
-          >
-            {timeline.map((item, i) => (
-              <motion.div
-                key={`${item.year}-${i}`}
-                className="flex-shrink-0 w-56 md:w-64 group snap-start"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.5, delay: i * 0.07, ease: expo }}
-              >
-                <div className="relative mb-5">
-                  <div className="w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] relative z-10 transition-all duration-500 group-hover:border-[rgba(255,200,130,0.9)] group-hover:shadow-[0_0_10px_rgba(255,200,130,0.5)]" />
-                </div>
-                <span className="text-[10px] font-mono text-white/30 tracking-wider">{item.year}</span>
-                <h3 className="text-base font-light text-[#FDFDFB] mt-1 tracking-tight group-hover:translate-x-1 transition-transform duration-400">
+        <ol className="relative ml-1.5 border-l border-white/10">
+          {timeline.map((item, i) => (
+            <li
+              key={`${item.year}-${i}`}
+              className="relative pl-8 pb-9 last:pb-0 group"
+            >
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] transition-all duration-500 group-hover:border-[rgba(255,200,130,0.9)] group-hover:shadow-[0_0_10px_rgba(255,200,130,0.5)]" />
+              <Reveal y={18} delay={(i % 2) * 0.05}>
+                <span className="font-mono text-[10px] text-white/30 tracking-[0.2em]">{item.year}</span>
+                <h3 className="text-lg md:text-xl font-serif italic text-[#FDFDFB] mt-1 tracking-tight">
                   {item.title}
                 </h3>
-                <p className="text-[13px] text-white/40 font-light mt-1.5 leading-relaxed">{item.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </motion.section>
+                <p className="text-[13.5px] text-white/45 font-light mt-1.5 leading-relaxed max-w-[55ch]">
+                  {item.description}
+                </p>
+              </Reveal>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       {/* ═══════ CONTACT ═══════ */}
-      <motion.section
-        className="px-6 md:px-16 py-12 md:py-16 border-t border-white/5"
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-60px' }}
-        transition={{ duration: 0.8, ease: expo }}
-      >
+      <section className="px-6 md:px-16 py-12 md:py-16 border-t border-white/5">
         <div className="max-w-3xl mx-auto">
-          <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter mb-6 overflow-hidden py-1">
-            <motion.span
-              className="block"
-              initial={{ y: '120%' }}
-              whileInView={{ y: '0%' }}
-              viewport={{ once: true, margin: '-10%' }}
-              transition={{ duration: 0.8, ease: expo }}
-            >
+          <Reveal>
+            <h2 className="text-xl md:text-2xl font-serif italic text-[#FDFDFB] tracking-tighter mb-6 py-1">
               Contact.
-            </motion.span>
-          </h2>
+            </h2>
+          </Reveal>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
-            <motion.a
+          <Reveal>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
+            <a
               href={`mailto:${email}`}
               className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
-              whileHover={{ transition: { duration: 0.2 } }}
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
@@ -392,14 +425,13 @@ export default function AboutPage({ settings }: Props) {
                 <p className="text-sm font-light text-white/80 truncate">{email}</p>
               </div>
               <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
-            </motion.a>
+            </a>
 
-            <motion.a
+            <a
               href={instagram}
               target="_blank"
               rel="noopener noreferrer"
               className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
-              whileHover={{ transition: { duration: 0.2 } }}
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -410,7 +442,7 @@ export default function AboutPage({ settings }: Props) {
                 <p className="text-sm font-light text-white/80 truncate">{igHandle}</p>
               </div>
               <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
-            </motion.a>
+            </a>
 
             <div className="p-5 bg-[#0A0A0A] flex items-center gap-3.5">
               <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
@@ -432,15 +464,10 @@ export default function AboutPage({ settings }: Props) {
                 <p className="text-sm font-light text-white/55">Open to conversation, not client briefs</p>
               </div>
             </div>
-          </div>
+            </div>
+          </Reveal>
 
-          <motion.div
-            className="mt-8 text-center"
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, ease: expo }}
-          >
+          <Reveal delay={0.05} className="mt-8 text-center">
             <Magnetic strength={0.5}>
               <a
                 href={`mailto:${email}`}
@@ -449,9 +476,11 @@ export default function AboutPage({ settings }: Props) {
                 Get in Touch
               </a>
             </Magnetic>
-          </motion.div>
+          </Reveal>
         </div>
-      </motion.section>
+      </section>
+
+      </div>
     </div>
   );
 }

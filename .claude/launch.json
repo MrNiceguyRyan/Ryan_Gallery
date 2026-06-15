@@ -6,6 +6,12 @@
       "runtimeExecutable": "/bin/zsh",
       "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && npx astro dev"],
       "port": 4321
+    },
+    {
+      "name": "astro-preview",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && npx astro preview --port 4321"],
+      "port": 4321
     }
   ]
 }
