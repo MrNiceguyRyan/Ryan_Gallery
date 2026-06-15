@@ -605,8 +605,8 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           </div>
         </div>
 
-        {/* ── Desktop sidebar — grouped by region (optional; off when an
-             external index drives the map, e.g. /travel's AtlasIndex) ── */}
+        {/* ── Desktop sidebar — grouped by region (optional; off via
+             showLocationList=false when an external index drives the map) ── */}
         {showLocationList && (
         <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#0A0A0A]">
           <div className="px-5 py-4 border-b border-white/5">
