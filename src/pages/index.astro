@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
-import type { Collection, Photo } from '../types';
+import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 
 // ─── GROQ: All collections with photos + location data ───
@@ -36,28 +36,8 @@ const collections: Collection[] = await sanityClient.fetch(`
     }
   }
 `);
-
-// ─── GROQ: All photos ───
-const photos: Photo[] = await sanityClient.fetch(`
-  *[_type == "photo"] | order(_createdAt desc) {
-    _id,
-    title,
-    "imageUrl": image.asset->url,
-    camera,
-    focalLength,
-    aperture,
-    shutterSpeed,
-    iso,
-    styleCategory,
-    location,
-    collection->{
-      name,
-      "slug": slug.current
-    }
-  }
-`);
 ---
 
 <Layout>
-  <HomePage client:load collections={collections} photos={photos} />
+  <HomePage client:load collections={collections} />
 </Layout>

@@ -1,0 +1,6 @@
+# Content-hashed build assets never change for a given filename, so cache them
+# hard. This removes a conditional 304 round-trip per asset on repeat visits
+# and on every in-site ClientRouter navigation. Scoped to /_astro/* ONLY —
+# HTML stays on the default must-revalidate so documents are never stale.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring, useVelocity, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
-import type { Collection, Photo } from '../../types';
+import type { Collection } from '../../types';
 import HeroEntrance from './HeroEntrance';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
@@ -33,7 +33,6 @@ const expo = [0.23, 1, 0.32, 1] as const;
 
 interface Props {
   collections: Collection[];
-  photos: Photo[];
 }
 
 /* A homepage section — a run of city chapters that share a `region`. Sections
@@ -236,7 +235,7 @@ function useInViewOnce<T extends Element>(rootMargin = '0px 0px -12% 0px') {
   return [ref, shown] as const;
 }
 
-export default function HomePage({ collections, photos }: Props) {
+export default function HomePage({ collections }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
   // multi-city region starts collapsed, so the homepage opens as a compact
