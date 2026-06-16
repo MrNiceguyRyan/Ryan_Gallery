@@ -155,12 +155,15 @@ export default function HeroEntrance({
       );
 
       // ── Phase 3 · Text reveal (overlaps the fan's tail) ──
-      tl.to(textLines, { yPercent: 0, duration: 0.85, ease: 'expo.out', stagger: 0.1 }, '-=0.55');
+      // Start earlier so the intro lines aren't crammed into the last beat — at
+      // the old timing they surfaced ~0.7s before the sheet lifted, reading as
+      // "the text barely appears".
+      tl.to(textLines, { yPercent: 0, duration: 0.85, ease: 'expo.out', stagger: 0.1 }, '-=0.7');
       // hairline underline wipes out beneath the name
       tl.to(underlineRef.current, { scaleX: 1, duration: 0.6, ease: 'expo.out' }, '-=0.45');
 
-      // ── Settle, then lift the sheet away (explicit label) ──
-      tl.to({}, { duration: 0.55 }).addLabel('out');
+      // ── Settle (hold the fully-revealed text long enough to read), then lift ──
+      tl.to({}, { duration: 1.35 }).addLabel('out');
       tl.to(cardEls, { y: '-=30', opacity: 0, duration: 0.55, ease: 'power3.in', stagger: 0.035 }, 'out')
         .to(textRef.current, { yPercent: -24, opacity: 0, duration: 0.5, ease: 'power3.in' }, 'out')
         .to(rootRef.current, { opacity: 0, duration: 0.5, ease: 'power2.inOut' }, 'out+=0.12');
