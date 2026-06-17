@@ -14,15 +14,20 @@
  *
  * Deleting is destructive and gated behind BOTH --apply and --delete-empty,
  * and only ever touches collections with exactly 0 referencing photos.
+ *
+ * Requires SANITY_TOKEN because --apply and --delete-empty mutate production
+ * Sanity data.
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
-
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Export a Sanity write token before running this cleanup script.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
