@@ -1,0 +1,69 @@
+/* ============================================================
+   About / cinematic portfolio — TYPOGRAPHY
+   Geometric sans, oversized display, tight tracking, Swiss labels.
+   ============================================================ */
+
+/* Small uppercase tracked label, e.g. "Portfolio", "Socials" */
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+/* Oversized hero / section display */
+.display {
+  font-size: clamp(2.8rem, 11vw, 12rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+
+.display--xl {
+  font-size: clamp(3.5rem, 16vw, 20rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.82;
+}
+
+/* Centered statement / quote text */
+.quote {
+  font-size: clamp(2rem, 6.5vw, 6rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+  text-align: center;
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+/* Body / meta */
+.meta {
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+.numeral {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Reveal primitives — word & char split targets ──
+   The JS reveal modules wrap text into .word / .char spans. Base
+   tone is dim; scroll progress lifts each to full contrast (white
+   on dark, black on light — handled via currentColor). */
+.word,
+.char {
+  display: inline-block;
+  color: var(--dim-on-dark);
+  will-change: color;
+}
+.word {
+  /* preserve spaces between words */
+  margin-right: 0.25em;
+}
+.char {
+  white-space: pre;
+}
