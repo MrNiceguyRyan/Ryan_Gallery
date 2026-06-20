@@ -68,8 +68,17 @@ function MobileFilmstripItem({
     ? `${coverBase}?auto=format&w=600&q=80 600w, ${coverBase}?auto=format&w=900&q=80 900w, ${coverBase}?auto=format&w=1200&q=78 1200w`
     : undefined;
 
+  // Scroll parallax — the cover drifts inside its frame as the card passes
+  // through the viewport, matching the desktop chapters. Image is sized h-[126%]
+  // so the drift never exposes an edge. Disabled for reduced-motion.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll({ target: cardRef, offset: ['start end', 'end start'] });
+  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-16%']);
+
   return (
     <motion.div
+      ref={cardRef}
       onClick={onClick}
       whileInView="active"
       whileTap={{ scale: 0.985 }}
@@ -83,12 +92,13 @@ function MobileFilmstripItem({
           srcSet={coverSrcSet}
           sizes="100vw"
           alt={title}
+          style={{ y: imgY }}
           variants={{
             active: { scale: 1.08, filter: 'grayscale(0%)' },
           }}
           initial={{ filter: 'grayscale(100%)', scale: 1.02 }}
           transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute inset-0 w-full h-full object-cover object-center"
+          className="absolute inset-0 w-full h-[126%] object-cover object-center"
           loading="lazy"
           decoding="async"
           draggable={false}
@@ -272,6 +282,16 @@ export default function HomePage({ collections }: Props) {
   const heroY = useTransform(scrollY, [0, 600], [0, -100], { clamp: true });
   const heroScale = useTransform(scrollY, [0, 600], [1, 1.06], { clamp: true });
   const scrollCueOpacity = useTransform(scrollY, [0, 160], [1, 0], { clamp: true });
+  // Layered hero parallax — on scroll-out the title pulls UP faster than the
+  // frame while the epigraph lags slightly DOWN, so the two planes separate
+  // into depth instead of receding as one flat sheet. Applied on dedicated
+  // wrappers so they don't fight the entrance/exit transforms; off when reduced.
+  const heroTitleParallax = useTransform(scrollY, [0, 600], [0, -64], { clamp: true });
+  const heroEpigraphParallax = useTransform(scrollY, [0, 600], [0, 38], { clamp: true });
+  // Deep background photographic layer — a single faint, heavily-blurred frame
+  // that drifts slowly up the whole scroll, sitting behind the accent halos to
+  // give the room a sense of photographic depth. Drift only; off when reduced.
+  const bgPhotoY = useTransform(scrollY, [0, 4000], [0, -130], { clamp: true });
 
   // The cinematic film-open plays once the first-visit intro is gone (or
   // immediately on a return visit, when no intro shows).
@@ -281,6 +301,15 @@ export default function HomePage({ collections }: Props) {
   const reduce = useReducedMotion();
   // "Selected Works" heading block — reliable scroll reveal (not whileInView).
   const [selectedWorksRef, selectedWorksShown] = useInViewOnce<HTMLDivElement>();
+  // Reverse parallax — the heading block counter-drifts (down) against the
+  // covers' upward drift, so the text plane reads as nearer than the photos.
+  // useScroll measures the static outer wrapper; the drift is applied to an
+  // inner layer (no measure/transform feedback loop). Off when reduced.
+  const { scrollYProgress: swScrollProgress } = useScroll({
+    target: selectedWorksRef,
+    offset: ['start end', 'end start'],
+  });
+  const headingReverseY = useTransform(swScrollProgress, [0, 1], reduce ? [0, 0] : [36, -36]);
 
   // Scroll-velocity skew (Zajno-style "weighty" scroll) — the archive content
   // leans slightly with scroll speed and settles when you stop. Scoped to the
@@ -673,7 +702,7 @@ export default function HomePage({ collections }: Props) {
             </div>
 
             <div className="space-y-4 max-w-7xl w-full mx-auto">
-              <div className="relative">
+              <motion.div className="relative" style={reduce ? undefined : { y: heroTitleParallax }}>
                 <ParticleTitle
                   text="Journal <br/> Gallery"
                   className="h-64 md:h-96"
@@ -688,7 +717,7 @@ export default function HomePage({ collections }: Props) {
                     transition={{ duration: 0.9, delay: introReady ? 0.7 : 0, ease: [0.5, 0, 0.15, 1] }}
                   />
                 </div>
-              </div>
+              </motion.div>
 
               {/* ── Rotating epigraph — narrative bridge from hero into archive ──
                    A small label sits constant ("From the archive"), and beneath
@@ -700,6 +729,7 @@ export default function HomePage({ collections }: Props) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1.2, duration: 1 }}
+                style={reduce ? undefined : { y: heroEpigraphParallax }}
                 className="pt-10 md:pt-12 flex flex-col items-center gap-3"
               >
                 <p className="text-[9px] uppercase tracking-[0.5em] font-medium opacity-25">
@@ -793,6 +823,25 @@ export default function HomePage({ collections }: Props) {
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
+            {/* Deep photographic layer — faint, blurred, drifts slowly on scroll
+                 for parallax depth. Sits beneath the halos. */}
+            {(() => {
+              const bgPhotoBase =
+                activeCollections[0]?.coverImageUrl ?? activeCollections[0]?.photos?.[0]?.imageUrl ?? '';
+              return bgPhotoBase ? (
+                <motion.div
+                  className="absolute -inset-y-[25%] inset-x-0"
+                  style={reduce ? undefined : { y: bgPhotoY }}
+                  aria-hidden="true"
+                >
+                  <img
+                    src={`${bgPhotoBase}?auto=format&w=1100&q=45`}
+                    alt=""
+                    className="w-full h-full object-cover blur-[80px] grayscale opacity-[0.10] scale-110"
+                  />
+                </motion.div>
+              ) : null;
+            })()}
             {/* Accent halo — large soft radial driven by the page-level --accent-*
                  vars. Two layers oscillating out of phase give the room a
                  color-temperature "breath." Opacity is scroll-driven via
@@ -946,7 +995,8 @@ export default function HomePage({ collections }: Props) {
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
             <motion.div style={{ skewY: contentSkew }} className="flex-1 space-y-12 md:space-y-20">
-              <div ref={selectedWorksRef} className="space-y-4 max-w-2xl">
+              <div ref={selectedWorksRef} className="max-w-2xl">
+                <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-4">
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={selectedWorksShown ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
@@ -980,6 +1030,7 @@ export default function HomePage({ collections }: Props) {
                   </span>
                   <span>Select any frame to enter its story</span>
                 </div>
+                </motion.div>
               </div>
 
               <div className="space-y-12 md:space-y-20">

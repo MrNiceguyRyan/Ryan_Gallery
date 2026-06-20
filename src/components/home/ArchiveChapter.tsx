@@ -1,5 +1,5 @@
 import { useRef, useMemo, useState } from 'react';
-import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from 'framer-motion';
+import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import type { Collection } from '../../types';
 import Magnetic from '../shared/Magnetic';
@@ -26,6 +26,7 @@ interface ArchiveChapterProps {
 export default function ArchiveChapter({ id, collection, onClick, index, isActive }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
+  const reduce = useReducedMotion();
 
   // Cursor-following light sheen (spring-smoothed) layered over the cover.
   const sheenX = useMotionValue(50);
@@ -45,7 +46,10 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   });
   const opacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0, 1, 1, 0]);
   const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.06, 1, 1, 0.99]);
-  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', '-14%']);
+  // Cover-photo parallax — the image drifts up inside its frame as the chapter
+  // passes through the viewport. Stronger than a hairline so the depth reads;
+  // the photo is sized h-[140%] (below) so the drift never exposes an edge.
+  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-22%']);
 
   const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
   // Full-bleed cover — wide (≈92vw) up to a large container. Bracket Retina.
@@ -87,7 +91,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               decoding="async"
               animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
               transition={{ duration: 1.1, ease: expo }}
-              className="absolute inset-0 w-full h-[125%] object-cover"
+              className="absolute inset-0 w-full h-[140%] object-cover"
               draggable={false}
             />
           )}
