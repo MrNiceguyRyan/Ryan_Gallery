@@ -8,9 +8,7 @@ import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
-import BackgroundVideo from './BackgroundVideo';
 import Magnetic from '../shared/Magnetic';
-import { accentFromPalette, ACCENT_NEUTRAL } from '../../lib/accentFromPalette';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
  * narratives in src/lib/narratives.tsx. The hero cycles through these
@@ -266,13 +264,6 @@ export default function HomePage({ collections }: Props) {
   const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
-  // Progressive halo onset — opacity follows actual scroll past the hero
-  // instead of toggling from a binary IntersectionObserver state. This makes
-  // the color wash arrive gradually as the user moves out of the hero,
-  // matching the user's "渐进" request. Maps the first 700 px of scroll to
-  // [0, 1]; remains at 1 deeper in the page.
-  const haloOpacity = useTransform(scrollY, [0, 700], [0, 1], { clamp: true });
-  const haloOpacitySecondary = useTransform(scrollY, [80, 780], [0, 1], { clamp: true });
 
   // Cinematic hero exit — as the user scrolls past the opening, the title
   // recedes (lifts, scales up slightly, fades) like a camera pulling back,
@@ -288,10 +279,6 @@ export default function HomePage({ collections }: Props) {
   // wrappers so they don't fight the entrance/exit transforms; off when reduced.
   const heroTitleParallax = useTransform(scrollY, [0, 600], [0, -64], { clamp: true });
   const heroEpigraphParallax = useTransform(scrollY, [0, 600], [0, 38], { clamp: true });
-  // Deep background photographic layer — a single faint, heavily-blurred frame
-  // that drifts slowly up the whole scroll, sitting behind the accent halos to
-  // give the room a sense of photographic depth. Drift only; off when reduced.
-  const bgPhotoY = useTransform(scrollY, [0, 4000], [0, -130], { clamp: true });
 
   // The cinematic film-open plays once the first-visit intro is gone (or
   // immediately on a return visit, when no intro shows).
@@ -462,11 +449,10 @@ export default function HomePage({ collections }: Props) {
   // looks unchanged at scrollY=0. The `accent-tint-transition` class on the
   // wrapper interpolates these three CSS vars over 1.2s as `activeArchiveId`
   // flips, giving a slow crossfade between "rooms".
-  const accentRgb = useMemo(() => {
-    if (!activeArchiveId) return ACCENT_NEUTRAL;
-    const city = orderedCities.find((c) => `archive-item-${c._id}` === activeArchiveId);
-    return city ? accentFromPalette(city.palette) : ACCENT_NEUTRAL;
-  }, [activeArchiveId, orderedCities]);
+  // Editorial restraint (高级简约): ONE muted clay accent drives all chrome
+  // (rails, folios, dividers) — no per-chapter colour shift. The photographs
+  // carry the colour; the page stays quiet.
+  const accentRgb = { r: 199, g: 154, b: 107 };
 
   return (
     <>
@@ -492,54 +478,15 @@ export default function HomePage({ collections }: Props) {
           ['--accent-b' as never]: accentRgb.b,
         }}
       >
-        {/* ── Global Grain & Texture Overlay ── */}
+        {/* ── Editorial canvas ──
+             Refined-dark magazine direction: a flat near-black page with only a
+             faint film grain and the page vignette below. The cinematic stack
+             (background video, ambient glow, dust, parallax grid, sunbeam,
+             colored halos) was removed for restraint — the photographs carry
+             the page. */}
         <div className="noise-grain" />
-        <div
-          className={`ambient-glow transition-opacity duration-1000 ${
-            selectedCollection ? 'opacity-0' : 'opacity-100'
-          }`}
-        />
 
-        {/* ── Background Video & Atmosphere Layer ── */}
-        <div
-          className={`fixed inset-0 pointer-events-none z-0 transition-opacity duration-1000 ${
-            selectedCollection ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          <div className="absolute inset-0 bg-[#0A0A0A] z-0" />
-
-          <div className="absolute inset-0 z-10 overflow-hidden lens-breathing shutter-flicker">
-            <BackgroundVideo
-              src="https://assets.mixkit.co/videos/preview/mixkit-street-crosswalk-in-a-large-city-at-sunset-34305-preview.mp4"
-            />
-
-            {/* Light Leak Layer */}
-            <div
-              className="absolute inset-0 z-30 opacity-[0.15] pointer-events-none mix-blend-screen bg-gradient-to-tr from-transparent via-orange-500/5 to-transparent animate-pulse"
-              style={{ animationDuration: '10s' }}
-            />
-
-            {/* Video Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0A0A0A] z-20" />
-            <div className="absolute inset-0 bg-black/40 z-20 shadow-[inset_0_0_150px_rgba(0,0,0,1)]" />
-          </div>
-        </div>
-
-        {/* ── Subtle Grid Pattern ── */}
-        <div
-          className={`fixed inset-0 pointer-events-none z-[1] transition-opacity duration-1000 ${
-            selectedCollection ? 'opacity-0' : 'opacity-[0.02]'
-          }`}
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-            backgroundSize: '100px 100px',
-          }}
-        />
-
-        <div className="fixed inset-0 pointer-events-none opacity-[0.03] mix-blend-multiply z-[1] paper-texture" />
-
-        {/* ── Continuous cinematic vignette ──
+        {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
              darkening is the SAME from the opening through the whole archive
              — the "journey" and the content below share one frame instead of
@@ -549,69 +496,6 @@ export default function HomePage({ collections }: Props) {
             selectedCollection ? 'opacity-0' : 'opacity-100'
           }`}
           style={{ background: 'radial-gradient(125% 95% at 50% 38%, transparent 50%, rgba(0,0,0,0.62) 100%)' }}
-        />
-
-        {/* ── Cinematic Atmospheric Layers ── */}
-        <div
-          className={`fixed inset-0 pointer-events-none overflow-hidden z-[2] transition-opacity duration-1000 ${
-            selectedCollection ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          {/* Floating Digital Dust Particles (skipped when reduced-motion) */}
-          {!reduce && [...Array(40)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-[1px] h-[1px] bg-white rounded-full opacity-[0.08]"
-              initial={{
-                x: Math.random() * 100 + '%',
-                y: Math.random() * 100 + '%',
-                scale: Math.random() * 0.5 + 0.5,
-              }}
-              animate={{
-                y: [null, (Math.random() - 0.5) * 400 + 'px'],
-                x: [null, (Math.random() - 0.5) * 200 + 'px'],
-                opacity: [0.02, 0.1, 0.02],
-              }}
-              transition={{
-                duration: 15 + Math.random() * 30,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-            />
-          ))}
-
-          {/* Floating Parallax Grid Elements (skipped when reduced-motion) */}
-          {!reduce && [...Array(3)].map((_, i) => (
-            <motion.div
-              key={`grid-${i}`}
-              className="absolute inset-0 opacity-[0.02]"
-              initial={{ rotate: 15 + i * 15, scale: 1.2 }}
-              animate={{
-                x: [(i - 1) * 20, (i - 1) * -20],
-                y: [(i - 1) * 20, (i - 1) * -20],
-              }}
-              transition={{
-                duration: 30 + i * 10,
-                repeat: Infinity,
-                repeatType: 'reverse',
-                ease: 'easeInOut',
-              }}
-              style={{
-                backgroundImage:
-                  'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)',
-                backgroundSize: `${100 + i * 50}px ${100 + i * 50}px`,
-              }}
-            />
-          ))}
-
-          {/* Subtle Depth Glows */}
-          <div className="absolute inset-0 opacity-[0.05] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.15)_0%,transparent_70%)]" />
-        </div>
-
-        <div
-          className={`fixed inset-x-0 top-0 h-[100vh] pointer-events-none z-[2] transition-opacity duration-1000 sunbeam opacity-[0.4] ${
-            selectedCollection ? 'opacity-0' : 'opacity-100'
-          }`}
         />
 
         {/* ── Nav — signature font + pill buttons ── */}
@@ -816,56 +700,9 @@ export default function HomePage({ collections }: Props) {
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
           {/* Dynamic Ambient Background Aura */}
           <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-            {/* Deep photographic layer — faint, blurred, drifts slowly on scroll
-                 for parallax depth. Sits beneath the halos. */}
-            {(() => {
-              const bgPhotoBase =
-                activeCollections[0]?.coverImageUrl ?? activeCollections[0]?.photos?.[0]?.imageUrl ?? '';
-              return bgPhotoBase ? (
-                <motion.div
-                  className="absolute -inset-y-[25%] inset-x-0"
-                  style={reduce ? undefined : { y: bgPhotoY }}
-                  aria-hidden="true"
-                >
-                  <img
-                    src={`${bgPhotoBase}?auto=format&w=1100&q=45`}
-                    alt=""
-                    className="w-full h-full object-cover blur-[80px] grayscale opacity-[0.10] scale-110"
-                  />
-                </motion.div>
-              ) : null;
-            })()}
-            {/* Accent halo — large soft radial driven by the page-level --accent-*
-                 vars. Two layers oscillating out of phase give the room a
-                 color-temperature "breath." Opacity is scroll-driven via
-                 haloOpacity / haloOpacitySecondary so the wash appears
-                 PROGRESSIVELY as the user leaves the hero, instead of popping
-                 in when the first chapter's IntersectionObserver fires. The
-                 breathing scale animation runs independently on a 9–11 s
-                 loop and multiplies onto the scroll-driven opacity. */}
-            <motion.div
-              className="absolute inset-0"
-              style={{
-                opacity: haloOpacity,
-                background:
-                  'radial-gradient(80vmax 80vmax at 18% 82%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.14), transparent 70%)',
-                willChange: 'transform',
-              }}
-              animate={reduce ? undefined : { scale: [1, 1.08, 1] }}
-              transition={reduce ? undefined : { scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' } }}
-            />
-            <motion.div
-              className="absolute inset-0"
-              style={{
-                opacity: haloOpacitySecondary,
-                background:
-                  'radial-gradient(70vmax 70vmax at 85% 12%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08), transparent 70%)',
-                willChange: 'transform',
-              }}
-              animate={reduce ? undefined : { scale: [1.05, 1, 1.05] }}
-              transition={reduce ? undefined : { scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' } }}
-            />
-
+            {/* Colored accent halos + the deep photo-parallax layer were removed
+                 for the editorial direction. Only the faint grayscale backdrop
+                 of the active chapter remains (below). */}
             <AnimatePresence mode="wait">
               {activeArchiveId && (
                 <motion.div
