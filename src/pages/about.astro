@@ -1,149 +1,106 @@
 ---
 import AboutLab from '../layouts/AboutLab.astro';
-import { sanityClient } from 'sanity:client';
 
-// Real identity + content, pulled from Sanity siteSettings with the same
-// curated fallbacks the previous About page used (the local "design").
-const settings = await sanityClient.fetch(`
-  *[_type == "siteSettings"][0]{ name, bio, "avatarUrl": avatar.asset->url, email, instagram }
-`);
-const name: string = settings?.name?.trim() || 'Ryan Xu';
-const email: string = settings?.email || 'ryan2420159421@gmail.com';
-const instagram: string = settings?.instagram || 'https://www.instagram.com/ryan_photoo/';
-const igHandle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'ryan_photoo');
-
-// The headshot — used in ONE framed box only (the hero). B&W via CSS.
-const AVATAR_BASE: string =
-  settings?.avatarUrl ||
-  'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg';
-const portrait = (w: number, h: number) =>
-  `${AVATAR_BASE}?w=${w}&h=${h}&fit=crop&crop=right&auto=format&q=85`;
-// Landscape/work placeholders (not the headshot) — swap for real frames later.
-const work = (seed: string, w: number, h: number) =>
+// Placeholder grayscale imagery (swap for real frames later).
+const img = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${seed}/${w}/${h}?grayscale`;
 
-// Statement lines drawn from the photographer's real principles.
-const statements = [
-  'A personal archive. No client briefs.',
-  'Light. Geometry. Stillness.',
-  'One frame at a time — real shutter, real exposure.',
+const quotes = [
+  { text: 'Unforgettable memories are not defined by details.', theme: 'light' },
+  { text: 'They are felt.', theme: 'dark' },
+  { text: 'Design translates emotion into form.', theme: 'light' },
+  { text: 'Form that evokes.', theme: 'dark' },
 ];
 
-// Real timeline → the index of work.
-const timeline = [
-  { num: '01', year: '2024', title: 'New York Stories', note: 'Streets, architecture, and the off-hours light of the five boroughs.', img: work('nyc-stories', 1400, 1000) },
-  { num: '02', year: '2024', title: 'Southwest Sequence', note: 'Zion, Bryce Canyon, Page, and the Arizona high desert. Sandstone under hard sun.', img: work('southwest', 1400, 1000) },
-  { num: '03', year: '2024', title: 'Florida Coast', note: 'Miami and Orlando. Humid blues, neon greens, salt-bleached pastels.', img: work('florida', 1400, 1000) },
-  { num: '04', year: '2023', title: 'Started Photography', note: 'First camera. First frame I cared about. The archive begins here.', img: work('begin', 1400, 1000) },
+const works = [
+  { num: '01', title: 'Still Waters', img: img('work-a', 1200, 900) },
+  { num: '02', title: 'Concrete Light', img: img('work-b', 1200, 900) },
+  { num: '03', title: 'After Hours', img: img('work-c', 1200, 900) },
+  { num: '04', title: 'Salt & Static', img: img('work-d', 1200, 900) },
 ];
 ---
 
-<AboutLab title={`About — ${name}`}>
+<AboutLab title="About — Ryan Xu">
   {/* ── Fixed chrome ── */}
   <header class="site-header">
-    <a class="site-name" href="/about">{name}</a>
+    <a class="site-name" href="/about">Ryan Xu</a>
     <nav class="site-nav">
       <a href="/">Works</a>
       <a href="/about">About</a>
-      <a href={`mailto:${email}`}>Reach out</a>
+      <a href="mailto:ryan2420159421@gmail.com">Reach out</a>
     </nav>
   </header>
   <div class="scroll-hint">Scroll Down</div>
 
   <main>
-    {/* ── 1 · Hero — single framed portrait box + identity ── */}
+    {/* ── 1 · Hero ── */}
     <section class="hero" data-theme="dark">
-      <div class="hero__stage">
-        <figure class="hero__frame" data-hero-frame>
-          <img src={portrait(900, 1200)} alt={name} />
-        </figure>
-        <div class="hero__id" data-hero-id>
-          <span class="eyebrow">The Journal Gallery — Portfolio &rsquo;26</span>
-          <h1 class="hero__name">{name}</h1>
-          <p class="hero__role">Photographer &middot; New York &middot; Since 2023</p>
-          <p class="hero__tag">Make it Best</p>
-        </div>
-      </div>
+      <div class="hero__bg"><img src={img('hero-portrait', 1600, 2000)} alt="" /></div>
+      <article class="hero__card" data-hero-card>
+        <span class="eyebrow">Portfolio &rsquo;26</span>
+        <h1 class="hero__title">Multidisciplinary<br />Designer</h1>
+        <p class="hero__sub">Make It Last</p>
+      </article>
     </section>
 
-    {/* ── 2 · Statements (word reveal) ── */}
-    {statements.map((text) => (
-      <section class="quote-section" data-theme="dark">
-        <p class="quote" data-words>{text}</p>
+    {/* ── 2 · Quote statements (theme-switching, word reveal) ── */}
+    {quotes.map((q) => (
+      <section class="quote-section" data-theme={q.theme}>
+        <p class="quote" data-words>{q.text}</p>
       </section>
     ))}
 
-    {/* ── 3 · Bio ── */}
-    <section class="bio" data-theme="dark">
-      <div class="bio__inner">
-        <span class="eyebrow">On the work</span>
-        <p class="bio__lede" data-words>
-          A photographic record of moving through cities and landscapes — from the
-          high-contrast geometry of Manhattan to the geologic time of the American
-          Southwest.
-        </p>
-        <p class="bio__body">
-          No commissioned work, no client briefs. Frames selected on a slow timeline,
-          organized by location, dated. Off the camera: engineering and AI research —
-          the discipline of careful observation transfers between the two; both reward
-          patience over output volume.
-        </p>
-      </div>
-    </section>
-
-    {/* ── 4 · Image reveal (landscape work) ── */}
+    {/* ── 3 · Image reveal gallery ── */}
     <section class="gallery" data-theme="dark">
-      <figure class="reveal-img" data-img-reveal><img src={work('frame-a', 1600, 1000)} alt="" /></figure>
-      <figure class="reveal-img" data-img-reveal><img src={work('frame-b', 1000, 1300)} alt="" /></figure>
-      <figure class="reveal-img" data-img-reveal><img src={work('frame-c', 1600, 1000)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={img('gal-1', 1600, 1000)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={img('gal-2', 1000, 1300)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={img('gal-3', 1600, 1000)} alt="" /></figure>
     </section>
 
-    {/* ── 5 · The Route — real timeline as index ── */}
+    {/* ── 4 · Works ── */}
     <section class="works" data-theme="dark">
       <div class="works__stage" data-works-stage>
-        <img src={timeline[0].img} alt="" data-works-bg />
-        <span class="works__index numeral" data-works-index>{timeline[0].num}</span>
+        <img src={works[0].img} alt="" data-works-bg />
+        <span class="works__index numeral" data-works-index>{works[0].num}</span>
       </div>
       <div class="works__list">
-        <span class="eyebrow works__list-eyebrow">The Route</span>
-        {timeline.map((t, i) => (
-          <div class:list={['works__item', { 'is-active': i === 0 }]} data-works-item data-img={t.img} data-num={t.num} data-note={t.note}>
-            <span class="num numeral">{t.num}</span>
-            <span class="works__item-title">{t.title}</span>
-            <span class="works__item-year numeral">{t.year}</span>
+        <span class="eyebrow works__list-eyebrow">Selected Works</span>
+        {works.map((w, i) => (
+          <div class:list={['works__item', { 'is-active': i === 0 }]} data-works-item data-img={w.img} data-num={w.num}>
+            <span class="num numeral">{w.num}</span>
+            <span>{w.title}</span>
           </div>
         ))}
       </div>
     </section>
 
-    {/* ── 6 · Converge (Flip) — photographic phrase ── */}
-    <section class="converge" data-theme="dark" data-converge>
+    {/* ── 5 · Carve it / Into / Memory (Flip converge) ── */}
+    <section class="converge" data-theme="light" data-converge>
       <div class="converge__row" data-converge-row>
-        <span class="converge__word" data-converge-word>Frame</span>
-        <div class="converge__media" data-converge-media><img src={work('converge', 1000, 1300)} alt="" /></div>
-        <span class="converge__word" data-converge-word>the</span>
-        <span class="converge__word" data-converge-word>Moment</span>
+        <span class="converge__word" data-converge-word>Carve it</span>
+        <div class="converge__media" data-converge-media><img src={img('converge', 900, 1200)} alt="" /></div>
+        <span class="converge__word" data-converge-word>Into</span>
+        <span class="converge__word" data-converge-word>Memory</span>
       </div>
     </section>
 
-    {/* ── 7 · Closing — text only ── */}
-    <section class="closing" data-theme="dark">
-      <h2 class="display" data-words>Make it Best</h2>
-      <p class="closing__sub">A personal archive — New York, since 2023.</p>
+    {/* ── 6 · Make it Matter ── */}
+    <section class="matter" data-theme="dark">
+      <div class="matter__bg"><img src={img('matter', 1800, 2200)} alt="" /></div>
+      <div class="matter__text">
+        <h2 class="display" data-words>Make it Matter</h2>
+      </div>
     </section>
 
-    {/* ── 8 · Footer ── */}
-    <footer class="site-footer" data-theme="dark">
-      <p class="site-footer__lead" data-words>Reach out</p>
+    {/* ── 7 · Footer ── */}
+    <footer class="site-footer" data-theme="light">
+      <p class="site-footer__lead" data-words>Special Thanks</p>
       <div class="site-footer__row">
-        <div class="footer__meta meta">
-          <span>New York, NY</span>
-          <span>Nikon Zf &middot; Fujifilm X-T50</span>
-          <span>Open to conversation, not client briefs</span>
-        </div>
+        <span class="meta">Inspired by Codegrid &middot; Built with GSAP + Lenis</span>
         <div class="socials">
-          <a href={`mailto:${email}`} data-chars>Email</a>
-          <a href={instagram} target="_blank" rel="noopener noreferrer" data-chars>{igHandle}</a>
+          <a href="https://www.instagram.com/ryan_photoo/" target="_blank" rel="noopener noreferrer" data-chars>Ig</a>
+          <a href="#" data-chars>In</a>
+          <a href="#" data-chars>Be</a>
         </div>
       </div>
     </footer>
