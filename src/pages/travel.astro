@@ -69,7 +69,7 @@ const cityNames = [
   <Nav client:load currentPath={currentPath} dark={true} />
 
   <!-- ── Hero — pure-typographic kinetic "light band" over dark ── -->
-  <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#0A0A0A]">
+  <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#0A0A0A]" data-travel-hero>
     <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
     <div
       class="absolute inset-0 z-0 hero-glow"
@@ -80,7 +80,7 @@ const cityNames = [
 
     <!-- Background light band: two opposing rows of outlined place names -->
     {cityNames.length > 0 && (
-      <div class="absolute inset-0 z-[1] flex flex-col justify-center gap-2 md:gap-4 pointer-events-none select-none">
+      <div class="absolute inset-0 z-[1] flex flex-col justify-center gap-2 md:gap-4 pointer-events-none select-none" data-travel-band>
         <div class="atlas-marquee">
           <div class="atlas-marquee-track atlas-row-a flex whitespace-nowrap will-change-transform">
             {[0, 1].map(() => (
@@ -117,14 +117,17 @@ const cityNames = [
     <div class="absolute inset-0 z-[2] bg-gradient-to-tr from-[#0A0A0A] via-[#0A0A0A]/65 to-transparent"></div>
     <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#0A0A0A] via-transparent to-[#0A0A0A]/55"></div>
 
-    <!-- Foreground content -->
-    <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl animate-fade-in-up">
-      <p class="font-mono text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
-        The Territory
-      </p>
-      <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight leading-[0.9] text-[#FDFDFB]">
-        Mapping the<br />Archive.
-      </h1>
+    <!-- Foreground content (outer wrapper carries scroll-parallax; inner keeps
+         the one-shot mount fade so the two transforms never collide) -->
+    <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl" data-travel-fg>
+      <div class="animate-fade-in-up">
+        <p class="font-mono text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
+          The Territory
+        </p>
+        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight leading-[0.9] text-[#FDFDFB]">
+          Mapping the<br />Archive.
+        </h1>
+      </div>
     </div>
   </section>
 
@@ -276,4 +279,50 @@ const cityNames = [
     els.forEach((el) => io.observe(el));
   }
   document.addEventListener('astro:page-load', runAtlasCountUps);
+
+  // ── Hero scroll-parallax ──
+  // The kinetic name-band, the foreground title and the atmospheric glow drift
+  // at different rates as the hero scrolls toward the map — the same layered
+  // depth as the homepage hero, here on native scroll + rAF (this page is plain
+  // Astro, not a React island). Transforms live on non-animated wrappers so they
+  // never collide with the band's marquee or the title's mount fade. Reduced-
+  // motion users get the static hero.
+  let travelScrollHandler: (() => void) | null = null;
+  function initTravelParallax() {
+    if (travelScrollHandler) {
+      window.removeEventListener('scroll', travelScrollHandler);
+      window.removeEventListener('resize', travelScrollHandler);
+      travelScrollHandler = null;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const hero = document.querySelector<HTMLElement>('[data-travel-hero]');
+    if (!hero) return;
+    const band = document.querySelector<HTMLElement>('[data-travel-band]');
+    const fg = document.querySelector<HTMLElement>('[data-travel-fg]');
+    const glow = hero.querySelector<HTMLElement>('.hero-glow');
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const rect = hero.getBoundingClientRect();
+      const h = rect.height || 1;
+      const p = Math.min(Math.max(-rect.top / h, 0), 1); // 0 → 1 as hero exits
+      if (glow) glow.style.transform = `translate3d(0, ${p * 60}px, 0)`;
+      if (band) band.style.transform = `translate3d(0, ${p * 44}px, 0)`;
+      if (fg) {
+        fg.style.transform = `translate3d(0, ${p * -52}px, 0)`;
+        fg.style.opacity = String(1 - p * 0.85);
+      }
+    };
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    };
+    travelScrollHandler = onScroll;
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    update();
+  }
+  document.addEventListener('astro:page-load', initTravelParallax);
 </script>
