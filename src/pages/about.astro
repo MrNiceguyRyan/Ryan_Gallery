@@ -1,29 +1,46 @@
 ---
 import AboutLab from '../layouts/AboutLab.astro';
+import { sanityClient } from 'sanity:client';
 
-// Placeholder grayscale imagery (swap for real frames later).
-const img = (seed: string, w: number, h: number) =>
+// Real avatar from Sanity siteSettings; graceful picsum fallback if unset.
+const settings = await sanityClient.fetch(`
+  *[_type == "siteSettings"][0]{ name, "avatarUrl": avatar.asset->url }
+`);
+const name: string = settings?.name?.trim() || 'Ryan Xu';
+
+// Portrait = the user's real photo. siteSettings.avatar is currently unset, so
+// fall back to the same Sanity asset the previous About page used (cropped to
+// the subject on the right). B&W is applied in CSS via the grayscale filter.
+const AVATAR_BASE: string =
+  settings?.avatarUrl ||
+  'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg';
+const portrait = (w: number, h: number) =>
+  `${AVATAR_BASE}?w=${w}&h=${h}&fit=crop&crop=right&auto=format&q=82`;
+
+// Work-sample placeholders (swap for real frames later).
+const work = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${seed}/${w}/${h}?grayscale`;
 
+// Unified pure-black theme — every section is dark.
 const quotes = [
-  { text: 'Unforgettable memories are not defined by details.', theme: 'light' },
-  { text: 'They are felt.', theme: 'dark' },
-  { text: 'Design translates emotion into form.', theme: 'light' },
-  { text: 'Form that evokes.', theme: 'dark' },
+  'Unforgettable memories are not defined by details.',
+  'They are felt.',
+  'Design translates emotion into form.',
+  'Form that evokes.',
 ];
 
 const works = [
-  { num: '01', title: 'Still Waters', img: img('work-a', 1200, 900) },
-  { num: '02', title: 'Concrete Light', img: img('work-b', 1200, 900) },
-  { num: '03', title: 'After Hours', img: img('work-c', 1200, 900) },
-  { num: '04', title: 'Salt & Static', img: img('work-d', 1200, 900) },
+  { num: '01', title: 'Still Waters', img: work('work-a', 1200, 900) },
+  { num: '02', title: 'Concrete Light', img: work('work-b', 1200, 900) },
+  { num: '03', title: 'After Hours', img: work('work-c', 1200, 900) },
+  { num: '04', title: 'Salt & Static', img: work('work-d', 1200, 900) },
 ];
 ---
 
-<AboutLab title="About — Ryan Xu">
+<AboutLab title={`About — ${name}`}>
   {/* ── Fixed chrome ── */}
   <header class="site-header">
-    <a class="site-name" href="/about">Ryan Xu</a>
+    <a class="site-name" href="/about">{name}</a>
     <nav class="site-nav">
       <a href="/">Works</a>
       <a href="/about">About</a>
@@ -33,28 +50,28 @@ const works = [
   <div class="scroll-hint">Scroll Down</div>
 
   <main>
-    {/* ── 1 · Hero ── */}
+    {/* ── 1 · Hero — portrait + the box ("Make it Best") ── */}
     <section class="hero" data-theme="dark">
-      <div class="hero__bg"><img src={img('hero-portrait', 1600, 2000)} alt="" /></div>
+      <div class="hero__bg"><img src={portrait(1600, 2000)} alt={name} /></div>
       <article class="hero__card" data-hero-card>
         <span class="eyebrow">Portfolio &rsquo;26</span>
-        <h1 class="hero__title">Multidisciplinary<br />Designer</h1>
-        <p class="hero__sub">Make It Last</p>
+        <h1 class="hero__title">Make it<br />Best</h1>
+        <p class="hero__sub">{name} &middot; Photography</p>
       </article>
     </section>
 
-    {/* ── 2 · Quote statements (theme-switching, word reveal) ── */}
-    {quotes.map((q) => (
-      <section class="quote-section" data-theme={q.theme}>
-        <p class="quote" data-words>{q.text}</p>
+    {/* ── 2 · Quote statements (word reveal) ── */}
+    {quotes.map((text) => (
+      <section class="quote-section" data-theme="dark">
+        <p class="quote" data-words>{text}</p>
       </section>
     ))}
 
     {/* ── 3 · Image reveal gallery ── */}
     <section class="gallery" data-theme="dark">
-      <figure class="reveal-img" data-img-reveal><img src={img('gal-1', 1600, 1000)} alt="" /></figure>
-      <figure class="reveal-img" data-img-reveal><img src={img('gal-2', 1000, 1300)} alt="" /></figure>
-      <figure class="reveal-img" data-img-reveal><img src={img('gal-3', 1600, 1000)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={work('gal-1', 1600, 1000)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={work('gal-2', 1000, 1300)} alt="" /></figure>
+      <figure class="reveal-img" data-img-reveal><img src={work('gal-3', 1600, 1000)} alt="" /></figure>
     </section>
 
     {/* ── 4 · Works ── */}
@@ -75,28 +92,28 @@ const works = [
     </section>
 
     {/* ── 5 · Carve it / Into / Memory (Flip converge) ── */}
-    <section class="converge" data-theme="light" data-converge>
+    <section class="converge" data-theme="dark" data-converge>
       <div class="converge__row" data-converge-row>
         <span class="converge__word" data-converge-word>Carve it</span>
-        <div class="converge__media" data-converge-media><img src={img('converge', 900, 1200)} alt="" /></div>
+        <div class="converge__media" data-converge-media><img src={portrait(900, 1200)} alt={name} /></div>
         <span class="converge__word" data-converge-word>Into</span>
         <span class="converge__word" data-converge-word>Memory</span>
       </div>
     </section>
 
-    {/* ── 6 · Make it Matter ── */}
+    {/* ── 6 · Closing statement — portrait + "Make it Best" ── */}
     <section class="matter" data-theme="dark">
-      <div class="matter__bg"><img src={img('matter', 1800, 2200)} alt="" /></div>
+      <div class="matter__bg"><img src={portrait(1800, 2200)} alt={name} /></div>
       <div class="matter__text">
-        <h2 class="display" data-words>Make it Matter</h2>
+        <h2 class="display" data-words>Make it Best</h2>
       </div>
     </section>
 
     {/* ── 7 · Footer ── */}
-    <footer class="site-footer" data-theme="light">
+    <footer class="site-footer" data-theme="dark">
       <p class="site-footer__lead" data-words>Special Thanks</p>
       <div class="site-footer__row">
-        <span class="meta">Inspired by Codegrid &middot; Built with GSAP + Lenis</span>
+        <span class="meta">{name} &middot; Built with GSAP + Lenis</span>
         <div class="socials">
           <a href="https://www.instagram.com/ryan_photoo/" target="_blank" rel="noopener noreferrer" data-chars>Ig</a>
           <a href="#" data-chars>In</a>
