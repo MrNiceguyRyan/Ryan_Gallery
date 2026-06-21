@@ -357,7 +357,11 @@ img {
 
 /* Angled warm sunbeam light leak */
 .sunbeam {
-  position: absolute;
+  /* MUST stay fixed (viewport-relative). As `absolute` it sat in page flow with
+     height:150% + rotate(25deg), extending the page ~1000px below the content
+     (scroll-into-void) and poking out sideways (horizontal scroll). The markup
+     and Layout both treat it as a fixed ambient layer. */
+  position: fixed;
   top: -20%;
   left: 10%;
   width: 30vw;
