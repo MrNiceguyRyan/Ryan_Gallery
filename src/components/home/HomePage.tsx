@@ -178,7 +178,7 @@ function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => vo
       )}
       {/* Dim lift — opacity only, same timeline as the scale (no filter jank). */}
       <motion.div
-        className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
+        className="absolute inset-0 bg-[#100D09] pointer-events-none"
         animate={{ opacity: hovered ? 0.12 : 0.42 }}
         transition={tween}
       />
@@ -418,7 +418,7 @@ export default function HomePage({ collections }: Props) {
   useEffect(() => {
     const isOverlayOpen = !!selectedCollection;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
-    document.body.style.backgroundColor = '#0A0A0A';
+    document.body.style.backgroundColor = '#100D09';
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
@@ -467,7 +467,7 @@ export default function HomePage({ collections }: Props) {
       )}
 
       <div
-        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0A0A0A] text-[#FDFDFB] ${
+        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#100D09] text-[#E8E1D3] ${
           showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
         }`}
         style={{
@@ -511,7 +511,7 @@ export default function HomePage({ collections }: Props) {
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.2, ease: expo }}
-            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-[28px] md:text-4xl leading-none text-[#FDFDFB] mix-blend-difference py-1"
+            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-[28px] md:text-4xl leading-none text-[#E8E1D3] mix-blend-difference py-1"
           >
             Ryan Xu
           </motion.button>
@@ -622,7 +622,7 @@ export default function HomePage({ collections }: Props) {
                       transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
                       className="absolute inset-x-0 flex flex-col items-center gap-2.5"
                     >
-                      <p className="text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#FDFDFB] opacity-[0.72]">
+                      <p className="text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#E8E1D3] opacity-[0.72]">
                         &ldquo;{HERO_EPIGRAPHS[epigraphIdx].line}&rdquo;
                       </p>
                       <p className="font-mono text-[9px] tracking-[0.4em] uppercase opacity-30">
