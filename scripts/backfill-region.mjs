@@ -11,11 +11,13 @@
 
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
-
 const DRY_RUN = process.argv.includes('--dry-run');
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
+
+if (!DRY_RUN && !SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Set it in the environment before applying region backfills.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
