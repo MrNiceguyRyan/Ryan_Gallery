@@ -244,6 +244,90 @@ function useInViewOnce<T extends Element>(rootMargin = '0px 0px -12% 0px') {
   return [ref, shown] as const;
 }
 
+/* ═══════════════════════════════════════════════════════
+ *  SelectedFramesCarousel — landonorris-style horizontal scroll
+ *  A tall pinned section: as you scroll DOWN through it, a row of
+ *  frames slides sideways. framer drives the X off the section's
+ *  scroll progress; shift is measured so the last frame lands flush.
+ * ═══════════════════════════════════════════════════════ */
+interface CarouselFrame {
+  img: string;
+  label: string;
+  place: string;
+  num: string;
+}
+function SelectedFramesCarousel({ frames }: { frames: CarouselFrame[] }) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+  const [shift, setShift] = useState(0);
+
+  useEffect(() => {
+    const measure = () => {
+      if (trackRef.current) setShift(Math.max(0, trackRef.current.scrollWidth - window.innerWidth));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    const t = setTimeout(measure, 600); // re-measure after images/layout settle
+    return () => {
+      window.removeEventListener('resize', measure);
+      clearTimeout(t);
+    };
+  }, [frames.length]);
+
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] });
+  const x = useTransform(scrollYProgress, [0, 1], [0, -shift]);
+
+  if (!frames.length) return null;
+
+  return (
+    <section ref={sectionRef} className="relative hidden md:block" style={{ height: `${frames.length * 52 + 60}vh` }}>
+      <div className="sticky top-0 h-screen overflow-hidden flex flex-col justify-center">
+        <div className="px-6 md:px-12 mb-8 flex items-end justify-between">
+          <h2 className="font-serif italic text-4xl md:text-6xl tracking-tighter leading-none">Selected frames</h2>
+          <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-white/35">
+            Scroll &middot; {frames.length} frames
+          </span>
+        </div>
+        <motion.div
+          ref={trackRef}
+          style={reduce ? undefined : { x }}
+          className="flex items-center gap-6 md:gap-10 px-6 md:px-12 will-change-transform"
+        >
+          {frames.map((f, i) => (
+            <figure
+              key={i}
+              className="relative shrink-0 w-[64vw] md:w-[42vw] lg:w-[34vw] aspect-[3/2] overflow-hidden bg-white/[0.03] border border-white/5"
+            >
+              {f.img && (
+                <img
+                  src={`${f.img}?auto=format&w=1200&q=80`}
+                  alt={f.label}
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                  className="w-full h-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+              <figcaption className="absolute inset-x-0 bottom-0 p-5 md:p-7 flex items-end justify-between">
+                <span className="font-serif italic text-2xl md:text-4xl tracking-tight text-white leading-none">{f.label}</span>
+                <span
+                  className="font-mono text-[10px] tracking-[0.3em] uppercase"
+                  style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                >
+                  {f.num}
+                  {f.place ? ` · ${f.place}` : ''}
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 export default function HomePage({ collections }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
@@ -720,6 +804,16 @@ export default function HomePage({ collections }: Props) {
             />
           </motion.div>
         </header>
+
+        {/* ── Selected Frames — horizontal scroll showcase ── */}
+        <SelectedFramesCarousel
+          frames={orderedCities.slice(0, 8).map((c, i) => ({
+            img: c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '',
+            label: c.name.trim(),
+            place: (c.location || c.region || '').trim(),
+            num: String(i + 1).padStart(2, '0'),
+          }))}
+        />
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
