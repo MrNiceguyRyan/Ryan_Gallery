@@ -9,6 +9,7 @@ import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
+import Lenis from 'lenis';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
  * narratives in src/lib/narratives.tsx. The hero cycles through these
@@ -286,6 +287,31 @@ export default function HomePage({ collections }: Props) {
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
+
+  // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
+  // Inertial smooth scroll for the homepage. framer's useScroll reads the same
+  // window position Lenis drives, so the existing scroll effects keep working.
+  // Skipped for reduced-motion. Torn down on unmount (e.g. route change).
+  useEffect(() => {
+    if (reduce) return;
+    const lenis = new Lenis({
+      duration: 1.05,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+      touchMultiplier: 1.6,
+    });
+    let raf = 0;
+    const loop = (time: number) => {
+      lenis.raf(time);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      lenis.destroy();
+    };
+  }, [reduce]);
+
   // "Selected Works" heading block — reliable scroll reveal (not whileInView).
   const [selectedWorksRef, selectedWorksShown] = useInViewOnce<HTMLDivElement>();
   // Reverse parallax — the heading block counter-drifts (down) against the
@@ -449,10 +475,9 @@ export default function HomePage({ collections }: Props) {
   // looks unchanged at scrollY=0. The `accent-tint-transition` class on the
   // wrapper interpolates these three CSS vars over 1.2s as `activeArchiveId`
   // flips, giving a slow crossfade between "rooms".
-  // Editorial restraint (高级简约): ONE muted clay accent drives all chrome
-  // (rails, folios, dividers) — no per-chapter colour shift. The photographs
-  // carry the colour; the page stays quiet.
-  const accentRgb = { r: 199, g: 154, b: 107 };
+  // Single signature accent for all chrome (rails, dividers, dots) — Manchester
+  // City sky blue. No per-chapter colour shift; the photographs carry the rest.
+  const accentRgb = { r: 108, g: 171, b: 221 };
 
   return (
     <>

@@ -8,6 +8,23 @@
   --font-signature: "Mrs Saint Delafield", cursive;
 }
 
+/* ─── Lenis smooth scroll — required rules. Override the native
+   `scroll-behavior: smooth` below (it fights Lenis) only while Lenis
+   is active (the .lenis classes are added by the library on the homepage). */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
 /* ─── Base reset ─── */
 html {
   scroll-behavior: smooth;

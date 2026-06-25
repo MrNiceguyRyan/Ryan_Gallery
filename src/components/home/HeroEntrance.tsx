@@ -75,6 +75,7 @@ export default function HeroEntrance({
 
       const counter = { v: 0 };
       const tl = gsap.timeline({ defaults: { ease: 'expo.out' }, onComplete: finish });
+      tl.timeScale(1.4); // snappier overall pacing
 
       // ── In: the defocused frame + AF reticle appear ──
       tl.to(photoRef.current, { opacity: 1, duration: 0.8, ease: 'power2.out' }, 0)
