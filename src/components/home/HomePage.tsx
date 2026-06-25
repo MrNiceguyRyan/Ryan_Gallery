@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion } fr
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import HeroEntrance from './HeroEntrance';
+import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
@@ -579,19 +580,20 @@ export default function HomePage({ collections }: Props) {
 
             <div className="space-y-4 max-w-7xl w-full mx-auto">
               <motion.div className="relative" style={reduce ? undefined : { y: heroTitleParallax }}>
-                {/* Editorial masthead — high-contrast Didone (Playfair) set large,
-                    a fashion-magazine cover treatment instead of the particle
-                    canvas. Renders as real type (no WebGL/canvas). */}
-                <h1
-                  className="text-center font-bold tracking-[-0.02em] leading-[0.8]"
-                  style={{
-                    fontFamily: "'Playfair Display', ui-serif, Georgia, serif",
-                    fontSize: 'clamp(58px, 13vw, 190px)',
-                    color: '#E8E1D3',
-                  }}
-                >
-                  Journal<br />Gallery
-                </h1>
+                <ParticleTitle
+                  text="Journal <br/> Gallery"
+                  className="h-64 md:h-96"
+                />
+                {/* Anamorphic light sweep across the title (one-shot on open) */}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
+                  <motion.div
+                    className="absolute top-0 bottom-0 w-2/5 -skew-x-12"
+                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.45), transparent)' }}
+                    initial={{ x: '-170%' }}
+                    animate={{ x: introReady ? '440%' : '-170%' }}
+                    transition={{ duration: 0.9, delay: introReady ? 0.7 : 0, ease: [0.5, 0, 0.15, 1] }}
+                  />
+                </div>
               </motion.div>
 
               {/* ── Rotating epigraph — narrative bridge from hero into archive ──
