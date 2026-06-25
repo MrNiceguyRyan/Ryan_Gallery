@@ -459,16 +459,10 @@ export default function HomePage({ collections }: Props) {
       {showOpening && (
         <HeroEntrance
           onComplete={handleOpeningComplete}
-          images={(() => {
-            // Gather a richer pool of frames for the montage flythrough: each
-            // collection's cover first, then its photos, deduped, capped at 16.
-            const urls: string[] = [];
-            for (const c of activeCollections) {
-              if (c.coverImageUrl) urls.push(c.coverImageUrl);
-              for (const p of c.photos ?? []) if (p.imageUrl) urls.push(p.imageUrl);
-            }
-            return [...new Set(urls)].slice(0, 16);
-          })()}
+          images={activeCollections
+            .slice(0, 5)
+            .map((c) => c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '')
+            .filter(Boolean)}
         />
       )}
 
