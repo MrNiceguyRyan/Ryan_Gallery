@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, Camera, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import HeroEntrance from './HeroEntrance';
@@ -328,6 +328,96 @@ function SelectedFramesCarousel({ frames }: { frames: CarouselFrame[] }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════
+ *  Kinetic big-type — the "distilled lens." line rises word-by-word
+ *  on scroll PROGRESS (not whileInView), reversing on scroll-up.
+ * ═══════════════════════════════════════════════════════ */
+const SW_WORDS = ['Curating', 'the', 'world', 'through', 'a', 'distilled', 'lens.'] as const;
+
+function RisingWord({
+  word,
+  index,
+  progress,
+  reduce,
+  accent,
+}: {
+  word: string;
+  index: number;
+  progress: MotionValue<number>;
+  reduce: boolean;
+  accent?: boolean;
+}) {
+  const y = useTransform(progress, [index * 0.09, index * 0.09 + 0.4], ['110%', '0%'], { clamp: true });
+  return (
+    <span className="overflow-hidden inline-block align-bottom pb-[0.12em] -mb-[0.12em]">
+      <motion.span
+        className="inline-block"
+        style={{
+          y: reduce ? '0%' : y,
+          color: accent ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' : undefined,
+        }}
+      >
+        {word}&nbsp;
+      </motion.span>
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+ *  QuietIndexBand — a restrained marquee seam (landonorris-style),
+ *  cooler/quieter than /travel's: one row, filled 14% type, em-dash
+ *  separators, no glow. ONE name glows emerald — the live active
+ *  chapter (or the first at top), a calm spotlight tied to scroll.
+ * ═══════════════════════════════════════════════════════ */
+function QuietIndexBand({
+  names,
+  activeArchiveId,
+}: {
+  names: { name: string; id: string | null }[];
+  activeArchiveId: string | null;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const firstId = names.find((n) => n.id)?.id ?? null;
+  const activeId = activeArchiveId ?? firstId;
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLElement>('.qm-name').forEach((el) => {
+      el.classList.toggle('is-active', !!activeId && el.dataset.id === activeId);
+    });
+  }, [activeId, names]);
+
+  if (!names.length) return null;
+
+  const run = (key: string) => (
+    <div className="flex shrink-0" aria-hidden="true" key={key}>
+      {names.map((n, i) => (
+        <span key={i} className="flex items-baseline">
+          <span className="qm-name" data-id={n.id ?? ''}>
+            {n.name}
+          </span>
+          <span className="qm-sep">&mdash;</span>
+        </span>
+      ))}
+    </div>
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      role="presentation"
+      className="quiet-marquee w-full border-y py-3 md:py-4"
+      style={{ borderColor: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
+    >
+      <div className="quiet-marquee-track">
+        {run('a')}
+        {run('b')}
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage({ collections }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
@@ -407,6 +497,12 @@ export default function HomePage({ collections }: Props) {
     offset: ['start end', 'end start'],
   });
   const headingReverseY = useTransform(swScrollProgress, [0, 1], reduce ? [0, 0] : [36, -36]);
+  // Word-by-word rise for the "distilled lens." headline, scrubbed on the
+  // heading's own scroll progress (separate offset; measures the static ref).
+  const { scrollYProgress: swRevealProgress } = useScroll({
+    target: selectedWorksRef,
+    offset: ['start 0.85', 'start 0.35'],
+  });
 
   // Filter to collections that have photos
   const activeCollections = useMemo(
@@ -446,6 +542,19 @@ export default function HomePage({ collections }: Props) {
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
+
+  // Marquee index — real place names (hero epigraphs) + archive cities, deduped.
+  // Each maps to its archive id so the band can spotlight the live active one.
+  const indexNames = useMemo(
+    () =>
+      Array.from(
+        new Set([...HERO_EPIGRAPHS.map((e) => e.place), ...orderedCities.map((c) => c.name.trim())]),
+      ).map((name) => {
+        const city = orderedCities.find((c) => c.name.trim() === name);
+        return { name, id: city ? cityDomId(city) : null };
+      }),
+    [orderedCities],
+  );
 
   // ── Region collapse helpers ──
   const sectionKeyOfCity = useMemo(() => {
@@ -815,6 +924,9 @@ export default function HomePage({ collections }: Props) {
           }))}
         />
 
+        {/* ── Quiet index marquee — seam from the carousel into the archive ── */}
+        <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
+
         {/* ── Desktop Main — sidebar + archive chapters ── */}
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
           {/* Dynamic Ambient Background Aura */}
@@ -955,16 +1067,17 @@ export default function HomePage({ collections }: Props) {
                   <div className="w-8 h-px bg-white/30" />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="text-4xl md:text-7xl font-serif italic tracking-tighter leading-tight overflow-hidden pb-2">
-                  <motion.span
-                    className="block"
-                    initial={{ y: '115%' }}
-                    animate={selectedWorksShown ? { y: '0%' } : { y: '115%' }}
-                    transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    Curating the world through a{' '}
-                    <span className="opacity-50">distilled lens.</span>
-                  </motion.span>
+                <h2 className="text-4xl md:text-7xl font-serif italic tracking-tighter leading-tight pb-2">
+                  {SW_WORDS.map((w, i) => (
+                    <RisingWord
+                      key={i}
+                      word={w}
+                      index={i}
+                      progress={swRevealProgress}
+                      reduce={!!reduce}
+                      accent={w === 'lens.'}
+                    />
+                  ))}
                 </h2>
                 <div className="flex items-center gap-2.5 pt-2 text-[10px] font-mono uppercase tracking-[0.3em] text-white/35">
                   <span className="relative flex h-1.5 w-1.5">

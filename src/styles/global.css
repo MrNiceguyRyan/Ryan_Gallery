@@ -25,6 +25,46 @@ html.lenis body {
   overflow: hidden;
 }
 
+/* ─── Quiet index marquee (homepage seam) — restrained, filled, no glow ─── */
+.quiet-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+.quiet-marquee-track {
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  animation: quiet-marquee var(--qm-dur, 48s) linear infinite;
+  will-change: transform;
+}
+@keyframes quiet-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.qm-name {
+  padding: 0 0.55em;
+  font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: clamp(2.1rem, 4.2vw, 3.4rem);
+  letter-spacing: -0.02em;
+  color: rgba(230, 233, 231, 0.14);
+  transition: color 0.6s ease;
+}
+.qm-name.is-active {
+  color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+  opacity: 0.55;
+}
+.qm-sep {
+  font-size: clamp(1.5rem, 3vw, 2.4rem);
+  color: rgba(230, 233, 231, 0.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiet-marquee-track {
+    animation: none;
+  }
+}
+
 /* ─── Base reset ─── */
 html {
   scroll-behavior: smooth;
