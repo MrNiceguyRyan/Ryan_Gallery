@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
-import HeroEntrance from './HeroEntrance';
 import ParticleTitle from './ParticleTitle';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
@@ -353,7 +352,6 @@ export default function HomePage({ collections }: Props) {
     });
     return init;
   });
-  const [showOpening, setShowOpening] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const { scrollY, scrollYProgress } = useScroll();
 
@@ -374,7 +372,7 @@ export default function HomePage({ collections }: Props) {
 
   // The cinematic film-open plays once the first-visit intro is gone (or
   // immediately on a return visit, when no intro shows).
-  const introReady = !showOpening;
+  const introReady = true;
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
@@ -548,15 +546,6 @@ export default function HomePage({ collections }: Props) {
   }, [orderedCities, collapsed]);
 
   useEffect(() => {
-    if (!sessionStorage.getItem('opening-shown')) setShowOpening(true);
-  }, []);
-
-  const handleOpeningComplete = useCallback(() => {
-    sessionStorage.setItem('opening-shown', '1');
-    setShowOpening(false);
-  }, []);
-
-  useEffect(() => {
     const isOverlayOpen = !!selectedCollection;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
     document.body.style.backgroundColor = '#282c20';
@@ -600,20 +589,8 @@ export default function HomePage({ collections }: Props) {
 
   return (
     <>
-      {showOpening && (
-        <HeroEntrance
-          onComplete={handleOpeningComplete}
-          images={activeCollections
-            .slice(0, 5)
-            .map((c) => c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '')
-            .filter(Boolean)}
-        />
-      )}
-
       <div
-        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#282c20] text-[#F4F4ED] ${
-          showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
-        }`}
+        className="accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#282c20] text-[#F4F4ED] opacity-100"
         style={{
           // Drive per-chapter retint. The browser interpolates these natively
           // thanks to @property registration in global.css.
@@ -656,7 +633,7 @@ export default function HomePage({ collections }: Props) {
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             transition={{ duration: 0.2, ease: expo }}
-            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-signature text-[28px] md:text-4xl leading-none text-[#F4F4ED] mix-blend-difference py-1"
+            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-serif uppercase text-lg md:text-xl tracking-[0.16em] font-medium leading-none text-[#F4F4ED] mix-blend-difference py-1"
           >
             Ryan Xu
           </motion.button>

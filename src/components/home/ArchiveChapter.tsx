@@ -54,6 +54,17 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   // the photo is sized h-[140%] (below) so the drift never exposes an edge.
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-22%']);
 
+  // Fanned-card settle — adjacent chapters drift in from a slight, alternating
+  // offset + tilt that resolves flush as they scroll into place (hand-laid
+  // frames). And keyword-ignite — the title's last word lights to lime as the
+  // chapter centers.
+  const fanX = useTransform(scrollYProgress, [0, 0.32], [index % 2 === 0 ? -28 : 28, 0]);
+  const fanRotate = useTransform(scrollYProgress, [0, 0.32], [index % 2 === 0 ? -1.2 : 1.2, 0]);
+  const igniteColor = useTransform(scrollYProgress, [0.3, 0.52], ['rgba(244,244,237,1)', 'rgb(210,255,0)']);
+  const nameParts = collection.name.trim().split(/\s+/);
+  const igniteWord = nameParts.length > 1 ? nameParts[nameParts.length - 1] : collection.name.trim();
+  const leadWords = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : '';
+
   const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
   // Full-bleed cover — wide (≈92vw) up to a large container. Bracket Retina.
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
@@ -82,7 +93,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const dateline = collection.location || collection.region || 'United States';
 
   return (
-    <motion.section id={id} ref={chapterRef} style={{ opacity }} className="relative pb-12 lg:pb-16">
+    <motion.section id={id} ref={chapterRef} style={{ opacity, x: reduce ? 0 : fanX, rotate: reduce ? 0 : fanRotate }} className="relative pb-12 lg:pb-16">
       <motion.div
         className="relative group cursor-none w-full overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
         onClick={onClick}
@@ -173,7 +184,8 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             className="font-serif uppercase text-white tracking-tighter leading-[0.82] drop-shadow-[0_2px_40px_rgba(0,0,0,0.55)]"
             style={{ fontSize: 'clamp(46px, 8.5vw, 132px)' }}
           >
-            {collection.name}
+            {leadWords && <>{leadWords} </>}
+            <motion.span style={{ color: reduce ? 'rgb(210,255,0)' : igniteColor }}>{igniteWord}</motion.span>
           </h3>
           <div className="mt-4 md:mt-6 flex items-end justify-between gap-6">
             <div className="font-ui text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
