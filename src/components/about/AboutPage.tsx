@@ -371,12 +371,14 @@ export default function AboutPage({ settings }: Props) {
       {/* ═══════ TIMELINE — vertical editorial log ═══════ */}
       <section className="px-6 md:px-16 max-w-3xl mx-auto py-12 md:py-16 border-t border-white/5">
         <Reveal>
-          <h2 className="text-xl md:text-2xl font-serif uppercase text-[#F4F4ED] tracking-tighter py-1 mb-8">
-            Timeline.
+          <p className="font-ui text-[10px] tracking-[0.4em] uppercase text-white/30 mb-3">The Log</p>
+          <h2 className="text-3xl md:text-4xl font-serif uppercase text-[#F4F4ED] tracking-tight py-1 mb-8">
+            Timeline
           </h2>
         </Reveal>
 
-        <ol className="relative ml-1.5 border-l border-white/10">
+        <ol className="relative ml-1.5">
+          <span className="absolute left-0 top-0 h-full w-px bg-white/12 origin-top animate-line-grow" aria-hidden="true" />
           {timeline.map((item, i) => (
             <li
               key={`${item.year}-${i}`}
@@ -401,8 +403,9 @@ export default function AboutPage({ settings }: Props) {
       <section className="px-6 md:px-16 py-12 md:py-16 border-t border-white/5">
         <div className="max-w-3xl mx-auto">
           <Reveal>
-            <h2 className="text-xl md:text-2xl font-serif uppercase text-[#F4F4ED] tracking-tighter mb-6 py-1">
-              Contact.
+            <p className="font-ui text-[10px] tracking-[0.4em] uppercase text-white/30 mb-3">Reach out</p>
+            <h2 className="text-3xl md:text-4xl font-serif uppercase text-[#F4F4ED] tracking-tight mb-6 py-1">
+              Contact
             </h2>
           </Reveal>
 

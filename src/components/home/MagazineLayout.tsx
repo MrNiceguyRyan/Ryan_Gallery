@@ -281,7 +281,7 @@ export default function MagazineLayout({
         >
           {/* Sticky header — top padding honors iOS notch safe-area */}
           <div
-            className="sticky top-0 left-0 w-full z-10 px-5 py-4 md:px-12 md:py-6 flex justify-between items-center backdrop-blur-3xl bg-black/80 border-b border-white/5"
+            className="sticky top-0 left-0 w-full z-10 px-5 py-4 md:px-12 md:py-6 flex justify-between items-center backdrop-blur-3xl bg-[#282c20]/80 border-b border-white/5"
             style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
           >
             <motion.button
