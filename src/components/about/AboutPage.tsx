@@ -297,7 +297,7 @@ export default function AboutPage({ settings }: Props) {
               initial="hidden"
               animate={coverGone ? 'show' : 'hidden'}
             >
-              {name}<span style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}>.</span>
+              <span className="draw-underline" style={{ ['--draw-delay' as never]: '1.4s' }}>{name}</span>
             </motion.h1>
 
             {/* Lede — a single serif statement, the page thesis */}

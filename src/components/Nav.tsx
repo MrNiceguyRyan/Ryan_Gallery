@@ -28,7 +28,7 @@ export default function Nav({ currentPath, dark = false }: Props) {
         {/* Left: signature name */}
         <a
           href="/"
-          className="font-signature text-[28px] md:text-4xl leading-none text-[#F4F4ED] mix-blend-difference hover:opacity-60 transition-opacity duration-200 py-1"
+          className="font-serif uppercase text-lg md:text-xl tracking-[0.16em] font-medium leading-none text-[#F4F4ED] mix-blend-difference hover:opacity-60 transition-opacity duration-200 py-1"
         >
           Ryan Xu
         </a>
@@ -102,8 +102,8 @@ export default function Nav({ currentPath, dark = false }: Props) {
                   <motion.a
                     key={link.href}
                     href={link.href}
-                    className={`w-full text-center py-5 text-2xl font-[200] tracking-[0.15em] transition-colors border-b border-white/5 last:border-0 ${
-                      isActive ? 'text-white' : 'text-white/40 hover:text-white/80'
+                    className={`w-full text-center py-5 text-4xl font-serif uppercase tracking-tight transition-colors border-b border-white/5 last:border-0 ${
+                      isActive ? 'text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]' : 'text-white/40 hover:text-white/80'
                     }`}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}

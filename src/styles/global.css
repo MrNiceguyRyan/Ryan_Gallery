@@ -179,6 +179,58 @@ body {
   font-family: var(--font-ui);
 }
 
+/* ─── Self-drawing lime underline (the signature Lando UI tell) ───
+   A 2px accent rule that draws in left→right on hover, and stays drawn on the
+   active item (add `.is-active`). Honors reduced-motion by appearing instantly. */
+.link-underline {
+  position: relative;
+}
+.link-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.18em;
+  height: 2px;
+  background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.link-underline:hover::after,
+.link-underline:focus-visible::after,
+.link-underline.is-active::after {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .link-underline::after { transition: none; }
+}
+
+/* ─── On-mount self-drawing lime underline (for headline keywords) ───
+   Draws once, left→right, after `--draw-delay`. Width spans the element it
+   wraps (give it a relative inline-block host). */
+.draw-underline {
+  position: relative;
+}
+.draw-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.12em;
+  height: 0.07em;
+  background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: draw-underline 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--draw-delay, 0.6s) forwards;
+}
+@keyframes draw-underline {
+  to { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .draw-underline::after { animation: none; transform: scaleX(1); }
+}
+
 /* ─── Marquee animations ─── */
 @keyframes marquee {
   0% { transform: translateX(0%); }

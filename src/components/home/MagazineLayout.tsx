@@ -378,7 +378,7 @@ export default function MagazineLayout({
                       </div>
                       <div className="h-[1px] w-full bg-white/5 relative overflow-hidden">
                         <motion.div
-                          className="absolute top-0 left-0 h-full bg-white"
+                          className="absolute top-0 left-0 h-full bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
                           style={{ width: `${scrollPercent}%` }}
                           transition={{ duration: 0.15, ease: 'linear' }}
                         />
@@ -549,7 +549,7 @@ export default function MagazineLayout({
                         transition={{ duration: 0.2, ease: expo }}
                         className="group flex flex-col items-center gap-4"
                       >
-                        <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-colors duration-300">
+                        <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                           {isShared ? <Check size={16} /> : <Share2 size={16} />}
                         </div>
                         <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity duration-300">
@@ -564,7 +564,7 @@ export default function MagazineLayout({
                         transition={{ duration: 0.2, ease: expo }}
                         className="group flex flex-col items-center gap-4"
                       >
-                        <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-colors duration-300">
+                        <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                           <ArrowRight className="-rotate-90" size={16} />
                         </div>
                         <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-30 group-hover:opacity-100 transition-opacity duration-300">

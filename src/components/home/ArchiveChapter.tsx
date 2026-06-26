@@ -187,7 +187,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             <Magnetic strength={0.4}>
               <span className="shrink-0 inline-flex items-center gap-3 font-ui text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 group-hover:text-white transition-colors duration-500">
                 View Story
-                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-white group-hover:bg-white group-hover:text-black transition-all duration-500">
+                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] transition-all duration-500">
                   <ArrowRight size={16} />
                 </span>
               </span>
