@@ -180,7 +180,7 @@ function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => vo
       )}
       {/* Dim lift — opacity only, same timeline as the scale (no filter jank). */}
       <motion.div
-        className="absolute inset-0 bg-[#0B0C0C] pointer-events-none"
+        className="absolute inset-0 bg-[#181b10] pointer-events-none"
         animate={{ opacity: hovered ? 0.12 : 0.42 }}
         transition={tween}
       />
@@ -559,7 +559,7 @@ export default function HomePage({ collections }: Props) {
   useEffect(() => {
     const isOverlayOpen = !!selectedCollection;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
-    document.body.style.backgroundColor = '#0B0C0C';
+    document.body.style.backgroundColor = '#181b10';
     // Pause Lenis while the overlay is up so its own overflow-y-auto scrolls
     // natively; resume on close.
     if (isOverlayOpen) lenisRef.current?.stop();
@@ -596,7 +596,7 @@ export default function HomePage({ collections }: Props) {
   // flips, giving a slow crossfade between "rooms".
   // Single signature accent for all chrome (rails, dividers, dots) — Man City
   // sky-blue. No per-chapter colour shift; the photographs carry the rest.
-  const accentRgb = { r: 108, g: 171, b: 221 };
+  const accentRgb = { r: 210, g: 255, b: 0 };
 
   return (
     <>
@@ -611,7 +611,7 @@ export default function HomePage({ collections }: Props) {
       )}
 
       <div
-        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0a0c11] text-[#E6E9E7] ${
+        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#181b10] text-[#E6E9E7] ${
           showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
         }`}
         style={{

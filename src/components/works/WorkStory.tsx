@@ -26,7 +26,7 @@ export default function WorkStory({
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    document.documentElement.style.backgroundColor = '#0A0A0A';
+    document.documentElement.style.backgroundColor = '#22271a';
     return () => {
       document.body.style.overflow = prevOverflow;
     };

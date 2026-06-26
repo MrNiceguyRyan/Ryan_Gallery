@@ -2,7 +2,7 @@
 // Shared site footer — a landonorris-style closing statement used across the
 // whole (dark) site: a big two-tone headline with a script signature, a Pages
 // column, social links with a clip-masked vertical "roll" hover, an enquiries
-// pill, and a quiet meta bar. The single accent is the site-wide sky-blue
+// pill, and a quiet meta bar. The single accent is the site-wide electric lime
 // (rgb(var(--accent-r/g/b)) — set on the homepage wrapper, and inherited from
 // the @property default everywhere else).
 interface Props {
@@ -27,7 +27,7 @@ const social = [
 ];
 const contactHref = 'mailto:ryan2420159421@gmail.com';
 ---
-<footer class="site-footer relative overflow-hidden bg-[#0B0C0C] text-[#E6E9E7] border-t border-white/10">
+<footer class="site-footer relative overflow-hidden bg-[#181b10] text-[#E6E9E7] border-t border-white/10">
   {/* Atmosphere — faint topographic contour + a soft cool edge-glow */}
   <div class="footer-atmos" aria-hidden="true">
     <svg viewBox="0 0 1440 520" preserveAspectRatio="none">
@@ -201,7 +201,7 @@ const contactHref = 'mailto:ryan2420159421@gmail.com';
   }
   .enquiry-pill:hover {
     transform: translateY(-2px);
-    color: #0B0C0C;
+    color: #181b10;
     background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
     border-color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
   }

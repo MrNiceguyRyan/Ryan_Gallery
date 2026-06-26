@@ -77,7 +77,7 @@ export default function Nav({ currentPath, dark = false }: Props) {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            className="fixed inset-0 z-40 bg-[#0A0A0A]/97 backdrop-blur-2xl flex flex-col items-center justify-center gap-0 md:hidden"
+            className="fixed inset-0 z-40 bg-[#22271a]/97 backdrop-blur-2xl flex flex-col items-center justify-center gap-0 md:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

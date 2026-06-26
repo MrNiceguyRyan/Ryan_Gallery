@@ -138,7 +138,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
 
           {/* Calm dim-lift on hover (opacity only) */}
           <motion.div
-            className="absolute inset-0 bg-[#0A0A0A] pointer-events-none"
+            className="absolute inset-0 bg-[#22271a] pointer-events-none"
             animate={{ opacity: isHovered ? 0.12 : isActive ? 0.28 : 0.5 }}
             transition={{ duration: 0.8, ease: expo }}
           />

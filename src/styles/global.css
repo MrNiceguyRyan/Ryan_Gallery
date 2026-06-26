@@ -253,23 +253,23 @@ img {
  *  Safari 16.4+ / Chrome 85+ / Firefox 128+. Older browsers fall back to a
  *  step transition (still works visually, just no interpolation).
  *
- *  Default = Man City sky-blue rgb(108,171,221) so pages outside the homepage
+ *  Default = electric lime rgb(210,255,0) so pages outside the homepage
  *  wrapper (travel, about, the shared footer) inherit the single signature
  *  accent without each having to set it. */
 @property --accent-r {
   syntax: '<number>';
   inherits: true;
-  initial-value: 108;
+  initial-value: 210;
 }
 @property --accent-g {
   syntax: '<number>';
   inherits: true;
-  initial-value: 171;
+  initial-value: 255;
 }
 @property --accent-b {
   syntax: '<number>';
   inherits: true;
-  initial-value: 221;
+  initial-value: 0;
 }
 
 .accent-tint-transition {
@@ -288,7 +288,7 @@ img {
  *  Mount <SiteAtmosphere/> (home / about) or `<canvas class="site-atmos">`
  *  (travel) behind page content.
  * ═══════════════════════════════════════════════════════ */
-:root { --bg-base: #0a0c11; }
+:root { --bg-base: #181b10; }
 
 .site-atmos {
   position: fixed;

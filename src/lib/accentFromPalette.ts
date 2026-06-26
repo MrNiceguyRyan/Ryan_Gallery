@@ -7,14 +7,14 @@ export interface AccentRGB {
 }
 
 /** Neutral fallback — same color the homepage already uses for chrome
- *  accents (white/40 on bg-[#0A0A0A]). Returned when no palette resolves. */
+ *  accents (white/40 on bg-[#22271a]). Returned when no palette resolves. */
 export const ACCENT_NEUTRAL: AccentRGB = { r: 255, g: 255, b: 255 };
 
 /**
  * Extract a single accent RGB triple from Sanity's auto-extracted image palette.
  *
  * The homepage runs on a near-black background, so we prefer swatches that
- * stay readable against `#0A0A0A`. The fallback chain is:
+ * stay readable against `#22271a`. The fallback chain is:
  *   `vibrant` → `lightVibrant` → `muted` → `dominant` → white
  *
  * `darkMuted` / `darkVibrant` are intentionally NOT preferred — on a dark

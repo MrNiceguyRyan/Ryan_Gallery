@@ -81,7 +81,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
           style={{
             width: isActive ? 9 : 7,
             height: isActive ? 9 : 7,
-            background: state === 'future' ? '#0A0A0A' : ACCENT,
+            background: state === 'future' ? '#22271a' : ACCENT,
             border: state === 'future' ? '1px solid rgba(255,255,255,0.25)' : `1px solid ${ACCENT}`,
             opacity: state === 'past' ? 0.65 : 1,
             boxShadow: isActive ? `0 0 10px ${ACCENT}` : 'none',
