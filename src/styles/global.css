@@ -253,22 +253,23 @@ img {
  *  Safari 16.4+ / Chrome 85+ / Firefox 128+. Older browsers fall back to a
  *  step transition (still works visually, just no interpolation).
  *
- *  Default value of 255 makes the unscrolled hero render identically to the
- *  pre-accent code (white accents). */
+ *  Default = Man City sky-blue rgb(108,171,221) so pages outside the homepage
+ *  wrapper (travel, about, the shared footer) inherit the single signature
+ *  accent without each having to set it. */
 @property --accent-r {
   syntax: '<number>';
   inherits: true;
-  initial-value: 255;
+  initial-value: 108;
 }
 @property --accent-g {
   syntax: '<number>';
   inherits: true;
-  initial-value: 255;
+  initial-value: 171;
 }
 @property --accent-b {
   syntax: '<number>';
   inherits: true;
-  initial-value: 255;
+  initial-value: 221;
 }
 
 .accent-tint-transition {

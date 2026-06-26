@@ -3,6 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
+import Footer from '../components/Footer.astro';
 
 // ─── GROQ: All collections with photos + location data ───
 const collections: Collection[] = await sanityClient.fetch(`
@@ -40,4 +41,5 @@ const collections: Collection[] = await sanityClient.fetch(`
 
 <Layout>
   <HomePage client:load collections={collections} />
+  <Footer />
 </Layout>
