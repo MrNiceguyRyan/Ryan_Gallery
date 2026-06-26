@@ -26,6 +26,9 @@ interface ArchiveChapterProps {
 export default function ArchiveChapter({ id, collection, onClick, index, isActive }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
+  // The cover→interior swap image is heavy, so it's only mounted once the card
+  // has been hovered at least once (and never under reduced-motion).
+  const [armed, setArmed] = useState(false);
   const reduce = useReducedMotion();
 
   // Cursor-following light sheen (spring-smoothed) layered over the cover.
@@ -58,6 +61,18 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     ? `${coverBase}?auto=format&w=1000&q=82 1000w, ${coverBase}?auto=format&w=1600&q=82 1600w, ${coverBase}?auto=format&w=2000&q=78 2000w`
     : undefined;
 
+  // Hover swap-frame — the first interior photo that ISN'T the cover, so hovering
+  // a chapter cross-fades to a peek inside the story. Lighter than the cover
+  // (it's a transient reveal). Empty when the collection has only its cover.
+  const swapBase = useMemo(() => {
+    const alt = collection.photos?.find((p) => p.imageUrl && p.imageUrl !== coverBase);
+    return alt?.imageUrl ?? '';
+  }, [collection.photos, coverBase]);
+  const swapUrl = swapBase ? `${swapBase}?auto=format&w=1400&q=80` : '';
+  const swapSrcSet = swapBase
+    ? `${swapBase}?auto=format&w=1000&q=80 1000w, ${swapBase}?auto=format&w=1400&q=80 1400w`
+    : undefined;
+
   const coords = useMemo(() => {
     const photo = collection.photos?.find((p) => p.location?.lat != null && p.location?.lng != null);
     return photo?.location || null;
@@ -71,7 +86,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
       <motion.div
         className="relative group cursor-none w-full overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
         onClick={onClick}
-        onHoverStart={() => setIsHovered(true)}
+        onHoverStart={() => { setIsHovered(true); setArmed(true); }}
         onHoverEnd={() => setIsHovered(false)}
         onMouseMove={onCoverMove}
         data-cursor="View Story"
@@ -91,6 +106,31 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               decoding="async"
               animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
               transition={{ duration: 1.1, ease: expo }}
+              className="absolute inset-0 w-full h-[140%] object-cover"
+              draggable={false}
+            />
+          )}
+
+          {/* Hover swap — a second frame from the collection cross-fades in over
+              the cover (a calm peek inside the story). Mounted on first hover,
+              matched to the cover's parallax + hover-scale so it reads as one
+              image dissolving into another, not a jump. Skipped under reduced-motion. */}
+          {swapUrl && armed && !reduce && (
+            <motion.img
+              style={{ y: imgY }}
+              src={swapUrl}
+              srcSet={swapSrcSet}
+              sizes="(min-width: 768px) 92vw, 100vw"
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1.045 : 1 }}
+              transition={{
+                opacity: { duration: isHovered ? 1.0 : 0.7, ease: expo },
+                scale: { duration: 1.1, ease: expo },
+              }}
               className="absolute inset-0 w-full h-[140%] object-cover"
               draggable={false}
             />
