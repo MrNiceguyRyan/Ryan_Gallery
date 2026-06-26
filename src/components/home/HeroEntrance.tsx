@@ -152,13 +152,13 @@ export default function HeroEntrance({
             <span className="absolute bottom-0 right-0 w-7 h-7 border-b border-r border-white/55" />
             {/* counter centered in the reticle */}
             <div ref={numberRef} className="absolute inset-0 flex items-baseline justify-center">
-              <span ref={counterRef} className="font-mono tabular-nums text-white text-6xl md:text-7xl leading-none tracking-tighter">
+              <span ref={counterRef} className="font-ui tabular-nums text-white text-6xl md:text-7xl leading-none tracking-tighter">
                 0
               </span>
-              <span className="font-mono text-white/35 text-lg md:text-xl ml-1">%</span>
+              <span className="font-ui text-white/35 text-lg md:text-xl ml-1">%</span>
             </div>
           </div>
-          <div ref={labelRef} className="font-mono text-[10px] tracking-[0.55em] uppercase text-white/35" style={{ opacity: 0 }}>
+          <div ref={labelRef} className="font-ui text-[10px] tracking-[0.55em] uppercase text-white/35" style={{ opacity: 0 }}>
             {loadingLabel}
           </div>
         </div>
@@ -167,18 +167,18 @@ export default function HeroEntrance({
       {/* Title */}
       <div ref={textRef} className="absolute inset-x-0 bottom-[11vh] px-6 flex flex-col items-center text-center gap-2 md:gap-3 z-20">
         <div className="overflow-hidden">
-          <div className="entrance-line font-mono text-[10px] md:text-[11px] tracking-[0.5em] uppercase text-white/55" style={{ transform: 'translateY(110%)' }}>
+          <div className="entrance-line font-ui text-[10px] md:text-[11px] tracking-[0.5em] uppercase text-white/55" style={{ transform: 'translateY(110%)' }}>
             {kicker}
           </div>
         </div>
         <div className="overflow-hidden py-1">
-          <h1 className="entrance-line font-serif italic tracking-tighter text-white leading-[0.9] text-[clamp(36px,7vw,84px)]" style={{ transform: 'translateY(110%)' }}>
+          <h1 className="entrance-line font-serif uppercase tracking-tighter text-white leading-[0.9] text-[clamp(36px,7vw,84px)]" style={{ transform: 'translateY(110%)' }}>
             {name}
           </h1>
         </div>
         <div ref={underlineRef} className="h-px w-20 bg-white/40 origin-center" style={{ transform: 'scaleX(0)' }} />
         <div className="overflow-hidden">
-          <div className="entrance-line font-mono text-[10px] md:text-[11px] tracking-[0.32em] uppercase text-white/50" style={{ transform: 'translateY(110%)' }}>
+          <div className="entrance-line font-ui text-[10px] md:text-[11px] tracking-[0.32em] uppercase text-white/50" style={{ transform: 'translateY(110%)' }}>
             {tagline}
           </div>
         </div>

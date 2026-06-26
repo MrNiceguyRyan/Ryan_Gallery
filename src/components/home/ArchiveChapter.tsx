@@ -156,7 +156,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
         </motion.div>
 
         {/* ── Kicker (top) ── */}
-        <div className="absolute inset-x-0 top-0 p-5 md:p-8 flex items-start justify-between font-mono text-[10px] md:text-[11px] tracking-[0.4em] uppercase">
+        <div className="absolute inset-x-0 top-0 p-5 md:p-8 flex items-start justify-between font-ui text-[10px] md:text-[11px] tracking-[0.4em] uppercase">
           <span className="flex items-center gap-2 text-white/70">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
             Dispatch&nbsp;Nº&nbsp;{String(index + 1).padStart(2, '0')}
@@ -170,13 +170,13 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
         {/* ── Masthead title + meta + CTA (bottom, over the photo) ── */}
         <div className="absolute inset-x-0 bottom-0 p-5 md:p-8 lg:p-10">
           <h3
-            className="font-serif italic text-white tracking-tighter leading-[0.82] drop-shadow-[0_2px_40px_rgba(0,0,0,0.55)]"
+            className="font-serif uppercase text-white tracking-tighter leading-[0.82] drop-shadow-[0_2px_40px_rgba(0,0,0,0.55)]"
             style={{ fontSize: 'clamp(46px, 8.5vw, 132px)' }}
           >
             {collection.name}
           </h3>
           <div className="mt-4 md:mt-6 flex items-end justify-between gap-6">
-            <div className="font-mono text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="font-ui text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>{frames} frames</span>
               {coords && (
                 <span className="text-white/35">
@@ -185,7 +185,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               )}
             </div>
             <Magnetic strength={0.4}>
-              <span className="shrink-0 inline-flex items-center gap-3 font-mono text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 group-hover:text-white transition-colors duration-500">
+              <span className="shrink-0 inline-flex items-center gap-3 font-ui text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 group-hover:text-white transition-colors duration-500">
                 View Story
                 <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-white group-hover:bg-white group-hover:text-black transition-all duration-500">
                   <ArrowRight size={16} />

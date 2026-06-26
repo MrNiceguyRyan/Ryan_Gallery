@@ -8,8 +8,8 @@ import type { Photo } from '../types';
 import Magnetic from './shared/Magnetic';
 
 // ─── Accent color (unified warm dark tone) ───
-const ACCENT = '#2c3e50';
-const ACCENT_RGB = '44, 62, 80';
+const ACCENT = '#D2FF00';
+const ACCENT_RGB = '210, 255, 0';
 
 // ─── Map style presets ───
 const MAP_STYLES = [
@@ -61,7 +61,7 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
       return (
         <div className="h-[50vh] min-h-[300px] rounded-2xl bg-white/5 flex flex-col items-center justify-center text-center px-8">
           <p className="text-white/40 text-sm font-light">Map failed to load</p>
-          <p className="text-white/20 text-xs font-mono mt-2 max-w-sm">{this.state.error?.message}</p>
+          <p className="text-white/20 text-xs font-ui mt-2 max-w-sm">{this.state.error?.message}</p>
           <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-4 px-5 py-2 text-xs tracking-wider rounded-full border border-white/10 text-white/50 hover:border-white/30 hover:text-white transition-all duration-300">Retry</button>
         </div>
       );
@@ -140,7 +140,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-  const [mapStyleIdx, setMapStyleIdx] = useState(0); // default to light style
+  const [mapStyleIdx, setMapStyleIdx] = useState(4); // default to dark style
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
 
@@ -537,8 +537,8 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           {/* ── Floating status badge ── */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
             <div className="bg-black/50 backdrop-blur-2xl px-5 py-3.5 rounded-2xl shadow-lg border border-white/10">
-              <p className="text-sm font-serif italic text-white/85 leading-none">United States</p>
-              <p className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/30 mt-1.5">
+              <p className="text-sm font-serif uppercase text-white/85 leading-none">United States</p>
+              <p className="text-[8px] font-ui uppercase tracking-[0.25em] text-white/30 mt-1.5">
                 {cityClusters.length} coordinates · {photos.length} frames
               </p>
             </div>
@@ -594,7 +594,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           {/* ── Live coordinate readout — bottom-center so it clears the
                bottom-right Mapbox nav/fullscreen controls. Updates on pan/zoom. ── */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none hidden md:block">
-            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 font-mono text-[9px] tracking-[0.12em] text-white/40 tabular-nums flex items-center gap-2.5">
+            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 font-ui text-[9px] tracking-[0.12em] text-white/40 tabular-nums flex items-center gap-2.5">
               <span style={{ color: ACCENT }}>◉</span>
               <span>LAT {viewState.latitude.toFixed(2)}°</span>
               <span className="opacity-30">·</span>
@@ -611,7 +611,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
         <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#22271a]">
           <div className="px-5 py-4 border-b border-white/5">
             <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
-            <p className="text-xs text-white/20 font-mono mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>
+            <p className="text-xs text-white/20 font-ui mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>
           </div>
           <div className="flex-1 overflow-y-auto no-scrollbar">
             {regionGroups.map((group) => {
@@ -627,7 +627,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                       <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">{group.region}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-white/20">{group.totalPhotos}</span>
+                      <span className="text-[10px] font-ui text-white/20">{group.totalPhotos}</span>
                       <motion.svg
                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                         className="text-white/20"
@@ -693,7 +693,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                     <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`text-[10px] font-mono ${isSelected ? 'text-white/50' : 'text-white/20'}`}>{cluster.photos.length}</span>
+                                    <span className={`text-[10px] font-ui ${isSelected ? 'text-white/50' : 'text-white/20'}`}>{cluster.photos.length}</span>
                                     {(isSelected || isHoveredFromMap) && (
                                       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/40' : 'bg-white/20'}`} />
                                     )}
@@ -721,14 +721,14 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
                                     <div>
                                       <p className="text-[9px] uppercase tracking-[0.15em] text-white/60 font-semibold">{cluster.country}</p>
-                                      <h4 className="text-lg font-serif italic text-white leading-tight">{cluster.city}</h4>
+                                      <h4 className="text-lg font-serif uppercase text-white leading-tight">{cluster.city}</h4>
                                     </div>
-                                    <span className="text-[10px] font-mono text-white/50">{cluster.photos.length} photos</span>
+                                    <span className="text-[10px] font-ui text-white/50">{cluster.photos.length} photos</span>
                                   </div>
                                 </div>
                                 {/* Content */}
                                 <div className="p-4">
-                                  <p className="text-[10px] text-white/30 font-mono tracking-wide mb-3">
+                                  <p className="text-[10px] text-white/30 font-ui tracking-wide mb-3">
                                     {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
                                   </p>
                                   <div className="grid grid-cols-3 gap-1.5">
@@ -772,7 +772,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             <div className="flex items-center gap-2 px-1 mb-2">
               <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40">{group.region}</span>
               <div className="flex-1 h-px bg-white/5" />
-              <span className="text-[10px] font-mono text-white/20">{group.totalPhotos}</span>
+              <span className="text-[10px] font-ui text-white/20">{group.totalPhotos}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {group.clusters.map((cluster) => {
@@ -787,7 +787,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                         <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{cluster.city}</h3>
                         <p className={`text-[10px] ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
                       </div>
-                      <span className={`text-xs font-mono ${isSelected ? 'text-white/40' : 'text-white/20'}`}>{cluster.photos.length}</span>
+                      <span className={`text-xs font-ui ${isSelected ? 'text-white/40' : 'text-white/20'}`}>{cluster.photos.length}</span>
                     </div>
                     <AnimatePresence>
                       {isSelected && (

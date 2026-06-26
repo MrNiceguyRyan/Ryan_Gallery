@@ -91,7 +91,7 @@ const cityNames = [
               <div class="flex items-center shrink-0" aria-hidden="true">
                 {cityNames.map((city) => (
                   <span class="flex items-center">
-                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif italic tracking-tight">{city}</span>
+                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif uppercase tracking-tight">{city}</span>
                     <span class="band-dot">&bull;</span>
                   </span>
                 ))}
@@ -105,7 +105,7 @@ const cityNames = [
               <div class="flex items-center shrink-0" aria-hidden="true">
                 {cityNames.map((city) => (
                   <span class="flex items-center">
-                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif italic tracking-tight">{city}</span>
+                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif uppercase tracking-tight">{city}</span>
                     <span class="band-dot">&bull;</span>
                   </span>
                 ))}
@@ -125,10 +125,10 @@ const cityNames = [
          the one-shot mount fade so the two transforms never collide) -->
     <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl" data-travel-fg>
       <div class="animate-fade-in-up">
-        <p class="font-mono text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
+        <p class="font-ui text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
           The Territory
         </p>
-        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight leading-[0.9] text-[#FDFDFB]">
+        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif uppercase tracking-tight leading-[0.9] text-[#FDFDFB]">
           Mapping the<br /><span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
         </h1>
       </div>
@@ -150,12 +150,12 @@ const cityNames = [
         return (
           <div class={`flex flex-col gap-2 ${i > 0 ? 'md:border-l md:border-white/10 md:pl-8' : ''}`}>
             <span
-              class="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tight text-[#FDFDFB] leading-none tabular-nums"
+              class="text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-tight text-[#FDFDFB] leading-none tabular-nums"
               data-countup={numeric ? s.value : undefined}
             >
               {s.value}
             </span>
-            <span class="font-mono text-[9px] tracking-[0.4em] uppercase text-white/35">
+            <span class="font-ui text-[9px] tracking-[0.4em] uppercase text-white/35">
               {s.label}
             </span>
           </div>
@@ -172,11 +172,11 @@ const cityNames = [
   >
     <div class="flex items-end justify-between mb-4 md:mb-5 px-1">
       <div class="flex items-center gap-3">
-        <span class="font-mono text-[10px] tracking-[0.4em] uppercase text-white/45">
+        <span class="font-ui text-[10px] tracking-[0.4em] uppercase text-white/45">
           Interactive Atlas
         </span>
       </div>
-      <span class="hidden md:block font-mono text-[9px] tracking-[0.3em] uppercase text-white/25">
+      <span class="hidden md:block font-ui text-[9px] tracking-[0.3em] uppercase text-white/25">
         Drag · Scroll to zoom · Pick a city →
       </span>
     </div>
@@ -185,7 +185,7 @@ const cityNames = [
          the region/city list on the RIGHT of the near-fullscreen map. */}
     <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} showLocationList={true} />
 
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-4 px-1 font-mono text-[9px] tracking-[0.3em] uppercase text-white/25">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-4 px-1 font-ui text-[9px] tracking-[0.3em] uppercase text-white/25">
       <span>Coordinates sourced from frame EXIF</span>
       <span>{frames} geotagged frames · {locations} locations</span>
     </div>
@@ -195,10 +195,10 @@ const cityNames = [
        and the about page's markers. Same visual signature across pages. */}
   <div class="pt-10 pb-4 flex flex-col items-center gap-3 opacity-30">
     <div class="w-px h-10 bg-white/40"></div>
-    <span class="text-[9px] uppercase tracking-[0.5em] font-mono">
+    <span class="text-[9px] uppercase tracking-[0.5em] font-ui">
       End of mapped frames
     </span>
-    <span class="text-[8px] font-mono opacity-60">
+    <span class="text-[8px] font-ui opacity-60">
       {locations} coordinates
     </span>
   </div>

@@ -107,7 +107,7 @@ function PhotoCell({
         transition={{ duration: 1.0, delay: Math.min(index * 0.04, 0.5), ease: expo }}
       >
         {/* Index number */}
-        <div className="absolute top-3 right-3 z-20 text-[7px] font-mono text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
+        <div className="absolute top-3 right-3 z-20 text-[7px] font-ui text-white/0 group-hover:text-white/40 transition-colors duration-700 pointer-events-none">
           {String(index + 1).padStart(2, '0')}
         </div>
 
@@ -322,7 +322,7 @@ export default function MagazineLayout({
                       </span>
                       <div className="h-[1px] flex-1 bg-white/10" />
                     </div>
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tighter leading-[0.85] overflow-hidden py-1">
+                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-tighter leading-[0.85] overflow-hidden py-1">
                       <motion.span
                         key={collection._id}
                         className="block"
@@ -340,7 +340,7 @@ export default function MagazineLayout({
                       {collection.location && collection.year && (
                         <div className="w-1 h-1 rounded-full bg-white/20" />
                       )}
-                      <p className="text-[10px] uppercase tracking-[0.4em] opacity-40 font-mono italic">
+                      <p className="text-[10px] uppercase tracking-[0.4em] opacity-40 font-ui italic">
                         {collection.year || ''}
                       </p>
                     </div>
@@ -374,7 +374,7 @@ export default function MagazineLayout({
                     <div className="space-y-2.5">
                       <div className="flex justify-between text-[9px] uppercase tracking-widest font-bold opacity-30">
                         <span>Reading Progress</span>
-                        <span className="font-mono">{scrollPercent}%</span>
+                        <span className="font-ui">{scrollPercent}%</span>
                       </div>
                       <div className="h-[1px] w-full bg-white/5 relative overflow-hidden">
                         <motion.div
@@ -386,7 +386,7 @@ export default function MagazineLayout({
                     </div>
 
                     {/* Frame count — compact line */}
-                    <div className="hidden lg:flex items-center gap-3 text-[9px] uppercase tracking-[0.4em] font-mono opacity-30">
+                    <div className="hidden lg:flex items-center gap-3 text-[9px] uppercase tracking-[0.4em] font-ui opacity-30">
                       <div className="w-8 h-[1px] bg-white opacity-30" />
                       <span>{photos.length} Captured Frames</span>
                     </div>
@@ -425,7 +425,7 @@ export default function MagazineLayout({
                               animate={{ opacity: [0.4, 1, 0.4] }}
                               transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                             />
-                            <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-white/40 group-hover:text-white/80 transition-colors duration-300">
+                            <span className="text-[8px] font-ui uppercase tracking-[0.3em] text-white/40 group-hover:text-white/80 transition-colors duration-300">
                               {coords.lat.toFixed(4)}°N, {Math.abs(coords.lng).toFixed(4)}°{coords.lng >= 0 ? 'E' : 'W'}
                             </span>
                           </div>
@@ -515,7 +515,7 @@ export default function MagazineLayout({
                         </span>
                         <div className="flex flex-col items-center gap-8">
                           <Magnetic strength={0.4}>
-                            <h3 className="text-4xl md:text-6xl font-serif italic tracking-tighter overflow-hidden py-1">
+                            <h3 className="text-4xl md:text-6xl font-serif uppercase tracking-tighter overflow-hidden py-1">
                               <motion.span
                                 className="block"
                                 initial={{ y: '115%' }}
@@ -642,7 +642,7 @@ export default function MagazineLayout({
                 className="absolute"
                 style={{ top: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
               >
-                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase">
+                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase">
                   <span className="font-medium text-white/60">The Journal Gallery</span>
                   <span className="text-white/35">Vol. 01 · {collection.year || '—'}</span>
                 </div>
@@ -655,7 +655,7 @@ export default function MagazineLayout({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.22, ease: expo }}
-                  className="font-mono text-[11px] tracking-[0.5em] uppercase"
+                  className="font-ui text-[11px] tracking-[0.5em] uppercase"
                   style={{ color: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.85)' }}
                 >
                   // dispatch № {folio}
@@ -665,7 +665,7 @@ export default function MagazineLayout({
                     initial={{ y: '110%' }}
                     animate={{ y: '0%' }}
                     transition={{ duration: 0.85, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
-                    className="inline-block font-serif italic font-normal leading-[0.92] tracking-tight text-white/[0.98]"
+                    className="inline-block font-serif uppercase font-normal leading-[0.92] tracking-tight text-white/[0.98]"
                     style={{ fontSize: 'clamp(48px,11vw,168px)' }}
                   >
                     {collection.name}
@@ -675,7 +675,7 @@ export default function MagazineLayout({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.46, ease: expo }}
-                  className="flex items-center gap-3 font-mono text-[10px] tracking-[0.34em] uppercase text-white/40"
+                  className="flex items-center gap-3 font-ui text-[10px] tracking-[0.34em] uppercase text-white/40"
                 >
                   {collection.location && <span>{collection.location}</span>}
                   {collection.location && (
@@ -690,7 +690,7 @@ export default function MagazineLayout({
                 initial={{ clipPath: 'inset(0 0 0 100%)' }}
                 animate={{ clipPath: 'inset(0 0 0 0%)' }}
                 transition={{ duration: 0.65, delay: 0.12, ease: expo }}
-                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-mono text-[10px] tracking-[0.42em] uppercase text-white/35"
+                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase text-white/35"
                 style={{ bottom: 'clamp(1.5rem,4vh,3rem)', left: 'clamp(1.5rem,5vw,4rem)', right: 'clamp(1.5rem,5vw,4rem)' }}
               >
                 <span className="text-[13px] tracking-[0.2em] text-white/55">{folio}</span>

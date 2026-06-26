@@ -56,14 +56,14 @@ export default function RegionHeader({
             transition={{ duration: 0.95, ease: expo }}
           >
             <span
-              className="flex items-center gap-2 font-mono text-[10px] tracking-[0.5em] uppercase mb-3 md:mb-4"
+              className="flex items-center gap-2 font-ui text-[10px] tracking-[0.5em] uppercase mb-3 md:mb-4"
               style={{ color: accentSoft(0.85) }}
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
               Region
             </span>
             <h2
-              className={`font-serif italic tracking-tighter leading-[0.85] text-white transition-opacity duration-300 ${
+              className={`font-serif uppercase tracking-tighter leading-[0.85] text-white transition-opacity duration-300 ${
                 collapsible ? 'group-hover/region:opacity-80' : ''
               }`}
               style={{ fontSize: 'clamp(40px, 7vw, 92px)' }}
@@ -79,7 +79,7 @@ export default function RegionHeader({
           transition={{ duration: 0.7, delay: 0.2 }}
           className="flex items-center gap-4 pb-2 shrink-0"
         >
-          <div className="hidden md:block text-right font-mono text-[11px] tracking-[0.25em] uppercase text-white/40 leading-relaxed">
+          <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.25em] uppercase text-white/40 leading-relaxed">
             {placeCount} places
             <br />
             {frameCount} frames
@@ -89,7 +89,7 @@ export default function RegionHeader({
               {/* Strong, unmistakable cue to open when collapsed */}
               {collapsed && (
                 <motion.span
-                  className="hidden sm:inline font-mono text-[10px] tracking-[0.35em] uppercase"
+                  className="hidden sm:inline font-ui text-[10px] tracking-[0.35em] uppercase"
                   style={{ color: ACCENT }}
                   animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
                   transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}

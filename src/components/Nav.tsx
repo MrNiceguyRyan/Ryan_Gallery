@@ -119,7 +119,7 @@ export default function Nav({ currentPath, dark = false }: Props) {
 
             {/* Footer in menu */}
             <motion.p
-              className="absolute bottom-10 text-[10px] text-white/15 font-mono tracking-[0.3em] uppercase"
+              className="absolute bottom-10 text-[10px] text-white/15 font-ui tracking-[0.3em] uppercase"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.35, duration: 0.4 }}

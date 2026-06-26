@@ -106,7 +106,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
              of the lightbox include attribution. Mix-blend-difference keeps it
              legible against any image color while staying visually quiet. */}
         <div
-          className="pointer-events-none absolute bottom-2 right-3 text-[9px] font-mono tracking-[0.2em] uppercase opacity-50 select-none"
+          className="pointer-events-none absolute bottom-2 right-3 text-[9px] font-ui tracking-[0.2em] uppercase opacity-50 select-none"
           style={{ mixBlendMode: 'difference', color: 'white' }}
         >
           © ryanxugallery.com
@@ -147,7 +147,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
 
       {/* Mobile swipe hint — shown only when there are more photos */}
       {photos.length > 1 && (
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 flex md:hidden items-center gap-1.5 text-white/20 text-[10px] font-mono tracking-widest uppercase pointer-events-none">
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 flex md:hidden items-center gap-1.5 text-white/20 text-[10px] font-ui tracking-widest uppercase pointer-events-none">
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
@@ -167,11 +167,11 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
           {photo.title && (
             <span className="text-white/60 text-[13px] md:text-sm font-light tracking-wide truncate">{photo.title}</span>
           )}
-          <span className="text-white/30 text-[11px] md:text-xs font-mono tracking-wider shrink-0">
+          <span className="text-white/30 text-[11px] md:text-xs font-ui tracking-wider shrink-0">
             {index + 1} / {photos.length}
           </span>
         </div>
-        <div className="flex items-center justify-center gap-2 md:gap-4 text-[11px] md:text-[13px] text-white/35 font-mono tracking-wide flex-wrap">
+        <div className="flex items-center justify-center gap-2 md:gap-4 text-[11px] md:text-[13px] text-white/35 font-ui tracking-wide flex-wrap">
           {photo.camera && <span className="text-white/45">{photo.camera}</span>}
           {photo.focalLength && (<><span className="text-white/15">|</span><span>{photo.focalLength}</span></>)}
           {photo.aperture && (<><span className="text-white/15">|</span><span>{photo.aperture}</span></>)}

@@ -92,7 +92,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
 
       {/* Index */}
       <span
-        className={`text-[8px] font-mono leading-none transition-all duration-500 ${
+        className={`text-[8px] font-ui leading-none transition-all duration-500 ${
           isActive ? 'opacity-100 text-white' : 'opacity-25 group-hover:opacity-100'
         }`}
       >

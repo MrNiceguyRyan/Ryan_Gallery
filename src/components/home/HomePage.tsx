@@ -113,11 +113,11 @@ function MobileFilmstripItem({
 
       {/* Centered Title — clamps and shrinks to fit narrow screens */}
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-5 py-6 z-10 pointer-events-none">
-        <h3 className="text-3xl sm:text-4xl text-white font-serif italic tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
+        <h3 className="text-3xl sm:text-4xl text-white font-serif uppercase tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
           {title}
         </h3>
         {caption && (
-          <span className="font-mono text-[8px] uppercase tracking-[0.35em] text-white/75 mix-blend-difference">
+          <span className="font-ui text-[8px] uppercase tracking-[0.35em] text-white/75 mix-blend-difference">
             {caption}
           </span>
         )}
@@ -193,10 +193,10 @@ function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => vo
         transition={tween}
       />
       <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
-        <span className="font-serif italic text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
+        <span className="font-serif uppercase text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
           {c.name.trim()}
         </span>
-        <span className="font-mono text-[9px] text-white/50 tracking-widest shrink-0">
+        <span className="font-ui text-[9px] text-white/50 tracking-widest shrink-0">
           {c.photoCount ?? c.photos?.length ?? 0}
         </span>
       </div>
@@ -770,7 +770,7 @@ export default function HomePage({ collections }: Props) {
                       <p className="text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#E6E9E7] opacity-[0.72]">
                         &ldquo;{HERO_EPIGRAPHS[epigraphIdx].line}&rdquo;
                       </p>
-                      <p className="font-mono text-[9px] tracking-[0.4em] uppercase opacity-30">
+                      <p className="font-ui text-[9px] tracking-[0.4em] uppercase opacity-30">
                         &mdash;&ensp;{HERO_EPIGRAPHS[epigraphIdx].place}
                       </p>
                     </motion.div>
@@ -814,7 +814,7 @@ export default function HomePage({ collections }: Props) {
                 style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
               />
               <div className="flex items-center gap-6">
-                <span className="text-[9px] font-mono opacity-20">REF &numero;</span>
+                <span className="text-[9px] font-ui opacity-20">REF &numero;</span>
                 <span className="text-[10px] uppercase tracking-[0.4em] opacity-30 font-bold">
                   Vol. {activeCollections.length} Archive
                 </span>
@@ -832,7 +832,7 @@ export default function HomePage({ collections }: Props) {
             style={{ opacity: scrollCueOpacity }}
             className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10 pointer-events-none"
           >
-            <span className="text-[9px] uppercase tracking-[0.5em] font-mono opacity-40">Scroll</span>
+            <span className="text-[9px] uppercase tracking-[0.5em] font-ui opacity-40">Scroll</span>
             <motion.div
               className="w-px h-8 bg-white/30 origin-top"
               animate={reduce ? { scaleY: 1 } : { scaleY: [0, 1, 0] }}
@@ -900,7 +900,7 @@ export default function HomePage({ collections }: Props) {
                     <button
                       onClick={toggleAll}
                       data-cursor={allCollapsed ? 'Expand' : 'Collapse'}
-                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-mono text-white/30 hover:text-white/70 transition-colors cursor-none"
+                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-ui text-white/30 hover:text-white/70 transition-colors cursor-none"
                     >
                       <ChevronDown
                         size={11}
@@ -954,7 +954,7 @@ export default function HomePage({ collections }: Props) {
 
                 <div className="pt-2 space-y-4">
                   <div className="space-y-2">
-                    <span className="text-[7px] uppercase tracking-widest opacity-20 block font-mono">
+                    <span className="text-[7px] uppercase tracking-widest opacity-20 block font-ui">
                       Journey Progress
                     </span>
                     <div className="w-full h-[1px] bg-white/5 relative overflow-hidden">
@@ -984,7 +984,7 @@ export default function HomePage({ collections }: Props) {
                   <div className="w-8 h-px bg-white/30" />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="text-4xl md:text-7xl font-serif italic tracking-tighter leading-tight pb-2">
+                <h2 className="text-4xl md:text-7xl font-serif uppercase tracking-tighter leading-tight pb-2">
                   {SW_WORDS.map((w, i) => (
                     <RisingWord
                       key={i}
@@ -996,7 +996,7 @@ export default function HomePage({ collections }: Props) {
                     />
                   ))}
                 </h2>
-                <div className="flex items-center gap-2.5 pt-2 text-[10px] font-mono uppercase tracking-[0.3em] text-white/35">
+                <div className="flex items-center gap-2.5 pt-2 text-[10px] font-ui uppercase tracking-[0.3em] text-white/35">
                   <span className="relative flex h-1.5 w-1.5">
                     <span
                       className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
@@ -1077,10 +1077,10 @@ export default function HomePage({ collections }: Props) {
                   className="w-px h-10"
                   style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
                 />
-                <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
+                <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
                   End of archive
                 </span>
-                <span className="text-[8px] font-mono opacity-60">
+                <span className="text-[8px] font-ui opacity-60">
                   // {activeCollections.length} of {activeCollections.length}
                 </span>
               </div>
@@ -1105,12 +1105,12 @@ export default function HomePage({ collections }: Props) {
                     className="w-1.5 h-1.5 rounded-full shrink-0"
                     style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                   />
-                  <span className="font-serif italic text-2xl tracking-tight text-white leading-none">
+                  <span className="font-serif uppercase text-2xl tracking-tight text-white leading-none">
                     {section.region}
                   </span>
                   {isCollapsed && (
                     <motion.span
-                      className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase"
+                      className="ml-auto font-ui text-[8px] tracking-[0.3em] uppercase"
                       style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                       animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
                       transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
@@ -1157,7 +1157,7 @@ export default function HomePage({ collections }: Props) {
               className="w-px h-10"
               style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
             />
-            <span className="text-[9px] uppercase tracking-[0.5em] font-mono">
+            <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
               End of archive
             </span>
           </div>
