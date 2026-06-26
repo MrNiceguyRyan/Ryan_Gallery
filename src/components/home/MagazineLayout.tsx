@@ -276,6 +276,7 @@ export default function MagazineLayout({
           exit={{ y: '100%' }}
           transition={{ duration: 0.9, ease: [0.32, 0, 0.07, 1] }}
           ref={containerRef}
+          data-lenis-prevent
           className="w-full h-full overflow-y-auto no-scrollbar relative bg-[#0A0A0A] text-[#FDFDFB]"
         >
           {/* Sticky header — top padding honors iOS notch safe-area */}

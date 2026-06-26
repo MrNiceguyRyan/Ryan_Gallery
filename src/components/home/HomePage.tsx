@@ -382,6 +382,9 @@ export default function HomePage({ collections }: Props) {
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
   // window position Lenis drives, so the existing scroll effects keep working.
   // Skipped for reduced-motion. Torn down on unmount (e.g. route change).
+  // Held in a ref so the collection overlay can pause it — Lenis otherwise eats
+  // the wheel on the window and the overlay's own scroll never moves.
+  const lenisRef = useRef<Lenis | null>(null);
   useEffect(() => {
     if (reduce) return;
     const lenis = new Lenis({
@@ -390,6 +393,7 @@ export default function HomePage({ collections }: Props) {
       smoothWheel: true,
       touchMultiplier: 1.6,
     });
+    lenisRef.current = lenis;
     let raf = 0;
     const loop = (time: number) => {
       lenis.raf(time);
@@ -399,6 +403,7 @@ export default function HomePage({ collections }: Props) {
     return () => {
       cancelAnimationFrame(raf);
       lenis.destroy();
+      lenisRef.current = null;
     };
   }, [reduce]);
 
@@ -554,6 +559,10 @@ export default function HomePage({ collections }: Props) {
     const isOverlayOpen = !!selectedCollection;
     document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
     document.body.style.backgroundColor = '#0B0C0C';
+    // Pause Lenis while the overlay is up so its own overflow-y-auto scrolls
+    // natively; resume on close.
+    if (isOverlayOpen) lenisRef.current?.stop();
+    else lenisRef.current?.start();
     return () => {
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
