@@ -104,8 +104,8 @@ export default function AboutPage({ settings }: Props) {
            Warm amber washes (the site accent) + a faint dot grid + grain, all
            fixed-behind and pointer-events-none. ═══════ */}
       <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(60vmax 50vmax at 12% 6%, rgba(255,200,130,0.055), transparent 60%)' }} />
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(55vmax 46vmax at 100% 100%, rgba(255,200,130,0.04), transparent 62%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(60vmax 50vmax at 12% 6%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.055), transparent 60%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(55vmax 46vmax at 100% 100%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.04), transparent 62%)' }} />
         <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.65) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
         <div className="absolute inset-0 newsprint-screen opacity-[0.035]" />
       </div>
@@ -124,7 +124,7 @@ export default function AboutPage({ settings }: Props) {
             <div className="absolute inset-0 newsprint-screen opacity-[0.05] pointer-events-none" />
             <div
               className="absolute inset-0 pointer-events-none"
-              style={{ background: 'radial-gradient(52vmax 42vmax at 20% 112%, rgba(255,200,130,0.10), transparent 68%)' }}
+              style={{ background: 'radial-gradient(52vmax 42vmax at 20% 112%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.10), transparent 68%)' }}
             />
             {/* Newspaper column rules */}
             <div className="absolute inset-0 grid grid-cols-4 opacity-50 pointer-events-none">
@@ -162,7 +162,7 @@ export default function AboutPage({ settings }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.22, ease: expo }}
                 className="font-mono text-[11px] tracking-[0.5em] uppercase"
-                style={{ color: 'rgba(255,200,130,0.85)' }}
+                style={{ color: 'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.85)' }}
               >
                 Photographer
               </motion.span>
@@ -242,7 +242,7 @@ export default function AboutPage({ settings }: Props) {
                   style={{
                     borderRadius: DROP_OUTER[0],
                     background:
-                      'radial-gradient(circle at 36% 30%, rgba(255,200,130,0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
+                      'radial-gradient(circle at 36% 30%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
                   }}
                   animate={reduce ? undefined : { borderRadius: DROP_OUTER, rotate: [0, 7, 0], scale: [1, 1.06, 1] }}
                   transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
@@ -302,7 +302,7 @@ export default function AboutPage({ settings }: Props) {
               initial="hidden"
               animate={coverGone ? 'show' : 'hidden'}
             >
-              {name}.
+              {name}<span style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}>.</span>
             </motion.h1>
 
             {/* Lede — a single serif statement, the page thesis */}
@@ -387,7 +387,7 @@ export default function AboutPage({ settings }: Props) {
               key={`${item.year}-${i}`}
               className="relative pl-8 pb-9 last:pb-0 group"
             >
-              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] transition-all duration-500 group-hover:border-[rgba(255,200,130,0.9)] group-hover:shadow-[0_0_10px_rgba(255,200,130,0.5)]" />
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#0A0A0A] transition-all duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
               <Reveal y={18} delay={(i % 2) * 0.05}>
                 <span className="font-mono text-[10px] text-white/30 tracking-[0.2em]">{item.year}</span>
                 <h3 className="text-lg md:text-xl font-serif italic text-[#FDFDFB] mt-1 tracking-tight">
@@ -417,7 +417,7 @@ export default function AboutPage({ settings }: Props) {
               href={`mailto:${email}`}
               className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
             >
-              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
               </svg>
               <div className="min-w-0">
@@ -433,7 +433,7 @@ export default function AboutPage({ settings }: Props) {
               rel="noopener noreferrer"
               className="group relative p-5 bg-[#0A0A0A] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
             >
-              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(255,200,130,0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
               </svg>
@@ -471,9 +471,9 @@ export default function AboutPage({ settings }: Props) {
             <Magnetic strength={0.5}>
               <a
                 href={`mailto:${email}`}
-                className="inline-block px-7 py-2.5 bg-white text-black text-sm font-light tracking-wider rounded-full hover:bg-white/80 transition-colors duration-300"
+                className="inline-flex items-center gap-2 px-7 py-3 border border-white/25 text-white/85 text-[13px] font-light tracking-[0.18em] uppercase rounded-full transition-all duration-300 hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] hover:text-[#0B0C0C] hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
               >
-                Get in Touch
+                Get in touch <span aria-hidden="true">↗</span>
               </a>
             </Magnetic>
           </Reveal>

@@ -73,7 +73,7 @@ const cityNames = [
     <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
     <div
       class="absolute inset-0 z-0 hero-glow"
-      style="background: radial-gradient(58vmax 46vmax at 50% 44%, rgba(255,200,130,0.07), transparent 70%);"
+      style="background: radial-gradient(58vmax 46vmax at 50% 44%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.07), transparent 70%);"
     ></div>
     <!-- Faint coordinate hairlines for atlas texture -->
     <div class="absolute inset-0 z-0 opacity-[0.04] hidden md:block" style="background-image: linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px); background-size: 120px 120px;"></div>
@@ -125,7 +125,7 @@ const cityNames = [
           The Territory
         </p>
         <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif italic tracking-tight leading-[0.9] text-[#FDFDFB]">
-          Mapping the<br />Archive.
+          Mapping the<br /><span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
         </h1>
       </div>
     </div>
@@ -235,8 +235,8 @@ const cityNames = [
   .band-dot {
     padding: 0 0.15em;
     font-size: 0.5em;
-    color: rgba(255, 200, 130, 0.75);
-    text-shadow: 0 0 12px rgba(255, 200, 130, 0.65), 0 0 4px rgba(255, 200, 130, 0.85);
+    color: rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.75);
+    text-shadow: 0 0 12px rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.65), 0 0 4px rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.85);
     transform: translateY(-0.35em);
     display: inline-block;
   }
