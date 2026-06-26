@@ -28,7 +28,7 @@ export default function Nav({ currentPath, dark = false }: Props) {
         {/* Left: signature name */}
         <a
           href="/"
-          className="font-signature text-[28px] md:text-4xl leading-none text-[#FDFDFB] mix-blend-difference hover:opacity-60 transition-opacity duration-200 py-1"
+          className="font-signature text-[28px] md:text-4xl leading-none text-[#F4F4ED] mix-blend-difference hover:opacity-60 transition-opacity duration-200 py-1"
         >
           Ryan Xu
         </a>
@@ -77,7 +77,7 @@ export default function Nav({ currentPath, dark = false }: Props) {
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            className="fixed inset-0 z-40 bg-[#22271a]/97 backdrop-blur-2xl flex flex-col items-center justify-center gap-0 md:hidden"
+            className="fixed inset-0 z-40 bg-[#30352a]/97 backdrop-blur-2xl flex flex-col items-center justify-center gap-0 md:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

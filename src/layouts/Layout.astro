@@ -82,7 +82,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalURL} />
-    <meta name="theme-color" content="#22271a" />
+    <meta name="theme-color" content="#30352a" />
 
     <!-- Open Graph -->
     <meta property="og:type" content={ogType} />
@@ -118,7 +118,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
   <body class:list={[
     "min-h-screen font-sans antialiased overflow-x-hidden",
-    dark ? "bg-[#181b10] text-[#FDFDFB]" : "bg-white text-gray-900"
+    dark ? "bg-[#282c20] text-[#F4F4ED]" : "bg-white text-gray-900"
   ]} style="cursor: none;">
     <!-- Custom cursor — a minimal dot (no ring) -->
     <div id="cursor-dot" aria-hidden="true"></div>
@@ -331,8 +331,8 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         letter-spacing: 0.28em;
         text-transform: uppercase;
         font-weight: 700;
-        color: #22271a;
-        background: #FDFDFB;
+        color: #30352a;
+        background: #F4F4ED;
         padding: 6px 11px;
         border-radius: 999px;
         white-space: nowrap;
@@ -471,9 +471,9 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         }
 
         // Pick background color that will be revealed under the sliding body.
-        // All pages use dark theme (#22271a).
+        // All pages use dark theme (#30352a).
         function bgFor(toPath) {
-          return '#22271a';
+          return '#30352a';
         }
 
         function runExit(href, bg) {

@@ -608,7 +608,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
         {/* ── Desktop sidebar — grouped by region (optional; off via
              showLocationList=false when an external index drives the map) ── */}
         {showLocationList && (
-        <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#22271a]">
+        <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#30352a]">
           <div className="px-5 py-4 border-b border-white/5">
             <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
             <p className="text-xs text-white/20 font-ui mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>

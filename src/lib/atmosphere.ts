@@ -1,16 +1,16 @@
 /**
- * Animated "topographic" site atmosphere, drawn on a <canvas>.
+ * Animated "organic blob" site atmosphere, drawn on a <canvas>.
  *
- * A field of scattered "peaks": each emits a stack of nested, irregular closed
- * contours (like the rings of an elevation map). Every contour's radius is
- * warped by several sine harmonics whose phases drift with time, so the lines
- * are never circular and continuously reshape — dense, irregular lines in
- * organic motion. No horizontal banding. The peaks overlap to fill the frame.
+ * A field of scattered, ROUNDED, irregular closed contours — pebble / water-drop
+ * shapes (echoing Lando's blob motif), NOT straight stripes. They're stroked in
+ * a faint olive only a hair lighter than the page, so the field reads as a quiet
+ * texture and never competes with the photography. Density is scattered/random
+ * across the frame. Motion is a slow scroll-parallax drift plus an almost
+ * imperceptible breathe — continuous, never a flicker.
  *
- * Motion is continuous and organic (never a flicker). Honors
- * prefers-reduced-motion by drawing a single static frame, and caps the redraw
- * rate to stay light. Returns a cleanup fn; also self-stops once the canvas
- * leaves the DOM (SPA nav).
+ * Honors prefers-reduced-motion (single static frame). The canvas is fixed, so
+ * "parallax" is applied by offsetting the drawing by a fraction of scrollY each
+ * frame. Returns a cleanup fn; also self-stops once the canvas leaves the DOM.
  */
 export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
   const ctx = canvas.getContext('2d');
@@ -20,13 +20,9 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Stroke colour from the live accent var (sky-blue), with a safe fallback.
-  const root = getComputedStyle(document.documentElement);
-  const cssVar = (name: string, fallback: string) => root.getPropertyValue(name).trim() || fallback;
-  const R = cssVar('--accent-r', '108');
-  const G = cssVar('--accent-g', '171');
-  const B = cssVar('--accent-b', '221');
-  const ink = (a: number) => `rgba(${R},${G},${B},${a})`;
+  // Faint near-background olive — just a hair lighter than the #282c20 page, so
+  // the blobs are felt more than seen. Outer rings fade further into the page.
+  const stroke = (a: number) => `rgba(58, 63, 45, ${a})`;
 
   let w = 0;
   let h = 0;
@@ -41,48 +37,48 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
   resize();
   window.addEventListener('resize', resize);
 
-  // Scattered elevation "peaks" (relative coords; some past the edges so the
-  // contour field continues off-frame). Each has its own size, ring count,
-  // aspect, tempo and phase seed → a dense, non-repeating topographic field.
+  // Scattered blob "peaks" — each emits a stack of nested rounded contours.
+  // Spread across the frame (some past the edges) for a continuous, random-
+  // density field. Low warp = smooth pebble shapes, not spiky topography.
   const peaks = [
-    { x: 0.16, y: 0.26, rings: 8, base: 26, warp: 24, sp: 1.7, aspect: 0.92, seed: 0.0 },
-    { x: 0.46, y: 0.12, rings: 7, base: 30, warp: 28, sp: 1.3, aspect: 1.06, seed: 1.7 },
-    { x: 0.80, y: 0.22, rings: 8, base: 25, warp: 22, sp: 1.9, aspect: 0.88, seed: 3.1 },
-    { x: 0.27, y: 0.62, rings: 9, base: 28, warp: 30, sp: 1.5, aspect: 0.96, seed: 4.6 },
-    { x: 0.62, y: 0.55, rings: 8, base: 27, warp: 26, sp: 1.7, aspect: 1.08, seed: 6.0 },
-    { x: 0.90, y: 0.66, rings: 7, base: 27, warp: 24, sp: 1.6, aspect: 0.9, seed: 7.4 },
-    { x: 0.06, y: 0.82, rings: 7, base: 27, warp: 26, sp: 1.55, aspect: 1.0, seed: 8.8 },
-    { x: 0.52, y: 0.90, rings: 8, base: 28, warp: 28, sp: 1.45, aspect: 0.94, seed: 10.2 },
+    { x: 0.13, y: 0.18, rings: 7, base: 30, warp: 13, sp: 0.5, aspect: 0.92, seed: 0.0 },
+    { x: 0.42, y: 0.09, rings: 6, base: 34, warp: 15, sp: 0.42, aspect: 1.08, seed: 1.7 },
+    { x: 0.79, y: 0.16, rings: 7, base: 27, warp: 12, sp: 0.55, aspect: 0.9, seed: 3.1 },
+    { x: 0.24, y: 0.50, rings: 8, base: 31, warp: 16, sp: 0.46, aspect: 0.98, seed: 4.6 },
+    { x: 0.59, y: 0.44, rings: 7, base: 29, warp: 14, sp: 0.5, aspect: 1.06, seed: 6.0 },
+    { x: 0.92, y: 0.54, rings: 6, base: 29, warp: 13, sp: 0.48, aspect: 0.9, seed: 7.4 },
+    { x: 0.07, y: 0.78, rings: 7, base: 29, warp: 15, sp: 0.5, aspect: 1.0, seed: 8.8 },
+    { x: 0.45, y: 0.85, rings: 7, base: 31, warp: 14, sp: 0.42, aspect: 0.95, seed: 10.2 },
+    { x: 0.76, y: 0.82, rings: 7, base: 29, warp: 15, sp: 0.5, aspect: 1.04, seed: 11.6 },
+    { x: 0.99, y: 0.93, rings: 5, base: 29, warp: 12, sp: 0.46, aspect: 0.9, seed: 13.0 },
   ];
 
-  const render = (t: number) => {
+  const render = (t: number, par: number) => {
     ctx.clearRect(0, 0, w, h);
     ctx.lineWidth = 1;
-    const u = Math.max(w, h) / 1400; // scale the field with the viewport
-
+    const u = Math.max(w, h) / 1400;
     for (const p of peaks) {
       const cx = p.x * w;
-      const cy = p.y * h;
+      const cy = p.y * h - par;
       const warp = p.warp * u;
       for (let k = 1; k <= p.rings; k++) {
-        const breathe = 1 + 0.045 * Math.sin(t * p.sp + k * 0.5 + p.seed);
+        const breathe = 1 + 0.03 * Math.sin(t * p.sp + k * 0.4 + p.seed);
         const rad = p.base * k * breathe * u;
         ctx.beginPath();
-        const steps = 84;
+        const steps = 72;
         for (let s = 0; s <= steps; s++) {
           const a = (s / steps) * Math.PI * 2;
           const rr =
             rad +
-            Math.sin(a * 2 + t * 0.9 + p.seed) * (warp * 0.5) +
-            Math.sin(a * 3 - t * 0.65 + k * 0.7) * (warp * 0.34) +
-            Math.sin(a * 5 + t * 1.3 + p.seed * 1.3) * (warp * 0.18);
+            Math.sin(a * 2 + t * 0.22 + p.seed) * (warp * 0.6) +
+            Math.sin(a * 3 - t * 0.16 + k * 0.5) * (warp * 0.3);
           const px = cx + Math.cos(a) * rr;
           const py = cy + Math.sin(a) * rr * p.aspect;
           if (s === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
         ctx.closePath();
-        ctx.strokeStyle = ink(Math.max(0.035, 0.13 - k * 0.011));
+        ctx.strokeStyle = stroke(Math.max(0.22, 0.7 - k * 0.06));
         ctx.stroke();
       }
     }
@@ -96,16 +92,17 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
   };
 
   if (reduce) {
-    render(0);
+    render(0, 0);
   } else {
     const loop = (now: number) => {
       if (!canvas.isConnected) {
         stop();
         return;
       }
-      if (now - last >= 22) {
+      if (now - last >= 33) {
         last = now;
-        render(now * 0.001);
+        const sy = window.scrollY || window.pageYOffset || 0;
+        render(now * 0.001, sy * 0.045);
       }
       raf = requestAnimationFrame(loop);
     };

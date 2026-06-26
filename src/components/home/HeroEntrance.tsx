@@ -129,7 +129,7 @@ export default function HeroEntrance({
   }, [onComplete]);
 
   return (
-    <div ref={rootRef} className="fixed inset-0 z-[60] bg-[#22271a] overflow-hidden pointer-events-none" aria-hidden="true">
+    <div ref={rootRef} className="fixed inset-0 z-[60] bg-[#30352a] overflow-hidden pointer-events-none" aria-hidden="true">
       {/* Single full-bleed cover (starts defocused, racks sharp) */}
       <div className="absolute inset-0 overflow-hidden">
         <div ref={photoRef} className="absolute inset-0 will-change-[filter,transform]" style={{ opacity: 0 }}>

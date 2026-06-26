@@ -92,7 +92,7 @@ function PhotoCell({
         zIndex: isThisHovered ? 20 : 1,
       }}
       transition={{ duration: 0.6, ease: expo, boxShadow: { duration: 0.3 } }}
-      className={`${colSpan} group relative bg-[#22271a] cursor-pointer overflow-hidden`}
+      className={`${colSpan} group relative bg-[#30352a] cursor-pointer overflow-hidden`}
     >
       {/* Entrance reveal — image rises out of a baseline clip (separate from
           the hover-dim above so the timings don't fight). Mount-triggered
@@ -277,7 +277,7 @@ export default function MagazineLayout({
           transition={{ duration: 0.9, ease: [0.32, 0, 0.07, 1] }}
           ref={containerRef}
           data-lenis-prevent
-          className="w-full h-full overflow-y-auto no-scrollbar relative bg-[#22271a] text-[#FDFDFB]"
+          className="w-full h-full overflow-y-auto no-scrollbar relative bg-[#30352a] text-[#F4F4ED]"
         >
           {/* Sticky header — top padding honors iOS notch safe-area */}
           <div
@@ -413,8 +413,8 @@ export default function MagazineLayout({
                             whileHover={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.55, ease: expo }}
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#22271a] via-transparent to-transparent opacity-80" />
-                          <div className="absolute inset-0 bg-gradient-to-r from-[#22271a]/40 to-transparent" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#30352a] via-transparent to-transparent opacity-80" />
+                          <div className="absolute inset-0 bg-gradient-to-r from-[#30352a]/40 to-transparent" />
                           <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)' }} />
                         </div>
 
@@ -590,7 +590,7 @@ export default function MagazineLayout({
               initial={{ y: 0 }}
               exit={{ y: '-100%' }}
               transition={{ duration: 0.82, ease: [0.76, 0, 0.24, 1] }}
-              className="absolute inset-0 z-[75] bg-[#22271a] text-[#FDFDFB] overflow-hidden pointer-events-none"
+              className="absolute inset-0 z-[75] bg-[#30352a] text-[#F4F4ED] overflow-hidden pointer-events-none"
             >
               {/* Optional per-collection background image (e.g. Miami street map),
                   dimmed + slow zoom so the editorial type stays legible. */}
@@ -607,8 +607,8 @@ export default function MagazineLayout({
                     className="w-full h-full object-cover"
                     draggable={false}
                   />
-                  <div className="absolute inset-0 bg-[#22271a]/55" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#22271a] via-[#22271a]/15 to-[#22271a]/55" />
+                  <div className="absolute inset-0 bg-[#30352a]/55" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#30352a] via-[#30352a]/15 to-[#30352a]/55" />
                 </motion.div>
               )}
 

@@ -100,7 +100,7 @@ export default function AboutPage({ settings }: Props) {
   }, []);
 
   return (
-    <div className="relative bg-[#181b10] text-[#FDFDFB] min-h-[100dvh]">
+    <div className="relative bg-[#282c20] text-[#F4F4ED] min-h-[100dvh]">
       {/* Shared cool atmosphere — sky-blue glows + a contour field. Replaces
            the old warm-amber washes, dot grid, and animated grain (the grain
            read as noise/flicker). */}
@@ -114,7 +114,7 @@ export default function AboutPage({ settings }: Props) {
             initial={{ y: 0 }}
             exit={{ y: '-100%' }}
             transition={{ duration: 0.85, ease: [0.76, 0, 0.24, 1] }}
-            className="fixed inset-0 z-[60] bg-[#181b10] text-[#FDFDFB] overflow-hidden"
+            className="fixed inset-0 z-[60] bg-[#282c20] text-[#F4F4ED] overflow-hidden"
           >
             {/* Cool accent wash (grain removed) */}
             <div
@@ -291,7 +291,7 @@ export default function AboutPage({ settings }: Props) {
           <div className="md:col-span-7">
             {/* Name — fades up as part of the top-to-bottom entrance cascade */}
             <motion.h1
-              className="text-6xl md:text-7xl lg:text-8xl font-serif uppercase text-[#FDFDFB] tracking-tighter leading-[1.1] pb-2"
+              className="text-6xl md:text-7xl lg:text-8xl font-serif uppercase text-[#F4F4ED] tracking-tighter leading-[1.1] pb-2"
               variants={heroItem}
               custom={0.1}
               initial="hidden"
@@ -371,7 +371,7 @@ export default function AboutPage({ settings }: Props) {
       {/* ═══════ TIMELINE — vertical editorial log ═══════ */}
       <section className="px-6 md:px-16 max-w-3xl mx-auto py-12 md:py-16 border-t border-white/5">
         <Reveal>
-          <h2 className="text-xl md:text-2xl font-serif uppercase text-[#FDFDFB] tracking-tighter py-1 mb-8">
+          <h2 className="text-xl md:text-2xl font-serif uppercase text-[#F4F4ED] tracking-tighter py-1 mb-8">
             Timeline.
           </h2>
         </Reveal>
@@ -382,10 +382,10 @@ export default function AboutPage({ settings }: Props) {
               key={`${item.year}-${i}`}
               className="relative pl-8 pb-9 last:pb-0 group"
             >
-              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#22271a] transition-all duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#30352a] transition-all duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
               <Reveal y={18} delay={(i % 2) * 0.05}>
                 <span className="font-ui text-[10px] text-white/30 tracking-[0.2em]">{item.year}</span>
-                <h3 className="text-lg md:text-xl font-serif uppercase text-[#FDFDFB] mt-1 tracking-tight">
+                <h3 className="text-lg md:text-xl font-serif uppercase text-[#F4F4ED] mt-1 tracking-tight">
                   {item.title}
                 </h3>
                 <p className="text-[13.5px] text-white/45 font-light mt-1.5 leading-relaxed max-w-[55ch]">
@@ -401,7 +401,7 @@ export default function AboutPage({ settings }: Props) {
       <section className="px-6 md:px-16 py-12 md:py-16 border-t border-white/5">
         <div className="max-w-3xl mx-auto">
           <Reveal>
-            <h2 className="text-xl md:text-2xl font-serif uppercase text-[#FDFDFB] tracking-tighter mb-6 py-1">
+            <h2 className="text-xl md:text-2xl font-serif uppercase text-[#F4F4ED] tracking-tighter mb-6 py-1">
               Contact.
             </h2>
           </Reveal>
@@ -410,7 +410,7 @@ export default function AboutPage({ settings }: Props) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
             <a
               href={`mailto:${email}`}
-              className="group relative p-5 bg-[#22271a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
@@ -426,7 +426,7 @@ export default function AboutPage({ settings }: Props) {
               href={instagram}
               target="_blank"
               rel="noopener noreferrer"
-              className="group relative p-5 bg-[#22271a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -439,7 +439,7 @@ export default function AboutPage({ settings }: Props) {
               <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
             </a>
 
-            <div className="p-5 bg-[#22271a] flex items-center gap-3.5">
+            <div className="p-5 bg-[#30352a] flex items-center gap-3.5">
               <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
@@ -450,7 +450,7 @@ export default function AboutPage({ settings }: Props) {
               </div>
             </div>
 
-            <div className="p-5 bg-[#22271a] flex items-center gap-3.5">
+            <div className="p-5 bg-[#30352a] flex items-center gap-3.5">
               <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" />
               </svg>
@@ -466,7 +466,7 @@ export default function AboutPage({ settings }: Props) {
             <Magnetic strength={0.5}>
               <a
                 href={`mailto:${email}`}
-                className="inline-flex items-center gap-2 px-7 py-3 border border-white/25 text-white/85 text-[13px] font-light tracking-[0.18em] uppercase rounded-full transition-all duration-300 hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] hover:text-[#181b10] hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
+                className="inline-flex items-center gap-2 px-7 py-3 border border-white/25 text-white/85 text-[13px] font-light tracking-[0.18em] uppercase rounded-full transition-all duration-300 hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] hover:text-[#282c20] hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
               >
                 Get in touch <span aria-hidden="true">↗</span>
               </a>

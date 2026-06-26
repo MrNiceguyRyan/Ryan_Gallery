@@ -68,12 +68,12 @@ const cityNames = [
 
   <Nav client:load currentPath={currentPath} dark={true} />
 
-  <!-- Shared cool atmosphere — sky-blue glows (CSS) + animated topographic
+  <!-- Site atmosphere — animated organic-blob contour texture
        field drawn on the canvas by lib/atmosphere.ts (see the script below) -->
   <canvas class="site-atmos" aria-hidden="true"></canvas>
 
   <!-- ── Hero — pure-typographic kinetic "light band" over dark ── -->
-  <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#181b10]" data-travel-hero>
+  <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#282c20]" data-travel-hero>
     <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
     <div
       class="absolute inset-0 z-0 hero-glow"
@@ -118,8 +118,8 @@ const cityNames = [
 
     <!-- Title-legibility wash: solid dark anchored bottom-left, fading up/right
          so the band stays visible elsewhere; plus a soft top/bottom vignette. -->
-    <div class="absolute inset-0 z-[2] bg-gradient-to-tr from-[#181b10] via-[#181b10]/65 to-transparent"></div>
-    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#181b10] via-transparent to-[#181b10]/55"></div>
+    <div class="absolute inset-0 z-[2] bg-gradient-to-tr from-[#282c20] via-[#282c20]/65 to-transparent"></div>
+    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#282c20] via-transparent to-[#282c20]/55"></div>
 
     <!-- Foreground content (outer wrapper carries scroll-parallax; inner keeps
          the one-shot mount fade so the two transforms never collide) -->
@@ -128,7 +128,7 @@ const cityNames = [
         <p class="font-ui text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
           The Territory
         </p>
-        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif uppercase tracking-tight leading-[0.9] text-[#FDFDFB]">
+        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif uppercase tracking-tight leading-[0.9] text-[#F4F4ED]">
           Mapping the<br /><span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
         </h1>
       </div>
@@ -150,7 +150,7 @@ const cityNames = [
         return (
           <div class={`flex flex-col gap-2 ${i > 0 ? 'md:border-l md:border-white/10 md:pl-8' : ''}`}>
             <span
-              class="text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-tight text-[#FDFDFB] leading-none tabular-nums"
+              class="text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-tight text-[#F4F4ED] leading-none tabular-nums"
               data-countup={numeric ? s.value : undefined}
             >
               {s.value}
