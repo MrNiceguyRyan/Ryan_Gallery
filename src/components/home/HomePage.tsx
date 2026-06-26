@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, typ
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ParticleTitle from './ParticleTitle';
+import SignatureIntro from './SignatureIntro';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
@@ -589,6 +590,7 @@ export default function HomePage({ collections }: Props) {
 
   return (
     <>
+      <SignatureIntro />
       <div
         className="accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#282c20] text-[#F4F4ED] opacity-100"
         style={{

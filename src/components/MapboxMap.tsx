@@ -140,7 +140,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-  const [mapStyleIdx, setMapStyleIdx] = useState(4); // default to dark style
+  const [mapStyleIdx, setMapStyleIdx] = useState(0); // default to light style (the globe dive-in fog is light-tuned)
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
 

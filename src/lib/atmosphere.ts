@@ -21,7 +21,7 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const STROKE = 'rgba(68, 74, 52, 0.52)'; // clearly readable olive over the #282c20 page
-  const CELL = 30;   // grid cell px — smaller = smoother lines, more compute
+  const CELL = 16;   // grid cell px — smaller = smoother lines, more compute
   const SCALE = 150; // px per field "world" unit — larger = broader terrain
   const LEVELS = 11; // number of contour rings across the field's range
 
