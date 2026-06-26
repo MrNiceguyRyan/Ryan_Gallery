@@ -313,6 +313,37 @@ img {
   vector-effect: non-scaling-stroke;
 }
 
+/* ── Disordered organic motion (landonorris-style) ──
+ *  Each line drifts + breathes on its OWN slow timeline — different speed,
+ *  direction, and phase — so the field churns organically instead of sliding
+ *  as one block. Smooth and slow (continuous motion, never a flicker).
+ *  Wholly disabled under reduced-motion (the field stays static). */
+@media (prefers-reduced-motion: no-preference) {
+  .site-atmos path {
+    transform-box: view-box;
+    transform-origin: center;
+    will-change: transform;
+    animation: atmos-flow-a 24s ease-in-out infinite alternate;
+  }
+  .site-atmos path:nth-child(3n+1) { animation-name: atmos-flow-b; animation-duration: 31s; }
+  .site-atmos path:nth-child(3n+2) { animation-name: atmos-flow-c; animation-duration: 19s; animation-direction: alternate-reverse; }
+  .site-atmos path:nth-child(4n)   { animation-duration: 27s; animation-delay: -6s; }
+  .site-atmos path:nth-child(5n)   { animation-duration: 35s; animation-delay: -11s; }
+  .site-atmos path:nth-child(7n)   { animation-direction: alternate-reverse; animation-delay: -4s; }
+}
+@keyframes atmos-flow-a {
+  from { transform: translate(0px, 0px) scale(1, 1); }
+  to   { transform: translate(-22px, 13px) scale(1.015, 1.04); }
+}
+@keyframes atmos-flow-b {
+  from { transform: translate(0px, 0px) scale(1, 1); }
+  to   { transform: translate(18px, -15px) scale(1.02, 0.985); }
+}
+@keyframes atmos-flow-c {
+  from { transform: translate(0px, 0px) scale(1, 1); }
+  to   { transform: translate(-12px, -18px) scale(0.99, 1.03); }
+}
+
 /* ═══════════════════════════════════════════════════════
  *  Journal Gallery — filmstrip layout
  * ═══════════════════════════════════════════════════════ */
