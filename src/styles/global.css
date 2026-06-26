@@ -280,6 +280,40 @@ img {
 }
 
 /* ═══════════════════════════════════════════════════════
+ *  Site atmosphere — the shared dark backdrop on every page.
+ *  A cool deep base (var --bg-base, set on each page wrapper), two faint
+ *  sky-blue corner glows, and a topographic contour field. STATIC — no
+ *  grain, no flicker (the old animated .noise-grain was retired). Mount one
+ *  <SiteAtmosphere/> (or a `.site-atmos` div) behind each page's content;
+ *  all tuning — glow reach, contour strength — lives here, in one place.
+ * ═══════════════════════════════════════════════════════ */
+:root { --bg-base: #0a0c11; }
+
+.site-atmos {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Transparent base (the page wrapper paints --bg-base) + two cool glows. */
+  background:
+    radial-gradient(118vmax 82vmax at 50% -10%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.075), transparent 58%),
+    radial-gradient(88vmax 72vmax at 108% 112%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.055), transparent 60%);
+}
+.site-atmos > svg {
+  position: absolute;
+  inset: -3% -2%;
+  width: 104%;
+  height: 106%;
+}
+.site-atmos path {
+  fill: none;
+  stroke: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ═══════════════════════════════════════════════════════
  *  Journal Gallery — filmstrip layout
  * ═══════════════════════════════════════════════════════ */
 

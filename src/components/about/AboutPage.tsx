@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
+import SiteAtmosphere from '../shared/SiteAtmosphere';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -99,16 +100,11 @@ export default function AboutPage({ settings }: Props) {
   }, []);
 
   return (
-    <div className="relative bg-[#0A0A0A] text-[#FDFDFB] min-h-[100dvh]">
-      {/* ═══════ Ambient texture — keeps the all-black page from reading flat.
-           Warm amber washes (the site accent) + a faint dot grid + grain, all
-           fixed-behind and pointer-events-none. ═══════ */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(60vmax 50vmax at 12% 6%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.055), transparent 60%)' }} />
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(55vmax 46vmax at 100% 100%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.04), transparent 62%)' }} />
-        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.65) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
-        <div className="absolute inset-0 newsprint-screen opacity-[0.035]" />
-      </div>
+    <div className="relative bg-[#0a0c11] text-[#FDFDFB] min-h-[100dvh]">
+      {/* Shared cool atmosphere — sky-blue glows + a contour field. Replaces
+           the old warm-amber washes, dot grid, and animated grain (the grain
+           read as noise/flicker). */}
+      <SiteAtmosphere />
 
       {/* ═══════ Entrance — magazine "contributor" cover ═══════ */}
       <AnimatePresence>
@@ -118,10 +114,9 @@ export default function AboutPage({ settings }: Props) {
             initial={{ y: 0 }}
             exit={{ y: '-100%' }}
             transition={{ duration: 0.85, ease: [0.76, 0, 0.24, 1] }}
-            className="fixed inset-0 z-[60] bg-[#0A0A0A] text-[#FDFDFB] overflow-hidden"
+            className="fixed inset-0 z-[60] bg-[#0a0c11] text-[#FDFDFB] overflow-hidden"
           >
-            {/* Newsprint halftone + warm accent wash */}
-            <div className="absolute inset-0 newsprint-screen opacity-[0.05] pointer-events-none" />
+            {/* Cool accent wash (grain removed) */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{ background: 'radial-gradient(52vmax 42vmax at 20% 112%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.10), transparent 68%)' }}

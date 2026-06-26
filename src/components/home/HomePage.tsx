@@ -9,6 +9,7 @@ import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
+import SiteAtmosphere from '../shared/SiteAtmosphere';
 import Lenis from 'lenis';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -610,7 +611,7 @@ export default function HomePage({ collections }: Props) {
       )}
 
       <div
-        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0B0C0C] text-[#E6E9E7] ${
+        className={`accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#0a0c11] text-[#E6E9E7] ${
           showOpening ? 'opacity-0' : 'opacity-100 transition-opacity duration-700'
         }`}
         style={{
@@ -626,8 +627,9 @@ export default function HomePage({ collections }: Props) {
              faint film grain and the page vignette below. The cinematic stack
              (background video, ambient glow, dust, parallax grid, sunbeam,
              colored halos) was removed for restraint — the photographs carry
-             the page. */}
-        <div className="noise-grain" />
+             the page. The old animated film grain was retired — it read as
+             flicker; a static cool contour field (SiteAtmosphere) replaces it. */}
+        <SiteAtmosphere />
 
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
@@ -638,7 +640,7 @@ export default function HomePage({ collections }: Props) {
           className={`fixed inset-0 pointer-events-none z-[2] transition-opacity duration-1000 ${
             selectedCollection ? 'opacity-0' : 'opacity-100'
           }`}
-          style={{ background: 'radial-gradient(125% 95% at 50% 38%, transparent 50%, rgba(0,0,0,0.62) 100%)' }}
+          style={{ background: 'radial-gradient(125% 95% at 50% 38%, transparent 52%, rgba(4,6,12,0.46) 100%)' }}
         />
 
         {/* ── Nav — signature font + pill buttons ── */}
