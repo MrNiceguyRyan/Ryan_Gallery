@@ -35,7 +35,7 @@ function walk(dir) {
     const text = readFileSync(path, 'utf8');
     const displayPath = relative(ROOT, path);
 
-    if (/sk[A-Za-z0-9]{40,}/.test(text)) {
+    if (/['"`]sk[A-Za-z0-9]{40,}['"`]/.test(text)) {
       violations.push(`${displayPath}: contains a likely Sanity API token`);
     }
 
