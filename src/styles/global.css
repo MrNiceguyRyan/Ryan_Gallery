@@ -281,11 +281,12 @@ img {
 
 /* ═══════════════════════════════════════════════════════
  *  Site atmosphere — the shared dark backdrop on every page.
- *  A cool deep base (var --bg-base, set on each page wrapper), two faint
- *  sky-blue corner glows, and a topographic contour field. STATIC — no
- *  grain, no flicker (the old animated .noise-grain was retired). Mount one
- *  <SiteAtmosphere/> (or a `.site-atmos` div) behind each page's content;
- *  all tuning — glow reach, contour strength — lives here, in one place.
+ *  A cool deep base (var --bg-base, set on each page wrapper) + two faint
+ *  sky-blue corner glows. The moving topographic field — flowing contour
+ *  ridges and breathing concentric ripples — is drawn on the canvas itself by
+ *  lib/atmosphere.ts (organic, slow, continuous; static under reduced-motion).
+ *  Mount <SiteAtmosphere/> (home / about) or `<canvas class="site-atmos">`
+ *  (travel) behind page content.
  * ═══════════════════════════════════════════════════════ */
 :root { --bg-base: #0a0c11; }
 
@@ -293,55 +294,14 @@ img {
   position: fixed;
   inset: 0;
   z-index: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  overflow: hidden;
-  /* Transparent base (the page wrapper paints --bg-base) + two cool glows. */
+  /* The canvas is transparent where nothing is drawn, so these two cool corner
+     glows read through behind the lines. */
   background:
     radial-gradient(118vmax 82vmax at 50% -10%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.075), transparent 58%),
     radial-gradient(88vmax 72vmax at 108% 112%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.055), transparent 60%);
-}
-.site-atmos > svg {
-  position: absolute;
-  inset: -3% -2%;
-  width: 104%;
-  height: 106%;
-}
-.site-atmos path {
-  fill: none;
-  stroke: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* ── Disordered organic motion (landonorris-style) ──
- *  Each line drifts + breathes on its OWN slow timeline — different speed,
- *  direction, and phase — so the field churns organically instead of sliding
- *  as one block. Smooth and slow (continuous motion, never a flicker).
- *  Wholly disabled under reduced-motion (the field stays static). */
-@media (prefers-reduced-motion: no-preference) {
-  .site-atmos path {
-    transform-box: view-box;
-    transform-origin: center;
-    will-change: transform;
-    animation: atmos-flow-a 24s ease-in-out infinite alternate;
-  }
-  .site-atmos path:nth-child(3n+1) { animation-name: atmos-flow-b; animation-duration: 31s; }
-  .site-atmos path:nth-child(3n+2) { animation-name: atmos-flow-c; animation-duration: 19s; animation-direction: alternate-reverse; }
-  .site-atmos path:nth-child(4n)   { animation-duration: 27s; animation-delay: -6s; }
-  .site-atmos path:nth-child(5n)   { animation-duration: 35s; animation-delay: -11s; }
-  .site-atmos path:nth-child(7n)   { animation-direction: alternate-reverse; animation-delay: -4s; }
-}
-@keyframes atmos-flow-a {
-  from { transform: translate(0px, 0px) scale(1, 1); }
-  to   { transform: translate(-22px, 13px) scale(1.015, 1.04); }
-}
-@keyframes atmos-flow-b {
-  from { transform: translate(0px, 0px) scale(1, 1); }
-  to   { transform: translate(18px, -15px) scale(1.02, 0.985); }
-}
-@keyframes atmos-flow-c {
-  from { transform: translate(0px, 0px) scale(1, 1); }
-  to   { transform: translate(-12px, -18px) scale(0.99, 1.03); }
 }
 
 /* ═══════════════════════════════════════════════════════
