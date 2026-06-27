@@ -1,15 +1,12 @@
 /**
- * Animated topographic-contour site atmosphere, drawn on a <canvas>.
+ * Aurora-flow site atmosphere, drawn on a <canvas>.
  *
- * A real elevation-map look: iso-lines of a smooth, slowly-evolving scalar field
- * (multi-frequency noise) extracted with marching squares. The contours wind
- * ACROSS the frame from one edge to another, close into loops around peaks and
- * valleys, and naturally vary in density (tight where the terrain is steep,
- * sparse where it's flat) — not concentric circles, not straight bands. They're
- * stroked in a faint olive a hair lighter than the page, so the field reads as
- * quiet texture. The terrain drifts slowly and parallaxes with scroll.
+ * A handful of large, soft radial light "blobs" — mostly a warm olive a touch
+ * lighter than the page, with a couple of faint lime accents — drift, breathe,
+ * and overlap additively to make a slow flowing aurora behind the content. It's
+ * deliberately faint and very slow: atmosphere, never a subject, and no flicker.
  *
- * Honors prefers-reduced-motion (single static frame). Returns a cleanup fn;
+ * Honors prefers-reduced-motion (a single static frame). Returns a cleanup fn;
  * also self-stops once the canvas leaves the DOM (SPA nav).
  */
 export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
@@ -20,93 +17,56 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const STROKE = 'rgba(68, 74, 52, 0.52)'; // clearly readable olive over the #282c20 page
-  const CELL = 16;   // grid cell px — smaller = smoother lines, more compute
-  const SCALE = 150; // px per field "world" unit — larger = broader terrain
-  const LEVELS = 11; // number of contour rings across the field's range
+  // Lime follows the live accent var; olive is a fixed soft tone lighter than
+  // the #282c20 page so additive overlaps read as a gentle glow, not a wash.
+  const root = getComputedStyle(document.documentElement);
+  const cssVar = (name: string, fallback: string) => root.getPropertyValue(name).trim() || fallback;
+  const LIME = `${cssVar('--accent-r', '210')}, ${cssVar('--accent-g', '255')}, ${cssVar('--accent-b', '0')}`;
+  const OLIVE = '78, 92, 56';
+
+  // Each blob drifts on slow sine LFOs (period ~40-80s), breathes its radius,
+  // and is painted with `lighter` (additive) blending for the aurora glow.
+  const blobs = [
+    { lime: false, x: 0.20, y: 0.28, r: 0.52, ax: 0.11, ay: 0.07, sx: 0.11, sy: 0.08, ph: 0.0, a: 0.17 },
+    { lime: false, x: 0.76, y: 0.24, r: 0.56, ax: 0.12, ay: 0.09, sx: 0.09, sy: 0.12, ph: 1.7, a: 0.16 },
+    { lime: true, x: 0.55, y: 0.58, r: 0.42, ax: 0.10, ay: 0.11, sx: 0.10, sy: 0.08, ph: 3.1, a: 0.085 },
+    { lime: false, x: 0.86, y: 0.70, r: 0.50, ax: 0.10, ay: 0.10, sx: 0.08, sy: 0.13, ph: 4.6, a: 0.15 },
+    { lime: false, x: 0.14, y: 0.78, r: 0.50, ax: 0.12, ay: 0.08, sx: 0.12, sy: 0.10, ph: 6.0, a: 0.16 },
+    { lime: true, x: 0.36, y: 0.16, r: 0.36, ax: 0.09, ay: 0.10, sx: 0.10, sy: 0.11, ph: 7.4, a: 0.07 },
+  ];
 
   let w = 0;
   let h = 0;
-  let nx = 0;
-  let ny = 0;
-  let grid: Float32Array = new Float32Array(0);
   const resize = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Aurora is soft, so it doesn't need full Retina — cap DPR to save the
+    // per-frame full-screen gradient fills.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     w = canvas.clientWidth || window.innerWidth;
     h = canvas.clientHeight || window.innerHeight;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    nx = Math.ceil(w / CELL) + 2;
-    ny = Math.ceil(h / CELL) + 2;
-    grid = new Float32Array(nx * ny);
   };
   resize();
   window.addEventListener('resize', resize);
 
-  // Smooth, evolving scalar field. The components run at different spatial
-  // frequencies AND different time rates, so the terrain beats in and out of
-  // phase — that's the fast/slow rhythm, with no two regions ever identical.
-  const field = (x: number, y: number, t: number) =>
-    Math.sin(x * 1.10 + t * 0.10) * 0.60 +
-    Math.cos(y * 0.90 - t * 0.08) * 0.60 +
-    Math.sin((x + y) * 0.70 + t * 0.06) * 0.50 +
-    Math.cos((x - y) * 0.50 - t * 0.05) * 0.50 +
-    Math.sin(x * 0.40 + y * 1.30 + t * 0.04) * 0.40;
-
-  const AMP = 2.6; // sum of component amplitudes → field range ≈ ±AMP
-
-  const render = (t: number, par: number) => {
+  const render = (t: number) => {
     ctx.clearRect(0, 0, w, h);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = STROKE;
-    ctx.lineJoin = 'round';
-
-    // Sample the field onto the grid (parallax shifts the sampled terrain in y).
-    for (let j = 0; j < ny; j++) {
-      const wy = (j * CELL + par) / SCALE;
-      const base = j * nx;
-      for (let i = 0; i < nx; i++) {
-        grid[base + i] = field((i * CELL) / SCALE, wy, t);
-      }
+    const u = Math.max(w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of blobs) {
+      const cx = (b.x + Math.sin(t * b.sx + b.ph) * b.ax) * w;
+      const cy = (b.y + Math.cos(t * b.sy + b.ph * 1.3) * b.ay) * h;
+      const rad = b.r * u * (1 + 0.08 * Math.sin(t * 0.05 + b.ph));
+      const col = b.lime ? LIME : OLIVE;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+      g.addColorStop(0, `rgba(${col}, ${b.a})`);
+      g.addColorStop(0.45, `rgba(${col}, ${b.a * 0.4})`);
+      g.addColorStop(1, `rgba(${col}, 0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
     }
-
-    // Marching squares per contour level → one batched path per level.
-    for (let l = 0; l < LEVELS; l++) {
-      const L = -AMP + ((l + 0.5) / LEVELS) * 2 * AMP;
-      ctx.beginPath();
-      for (let j = 0; j < ny - 1; j++) {
-        for (let i = 0; i < nx - 1; i++) {
-          const tl = grid[j * nx + i];
-          const tr = grid[j * nx + i + 1];
-          const br = grid[(j + 1) * nx + i + 1];
-          const bl = grid[(j + 1) * nx + i];
-          let c = 0;
-          if (tl >= L) c |= 8;
-          if (tr >= L) c |= 4;
-          if (br >= L) c |= 2;
-          if (bl >= L) c |= 1;
-          if (c === 0 || c === 15) continue;
-          // Edge crossing points (linear interpolation), in pixels.
-          const T = () => { const m = (L - tl) / (tr - tl); return [(i + m) * CELL, j * CELL]; };
-          const R = () => { const m = (L - tr) / (br - tr); return [(i + 1) * CELL, (j + m) * CELL]; };
-          const B = () => { const m = (L - bl) / (br - bl); return [(i + m) * CELL, (j + 1) * CELL]; };
-          const Le = () => { const m = (L - tl) / (bl - tl); return [i * CELL, (j + m) * CELL]; };
-          const seg = (a: number[], b: number[]) => { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); };
-          switch (c) {
-            case 1: case 14: seg(Le(), B()); break;
-            case 2: case 13: seg(B(), R()); break;
-            case 3: case 12: seg(Le(), R()); break;
-            case 4: case 11: seg(T(), R()); break;
-            case 6: case 9: seg(T(), B()); break;
-            case 7: case 8: seg(T(), Le()); break;
-            case 5: seg(T(), Le()); seg(B(), R()); break;
-            case 10: seg(T(), R()); seg(Le(), B()); break;
-          }
-        }
-      }
-      ctx.stroke();
-    }
+    ctx.globalCompositeOperation = 'source-over';
   };
 
   let raf = 0;
@@ -117,17 +77,16 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
   };
 
   if (reduce) {
-    render(0, 0);
+    render(0);
   } else {
     const loop = (now: number) => {
       if (!canvas.isConnected) {
         stop();
         return;
       }
-      if (now - last >= 33) {
+      if (now - last >= 40) {
         last = now;
-        const sy = window.scrollY || window.pageYOffset || 0;
-        render(now * 0.001, sy * 0.06);
+        render(now * 0.001);
       }
       raf = requestAnimationFrame(loop);
     };
