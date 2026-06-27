@@ -96,7 +96,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     <motion.section id={id} ref={chapterRef} style={{ opacity, x: reduce ? 0 : fanX, rotate: reduce ? 0 : fanRotate }} className="relative pb-12 lg:pb-16">
       <motion.div
         className="relative group cursor-none w-full overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
-        animate={{ boxShadow: isHovered ? '0 0 70px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.28)' : '0 0 0px rgba(0, 0, 0, 0)' }}
+        animate={{ boxShadow: isHovered ? '0 0 95px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.42)' : '0 0 0px rgba(0, 0, 0, 0)' }}
         transition={{ duration: 0.6, ease: expo }}
         onClick={onClick}
         onHoverStart={() => { setIsHovered(true); setArmed(true); }}

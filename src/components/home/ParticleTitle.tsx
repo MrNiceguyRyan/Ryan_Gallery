@@ -187,8 +187,8 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover,
         }
 
         if (h > 0.15) {
-          p.vx += (p.x - cx) * 0.006 * h;
-          p.vy += (p.y - cy) * 0.006 * h;
+          p.vx += (p.x - cx) * 0.011 * h;
+          p.vy += (p.y - cy) * 0.011 * h;
         }
 
         p.vx += (p.originX - p.x) * currentEase;
@@ -199,10 +199,10 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover,
         p.y += p.vy;
 
         const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        const alpha = Math.min(1, 0.6 + speed * 0.15 + h * 0.3);
+        const alpha = Math.min(1, 0.6 + speed * 0.15 + h * 0.45);
 
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = h > 0.4 && i % 5 === 0 ? 'rgb(210,255,0)' : p.color;
+        ctx.fillStyle = h > 0.3 && i % 3 === 0 ? 'rgb(210,255,0)' : p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
       ctx.globalAlpha = 1;

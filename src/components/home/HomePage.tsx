@@ -384,18 +384,20 @@ export default function HomePage({ collections }: Props) {
   // read. A scroll-velocity → spring signal (0 idle → 1 fast). Fed to the
   // particle hero via a ref (no re-render) and to a lime bloom. Off under reduce.
   const scrollVel = useVelocity(scrollY);
-  const heatRaw = useTransform(scrollVel, [-2600, 0, 2600], [1, 0, 1], { clamp: true });
+  const heatRaw = useTransform(scrollVel, [-1800, 0, 1800], [1, 0, 1], { clamp: true });
   const heat = useSpring(heatRaw, { stiffness: 120, damping: 22 });
   const heatRef = useRef(0);
   useEffect(() => {
     if (reduce) { heatRef.current = 0; return; }
     return heat.on('change', (v) => { heatRef.current = v; });
   }, [heat, reduce]);
-  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.5]);
-  const bloomScale = useTransform(heat, [0, 1], [1, 1.12]);
-  const heatSkew = useTransform(heat, [0, 1], [0, 5]);
+  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.78]);
+  const bloomScale = useTransform(heat, [0, 1], [1, 1.16]);
+  const heatSkew = useTransform(heat, [0, 1], [0, 8]);
+  const heatScale = useTransform(heat, [0, 1], [1, 1.05]);
+  const heatGlow = useTransform(heat, [0, 1], [0.4, 1.15]);
   // Scroll-DEPTH heat — independent of velocity, the page warms the deeper you go.
-  const depthHeat = useTransform(scrollY, [500, 1700], [0, reduce ? 0 : 0.13], { clamp: true });
+  const depthHeat = useTransform(scrollY, [400, 1600], [0, reduce ? 0 : 0.2], { clamp: true });
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -766,7 +768,7 @@ export default function HomePage({ collections }: Props) {
                 {/* The name — slams up line-by-line on load; skews + glows on fast scroll */}
                 <motion.h1
                   className="relative z-10 font-serif uppercase leading-[0.82] tracking-tight"
-                  style={{ fontSize: 'clamp(48px, 12.5vw, 196px)', skewX: reduce ? 0 : heatSkew }}
+                  style={{ fontSize: 'clamp(48px, 12.5vw, 196px)', skewX: reduce ? 0 : heatSkew, scale: reduce ? 1 : heatScale }}
                 >
                   <span className="block overflow-hidden">
                     <motion.span
@@ -781,7 +783,7 @@ export default function HomePage({ collections }: Props) {
                   <span className="block overflow-hidden">
                     <motion.span
                       className="block heat-glow"
-                      style={{ ['--glow-intensity' as never]: 0.55, color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                      style={{ ['--glow-intensity' as never]: reduce ? 0.55 : heatGlow, color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                       initial={{ y: '110%' }}
                       animate={introReady ? { y: '0%' } : { y: '110%' }}
                       transition={{ duration: 0.9, delay: 0.3, ease: expo }}
