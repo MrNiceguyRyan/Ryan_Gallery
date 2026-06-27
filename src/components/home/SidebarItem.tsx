@@ -84,7 +84,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
             background: state === 'future' ? '#30352a' : ACCENT,
             border: state === 'future' ? '1px solid rgba(255,255,255,0.25)' : `1px solid ${ACCENT}`,
             opacity: state === 'past' ? 0.65 : 1,
-            boxShadow: isActive ? `0 0 10px ${ACCENT}` : 'none',
+            boxShadow: isActive ? `0 0 14px ${ACCENT}, 0 0 28px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.5)` : 'none',
             transition: 'all 0.4s ease',
           }}
         />
@@ -103,7 +103,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
       <span
         className={`text-[10px] md:text-[11px] uppercase tracking-[0.32em] font-black leading-none transition-all duration-700 truncate w-full ${
           isActive
-            ? 'opacity-100 text-white italic'
+            ? 'opacity-100 text-white'
             : 'opacity-25 group-hover:opacity-100 group-hover:translate-x-0.5'
         }`}
       >

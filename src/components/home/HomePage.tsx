@@ -394,6 +394,8 @@ export default function HomePage({ collections }: Props) {
   const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.5]);
   const bloomScale = useTransform(heat, [0, 1], [1, 1.12]);
   const heatSkew = useTransform(heat, [0, 1], [0, 5]);
+  // Scroll-DEPTH heat — independent of velocity, the page warms the deeper you go.
+  const depthHeat = useTransform(scrollY, [500, 1700], [0, reduce ? 0 : 0.13], { clamp: true });
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -637,6 +639,14 @@ export default function HomePage({ collections }: Props) {
           </motion.div>
         )}
 
+        {/* Scroll-DEPTH heat — a lime glow rising from below that intensifies the
+             deeper you scroll, so the archive literally gets hotter toward the end. */}
+        <motion.div
+          aria-hidden
+          className="fixed inset-0 z-[1] pointer-events-none"
+          style={{ opacity: depthHeat, background: 'radial-gradient(80vmax 60vmax at 50% 102%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.2), transparent 64%)' }}
+        />
+
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
              darkening is the SAME from the opening through the whole archive
@@ -737,7 +747,7 @@ export default function HomePage({ collections }: Props) {
                     <div className={`whitespace-nowrap will-change-transform ${reduce ? '' : 'animate-marquee'}`}>
                       {[0, 1].map((r) => (
                         <span key={r} className="font-serif uppercase tracking-tight text-transparent" style={{ fontSize: 'clamp(56px, 12vw, 190px)', WebkitTextStroke: '1px rgba(244,244,237,0.09)', paddingRight: '0.35em' }}>
-                          Ryan Xu · Visual Archive ·&nbsp;
+                          Journal Gallery · Visual Archive ·&nbsp;
                         </span>
                       ))}
                     </div>
@@ -756,7 +766,7 @@ export default function HomePage({ collections }: Props) {
                 {/* The name — slams up line-by-line on load; skews + glows on fast scroll */}
                 <motion.h1
                   className="relative z-10 font-serif uppercase leading-[0.82] tracking-tight"
-                  style={{ fontSize: 'clamp(76px, 19vw, 300px)', skewX: reduce ? 0 : heatSkew }}
+                  style={{ fontSize: 'clamp(48px, 12.5vw, 196px)', skewX: reduce ? 0 : heatSkew }}
                 >
                   <span className="block overflow-hidden">
                     <motion.span
@@ -765,7 +775,7 @@ export default function HomePage({ collections }: Props) {
                       animate={introReady ? { y: '0%' } : { y: '110%' }}
                       transition={{ duration: 0.9, delay: 0.15, ease: expo }}
                     >
-                      Ryan
+                      Journal
                     </motion.span>
                   </span>
                   <span className="block overflow-hidden">
@@ -776,7 +786,7 @@ export default function HomePage({ collections }: Props) {
                       animate={introReady ? { y: '0%' } : { y: '110%' }}
                       transition={{ duration: 0.9, delay: 0.3, ease: expo }}
                     >
-                      Xu
+                      Gallery
                     </motion.span>
                   </span>
                 </motion.h1>
@@ -1003,7 +1013,8 @@ export default function HomePage({ collections }: Props) {
                         className="absolute top-0 left-0 h-full"
                         style={{
                           width: sidebarScrollWidth,
-                          background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.55)',
+                          background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))',
+                          boxShadow: '0 0 10px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.7)',
                         }}
                       />
                     </div>
