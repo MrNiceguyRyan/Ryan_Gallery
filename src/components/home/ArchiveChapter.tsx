@@ -96,6 +96,8 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     <motion.section id={id} ref={chapterRef} style={{ opacity, x: reduce ? 0 : fanX, rotate: reduce ? 0 : fanRotate }} className="relative pb-12 lg:pb-16">
       <motion.div
         className="relative group cursor-none w-full overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-white/15 transition-colors duration-700"
+        animate={{ boxShadow: isHovered ? '0 0 70px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.28)' : '0 0 0px rgba(0, 0, 0, 0)' }}
+        transition={{ duration: 0.6, ease: expo }}
         onClick={onClick}
         onHoverStart={() => { setIsHovered(true); setArmed(true); }}
         onHoverEnd={() => setIsHovered(false)}
@@ -115,7 +117,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               alt={collection.name}
               loading="lazy"
               decoding="async"
-              animate={{ scale: isHovered ? 1.045 : isActive ? 1.02 : 1 }}
+              animate={{ scale: isHovered ? 1.12 : isActive ? 1.02 : 1 }}
               transition={{ duration: 1.1, ease: expo }}
               className="absolute inset-0 w-full h-[140%] object-cover"
               draggable={false}
@@ -137,7 +139,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               loading="lazy"
               decoding="async"
               initial={{ opacity: 0 }}
-              animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1.045 : 1 }}
+              animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1.12 : 1 }}
               transition={{
                 opacity: { duration: isHovered ? 1.0 : 0.7, ease: expo },
                 scale: { duration: 1.1, ease: expo },
@@ -209,7 +211,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
 
         {/* Accent baseline wipes in on hover */}
         <div
-          className="absolute left-0 right-0 bottom-0 h-[3px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+          className="absolute left-0 right-0 bottom-0 h-[5px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
           style={{ background: ACCENT }}
         />
       </motion.div>

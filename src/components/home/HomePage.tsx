@@ -265,12 +265,15 @@ function RisingWord({
   accent?: boolean;
 }) {
   const y = useTransform(progress, [index * 0.09, index * 0.09 + 0.4], ['110%', '0%'], { clamp: true });
+  const scale = useTransform(progress, [index * 0.09, index * 0.09 + 0.45], [0.9, 1], { clamp: true });
   return (
     <span className="overflow-hidden inline-block align-bottom pb-[0.12em] -mb-[0.12em]">
       <motion.span
-        className="inline-block"
+        className={`inline-block origin-bottom ${accent ? 'heat-glow' : ''}`}
         style={{
           y: reduce ? '0%' : y,
+          scale: reduce ? 1 : scale,
+          ...(accent ? { ['--glow-intensity' as never]: 0.85 } : {}),
           color: accent ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' : undefined,
         }}
       >
@@ -985,10 +988,16 @@ export default function HomePage({ collections }: Props) {
                   transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold opacity-30"
                 >
-                  <div className="w-8 h-px bg-white/30" />
+                  <motion.div
+                    className="h-px origin-left"
+                    style={{ width: 32, background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                    initial={{ scaleX: 0 }}
+                    animate={selectedWorksShown ? { scaleX: 1 } : { scaleX: 0 }}
+                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                  />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="text-4xl md:text-7xl font-serif uppercase tracking-tighter leading-tight pb-2">
+                <h2 className="font-serif uppercase tracking-tight leading-[0.92] pb-2" style={{ fontSize: 'clamp(46px, 11vw, 150px)' }}>
                   {SW_WORDS.map((w, i) => (
                     <RisingWord
                       key={i}
