@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
-import ParticleTitle from './ParticleTitle';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import ArchiveChapter from './ArchiveChapter';
@@ -394,6 +393,7 @@ export default function HomePage({ collections }: Props) {
   }, [heat, reduce]);
   const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.5]);
   const bloomScale = useTransform(heat, [0, 1], [1, 1.12]);
+  const heatSkew = useTransform(heat, [0, 1], [0, 5]);
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -730,22 +730,56 @@ export default function HomePage({ collections }: Props) {
             </div>
 
             <div className="space-y-4 max-w-7xl w-full mx-auto">
-              <motion.div className="relative" style={reduce ? undefined : { y: heroTitleParallax }}>
-                <ParticleTitle
-                  text="Journal <br/> Gallery"
-                  className="h-64 md:h-96"
-                  heatRef={heatRef}
-                />
-                {/* Anamorphic light sweep across the title (one-shot on open) */}
-                <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
-                  <motion.div
-                    className="absolute top-0 bottom-0 w-2/5 -skew-x-12"
-                    style={{ background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.45), transparent)' }}
-                    initial={{ x: '-170%' }}
-                    animate={{ x: introReady ? '440%' : '-170%' }}
-                    transition={{ duration: 0.9, delay: introReady ? 0.7 : 0, ease: [0.5, 0, 0.15, 1] }}
-                  />
+              <motion.div className="relative w-full" style={reduce ? undefined : { y: heroTitleParallax }}>
+                {/* Counter-scrolling giant outlined marquees behind the name */}
+                <div className="pointer-events-none select-none absolute inset-0 flex flex-col justify-center gap-0 md:gap-3 overflow-hidden" aria-hidden="true">
+                  <div className="overflow-hidden">
+                    <div className={`whitespace-nowrap will-change-transform ${reduce ? '' : 'animate-marquee'}`}>
+                      {[0, 1].map((r) => (
+                        <span key={r} className="font-serif uppercase tracking-tight text-transparent" style={{ fontSize: 'clamp(56px, 12vw, 190px)', WebkitTextStroke: '1px rgba(244,244,237,0.09)', paddingRight: '0.35em' }}>
+                          Ryan Xu · Visual Archive ·&nbsp;
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="overflow-hidden">
+                    <div className={`whitespace-nowrap will-change-transform ${reduce ? '' : 'animate-marquee-reverse'}`}>
+                      {[0, 1].map((r) => (
+                        <span key={r} className="font-serif uppercase tracking-tight" style={{ fontSize: 'clamp(56px, 12vw, 190px)', color: 'rgba(244,244,237,0.05)', paddingRight: '0.35em' }}>
+                          New York · Through The Lens ·&nbsp;
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
+                {/* The name — slams up line-by-line on load; skews + glows on fast scroll */}
+                <motion.h1
+                  className="relative z-10 font-serif uppercase leading-[0.82] tracking-tight"
+                  style={{ fontSize: 'clamp(76px, 19vw, 300px)', skewX: reduce ? 0 : heatSkew }}
+                >
+                  <span className="block overflow-hidden">
+                    <motion.span
+                      className="block"
+                      initial={{ y: '110%' }}
+                      animate={introReady ? { y: '0%' } : { y: '110%' }}
+                      transition={{ duration: 0.9, delay: 0.15, ease: expo }}
+                    >
+                      Ryan
+                    </motion.span>
+                  </span>
+                  <span className="block overflow-hidden">
+                    <motion.span
+                      className="block heat-glow"
+                      style={{ ['--glow-intensity' as never]: 0.55, color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                      initial={{ y: '110%' }}
+                      animate={introReady ? { y: '0%' } : { y: '110%' }}
+                      transition={{ duration: 0.9, delay: 0.3, ease: expo }}
+                    >
+                      Xu
+                    </motion.span>
+                  </span>
+                </motion.h1>
               </motion.div>
 
               {/* ── Rotating epigraph — narrative bridge from hero into archive ──
@@ -997,7 +1031,7 @@ export default function HomePage({ collections }: Props) {
                   />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="font-serif uppercase tracking-tight leading-[0.92] pb-2" style={{ fontSize: 'clamp(46px, 11vw, 150px)' }}>
+                <h2 className="font-serif uppercase tracking-tight leading-[0.95] pb-2" style={{ fontSize: 'clamp(32px, 5.5vw, 76px)' }}>
                   {SW_WORDS.map((w, i) => (
                     <RisingWord
                       key={i}
