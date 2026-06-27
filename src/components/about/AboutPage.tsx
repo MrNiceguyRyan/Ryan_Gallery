@@ -367,7 +367,7 @@ export default function AboutPage({ settings }: Props) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
             <a
               href={`mailto:${email}`}
-              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-all duration-300 flex items-center gap-3.5"
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
@@ -383,7 +383,7 @@ export default function AboutPage({ settings }: Props) {
               href={instagram}
               target="_blank"
               rel="noopener noreferrer"
-              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] transition-colors duration-300 flex items-center gap-3.5"
+              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-all duration-300 flex items-center gap-3.5"
             >
               <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
