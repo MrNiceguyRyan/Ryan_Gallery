@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useReducedMotion, type MotionValue } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
+import HeroCover from './HeroCover';
 import ArchiveChapter from './ArchiveChapter';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
@@ -380,24 +381,6 @@ export default function HomePage({ collections }: Props) {
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
 
-  // ── Scroll-HEAT — the page runs HOT the harder you scroll and cools when you
-  // read. A scroll-velocity → spring signal (0 idle → 1 fast). Fed to the
-  // particle hero via a ref (no re-render) and to a lime bloom. Off under reduce.
-  const scrollVel = useVelocity(scrollY);
-  const heatRaw = useTransform(scrollVel, [-1200, 0, 1200], [1, 0, 1], { clamp: true });
-  const heat = useSpring(heatRaw, { stiffness: 120, damping: 22 });
-  const heatRef = useRef(0);
-  useEffect(() => {
-    if (reduce) { heatRef.current = 0; return; }
-    return heat.on('change', (v) => { heatRef.current = v; });
-  }, [heat, reduce]);
-  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 1]);
-  const bloomScale = useTransform(heat, [0, 1], [1, 1.24]);
-  const heatSkew = useTransform(heat, [0, 1], [0, 13]);
-  const heatScale = useTransform(heat, [0, 1], [1, 1.09]);
-  const heatGlow = useTransform(heat, [0, 1], [0.5, 1.45]);
-  // Scroll-DEPTH heat — independent of velocity, the page warms the deeper you go.
-  const depthHeat = useTransform(scrollY, [400, 1600], [0, reduce ? 0 : 0.34], { clamp: true });
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -483,6 +466,10 @@ export default function HomePage({ collections }: Props) {
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
+  const totalFrames = useMemo(
+    () => activeCollections.reduce((a, c) => a + (c.photoCount ?? c.photos?.length ?? 0), 0),
+    [activeCollections],
+  );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
   // Marquee index — real place names (hero epigraphs) + archive cities, deduped.
@@ -630,25 +617,6 @@ export default function HomePage({ collections }: Props) {
              flicker; a static cool contour field (SiteAtmosphere) replaces it. */}
         <SiteAtmosphere />
 
-        {/* Scroll-heat bloom — a lime flare that swells on fast scroll and dies
-             when you stop. Behind content (z-1), above the contour atmosphere. */}
-        {!reduce && (
-          <motion.div aria-hidden className="fixed inset-0 z-[1] pointer-events-none" style={{ opacity: bloomOpacity }}>
-            <motion.div
-              className="absolute inset-0 will-change-transform"
-              style={{ scale: bloomScale, background: 'radial-gradient(84vmax 66vmax at 50% 40%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.5), rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.12) 42%, transparent 62%)' }}
-            />
-          </motion.div>
-        )}
-
-        {/* Scroll-DEPTH heat — a lime glow rising from below that intensifies the
-             deeper you scroll, so the archive literally gets hotter toward the end. */}
-        <motion.div
-          aria-hidden
-          className="fixed inset-0 z-[1] pointer-events-none"
-          style={{ opacity: depthHeat, background: 'radial-gradient(80vmax 60vmax at 50% 102%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.2), transparent 64%)' }}
-        />
-
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
              darkening is the SAME from the opening through the whole archive
@@ -704,195 +672,11 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── Hero Header ── */}
-        <header className="h-[100vh] flex flex-col justify-center items-center text-center px-6 relative overflow-hidden">
-          {/* The dramatic opening now lives entirely in HeroEntrance (the GSAP
-               intro). The hero no longer slams its own shutter / exposure flash —
-               it settles in as a calm continuation, so the entrance and the
-               hero read as ONE connected sequence. */}
-          {/* Scroll-linked cinematic exit wrapper — recedes on scroll */}
-          <motion.div
-            style={{ opacity: heroOpacity, y: heroY, scale: heroScale }}
-            className="relative z-10 w-full flex justify-center"
-          >
-          {/* Header content — cinematic push-in (defocus → focus, slow dolly).
-               Held hidden until the first-visit intro clears (introReady), so
-               the push-in plays WITH the letterbox open, not under the intro. */}
-          {/* Calm settle — the hero rises gently out of a soft defocus as the
-               entrance hands off. No jolt; reads as the entrance landing into
-               the gallery. */}
-          <motion.div
-            initial={{ opacity: 0, y: 30, scale: 1.03, filter: 'blur(9px)' }}
-            animate={introReady
-              ? { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }
-              : { opacity: 0, y: 30, scale: 1.03, filter: 'blur(9px)' }}
-            transition={{ duration: 1.25, ease: expo, delay: 0.05 }}
-            className="space-y-12"
-          >
-            <div className="flex flex-col items-center gap-6">
-              <motion.span
-                initial={{ opacity: 0, letterSpacing: '4em' }}
-                animate={{ opacity: 0.3, letterSpacing: '2em' }}
-                transition={{ delay: 0.1, duration: 1.5 }}
-                className="text-[9px] uppercase block font-bold"
-              >
-                The Act of Remembering
-              </motion.span>
-              <div className="w-[1px] h-20 bg-gradient-to-b from-white/30 to-transparent" />
-            </div>
-
-            <div className="space-y-4 max-w-7xl w-full mx-auto">
-              <motion.div className="relative w-full" style={reduce ? undefined : { y: heroTitleParallax }}>
-                {/* Counter-scrolling giant outlined marquees behind the name */}
-                <div className="pointer-events-none select-none absolute inset-0 flex flex-col justify-center gap-0 md:gap-3 overflow-hidden" aria-hidden="true">
-                  <div className="overflow-hidden">
-                    <div className={`whitespace-nowrap will-change-transform ${reduce ? '' : 'animate-marquee'}`}>
-                      {[0, 1].map((r) => (
-                        <span key={r} className="font-serif uppercase tracking-tight text-transparent" style={{ fontSize: 'clamp(56px, 12vw, 190px)', WebkitTextStroke: '1px rgba(244,244,237,0.09)', paddingRight: '0.35em' }}>
-                          Journal Gallery · Visual Archive ·&nbsp;
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="overflow-hidden">
-                    <div className={`whitespace-nowrap will-change-transform ${reduce ? '' : 'animate-marquee-reverse'}`}>
-                      {[0, 1].map((r) => (
-                        <span key={r} className="font-serif uppercase tracking-tight" style={{ fontSize: 'clamp(56px, 12vw, 190px)', color: 'rgba(244,244,237,0.05)', paddingRight: '0.35em' }}>
-                          New York · Through The Lens ·&nbsp;
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* The name — slams up line-by-line on load; skews + glows on fast scroll */}
-                <motion.h1
-                  className="relative z-10 font-serif uppercase leading-[0.82] tracking-tight"
-                  style={{ fontSize: 'clamp(48px, 12.5vw, 196px)', skewX: reduce ? 0 : heatSkew, scale: reduce ? 1 : heatScale }}
-                >
-                  <span className="block overflow-hidden">
-                    <motion.span
-                      className="block"
-                      initial={{ y: '110%' }}
-                      animate={introReady ? { y: '0%' } : { y: '110%' }}
-                      transition={{ duration: 0.9, delay: 0.15, ease: expo }}
-                    >
-                      Journal
-                    </motion.span>
-                  </span>
-                  <span className="block overflow-hidden">
-                    <motion.span
-                      className="block heat-glow"
-                      style={{ ['--glow-intensity' as never]: reduce ? 0.55 : heatGlow, color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                      initial={{ y: '110%' }}
-                      animate={introReady ? { y: '0%' } : { y: '110%' }}
-                      transition={{ duration: 0.9, delay: 0.3, ease: expo }}
-                    >
-                      Gallery
-                    </motion.span>
-                  </span>
-                </motion.h1>
-              </motion.div>
-
-              {/* ── Rotating epigraph — narrative bridge from hero into archive ──
-                   A small label sits constant ("From the archive"), and beneath
-                   it a serif-italic line crossfades every ~6.5 s through real
-                   first-lines drawn from each chapter's narrative. Gives the
-                   hero a sense of "this place actually contains specific stories"
-                   instead of a single static tagline. */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1.2, duration: 1 }}
-                style={reduce ? undefined : { y: heroEpigraphParallax }}
-                className="pt-10 md:pt-12 flex flex-col items-center gap-3"
-              >
-                <p className="text-[9px] uppercase tracking-[0.5em] font-medium opacity-25">
-                  From the archive
-                </p>
-                <div className="relative w-full max-w-[40rem] mx-auto h-20 md:h-16">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={epigraphIdx}
-                      initial={{ opacity: 0, y: 8, filter: 'blur(3px)' }}
-                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                      exit={{ opacity: 0, y: -8, filter: 'blur(3px)' }}
-                      transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-                      className="absolute inset-x-0 flex flex-col items-center gap-2.5"
-                    >
-                      <p className="text-center text-base md:text-lg font-serif italic leading-snug px-5 text-[#F4F4ED] opacity-[0.72]">
-                        &ldquo;{HERO_EPIGRAPHS[epigraphIdx].line}&rdquo;
-                      </p>
-                      <p className="font-ui text-[9px] tracking-[0.4em] uppercase opacity-30">
-                        &mdash;&ensp;{HERO_EPIGRAPHS[epigraphIdx].place}
-                      </p>
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-
-                {/* Journey position — clickable dots to step through the entries */}
-                <div className="flex items-center gap-1.5 pt-1">
-                  {HERO_EPIGRAPHS.map((_, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setEpigraphIdx(i)}
-                      aria-label={`Archive entry ${i + 1}`}
-                      className="p-1.5 -m-1.5 cursor-pointer"
-                    >
-                      <span
-                        className="block w-1.5 h-1.5 rounded-full transition-all duration-500"
-                        style={{
-                          background:
-                            i === epigraphIdx
-                              ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))'
-                              : 'rgba(255,255,255,0.2)',
-                          transform: i === epigraphIdx ? 'scale(1.4)' : 'scale(1)',
-                        }}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.5, duration: 1 }}
-              className="flex items-center justify-center gap-16 pt-16"
-            >
-              <div
-                className="w-16 h-[1px]"
-                style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
-              />
-              <div className="flex items-center gap-6">
-                <span className="text-[9px] font-ui opacity-20">REF &numero;</span>
-                <span className="text-[10px] uppercase tracking-[0.4em] opacity-30 font-bold">
-                  Vol. {activeCollections.length} Archive
-                </span>
-              </div>
-              <div
-                className="w-16 h-[1px]"
-                style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
-              />
-            </motion.div>
-          </motion.div>
-          </motion.div>
-
-          {/* Scroll cue — invites entry into the archive, fades on first scroll */}
-          <motion.div
-            style={{ opacity: scrollCueOpacity }}
-            className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10 pointer-events-none"
-          >
-            <span className="text-[9px] uppercase tracking-[0.5em] font-ui opacity-40">Scroll</span>
-            <motion.div
-              className="w-px h-8 bg-white/30 origin-top"
-              animate={reduce ? { scaleY: 1 } : { scaleY: [0, 1, 0] }}
-              transition={reduce ? { duration: 0.3 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
-        </header>
+        <HeroCover
+          leadCover={orderedCities[0]?.coverImageUrl ?? activeCollections[0]?.coverImageUrl ?? ''}
+          collections={activeCollections.length}
+          frames={totalFrames}
+        />
 
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />

@@ -158,7 +158,9 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     role: 'button' as const,
     'aria-label': `View story: ${collection.name}`,
   };
-  const glow = { boxShadow: isHovered ? '0 0 150px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.6)' : '0 0 0px rgba(0, 0, 0, 0)' };
+  // Hover glow removed — the lime flash read as flicker; the dim-lift + scale +
+  // sheen + baseline carry the hover calmly.
+  const glow = {};
   const baseline = (
     <div
       className="absolute left-0 right-0 bottom-0 h-[5px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)] z-10"
