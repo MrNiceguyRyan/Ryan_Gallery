@@ -47,24 +47,6 @@ function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNod
   );
 }
 
-// Organic "water-droplet" frame: a border-radius that morphs through a few
-// asymmetric blob states so the avatar wobbles like a settling drop. The two
-// arrays run at different tempos so the inner photo and outer halo are never
-// perfectly in sync, for the surface-tension shimmer.
-const DROP_INNER = [
-  '64% 36% 27% 73% / 66% 28% 72% 34%',
-  '33% 67% 66% 34% / 36% 70% 30% 64%',
-  '58% 42% 44% 56% / 26% 64% 36% 74%',
-  '28% 72% 64% 36% / 68% 34% 66% 32%',
-  '64% 36% 27% 73% / 66% 28% 72% 34%',
-];
-const DROP_OUTER = [
-  '52% 48% 36% 64% / 60% 42% 58% 40%',
-  '66% 34% 58% 42% / 34% 66% 36% 64%',
-  '36% 64% 48% 52% / 62% 38% 64% 36%',
-  '52% 48% 36% 64% / 60% 42% 58% 40%',
-];
-
 /** Fallback timeline shown when Sanity has no data yet. Only entries
  *  backed by real collections are listed. Future additions go through
  *  Sanity Studio, not this fallback. */
@@ -216,58 +198,30 @@ export default function AboutPage({ settings }: Props) {
 
         <div className="grid md:grid-cols-12 gap-10 md:gap-12 items-start">
 
-          {/* ── LEFT: water-droplet portrait + stacked meta ── */}
+          {/* ── LEFT: editorial portrait + stacked meta ── */}
           <div className="md:col-span-5 flex flex-col items-start gap-7">
-            {/* Avatar — a water-droplet frame: settles in, then floats while its
-                edge morphs like a slowly wobbling drop, wrapped in a soft halo. */}
+            {/* Avatar — a clean editorial frame: rises in once (clip-reveal), then
+                only a quiet hover-scale. Lime registration ticks tie it to the
+                heat system. No infinite wobble. */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={coverGone ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: expo }}
+              className="group relative w-44 md:w-56"
+              initial={{ opacity: 0, y: 28, clipPath: 'inset(12% 0% 12% 0%)' }}
+              animate={coverGone ? { opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' } : { opacity: 0, y: 28 }}
+              transition={{ duration: 0.9, delay: 0.1, ease: expo }}
             >
-              <motion.div
-                className="relative w-40 h-40 md:w-52 md:h-52"
-                animate={reduce ? undefined : { y: [0, -7, 0] }}
-                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                {/* Liquid halo — morphs out of phase + drifts, for surface tension */}
-                <motion.div
-                  aria-hidden
-                  className="absolute -inset-3 -z-10 blur-xl"
-                  style={{
-                    borderRadius: DROP_OUTER[0],
-                    background:
-                      'radial-gradient(circle at 36% 30%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.34), rgba(255,255,255,0.05) 58%, transparent 74%)',
-                  }}
-                  animate={reduce ? undefined : { borderRadius: DROP_OUTER, rotate: [0, 7, 0], scale: [1, 1.06, 1] }}
-                  transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
+              <span aria-hidden className="absolute -top-2 -left-2 w-5 h-5 border-t border-l" style={{ borderColor: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }} />
+              <span aria-hidden className="absolute -bottom-2 -right-2 w-5 h-5 border-b border-r" style={{ borderColor: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }} />
+              <div className="relative aspect-[4/5] w-full overflow-hidden ring-1 ring-white/15 bg-white/5">
+                <img
+                  src={avatarUrl}
+                  alt={name}
+                  className="w-full h-full object-cover object-right grayscale-[0.2] transition-transform duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06]"
+                  loading="eager"
+                  decoding="async"
+                  draggable={false}
                 />
-                {/* The droplet — morphing border-radius clips the photo */}
-                <motion.div
-                  className="relative w-full h-full overflow-hidden bg-white/5 shadow-xl ring-1 ring-white/15"
-                  style={{ borderRadius: DROP_INNER[0] }}
-                  animate={reduce ? undefined : { borderRadius: DROP_INNER, scale: [1, 1.045, 0.99, 1] }}
-                  transition={{ duration: 7.5, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <img
-                    src={avatarUrl}
-                    alt={name}
-                    className="w-full h-full object-cover object-right scale-105"
-                    loading="eager"
-                    decoding="async"
-                    draggable={false}
-                  />
-                  {/* Specular gloss — the water-drop sheen, top-left (subtle) */}
-                  <div
-                    aria-hidden
-                    className="absolute inset-0 pointer-events-none mix-blend-screen"
-                    style={{
-                      background:
-                        'radial-gradient(40% 30% at 30% 22%, rgba(255,255,255,0.16), rgba(255,255,255,0.03) 46%, transparent 64%)',
-                    }}
-                  />
-                </motion.div>
-              </motion.div>
+                <div aria-hidden className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20]/45 via-transparent to-transparent" />
+              </div>
             </motion.div>
 
             {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
