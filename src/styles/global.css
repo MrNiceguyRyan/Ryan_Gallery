@@ -179,6 +179,14 @@ body {
   font-family: var(--font-ui);
 }
 
+/* ─── Editorial type grammar — one consistent label/deck system so the page
+   reads authored, not scavenged. Colour can be overridden per use. ─── */
+.text-eyebrow { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.5em; text-transform: uppercase; color: rgba(244, 244, 237, 0.32); }
+.text-kicker { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; }
+.text-deck { font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 1.4vw, 21px); line-height: 1.5; color: rgba(244, 244, 237, 0.72); }
+.text-caption { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(244, 244, 237, 0.4); }
+.text-dateline { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(244, 244, 237, 0.5); }
+
 /* ─── Self-drawing lime underline (the signature Lando UI tell) ───
    A 2px accent rule that draws in left→right on hover, and stays drawn on the
    active item (add `.is-active`). Honors reduced-motion by appearing instantly. */

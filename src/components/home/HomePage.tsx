@@ -1118,6 +1118,8 @@ export default function HomePage({ collections }: Props) {
                                   isActive={activeArchiveId === domId}
                                   onClick={() => setSelectedCollection(city)}
                                   index={index}
+                                  variant={index === 0 ? 'feature' : 'cover'}
+                                  flip={index % 2 === 1}
                                 />
                               );
                             })}

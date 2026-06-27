@@ -49,6 +49,19 @@ export const EDITORIAL_FALLBACKS: Record<string, string[]> = {
  *        accent line. Defaults to a neutral white/10 so it works on dark
  *        backgrounds. Pass `"border-black/10"` on light pages.
  */
+
+/** First-paragraph excerpt of a collection's editorial fallback, truncated to
+ *  ~n chars at a word boundary with an ellipsis. Empty when there's no fallback.
+ *  The canonical source of homepage editorial copy (Sanity `introduction` is
+ *  empty), shared by the ArchiveChapter feature spread and any future strip. */
+export function excerpt(slug: string | undefined, n = 170): string {
+  const full = (slug && EDITORIAL_FALLBACKS[slug]?.[0]) || '';
+  if (full.length <= n) return full;
+  const cut = full.slice(0, n);
+  const lastSpace = cut.lastIndexOf(' ');
+  return cut.slice(0, lastSpace > 0 ? lastSpace : n).trimEnd() + '…';
+}
+
 export function renderPortableText(
   blocks: PortableTextBlock[],
   blockquoteBorderColor = 'border-white/10',
