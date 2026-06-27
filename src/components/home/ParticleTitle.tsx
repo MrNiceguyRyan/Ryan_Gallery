@@ -20,9 +20,12 @@ interface ParticleTitleProps {
   text: string;
   className?: string;
   onHover?: (isHovering: boolean) => void;
+  /** Live scroll-heat (0..1). The render loop reads it each frame to scatter +
+   *  lime-tint particles on fast scroll — no React re-render. */
+  heatRef?: React.MutableRefObject<number>;
 }
 
-const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover }) => {
+const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover, heatRef }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const particles = useRef<Particle[]>([]);
@@ -163,6 +166,12 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
       const currentFriction = 0.88 + settleProgress * 0.04;
       const currentEase = 0.06 + settleProgress * 0.02;
 
+      // Scroll-heat: scatter particles outward + lime-tint a fraction on fast
+      // scroll; the ease/friction snaps them home as the heat decays.
+      const h = heatRef?.current ?? 0;
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+
       for (let i = 0; i < particles.current.length; i++) {
         const p = particles.current[i];
         const dx = mouseX - p.x;
@@ -177,6 +186,11 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
           p.vy -= force * Math.sin(angle) * 4.0;
         }
 
+        if (h > 0.15) {
+          p.vx += (p.x - cx) * 0.006 * h;
+          p.vy += (p.y - cy) * 0.006 * h;
+        }
+
         p.vx += (p.originX - p.x) * currentEase;
         p.vy += (p.originY - p.y) * currentEase;
         p.vx *= currentFriction;
@@ -185,10 +199,10 @@ const ParticleTitle: React.FC<ParticleTitleProps> = ({ text, className, onHover 
         p.y += p.vy;
 
         const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        const alpha = Math.min(1, 0.6 + speed * 0.15);
+        const alpha = Math.min(1, 0.6 + speed * 0.15 + h * 0.3);
 
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = p.color;
+        ctx.fillStyle = h > 0.4 && i % 5 === 0 ? 'rgb(210,255,0)' : p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
       ctx.globalAlpha = 1;

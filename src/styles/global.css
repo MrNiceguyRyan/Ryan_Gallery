@@ -352,6 +352,21 @@ img {
  *  Mount <SiteAtmosphere/> (home / about) or `<canvas class="site-atmos">`
  *  (travel) behind page content.
  * ═══════════════════════════════════════════════════════ */
+/* ─── Heat system — a fixed lime "heat" decoupled from the (per-room) accent.
+   Drives the scroll-velocity glow/bloom. --glow-intensity (0..1) is set per
+   element and softly interpolated by the browser (@property). ─── */
+:root { --heat-r: 210; --heat-g: 255; --heat-b: 0; }
+@property --glow-intensity {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+.heat-glow {
+  text-shadow: 0 0 calc(44px * var(--glow-intensity)) rgba(var(--heat-r), var(--heat-g), var(--heat-b), calc(0.65 * var(--glow-intensity)));
+  transition: text-shadow 0.4s ease;
+}
+@keyframes heat-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
+
 :root { --bg-base: #282c20; }
 
 .site-atmos {

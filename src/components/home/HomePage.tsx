@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ParticleTitle from './ParticleTitle';
@@ -378,6 +378,20 @@ export default function HomePage({ collections }: Props) {
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
 
+  // ── Scroll-HEAT — the page runs HOT the harder you scroll and cools when you
+  // read. A scroll-velocity → spring signal (0 idle → 1 fast). Fed to the
+  // particle hero via a ref (no re-render) and to a lime bloom. Off under reduce.
+  const scrollVel = useVelocity(scrollY);
+  const heatRaw = useTransform(scrollVel, [-2600, 0, 2600], [1, 0, 1], { clamp: true });
+  const heat = useSpring(heatRaw, { stiffness: 120, damping: 22 });
+  const heatRef = useRef(0);
+  useEffect(() => {
+    if (reduce) { heatRef.current = 0; return; }
+    return heat.on('change', (v) => { heatRef.current = v; });
+  }, [heat, reduce]);
+  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.5]);
+  const bloomScale = useTransform(heat, [0, 1], [1, 1.12]);
+
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
   // window position Lenis drives, so the existing scroll effects keep working.
@@ -609,6 +623,17 @@ export default function HomePage({ collections }: Props) {
              flicker; a static cool contour field (SiteAtmosphere) replaces it. */}
         <SiteAtmosphere />
 
+        {/* Scroll-heat bloom — a lime flare that swells on fast scroll and dies
+             when you stop. Behind content (z-1), above the contour atmosphere. */}
+        {!reduce && (
+          <motion.div aria-hidden className="fixed inset-0 z-[1] pointer-events-none" style={{ opacity: bloomOpacity }}>
+            <motion.div
+              className="absolute inset-0 will-change-transform"
+              style={{ scale: bloomScale, background: 'radial-gradient(60vmax 50vmax at 50% 38%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.22), transparent 62%)' }}
+            />
+          </motion.div>
+        )}
+
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
              darkening is the SAME from the opening through the whole archive
@@ -706,6 +731,7 @@ export default function HomePage({ collections }: Props) {
                 <ParticleTitle
                   text="Journal <br/> Gallery"
                   className="h-64 md:h-96"
+                  heatRef={heatRef}
                 />
                 {/* Anamorphic light sweep across the title (one-shot on open) */}
                 <div className="pointer-events-none absolute inset-0 overflow-hidden z-20" aria-hidden="true">
