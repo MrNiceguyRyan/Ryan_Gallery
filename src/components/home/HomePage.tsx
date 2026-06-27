@@ -384,20 +384,20 @@ export default function HomePage({ collections }: Props) {
   // read. A scroll-velocity → spring signal (0 idle → 1 fast). Fed to the
   // particle hero via a ref (no re-render) and to a lime bloom. Off under reduce.
   const scrollVel = useVelocity(scrollY);
-  const heatRaw = useTransform(scrollVel, [-1800, 0, 1800], [1, 0, 1], { clamp: true });
+  const heatRaw = useTransform(scrollVel, [-1200, 0, 1200], [1, 0, 1], { clamp: true });
   const heat = useSpring(heatRaw, { stiffness: 120, damping: 22 });
   const heatRef = useRef(0);
   useEffect(() => {
     if (reduce) { heatRef.current = 0; return; }
     return heat.on('change', (v) => { heatRef.current = v; });
   }, [heat, reduce]);
-  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 0.78]);
-  const bloomScale = useTransform(heat, [0, 1], [1, 1.16]);
-  const heatSkew = useTransform(heat, [0, 1], [0, 8]);
-  const heatScale = useTransform(heat, [0, 1], [1, 1.05]);
-  const heatGlow = useTransform(heat, [0, 1], [0.4, 1.15]);
+  const bloomOpacity = useTransform(heat, [0, 1], [0, reduce ? 0 : 1]);
+  const bloomScale = useTransform(heat, [0, 1], [1, 1.24]);
+  const heatSkew = useTransform(heat, [0, 1], [0, 13]);
+  const heatScale = useTransform(heat, [0, 1], [1, 1.09]);
+  const heatGlow = useTransform(heat, [0, 1], [0.5, 1.45]);
   // Scroll-DEPTH heat — independent of velocity, the page warms the deeper you go.
-  const depthHeat = useTransform(scrollY, [400, 1600], [0, reduce ? 0 : 0.2], { clamp: true });
+  const depthHeat = useTransform(scrollY, [400, 1600], [0, reduce ? 0 : 0.34], { clamp: true });
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -636,7 +636,7 @@ export default function HomePage({ collections }: Props) {
           <motion.div aria-hidden className="fixed inset-0 z-[1] pointer-events-none" style={{ opacity: bloomOpacity }}>
             <motion.div
               className="absolute inset-0 will-change-transform"
-              style={{ scale: bloomScale, background: 'radial-gradient(60vmax 50vmax at 50% 38%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.22), transparent 62%)' }}
+              style={{ scale: bloomScale, background: 'radial-gradient(84vmax 66vmax at 50% 40%, rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.5), rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.12) 42%, transparent 62%)' }}
             />
           </motion.div>
         )}
