@@ -3,9 +3,11 @@
  *
  *   node scripts/cleanup-collections.mjs              (DRY RUN — reports only)
  *   node scripts/cleanup-collections.mjs --apply      (trim whitespace names)
- *   node scripts/cleanup-collections.mjs --apply --delete-empty
- *                                                     (also delete photo-less
- *                                                      collections — destructive)
+ *   node scripts/cleanup-collections.mjs --apply --delete-empty Orlando Arizona
+ *                                                     (also delete named
+ *                                                      photo-less collections)
+ *
+ * Requires: SANITY_TOKEN env var with write access.
  *
  * Fixes surfaced by the audit:
  *   - "New York " → "New York"  (trailing-space name)
@@ -17,12 +19,26 @@
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
+const DELETE_EMPTY_NAMES = DELETE_EMPTY
+  ? process.argv
+    .slice(process.argv.indexOf('--delete-empty') + 1)
+    .filter((arg) => !arg.startsWith('--'))
+  : [];
+const DELETE_EMPTY_TARGETS = new Set(DELETE_EMPTY_NAMES.map(normalizeTarget));
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Set a Sanity write token in the environment before running this cleanup script.');
+  process.exit(1);
+}
+
+if (DELETE_EMPTY && DELETE_EMPTY_TARGETS.size === 0) {
+  console.error('Refusing to delete all empty collections. Pass exact collection names or ids after --delete-empty.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
@@ -31,6 +47,10 @@ const sanity = createClient({
   token: SANITY_TOKEN,
   useCdn: false,
 });
+
+function normalizeTarget(value) {
+  return String(value || '').trim().toLowerCase();
+}
 
 async function main() {
   console.log(`\n🧹 Collection cleanup  ${APPLY ? '(APPLY)' : '(DRY RUN — no writes)'}${DELETE_EMPTY ? ' +delete-empty' : ''}\n`);
@@ -63,6 +83,10 @@ async function main() {
 
   if (DELETE_EMPTY) {
     for (const c of empties) {
+      if (!DELETE_EMPTY_TARGETS.has(normalizeTarget(c.name)) && !DELETE_EMPTY_TARGETS.has(normalizeTarget(c._id))) {
+        console.log(`   (kept empty collection "${c.name}" — not listed after --delete-empty)`);
+        continue;
+      }
       await sanity.delete(c._id);
       console.log(`   ✓ deleted empty collection "${c.name}" (${c._id})`);
     }
