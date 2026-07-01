@@ -6,6 +6,7 @@ import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import HeroCover from './HeroCover';
 import ArchiveChapter from './ArchiveChapter';
+import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
@@ -914,22 +915,6 @@ export default function HomePage({ collections }: Props) {
                   );
                 })}
               </div>
-
-              {/* End-of-archive terminator — visual full-stop above the footer.
-                   Tightened gap so the page caps cleanly at the footer's
-                   bottom edge instead of trailing off into dead space. */}
-              <div className="pt-8 pb-2 flex flex-col items-center gap-3 opacity-30">
-                <div
-                  className="w-px h-10"
-                  style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
-                />
-                <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
-                  End of archive
-                </span>
-                <span className="text-[8px] font-ui opacity-60">
-                  // {activeCollections.length} of {activeCollections.length}
-                </span>
-              </div>
             </div>
           </div>
         </main>
@@ -997,17 +982,19 @@ export default function HomePage({ collections }: Props) {
             return els;
           })}
 
-          {/* Mobile end-of-archive terminator */}
-          <div className="pt-12 pb-2 flex flex-col items-center gap-3 opacity-30">
-            <div
-              className="w-px h-10"
-              style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
-            />
-            <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
-              End of archive
-            </span>
-          </div>
+        </div>
 
+        {/* ── Archive back matter — full contents index + single end-cap
+             (shared by desktop + mobile, in on-screen order) ── */}
+        <ArchiveIndex collections={orderedCities} onOpen={setSelectedCollection} totalFrames={totalFrames} />
+        <div className="pt-6 pb-16 flex flex-col items-center gap-3 opacity-30">
+          <div
+            className="w-px h-10"
+            style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
+          />
+          <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
+            End of archive
+          </span>
         </div>
 
         <ScrollSignature />

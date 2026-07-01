@@ -84,11 +84,19 @@ const contactHref = 'mailto:ryan2420159421@gmail.com';
       </a>
     </div>
 
-    {/* Meta bar */}
-    <div class="footer-meta mt-16 md:mt-24 pt-6 border-t border-white/10 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-      <span>© {year} Ryan Xu. All rights reserved.</span>
-      <span class="footer-cameras">Fujifilm X-T50 · Nikon Zf</span>
-      <a href="/">ryanxugallery.com</a>
+    {/* Meta bar — colophon tier + copyright line */}
+    <div class="footer-meta mt-16 md:mt-24 pt-6 border-t border-white/10 flex flex-col gap-4">
+      <div class="footer-colophon flex flex-col md:flex-row md:flex-wrap gap-x-6 gap-y-2 md:items-center">
+        <span>Set in <em>Fraunces</em> &amp; <em>Space&nbsp;Grotesk</em></span>
+        <span class="sep" aria-hidden="true">/</span>
+        <span>Photographed on Fujifilm&nbsp;X-T50 &amp; Nikon&nbsp;Zf</span>
+        <span class="sep" aria-hidden="true">/</span>
+        <span>Made in New&nbsp;York</span>
+      </div>
+      <div class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+        <span>© {year} Ryan Xu. All rights reserved.</span>
+        <a href="/">ryanxugallery.com</a>
+      </div>
     </div>
   </div>
 </footer>
@@ -215,6 +223,11 @@ const contactHref = 'mailto:ryan2420159421@gmail.com';
   }
   .footer-meta a { transition: color 0.4s ease; }
   .footer-meta a:hover { color: rgba(230, 233, 231, 0.72); }
+
+  /* Colophon — typeface + camera + place credits, one brightness up. */
+  .footer-colophon em { font-style: normal; color: rgba(230, 233, 231, 0.6); }
+  .footer-colophon .sep { opacity: 0.35; }
+  @media (max-width: 767px) { .footer-colophon .sep { display: none; } }
 
   @media (prefers-reduced-motion: reduce) {
     .flip-inner, .arrow, .navlink, .enquiry-pill { transition: color 0.3s ease, background 0.3s ease, border-color 0.3s ease; }

@@ -263,6 +263,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           <div className={`mt-4 md:mt-6 flex items-end justify-between gap-6 ${flip ? 'flex-row-reverse' : ''}`}>
             <div className="font-ui text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>{frames} frames</span>
+              {exifLine && <span className="text-white/35">{exifLine}</span>}
               {coords && (
                 <span className="text-white/35">
                   {coords.lat.toFixed(3)}°, {coords.lng.toFixed(3)}°
