@@ -4,14 +4,14 @@ import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
-import HeroAtlas from './HeroAtlas';
-import type { AtlasWaypoint } from '../../lib/atlas';
+import HeroStatement from './HeroStatement';
+import ExposureBackground from './ExposureBackground';
+import type { ExposureStop } from '../../lib/exposure';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
-import SiteAtmosphere from '../shared/SiteAtmosphere';
 import Lenis from 'lenis';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -359,26 +359,7 @@ export default function HomePage({ collections }: Props) {
     return init;
   });
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
-  const { scrollY, scrollYProgress } = useScroll();
-
-  // Cinematic hero exit — as the user scrolls past the opening, the title
-  // recedes (lifts, scales up slightly, fades) like a camera pulling back,
-  // instead of flatly scrolling off. Scroll-linked, so it reads as a
-  // continuous move into the archive.
-  const heroOpacity = useTransform(scrollY, [0, 600], [1, 0], { clamp: true });
-  const heroY = useTransform(scrollY, [0, 600], [0, -100], { clamp: true });
-  const heroScale = useTransform(scrollY, [0, 600], [1, 1.06], { clamp: true });
-  const scrollCueOpacity = useTransform(scrollY, [0, 160], [1, 0], { clamp: true });
-  // Layered hero parallax — on scroll-out the title pulls UP faster than the
-  // frame while the epigraph lags slightly DOWN, so the two planes separate
-  // into depth instead of receding as one flat sheet. Applied on dedicated
-  // wrappers so they don't fight the entrance/exit transforms; off when reduced.
-  const heroTitleParallax = useTransform(scrollY, [0, 600], [0, -64], { clamp: true });
-  const heroEpigraphParallax = useTransform(scrollY, [0, 600], [0, 38], { clamp: true });
-
-  // The cinematic film-open plays once the first-visit intro is gone (or
-  // immediately on a return visit, when no intro shows).
-  const introReady = true;
+  const { scrollYProgress } = useScroll();
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
@@ -474,13 +455,16 @@ export default function HomePage({ collections }: Props) {
   );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
-  // The journey's waypoints — each city's first geotagged photo, in on-screen
-  // order. Feeds the hero atlas (the route that draws itself on load).
-  const waypoints = useMemo<AtlasWaypoint[]>(
+  // The exposure's stops — one per city in on-screen order, each stamped with
+  // the collection's real EXIF. Skeleton of the light-writing gesture.
+  const exposureStops = useMemo<ExposureStop[]>(
     () =>
-      orderedCities.flatMap((c) => {
-        const p = c.photos?.find((p) => p.location?.lat != null && p.location?.lng != null);
-        return p?.location ? [{ label: c.name.trim(), lat: p.location.lat, lng: p.location.lng }] : [];
+      orderedCities.map((c) => {
+        const p = c.photos?.[0];
+        const exif = [p?.focalLength, p?.aperture, p?.iso ? `ISO ${p.iso}` : '']
+          .filter(Boolean)
+          .join(' · ');
+        return { label: c.name.trim(), exif };
       }),
     [orderedCities],
   );
@@ -584,21 +568,6 @@ export default function HomePage({ collections }: Props) {
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
 
-  // ── Rotating hero epigraph ──
-  // Cycles through HERO_EPIGRAPHS once every ~6.5s with a crossfade.
-  // Starts on a random index so different visits feel different.
-  const [epigraphIdx, setEpigraphIdx] = useState(() =>
-    Math.floor(Math.random() * HERO_EPIGRAPHS.length),
-  );
-  // setTimeout keyed on the current index so the dwell time re-arms cleanly
-  // after a manual jump (clicking a position dot) instead of double-firing.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setEpigraphIdx((i) => (i + 1) % HERO_EPIGRAPHS.length);
-    }, 6500);
-    return () => clearTimeout(t);
-  }, [epigraphIdx]);
-
   // ── Per-chapter dynamic accent color ──
   // Resolve the currently visible chapter's color palette → RGB. When no
   // chapter intersects (hero state), fall back to neutral white so the page
@@ -621,14 +590,13 @@ export default function HomePage({ collections }: Props) {
           ['--accent-b' as never]: accentRgb.b,
         }}
       >
-        {/* ── Editorial canvas ──
-             Refined-dark magazine direction: a flat near-black page with only a
-             faint film grain and the page vignette below. The cinematic stack
-             (background video, ambient glow, dust, parallax grid, sunbeam,
-             colored halos) was removed for restraint — the photographs carry
-             the page. The old animated film grain was retired — it read as
-             flicker; a static cool contour field (SiteAtmosphere) replaces it. */}
-        <SiteAtmosphere />
+        {/* ── The Long Exposure ──
+             The homepage background IS a photograph being taken: one light
+             writes the journey across the viewport and its trail accumulates
+             like film (lib/exposure.ts). Scrolling closes the shutter — the
+             plate freezes into a 6% ghost behind the archive. Replaces the
+             contour SiteAtmosphere on this page only (travel/about keep it). */}
+        <ExposureBackground stops={exposureStops} />
 
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
@@ -685,7 +653,7 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        <HeroAtlas waypoints={waypoints} collections={activeCollections.length} frames={totalFrames} />
+        <HeroStatement collections={activeCollections.length} frames={totalFrames} places={exposureStops.length} />
 
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
