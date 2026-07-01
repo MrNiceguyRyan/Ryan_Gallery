@@ -1,43 +1,48 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { startAtlas, type AtlasWaypoint } from '../../lib/atlas';
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const expo = [0.16, 1, 0.3, 1] as const;
 
 /**
- * HeroCover — the homepage opener as a photographic magazine COVER: one
- * full-bleed lead photograph carries the screen, framed by a restrained
- * editorial overlay (masthead wordmark, an archive index, a serif statement,
- * a scroll cue). A slow scroll-parallax on the image; a one-shot rise on load.
- * No flashing — the photography opens the site.
+ * HeroAtlas — the homepage opener as a living ROUTE MAP (no photograph):
+ * contour terrain + a blueprint grid on the deep-olive base, with the
+ * archive's real coordinates joined into a journey that draws itself in
+ * (lib/atlas.ts). The editorial overlay (masthead wordmark, archive index,
+ * serif statement, scroll cue) is unchanged from the cover era — the map
+ * now literally illustrates "a record of light & place."
  */
-export default function HeroCover({
-  leadCover,
+export default function HeroAtlas({
+  waypoints,
   collections,
   frames,
 }: {
-  leadCover: string;
+  waypoints: AtlasWaypoint[];
   collections: number;
   frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
-  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '12%']);
-  const imgScale = useTransform(scrollYProgress, [0, 1], [1.05, reduce ? 1.05 : 1.16]);
+  const mapY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '10%']);
   const overlayOpacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
-  const img = leadCover ? `${leadCover}?auto=format&w=2200&q=82` : '';
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    return startAtlas(canvasRef.current, waypoints);
+  }, [waypoints]);
 
   return (
     <header ref={ref} className="relative h-[100svh] min-h-[620px] w-full overflow-hidden">
-      {/* Lead photograph — full-bleed, slow scroll parallax */}
-      <motion.div className="absolute inset-0" style={{ y: imgY, scale: imgScale }}>
-        {img && <img src={img} alt="" aria-hidden="true" className="w-full h-full object-cover" draggable={false} />}
+      {/* The atlas — full-bleed canvas, slow scroll parallax */}
+      <motion.div className="absolute inset-0" style={{ y: mapY }}>
+        <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 w-full h-full" />
       </motion.div>
 
-      {/* Legibility scrims */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20] via-[#282c20]/20 to-[#282c20]/55" />
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-[#282c20]/55 via-transparent to-transparent" />
+      {/* Statement legibility scrim (the map lines are faint; keep it light) */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20] via-transparent to-transparent" />
 
       {/* Editorial cover overlay */}
       <motion.div
@@ -70,7 +75,7 @@ export default function HeroCover({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.55, duration: 0.8 }}
           >
-            Visual Archive · New York
+            The Route · {waypoints.length} stops
           </motion.p>
           <h1 className="font-serif uppercase text-[#F4F4ED] leading-[0.86] tracking-tight" style={{ fontSize: 'clamp(44px, 8vw, 132px)' }}>
             <span className="block overflow-hidden">

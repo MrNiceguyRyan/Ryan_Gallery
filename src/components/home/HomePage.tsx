@@ -4,7 +4,8 @@ import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
-import HeroCover from './HeroCover';
+import HeroAtlas from './HeroAtlas';
+import type { AtlasWaypoint } from '../../lib/atlas';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
@@ -473,6 +474,17 @@ export default function HomePage({ collections }: Props) {
   );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
+  // The journey's waypoints — each city's first geotagged photo, in on-screen
+  // order. Feeds the hero atlas (the route that draws itself on load).
+  const waypoints = useMemo<AtlasWaypoint[]>(
+    () =>
+      orderedCities.flatMap((c) => {
+        const p = c.photos?.find((p) => p.location?.lat != null && p.location?.lng != null);
+        return p?.location ? [{ label: c.name.trim(), lat: p.location.lat, lng: p.location.lng }] : [];
+      }),
+    [orderedCities],
+  );
+
   // Marquee index — real place names (hero epigraphs) + archive cities, deduped.
   // Each maps to its archive id so the band can spotlight the live active one.
   const indexNames = useMemo(
@@ -673,50 +685,15 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        <HeroCover
-          leadCover={orderedCities[0]?.coverImageUrl ?? activeCollections[0]?.coverImageUrl ?? ''}
-          collections={activeCollections.length}
-          frames={totalFrames}
-        />
+        <HeroAtlas waypoints={waypoints} collections={activeCollections.length} frames={totalFrames} />
 
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
 
         {/* ── Desktop Main — sidebar + archive chapters ── */}
         <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
-          {/* Dynamic Ambient Background Aura */}
-          <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
-            {/* Colored accent halos + the deep photo-parallax layer were removed
-                 for the editorial direction. Only the faint grayscale backdrop
-                 of the active chapter remains (below). */}
-            <AnimatePresence mode="wait">
-              {activeArchiveId && (
-                <motion.div
-                  key={activeArchiveId}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.15 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 2, ease: 'easeInOut' }}
-                  className="absolute inset-0"
-                >
-                  {(() => {
-                    const activeCity = orderedCities.find((c) => `archive-item-${c._id}` === activeArchiveId);
-                    const bgUrl = activeCity?.coverImageUrl || activeCity?.photos?.[0]?.imageUrl;
-                    return bgUrl ? (
-                      <>
-                        <img
-                          src={`${bgUrl}?auto=format&w=800&q=40`}
-                          className="w-full h-full object-cover blur-[120px] scale-110 grayscale"
-                          alt=""
-                        />
-                        <div className="absolute inset-0 bg-black/40" />
-                      </>
-                    ) : null;
-                  })()}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+          {/* The blurred active-chapter photo backdrop was removed — no photo
+               used as background anywhere; the contour atmosphere carries it. */}
 
           {/* Decorative Grid Lines */}
           <div className="fixed left-24 top-0 bottom-0 w-px bg-white/[0.03] z-0 hidden lg:block" />
