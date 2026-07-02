@@ -11,9 +11,7 @@ const expo = [0.16, 1, 0.3, 1] as const;
 interface ArchiveChapterProps {
   id: string;
   collection: Collection;
-  /** Called with the clicked frame's rect so the homepage can run the
-   *  cover-expand cinematic open (undefined → plain open). */
-  onClick: (rect?: DOMRect) => void;
+  onClick: () => void;
   index: number;
   isActive: boolean;
   /** 'cover' (default) = full-bleed magazine cover; 'feature' = a 2-column
@@ -156,8 +154,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   );
 
   const interactive = {
-    // Hand the frame's rect up so the open can expand FROM this card.
-    onClick: (e: React.MouseEvent<HTMLElement>) => onClick(e.currentTarget.getBoundingClientRect()),
+    onClick,
     onHoverStart: () => { setIsHovered(true); setArmed(true); },
     onHoverEnd: () => setIsHovered(false),
     onMouseMove: onCoverMove,
@@ -213,7 +210,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             </div>
             <Magnetic strength={0.4}>
               <button
-                onClick={() => onClick()}
+                onClick={onClick}
                 data-cursor="View Story"
                 aria-label={`View story: ${collection.name}`}
                 className="group/cta mt-1 shrink-0 inline-flex items-center gap-3 font-ui text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 hover:text-white transition-colors duration-500"

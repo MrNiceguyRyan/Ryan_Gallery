@@ -6,6 +6,7 @@ import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import HeroStatement from './HeroStatement';
 import StatementReveal from './StatementReveal';
+import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
@@ -342,14 +343,6 @@ function QuietIndexBand({
 
 export default function HomePage({ collections }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
-  // Cinematic open — the clicked card's cover expands from its rect to full
-  // screen, THEN the story mounts beneath and the clone fades away.
-  const [opening, setOpening] = useState<{
-    c: Collection;
-    rect: { top: number; left: number; width: number; height: number };
-    cover: string;
-    fading: boolean;
-  } | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
   // multi-city region starts collapsed, so the homepage opens as a compact
   // index the visitor expands. Computed from the props up-front (no flash).
@@ -374,29 +367,6 @@ export default function HomePage({ collections }: Props) {
 
   // Kinetic type for the Selected Works heading (hero language, smaller dose).
   const swKinetic = useVelocitySkew(4, 18);
-
-  // Cinematic open: with a source rect, run the cover-expand transition;
-  // without one (index rows, strips, mobile, reduced motion) open directly.
-  const openCollection = useCallback(
-    (c: Collection, rect?: DOMRect) => {
-      const cover = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
-      if (reduce || !rect || !cover) {
-        setSelectedCollection(c);
-        return;
-      }
-      setOpening((prev) =>
-        prev
-          ? prev
-          : {
-              c,
-              rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
-              cover: `${cover}?auto=format&w=2000&q=80`,
-              fading: false,
-            },
-      );
-    },
-    [reduce],
-  );
 
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
@@ -676,6 +646,19 @@ export default function HomePage({ collections }: Props) {
              scroll (clip wipe + lime scan-bar), the moment after the hero ── */}
         <StatementReveal />
 
+        {/* ── Walk-in gateway — pin + scrub: the lead cover scales from a
+             small card to past-full-bleed as you scroll (walking into a
+             photograph), then hands off to the archive. ── */}
+        {orderedCities[0] && (
+          <WalkIn
+            cover={orderedCities[0].coverImageUrl ?? orderedCities[0].photos?.[0]?.imageUrl ?? ''}
+            name={orderedCities[0].name.trim()}
+            places={orderedCities.length}
+            frames={totalFrames}
+            onOpen={() => setSelectedCollection(orderedCities[0])}
+          />
+        )}
+
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
 
@@ -870,7 +853,7 @@ export default function HomePage({ collections }: Props) {
                                   id={domId}
                                   collection={city}
                                   isActive={activeArchiveId === domId}
-                                  onClick={(rect) => openCollection(city, rect)}
+                                  onClick={() => setSelectedCollection(city)}
                                   index={index}
                                   variant={index === 0 ? 'feature' : 'cover'}
                                   flip={index % 2 === 1}
@@ -969,59 +952,6 @@ export default function HomePage({ collections }: Props) {
         <ScrollSignature />
 
       </div>
-
-      {/* ── Cinematic open clone — the clicked cover expands from its card
-           rect to full screen (z-60, above the overlay), the story mounts
-           beneath it, then the clone fades away. ── */}
-      {opening && (
-        <motion.div
-          aria-hidden="true"
-          className="fixed z-[60] overflow-hidden pointer-events-none bg-[#282c20]"
-          initial={{
-            top: opening.rect.top,
-            left: opening.rect.left,
-            width: opening.rect.width,
-            height: opening.rect.height,
-            opacity: 1,
-          }}
-          animate={{
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            opacity: opening.fading ? 0 : 1,
-          }}
-          transition={
-            opening.fading
-              ? { duration: 0.5, ease: 'easeOut' }
-              : { duration: 0.68, ease: [0.16, 1, 0.3, 1] }
-          }
-          onAnimationComplete={() => {
-            if (opening.fading) {
-              setOpening(null);
-              return;
-            }
-            // Expansion done — mount the story under the clone, hold a beat
-            // to cover its slide-up, then fade the clone off.
-            setSelectedCollection(opening.c);
-            window.setTimeout(
-              () => setOpening((o) => (o ? { ...o, fading: true } : o)),
-              520,
-            );
-          }}
-        >
-          <motion.img
-            src={opening.cover}
-            alt=""
-            className="w-full h-full object-cover"
-            initial={{ scale: 1.08 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 1.0, ease: [0.16, 1, 0.3, 1] }}
-            draggable={false}
-          />
-          <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none bg-gradient-to-t from-black/45 to-transparent" />
-        </motion.div>
-      )}
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}
       <AnimatePresence>
