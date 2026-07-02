@@ -53,8 +53,11 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
 
   const { scrollYProgress } = useScroll({ target: chapterRef, offset: ['start end', 'end start'] });
   const opacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0, 1, 1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.06, 1, 1, 0.99]);
-  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-22%']);
+  // Cinematic entrance — the card rises in, and the photo settles OUT of a zoom
+  // (a filmic "arrive/focus") over a stronger internal dolly.
+  const entryY = useTransform(scrollYProgress, [0, 0.4], [96, 0], { clamp: true });
+  const revealScale = useTransform(scrollYProgress, [0, 0.45, 0.9, 1], [1.3, 1, 1, 1.06]);
+  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-26%']);
 
   // Keyword-ignite (last word lights to lime on scroll-in) stays.
   const igniteColor = useTransform(scrollYProgress, [0.3, 0.52], ['rgba(244,244,237,1)', 'rgb(210,255,0)']);
@@ -99,7 +102,9 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
 
   // Shared image block — parallax scale + cover/swap imgs + dim + scrims + sheen.
   const imageBlock = (
-    <motion.div style={{ scale }} className={`relative ${aspectClass} overflow-hidden`}>
+    <motion.div className={`relative ${aspectClass} overflow-hidden`}>
+      {/* Reveal layer — settle-zoom, clipped by the frame */}
+      <motion.div className="absolute inset-0" style={{ scale: reduce ? 1 : revealScale }}>
       {coverUrl && (
         <motion.img
           style={{ y: imgY }}
@@ -132,6 +137,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           draggable={false}
         />
       )}
+      </motion.div>
       <motion.div
         className="absolute inset-0 bg-[#30352a] pointer-events-none"
         animate={{ opacity: isHovered ? 0.12 : isActive ? 0.28 : 0.5 }}
@@ -172,7 +178,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
       <motion.section
         id={id}
         ref={chapterRef}
-        style={{ opacity }}
+        style={{ opacity, y: reduce ? 0 : entryY }}
         className="relative pb-16 lg:pb-28"
       >
         <div className="lg:grid lg:grid-cols-12 lg:gap-12 lg:items-center">
@@ -226,7 +232,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     <motion.section
       id={id}
       ref={chapterRef}
-      style={{ opacity }}
+      style={{ opacity, y: reduce ? 0 : entryY }}
       className="relative pb-12 lg:pb-16"
     >
       <motion.div

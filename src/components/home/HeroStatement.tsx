@@ -69,7 +69,7 @@ export default function HeroStatement({
   const velocity = useVelocity(pageScrollY);
   // Stronger + more reactive skew, plus a horizontal "throw" — the block leans
   // AND slides with scroll velocity, then springs back hard.
-  const skewRaw = useTransform(velocity, [-2200, 0, 2200], [13, 0, -13], { clamp: true });
+  const skewRaw = useTransform(velocity, [-2200, 0, 2200], [7, 0, -7], { clamp: true });
   const skew = useSpring(skewRaw, { stiffness: 260, damping: 21, mass: 0.5 });
   const throwRaw = useTransform(velocity, [-2200, 0, 2200], [-70, 0, 70], { clamp: true });
   const throwX = useSpring(throwRaw, { stiffness: 220, damping: 23, mass: 0.5 });
