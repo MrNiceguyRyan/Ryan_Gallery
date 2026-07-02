@@ -201,14 +201,17 @@ export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
     const loop = (now: number) => {
       if (!canvas.isConnected) { stop(); return; }
       raf = requestAnimationFrame(loop);
-      if (document.hidden) return;
+      // (No document.hidden guard — rAF is already throttled in hidden tabs,
+      // and the guard left the canvas blank whenever a tab reported hidden.)
       if (t0 < 0) t0 = now;
       const elapsed = (now - t0) * 0.001;
       updateTargets();
       // Exponential ease → inertia (keeps flowing a beat after scroll stops).
       flow += (flowTarget - flow) * 0.06;
       invert += (invertTarget - invert) * 0.08;
-      draw(flow + elapsed * 0.02); // + a whisper of idle drift
+      // Continuously self-animating: a brisk time drift is the primary motion,
+      // scroll adds to it.
+      draw(flow + elapsed * 0.18);
     };
     raf = requestAnimationFrame(loop);
   }

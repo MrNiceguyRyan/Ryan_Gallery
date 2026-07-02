@@ -64,16 +64,12 @@ export default function HeroStatement({
             Visual Archive · {places} places
           </motion.p>
           <h1 className="font-serif uppercase text-[#F4F4ED] leading-[0.86] tracking-tight" style={{ fontSize: 'clamp(44px, 8vw, 132px)' }}>
-            <span className="block overflow-hidden">
-              <motion.span className="block" initial={{ y: '112%' }} animate={{ y: '0%' }} transition={{ duration: 0.95, delay: 0.25, ease: expo }}>
-                A record of
-              </motion.span>
-            </span>
-            <span className="block overflow-hidden">
-              <motion.span className="block" initial={{ y: '112%' }} animate={{ y: '0%' }} transition={{ duration: 0.95, delay: 0.38, ease: expo }}>
-                light &amp; <span style={{ color: ACCENT }}>place.</span>
-              </motion.span>
-            </span>
+            <motion.span className="block" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.2, ease: expo }}>
+              A record of
+            </motion.span>
+            <motion.span className="block" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.32, ease: expo }}>
+              light &amp; <span style={{ color: ACCENT }}>place.</span>
+            </motion.span>
           </h1>
           <motion.div
             className="mt-9 flex items-center gap-4 text-eyebrow"
