@@ -68,10 +68,6 @@ const cityNames = [
 
   <Nav client:load currentPath={currentPath} dark={true} />
 
-  <!-- Site atmosphere — animated organic-blob contour texture
-       field drawn on the canvas by lib/atmosphere.ts (see the script below) -->
-  <canvas class="site-atmos" aria-hidden="true"></canvas>
-
   <!-- ── Hero — pure-typographic kinetic "light band" over dark ── -->
   <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#282c20]" data-travel-hero>
     <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
@@ -205,20 +201,6 @@ const cityNames = [
 
   <Footer dark={true} />
 </Layout>
-
-<!-- Animated topographic atmosphere drawn on the shared canvas -->
-<script>
-  import { startAtmosphere } from '../lib/atmosphere';
-  function initAtmos() {
-    const c = document.querySelector('canvas.site-atmos');
-    if (c instanceof HTMLCanvasElement && !c.dataset.atmos) {
-      c.dataset.atmos = '1';
-      startAtmosphere(c);
-    }
-  }
-  initAtmos();
-  document.addEventListener('astro:page-load', initAtmos);
-</script>
 
 <style>
   /* ── Kinetic place-name "light band" (hero background) ──

@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
-import SiteAtmosphere from '../shared/SiteAtmosphere';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -83,10 +82,6 @@ export default function AboutPage({ settings }: Props) {
 
   return (
     <div className="relative bg-[#282c20] text-[#F4F4ED] min-h-[100dvh]">
-      {/* Shared cool atmosphere — sky-blue glows + a contour field. Replaces
-           the old warm-amber washes, dot grid, and animated grain (the grain
-           read as noise/flicker). */}
-      <SiteAtmosphere />
 
       {/* ═══════ Entrance — magazine "contributor" cover ═══════ */}
       <AnimatePresence>

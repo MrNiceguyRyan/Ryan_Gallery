@@ -6,7 +6,6 @@ import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import HeroStatement from './HeroStatement';
 import StatementReveal from './StatementReveal';
-import SiteAtmosphere from '../shared/SiteAtmosphere';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
@@ -577,12 +576,9 @@ export default function HomePage({ collections }: Props) {
           ['--accent-b' as never]: accentRgb.b,
         }}
       >
-        {/* ── Flowing contour field ──
-             The site-wide background language: thin topographic/airflow contour
-             lines that drift and parallax, with one lime thread through them
-             (lib/atmosphere.ts). The whole page — hero, manifesto, archive —
-             sits on this map. */}
-        <SiteAtmosphere />
+        {/* Background canvas removed — a clean solid-dark canvas; the "wow"
+             comes from content (monumental type, image reveals), not an ambient
+             backdrop. */}
 
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
