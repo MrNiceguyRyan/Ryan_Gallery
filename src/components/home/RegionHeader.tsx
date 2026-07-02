@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import { useVelocitySkew } from '../../lib/useVelocitySkew';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
@@ -30,6 +31,9 @@ export default function RegionHeader({
 }) {
   const Tag = collapsible ? 'button' : 'div';
   const reduce = useReducedMotion();
+  // Kinetic type — the region name leans + throws with scroll velocity,
+  // echoing the hero's language at a smaller amplitude.
+  const kinetic = useVelocitySkew(5, 24);
   return (
     <section className="relative pt-10 lg:pt-20 select-none" aria-label={`Region: ${region}`}>
       {/* Hairline rule wipes in (mount-triggered so it always renders) */}
@@ -46,7 +50,7 @@ export default function RegionHeader({
         data-cursor={collapsible ? (collapsed ? 'Expand' : 'Collapse') : undefined}
         aria-expanded={collapsible ? !collapsed : undefined}
         className={`group/region flex w-full items-end justify-between gap-6 pt-5 md:pt-7 text-left ${
-          collapsible ? 'cursor-none' : ''
+          collapsible ? 'cursor-pointer' : ''
         }`}
       >
         <div className="overflow-hidden">
@@ -62,14 +66,14 @@ export default function RegionHeader({
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
               Region
             </span>
-            <h2
-              className={`font-serif uppercase tracking-tighter leading-[0.85] text-white transition-opacity duration-300 ${
+            <motion.h2
+              className={`font-serif uppercase tracking-tighter leading-[0.85] text-white transition-opacity duration-300 will-change-transform ${
                 collapsible ? 'group-hover/region:opacity-80' : ''
               }`}
-              style={{ fontSize: 'clamp(40px, 7vw, 92px)' }}
+              style={{ fontSize: 'clamp(40px, 7vw, 92px)', skewX: kinetic.skewX, x: kinetic.x }}
             >
               {region}
-            </h2>
+            </motion.h2>
           </motion.div>
         </div>
 

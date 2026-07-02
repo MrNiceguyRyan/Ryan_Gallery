@@ -79,7 +79,7 @@ export default function ArchiveIndex({ collections, onOpen, totalFrames }: Props
                 onClick={() => onOpen(c)}
                 data-cursor="View Story"
                 aria-label={`View ${c.name.trim()}`}
-                className="index-row group/idx relative w-full flex items-center gap-4 md:gap-6 py-4 md:py-5 text-left border-b border-white/[0.07] cursor-none"
+                className="index-row group/idx relative w-full flex items-center gap-4 md:gap-6 py-4 md:py-5 text-left border-b border-white/[0.07] cursor-pointer"
                 style={rise(Math.min(60 + i * 45, 460))}
               >
                 {/* Accent tick — wipes down on hover */}

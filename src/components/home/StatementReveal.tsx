@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useVelocitySkew } from '../../lib/useVelocitySkew';
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const WARM_WHITE = '#DDE1D2';
@@ -39,6 +40,8 @@ export default function StatementReveal() {
   const ref = useRef<HTMLElement>(null);
   const reduce = useReducedMotion();
   const [shown, setShown] = useState(false);
+  // Kinetic type — the manifesto leans + throws with scroll velocity.
+  const kinetic = useVelocitySkew(4, 20);
 
   useEffect(() => {
     if (reduce) { setShown(true); return; }
@@ -72,17 +75,17 @@ export default function StatementReveal() {
       >
         Nº 00 — The Ethos
       </p>
-      <p
+      <motion.p
         aria-hidden="true"
-        className="font-ui uppercase text-center mx-auto"
-        style={{ maxWidth: '15ch', fontSize: 'clamp(32px, 7vw, 104px)', lineHeight: 0.9, letterSpacing: '-0.008em', fontWeight: 400 }}
+        className="font-ui uppercase text-center mx-auto will-change-transform"
+        style={{ maxWidth: '15ch', fontSize: 'clamp(32px, 7vw, 104px)', lineHeight: 0.9, letterSpacing: '-0.008em', fontWeight: 400, skewX: kinetic.skewX, x: kinetic.x }}
       >
         {LINES.map((tokens, i) => (
           <span key={i} className="block" style={lineStyle(i)}>
             {tokens.map((tok, j) => <Run key={j} tok={tok} />)}
           </span>
         ))}
-      </p>
+      </motion.p>
       <span className="sr-only">{LINES.map((l) => l.map((t) => t.t).join('')).join(' ')}</span>
     </section>
   );

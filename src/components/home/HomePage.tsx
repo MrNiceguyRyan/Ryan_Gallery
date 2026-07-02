@@ -11,6 +11,7 @@ import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
+import { useVelocitySkew } from '../../lib/useVelocitySkew';
 import Lenis from 'lenis';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
@@ -165,7 +166,7 @@ function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => vo
       aria-label={`View ${c.name.trim()}`}
       animate={{ borderColor: hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' }}
       transition={tween}
-      className="relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border cursor-none"
+      className="relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border cursor-pointer"
     >
       {url && (
         <motion.img
@@ -341,6 +342,14 @@ function QuietIndexBand({
 
 export default function HomePage({ collections }: Props) {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  // Cinematic open — the clicked card's cover expands from its rect to full
+  // screen, THEN the story mounts beneath and the clone fades away.
+  const [opening, setOpening] = useState<{
+    c: Collection;
+    rect: { top: number; left: number; width: number; height: number };
+    cover: string;
+    fading: boolean;
+  } | null>(null);
   // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
   // multi-city region starts collapsed, so the homepage opens as a compact
   // index the visitor expands. Computed from the props up-front (no flash).
@@ -362,6 +371,32 @@ export default function HomePage({ collections }: Props) {
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
+
+  // Kinetic type for the Selected Works heading (hero language, smaller dose).
+  const swKinetic = useVelocitySkew(4, 18);
+
+  // Cinematic open: with a source rect, run the cover-expand transition;
+  // without one (index rows, strips, mobile, reduced motion) open directly.
+  const openCollection = useCallback(
+    (c: Collection, rect?: DOMRect) => {
+      const cover = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
+      if (reduce || !rect || !cover) {
+        setSelectedCollection(c);
+        return;
+      }
+      setOpening((prev) =>
+        prev
+          ? prev
+          : {
+              c,
+              rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+              cover: `${cover}?auto=format&w=2000&q=80`,
+              fading: false,
+            },
+      );
+    },
+    [reduce],
+  );
 
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
@@ -669,7 +704,7 @@ export default function HomePage({ collections }: Props) {
                     <button
                       onClick={toggleAll}
                       data-cursor={allCollapsed ? 'Expand' : 'Collapse'}
-                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-ui text-white/30 hover:text-white/70 transition-colors cursor-none"
+                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-ui text-white/30 hover:text-white/70 transition-colors cursor-pointer"
                     >
                       <ChevronDown
                         size={11}
@@ -760,7 +795,10 @@ export default function HomePage({ collections }: Props) {
                   />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2 className="font-serif uppercase tracking-tight leading-[0.95] pb-2" style={{ fontSize: 'clamp(32px, 5.5vw, 76px)' }}>
+                <motion.h2
+                  className="font-serif uppercase tracking-tight leading-[0.95] pb-2 will-change-transform"
+                  style={{ fontSize: 'clamp(32px, 5.5vw, 76px)', skewX: swKinetic.skewX, x: swKinetic.x }}
+                >
                   {SW_WORDS.map((w, i) => (
                     <RisingWord
                       key={i}
@@ -771,7 +809,7 @@ export default function HomePage({ collections }: Props) {
                       accent={w === 'lens.'}
                     />
                   ))}
-                </h2>
+                </motion.h2>
                 <div className="flex items-center gap-2.5 pt-2 text-[10px] font-ui uppercase tracking-[0.3em] text-white/35">
                   <span className="relative flex h-1.5 w-1.5">
                     <span
@@ -832,7 +870,7 @@ export default function HomePage({ collections }: Props) {
                                   id={domId}
                                   collection={city}
                                   isActive={activeArchiveId === domId}
-                                  onClick={() => setSelectedCollection(city)}
+                                  onClick={(rect) => openCollection(city, rect)}
                                   index={index}
                                   variant={index === 0 ? 'feature' : 'cover'}
                                   flip={index % 2 === 1}
@@ -931,6 +969,59 @@ export default function HomePage({ collections }: Props) {
         <ScrollSignature />
 
       </div>
+
+      {/* ── Cinematic open clone — the clicked cover expands from its card
+           rect to full screen (z-60, above the overlay), the story mounts
+           beneath it, then the clone fades away. ── */}
+      {opening && (
+        <motion.div
+          aria-hidden="true"
+          className="fixed z-[60] overflow-hidden pointer-events-none bg-[#282c20]"
+          initial={{
+            top: opening.rect.top,
+            left: opening.rect.left,
+            width: opening.rect.width,
+            height: opening.rect.height,
+            opacity: 1,
+          }}
+          animate={{
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            opacity: opening.fading ? 0 : 1,
+          }}
+          transition={
+            opening.fading
+              ? { duration: 0.5, ease: 'easeOut' }
+              : { duration: 0.68, ease: [0.16, 1, 0.3, 1] }
+          }
+          onAnimationComplete={() => {
+            if (opening.fading) {
+              setOpening(null);
+              return;
+            }
+            // Expansion done — mount the story under the clone, hold a beat
+            // to cover its slide-up, then fade the clone off.
+            setSelectedCollection(opening.c);
+            window.setTimeout(
+              () => setOpening((o) => (o ? { ...o, fading: true } : o)),
+              520,
+            );
+          }}
+        >
+          <motion.img
+            src={opening.cover}
+            alt=""
+            className="w-full h-full object-cover"
+            initial={{ scale: 1.08 }}
+            animate={{ scale: 1 }}
+            transition={{ duration: 1.0, ease: [0.16, 1, 0.3, 1] }}
+            draggable={false}
+          />
+          <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none bg-gradient-to-t from-black/45 to-transparent" />
+        </motion.div>
+      )}
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}
       <AnimatePresence>

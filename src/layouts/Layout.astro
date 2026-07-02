@@ -119,12 +119,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
   <body class:list={[
     "min-h-screen font-sans antialiased overflow-x-hidden",
     dark ? "bg-[#282c20] text-[#F4F4ED]" : "bg-white text-gray-900"
-  ]} style="cursor: none;">
-    <!-- Custom cursor — an instant dot + a spring-trailed ring that morphs
-         into a filled lime disc holding the label over [data-cursor] elements. -->
-    <div id="cursor-dot" aria-hidden="true"></div>
-    <div id="cursor-ring" aria-hidden="true"><span id="cursor-label">View</span></div>
-
+  ]}>
     <slot />
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
@@ -294,128 +289,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       }
     </style>
 
-    <style is:inline>
-      /* Hide the native cursor everywhere (the custom cursor replaces it) */
-      *, *::before, *::after { cursor: none !important; }
-      /* Lightbox: restore default cursor (custom cursor hidden via cursor-hidden) */
-      .cursor-hidden ~ * { cursor: default; }
-      [style*="cursor: default"], [style*="cursor: default"] * { cursor: default !important; }
-
-      #cursor-dot {
-        position: fixed; top: 0; left: 0;
-        width: 6px; height: 6px; margin: -3px 0 0 -3px;
-        background: #F4F4ED; border-radius: 50%;
-        pointer-events: none; z-index: 10000;
-        mix-blend-mode: difference;
-        transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        will-change: left, top;
-      }
-      /* The trailing ring — a container that morphs; centered via translate so
-         it stays on the pointer at any size. */
-      #cursor-ring {
-        position: fixed; top: 0; left: 0;
-        width: 40px; height: 40px;
-        transform: translate(-50%, -50%);
-        border-radius: 999px; border: 1.5px solid rgba(244, 244, 237, 0.45);
-        display: flex; align-items: center; justify-content: center;
-        pointer-events: none; z-index: 9999;
-        transition: width 0.38s cubic-bezier(0.16, 1, 0.3, 1),
-                    height 0.38s cubic-bezier(0.16, 1, 0.3, 1),
-                    background-color 0.3s ease, border-color 0.3s ease, opacity 0.25s ease;
-        will-change: left, top;
-      }
-      #cursor-label {
-        font-family: "Space Grotesk", ui-sans-serif, monospace;
-        font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700;
-        color: #282c20; white-space: nowrap;
-        opacity: 0; transform: scale(0.6);
-        transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      /* Generic interactive (a/button/…): ring swells + goes lime, dot shrinks */
-      body.cursor-hover #cursor-ring { width: 56px; height: 56px; border-color: rgba(210, 255, 0, 0.7); }
-      body.cursor-hover #cursor-dot { transform: scale(0.4); }
-      body.cursor-click #cursor-ring { width: 34px; height: 34px; }
-      /* Over [data-cursor]: ring becomes a filled lime disc holding the label */
-      body.cursor-label-on #cursor-ring {
-        width: 94px; height: 94px;
-        background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-        border-color: transparent;
-      }
-      body.cursor-label-on #cursor-label { opacity: 1; transform: scale(1); }
-      body.cursor-label-on #cursor-dot { opacity: 0; }
-
-      body.cursor-hidden #cursor-dot, body.cursor-hidden #cursor-ring { opacity: 0 !important; }
-
-      @media (hover: none) {
-        #cursor-dot, #cursor-ring { display: none !important; }
-        *, *::before, *::after { cursor: auto !important; }
-      }
-    </style>
+    {/* Custom cursor removed — the native cursor is the cursor. Interactive
+        elements use standard `cursor: pointer` affordance. */}
 
     <script is:inline>
-      // ── Custom cursor (instant dot + spring-trailed ring + contextual label) ──
-      (function() {
-        var mouseX = -200, mouseY = -200;
-        var rx = -200, ry = -200;
-        var initialized = false;
-        var rafId = 0;
-
-        function init() {
-          var dot = document.getElementById('cursor-dot');
-          var ring = document.getElementById('cursor-ring');
-          if (!dot || !ring) return;
-
-          document.body.classList.remove('cursor-hover', 'cursor-hidden', 'cursor-label-on', 'cursor-click');
-
-          if (initialized) return;
-          initialized = true;
-
-          var hoverEls = 'a, button, [role="button"], .cursor-pointer, input, textarea, select, label';
-
-          document.addEventListener('mousemove', function(e) {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-            var d = document.getElementById('cursor-dot');
-            if (d) { d.style.left = mouseX + 'px'; d.style.top = mouseY + 'px'; }
-            var isHover = !!(e.target && e.target.closest && e.target.closest(hoverEls));
-            document.body.classList.toggle('cursor-hover', isHover);
-
-            // Over a [data-cursor] element, morph the ring into a labelled disc.
-            var ct = e.target && e.target.closest ? e.target.closest('[data-cursor]') : null;
-            var label = document.getElementById('cursor-label');
-            if (ct) {
-              var txt = ct.getAttribute('data-cursor') || 'View';
-              if (label && label.textContent !== txt) label.textContent = txt;
-              document.body.classList.add('cursor-label-on');
-            } else {
-              document.body.classList.remove('cursor-label-on');
-            }
-          }, { passive: true });
-
-          // The ring trails the pointer with an eased lerp (the fluid lag).
-          function raf() {
-            rx += (mouseX - rx) * 0.18;
-            ry += (mouseY - ry) * 0.18;
-            var r = document.getElementById('cursor-ring');
-            if (r) { r.style.left = rx + 'px'; r.style.top = ry + 'px'; }
-            rafId = requestAnimationFrame(raf);
-          }
-          if (!rafId) rafId = requestAnimationFrame(raf);
-
-          document.addEventListener('mousedown', function() {
-            document.body.classList.add('cursor-click');
-          });
-          document.addEventListener('mouseup', function() {
-            document.body.classList.remove('cursor-click');
-          });
-          document.addEventListener('mouseleave', function() { document.body.classList.add('cursor-hidden'); });
-          document.addEventListener('mouseenter', function() { document.body.classList.remove('cursor-hidden'); });
-        }
-
-        init();
-        document.addEventListener('astro:page-load', init);
-      })();
-
       // ── Image protection ──
       // Block right-click anywhere on a photo (img tag OR a container that
       // declares itself as wrapping a protected image via .work-photo-item /
