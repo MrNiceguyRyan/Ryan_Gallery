@@ -10,9 +10,9 @@ const expo = [0.16, 1, 0.3, 1] as const;
 /* The dominant statement, as big lines. `lime` marks the accent payoff line;
  * `depth` is the mouse-parallax amount (px) — alternating for a layered feel. */
 const LINES = [
-  { text: 'A RECORD OF', lime: false, depth: 26 },
-  { text: 'LIGHT &', lime: false, depth: -18 },
-  { text: 'PLACE.', lime: true, depth: 34 },
+  { text: 'A RECORD OF', lime: false, depth: 46 },
+  { text: 'LIGHT &', lime: false, depth: -32 },
+  { text: 'PLACE.', lime: true, depth: 62 },
 ];
 
 function BigLine({
@@ -67,8 +67,12 @@ export default function HeroStatement({
   const { scrollY, scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
   const { scrollY: pageScrollY } = useScroll();
   const velocity = useVelocity(pageScrollY);
-  const skewRaw = useTransform(velocity, [-3000, 0, 3000], [7, 0, -7], { clamp: true });
-  const skew = useSpring(skewRaw, { stiffness: 200, damping: 26, mass: 0.5 });
+  // Stronger + more reactive skew, plus a horizontal "throw" — the block leans
+  // AND slides with scroll velocity, then springs back hard.
+  const skewRaw = useTransform(velocity, [-2200, 0, 2200], [13, 0, -13], { clamp: true });
+  const skew = useSpring(skewRaw, { stiffness: 260, damping: 21, mass: 0.5 });
+  const throwRaw = useTransform(velocity, [-2200, 0, 2200], [-70, 0, 70], { clamp: true });
+  const throwX = useSpring(throwRaw, { stiffness: 220, damping: 23, mass: 0.5 });
 
   // Mouse parallax driver (-1..1 across the viewport), spring-smoothed.
   const mxRaw = useMotionValue(0);
@@ -119,14 +123,14 @@ export default function HeroStatement({
           >
             Visual Archive · {places} places
           </motion.p>
-          <h1
-            className="font-serif uppercase text-[#F4F4ED] tracking-[-0.02em]"
-            style={{ fontSize: 'clamp(56px, 13.5vw, 210px)', lineHeight: 0.84 }}
+          <motion.h1
+            className="font-serif uppercase text-[#F4F4ED] tracking-[-0.02em] will-change-transform"
+            style={{ fontSize: 'clamp(44px, 10vw, 150px)', lineHeight: 0.86, ...(reduce ? {} : { x: throwX }) }}
           >
             {LINES.map((line, i) => (
               <BigLine key={i} line={line} i={i} skew={skew} mouseX={mouseX} exitY={exitY} reduce={!!reduce} />
             ))}
-          </h1>
+          </motion.h1>
         </div>
 
         {/* Bottom — scroll cue */}
