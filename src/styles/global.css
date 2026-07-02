@@ -178,14 +178,6 @@ body {
 .font-ui {
   font-family: var(--font-ui);
 }
-/* ─── Impact grotesque (Archivo Black Italic) — the manifesto statement only;
-   heavy oblique all-caps, Mona-Sans energy for the scroll reveal. ─── */
-.font-impact {
-  font-family: "Archivo", "Space Grotesk", system-ui, sans-serif;
-  font-weight: 900;
-  font-style: italic;
-  font-stretch: 100%;
-}
 
 /* ─── Editorial type grammar — one consistent label/deck system so the page
    reads authored, not scavenged. Colour can be overridden per use. ─── */

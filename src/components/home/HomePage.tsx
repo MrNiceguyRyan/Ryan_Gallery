@@ -6,8 +6,7 @@ import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import HeroStatement from './HeroStatement';
 import StatementReveal from './StatementReveal';
-import ExposureBackground from './ExposureBackground';
-import type { ExposureStop } from '../../lib/exposure';
+import SiteAtmosphere from '../shared/SiteAtmosphere';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
@@ -456,19 +455,6 @@ export default function HomePage({ collections }: Props) {
   );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
-  // The exposure's stops — one per city in on-screen order, each stamped with
-  // the collection's real EXIF. Skeleton of the light-writing gesture.
-  const exposureStops = useMemo<ExposureStop[]>(
-    () =>
-      orderedCities.map((c) => {
-        const p = c.photos?.[0];
-        const exif = [p?.focalLength, p?.aperture, p?.iso ? `ISO ${p.iso}` : '']
-          .filter(Boolean)
-          .join(' · ');
-        return { label: c.name.trim(), exif };
-      }),
-    [orderedCities],
-  );
 
   // Marquee index — real place names (hero epigraphs) + archive cities, deduped.
   // Each maps to its archive id so the band can spotlight the live active one.
@@ -591,13 +577,12 @@ export default function HomePage({ collections }: Props) {
           ['--accent-b' as never]: accentRgb.b,
         }}
       >
-        {/* ── The Long Exposure ──
-             The homepage background IS a photograph being taken: one light
-             writes the journey across the viewport and its trail accumulates
-             like film (lib/exposure.ts). Scrolling closes the shutter — the
-             plate freezes into a 6% ghost behind the archive. Replaces the
-             contour SiteAtmosphere on this page only (travel/about keep it). */}
-        <ExposureBackground stops={exposureStops} />
+        {/* ── Flowing contour field ──
+             The site-wide background language: thin topographic/airflow contour
+             lines that drift and parallax, with one lime thread through them
+             (lib/atmosphere.ts). The whole page — hero, manifesto, archive —
+             sits on this map. */}
+        <SiteAtmosphere />
 
         {/* ── Continuous page vignette ──
              A page-level fixed frame (not hero-bound) so the cinematic
@@ -654,7 +639,7 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        <HeroStatement collections={activeCollections.length} frames={totalFrames} places={exposureStops.length} />
+        <HeroStatement collections={activeCollections.length} frames={totalFrames} places={orderedCities.length} />
 
         {/* ── The Ethos — manifesto that writes itself out line by line on
              scroll (clip wipe + lime scan-bar), the moment after the hero ── */}

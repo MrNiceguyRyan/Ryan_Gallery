@@ -61,7 +61,7 @@ export default function HeroStatement({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.55, duration: 0.8 }}
           >
-            One exposure · {places} places
+            Visual Archive · {places} places
           </motion.p>
           <h1 className="font-serif uppercase text-[#F4F4ED] leading-[0.86] tracking-tight" style={{ fontSize: 'clamp(44px, 8vw, 132px)' }}>
             <span className="block overflow-hidden">
@@ -81,7 +81,7 @@ export default function HeroStatement({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.95, duration: 0.8 }}
           >
-            <span>Scroll to close the shutter</span>
+            <span>Scroll to enter the archive</span>
             <span className="w-12 h-px" style={{ background: 'rgba(244,244,237,0.4)' }} />
           </motion.div>
         </div>
