@@ -384,8 +384,6 @@ img {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  /* A hair of blur softens the contour lines so they read as atmosphere. */
-  filter: blur(0.6px);
 }
 
 /* ═══════════════════════════════════════════════════════

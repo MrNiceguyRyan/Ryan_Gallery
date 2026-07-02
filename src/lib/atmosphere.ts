@@ -1,167 +1,214 @@
 /**
- * Flow-field contour atmosphere, drawn on a full-screen <canvas> (the
- * landonorris.com background language).
+ * Flow-field contour atmosphere — a WebGL fragment shader that draws the
+ * iso-lines of an fbm noise field (the landonorris.com background language).
  *
- * Marching-squares contour lines of a slow multi-frequency scalar field —
- * thin flowing curves that drift like a topographic / airflow map. Every 3rd
- * line is an "index contour" (a touch stronger, the map-making convention) and
- * ONE level is drawn in the electric-lime accent — the occasional bright thread
- * through the field. Visible by design: no centre mask, real alpha; the field
- * evolves over time and parallaxes with scroll so it reads as flowing.
+ * The look: thin, smooth, organic flowing curves — nested closed loops and
+ * long S-shaped streamlines, like a topographic map. Sparse (a handful of
+ * lines on screen), ~1px, faint electric-lime on the deep-olive page, with the
+ * occasional segment lit a little brighter. It draws ONLY the lines (transparent
+ * output) so the page's olive shows through — no background-colour seam.
  *
- * Honors prefers-reduced-motion (one static frame). Returns a cleanup fn; also
- * self-stops once the canvas leaves the DOM.
+ * Motion is SCROLL-DRIVEN, not time-driven: scroll position feeds a flow value
+ * that an exponential ease chases (a Lenis-like inertia — the field keeps
+ * flowing a moment after you stop), plus a whisper of idle drift so it's never
+ * fully frozen. A `u_invert` uniform cross-fades the lines to a dark grey for
+ * any light section that opts in via [data-atmos-theme="light"] (dormant while
+ * the site is all-dark). Honors prefers-reduced-motion (one static frame).
+ *
+ * Exports `startAtmosphere(canvas): () => void` — the contract SiteAtmosphere
+ * (home/about) and travel.astro rely on.
  */
 
-const CELL = 18; // grid resolution (px)
-const SCALE = 235; // field wavelength (px) — broad, sweeping contours
-const LEVELS = 8;
-const RANGE = 1.7; // field values live in ≈ [-RANGE, RANGE]
-const LIME_LEVEL = 3; // which iso-level is drawn in the accent
+const VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }`;
 
-/* Thin light-olive lines, lighter than the #282c20 page so they read as
- * topography. */
-const STROKE = '150, 158, 120';
-const A_MAIN = 0.26;
-const A_INDEX = 0.46;
-const A_LIME = 0.34;
+const FRAG = `#extension GL_OES_standard_derivatives : enable
+precision highp float;
+uniform vec2  u_res;
+uniform float u_flow;    // flow amount (scroll-driven + idle drift)
+uniform float u_invert;  // 0 = dark section (lime lines) → 1 = light section (grey)
+uniform vec3  u_lime;    // brand accent, 0..1
 
-/* Scalar field — four slow terms → organic, non-repeating terrain; the time
- * coefficients give a perceptible-but-calm flow (periods ~80-160s). */
-const field = (nx: number, ny: number, t: number) =>
-  Math.sin(nx * 1.6 + t * 0.06) * Math.cos(ny * 1.4 - t * 0.05) +
-  0.55 * Math.sin((nx + ny) * 1.0 + t * 0.04) +
-  0.45 * Math.cos((nx - ny) * 1.7 - t * 0.045);
+/* ---- tunables ---- */
+const float FIELD_SCALE = 2.5;   // zoom of the noise field
+const float DENSITY     = 12.0;  // iso-line count (higher = denser)
+const float LINE_ALPHA  = 0.16;  // base line opacity on the olive page
+const int   OCTAVES     = 5;     // fbm detail
+/* ------------------ */
+
+const vec3 LINE_GREY = vec3(0.42, 0.44, 0.36); // lines over a light section
+
+vec3 permute(vec3 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+float snoise(vec2 v){
+  const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                     -0.577350269189626, 0.024390243902439);
+  vec2 i  = floor(v + dot(v, C.yy));
+  vec2 x0 = v - i + dot(i, C.xx);
+  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+  vec4 x12 = x0.xyxy + C.xxzz; x12.xy -= i1;
+  i = mod(i, 289.0);
+  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+  vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+  m = m*m; m = m*m;
+  vec3 x = 2.0 * fract(p * C.www) - 1.0;
+  vec3 h = abs(x) - 0.5; vec3 ox = floor(x + 0.5); vec3 a0 = x - ox;
+  m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+  vec3 g;
+  g.x  = a0.x*x0.x + h.x*x0.y;
+  g.yz = a0.yz*x12.xz + h.yz*x12.yw;
+  return 130.0 * dot(m, g);
+}
+float fbm(vec2 p){
+  float v = 0.0, a = 0.5;
+  for(int i = 0; i < OCTAVES; i++){ v += a*snoise(p); p *= 2.0; a *= 0.5; }
+  return v;
+}
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / u_res;
+  uv.x *= u_res.x / u_res.y;
+
+  // Scroll-driven advection of the field.
+  float field = fbm(uv * FIELD_SCALE + vec2(u_flow, u_flow * 0.4));
+
+  // Iso-lines: distance to the nearest equally-spaced threshold, AA'd by the
+  // field's screen-space gradient (fwidth) so lines stay ~1px at any zoom.
+  float f = fract(field * DENSITY);
+  float d = min(f, 1.0 - f) / DENSITY;
+  float wd = fwidth(field);
+  float line = 1.0 - smoothstep(0.0, wd * 1.5, d);
+
+  // A slow second field lifts a few segments brighter — one line "lit up".
+  float boost = smoothstep(0.55, 0.9, snoise(uv * 0.6 + u_flow * 0.3)) * 0.12;
+
+  vec3 col = mix(u_lime, LINE_GREY, u_invert);
+  float alpha = clamp(line * (LINE_ALPHA + boost), 0.0, 1.0);
+  gl_FragColor = vec4(col, alpha); // straight alpha (premultipliedAlpha:false)
+}`;
 
 export function startAtmosphere(canvas: HTMLCanvasElement): () => void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return () => {};
+  const gl = canvas.getContext('webgl', {
+    alpha: true,
+    premultipliedAlpha: false,
+    antialias: true,
+    depth: false,
+    powerPreference: 'low-power',
+  }) as WebGLRenderingContext | null;
+  if (!gl) return () => {}; // no WebGL → page olive shows, no lines
+
+  gl.getExtension('OES_standard_derivatives'); // fwidth in the frag shader
 
   const reduce =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Lime follows the live accent var (electric lime by default).
-  const root = getComputedStyle(document.documentElement);
-  const cssVar = (name: string, fb: string) => root.getPropertyValue(name).trim() || fb;
-  const LIME = `${cssVar('--accent-r', '210')}, ${cssVar('--accent-g', '255')}, ${cssVar('--accent-b', '0')}`;
+  const compile = (type: number, src: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('atmosphere shader:', gl.getShaderInfoLog(s));
+    }
+    return s;
+  };
+  const prog = gl.createProgram()!;
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
 
-  let w = 0;
-  let h = 0;
-  let cols = 0;
-  let rows = 0;
-  let vals = new Float32Array(0);
+  // One big fullscreen triangle.
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes = gl.getUniformLocation(prog, 'u_res');
+  const uFlow = gl.getUniformLocation(prog, 'u_flow');
+  const uInvert = gl.getUniformLocation(prog, 'u_invert');
+  const uLime = gl.getUniformLocation(prog, 'u_lime');
+
+  // Lime from the live accent var.
+  const root = getComputedStyle(document.documentElement);
+  const cv = (n: string, f: number) => {
+    const v = parseFloat(root.getPropertyValue(n));
+    return (Number.isFinite(v) ? v : f) / 255;
+  };
+  const lime: [number, number, number] = [cv('--accent-r', 210), cv('--accent-g', 255), cv('--accent-b', 0)];
+
   const resize = () => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    w = canvas.clientWidth || window.innerWidth;
-    h = canvas.clientHeight || window.innerHeight;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cols = Math.ceil(w / CELL);
-    rows = Math.ceil(h / CELL);
-    vals = new Float32Array((cols + 1) * (rows + 1));
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5); // fragment-heavy → cap
+    canvas.width = Math.round((canvas.clientWidth || window.innerWidth) * dpr);
+    canvas.height = Math.round((canvas.clientHeight || window.innerHeight) * dpr);
+    gl.viewport(0, 0, canvas.width, canvas.height);
   };
   resize();
   window.addEventListener('resize', resize);
 
-  const render = (t: number, scroll: number) => {
-    ctx.clearRect(0, 0, w, h);
-    const yOff = scroll * 0.12; // terrain travels up as the page scrolls down
-    const STEP = (2 * RANGE) / LEVELS;
+  // Light-section inversion — only wired if any section opts in (dormant on the
+  // all-dark site). Kept cheap: a cached node list, checked against scroll.
+  let lightEls: HTMLElement[] = [];
+  const scanLight = () => {
+    lightEls = Array.from(document.querySelectorAll<HTMLElement>('[data-atmos-theme="light"]'));
+  };
+  scanLight();
 
-    // Sample the field at every grid vertex once (reused across all levels).
-    for (let iy = 0; iy <= rows; iy++) {
-      const ny = (iy * CELL + yOff) / SCALE;
-      const base = iy * (cols + 1);
-      for (let ix = 0; ix <= cols; ix++) {
-        vals[base + ix] = field((ix * CELL) / SCALE, ny, t);
+  let flow = 0;
+  let flowTarget = 0;
+  let invert = 0;
+  let invertTarget = 0;
+  let scrollY = window.scrollY || 0;
+
+  const onScroll = () => { scrollY = window.scrollY || 0; };
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  const updateTargets = () => {
+    flowTarget = scrollY * 0.0015; // scroll distance → flow (small = slow)
+    if (lightEls.length) {
+      const mid = scrollY + window.innerHeight / 2;
+      let light = false;
+      for (const el of lightEls) {
+        const top = el.offsetTop;
+        if (mid >= top && mid < top + el.offsetHeight) { light = true; break; }
       }
+      invertTarget = light ? 1 : 0;
     }
+  };
 
-    const main = new Path2D();
-    const index = new Path2D();
-    const lime = new Path2D();
-
-    for (let l = 0; l < LEVELS; l++) {
-      const v = -RANGE + (l + 0.5) * STEP;
-      const path = l === LIME_LEVEL ? lime : l % 3 === 0 ? index : main;
-      for (let iy = 0; iy < rows; iy++) {
-        const rowi = iy * (cols + 1);
-        const nrow = rowi + cols + 1;
-        const y0 = iy * CELL;
-        const y1 = y0 + CELL;
-        for (let ix = 0; ix < cols; ix++) {
-          const a = vals[rowi + ix];      // top-left
-          const b = vals[rowi + ix + 1];  // top-right
-          const c = vals[nrow + ix + 1];  // bottom-right
-          const d = vals[nrow + ix];      // bottom-left
-          let cse = 0;
-          if (a >= v) cse |= 8;
-          if (b >= v) cse |= 4;
-          if (c >= v) cse |= 2;
-          if (d >= v) cse |= 1;
-          if (cse === 0 || cse === 15) continue;
-
-          const x0 = ix * CELL;
-          const x1 = x0 + CELL;
-          const T = () => [x0 + (CELL * (v - a)) / (b - a), y0] as const;
-          const R = () => [x1, y0 + (CELL * (v - b)) / (c - b)] as const;
-          const B = () => [x0 + (CELL * (v - d)) / (c - d), y1] as const;
-          const L = () => [x0, y0 + (CELL * (v - a)) / (d - a)] as const;
-          const seg = (p: readonly [number, number], q: readonly [number, number]) => {
-            path.moveTo(p[0], p[1]);
-            path.lineTo(q[0], q[1]);
-          };
-
-          switch (cse) {
-            case 1: case 14: seg(L(), B()); break;
-            case 2: case 13: seg(B(), R()); break;
-            case 3: case 12: seg(L(), R()); break;
-            case 4: case 11: seg(T(), R()); break;
-            case 6: case 9: seg(T(), B()); break;
-            case 7: case 8: seg(T(), L()); break;
-            case 5: seg(T(), L()); seg(B(), R()); break; // saddle
-            case 10: seg(T(), R()); seg(B(), L()); break; // saddle
-          }
-        }
-      }
-    }
-
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(${STROKE}, ${A_MAIN})`;
-    ctx.stroke(main);
-    ctx.strokeStyle = `rgba(${STROKE}, ${A_INDEX})`;
-    ctx.stroke(index);
-    // The lime thread — a hair thicker with a soft glow so it reads as accent.
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = `rgba(${LIME}, ${A_LIME})`;
-    ctx.shadowColor = `rgba(${LIME}, 0.5)`;
-    ctx.shadowBlur = 6;
-    ctx.stroke(lime);
-    ctx.shadowBlur = 0;
+  const draw = (uFlowVal: number) => {
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.uniform1f(uFlow, uFlowVal);
+    gl.uniform1f(uInvert, invert);
+    gl.uniform3f(uLime, lime[0], lime[1], lime[2]);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
   let raf = 0;
-  let last = 0;
+  let t0 = -1;
   const stop = () => {
     cancelAnimationFrame(raf);
     window.removeEventListener('resize', resize);
+    window.removeEventListener('scroll', onScroll);
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
   };
 
   if (reduce) {
-    render(0, 0);
+    draw(0); // static iso-lines, no flow
   } else {
     const loop = (now: number) => {
-      if (!canvas.isConnected) {
-        stop();
-        return;
-      }
-      if (now - last >= 33) {
-        last = now;
-        render(now * 0.001, window.scrollY || window.pageYOffset || 0);
-      }
+      if (!canvas.isConnected) { stop(); return; }
       raf = requestAnimationFrame(loop);
+      if (document.hidden) return;
+      if (t0 < 0) t0 = now;
+      const elapsed = (now - t0) * 0.001;
+      updateTargets();
+      // Exponential ease → inertia (keeps flowing a beat after scroll stops).
+      flow += (flowTarget - flow) * 0.06;
+      invert += (invertTarget - invert) * 0.08;
+      draw(flow + elapsed * 0.02); // + a whisper of idle drift
     };
     raf = requestAnimationFrame(loop);
   }
