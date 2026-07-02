@@ -29,10 +29,10 @@ uniform float u_invert;  // 0 = dark section (lime lines) → 1 = light section 
 uniform vec3  u_lime;    // brand accent, 0..1
 
 /* ---- tunables ---- */
-const float FIELD_SCALE = 2.5;   // zoom of the noise field
-const float DENSITY     = 12.0;  // iso-line count (higher = denser)
-const float LINE_ALPHA  = 0.16;  // base line opacity on the olive page
-const int   OCTAVES     = 5;     // fbm detail
+const float FIELD_SCALE = 1.35;  // zoom of the noise field (smaller = bigger forms)
+const float DENSITY     = 3.5;   // iso-line count (higher = denser)
+const float LINE_ALPHA  = 0.22;  // base line opacity on the olive page
+const int   OCTAVES     = 2;     // fbm detail (low = smooth sweeping curves)
 /* ------------------ */
 
 const vec3 LINE_GREY = vec3(0.42, 0.44, 0.36); // lines over a light section
