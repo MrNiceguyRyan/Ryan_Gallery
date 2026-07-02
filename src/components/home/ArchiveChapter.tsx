@@ -56,9 +56,11 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [1.06, 1, 1, 0.99]);
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-22%']);
 
-  // Fanned-card settle + keyword-ignite (last word lights to lime on scroll-in).
-  const fanX = useTransform(scrollYProgress, [0, 0.32], [index % 2 === 0 ? -28 : 28, 0]);
-  const fanRotate = useTransform(scrollYProgress, [0, 0.32], [index % 2 === 0 ? -1.2 : 1.2, 0]);
+  // Slide-in from the right — each collection swipes in from off-frame right to
+  // its place as it scrolls up into view, then settles (landonorris cadence).
+  // The existing `opacity` transform carries the fade; `enterX` the travel.
+  const enterX = useTransform(scrollYProgress, [0, 0.42], ['46%', '0%']);
+  // Keyword-ignite (last word lights to lime on scroll-in) stays.
   const igniteColor = useTransform(scrollYProgress, [0.3, 0.52], ['rgba(244,244,237,1)', 'rgb(210,255,0)']);
   const nameParts = collection.name.trim().split(/\s+/);
   const igniteWord = nameParts.length > 1 ? nameParts[nameParts.length - 1] : collection.name.trim();
@@ -174,7 +176,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
       <motion.section
         id={id}
         ref={chapterRef}
-        style={{ opacity, x: reduce ? 0 : fanX, rotate: reduce ? 0 : fanRotate }}
+        style={{ opacity, x: reduce ? 0 : enterX }}
         className="relative pb-16 lg:pb-28"
       >
         <div className="lg:grid lg:grid-cols-12 lg:gap-12 lg:items-center">
@@ -228,7 +230,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     <motion.section
       id={id}
       ref={chapterRef}
-      style={{ opacity, x: reduce ? 0 : fanX, rotate: reduce ? 0 : fanRotate }}
+      style={{ opacity, x: reduce ? 0 : enterX }}
       className="relative pb-12 lg:pb-16"
     >
       <motion.div

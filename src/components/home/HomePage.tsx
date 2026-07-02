@@ -5,6 +5,7 @@ import type { Collection } from '../../types';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import HeroStatement from './HeroStatement';
+import StatementReveal from './StatementReveal';
 import ExposureBackground from './ExposureBackground';
 import type { ExposureStop } from '../../lib/exposure';
 import ArchiveChapter from './ArchiveChapter';
@@ -655,6 +656,10 @@ export default function HomePage({ collections }: Props) {
 
         <HeroStatement collections={activeCollections.length} frames={totalFrames} places={exposureStops.length} />
 
+        {/* ── The Ethos — manifesto that writes itself out line by line on
+             scroll (clip wipe + lime scan-bar), the moment after the hero ── */}
+        <StatementReveal />
+
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
 
@@ -756,7 +761,7 @@ export default function HomePage({ collections }: Props) {
             </aside>
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
-            <div className="flex-1 space-y-12 md:space-y-20">
+            <div className="flex-1 space-y-12 md:space-y-20 overflow-x-clip">
               <div ref={selectedWorksRef} className="max-w-2xl">
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-4">
                 <motion.div
