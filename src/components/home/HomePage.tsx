@@ -639,14 +639,15 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── The opening — a minimal page holding a miniature CONTACT SHEET
-             of all collections, which the scroll zooms past full-bleed
-             (pin + scrub). Everything below is inside the archive. ── */}
+        {/* ── The opening — one framed cover punched through a wall of
+             monumental type; the scroll zooms it past full-bleed (pin +
+             scrub). Everything below is inside the archive. ── */}
         <WalkIn
-          covers={orderedCities.map((c) => ({
-            src: c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '',
-            name: c.name.trim(),
-          }))}
+          cover={(() => {
+            const ny = orderedCities.find((c) => /new york/i.test(c.name));
+            const c = ny ?? orderedCities[0];
+            return c?.coverImageUrl ?? c?.photos?.[0]?.imageUrl ?? '';
+          })()}
           places={orderedCities.length}
           frames={totalFrames}
         />
