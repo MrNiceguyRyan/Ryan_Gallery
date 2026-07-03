@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "test": "node scripts/security.test.mjs && node src/lib/jsonLd.test.js",
     "preview": "astro preview",
     "astro": "astro"
   },
