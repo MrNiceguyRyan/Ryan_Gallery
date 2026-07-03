@@ -639,18 +639,17 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── The opening — a minimal page holding one small card, which the
-             scroll zooms past full-bleed (pin + scrub). Everything below this
-             section is "inside the photograph". ── */}
-        {orderedCities[0] && (
-          <WalkIn
-            cover={orderedCities[0].coverImageUrl ?? orderedCities[0].photos?.[0]?.imageUrl ?? ''}
-            name={orderedCities[0].name.trim()}
-            places={orderedCities.length}
-            frames={totalFrames}
-            onOpen={() => setSelectedCollection(orderedCities[0])}
-          />
-        )}
+        {/* ── The opening — a minimal page holding a miniature CONTACT SHEET
+             of all collections, which the scroll zooms past full-bleed
+             (pin + scrub). Everything below is inside the archive. ── */}
+        <WalkIn
+          covers={orderedCities.map((c) => ({
+            src: c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '',
+            name: c.name.trim(),
+          }))}
+          places={orderedCities.length}
+          frames={totalFrames}
+        />
 
         {/* ── The Ethos — the first beat inside the archive world ── */}
         <StatementReveal />
