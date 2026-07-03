@@ -3,21 +3,18 @@ import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion
 import MiniHome from './MiniHome';
 
 /**
- * WalkIn — the site's OPENING: a little FRAME holding a miniature of the site
- * itself, punched through a wall of monumental type.
+ * WalkIn — the site's OPENING: a little screen-shaped FRAME holding a
+ * miniature of the site itself, punched through a wall of monumental type.
  *
- * Inside the box: MiniHome — a photo-free scale-model of the homepage (real
- * collection data, the site's own type/layout; NO images).
- * Outside the box: the bold content — a giant "VISUAL ARCHIVE" bleeding off
- * both edges, an eyebrow, a caption, a scroll cue. The scale contrast (a
- * small precise site-in-a-box against enormous serif) is the impact.
+ * CRISP-ZOOM technique: the mini is rendered at FULL viewport size and the
+ * frame is scaled DOWN (0.3 → 1.0) — we only ever downscale a full-resolution,
+ * GPU-composited layer, so it stays sharp (no upscale blur) and buttery. The
+ * frame is viewport-shaped (a shrunk screen), not an arbitrary portrait card.
  *
- * Scroll = walking in: the frame scales past full-bleed (pin + scrub, CSS
- * sticky in a 260vh runway; Lenis stays the only scroll authority) as the
- * type wall dissolves; everything after this section is the real archive.
- *
- * GPU-only (transform scale). Statically rendered — NEVER mix a framer
- * `initial` transform with a style MotionValue (it freezes).
+ * Inside: MiniHome — a photo-free scale model of the homepage (real data, the
+ * site's own type/layout; NO images). Outside: the bold "VISUAL ARCHIVE" type
+ * wall. Scroll = walking in (pin + scrub, CSS sticky; Lenis is the only scroll
+ * authority); everything after is the real archive.
  */
 export default function WalkIn({
   collections,
@@ -32,21 +29,14 @@ export default function WalkIn({
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  const scale = useTransform(scrollYProgress, [0, 0.85], [1, 4.4], { clamp: true });
-  const radius = useTransform(scrollYProgress, [0, 0.5], [5, 0]);
-  // The type wall + chrome dissolve as the walk begins.
-  const wallOpacity = useTransform(scrollYProgress, [0.02, 0.2], [1, 0]);
-  const wallScale = useTransform(scrollYProgress, [0, 0.2], [1, 1.08]);
+  // DOWNSCALE → 1.0 (never above): crisp + cheap.
+  const scale = useTransform(scrollYProgress, [0, 0.82], [0.3, 1], { clamp: true });
+  const radius = useTransform(scrollYProgress, [0, 0.55], [60, 0]);
+  const frameOpacity = useTransform(scrollYProgress, [0, 0.4], [1, 0]);
+  const wallOpacity = useTransform(scrollYProgress, [0.02, 0.22], [1, 0]);
+  const wallScale = useTransform(scrollYProgress, [0, 0.22], [1, 1.08]);
 
   if (!collections.length) return null;
-
-  const box = 'w-[64vw] aspect-[4/5] md:w-[26vw] md:aspect-[4/5]';
-  const inner = (
-    <>
-      <MiniHome collections={collections} frames={frames} />
-      <div className="absolute inset-0 ring-1 ring-inset ring-white/12 pointer-events-none" />
-    </>
-  );
 
   if (reduce) {
     return (
@@ -57,7 +47,9 @@ export default function WalkIn({
         >
           Visual&nbsp;Archive
         </h1>
-        <div className={`relative overflow-hidden z-10 ${box}`}>{inner}</div>
+        <div className="relative z-10 w-[54vw] aspect-[16/10] overflow-hidden rounded-xl ring-1 ring-white/20">
+          <MiniHome collections={collections} frames={frames} />
+        </div>
         <p className="absolute bottom-[8vh] inset-x-0 text-center text-eyebrow" style={{ color: 'rgba(244,244,237,0.6)' }}>
           A record of light &amp; place — {places} places · {frames} frames
         </p>
@@ -66,10 +58,10 @@ export default function WalkIn({
   }
 
   return (
-    <section ref={ref} className="relative" style={{ height: '260vh' }}>
+    <section ref={ref} className="relative" style={{ height: '240vh' }}>
       <div className="sticky top-0 h-[100svh] overflow-hidden flex items-center justify-center">
         {/* ── The bold OUTSIDE — type wall + chrome, dissolves on scroll ── */}
-        <motion.div className="absolute inset-0 pointer-events-none" style={{ opacity: wallOpacity }}>
+        <motion.div className="absolute inset-0 z-0 pointer-events-none" style={{ opacity: wallOpacity }}>
           <div className="absolute top-[16vh] md:top-[18vh] inset-x-0 text-center">
             <p className="text-eyebrow" style={{ color: 'rgba(244,244,237,0.55)' }}>
               A Photographic Journal · Est. New York
@@ -92,13 +84,17 @@ export default function WalkIn({
           </div>
         </motion.div>
 
-        {/* ── The frame — the site in miniature; punches through the type,
-             scales past full-bleed. ── */}
+        {/* ── The frame — full-viewport mini, scaled DOWN then up to 1.0 ── */}
         <motion.div
-          className={`relative overflow-hidden will-change-transform z-10 ${box}`}
+          className="absolute inset-0 z-10 overflow-hidden will-change-transform"
           style={{ scale, borderRadius: radius, transformOrigin: 'center center' }}
         >
-          {inner}
+          <MiniHome collections={collections} frames={frames} />
+          {/* Frame edge — visible while it's a small card, fades as it fills */}
+          <motion.div
+            className="absolute inset-0 pointer-events-none border-[3px] border-white/25"
+            style={{ opacity: frameOpacity, borderRadius: radius }}
+          />
         </motion.div>
       </div>
     </section>
