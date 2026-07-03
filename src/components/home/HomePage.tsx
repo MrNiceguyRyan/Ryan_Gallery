@@ -4,7 +4,6 @@ import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
 import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
-import HeroStatement from './HeroStatement';
 import StatementReveal from './StatementReveal';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
@@ -640,15 +639,9 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        <HeroStatement collections={activeCollections.length} frames={totalFrames} places={orderedCities.length} />
-
-        {/* ── The Ethos — manifesto that writes itself out line by line on
-             scroll (clip wipe + lime scan-bar), the moment after the hero ── */}
-        <StatementReveal />
-
-        {/* ── Walk-in gateway — pin + scrub: the lead cover scales from a
-             small card to past-full-bleed as you scroll (walking into a
-             photograph), then hands off to the archive. ── */}
+        {/* ── The opening — a minimal page holding one small card, which the
+             scroll zooms past full-bleed (pin + scrub). Everything below this
+             section is "inside the photograph". ── */}
         {orderedCities[0] && (
           <WalkIn
             cover={orderedCities[0].coverImageUrl ?? orderedCities[0].photos?.[0]?.imageUrl ?? ''}
@@ -658,6 +651,9 @@ export default function HomePage({ collections }: Props) {
             onOpen={() => setSelectedCollection(orderedCities[0])}
           />
         )}
+
+        {/* ── The Ethos — the first beat inside the archive world ── */}
+        <StatementReveal />
 
         {/* ── Quiet index marquee — restrained seam into the archive ── */}
         <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
