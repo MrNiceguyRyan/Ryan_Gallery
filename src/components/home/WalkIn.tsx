@@ -2,27 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 
 /**
- * WalkIn — the site's OPENING, rebuilt on the real reference structure:
+ * WalkIn — the site's OPENING.
  *
- * The centre "card" is NOT an independent rotating box. It is a full-viewport
- * WINDOW layer (rounded-rect clip; framer scale 0.6→1 on scroll — downscale-
- * only, crisp) revealing an OVERSIZED FIGURE inside (110% of the window,
- * anchored centre). The pointer-follow is the figure doing a MICRO tilt:
- * rotation capped at ±3° with a coupled translation (tx≈nx·11px, ty≈ny·5px),
- * eased by a 0.08 lerp in one rAF loop — because the figure is bigger than
- * the window and only its middle shows, a tiny tilt reads as the whole card
- * leaning toward the mouse, with no edges exposed.
+ * Stage layers (bottom → top):
+ *   L1 deep-olive ground
+ *   L2 the X-BURST — apex at screen centre, four uneven wedges + four thin
+ *      splinter rays (one clip-path), SOLID lime fill (no gradient), sitting
+ *      BEHIND the card on the outer stage (same world as the giant word),
+ *      slowly aiming at the pointer (damped atan2, 0.04 — lazy, heavy light)
+ *   L3 the CARD — a full-viewport rounded WINDOW (framer scale 0.6→1 on
+ *      scroll, downscale-only = crisp) with real 3D: a perspective wrapper
+ *      tilts it toward the pointer (rotateX/rotateY capped ±5°, 0.08 lerp)
+ *      over a deep soft shadow; inside, an OVERSIZED figure (inset -5%)
+ *      parallax-translates (nx·10px/ny·5px) the opposite depth plane, and the
+ *      cycling city name wipes in TOP-DOWN with mix-blend overlay (light on
+ *      material, not a sticker)
+ *   L4 the giant bottom word (the only other outer element)
+ *   L5 the load preloader (olive sheet, word rises, mask lifts)
  *
- * Inside the figure: the olive card surface, an irregular X-shaped light
- * burst (four wedges, apex at centre, opening outward — the v1 cone language)
- * that aims at the pointer, and the cycling city name wiping in TOP-DOWN with
- * `mix-blend-mode: overlay` so the type reads as light on the material, not a
- * sticker.
- *
- * OUTSIDE the window: nothing but the giant bottom word (and the load
- * preloader). Olive palette throughout so the end-dim hands off seamlessly
- * to the dark pages below. Satellites are driven by direct writes (framer
- * bindings on siblings went stale across cycling re-renders).
+ * All pointer motion runs in ONE rAF loop with lerp damping (never assign
+ * directly). Satellites are scroll-driven by direct writes (framer bindings
+ * on siblings went stale across cycling re-renders). At the end of the walk
+ * the card dims to the page olive — lights out, enter the archive.
  */
 
 const GROUND = '#20241a'; // a step darker than the page, so the lit card pops
@@ -31,10 +32,18 @@ const OFF = '#F4F4ED';
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const EXPO = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
-/* Irregular X — four wedges, apex at centre, opening outward. Arm widths and
- * edge anchors are deliberately uneven. */
-const X_CLIP =
-  'polygon(50% 50%, 100% 16%, 100% 34%, 50% 50%, 98% 100%, 76% 100%, 50% 50%, 0% 84%, 0% 64%, 50% 50%, 5% 0%, 24% 0%)';
+/* Detailed irregular X — four uneven main wedges + four thin splinter rays,
+ * apex at centre, in a single clip-path. */
+const X_CLIP = [
+  '50% 50%', '100% 18%', '100% 30%', // NE main
+  '50% 50%', '100% 7%', '100% 10%', // NE splinter
+  '50% 50%', '96% 100%', '82% 100%', // SE main
+  '50% 50%', '71% 100%', '68% 100%', // SE splinter
+  '50% 50%', '0% 84%', '0% 72%', // SW main
+  '50% 50%', '0% 94%', '0% 91%', // SW splinter
+  '50% 50%', '4% 0%', '17% 0%', // NW main
+  '50% 50%', '29% 0%', '32% 0%', // NW splinter
+].join(', ');
 
 export default function WalkIn({
   collections,
@@ -46,6 +55,7 @@ export default function WalkIn({
   frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const tiltRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
   const beamRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -68,32 +78,35 @@ export default function WalkIn({
     return () => window.clearInterval(t);
   }, [reduce, collections.length]);
 
-  // ── Pointer follow — ONE rAF loop, two motions ──
-  // 1) The oversized figure micro-tilts toward the pointer: ±3° max, coupled
-  //    ±11px/±5px translation, 0.08 lerp (spring feel — never assign direct).
-  // 2) The X-burst aims at the pointer (atan2 to screen centre, damped,
-  //    shortest angular path).
+  // ── Pointer follow — ONE rAF loop, three motions ──
+  // 1) card 3D tilt: rotateX/rotateY capped ±5°, 0.08 lerp
+  // 2) figure parallax: translate nx·10 / ny·5, 0.08 lerp (opposite plane)
+  // 3) X-burst aim: damped atan2, 0.04 — deliberately slower, heavy light
   useEffect(() => {
     if (reduce) return;
-    let tRot = 0, cRot = 0, tX = 0, cX = 0, tY = 0, cY = 0;
-    let tAim = -20, cAim = -20;
+    let tTX = 0, cTX = 0, tTY = 0, cTY = 0; // card tilt (deg)
+    let tFX = 0, cFX = 0, tFY = 0, cFY = 0; // figure parallax (px)
+    let tAim = -20, cAim = -20; // burst angle (deg)
     let raf = 0;
     const onMove = (e: MouseEvent) => {
       const nx = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2); // -1..1
       const ny = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
-      tRot = nx * 3; // ±3° — the whole trick is how SMALL this is
-      tX = nx * 11;
-      tY = ny * 5;
+      tTY = nx * 5; // rotateY follows horizontal
+      tTX = -ny * 5; // rotateX follows vertical (inverted — top leans back)
+      tFX = nx * 10;
+      tFY = ny * 5;
       tAim = (Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2) * 180) / Math.PI;
     };
     const loop = () => {
-      cRot += (tRot - cRot) * 0.08;
-      cX += (tX - cX) * 0.08;
-      cY += (tY - cY) * 0.08;
+      cTX += (tTX - cTX) * 0.08;
+      cTY += (tTY - cTY) * 0.08;
+      cFX += (tFX - cFX) * 0.08;
+      cFY += (tFY - cFY) * 0.08;
       let d = tAim - cAim;
       d = ((d + 540) % 360) - 180;
-      cAim += d * 0.08;
-      if (figureRef.current) figureRef.current.style.transform = `translate(${cX}px, ${cY}px) rotate(${cRot}deg)`;
+      cAim += d * 0.04; // slower — the light is heavy
+      if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${cTX}deg) rotateY(${cTY}deg)`;
+      if (figureRef.current) figureRef.current.style.transform = `translate(${cFX}px, ${cFY}px)`;
       if (beamRef.current) beamRef.current.style.transform = `rotate(${cAim}deg)`;
       raf = requestAnimationFrame(loop);
     };
@@ -131,10 +144,29 @@ export default function WalkIn({
 
   const stage = (
     <>
-      {/* L1 — deep-olive ground. The outer page holds NOTHING but the word. */}
+      {/* L1 — deep-olive ground */}
       <div className="absolute inset-0" style={{ background: GROUND }} />
 
-      {/* L2 — the giant bottom word (the only outer element) */}
+      {/* L2 — the X-burst: BEHIND the card, on the outer stage with the giant
+           word. Solid lime, no gradient; slow damped aim. */}
+      <div
+        ref={beamRef}
+        aria-hidden="true"
+        className="absolute z-[5] pointer-events-none"
+        style={{
+          left: '-20%',
+          top: '-20%',
+          width: '140%',
+          height: '140%',
+          transform: 'rotate(-20deg)',
+          transformOrigin: 'center center',
+          clipPath: `polygon(${X_CLIP})`,
+          background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.34)',
+          willChange: 'transform',
+        }}
+      />
+
+      {/* L4 — giant word across the bottom (outer stage, in front) */}
       <div
         ref={wordRef}
         aria-hidden="true"
@@ -159,92 +191,77 @@ export default function WalkIn({
         </span>
       </div>
 
-      {/* L3 — the WINDOW: full-viewport rounded clip, scaled down (crisp).
-           It does not rotate — the figure inside does. */}
-      <motion.div
-        className="absolute inset-0 z-10 overflow-hidden will-change-transform"
-        style={{
-          scale: reduce ? 0.62 : scale,
-          borderRadius: reduce ? 44 : radius,
-          transformOrigin: 'center center',
-        }}
-      >
-        {/* The FIGURE — oversized (110%), micro-tilting toward the pointer */}
-        <div
-          ref={figureRef}
-          className="absolute will-change-transform"
-          style={{ inset: '-5%', background: CARD }}
-        >
-          {/* The X burst — apex at centre, four irregular wedges opening
-               outward, aiming at the pointer */}
-          <div
-            ref={beamRef}
-            aria-hidden="true"
-            className="absolute pointer-events-none"
+      {/* L3 — the CARD in real 3D: perspective wrapper → tilt layer → window */}
+      <div className="absolute inset-0 z-10" style={{ perspective: '1400px' }}>
+        <div ref={tiltRef} className="absolute inset-0 will-change-transform" style={{ transformStyle: 'preserve-3d' }}>
+          <motion.div
+            className="absolute inset-0 overflow-hidden will-change-transform"
             style={{
-              left: '-20%',
-              top: '-20%',
-              width: '140%',
-              height: '140%',
-              transform: 'rotate(-20deg)',
+              scale: reduce ? 0.62 : scale,
+              borderRadius: reduce ? 44 : radius,
               transformOrigin: 'center center',
-              clipPath: X_CLIP,
-              background: `radial-gradient(closest-side, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.4), rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.12) 70%, transparent)`,
-              willChange: 'transform',
+              boxShadow: '0 42px 110px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4)',
             }}
-          />
-
-          {/* Card chrome — tiny editorial labels (part of the material) */}
-          <div
-            className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-            style={{ color: 'rgba(244,244,237,0.5)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
           >
-            <span>Journal Gallery</span>
-            <span style={{ color: LIME }}>
-              Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
-            </span>
-          </div>
-
-          {/* Cycling city name — top-down wipe; OVERLAY blend so the type
-               reads as light on the surface, not a sticker */}
-          <div
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            style={{ mixBlendMode: 'overlay' }}
-          >
-            <span
-              key={reduce ? 'static' : cityIdx}
-              className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-              style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+            {/* The FIGURE — oversized, parallax-translating (opposite plane) */}
+            <div
+              ref={figureRef}
+              className="absolute will-change-transform"
+              style={{ inset: '-5%', background: CARD }}
             >
-              {city.name}
-            </span>
-            <span
-              key={reduce ? 'static-f' : `f${cityIdx}`}
-              className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-              style={{ color: 'rgba(244,244,237,0.75)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
-            >
-              {String(city.frames).padStart(2, '0')} frames
-            </span>
-          </div>
+              {/* Card chrome — tiny editorial labels (part of the material) */}
+              <div
+                className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                style={{ color: 'rgba(244,244,237,0.5)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
+              >
+                <span>Journal Gallery</span>
+                <span style={{ color: LIME }}>
+                  Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
+                </span>
+              </div>
 
-          {/* Bottom-of-card caption */}
-          <div
-            className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-            style={{ color: 'rgba(244,244,237,0.4)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
-          >
-            <span>A record of light &amp; place</span>
-            <span>{frames} frames</span>
-          </div>
+              {/* Cycling city name — top-down wipe; OVERLAY blend (light on
+                   material, not a sticker) */}
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center"
+                style={{ mixBlendMode: 'overlay' }}
+              >
+                <span
+                  key={reduce ? 'static' : cityIdx}
+                  className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
+                  style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+                >
+                  {city.name}
+                </span>
+                <span
+                  key={reduce ? 'static-f' : `f${cityIdx}`}
+                  className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
+                  style={{ color: 'rgba(244,244,237,0.75)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
+                >
+                  {String(city.frames).padStart(2, '0')} frames
+                </span>
+              </div>
+
+              {/* Bottom-of-card caption */}
+              <div
+                className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                style={{ color: 'rgba(244,244,237,0.4)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
+              >
+                <span>A record of light &amp; place</span>
+                <span>{frames} frames</span>
+              </div>
+            </div>
+
+            {/* Hairline window edge */}
+            <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
+
+            {/* Lights out — dims to the page olive as the window fills */}
+            {!reduce && (
+              <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />
+            )}
+          </motion.div>
         </div>
-
-        {/* Hairline window edge */}
-        <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
-
-        {/* Lights out — dims to the page olive as the window fills */}
-        {!reduce && (
-          <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />
-        )}
-      </motion.div>
+      </div>
 
       {/* Preloader — olive sheet with the giant word rising; lifts like a mask */}
       {phase !== 'in' && !reduce && (
