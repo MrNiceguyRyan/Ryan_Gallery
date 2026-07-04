@@ -30,7 +30,7 @@ const GROUND = '#20241a'; // a step darker than the page, so the lit card pops
 const CARD = '#30352a'; // the site's lifted-olive surface
 const OFF = '#F4F4ED';
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
-const EXPO = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'; // ease-out expo — the silky rise
 
 /* Detailed irregular X — four uneven main wedges + four thin splinter rays,
  * apex at centre, in a single clip-path. */
@@ -60,15 +60,39 @@ export default function WalkIn({
   const beamRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
 
-  // ── Load phases: pre (preloader word up) → lift (mask up) → in ──
-  const [phase, setPhase] = useState<'pre' | 'lift' | 'in'>('pre');
+  // ── Load sequence (the reference's four beats, transition-driven) ──
+  //  blank (0–0.3s: bare sheet) → rise (tone-on-tone word rises + fades in)
+  //  → HOLD until window.load AND a 1.6s minimum dwell (4s safety cap)
+  //  → done (the sheet FADES OUT — opacity, not a slide — while the stage
+  //  reveals beneath) → gone (unmount).
+  const [phase, setPhase] = useState<'blank' | 'rise' | 'done' | 'gone'>('blank');
   useEffect(() => {
-    if (reduce) { setPhase('in'); return; }
-    const t1 = window.setTimeout(() => setPhase('lift'), 1350);
-    const t2 = window.setTimeout(() => setPhase('in'), 2250);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    if (reduce) { setPhase('gone'); return; }
+    let minOk = false;
+    let loadOk = document.readyState === 'complete';
+    let fired = false;
+    let goneT = 0;
+    const reveal = () => {
+      if (fired || !minOk || !loadOk) return;
+      fired = true;
+      setPhase('done');
+      goneT = window.setTimeout(() => setPhase('gone'), 900);
+    };
+    const riseT = window.setTimeout(() => setPhase('rise'), 300);
+    const minT = window.setTimeout(() => { minOk = true; reveal(); }, 1600);
+    const onLoad = () => { loadOk = true; reveal(); };
+    if (!loadOk) window.addEventListener('load', onLoad);
+    // Never strand the visitor behind the sheet (slow network ≠ broken page).
+    const capT = window.setTimeout(() => { minOk = true; loadOk = true; reveal(); }, 4000);
+    return () => {
+      window.clearTimeout(riseT);
+      window.clearTimeout(minT);
+      window.clearTimeout(capT);
+      window.clearTimeout(goneT);
+      window.removeEventListener('load', onLoad);
+    };
   }, [reduce]);
-  const revealed = phase !== 'pre';
+  const revealed = phase === 'done' || phase === 'gone';
 
   // ── Cycling city names inside the card ──
   const [cityIdx, setCityIdx] = useState(0);
@@ -263,22 +287,35 @@ export default function WalkIn({
         </div>
       </div>
 
-      {/* Preloader — olive sheet with the giant word rising; lifts like a mask */}
-      {phase !== 'in' && !reduce && (
+      {/* Preloader — olive sheet; the tone-on-tone word rises from below
+           (transition-driven, not keyframes), holds until resources are
+           ready, then the whole sheet FADES away over the settled stage. */}
+      {phase !== 'gone' && !reduce && (
         <div
           className="absolute inset-0 z-40 overflow-hidden"
           style={{
             background: GROUND,
-            transform: phase === 'lift' ? 'translateY(-100%)' : 'translateY(0)',
-            transition: `transform 0.9s ${EXPO}`,
+            opacity: phase === 'done' ? 0 : 1,
+            pointerEvents: phase === 'done' ? 'none' : 'auto',
+            transition: `opacity 0.8s ${EXPO}`,
           }}
         >
           <div
-            className="absolute inset-x-0 bottom-[-1.5vw] text-center font-serif uppercase whitespace-nowrap leading-none"
-            style={{ fontSize: '13.5vw', letterSpacing: '-0.03em', color: 'rgba(244,244,237,0.09)' }}
+            className="absolute inset-x-0 bottom-[-1.5vw] text-center font-serif uppercase whitespace-nowrap leading-none overflow-hidden"
+            style={{ fontSize: '13.5vw', letterSpacing: '-0.03em' }}
           >
-            <span className="block overflow-hidden">
-              <span className="block walkin-rise">Visual&nbsp;Archive</span>
+            <span
+              className="block"
+              style={{
+                // Tone-on-tone: the card surface on the ground sheet — the
+                // word barely surfaces out of the dark, not a hard block.
+                color: CARD,
+                transform: phase === 'blank' ? 'translateY(110%)' : 'translateY(0)',
+                opacity: phase === 'blank' ? 0 : 1,
+                transition: `transform 1s ${EXPO}, opacity 1s ${EXPO}`,
+              }}
+            >
+              Visual&nbsp;Archive
             </span>
           </div>
         </div>

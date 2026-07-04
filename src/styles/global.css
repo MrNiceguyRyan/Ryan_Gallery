@@ -382,12 +382,7 @@ img {
   from { clip-path: inset(0 0 100% 0); }
   to   { clip-path: inset(0 0 0% 0); }
 }
-/* Preloader giant word: rises from below its overflow-hidden line box. */
-.walkin-rise { animation: walkin-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
-@keyframes walkin-rise {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
+/* (Preloader word rise is transition-driven in WalkIn.tsx, not keyframes.) */
 
 :root { --bg-base: #282c20; }
 
