@@ -367,6 +367,24 @@ export default function HomePage({ collections }: Props) {
   // Kinetic type for the Selected Works heading (hero language, smaller dose).
   const swKinetic = useVelocitySkew(4, 18);
 
+  // Nav pills (Map/About) stay hidden over the opening stage and fade in once
+  // the walk-in hands off to the inner pages. Direct writes off scroll — no
+  // React state churn, works identically under Lenis.
+  const navPillsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = navPillsRef.current;
+    if (!el) return;
+    el.style.transition = 'opacity 0.5s ease';
+    const apply = () => {
+      const show = window.scrollY > window.innerHeight * 1.15;
+      el.style.opacity = show ? '1' : '0';
+      el.style.pointerEvents = show ? 'auto' : 'none';
+    };
+    apply();
+    window.addEventListener('scroll', apply, { passive: true });
+    return () => window.removeEventListener('scroll', apply);
+  }, []);
+
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Inertial smooth scroll for the homepage. framer's useScroll reads the same
@@ -614,13 +632,13 @@ export default function HomePage({ collections }: Props) {
             Ryan Xu
           </motion.button>
 
-          <div className="flex items-center gap-2 md:gap-3">
+          <div ref={navPillsRef} className="flex items-center gap-2 md:gap-3">
             <Magnetic strength={0.5}>
               <motion.a
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/travel"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white mix-blend-difference"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
               >
                 Map
               </motion.a>
@@ -631,7 +649,7 @@ export default function HomePage({ collections }: Props) {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/about"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white mix-blend-difference"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
               >
                 About
               </motion.a>

@@ -2,32 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 
 /**
- * WalkIn — the site's OPENING, rebuilt on the iventions.com hero mechanics:
+ * WalkIn — the site's OPENING (iventions mechanics, re-graded to the site's
+ * dark-olive palette so it flows into the pages below).
  *
- * Layers (bottom → top): cream ground · a static purple diagonal light band
- * (scroll parallax only, not mouse) · the rounded centre CARD (cycling the
- * archive's real city names — no photos) with a SPOTLIGHT CONE inside that
- * rotates to aim at the pointer (atan2 → damped rAF interpolation, 0.08) ·
- * top chrome (masked-line title, two flanking copy blocks) · the giant
- * "VISUAL ARCHIVE" word across the bottom.
+ * Layers (bottom → top): deep-olive ground · a big diagonal LIGHT SHAFT that
+ * ROTATES to aim at the pointer (this is the mouse-follow element — a
+ * searchlight sweeping the stage behind the card; atan2 to screen centre +
+ * damped rAF, shortest angular path) · the centre card (lighter olive)
+ * cycling the archive's real city names with a top-down WIPE · top chrome
+ * (masked-line title, flanking copy) · the giant "VISUAL ARCHIVE" word.
  *
- * Load sequence: cream preloader with the giant word rising from the bottom,
- * hold, mask lifts to reveal the hero, title lines rise with 0.1s stagger
- * (all CSS transitions on a phase state — no framer mount animations, which
- * freeze when mixed with style MotionValues).
+ * Load: olive preloader, giant word rises, the sheet lifts like a mask,
+ * title lines rise staggered (CSS transitions on a phase state — no framer
+ * mount anims, which freeze when mixed with style MotionValues).
  *
  * Scroll (pin + scrub, CSS sticky; Lenis is the only scroll authority): the
- * card — rendered at FULL viewport size and only ever scaled DOWN (0.6 → 1,
- * crisp by construction) — grows to fill; the purple band parallaxes, the
- * giant word counter-translates, the chrome dissolves, and at the end the
- * card interior dims to the site's olive: lights out, enter the archive.
+ * card — full-viewport-sized, only ever scaled DOWN (0.6 → 1, crisp) — grows
+ * to full-bleed; the giant word counter-drifts; the chrome dissolves; at the
+ * end the card dims to the page olive: lights out, enter the archive.
+ * Satellite layers are driven by ONE scroll subscription writing styles
+ * directly (framer bindings on siblings went stale across cycling re-renders).
  */
 
-const CREAM = '#F3EFEB';
-const CARD = '#EAE3DC';
-const PURPLE = '#9C93E8';
-const NEON = '#E0FF98';
-const INK = '#1E1E1E';
+const GROUND = '#20241a'; // a step darker than the page, so the lit card pops
+const CARD = '#30352a'; // the site's lifted-olive surface
+const OFF = '#F4F4ED';
+const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const EXPO = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 export default function WalkIn({
@@ -40,8 +40,7 @@ export default function WalkIn({
   frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const beamRef = useRef<HTMLDivElement>(null);
+  const shaftRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
 
   // ── Load phases: pre (preloader word up) → lift (mask up) → in ──
@@ -62,24 +61,23 @@ export default function WalkIn({
     return () => window.clearInterval(t);
   }, [reduce, collections.length]);
 
-  // ── The spotlight cone aims at the pointer (atan2 + damped rAF) ──
+  // ── The background light shaft aims at the pointer ──
+  // atan2 relative to the screen centre + damped rAF interpolation (0.08 —
+  // the damping IS the silkiness; never assign directly). Shortest angular
+  // path so crossing ±180° never spins the long way round.
   useEffect(() => {
     if (reduce) return;
-    let target = -32;
-    let current = -32;
+    let target = -22;
+    let current = -22;
     let raf = 0;
     const onMove = (e: MouseEvent) => {
-      const el = cardRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      target = (Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180) / Math.PI;
+      target = (Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2) * 180) / Math.PI;
     };
     const loop = () => {
-      // Shortest angular path so crossing ±180° never spins the long way.
       let d = target - current;
       d = ((d + 540) % 360) - 180;
-      current += d * 0.08; // the damping IS the silkiness — never assign directly
-      if (beamRef.current) beamRef.current.style.transform = `rotate(${current}deg)`;
+      current += d * 0.08;
+      if (shaftRef.current) shaftRef.current.style.transform = `rotate(${current}deg)`;
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -90,16 +88,11 @@ export default function WalkIn({
     };
   }, [reduce]);
 
-  // ── Scroll scrub ──
+  // ── Scroll scrub — card via framer (proven); satellites via direct writes ──
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
   const scale = useTransform(scrollYProgress, [0, 0.8], [0.6, 1], { clamp: true });
   const radius = useTransform(scrollYProgress, [0, 0.6], [44, 0]);
 
-  // The satellite layers (band parallax, giant-word drift, chrome fade, dim)
-  // are written DIRECTLY from one scroll subscription. Framer style bindings
-  // on these siblings went stale across the city-cycling re-renders; direct
-  // writes (the same pattern as the beam) are immune.
-  const bandRef = useRef<HTMLDivElement>(null);
   const wordRef = useRef<HTMLDivElement>(null);
   const chromeRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
@@ -112,9 +105,6 @@ export default function WalkIn({
       if (wordRef.current) {
         wordRef.current.style.opacity = String(chromeO);
         wordRef.current.style.transform = `translateY(${seg(v, 0, 0.8) * 140}px)`;
-      }
-      if (bandRef.current) {
-        bandRef.current.style.transform = `translateY(${-seg(v, 0, 1) * 70}px) rotate(-22deg)`;
       }
       if (dimRef.current) dimRef.current.style.opacity = String(seg(v, 0.84, 1));
     };
@@ -143,27 +133,32 @@ export default function WalkIn({
 
   const stage = (
     <>
-      {/* L1 — cream ground */}
-      <div className="absolute inset-0" style={{ background: CREAM }} />
+      {/* L1 — deep-olive ground */}
+      <div className="absolute inset-0" style={{ background: GROUND }} />
 
-      {/* L2 — static purple diagonal light band (scroll parallax only) */}
+      {/* L2 — the searchlight: a long soft lime shaft through the screen
+           centre, rotating toward the pointer (behind the card) */}
       <div
-        ref={bandRef}
+        ref={shaftRef}
         aria-hidden="true"
         className="absolute pointer-events-none"
         style={{
-          width: '170%',
-          height: '30vh',
-          left: '-30%',
-          top: '34%',
-          background: PURPLE,
+          left: '50%',
+          top: '50%',
+          width: '220vmax',
+          height: '24vh',
+          marginLeft: '-110vmax',
+          marginTop: '-12vh',
           transform: 'rotate(-22deg)',
-          opacity: 0.85,
+          transformOrigin: 'center center',
+          background:
+            'linear-gradient(to bottom, transparent, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.16) 38%, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.16) 62%, transparent)',
+          filter: 'blur(14px)',
+          willChange: 'transform',
         }}
       />
 
-      {/* L5a — giant word across the bottom (in front of the card, like the
-           reference); counter-translates + dissolves on scroll */}
+      {/* L5a — giant word across the bottom; counter-drifts + dissolves */}
       <div
         ref={wordRef}
         aria-hidden="true"
@@ -172,7 +167,7 @@ export default function WalkIn({
           bottom: '-1.5vw',
           fontSize: '13.5vw',
           letterSpacing: '-0.03em',
-          color: INK,
+          color: OFF,
         }}
       >
         <span className="block overflow-hidden">
@@ -188,10 +183,9 @@ export default function WalkIn({
         </span>
       </div>
 
-      {/* L3+L4 — the card: full-viewport-sized, scaled DOWN (crisp), holding
-           the rotating spotlight cone + cycling city names */}
+      {/* L3 — the card: full-viewport-sized, scaled DOWN (crisp), cycling
+           city names with a top-down wipe */}
       <motion.div
-        ref={cardRef}
         className="absolute inset-0 z-10 overflow-hidden will-change-transform"
         style={{
           background: CARD,
@@ -200,48 +194,33 @@ export default function WalkIn({
           transformOrigin: 'center center',
         }}
       >
-        {/* The spotlight cone — rotates toward the pointer around the card
-             centre. Oversized so the wedge reaches past the edges. */}
-        <div
-          ref={beamRef}
-          aria-hidden="true"
-          className="absolute pointer-events-none"
-          style={{
-            left: '-25%',
-            top: '-25%',
-            width: '150%',
-            height: '150%',
-            transform: 'rotate(-32deg)',
-            clipPath: 'polygon(50% 50%, 100% 34%, 100% 66%)',
-            background: `linear-gradient(to right, ${NEON} 50%, ${NEON} 100%)`,
-            opacity: 0.95,
-          }}
-        />
+        {/* Hairline frame */}
+        <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
 
         {/* Card chrome — tiny editorial labels */}
         <div
           className="absolute top-[3.5%] inset-x-[4%] flex items-center justify-between font-ui uppercase"
-          style={{ color: 'rgba(30,30,30,0.55)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
+          style={{ color: 'rgba(244,244,237,0.5)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
         >
           <span>Journal Gallery</span>
-          <span>
+          <span style={{ color: LIME }}>
             Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
           </span>
         </div>
 
-        {/* Cycling city name — remounts per city for the CSS rise-in */}
+        {/* Cycling city name — remounts per city; top-down wipe reveal */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
             key={reduce ? 'static' : cityIdx}
             className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-            style={{ color: INK, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+            style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
           >
             {city.name}
           </span>
           <span
             key={reduce ? 'static-f' : `f${cityIdx}`}
             className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-            style={{ color: 'rgba(30,30,30,0.5)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.08s' }}
+            style={{ color: 'rgba(244,244,237,0.5)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
           >
             {String(city.frames).padStart(2, '0')} frames
           </span>
@@ -250,37 +229,32 @@ export default function WalkIn({
         {/* Bottom-of-card caption */}
         <div
           className="absolute bottom-[3.5%] inset-x-[4%] flex items-center justify-between font-ui uppercase"
-          style={{ color: 'rgba(30,30,30,0.45)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
+          style={{ color: 'rgba(244,244,237,0.4)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
         >
           <span>A record of light &amp; place</span>
           <span>{frames} frames</span>
         </div>
 
-        {/* Lights out — the card dims to the site olive as it fills, handing
-             off seamlessly to the dark archive below */}
+        {/* Lights out — dims to the page olive as it fills */}
         {!reduce && (
           <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />
         )}
       </motion.div>
 
-      {/* L5b — top chrome: masked-line title + flanking copy (dissolves on scroll) */}
-      <div
-        ref={chromeRef}
-        className="absolute inset-0 z-30 pointer-events-none"
-      >
+      {/* L5b — top chrome: masked-line title + flanking copy */}
+      <div ref={chromeRef} className="absolute inset-0 z-30 pointer-events-none">
         <h1
           className="absolute top-[9vh] inset-x-0 text-center uppercase"
-          style={{ color: INK, fontSize: 'clamp(34px, 4.6vw, 72px)', lineHeight: 0.98, letterSpacing: '-0.02em' }}
+          style={{ color: OFF, fontSize: 'clamp(34px, 4.6vw, 72px)', lineHeight: 0.98, letterSpacing: '-0.02em' }}
         >
           {titleLine(<span className="font-ui font-medium">Step into</span>, 0)}
-          {titleLine(<span className="font-serif italic">the light.</span>, 1)}
+          {titleLine(<span className="font-serif italic" style={{ color: LIME }}>the light.</span>, 1)}
         </h1>
 
-        {/* Flanking copy blocks */}
         <p
           className="absolute left-[5vw] top-[46%] w-[15vw] min-w-[150px] font-ui uppercase hidden md:block"
           style={{
-            color: 'rgba(30,30,30,0.62)', fontSize: '11px', letterSpacing: '0.14em', lineHeight: 1.8,
+            color: 'rgba(244,244,237,0.55)', fontSize: '11px', letterSpacing: '0.14em', lineHeight: 1.8,
             opacity: revealed ? 1 : 0, transition: `opacity 0.9s ease 0.55s`,
           }}
         >
@@ -289,28 +263,27 @@ export default function WalkIn({
         <p
           className="absolute right-[5vw] top-[46%] w-[15vw] min-w-[150px] text-right font-ui uppercase hidden md:block"
           style={{
-            color: 'rgba(30,30,30,0.62)', fontSize: '11px', letterSpacing: '0.14em', lineHeight: 1.8,
+            color: 'rgba(244,244,237,0.55)', fontSize: '11px', letterSpacing: '0.14em', lineHeight: 1.8,
             opacity: revealed ? 1 : 0, transition: `opacity 0.9s ease 0.65s`,
           }}
         >
-          Scroll — the spotlight finds each place in turn. Step inside the archive.
+          Scroll — the light finds each place in turn. Step inside the archive.
         </p>
       </div>
 
-      {/* Preloader — cream sheet with the giant word rising; the whole sheet
-           lifts away like a mask */}
+      {/* Preloader — olive sheet with the giant word rising; lifts like a mask */}
       {phase !== 'in' && !reduce && (
         <div
           className="absolute inset-0 z-40 overflow-hidden"
           style={{
-            background: CREAM,
+            background: GROUND,
             transform: phase === 'lift' ? 'translateY(-100%)' : 'translateY(0)',
             transition: `transform 0.9s ${EXPO}`,
           }}
         >
           <div
             className="absolute inset-x-0 bottom-[-1.5vw] text-center font-serif uppercase whitespace-nowrap leading-none"
-            style={{ fontSize: '13.5vw', letterSpacing: '-0.03em', color: 'rgba(30,30,30,0.12)' }}
+            style={{ fontSize: '13.5vw', letterSpacing: '-0.03em', color: 'rgba(244,244,237,0.09)' }}
           >
             <span className="block overflow-hidden">
               <span className="block walkin-rise">Visual&nbsp;Archive</span>

@@ -376,11 +376,11 @@ img {
 @keyframes heat-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
 
 /* ─── WalkIn opener — CSS-driven entrances (no framer mount anims there) ─── */
-/* Cycling city name inside the card: rises in on each remount. */
-.walkin-city { animation: walkin-city 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* Cycling city name inside the card: wipes in TOP-DOWN on each remount. */
+.walkin-city { animation: walkin-city 0.65s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes walkin-city {
-  from { opacity: 0; transform: translateY(26px); }
-  to   { opacity: 1; transform: none; }
+  from { clip-path: inset(0 0 100% 0); }
+  to   { clip-path: inset(0 0 0% 0); }
 }
 /* Preloader giant word: rises from below its overflow-hidden line box. */
 .walkin-rise { animation: walkin-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
