@@ -375,6 +375,20 @@ img {
 }
 @keyframes heat-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
 
+/* ─── WalkIn opener — CSS-driven entrances (no framer mount anims there) ─── */
+/* Cycling city name inside the card: rises in on each remount. */
+.walkin-city { animation: walkin-city 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes walkin-city {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Preloader giant word: rises from below its overflow-hidden line box. */
+.walkin-rise { animation: walkin-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+@keyframes walkin-rise {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
 :root { --bg-base: #282c20; }
 
 .site-atmos {

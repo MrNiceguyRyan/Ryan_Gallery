@@ -620,7 +620,7 @@ export default function HomePage({ collections }: Props) {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/travel"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white mix-blend-difference"
               >
                 Map
               </motion.a>
@@ -631,7 +631,7 @@ export default function HomePage({ collections }: Props) {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/about"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white mix-blend-difference"
               >
                 About
               </motion.a>
@@ -639,9 +639,10 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── The opening — a miniature of the site (MiniHome, no photos)
-             punched through a wall of monumental type; the scroll zooms it
-             past full-bleed (pin + scrub). Everything below is the archive. ── */}
+        {/* ── The opening — the iventions-mechanics hero: cream stage, purple
+             light band, the centre card cycling real city names with a
+             mouse-aimed spotlight cone, giant bottom word; scroll zooms the
+             card to full-bleed, then it dims into the dark archive. ── */}
         <WalkIn
           collections={orderedCities.map((c) => ({
             name: c.name.trim(),
