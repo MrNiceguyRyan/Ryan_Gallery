@@ -2,45 +2,32 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 
 /**
- * WalkIn — the site's OPENING, rebuilt against the reference's real texture
- * mechanics (measured 1:1), graded to the site's olive world.
+ * WalkIn — the site's OPENING.
  *
- * THE THREE TEXTURE SECRETS (the reason it read flat before):
- *  1. Blend LAYERING, not a solid card. The card is olive base + a soft-light
- *     sheen + an overlay lime wash (colored light on material) + the city
- *     name in overlay. The giant word uses mix-blend difference against the
- *     shaft. (The nav wordmark already uses difference.)
- *  2. RADIAL-SOFTENED beam. The lime X is blurred and vignetted into the
- *     ground by a radial "beam-soft" layer, so its edges melt — not a hard
- *     clip-path slab.
- *  3. A layered ground, no grain — depth comes from the blends.
- *
- * Pointer follow (measured): the FIGURE inside the card does an in-plane micro
- * move — rotate ±3.1°, translateX ≈ angle × 4.4 (±13.6px), translateY ±5px,
- * spring damping 0.08. The card itself does NOT 3D-tilt. The background shaft
- * sways gently.
- *
- * Entrance: a small lime X spins at centre (loading rotor), then OPENS OUT to
- * the full background shaft while the card scales out from a point. The card
- * is a full-viewport WINDOW scaled down (crisp) so at rest it reads as a
- * centred card in the shaft field; scroll grows it to full and dims to olive.
+ *  · Load: an HOURGLASS spins at centre (the loading rotor, fast).
+ *  · Reveal: it BLOOMS OPEN — a dynamic, silky morph — the hourglass fades as
+ *    a solid lime X scales up from centre with an overshoot while its spin
+ *    decelerates hard; a centre glow fills the middle so there's no void.
+ *  · The CARD is a full-viewport window (crisp downscale) that scales out from
+ *    a point, tilts in real 3D toward the pointer (perspective rotateX/rotateY),
+ *    and carries layered material texture (soft-light sheen + overlay lime
+ *    wash) that shifts as an inner figure parallaxes with the pointer.
+ *  · Scroll grows the card to full and dims to olive → into the archive.
  */
 
 const GROUND = '#20241a';
-const GROUND_RGB = '32, 36, 26';
 const CARD = '#30352a';
 const OFF = '#F4F4ED';
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const LIME_A = (a: number) => `rgba(var(--accent-r), var(--accent-g), var(--accent-b), ${a})`;
 const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
-const ROTOR = 0.045;
+const BLOOM = 'cubic-bezier(0.34, 1.45, 0.5, 1)'; // back-overshoot — the dynamic pop
+const ROTOR = 0.05;
 
-const X_CLIP = [
-  '50% 50%', '100% 18%', '100% 30%', '50% 50%', '100% 7%', '100% 10%',
-  '50% 50%', '96% 100%', '82% 100%', '50% 50%', '71% 100%', '68% 100%',
-  '50% 50%', '0% 84%', '0% 72%', '50% 50%', '0% 94%', '0% 91%',
-  '50% 50%', '4% 0%', '17% 0%', '50% 50%', '29% 0%', '32% 0%',
-].join(', ');
+/* Wide solid X — four broad wedges (thin gaps, no hollow middle). */
+const X_CLIP = 'polygon(50% 50%, 92% 8%, 100% 42%, 50% 50%, 100% 58%, 92% 92%, 50% 50%, 8% 92%, 0% 58%, 50% 50%, 0% 42%, 8% 8%)';
+/* Hourglass / sand-timer for the loading rotor. */
+const HOURGLASS = 'polygon(24% 6%, 76% 6%, 53% 50%, 76% 94%, 24% 94%, 47% 50%)';
 
 export default function WalkIn({
   collections,
@@ -52,8 +39,10 @@ export default function WalkIn({
   frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const tiltRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
-  const beamRef = useRef<HTMLDivElement>(null);
+  const xRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
 
   // ── Load sequence ──
@@ -90,34 +79,43 @@ export default function WalkIn({
     return () => window.clearInterval(t);
   }, [reduce, collections.length]);
 
-  // ── Pointer follow — ONE rAF (measured values, spring 0.08). The FIGURE
-  //    does the in-plane micro move (no card 3D). The shaft sways / spins. ──
+  // ── Pointer + spin rAF ──
+  //  · card 3D tilt: rotateX/rotateY ±5° (0.08)
+  //  · figure parallax: translate ±8/±4px (0.08) — shifts the light layers
+  //  · shaft spin: FAST during load, then hard-decelerates into a gentle sway
+  //    on reveal (the dynamic bloom). Same angle drives hourglass + X.
   useEffect(() => {
     if (reduce) return;
-    let tR = 0, cR = 0, tX = 0, cX = 0, tY = 0, cY = 0;
-    let tSway = -20, cAim = -20;
+    let tTX = 0, cTX = 0, tTY = 0, cTY = 0;
+    let tFX = 0, cFX = 0, tFY = 0, cFY = 0;
+    let tSway = -18, cSpin = 0;
     let raf = 0;
     const onMove = (e: MouseEvent) => {
       const nx = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
       const ny = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
-      tR = nx * 3.1;      // ±3.1° (measured)
-      tX = nx * 13.6;     // tx ≈ angle × 4.4
-      tY = ny * 5;        // ty ±5px
-      tSway = -20 + nx * 9; // background shaft: gentle sway around its base
+      tTY = nx * 5;
+      tTX = -ny * 5;
+      tFX = nx * 8;
+      tFY = ny * 4;
+      tSway = -18 + nx * 9;
     };
     const loop = () => {
-      cR += (tR - cR) * 0.08;
-      cX += (tX - cX) * 0.08;
-      cY += (tY - cY) * 0.08;
+      cTX += (tTX - cTX) * 0.08;
+      cTY += (tTY - cTY) * 0.08;
+      cFX += (tFX - cFX) * 0.08;
+      cFY += (tFY - cFY) * 0.08;
       if (!revealedRef.current) {
-        cAim = (cAim + 2.6) % 360; // rotor spin during load
+        cSpin = (cSpin + 5.4) % 360; // fast rotor spin
       } else {
-        let d = tSway - cAim;
+        let d = tSway - cSpin;
         d = ((d + 540) % 360) - 180;
-        cAim += d * 0.05; // decelerate into the gentle sway
+        cSpin += d * 0.045; // hard decelerate into the sway
       }
-      if (figureRef.current) figureRef.current.style.transform = `translate(${cX}px, ${cY}px) rotate(${cR}deg)`;
-      if (beamRef.current) beamRef.current.style.transform = `rotate(${cAim}deg)`;
+      if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${cTX}deg) rotateY(${cTY}deg)`;
+      if (figureRef.current) figureRef.current.style.transform = `translate(${cFX}px, ${cFY}px)`;
+      const rot = `rotate(${cSpin}deg)`;
+      if (xRef.current) xRef.current.style.transform = rot;
+      if (glassRef.current) glassRef.current.style.transform = rot;
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -154,44 +152,55 @@ export default function WalkIn({
       {/* L1 — deep-olive ground */}
       <div className="absolute inset-0" style={{ background: GROUND }} />
 
-      {/* L2 — the shaft: a small spinning rotor during load, opening OUT to the
-           full background X on reveal. */}
+      {/* L2 — the shaft field. `beamScale` blooms from rotor size to full with
+           an OVERSHOOT; inside, the hourglass (load) crossfades to the solid X
+           (reveal), both spun by the rAF. A centre glow fills the middle. */}
       <div
         aria-hidden="true"
         className="absolute inset-[-30%] z-[3] pointer-events-none"
         style={{
           transform: reduce || revealed ? 'scale(1)' : `scale(${ROTOR})`,
           transformOrigin: 'center center',
-          opacity: reduce ? 1 : phase === 'blank' ? 0 : revealed ? 1 : 0.9,
-          transition: `transform 1.15s ${EXPO}, opacity 1.15s ${EXPO}`,
+          transition: `transform 1.3s ${BLOOM}`,
           willChange: 'transform',
         }}
       >
+        {/* Solid X — reveal */}
         <div
-          ref={beamRef}
+          ref={xRef}
           className="absolute inset-0"
           style={{
-            clipPath: `polygon(${X_CLIP})`,
-            // Solid lime, but blurred so its edges are soft light, not a slab.
+            clipPath: X_CLIP,
             background: LIME,
-            filter: 'blur(22px)',
-            opacity: revealed ? 0.5 : 0.9,
-            transition: `opacity 1.15s ${EXPO}`,
+            opacity: reduce ? 0.5 : revealed ? 0.5 : 0,
+            transition: `opacity 0.9s ${EXPO} 0.15s`,
+            transformOrigin: 'center center',
+            willChange: 'transform',
+          }}
+        />
+        {/* Hourglass — load */}
+        <div
+          ref={glassRef}
+          className="absolute inset-[43%]"
+          style={{
+            clipPath: HOURGLASS,
+            background: LIME,
+            opacity: reduce ? 0 : revealed ? 0 : phase === 'blank' ? 0 : 1,
+            transition: `opacity 0.55s ${EXPO}`,
             transformOrigin: 'center center',
             willChange: 'transform',
           }}
         />
       </div>
 
-      {/* L2b — beam-soft: radial vignette to the ground colour, melting the
-           shaft's outer reach into the olive (secret #2). */}
+      {/* L2b — centre glow: fills the middle so the X has no hollow void */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 z-[4] pointer-events-none"
+        className="absolute inset-0 z-[2] pointer-events-none"
         style={{
-          background: `radial-gradient(120% 92% at 50% 42%, rgba(${GROUND_RGB},0) 0%, rgba(${GROUND_RGB},0.35) 52%, rgba(${GROUND_RGB},0.94) 100%)`,
+          background: `radial-gradient(38% 42% at 50% 50%, ${LIME_A(0.42)} 0%, ${LIME_A(0.12)} 45%, transparent 72%)`,
           opacity: reduce ? 1 : revealed ? 1 : 0,
-          transition: `opacity 1.2s ${EXPO}`,
+          transition: `opacity 1.2s ${EXPO} 0.2s`,
         }}
       />
 
@@ -217,88 +226,80 @@ export default function WalkIn({
         </span>
       </div>
 
-      {/* L3 — the CARD: scales OUT from centre; a flat window (no 3D tilt);
-           the FIGURE inside does the pointer micro-move + carries the texture. */}
+      {/* L3 — the CARD: scales OUT from centre, then real 3D tilt + scroll */}
       <div
         className="absolute inset-0 z-10"
         style={{
           transform: reduce || revealed ? 'scale(1)' : `scale(${ROTOR})`,
           opacity: reduce ? 1 : phase === 'blank' ? 0 : revealed ? 1 : 0,
           transformOrigin: 'center center',
-          transition: `transform 1.2s ${EXPO} 0.12s, opacity 0.8s ${EXPO} 0.12s`,
+          transition: `transform 1.25s ${BLOOM} 0.1s, opacity 0.8s ${EXPO} 0.1s`,
           willChange: 'transform',
         }}
       >
-        <motion.div
-          className="absolute inset-0 overflow-hidden will-change-transform"
-          style={{
-            scale: reduce ? 0.62 : scale,
-            borderRadius: reduce ? 44 : radius,
-            transformOrigin: 'center center',
-            boxShadow: '0 46px 120px rgba(0, 0, 0, 0.5), 0 12px 34px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          {/* FIGURE — oversized; pointer micro-move; holds the material layers */}
-          <div ref={figureRef} className="absolute will-change-transform" style={{ inset: '-6%', background: CARD }}>
-            {/* Texture secret #1a — a soft-light top sheen (light on material) */}
-            <div
-              className="absolute inset-0 pointer-events-none"
+        <div className="absolute inset-0" style={{ perspective: '1500px' }}>
+          <div ref={tiltRef} className="absolute inset-0 will-change-transform" style={{ transformStyle: 'preserve-3d' }}>
+            <motion.div
+              className="absolute inset-0 overflow-hidden will-change-transform"
               style={{
-                mixBlendMode: 'soft-light',
-                background: 'radial-gradient(135% 115% at 50% 22%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 58%)',
+                scale: reduce ? 0.62 : scale,
+                borderRadius: reduce ? 44 : radius,
+                transformOrigin: 'center center',
+                boxShadow: '0 48px 130px rgba(0, 0, 0, 0.55), 0 14px 38px rgba(0, 0, 0, 0.42)',
               }}
-            />
-            {/* Texture secret #1b — an overlay lime wash raking from one side */}
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                mixBlendMode: 'overlay',
-                background: `radial-gradient(90% 100% at 26% 68%, ${LIME_A(0.85)} 0%, ${LIME_A(0.12)} 42%, transparent 66%)`,
-              }}
-            />
-
-            {/* Chrome */}
-            <div
-              className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-              style={{ color: 'rgba(244,244,237,0.55)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
             >
-              <span>Journal Gallery</span>
-              <span style={{ color: LIME }}>
-                Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
-              </span>
-            </div>
+              {/* FIGURE — oversized; parallaxes the light layers with the pointer */}
+              <div ref={figureRef} className="absolute will-change-transform" style={{ inset: '-6%', background: CARD }}>
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ mixBlendMode: 'soft-light', background: 'radial-gradient(135% 115% at 50% 22%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 58%)' }}
+                />
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ mixBlendMode: 'overlay', background: `radial-gradient(90% 100% at 26% 68%, ${LIME_A(0.85)} 0%, ${LIME_A(0.12)} 42%, transparent 66%)` }}
+                />
 
-            {/* City name — kept legible (solid type at overlay goes muddy on a
-                 dark card; the texture is carried by the sheen + wash layers) */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span
-                key={reduce ? 'static' : cityIdx}
-                className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-                style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
-              >
-                {city.name}
-              </span>
-              <span
-                key={reduce ? 'static-f' : `f${cityIdx}`}
-                className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-                style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
-              >
-                {String(city.frames).padStart(2, '0')} frames
-              </span>
-            </div>
+                <div
+                  className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                  style={{ color: 'rgba(244,244,237,0.55)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
+                >
+                  <span>Journal Gallery</span>
+                  <span style={{ color: LIME }}>
+                    Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
+                  </span>
+                </div>
 
-            <div
-              className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-              style={{ color: 'rgba(244,244,237,0.42)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
-            >
-              <span>A record of light &amp; place</span>
-              <span>{frames} frames</span>
-            </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span
+                    key={reduce ? 'static' : cityIdx}
+                    className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
+                    style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+                  >
+                    {city.name}
+                  </span>
+                  <span
+                    key={reduce ? 'static-f' : `f${cityIdx}`}
+                    className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
+                    style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
+                  >
+                    {String(city.frames).padStart(2, '0')} frames
+                  </span>
+                </div>
+
+                <div
+                  className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                  style={{ color: 'rgba(244,244,237,0.42)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
+                >
+                  <span>A record of light &amp; place</span>
+                  <span>{frames} frames</span>
+                </div>
+              </div>
+
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
+              {!reduce && <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />}
+            </motion.div>
           </div>
-
-          <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
-          {!reduce && <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />}
-        </motion.div>
+        </div>
       </div>
     </>
   );
