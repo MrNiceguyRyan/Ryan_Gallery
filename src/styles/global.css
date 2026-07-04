@@ -382,13 +382,8 @@ img {
   from { clip-path: inset(0 0 100% 0); }
   to   { clip-path: inset(0 0 0% 0); }
 }
-/* (Preloader word rise is transition-driven in WalkIn.tsx, not keyframes.) */
-/* Preloader bowtie spinner — turns steadily through the load wait. */
-.walkin-spin { animation: walkin-spin 1.1s linear infinite; }
-@keyframes walkin-spin {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
-}
+/* (WalkIn entrance — word rise, rotor spin→aim, card scale-out — is all
+   transition/rAF-driven in WalkIn.tsx, not keyframes.) */
 
 :root { --bg-base: #282c20; }
 
