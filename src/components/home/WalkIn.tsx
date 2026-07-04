@@ -2,31 +2,39 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 
 /**
- * WalkIn — the site's OPENING. The entrance is an OPEN-OUT, not a curtain:
+ * WalkIn — the site's OPENING, rebuilt against the reference's real texture
+ * mechanics (measured 1:1), graded to the site's olive world.
  *
- *  · blank (0-0.3s): bare olive ground.
- *  · load: the giant word rises (tone-on-tone) while a small lime X spins at
- *    centre — the loading rotor. It keeps turning until window.load AND a
- *    minimum dwell (safety-capped).
- *  · reveal: the rotor OPENS OUT — the very same X scales up to full screen
- *    while its spin decelerates into aiming at the pointer, becoming the
- *    background light shaft; the CARD scales out from centre (silky, from a
- *    point, not a pop); the word brightens to off-white.
+ * THE THREE TEXTURE SECRETS (the reason it read flat before):
+ *  1. Blend LAYERING, not a solid card. The card is olive base + a soft-light
+ *     sheen + an overlay lime wash (colored light on material) + the city
+ *     name in overlay. The giant word uses mix-blend difference against the
+ *     shaft. (The nav wordmark already uses difference.)
+ *  2. RADIAL-SOFTENED beam. The lime X is blurred and vignetted into the
+ *     ground by a radial "beam-soft" layer, so its edges melt — not a hard
+ *     clip-path slab.
+ *  3. A layered ground, no grain — depth comes from the blends.
  *
- * The card is a full-viewport rounded WINDOW (framer scale 0.6→1 on scroll,
- * downscale-only = crisp) in real 3D (perspective tilt toward the pointer)
- * revealing an oversized figure that parallaxes. Pointer motion runs in ONE
- * rAF (lerp damping). At the end of the walk the card dims to the page olive.
+ * Pointer follow (measured): the FIGURE inside the card does an in-plane micro
+ * move — rotate ±3.1°, translateX ≈ angle × 4.4 (±13.6px), translateY ±5px,
+ * spring damping 0.08. The card itself does NOT 3D-tilt. The background shaft
+ * sways gently.
+ *
+ * Entrance: a small lime X spins at centre (loading rotor), then OPENS OUT to
+ * the full background shaft while the card scales out from a point. The card
+ * is a full-viewport WINDOW scaled down (crisp) so at rest it reads as a
+ * centred card in the shaft field; scroll grows it to full and dims to olive.
  */
 
 const GROUND = '#20241a';
+const GROUND_RGB = '32, 36, 26';
 const CARD = '#30352a';
 const OFF = '#F4F4ED';
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
+const LIME_A = (a: number) => `rgba(var(--accent-r), var(--accent-g), var(--accent-b), ${a})`;
 const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
-const ROTOR = 0.045; // the X scaled down to a small centre rotor during load
+const ROTOR = 0.045;
 
-/* Detailed irregular X — four uneven main wedges + four thin splinter rays. */
 const X_CLIP = [
   '50% 50%', '100% 18%', '100% 30%', '50% 50%', '100% 7%', '100% 10%',
   '50% 50%', '96% 100%', '82% 100%', '50% 50%', '71% 100%', '68% 100%',
@@ -44,7 +52,6 @@ export default function WalkIn({
   frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
-  const tiltRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
   const beamRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -75,7 +82,7 @@ export default function WalkIn({
   }, [reduce]);
   const revealed = phase === 'reveal';
 
-  // ── Cycling city names inside the card ──
+  // ── Cycling city names ──
   const [cityIdx, setCityIdx] = useState(0);
   useEffect(() => {
     if (reduce || collections.length < 2) return;
@@ -83,38 +90,33 @@ export default function WalkIn({
     return () => window.clearInterval(t);
   }, [reduce, collections.length]);
 
-  // ── Pointer follow — ONE rAF: card tilt, figure parallax, and the X's
-  //    spin→aim. During load the X spins; on reveal the spin decelerates into
-  //    aiming at the pointer (damped, shortest path). ──
+  // ── Pointer follow — ONE rAF (measured values, spring 0.08). The FIGURE
+  //    does the in-plane micro move (no card 3D). The shaft sways / spins. ──
   useEffect(() => {
     if (reduce) return;
-    let tTX = 0, cTX = 0, tTY = 0, cTY = 0;
-    let tFX = 0, cFX = 0, tFY = 0, cFY = 0;
-    let tAim = 0, cAim = 0;
+    let tR = 0, cR = 0, tX = 0, cX = 0, tY = 0, cY = 0;
+    let tSway = -20, cAim = -20;
     let raf = 0;
     const onMove = (e: MouseEvent) => {
       const nx = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
       const ny = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
-      tTY = nx * 5;
-      tTX = -ny * 5;
-      tFX = nx * 10;
-      tFY = ny * 5;
-      tAim = (Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2) * 180) / Math.PI;
+      tR = nx * 3.1;      // ±3.1° (measured)
+      tX = nx * 13.6;     // tx ≈ angle × 4.4
+      tY = ny * 5;        // ty ±5px
+      tSway = -20 + nx * 9; // background shaft: gentle sway around its base
     };
     const loop = () => {
-      cTX += (tTX - cTX) * 0.08;
-      cTY += (tTY - cTY) * 0.08;
-      cFX += (tFX - cFX) * 0.08;
-      cFY += (tFY - cFY) * 0.08;
+      cR += (tR - cR) * 0.08;
+      cX += (tX - cX) * 0.08;
+      cY += (tY - cY) * 0.08;
       if (!revealedRef.current) {
-        cAim = (cAim + 2.6) % 360; // rotor spin
+        cAim = (cAim + 2.6) % 360; // rotor spin during load
       } else {
-        let d = tAim - cAim;
+        let d = tSway - cAim;
         d = ((d + 540) % 360) - 180;
-        cAim += d * 0.045; // decelerate into aim
+        cAim += d * 0.05; // decelerate into the gentle sway
       }
-      if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${cTX}deg) rotateY(${cTY}deg)`;
-      if (figureRef.current) figureRef.current.style.transform = `translate(${cFX}px, ${cFY}px)`;
+      if (figureRef.current) figureRef.current.style.transform = `translate(${cX}px, ${cY}px) rotate(${cR}deg)`;
       if (beamRef.current) beamRef.current.style.transform = `rotate(${cAim}deg)`;
       raf = requestAnimationFrame(loop);
     };
@@ -123,7 +125,7 @@ export default function WalkIn({
     return () => { cancelAnimationFrame(raf); window.removeEventListener('mousemove', onMove); };
   }, [reduce]);
 
-  // ── Scroll scrub — window via framer (proven); satellites direct-write ──
+  // ── Scroll scrub ──
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
   const scale = useTransform(scrollYProgress, [0, 0.8], [0.6, 1], { clamp: true });
   const radius = useTransform(scrollYProgress, [0, 0.6], [44, 0]);
@@ -152,16 +154,15 @@ export default function WalkIn({
       {/* L1 — deep-olive ground */}
       <div className="absolute inset-0" style={{ background: GROUND }} />
 
-      {/* L2 — the X: a small spinning rotor during load, opening OUT to the
-           full background shaft on reveal. `beamScale` grows it (CSS
-           transition); `beamRef` (inner) rotates via rAF. */}
+      {/* L2 — the shaft: a small spinning rotor during load, opening OUT to the
+           full background X on reveal. */}
       <div
         aria-hidden="true"
-        className="absolute inset-[-30%] z-[5] pointer-events-none"
+        className="absolute inset-[-30%] z-[3] pointer-events-none"
         style={{
           transform: reduce || revealed ? 'scale(1)' : `scale(${ROTOR})`,
           transformOrigin: 'center center',
-          opacity: reduce ? 1 : phase === 'blank' ? 0 : revealed ? 0.32 : 0.85,
+          opacity: reduce ? 1 : phase === 'blank' ? 0 : revealed ? 1 : 0.9,
           transition: `transform 1.15s ${EXPO}, opacity 1.15s ${EXPO}`,
           willChange: 'transform',
         }}
@@ -171,19 +172,35 @@ export default function WalkIn({
           className="absolute inset-0"
           style={{
             clipPath: `polygon(${X_CLIP})`,
+            // Solid lime, but blurred so its edges are soft light, not a slab.
             background: LIME,
+            filter: 'blur(22px)',
+            opacity: revealed ? 0.5 : 0.9,
+            transition: `opacity 1.15s ${EXPO}`,
             transformOrigin: 'center center',
             willChange: 'transform',
           }}
         />
       </div>
 
-      {/* L4 — giant word (tone-on-tone during load → off-white on reveal) */}
+      {/* L2b — beam-soft: radial vignette to the ground colour, melting the
+           shaft's outer reach into the olive (secret #2). */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 z-[4] pointer-events-none"
+        style={{
+          background: `radial-gradient(120% 92% at 50% 42%, rgba(${GROUND_RGB},0) 0%, rgba(${GROUND_RGB},0.35) 52%, rgba(${GROUND_RGB},0.94) 100%)`,
+          opacity: reduce ? 1 : revealed ? 1 : 0,
+          transition: `opacity 1.2s ${EXPO}`,
+        }}
+      />
+
+      {/* L5 — giant word; difference blend so the shaft reads THROUGH it */}
       <div
         ref={wordRef}
         aria-hidden="true"
         className="absolute inset-x-0 z-20 text-center font-serif uppercase whitespace-nowrap leading-none pointer-events-none overflow-hidden"
-        style={{ bottom: '-1.5vw', fontSize: '13.5vw', letterSpacing: '-0.03em' }}
+        style={{ bottom: '-1.5vw', fontSize: '13.5vw', letterSpacing: '-0.03em', mixBlendMode: revealed ? 'difference' : 'normal' }}
       >
         <span className="block overflow-hidden">
           <span
@@ -200,8 +217,8 @@ export default function WalkIn({
         </span>
       </div>
 
-      {/* L3 — the CARD: scales OUT from centre on reveal (entrance), then 3D
-           tilt + scroll scale. */}
+      {/* L3 — the CARD: scales OUT from centre; a flat window (no 3D tilt);
+           the FIGURE inside does the pointer micro-move + carries the texture. */}
       <div
         className="absolute inset-0 z-10"
         style={{
@@ -212,59 +229,76 @@ export default function WalkIn({
           willChange: 'transform',
         }}
       >
-        <div className="absolute inset-0" style={{ perspective: '1400px' }}>
-          <div ref={tiltRef} className="absolute inset-0 will-change-transform" style={{ transformStyle: 'preserve-3d' }}>
-            <motion.div
-              className="absolute inset-0 overflow-hidden will-change-transform"
+        <motion.div
+          className="absolute inset-0 overflow-hidden will-change-transform"
+          style={{
+            scale: reduce ? 0.62 : scale,
+            borderRadius: reduce ? 44 : radius,
+            transformOrigin: 'center center',
+            boxShadow: '0 46px 120px rgba(0, 0, 0, 0.5), 0 12px 34px rgba(0, 0, 0, 0.4)',
+          }}
+        >
+          {/* FIGURE — oversized; pointer micro-move; holds the material layers */}
+          <div ref={figureRef} className="absolute will-change-transform" style={{ inset: '-6%', background: CARD }}>
+            {/* Texture secret #1a — a soft-light top sheen (light on material) */}
+            <div
+              className="absolute inset-0 pointer-events-none"
               style={{
-                scale: reduce ? 0.62 : scale,
-                borderRadius: reduce ? 44 : radius,
-                transformOrigin: 'center center',
-                boxShadow: '0 42px 110px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4)',
+                mixBlendMode: 'soft-light',
+                background: 'radial-gradient(135% 115% at 50% 22%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 58%)',
               }}
+            />
+            {/* Texture secret #1b — an overlay lime wash raking from one side */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                mixBlendMode: 'overlay',
+                background: `radial-gradient(90% 100% at 26% 68%, ${LIME_A(0.85)} 0%, ${LIME_A(0.12)} 42%, transparent 66%)`,
+              }}
+            />
+
+            {/* Chrome */}
+            <div
+              className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+              style={{ color: 'rgba(244,244,237,0.55)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
             >
-              <div ref={figureRef} className="absolute will-change-transform" style={{ inset: '-5%', background: CARD }}>
-                <div
-                  className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-                  style={{ color: 'rgba(244,244,237,0.5)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
-                >
-                  <span>Journal Gallery</span>
-                  <span style={{ color: LIME }}>
-                    Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
-                  </span>
-                </div>
+              <span>Journal Gallery</span>
+              <span style={{ color: LIME }}>
+                Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
+              </span>
+            </div>
 
-                <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ mixBlendMode: 'overlay' }}>
-                  <span
-                    key={reduce ? 'static' : cityIdx}
-                    className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-                    style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
-                  >
-                    {city.name}
-                  </span>
-                  <span
-                    key={reduce ? 'static-f' : `f${cityIdx}`}
-                    className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-                    style={{ color: 'rgba(244,244,237,0.75)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
-                  >
-                    {String(city.frames).padStart(2, '0')} frames
-                  </span>
-                </div>
+            {/* City name — kept legible (solid type at overlay goes muddy on a
+                 dark card; the texture is carried by the sheen + wash layers) */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span
+                key={reduce ? 'static' : cityIdx}
+                className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
+                style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+              >
+                {city.name}
+              </span>
+              <span
+                key={reduce ? 'static-f' : `f${cityIdx}`}
+                className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
+                style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
+              >
+                {String(city.frames).padStart(2, '0')} frames
+              </span>
+            </div>
 
-                <div
-                  className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
-                  style={{ color: 'rgba(244,244,237,0.4)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
-                >
-                  <span>A record of light &amp; place</span>
-                  <span>{frames} frames</span>
-                </div>
-              </div>
-
-              <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
-              {!reduce && <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />}
-            </motion.div>
+            <div
+              className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+              style={{ color: 'rgba(244,244,237,0.42)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
+            >
+              <span>A record of light &amp; place</span>
+              <span>{frames} frames</span>
+            </div>
           </div>
-        </div>
+
+          <div className="absolute inset-0 ring-1 ring-inset ring-white/10 pointer-events-none" style={{ borderRadius: 'inherit' }} />
+          {!reduce && <div ref={dimRef} className="absolute inset-0 pointer-events-none" style={{ background: '#282c20', opacity: 0 }} />}
+        </motion.div>
       </div>
     </>
   );
