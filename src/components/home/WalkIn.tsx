@@ -76,10 +76,10 @@ export default function WalkIn({
       if (fired || !minOk || !loadOk) return;
       fired = true;
       setPhase('done');
-      goneT = window.setTimeout(() => setPhase('gone'), 900);
+      goneT = window.setTimeout(() => setPhase('gone'), 1700);
     };
     const riseT = window.setTimeout(() => setPhase('rise'), 300);
-    const minT = window.setTimeout(() => { minOk = true; reveal(); }, 1600);
+    const minT = window.setTimeout(() => { minOk = true; reveal(); }, 1800);
     const onLoad = () => { loadOk = true; reveal(); };
     if (!loadOk) window.addEventListener('load', onLoad);
     // Never strand the visitor behind the sheet (slow network ≠ broken page).
@@ -297,9 +297,26 @@ export default function WalkIn({
             background: GROUND,
             opacity: phase === 'done' ? 0 : 1,
             pointerEvents: phase === 'done' ? 'none' : 'auto',
-            transition: `opacity 0.8s ${EXPO}`,
+            // Measured on the reference: a long ease-out fade (~1.5-2s) —
+            // drops fast, trails off.
+            transition: `opacity 1.6s ${EXPO}`,
           }}
         >
+          {/* Loading spinner — a small bowtie turning through the wait
+               (the reference's hourglass), lime for this site; blinks out
+               the moment the reveal starts. */}
+          <div
+            aria-hidden="true"
+            className="walkin-spin absolute left-1/2 top-1/2"
+            style={{
+              width: 26,
+              height: 40,
+              background: LIME,
+              clipPath: 'polygon(50% 50%, 0 0, 100% 0, 50% 50%, 100% 100%, 0 100%)',
+              opacity: phase === 'done' ? 0 : 0.9,
+              transition: 'opacity 0.3s ease',
+            }}
+          />
           <div
             className="absolute inset-x-0 bottom-[-1.5vw] text-center font-serif uppercase whitespace-nowrap leading-none overflow-hidden"
             style={{ fontSize: '13.5vw', letterSpacing: '-0.03em' }}
@@ -312,7 +329,7 @@ export default function WalkIn({
                 color: CARD,
                 transform: phase === 'blank' ? 'translateY(110%)' : 'translateY(0)',
                 opacity: phase === 'blank' ? 0 : 1,
-                transition: `transform 1s ${EXPO}, opacity 1s ${EXPO}`,
+                transition: `transform 1.1s ${EXPO}, opacity 1.1s ${EXPO}`,
               }}
             >
               Visual&nbsp;Archive
