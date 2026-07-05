@@ -58,6 +58,10 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const entryY = useTransform(scrollYProgress, [0, 0.4], [96, 0], { clamp: true });
   const revealScale = useTransform(scrollYProgress, [0, 0.45, 0.9, 1], [1.3, 1, 1, 1.06]);
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-26%']);
+  // Cover text planes counter-parallax against the photo — the masthead lifts,
+  // the kicker sinks as the card passes, so name/kicker/photo read as depth.
+  const mastheadY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-24%']);
+  const kickerY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '30%']);
 
   // Keyword-ignite (last word lights to lime on scroll-in) stays.
   const igniteColor = useTransform(scrollYProgress, [0.3, 0.52], ['rgba(244,244,237,1)', 'rgb(210,255,0)']);
@@ -243,8 +247,11 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
       >
         {imageBlock}
 
-        {/* ── Kicker (top) ── */}
-        <div className={`absolute inset-x-0 top-0 p-5 md:p-8 flex items-start justify-between font-ui text-[10px] md:text-[11px] tracking-[0.4em] uppercase ${flip ? 'flex-row-reverse' : ''}`}>
+        {/* ── Kicker (top) — sinks slightly against the photo ── */}
+        <motion.div
+          style={{ y: reduce ? 0 : kickerY }}
+          className={`absolute inset-x-0 top-0 p-5 md:p-8 flex items-start justify-between font-ui text-[10px] md:text-[11px] tracking-[0.4em] uppercase ${flip ? 'flex-row-reverse' : ''}`}
+        >
           <span className="flex items-center gap-2 text-white/70">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
             Dispatch&nbsp;Nº&nbsp;{String(index + 1).padStart(2, '0')}
@@ -253,10 +260,13 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             {dateline}
             {collection.year ? ` · ${collection.year}` : ''}
           </span>
-        </div>
+        </motion.div>
 
-        {/* ── Masthead title + meta + CTA (bottom) ── */}
-        <div className={`absolute inset-x-0 bottom-0 p-5 md:p-8 lg:p-10 ${flip ? 'text-right' : ''}`}>
+        {/* ── Masthead title + meta + CTA (bottom) — lifts against the photo ── */}
+        <motion.div
+          style={{ y: reduce ? 0 : mastheadY }}
+          className={`absolute inset-x-0 bottom-0 p-5 md:p-8 lg:p-10 ${flip ? 'text-right' : ''}`}
+        >
           <h3
             className="font-serif uppercase text-white tracking-tighter leading-[0.82] drop-shadow-[0_2px_40px_rgba(0,0,0,0.55)]"
             style={{ fontSize: 'clamp(46px, 8.5vw, 132px)' }}
@@ -283,7 +293,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
               </span>
             </Magnetic>
           </div>
-        </div>
+        </motion.div>
 
         {baseline}
       </motion.div>
