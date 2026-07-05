@@ -49,7 +49,12 @@ export default function WalkIn({
   const [phase, setPhase] = useState<'blank' | 'load' | 'reveal'>('blank');
   const revealedRef = useRef(false);
   useEffect(() => {
-    if (reduce) { setPhase('reveal'); revealedRef.current = true; return; }
+    if (reduce) {
+      setPhase('reveal');
+      revealedRef.current = true;
+      document.body.classList.add('walkin-in');
+      return;
+    }
     let minOk = false;
     let loadOk = document.readyState === 'complete';
     let fired = false;
@@ -58,6 +63,8 @@ export default function WalkIn({
       fired = true;
       revealedRef.current = true;
       setPhase('reveal');
+      // Body flag — the fixed nav (in HomePage) keys its slide-down off this.
+      document.body.classList.add('walkin-in');
     };
     const t1 = window.setTimeout(() => setPhase('load'), 300);
     const t2 = window.setTimeout(() => { minOk = true; go(); }, 1800);
@@ -146,6 +153,23 @@ export default function WalkIn({
 
   if (!collections.length) return null;
   const city = collections[cityIdx % collections.length];
+
+  /* Line-mask reveal (the reference's signature): each text line sits in an
+   * overflow-clip container and rises 112%→0 with a per-line staggered delay
+   * once the reveal fires. JS state flips the styles; the browser tweens. */
+  const lineMask = (content: React.ReactNode, delay: number) => (
+    <span className="block overflow-hidden w-full">
+      <span
+        className="block w-full"
+        style={{
+          transform: reduce || revealed ? 'translateY(0%)' : 'translateY(112%)',
+          transition: `transform 0.9s ${EXPO} ${delay}s`,
+        }}
+      >
+        {content}
+      </span>
+    </span>
+  );
 
   const stage = (
     <>
@@ -260,38 +284,54 @@ export default function WalkIn({
                 />
 
                 <div
-                  className="absolute top-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                  className="absolute top-[7%] inset-x-[8%] font-ui uppercase"
                   style={{ color: 'rgba(244,244,237,0.55)', fontSize: 'clamp(10px, 0.9vw, 13px)', letterSpacing: '0.3em' }}
                 >
-                  <span>Journal Gallery</span>
-                  <span style={{ color: LIME }}>
-                    Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
-                  </span>
+                  {lineMask(
+                    <span className="flex items-center justify-between w-full">
+                      <span>Journal Gallery</span>
+                      <span style={{ color: LIME }}>
+                        Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
+                      </span>
+                    </span>,
+                    0.45,
+                  )}
                 </div>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span
-                    key={reduce ? 'static' : cityIdx}
-                    className={`font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-                    style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
-                  >
-                    {city.name}
-                  </span>
-                  <span
-                    key={reduce ? 'static-f' : `f${cityIdx}`}
-                    className={`font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-                    style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
-                  >
-                    {String(city.frames).padStart(2, '0')} frames
-                  </span>
+                  {lineMask(
+                    <span
+                      key={reduce ? 'static' : cityIdx}
+                      className={`block font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
+                      style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+                    >
+                      {city.name}
+                    </span>,
+                    0.55,
+                  )}
+                  {lineMask(
+                    <span
+                      key={reduce ? 'static-f' : `f${cityIdx}`}
+                      className={`block text-center font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
+                      style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
+                    >
+                      {String(city.frames).padStart(2, '0')} frames
+                    </span>,
+                    0.64,
+                  )}
                 </div>
 
                 <div
-                  className="absolute bottom-[7%] inset-x-[8%] flex items-center justify-between font-ui uppercase"
+                  className="absolute bottom-[7%] inset-x-[8%] font-ui uppercase"
                   style={{ color: 'rgba(244,244,237,0.42)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
                 >
-                  <span>A record of light &amp; place</span>
-                  <span>{frames} frames</span>
+                  {lineMask(
+                    <span className="flex items-center justify-between w-full">
+                      <span>A record of light &amp; place</span>
+                      <span>{frames} frames</span>
+                    </span>,
+                    0.72,
+                  )}
                 </div>
               </div>
 

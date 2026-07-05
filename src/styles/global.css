@@ -384,6 +384,16 @@ img {
 }
 /* (WalkIn entrance — word rise, rotor spin→aim, card scale-out — is all
    transition/rAF-driven in WalkIn.tsx, not keyframes.) */
+/* Nav wordmark slides down from above once the opening reveals — WalkIn flips
+   body.walkin-in when its reveal fires. */
+.walkin-nav {
+  transform: translateY(-110%);
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+}
+body.walkin-in .walkin-nav { transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  .walkin-nav { transform: none !important; transition: none !important; }
+}
 
 :root { --bg-base: #282c20; }
 

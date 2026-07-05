@@ -629,7 +629,11 @@ export default function HomePage({ collections }: Props) {
             transition={{ duration: 0.2, ease: expo }}
             className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-serif uppercase text-lg md:text-xl tracking-[0.16em] font-medium leading-none text-[#F4F4ED] mix-blend-difference py-1"
           >
-            Ryan Xu
+            {/* Slides down from above once the opening reveals (body.walkin-in,
+                 flipped by WalkIn) — the reference's header entrance. */}
+            <span className="block overflow-hidden">
+              <span className="walkin-nav block">Ryan&nbsp;Xu</span>
+            </span>
           </motion.button>
 
           <div ref={navPillsRef} className="flex items-center gap-2 md:gap-3">
