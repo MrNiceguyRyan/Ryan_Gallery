@@ -3,26 +3,42 @@
  *
  *   node scripts/cleanup-collections.mjs              (DRY RUN — reports only)
  *   node scripts/cleanup-collections.mjs --apply      (trim whitespace names)
- *   node scripts/cleanup-collections.mjs --apply --delete-empty
- *                                                     (also delete photo-less
- *                                                      collections — destructive)
+ *   node scripts/cleanup-collections.mjs --apply --delete-empty --ids=<id,id>
+ *                                                     (delete named photo-less
+ *                                                      collections only)
  *
  * Fixes surfaced by the audit:
  *   - "New York " → "New York"  (trailing-space name)
  *   - empty duplicate "Orlando" + empty "Arizona"  (0 photos → noise in the
  *     homepage region clustering)
  *
- * Deleting is destructive and gated behind BOTH --apply and --delete-empty,
- * and only ever touches collections with exactly 0 referencing photos.
+ * Deleting is destructive and gated behind --apply, --delete-empty, and an
+ * explicit --ids allowlist. It only touches named collections with exactly
+ * 0 referencing photos.
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
+const IDS_ARG = process.argv.find((arg) => arg.startsWith('--ids='));
+const DELETE_IDS = new Set(
+  (IDS_ARG?.slice('--ids='.length) || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+);
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Set it to a Sanity write token before running this cleanup script.');
+  process.exit(1);
+}
+
+if (DELETE_EMPTY && DELETE_IDS.size === 0) {
+  console.error('Refusing --delete-empty without explicit --ids=<collectionId,...>. Run a dry run first and name each collection to delete.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
@@ -63,6 +79,10 @@ async function main() {
 
   if (DELETE_EMPTY) {
     for (const c of empties) {
+      if (!DELETE_IDS.has(c._id)) {
+        console.log(`   (kept empty collection "${c.name}" (${c._id}) — not listed in --ids)`);
+        continue;
+      }
       await sanity.delete(c._id);
       console.log(`   ✓ deleted empty collection "${c.name}" (${c._id})`);
     }
