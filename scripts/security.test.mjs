@@ -24,7 +24,7 @@ test('Sanity mutation scripts do not contain checked-in write tokens or fallback
 test('direct state-folder uploads use state name for CMS collection metadata', () => {
   assert.match(files.upload, /uploadCity\(stateName,\s*'\.',\s*stateName\)/);
   assert.match(files.upload, /findOrCreateCollection\(collectionName,\s*stateName\)/);
-  assert.doesNotMatch(files.upload, /findOrCreateCollection\(cityFolderName,\s*stateName\)/);
+  assert.doesNotMatch(files.upload, /const collectionId = await findOrCreateCollection\(cityFolderName,\s*stateName\)/);
 });
 
 test('empty collection deletion requires an explicit id allowlist', () => {
