@@ -15,8 +15,13 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Set it in your environment before running this write-capable script.');
+  process.exit(1);
+}
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
@@ -139,6 +144,10 @@ async function findOrCreateCollection(cityFolderName, stateName) {
   const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
   const displayCity = locationInfo.city || cityFolderName;
 
+  if (!slug) {
+    throw new Error(`Refusing to create a collection with an empty slug for "${cityFolderName}"`);
+  }
+
   // Search for existing collection by slug or name
   const existing = await sanity.fetch(
     `*[_type == "collection" && (slug.current == $slug || lower(name) == $lowerName)][0]{ _id, name }`,
@@ -217,22 +226,22 @@ function parseCameraInfo(exif) {
 }
 
 // ─── Upload a single city folder ─────────────────────────────────────────────
-async function uploadCity(stateName, cityFolderName) {
+async function uploadCity(stateName, cityFolderName, collectionName = cityFolderName) {
   const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
+  const locationKey = collectionName.toLowerCase().trim();
   const locationInfo = LOCATION_MAP[locationKey];
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
   // Get image files
   const files = readdirSync(cityPath).filter(isImage);
   if (files.length === 0) {
-    console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
+    console.log(`    ⚠️  No images in ${collectionName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${collectionName}: ${files.length} images`);
 
   // Find or create collection
-  const collectionId = await findOrCreateCollection(cityFolderName, stateName);
+  const collectionId = await findOrCreateCollection(collectionName, stateName);
 
   // Check existing photos — get filenames to skip duplicates
   const existingPhotos = await sanity.fetch(
@@ -267,7 +276,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(collectionName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -354,8 +363,8 @@ async function uploadState(stateName) {
     const directPhotos = readdirSync(statePath).filter(isImage);
     if (directPhotos.length > 0) {
       console.log(`  📷 Photos directly in ${stateName} (no city subfolders)`);
-      // Treat state as city
-      await uploadCity(stateName, '.');
+      // Read from the state folder, but use the state name for collection metadata.
+      await uploadCity(stateName, '.', stateName);
     } else {
       console.log(`  ⚠️  No city folders or photos found, skipping.`);
     }
