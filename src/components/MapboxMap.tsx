@@ -257,8 +257,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     setActiveClusterCity(city);
     // Expand the region containing this city so the card is visible
     if (cluster) {
-      const region = resolveClusterRegion(cluster);
-      setExpandedRegion(region);
+      setExpandedRegion(resolveClusterRegion(cluster));
     }
     // Gentle center, don't zoom aggressively
     const targetZoom = Math.max(viewState.zoom, 6);
