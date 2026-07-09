@@ -116,6 +116,10 @@ function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
     .sort((a, b) => b.totalPhotos - a.totalPhotos);
 }
 
+function resolveClusterRegion(cluster: LocationCluster): string {
+  return cluster.region || getRegion(cluster.country);
+}
+
 function formatCoord(v: number, pos: string, neg: string) {
   return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
 }
@@ -253,7 +257,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     setActiveClusterCity(city);
     // Expand the region containing this city so the card is visible
     if (cluster) {
-      const region = getRegion(cluster.country);
+      const region = resolveClusterRegion(cluster);
       setExpandedRegion(region);
     }
     // Gentle center, don't zoom aggressively
@@ -306,7 +310,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
         if (closest && minDist < 2) {
           setActiveClusterCity(closest.city);
           setActiveCluster(closest);
-          setExpandedRegion(getRegion(closest.country));
+          setExpandedRegion(resolveClusterRegion(closest));
         }
       }, 300);
       // Clean the hash so it doesn't re-fire on reload
