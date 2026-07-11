@@ -48,3 +48,21 @@ assert.match(
   /findOrCreateCollection\(collectionName, stateName\)/,
   'flat state-folder uploads must not create a "." collection',
 );
+
+const cleanupSource = readFileSync(join(repoRoot, 'scripts/cleanup-collections.mjs'), 'utf8');
+
+assert.match(
+  cleanupSource,
+  /const DELETE_IDS = new Set\(/,
+  'empty collection deletion must require an explicit id allow-list',
+);
+assert.match(
+  cleanupSource,
+  /APPLY && DELETE_EMPTY && DELETE_IDS\.size === 0/,
+  'blanket --delete-empty must fail when no explicit ids are provided',
+);
+assert.match(
+  cleanupSource,
+  /DELETE_IDS\.has\(c\._id\)/,
+  'cleanup must only delete empty collections listed in --ids',
+);
