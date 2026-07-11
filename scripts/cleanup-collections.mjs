@@ -17,12 +17,15 @@
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
+
+if (!SANITY_TOKEN) {
+  console.error('Missing required SANITY_TOKEN environment variable.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
