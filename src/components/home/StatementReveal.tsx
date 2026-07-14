@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import { useVelocitySkew } from '../../lib/useVelocitySkew';
+import { useReducedMotion } from 'framer-motion';
+import { useInViewOnce } from '../../lib/useInViewOnce';
+import { SweepLine, SWEEP_LIME, SWEEP_OLIVE } from './SweepLine';
 
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const WARM_WHITE = '#DDE1D2';
@@ -37,32 +37,13 @@ function Run({ tok }: { tok: Tok }) {
  * once.
  */
 export default function StatementReveal() {
-  const ref = useRef<HTMLElement>(null);
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(false);
-  // Kinetic type — the manifesto leans + throws with scroll velocity.
-  const kinetic = useVelocitySkew(4, 20);
+  // Fire as the block reaches the lower viewport, once (shared site trigger).
+  const [ref, shown] = useInViewOnce<HTMLElement>('0px 0px -5% 0px', 0);
 
-  useEffect(() => {
-    if (reduce) { setShown(true); return; }
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }),
-      { threshold: 0.2 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [reduce]);
-
-  const lineStyle = (i: number): React.CSSProperties =>
-    reduce
-      ? {}
-      : {
-          opacity: shown ? 1 : 0,
-          transform: shown ? 'none' : 'translateY(26px)',
-          transition: `opacity 0.7s ease ${i * 85}ms, transform 0.8s cubic-bezier(0.16,1,0.3,1) ${i * 85}ms`,
-        };
+  // Near-synchronous center-out stagger (reference: amount 0.015 from center).
+  const center = (LINES.length - 1) / 2;
+  const delayOf = (i: number) => (Math.abs(i - center) / center) * 0.015;
 
   return (
     <section
@@ -71,21 +52,29 @@ export default function StatementReveal() {
     >
       <p
         className="text-eyebrow text-center mb-8 md:mb-12"
-        style={{ color: ACCENT, opacity: reduce || shown ? 1 : 0, transition: 'opacity 0.7s ease' }}
+        style={{ color: ACCENT, opacity: reduce || shown ? 1 : 0, transition: 'opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1)' }}
       >
         Nº 00 — The Ethos
       </p>
-      <motion.p
+      <p
         aria-hidden="true"
-        className="font-ui uppercase text-center mx-auto will-change-transform"
-        style={{ maxWidth: '15ch', fontSize: 'clamp(32px, 7vw, 104px)', lineHeight: 0.9, letterSpacing: '-0.008em', fontWeight: 400, skewX: kinetic.skewX, x: kinetic.x }}
+        className="font-ui uppercase text-center mx-auto"
+        style={{ maxWidth: '15ch', fontSize: 'clamp(32px, 7vw, 104px)', lineHeight: 0.9, letterSpacing: '-0.008em', fontWeight: 400 }}
       >
         {LINES.map((tokens, i) => (
-          <span key={i} className="block" style={lineStyle(i)}>
-            {tokens.map((tok, j) => <Run key={j} tok={tok} />)}
+          <span key={i} className="block">
+            <SweepLine
+              shown={shown}
+              delay={delayOf(i)}
+              dir={i % 2 === 0 ? 'left' : 'right'}
+              color={tokens.some((t) => t.e) ? SWEEP_LIME : SWEEP_OLIVE}
+              reduce={!!reduce}
+            >
+              {tokens.map((tok, j) => <Run key={j} tok={tok} />)}
+            </SweepLine>
           </span>
         ))}
-      </motion.p>
+      </p>
       <span className="sr-only">{LINES.map((l) => l.map((t) => t.t).join('')).join(' ')}</span>
     </section>
   );

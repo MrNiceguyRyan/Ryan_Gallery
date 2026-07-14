@@ -1,23 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import type { Photo } from '../../types';
 
 interface LightboxProps {
   photos: Photo[];
   initialIndex: number;
   onClose: () => void;
-  /** z-index level — use 50 for WorkDetailPage, 60 for overlay-within-overlay (HomePage) */
-  zIndex?: 50 | 60;
 }
 
 /**
  * Shared Lightbox — fullscreen photo viewer
  * Keyboard ← → navigate · Escape close · touch swipe
  */
-export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }: LightboxProps) {
+export default function Lightbox({ photos, initialIndex, onClose }: LightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const photo = photos[index];
   const touchStartX = useRef(0);
+  const reduce = useReducedMotion();
 
   const goNext = useCallback(
     () => setIndex((i) => Math.min(i + 1, photos.length - 1)),
@@ -27,16 +26,20 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goNext();
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') goPrev();
     };
+    // Save/restore the previous overflow — the host overlay (MagazineLayout /
+    // WorkStory) already locks body scroll; blind '' restore would unlock it
+    // underneath the still-open story.
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     // Hide custom cursor inside lightbox — dark overlay makes white dot distracting
     document.body.classList.add('cursor-hidden');
     window.addEventListener('keydown', handleKey);
     return () => {
-      document.body.style.overflow = '';
+      document.body.style.overflow = prevOverflow;
       document.body.classList.remove('cursor-hidden');
       window.removeEventListener('keydown', handleKey);
     };
@@ -53,18 +56,19 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
     }
   };
 
-  const zClass = zIndex === 60 ? 'z-[60]' : 'z-50';
-
   return (
     <motion.div
       id="lightbox"
       data-protected="true"
-      className={`fixed inset-0 ${zClass} bg-black/97 backdrop-blur-md flex items-center justify-center`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={photo.title || 'Photo viewer'}
+      className="fixed inset-0 z-[60] bg-black/97 flex items-center justify-center"
       style={{ cursor: 'default' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       onClick={onClose}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -72,8 +76,8 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       {/* Close button — 44px tap target, safe-area-aware on iOS */}
       <motion.button
         onClick={onClose}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.92 }}
+        whileHover={reduce ? undefined : { scale: 1.08 }}
+        whileTap={reduce ? undefined : { scale: 0.92 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className="absolute right-4 md:right-6 z-10 w-11 h-11 flex items-center justify-center text-white/30 hover:text-white/80 transition-colors duration-200"
         style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -95,10 +99,10 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
             alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1} of ${photos.length}`}
             decoding="async"
             className="max-w-[92vw] max-h-[78vh] object-contain select-none"
-            initial={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
-            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
+            transition={{ duration: reduce ? 0.15 : 0.55, ease: [0.16, 1, 0.3, 1] }}
             draggable={false}
           />
         </AnimatePresence>
@@ -117,8 +121,8 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       {index > 0 && (
         <motion.button
           onClick={(e) => { e.stopPropagation(); goPrev(); }}
-          whileHover={{ scale: 1.15, x: -2 }}
-          whileTap={{ scale: 0.9, x: -4 }}
+          whileHover={reduce ? undefined : { scale: 1.15, x: -2 }}
+          whileTap={reduce ? undefined : { scale: 0.9, x: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-12 h-12 hidden md:flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Previous photo"
@@ -133,8 +137,8 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
       {index < photos.length - 1 && (
         <motion.button
           onClick={(e) => { e.stopPropagation(); goNext(); }}
-          whileHover={{ scale: 1.15, x: 2 }}
-          whileTap={{ scale: 0.9, x: 4 }}
+          whileHover={reduce ? undefined : { scale: 1.15, x: 2 }}
+          whileTap={reduce ? undefined : { scale: 0.9, x: 4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 w-12 h-12 hidden md:flex items-center justify-center text-white/20 hover:text-white/70 transition-colors duration-200"
           aria-label="Next photo"
@@ -185,7 +189,7 @@ export default function Lightbox({ photos, initialIndex, onClose, zIndex = 50 }:
         <motion.div
           className="h-full bg-white/25"
           animate={{ width: `${((index + 1) / photos.length) * 100}%` }}
-          transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         />
       </div>
     </motion.div>

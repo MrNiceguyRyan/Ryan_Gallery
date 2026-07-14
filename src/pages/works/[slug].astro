@@ -28,12 +28,10 @@ const collections: Collection[] = await sanityClient.fetch(`
     "slug": slug.current,
     subtitle,
     "coverImageUrl": coverImage.asset->url,
-    "palette": coverImage.asset->metadata.palette,
     location,
     year,
     description,
     introduction,
-    gridSize,
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
       _id,
       title,
@@ -74,13 +72,14 @@ const pageDescription = (() => {
     : suffix;
 })();
 
-// Use cover image for OG; fall back to first photo; fall back to default
+// Use cover image for OG; fall back to first photo; fall back to default.
+// 1200×630 crop matches the og:image:width/height Layout declares.
 const ogImage =
   (collection.coverImageUrl
-    ? `${collection.coverImageUrl}?auto=format&w=1200&q=85`
+    ? `${collection.coverImageUrl}?auto=format&w=1200&h=630&fit=crop&q=85`
     : null) ??
   (photos[0]?.imageUrl
-    ? `${photos[0].imageUrl}?auto=format&w=1200&q=85`
+    ? `${photos[0].imageUrl}?auto=format&w=1200&h=630&fit=crop&q=85`
     : null) ??
   undefined;
 

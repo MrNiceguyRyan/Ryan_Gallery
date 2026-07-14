@@ -1,45 +1,96 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from 'framer-motion';
 import type { SiteSettings, TimelineItem } from '../../types';
 import Magnetic from '../shared/Magnetic';
+import { startLenis } from '../../lib/smoothScroll';
+import { useInViewOnce } from '../../lib/useInViewOnce';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
+/* SignatureScrub — a real SVG signature drawn stroke by stroke, SCRUBBED by
+ * page scroll: each path's pathLength is bound to a slice of the page's
+ * scrollYProgress, so scrolling down literally drags the pen — main word first,
+ * then the underline flourish, then the finishing flick — and the signature
+ * completes exactly as you reach the bottom. Reduced-motion renders it fully
+ * drawn and static. */
+const SIG_STROKES = [
+  // main word — one continuous cursive scribble (R → y → a → n), ending in its
+  // own upward flick so nothing floats detached from the ink
+  'M30,95 C34,60 44,26 58,22 C72,18 74,40 60,55 C52,63 44,66 38,66 C60,70 78,74 92,72 C104,70 112,60 116,50 C118,64 118,78 112,92 C106,108 92,116 84,108 C78,100 88,88 102,82 C118,74 130,70 142,72 C154,74 158,84 154,92 C150,98 140,98 138,90 C140,78 150,72 162,70 C176,68 184,76 184,88 C184,94 182,96 180,92 C182,80 190,70 202,68 C216,66 222,76 220,90 C226,80 238,68 250,58',
+  // underline flourish
+  'M40,112 C100,124 200,124 268,104',
+];
+// each stroke draws over its own slice of the page scroll; done by the bottom
+const SIG_SEGMENTS: [number, number][] = [[0.42, 0.85], [0.85, 0.97]];
+
+function SignatureScrub({ className = '' }: { className?: string }) {
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll(); // whole-page progress
+  const lens = SIG_SEGMENTS.map(([a, b], i) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- fixed-length array, stable order
+    useTransform(scrollYProgress, [a, b], [0, 1], { clamp: true }),
+  );
+  return (
+    <svg
+      viewBox="0 0 300 140"
+      fill="none"
+      aria-hidden
+      className={className}
+      style={{ overflow: 'visible', filter: 'drop-shadow(0 0 7px rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.3))' }}
+    >
+      {SIG_STROKES.map((d, i) => (
+        <motion.path
+          key={i}
+          d={d}
+          stroke="rgb(var(--accent-r), var(--accent-g), var(--accent-b))"
+          strokeWidth={4.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ pathLength: reduce ? 1 : lens[i] }}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/* FlipLine — Lando-style hover roll: the line is duplicated and stacked; when
+ * the pointer lands on the parent `.group`, the original rolls UP and out while
+ * the copy rolls in from below. Pure CSS transforms (GPU), inherits text styles
+ * from the wrapper. The arriving copy can brighten via `hoverClassName`. */
+function FlipLine({ text, className = '', hoverClassName = '' }: { text: string; className?: string; hoverClassName?: string }) {
+  const move = 'transition-transform duration-[480ms] ease-[cubic-bezier(0.16,1,0.3,1)]';
+  return (
+    <span className={`relative block overflow-hidden ${className}`}>
+      <span className={`block truncate ${move} group-hover:-translate-y-full`}>{text}</span>
+      <span aria-hidden className={`absolute inset-0 block truncate translate-y-full ${move} group-hover:translate-y-0 ${hoverClassName}`}>
+        {text}
+      </span>
+    </span>
+  );
+}
+
 // Hero entrance item: fades up. `custom` is the per-element delay so the hero
 // text emerges top-to-bottom once the cover has lifted.
-const heroItem = {
-  hidden: { opacity: 0, y: 22 },
-  show: (d: number = 0) => ({ opacity: 1, y: 0, transition: { duration: 0.62, delay: d, ease: expo } }),
-};
+const makeHeroItem = (reduce: boolean) => ({
+  hidden: { opacity: 0, y: reduce ? 0 : 22 },
+  show: (d: number = 0) => ({ opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.62, delay: d, ease: expo } }),
+});
 
 /**
- * Scroll-reveal wrapper driven by a native IntersectionObserver. The project's
- * page-transition transform breaks framer's `whileInView`, so we observe
- * directly and flip a flag — guaranteed to fire. Content fades up on enter.
+ * Scroll-reveal wrapper — a thin fade-up skin over the shared useInViewOnce
+ * trigger (native IO; framer's whileInView is banned — see lib/useInViewOnce).
  * Reduced-motion users get the content immediately, no transform.
  */
 function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNode; className?: string; y?: number; delay?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (reduce) { setShown(true); return; }
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }),
-      { rootMargin: '0px 0px -12% 0px', threshold: 0.12 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [reduce]);
+  const [ref, shown] = useInViewOnce<HTMLDivElement>();
   return (
     <motion.div
       ref={ref}
       className={className}
-      initial={{ opacity: 0, y }}
-      animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y }}
-      transition={{ duration: 0.6, delay, ease: expo }}
+      initial={reduce ? false : { opacity: 0, y }}
+      animate={reduce || shown ? { opacity: 1, y: 0 } : { opacity: 0, y }}
+      transition={{ duration: reduce ? 0 : 0.6, delay, ease: expo }}
     >
       {children}
     </motion.div>
@@ -71,14 +122,26 @@ export default function AboutPage({ settings }: Props) {
     : FALLBACK_TIMELINE;
   const reduce = useReducedMotion();
   const igHandle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'instagram');
+  const heroItem = makeHeroItem(!!reduce);
+
+  // Same weighty inertial smooth-scroll as the homepage, so browsing About
+  // feels identical. Torn down on unmount (route change); no-op under reduced-motion.
+  useEffect(() => {
+    const { destroy } = startLenis();
+    return destroy;
+  }, []);
 
   // Editorial "contributor cover" entrance — plays once on arrival, then
   // peels away to reveal the page.
-  const [coverGone, setCoverGone] = useState(false);
+  const [coverGone, setCoverGone] = useState(!!reduce);
   useEffect(() => {
     const t = setTimeout(() => setCoverGone(true), 1150);
     return () => clearTimeout(t);
   }, []);
+
+  // Timeline rail draws itself when the log scrolls into view (not at mount,
+  // where it would finish unseen below the fold).
+  const [timelineRef, timelineShown] = useInViewOnce<HTMLOListElement>();
 
   return (
     <div className="relative bg-[#282c20] text-[#F4F4ED] min-h-[100dvh]">
@@ -195,27 +258,52 @@ export default function AboutPage({ settings }: Props) {
 
           {/* ── LEFT: editorial portrait + stacked meta ── */}
           <div className="md:col-span-5 flex flex-col items-start gap-7">
-            {/* Avatar — a clean editorial frame: rises in once (clip-reveal), then
-                only a quiet hover-scale. Lime registration ticks tie it to the
-                heat system. No infinite wobble. */}
+            {/* Avatar — a living droplet: the photo is masked in an organic
+                water-drop shape that slowly morphs (CSS keyframes, PRM-gated in
+                global.css); a second, offset droplet OUTLINE in lime drifts on a
+                desynced phase behind it — the "border" is water, not a box. */}
             <motion.div
-              className="group relative w-44 md:w-56"
-              initial={{ opacity: 0, y: 28, clipPath: 'inset(12% 0% 12% 0%)' }}
-              animate={coverGone ? { opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' } : { opacity: 0, y: 28 }}
-              transition={{ duration: 0.9, delay: 0.1, ease: expo }}
+              className="group relative w-48 md:w-60"
+              initial={{ opacity: 0, y: 22, scale: 0.975 }}
+              animate={coverGone ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 22, scale: 0.975 }}
+              transition={{ duration: 1.15, delay: 0.1, ease: expo }}
             >
-              <span aria-hidden className="absolute -top-2 -left-2 w-5 h-5 border-t border-l" style={{ borderColor: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }} />
-              <span aria-hidden className="absolute -bottom-2 -right-2 w-5 h-5 border-b border-r" style={{ borderColor: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }} />
-              <div className="relative aspect-[4/5] w-full overflow-hidden ring-1 ring-white/15 bg-white/5">
-                <img
-                  src={avatarUrl}
-                  alt={name}
-                  className="w-full h-full object-cover object-right grayscale-[0.2] transition-transform duration-[1100ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.06]"
-                  loading="eager"
-                  decoding="async"
-                  draggable={false}
+              {/* Whole droplet (outline + image) scales as ONE unit on its own
+                  GPU layer — a slow, gentle push-in. NOTE: Tailwind v4 sets the
+                  standalone `scale` property (not `transform`), so the transition
+                  MUST name `scale` — transitioning `transform` leaves it snapping. */}
+              <div
+                className="relative w-full group-hover:scale-[1.03]"
+                style={{
+                  transition: 'scale 1.1s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transformOrigin: 'center center',
+                  willChange: 'scale',
+                  backfaceVisibility: 'hidden',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="absolute -inset-2.5 animate-blob-morph border"
+                  style={{
+                    borderColor: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.35)',
+                    borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
+                    animationDelay: '-4s',
+                  }}
                 />
-                <div aria-hidden className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20]/45 via-transparent to-transparent" />
+                <div
+                  className="relative aspect-[4/5] w-full overflow-hidden animate-blob-morph bg-white/5"
+                  style={{ borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%' }}
+                >
+                  <img
+                    src={avatarUrl}
+                    alt={name}
+                    className="w-full h-full object-cover object-right grayscale-[0.2]"
+                    loading="eager"
+                    decoding="async"
+                    draggable={false}
+                  />
+                  <div aria-hidden className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20]/40 via-transparent to-transparent" />
+                </div>
               </div>
             </motion.div>
 
@@ -326,15 +414,15 @@ export default function AboutPage({ settings }: Props) {
           </h2>
         </Reveal>
 
-        <ol className="relative ml-1.5">
-          <span className="absolute left-0 top-0 h-full w-px bg-white/12 origin-top animate-line-grow" aria-hidden="true" />
+        <ol ref={timelineRef} className="relative ml-1.5">
+          <span className={`absolute left-0 top-0 h-full w-px bg-white/12 origin-top ${timelineShown ? 'animate-line-grow' : 'scale-y-0'}`} aria-hidden="true" />
           {timeline.map((item, i) => (
             <li
               key={`${item.year}-${i}`}
               className="relative pl-8 pb-9 last:pb-0 group"
             >
-              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#30352a] transition-all duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
-              <Reveal y={18} delay={(i % 2) * 0.05}>
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#30352a] transition-[border-color,box-shadow] duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
+              <Reveal y={18} delay={Math.min(i * 0.06, 0.18)}>
                 <span className="font-ui text-[10px] text-white/30 tracking-[0.2em]">{item.year}</span>
                 <h3 className="text-lg md:text-xl font-serif uppercase text-[#F4F4ED] mt-1 tracking-tight">
                   {item.title}
@@ -348,82 +436,74 @@ export default function AboutPage({ settings }: Props) {
         </ol>
       </section>
 
-      {/* ═══════ CONTACT ═══════ */}
-      <section className="px-6 md:px-16 py-12 md:py-16 border-t border-white/5">
-        <div className="max-w-3xl mx-auto">
-          <Reveal>
-            <p className="font-ui text-[10px] tracking-[0.4em] uppercase text-white/30 mb-3">Reach out</p>
-            <h2 className="text-3xl md:text-4xl font-serif uppercase text-[#F4F4ED] tracking-tight mb-6 py-1">
-              Contact
+      {/* ═══════ CONTACT — Lando-style closing card: statement + signature,
+           portrait centred between PAGES / FOLLOW columns, lime pill, © bar ═══════ */}
+      <section className="relative mt-14 md:mt-20 px-3 md:px-6">
+        <div className="relative rounded-t-[2.5rem] md:rounded-t-[5rem] bg-[#20241a] ring-1 ring-white/[0.05] overflow-hidden px-6 md:px-14 pt-14 md:pt-20 pb-6">
+          {/* Statement + signature scribble */}
+          <Reveal className="relative z-10 text-center">
+            <SignatureScrub className="mx-auto block w-[clamp(140px,17vw,220px)] -rotate-6 translate-x-[3%] mb-1" />
+            <h2 className="font-ui font-bold uppercase tracking-[-0.02em] leading-[0.96] text-[#F4F4ED]" style={{ fontSize: 'clamp(40px, 6.4vw, 96px)' }}>
+              Always <span className="font-serif italic font-normal" style={{ color: '#b2c73a' }}>chasing</span>
+              <br />
+              the <span className="font-serif italic font-normal" style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}>light.</span>
             </h2>
           </Reveal>
 
-          <Reveal>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-white/[0.06] rounded-2xl overflow-hidden border border-white/[0.06]">
-            <a
-              href={`mailto:${email}`}
-              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-all duration-300 flex items-center gap-3.5"
-            >
-              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-              </svg>
-              <div className="min-w-0">
-                <p className="font-ui text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Email</p>
-                <p className="text-sm font-light text-white/80 truncate">{email}</p>
-              </div>
-              <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
-            </a>
+          {/* Columns — PAGES | GET IN TOUCH | FOLLOW ON */}
+          <div className="relative z-10 mt-12 md:mt-16 grid grid-cols-2 md:grid-cols-3 gap-y-10 items-center">
+            {/* PAGES */}
+            <Reveal className="text-center md:text-left md:pl-[8%]">
+              <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/30 mb-4">Pages</p>
+              <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
+                {[['Home', '/'], ['Map', '/travel'], ['About', '/about']].map(([label, href]) => (
+                  <li key={href}>
+                    <a href={href} className="group inline-block">
+                      <FlipLine text={label} hoverClassName="text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
 
-            <a
-              href={instagram}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group relative p-5 bg-[#30352a] hover:bg-white/[0.04] hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-all duration-300 flex items-center gap-3.5"
-            >
-              <svg className="w-4 h-4 text-white/35 shrink-0 group-hover:text-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.95)] transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-              </svg>
-              <div className="min-w-0">
-                <p className="font-ui text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Social</p>
-                <p className="text-sm font-light text-white/80 truncate">{igHandle}</p>
-              </div>
-              <span aria-hidden className="ml-auto pl-2 text-white/20 group-hover:text-white/55 group-hover:translate-x-0.5 transition-all duration-300">↗</span>
-            </a>
+            {/* Centre — the lime enquiry pill takes the middle slot (the hero
+                already owns the one portrait on this page) */}
+            <Reveal delay={0.06} className="order-last md:order-none col-span-2 md:col-span-1 flex justify-center">
+              <Magnetic strength={0.5}>
+                <a
+                  href={`mailto:${email}`}
+                  className="group inline-flex items-center gap-2 px-7 py-3 rounded-full text-[12px] font-bold tracking-[0.18em] uppercase text-[#111112] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98]"
+                  style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
+                >
+                  <FlipLine text="Get in touch" />
+                  <span aria-hidden="true" className="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>
+                </a>
+              </Magnetic>
+            </Reveal>
 
-            <div className="p-5 bg-[#30352a] flex items-center gap-3.5">
-              <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
-              <div className="min-w-0">
-                <p className="font-ui text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Based</p>
-                <p className="text-sm font-light text-white/55">New York, NY</p>
-              </div>
-            </div>
+            {/* FOLLOW ON */}
+            <Reveal delay={0.1} className="text-center md:text-right md:pr-[8%]">
+              <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/30 mb-4">Follow on</p>
+              <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
+                <li>
+                  <a href={instagram} target="_blank" rel="noopener noreferrer" className="group inline-block">
+                    <FlipLine text="Instagram" hoverClassName="text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]" />
+                  </a>
+                </li>
+                <li>
+                  <a href={`mailto:${email}`} className="group inline-block">
+                    <FlipLine text="Email" hoverClassName="text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]" />
+                  </a>
+                </li>
+              </ul>
+            </Reveal>
+          </div>
 
-            <div className="p-5 bg-[#30352a] flex items-center gap-3.5">
-              <svg className="w-4 h-4 text-white/35 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" />
-              </svg>
-              <div className="min-w-0">
-                <p className="font-ui text-[9px] tracking-[0.32em] uppercase text-white/30 mb-1">Reply</p>
-                <p className="text-sm font-light text-white/55">Open to conversation, not client briefs</p>
-              </div>
-            </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.05} className="mt-8 text-center">
-            <Magnetic strength={0.5}>
-              <a
-                href={`mailto:${email}`}
-                className="inline-flex items-center gap-2 px-7 py-3 border border-white/25 text-white/85 text-[13px] font-light tracking-[0.18em] uppercase rounded-full transition-all duration-300 hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] hover:text-[#282c20] hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
-              >
-                Get in touch <span aria-hidden="true">↗</span>
-              </a>
-            </Magnetic>
-          </Reveal>
+          {/* Bottom bar */}
+          <div className="relative z-10 mt-12 pt-5 border-t border-white/10 flex flex-col md:flex-row gap-2 items-center justify-between font-ui text-[9px] tracking-[0.25em] uppercase text-white/30">
+            <span>© {new Date().getFullYear()} {name}. All rights reserved.</span>
+            <a href="/" className="hover:text-white/60 transition-colors duration-300">ryanxugallery.com</a>
+          </div>
         </div>
       </section>
 

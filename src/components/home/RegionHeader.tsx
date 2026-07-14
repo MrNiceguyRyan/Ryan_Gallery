@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
-import { useVelocitySkew } from '../../lib/useVelocitySkew';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 const ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
@@ -31,16 +30,13 @@ export default function RegionHeader({
 }) {
   const Tag = collapsible ? 'button' : 'div';
   const reduce = useReducedMotion();
-  // Kinetic type — the region name leans + throws with scroll velocity,
-  // echoing the hero's language at a smaller amplitude.
-  const kinetic = useVelocitySkew(5, 24);
   return (
     <section className="relative pt-10 lg:pt-20 select-none" aria-label={`Region: ${region}`}>
       {/* Hairline rule wipes in (mount-triggered so it always renders) */}
       <motion.div
         className="h-px w-full origin-left"
         style={{ background: accentSoft(0.28) }}
-        initial={{ scaleX: 0 }}
+        initial={reduce ? false : { scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 1.1, ease: expo }}
       />
@@ -55,7 +51,7 @@ export default function RegionHeader({
       >
         <div className="overflow-hidden">
           <motion.div
-            initial={{ y: '108%' }}
+            initial={reduce ? false : { y: '108%' }}
             animate={{ y: '0%' }}
             transition={{ duration: 0.95, ease: expo }}
           >
@@ -66,14 +62,14 @@ export default function RegionHeader({
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
               Region
             </span>
-            <motion.h2
-              className={`font-serif uppercase tracking-tighter leading-[0.85] text-white transition-opacity duration-300 will-change-transform ${
+            <h2
+              className={`font-serif uppercase tracking-tighter leading-[0.85] text-white transition-opacity duration-300 ${
                 collapsible ? 'group-hover/region:opacity-80' : ''
               }`}
-              style={{ fontSize: 'clamp(40px, 7vw, 92px)', skewX: kinetic.skewX, x: kinetic.x }}
+              style={{ fontSize: 'clamp(40px, 7vw, 92px)' }}
             >
               {region}
-            </motion.h2>
+            </h2>
           </motion.div>
         </div>
 
@@ -81,7 +77,9 @@ export default function RegionHeader({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="flex items-center gap-4 pb-2 shrink-0"
+          /* pr clears the archive column's overflow-x:clip so the circle's glow +
+             pulse are never sliced at the right edge */
+          className="flex items-center gap-4 pb-2 pr-2 md:pr-6 shrink-0"
         >
           <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.25em] uppercase text-white/40 leading-relaxed">
             {placeCount} places
@@ -90,26 +88,23 @@ export default function RegionHeader({
           </div>
           {collapsible && (
             <div className="flex items-center gap-3">
-              {/* Strong, unmistakable cue to open when collapsed */}
+              {/* Strong, unmistakable cue to open when collapsed. Pulses via CSS
+                  keyframes (compositor) — never a framer repeat:Infinity loop. */}
               {collapsed && (
-                <motion.span
-                  className="hidden sm:inline font-ui text-[10px] tracking-[0.35em] uppercase"
+                <span
+                  className="hidden sm:inline font-ui text-[10px] tracking-[0.35em] uppercase soft-pulse"
                   style={{ color: ACCENT }}
-                  animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
-                  transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                 >
                   Tap to expand
-                </motion.span>
+                </span>
               )}
-              <motion.span
-                className="flex items-center justify-center w-11 h-11 rounded-full border transition-colors duration-300"
+              <span
+                className={`flex items-center justify-center w-11 h-11 rounded-full border transition-colors duration-300 ${collapsed ? 'ring-pulse' : ''}`}
                 style={{
                   borderColor: collapsed ? accentSoft(0.7) : 'rgba(255,255,255,0.15)',
                   color: collapsed ? ACCENT : 'rgba(255,255,255,0.55)',
-                  boxShadow: collapsed ? `0 0 22px ${accentSoft(0.45)}` : 'none',
+                  boxShadow: collapsed ? `0 0 13px ${accentSoft(0.5)}` : 'none',
                 }}
-                animate={collapsed && !reduce ? { scale: [1, 1.1, 1] } : { scale: 1 }}
-                transition={collapsed && !reduce ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
               >
                 <motion.span
                   animate={{ rotate: collapsed ? 0 : 180 }}
@@ -118,7 +113,7 @@ export default function RegionHeader({
                 >
                   <ChevronDown size={18} />
                 </motion.span>
-              </motion.span>
+              </span>
             </div>
           )}
         </motion.div>

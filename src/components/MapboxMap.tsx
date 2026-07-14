@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
-import MapGL, { Marker, NavigationControl, FullscreenControl } from 'react-map-gl/mapbox';
+import MapGL, { Marker, Popup, NavigationControl, FullscreenControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import Supercluster from 'supercluster';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +10,10 @@ import Magnetic from './shared/Magnetic';
 // ─── Accent color (unified warm dark tone) ───
 const ACCENT = '#D2FF00';
 const ACCENT_RGB = '210, 255, 0';
+// Map markers use a calm warm ivory instead of the loud lime — dots read as
+// map pins, not neon. (Lime stays for UI accents: tooltips, sidebar, etc.)
+const DOT = '#E7E1CF';
+const DOT_RGB = '231, 225, 207';
 
 // ─── Map style presets ───
 const MAP_STYLES = [
@@ -120,22 +124,22 @@ function formatCoord(v: number, pos: string, neg: string) {
   return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
 }
 
-// ─── Intro camera framing — the map dives in from space ───
-const INTRO_VIEW = { latitude: 20, longitude: -40, zoom: 0.5, pitch: 0, bearing: -12 };
-const FINAL_VIEW = { latitude: 30, longitude: -40, zoom: 2.2, pitch: 40, bearing: 0 };
-const INTRO_DURATION = 1800;
+// ─── Camera framing — the map settles face-on over the continental US ───
+// No dive-from-space intro: the "from space" globe zoom was inherently heavy
+// (rendering the whole globe/atmosphere while a 60fps onMove re-render storm
+// ran), so the map now simply opens on the States, framed face-on (pitch:0).
+const FINAL_VIEW = { latitude: 38.8, longitude: -97.5, zoom: 3.5, pitch: 0, bearing: 0 };
 
 // ─── Main Inner Component ───
-function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { photos: Photo[]; mapboxToken: string; showLocationList?: boolean }) {
+function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
   const prefersReduced = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   );
-  const [viewState, setViewState] = useState(prefersReduced ? FINAL_VIEW : INTRO_VIEW);
-  // Gates the marker bloom until the dive-in settles, so markers don't pop
-  // mid-flight. Reduced-motion users skip the dive entirely.
-  const [introDone, setIntroDone] = useState(prefersReduced);
+  const [viewState, setViewState] = useState(FINAL_VIEW);
+  // No dive intro any more — the map opens settled on the US, so markers may
+  // bloom in immediately (they still stagger-animate on mount for a little life).
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -188,34 +192,20 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
       'space-color': 'rgb(15, 15, 20)',
       'star-intensity': 0.4,
     });
-    if (!map.getSource('mapbox-dem')) {
-      map.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
-    }
-    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+    // NOTE: 3D terrain (raster-DEM) intentionally removed. The atlas is framed
+    // face-on at pitch:0, so terrain relief is never visible — it added real
+    // per-frame GPU render cost + streamed DEM tiles that repaint on load,
+    // hurting scroll smoothness on constrained compositors for zero visual gain.
   }, []);
 
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const start = () => {
-      applyGlobeSettings(map);
-      if (prefersReduced) return;
-      // Dive in from space: zoom + tilt + a touch of rotation settle.
-      map.flyTo({
-        center: [FINAL_VIEW.longitude, FINAL_VIEW.latitude],
-        zoom: FINAL_VIEW.zoom,
-        pitch: FINAL_VIEW.pitch,
-        bearing: FINAL_VIEW.bearing,
-        duration: INTRO_DURATION,
-        curve: 1.5,
-        essential: true,
-      });
-      // Let markers bloom just before the camera fully settles.
-      window.setTimeout(() => setIntroDone(true), INTRO_DURATION - 250);
-    };
-    if (map.isStyleLoaded()) start();
-    else map.once('style.load', start);
-  }, [applyGlobeSettings, prefersReduced]);
+    // Apply the globe projection + atmosphere once the style is ready. No dive:
+    // the camera is already framed on the US (initial viewState = FINAL_VIEW).
+    if (map.isStyleLoaded()) applyGlobeSettings(map);
+    else map.once('style.load', () => applyGlobeSettings(map));
+  }, [applyGlobeSettings]);
 
   // Re-apply globe settings when style changes
   useEffect(() => {
@@ -225,25 +215,39 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     map.once('style.load', reapply);
   }, [mapStyleIdx, applyGlobeSettings]);
 
-  // Cluster click → smooth expand to appropriate zoom
+  // Cluster click. A cluster can hold photos from ONE city (proximity grouping
+  // at low zoom) or several. If it resolves to a single city we treat the click
+  // like selecting that city — smooth zoom in, highlight it in the sidebar, and
+  // pop its photo card on the map. A genuinely multi-city cluster just expands.
   const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
+    let leaves: any[] = [];
+    try { leaves = clusterIndex.getLeaves(clusterId, Infinity); } catch { leaves = []; }
+    const citiesInCluster = Array.from(new Set(
+      leaves.map((l) => validPhotos[l.properties.photoIndex]?.location?.city).filter(Boolean),
+    ));
+
+    if (citiesInCluster.length === 1) {
+      const cluster = cityClusters.find((c) => c.city === citiesInCluster[0]) || null;
+      if (cluster) {
+        mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(viewState.zoom, 7), duration: 1400, essential: !prefersReduced, curve: 1.42 });
+        setActiveCluster(cluster);
+        setActiveClusterCity(cluster.city);
+        setExpandedRegion(cluster.region || getRegion(cluster.country));
+        return;
+      }
+    }
+
+    // Multi-city (or unresolved) cluster → expand toward its break-apart zoom.
     try {
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
-      // Smooth step: don't jump too far, cap at +3 from current or expansionZoom, whichever is less
       const targetZoom = Math.min(expansionZoom, viewState.zoom + 3.5, 14);
-      mapRef.current?.flyTo({
-        center: [lng, lat],
-        zoom: targetZoom,
-        duration: 1400,
-        essential: true,
-        curve: 1.42,
-        speed: 0.8,
-      });
+      mapRef.current?.flyTo({ center: [lng, lat], zoom: targetZoom, duration: 1400, essential: !prefersReduced, curve: 1.42, speed: 0.8 });
     } catch {
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: true });
+      mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: !prefersReduced });
     }
     setActiveCluster(null);
-  }, [clusterIndex, viewState.zoom]);
+    setActiveClusterCity(null);
+  }, [clusterIndex, viewState.zoom, validPhotos, cityClusters]);
 
   // Photo marker click → highlight in sidebar (no map popup)
   const handlePhotoClick = useCallback((photo: Photo) => {
@@ -251,10 +255,11 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     const cluster = cityClusters.find(c => c.city === city) || null;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
-    // Expand the region containing this city so the card is visible
+    // Expand the region containing this city so the card is visible. Use the
+    // same key groupByRegion does (fine-grained region wins over country map),
+    // otherwise the wrong sidebar group opens.
     if (cluster) {
-      const region = getRegion(cluster.country);
-      setExpandedRegion(region);
+      setExpandedRegion(cluster.region || getRegion(cluster.country));
     }
     // Gentle center, don't zoom aggressively
     const targetZoom = Math.max(viewState.zoom, 6);
@@ -262,7 +267,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
       center: [photo.location!.lng, photo.location!.lat],
       zoom: targetZoom,
       duration: 1200,
-      essential: true,
+      essential: !prefersReduced,
     });
     // Wait for AnimatePresence region expand (300ms) before scrolling
     setTimeout(() => {
@@ -277,7 +282,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
     setActiveClusterCity(isSame ? null : cluster.city);
     setActiveCluster(isSame ? null : cluster);
     if (!isSame) {
-      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: 1500, essential: true });
+      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: 1500, essential: !prefersReduced });
     }
   }, [activeClusterCity]);
 
@@ -295,7 +300,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
       const zoom = parts[2] ? parseFloat(parts[2]) : 8;
       if (isNaN(lat) || isNaN(lng)) return;
       setTimeout(() => {
-        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: true });
+        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: !prefersReduced });
         // Find and highlight closest city
         let closest: LocationCluster | null = null;
         let minDist = Infinity;
@@ -306,7 +311,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
         if (closest && minDist < 2) {
           setActiveClusterCity(closest.city);
           setActiveCluster(closest);
-          setExpandedRegion(getRegion(closest.country));
+          setExpandedRegion(closest.region || getRegion(closest.country));
         }
       }, 300);
       // Clean the hash so it doesn't re-fire on reload
@@ -318,7 +323,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
   }, [cityClusters]);
 
   const resetView = useCallback(() => {
-    mapRef.current?.flyTo({ center: [-40, 30], zoom: 2.2, pitch: 40, bearing: 0, duration: 2000 });
+    mapRef.current?.flyTo({ center: [FINAL_VIEW.longitude, FINAL_VIEW.latitude], zoom: FINAL_VIEW.zoom, pitch: FINAL_VIEW.pitch, bearing: FINAL_VIEW.bearing, duration: 1600, essential: !prefersReduced });
     setActiveCluster(null);
     setActiveClusterCity(null);
   }, []);
@@ -334,9 +339,22 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
 
   return (
     <div>
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_40px_100px_-20px_rgba(0,0,0,0.4)] border border-white/10 bg-[#111]">
+      {/* translateZ(0) promotes the ENTIRE card (shadow + map + sidebar) to one
+          cached compositor layer, so scrolling the page just translates that
+          layer instead of re-compositing the heavy WebGL region every frame —
+          the key win for constrained compositors (mobile / embedded webviews).
+          Shadow blur trimmed 100px→64px (indistinguishable at 0.45 alpha) to
+          shrink the layer's rasterised bounds. */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_30px_64px_-24px_rgba(0,0,0,0.45)] border border-white/10 bg-[#111]" style={{ transform: 'translateZ(0)' }}>
         {/* ── Map ── */}
-        <div className="relative w-full lg:flex-1 h-[54vh] min-h-[360px] md:h-[64vh] lg:h-[72vh]">
+        {/* translateZ(0) promotes this map region to its own compositor layer.
+            Two payoffs during page scroll: (1) the overlay controls' backdrop-blur
+            samples a LOCAL, static backdrop (the canvas scrolls with them) so the
+            browser caches the filter instead of re-rasterising it every frame, and
+            (2) the whole map region translates as one cached layer. It's an ancestor
+            of the Mapbox canvas — never the canvas itself — so map/marker geometry
+            is untouched. This is a big win for smooth-scrolling back up past the map. */}
+        <div className="relative w-full lg:flex-1 h-[54vh] min-h-[360px] md:h-[64vh] lg:h-[72vh]" style={{ transform: 'translateZ(0)' }}>
           <MapGL
             {...viewState}
             ref={mapRef}
@@ -348,7 +366,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             onLoad={handleMapLoad}
             maxZoom={16}
             minZoom={1.5}
-            onClick={() => { setShowStylePicker(false); }}
+            onClick={() => { setShowStylePicker(false); setActiveCluster(null); setActiveClusterCity(null); }}
           >
             <NavigationControl position="bottom-right" showCompass={false} />
             <FullscreenControl position="bottom-right" />
@@ -364,7 +382,16 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
               const dx = lng - viewState.longitude;
               const dy = lat - viewState.latitude;
               const dist = Math.sqrt(dx * dx + dy * dy);
-              const bloomDelay = introDone ? Math.min(dist * 0.006, 0.5) + Math.random() * 0.08 : 0;
+              // Stable per-marker jitter (0..0.08) hashed from the feature/photo id
+              // so it doesn't change on every render — a fresh Math.random() here
+              // would re-stagger whileHover/exit and cause hover lag + ghosting.
+              const bloomSeed = String(
+                props.cluster ? feature.id : (validPhotos[props.photoIndex]?._id ?? feature.id),
+              );
+              let bloomHash = 0;
+              for (let i = 0; i < bloomSeed.length; i++) bloomHash = (bloomHash * 31 + bloomSeed.charCodeAt(i)) & 0xffff;
+              const bloomJitter = (bloomHash % 81) / 1000; // 0..0.08
+              const bloomDelay = Math.min(dist * 0.006, 0.5) + bloomJitter;
 
               // ── Cluster ──
               if (props.cluster) {
@@ -382,33 +409,34 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                     <motion.div
                       className="relative flex items-center justify-center cursor-pointer group"
                       style={{ width: size + 20, height: size + 20 }}
-                      initial={{ opacity: 0, scale: 0.4 }}
-                      animate={introDone ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.4 }}
-                      exit={{ opacity: 0, scale: 0.4 }}
-                      transition={{ type: 'spring', stiffness: 320, damping: 22, delay: bloomDelay }}
-                      whileHover={{ scale: 1.08 }}
+                      initial={prefersReduced ? false : { opacity: 0, scale: 0.4 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.4, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
+                      transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 22, delay: bloomDelay }}
+                      whileHover={prefersReduced ? undefined : { scale: 1.08, transition: { type: 'spring', stiffness: 320, damping: 22 } }}
                       whileTap={{ scale: 0.94 }}
                     >
-                      {/* Outer breathing ring */}
-                      <motion.div
-                        className="absolute rounded-full"
-                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${ACCENT_RGB},0.12)` }}
-                        animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.15, 0.5] }}
-                        transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                      {/* Outer breathing ring — CSS keyframes (compositor, off the
+                          main thread) so N perpetual cluster rings never compete
+                          with Lenis's main-thread smooth scroll. */}
+                      <div
+                        className="absolute rounded-full marker-breathe"
+                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${DOT_RGB},0.12)` }}
                       />
                       {/* Inner halo */}
                       <div
                         className="absolute rounded-full"
-                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${ACCENT_RGB},0.18)` }}
+                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${DOT_RGB},0.18)` }}
                       />
                       {/* Core badge */}
                       <div
-                        className="relative rounded-full flex items-center justify-center text-white font-bold shadow-lg border-[2.5px] border-white/50"
+                        className="relative rounded-full flex items-center justify-center font-bold shadow-lg border-[2.5px] border-black/15"
                         style={{
                           width: size, height: size,
                           fontSize: count < 10 ? 13 : 14,
-                          background: ACCENT,
-                          boxShadow: `0 6px 24px rgba(${ACCENT_RGB},0.4)`,
+                          background: DOT,
+                          color: '#20241a',
+                          boxShadow: `0 4px 16px rgba(0,0,0,0.35)`,
                         }}
                       >
                         <AnimatePresence mode="wait">
@@ -454,52 +482,59 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                   <motion.div
                     className="relative flex items-center justify-center cursor-pointer group"
                     style={{ width: containerSize, height: containerSize }}
-                    initial={{ opacity: 0, scale: 0.3 }}
-                    animate={
-                      introDone
-                        ? {
-                            // Dim the rest of the field when a city is selected, so
-                            // the active one (and any hovered one) reads as focus.
-                            opacity: activeCluster && !isActive && !isHovered ? 0.35 : 1,
-                            scale: 1,
-                          }
-                        : { opacity: 0, scale: 0.3 }
-                    }
-                    exit={{ opacity: 0, scale: 0.3 }}
-                    transition={{ type: 'spring', stiffness: 380, damping: 24, delay: bloomDelay, opacity: { duration: 0.5 } }}
+                    initial={prefersReduced ? false : { opacity: 0, scale: 0.3 }}
+                    animate={{
+                      // Dim the rest of the field when a city is selected, so
+                      // the active one (and any hovered one) reads as focus.
+                      opacity: activeCluster && !isActive && !isHovered ? 0.35 : 1,
+                      scale: 1,
+                    }}
+                    exit={{ opacity: 0, scale: 0.3, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
+                    transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 24, delay: bloomDelay, opacity: { duration: 0.5 } }}
                     onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
                     onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
                   >
                     {/* Glow ring — only shown when active or hovered */}
                     {(isActive || isHovered) && (
                       <div
-                        className="absolute inset-0 rounded-full transition-all duration-500"
-                        style={{ backgroundColor: `rgba(${ACCENT_RGB},${isActive ? 0.15 : 0.08})` }}
+                        className="absolute inset-0 rounded-full transition-colors duration-500"
+                        style={{ backgroundColor: `rgba(${DOT_RGB},${isActive ? 0.18 : 0.1})` }}
                       />
                     )}
 
                     {/* Pulse ring — pings outward while the city is hovered (incl.
-                        from the list), reinforcing the list ↔ map linkage. */}
+                        from the list), reinforcing the list ↔ map linkage. CSS
+                        keyframes (compositor), not a framer repeat loop; PRM
+                        users get a static ring instead. */}
                     {isHovered && !isActive && (
-                      <motion.span
-                        className="absolute inset-0 rounded-full"
-                        style={{ border: `1.5px solid rgba(${ACCENT_RGB},0.6)` }}
-                        initial={{ scale: 0.7, opacity: 0.6 }}
-                        animate={{ scale: [0.7, 1.9], opacity: [0.55, 0] }}
-                        transition={{ duration: 1.3, repeat: Infinity, ease: 'easeOut' }}
-                      />
+                      prefersReduced ? (
+                        <span
+                          className="absolute inset-0 rounded-full"
+                          style={{ border: `1.5px solid rgba(${DOT_RGB},0.5)` }}
+                        />
+                      ) : (
+                        <span
+                          className="absolute inset-0 rounded-full ping-out"
+                          style={{
+                            border: `1.5px solid rgba(${DOT_RGB},0.65)`,
+                            ['--ping-from' as never]: 0.7,
+                            ['--ping-to' as never]: 1.9,
+                            ['--ping-dur' as never]: '1.3s',
+                          }}
+                        />
+                      )
                     )}
                     <div
-                      className="relative rounded-full overflow-hidden shadow-lg transition-all duration-300 ease-out"
+                      className="relative rounded-full overflow-hidden shadow-lg transition-[width,height,box-shadow,outline] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
                       style={{
                         width: isActive ? 40 : isHovered ? 34 : 26,
                         height: isActive ? 40 : isHovered ? 34 : 26,
                         outline: isActive
-                          ? `3px solid ${ACCENT}`
+                          ? `3px solid ${DOT}`
                           : '2.5px solid rgba(255,255,255,0.9)',
                         outlineOffset: '1px',
                         boxShadow: isActive
-                          ? `0 0 20px rgba(${ACCENT_RGB},0.4), 0 4px 12px rgba(0,0,0,0.2)`
+                          ? `0 0 18px rgba(${DOT_RGB},0.45), 0 4px 12px rgba(0,0,0,0.25)`
                           : '0 2px 8px rgba(0,0,0,0.15)',
                       }}
                     >
@@ -516,7 +551,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                           initial={{ opacity: 0, y: -6, scale: 0.9 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -6, scale: 0.9 }}
-                          transition={{ duration: 0.15 }}
+                          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                           className="absolute -top-9 left-1/2 -translate-x-1/2 pointer-events-none"
                           style={{ zIndex: 10 }}
                         >
@@ -532,6 +567,66 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
               );
             })}
             </AnimatePresence>
+
+            {/* ── Photo box — pops up on the map at the selected city, so a
+                 marker click reads clearly: map zooms in, the sidebar city
+                 highlights, and this preview appears. Mirrors the sidebar
+                 selection; dismiss via ×, another marker, or an empty-map click. ── */}
+            {activeCluster && (
+              <Popup
+                longitude={activeCluster.lng}
+                latitude={activeCluster.lat}
+                anchor="bottom"
+                offset={20}
+                closeButton={false}
+                closeOnClick={false}
+                className="premium-map-popup"
+                maxWidth="240px"
+              >
+                <motion.div
+                  key={activeCluster.city}
+                  initial={{ opacity: 0, y: 8, scale: 0.94 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative w-[218px] overflow-hidden rounded-2xl bg-[#15150f] border border-white/10 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]"
+                >
+                  <div className="relative h-28 overflow-hidden">
+                    <img
+                      src={`${activeCluster.photos[0].imageUrl}?auto=format&w=440&q=80`}
+                      alt={activeCluster.city}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setActiveCluster(null); setActiveClusterCity(null); }}
+                      className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white/70 hover:text-white hover:bg-black/70 transition-colors"
+                      aria-label="Close"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                    <div className="absolute bottom-2.5 left-3.5 right-3.5">
+                      <p className="text-[8px] uppercase tracking-[0.2em] text-white/55 font-semibold">{activeCluster.country}</p>
+                      <h4 className="text-base font-serif uppercase text-white leading-tight truncate">{activeCluster.city}</h4>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between px-3.5 py-2.5 gap-2">
+                    <div className="flex -space-x-2">
+                      {activeCluster.photos.slice(0, 3).map((p) => (
+                        <div key={p._id} className="w-7 h-7 rounded-md overflow-hidden ring-2 ring-[#15150f]">
+                          <img src={`${p.imageUrl}?auto=format&w=64&h=64&fit=crop&q=70`} alt="" className="w-full h-full object-cover" draggable={false} />
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-ui uppercase tracking-[0.12em] font-semibold" style={{ color: ACCENT }}>
+                      {activeCluster.photos.length} frame{activeCluster.photos.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {/* pointer toward the marker */}
+                  <div className="absolute left-1/2 -bottom-[7px] -translate-x-1/2 w-3.5 h-3.5 rotate-45 bg-[#15150f] border-r border-b border-white/10" />
+                </motion.div>
+              </Popup>
+            )}
           </MapGL>
 
           {/* ── Floating status badge ── */}
@@ -587,7 +682,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           {/* ── Bottom label ── */}
           <div className="absolute bottom-6 left-6 z-10 pointer-events-none hidden lg:block">
             <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-[9px] font-bold text-white/30 uppercase tracking-[0.2em]">
-              Globe · 3D Terrain · {MAP_STYLES[mapStyleIdx].label}
+              Globe · {MAP_STYLES[mapStyleIdx].label}
             </div>
           </div>
 
@@ -605,9 +700,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           </div>
         </div>
 
-        {/* ── Desktop sidebar — grouped by region (optional; off via
-             showLocationList=false when an external index drives the map) ── */}
-        {showLocationList && (
+        {/* ── Desktop sidebar — grouped by region ── */}
         <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#30352a]">
           <div className="px-5 py-4 border-b border-white/5">
             <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
@@ -664,7 +757,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                 onClick={() => handleCityClick(cluster)}
                                 onMouseEnter={() => setHoveredCity(cluster.city)}
                                 onMouseLeave={() => setHoveredCity(null)}
-                                className={`relative w-full text-left px-5 py-3.5 border-b transition-[transform,background-color,border-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                                className={`relative w-full text-left px-5 py-3.5 border-b transition-[translate,background-color,border-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                                   isSelected
                                     ? 'bg-white/10 text-white border-b-white/10 translate-x-0'
                                     : isHoveredFromMap
@@ -685,7 +778,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
                                 />
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-[transform,box-shadow,outline-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
+                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-[scale,box-shadow,outline-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
                                     <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
                                   </div>
                                   <div className="flex-1 min-w-0">
@@ -700,15 +793,20 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   </div>
                                 </div>
                               </button>
-                              {/* Rich expanded card for selected city — with CSS transition */}
-                              <div
-                                className="bg-[#111] border-b border-white/5 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                                style={{
-                                  maxHeight: isSelected ? '500px' : '0px',
-                                  opacity: isSelected ? 1 : 0,
-                                  overflow: 'hidden',
-                                }}
-                              >
+                              {/* Rich expanded card for the selected city — framer
+                                  measures the real content height and animates it, so
+                                  the expand is smooth (no max-height:500px guess +
+                                  transition:all reflow on the 600px cover image). */}
+                              <AnimatePresence initial={false}>
+                                {isSelected && (
+                                  <motion.div
+                                    key="detail"
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ height: { duration: 0.5, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } }}
+                                    className="bg-[#111] border-b border-white/5 overflow-hidden"
+                                  >
                                 {/* Cover photo */}
                                 <div className="relative h-36 overflow-hidden">
                                   <img
@@ -741,7 +839,7 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                   {cluster.photos[0]?.collection?.slug && (
                                     <a
                                       href={`/works/${cluster.photos[0].collection.slug}`}
-                                      className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                                      className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
                                       style={{ background: ACCENT }}
                                     >
                                       Explore Story
@@ -749,7 +847,9 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
                                     </a>
                                   )}
                                 </div>
-                              </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </motion.div>
                           );
                         })}
@@ -761,11 +861,9 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
             })}
           </div>
         </div>
-        )}
       </div>
 
-      {/* ── Mobile city list — grouped by region (gated with the panel) ── */}
-      {showLocationList && (
+      {/* ── Mobile city list — grouped by region ── */}
       <div className="lg:hidden mt-4 space-y-4">
         {regionGroups.map((group) => (
           <div key={group.region}>
@@ -809,11 +907,10 @@ function MapboxMapInner({ photos, mapboxToken, showLocationList = true }: { phot
           </div>
         ))}
       </div>
-      )}
     </div>
   );
 }
 
-export default function MapboxMap(props: { photos: Photo[]; mapboxToken: string; showLocationList?: boolean }) {
-  return <MapErrorBoundary><MapboxMapInner photos={props.photos} mapboxToken={props.mapboxToken} showLocationList={props.showLocationList} /></MapErrorBoundary>;
+export default function MapboxMap(props: { photos: Photo[]; mapboxToken: string }) {
+  return <MapErrorBoundary><MapboxMapInner photos={props.photos} mapboxToken={props.mapboxToken} /></MapErrorBoundary>;
 }

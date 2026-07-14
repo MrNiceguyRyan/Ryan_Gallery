@@ -4,13 +4,12 @@
 
 @theme {
   --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-  /* Playfair is reserved for the ParticleTitle canvas hero ONLY. */
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
-  /* Display serif — Fraunces (high-contrast, Brier-like): every editorial headline. */
+  /* Display serif — Fraunces (high-contrast, Brier-like): every editorial headline.
+     (.font-serif below maps to THIS, not --font-serif.) */
   --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
   /* Geometric grotesque — Space Grotesk: all UI labels / eyebrows / captions. */
   --font-ui: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-signature: "Mrs Saint Delafield", cursive;
 }
 
 /* ─── Lenis smooth scroll — required rules. Override the native
@@ -82,6 +81,16 @@ body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   overflow-x: hidden;
   transition: background-color 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Print-grade type: real kerning + ligatures everywhere */
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  /* Taps shouldn't flash grey boxes on touch devices */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Multi-line headings break into balanced lines instead of a ragged orphan */
+h1, h2, h3 {
+  text-wrap: balance;
 }
 
 /* ─── Blob morph animation ─── */
@@ -104,22 +113,6 @@ body {
   animation: blob-morph 8s ease-in-out infinite;
 }
 
-/* ─── Guide bar breathing glow ─── */
-@keyframes breathe-glow {
-  0%, 100% {
-    opacity: 0.4;
-    box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.1);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 20px 6px rgba(255, 255, 255, 0.25);
-  }
-}
-
-.animate-breathe-glow {
-  animation: breathe-glow 3s ease-in-out infinite;
-}
-
 /* ─── Line growth animation ─── */
 @keyframes line-grow {
   from {
@@ -131,23 +124,8 @@ body {
 }
 
 .animate-line-grow {
-  animation: line-grow 1.5s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  animation: line-grow 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: top center;
-}
-
-/* ─── Glassmorphism utility ─── */
-.glass {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.glass-light {
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* ─── Minimal scrollbar ─── */
@@ -184,35 +162,6 @@ body {
 .text-eyebrow { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.5em; text-transform: uppercase; color: rgba(244, 244, 237, 0.32); }
 .text-kicker { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; }
 .text-deck { font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 1.4vw, 21px); line-height: 1.5; color: rgba(244, 244, 237, 0.72); }
-.text-caption { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(244, 244, 237, 0.4); }
-.text-dateline { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(244, 244, 237, 0.5); }
-
-/* ─── Self-drawing lime underline (the signature Lando UI tell) ───
-   A 2px accent rule that draws in left→right on hover, and stays drawn on the
-   active item (add `.is-active`). Honors reduced-motion by appearing instantly. */
-.link-underline {
-  position: relative;
-}
-.link-underline::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -0.18em;
-  height: 2px;
-  background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.link-underline:hover::after,
-.link-underline:focus-visible::after,
-.link-underline.is-active::after {
-  transform: scaleX(1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .link-underline::after { transition: none; }
-}
 
 /* ─── On-mount self-drawing lime underline (for headline keywords) ───
    Draws once, left→right, after `--draw-delay`. Width spans the element it
@@ -239,44 +188,32 @@ body {
   .draw-underline::after { animation: none; transform: scaleX(1); }
 }
 
-/* ─── Marquee animations ─── */
-@keyframes marquee {
-  0% { transform: translateX(0%); }
-  100% { transform: translateX(-50%); }
-}
-
-@keyframes marquee-reverse {
-  0% { transform: translateX(-50%); }
-  100% { transform: translateX(0%); }
-}
-
-.animate-marquee {
-  animation: marquee 28s linear infinite;
-}
-
-.animate-marquee-reverse {
-  animation: marquee-reverse 35s linear infinite;
-}
-
 /* ─── Selection ─── */
 ::selection {
   background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
   color: #282c20;
 }
 
-/* ─── Global interaction polish (eloqwnt-inspired: smooth, organic, 0.4s base) ─── */
-a, button {
-  transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-img {
-  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
-              filter 0.7s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+/* ─── Global interaction polish (eloqwnt-inspired: smooth, organic, 0.4s base) ───
+   Lives in @layer base so any Tailwind utility (transition-*, duration-*) beats it —
+   unlayered it silently overrode every per-element transition on the site.
+   `translate`/`scale`/`rotate` are listed because Tailwind v4's scale-*/translate-*
+   utilities set those STANDALONE properties, not `transform` — a transition that
+   only names `transform` lets them snap.
+   NOTE: deliberately no global `img` transition — framer-motion drives image
+   transforms per-frame (parallax, hover zooms), and a CSS transition on top makes
+   every one of those writes lag toward its target (mushy motion). The two pure-CSS
+   hover-zoom images carry their own `transition-transform` utilities. */
+@layer base {
+  a, button {
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                translate 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                scale 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* Focus-visible ring for keyboard navigation */
@@ -314,19 +251,10 @@ img {
   display: none;
 }
 
-/* ─── Dynamic accent color (per-chapter retint on homepage) ───
- *  CSS custom properties registered as <number> so the browser can natively
- *  interpolate between integer values. HomePage updates these three vars on
- *  the wrapper as the user scrolls between ArchiveChapter components; any
- *  descendant referencing `rgb(var(--accent-r), var(--accent-g),
- *  var(--accent-b))` will crossfade smoothly without JS lerping.
- *
- *  Safari 16.4+ / Chrome 85+ / Firefox 128+. Older browsers fall back to a
- *  step transition (still works visually, just no interpolation).
- *
- *  Default = electric lime rgb(210,255,0) so pages outside the homepage
- *  wrapper (travel, about, the shared footer) inherit the single signature
- *  accent without each having to set it. */
+/* ─── Site accent — single fixed electric lime rgb(210,255,0), exposed as
+ *  registered numeric vars so every page/component references one source:
+ *  `rgb(var(--accent-r), var(--accent-g), var(--accent-b))`. (The former
+ *  per-chapter retint system is gone — the accent never changes at runtime.) */
 @property --accent-r {
   syntax: '<number>';
   inherits: true;
@@ -343,22 +271,11 @@ img {
   initial-value: 0;
 }
 
-.accent-tint-transition {
-  transition:
-    --accent-r 1.2s ease-out,
-    --accent-g 1.2s ease-out,
-    --accent-b 1.2s ease-out;
-}
-
 /* ═══════════════════════════════════════════════════════
- *  Site atmosphere — the shared dark backdrop on every page.
- *  A deep olive base (var --bg-base, set on each page wrapper). The texture —
- *  a field of faint, rounded ORGANIC BLOB contours just a hair lighter than the
- *  page (echoing Lando's blob motif) — is drawn on the canvas by
- *  lib/atmosphere.ts, with a slow scroll-parallax drift (static under
- *  reduced-motion). No colour wash: it reads as texture, never as subject.
- *  Mount <SiteAtmosphere/> (home / about) or `<canvas class="site-atmos">`
- *  (travel) behind page content.
+ *  Site background — a flat deep-olive field (set on the <body> in Layout),
+ *  given depth by the global film grain + edge vignette (mounted in Layout).
+ *  The former contour-canvas atmosphere (SiteAtmosphere / lib/atmosphere.ts)
+ *  was retired in favour of that grain + vignette treatment.
  * ═══════════════════════════════════════════════════════ */
 /* ─── Heat system — a fixed lime "heat" decoupled from the (per-room) accent.
    Drives the scroll-velocity glow/bloom. --glow-intensity (0..1) is set per
@@ -373,7 +290,6 @@ img {
   text-shadow: 0 0 calc(44px * var(--glow-intensity)) rgba(var(--heat-r), var(--heat-g), var(--heat-b), calc(0.65 * var(--glow-intensity)));
   transition: text-shadow 0.4s ease;
 }
-@keyframes heat-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
 
 /* ─── WalkIn opener — CSS-driven entrances (no framer mount anims there) ─── */
 /* Cycling city name inside the card: wipes in TOP-DOWN on each remount. */
@@ -395,242 +311,120 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   .walkin-nav { transform: none !important; transition: none !important; }
 }
 
-:root { --bg-base: #282c20; }
-
-.site-atmos {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-/* ═══════════════════════════════════════════════════════
- *  Journal Gallery — filmstrip layout
- * ═══════════════════════════════════════════════════════ */
-
-/* Filmstrip collection bands */
-.filmstrip-item {
-  position: relative;
-  width: 100%;
-  /* Mobile: tall enough to read text and tap comfortably */
-  height: 42vh;
-  min-height: 240px;
-  overflow: hidden;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  /* Improve touch tap highlight */
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (min-width: 640px) {
-  .filmstrip-item {
-    height: 34vh;
-    min-height: 260px;
-  }
-}
-
-@media (min-width: 768px) {
-  .filmstrip-item {
-    height: 28vh;
-    min-height: 0;
-  }
-}
-
-.filmstrip-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  /* Scale & filter are driven by Framer Motion — no CSS transitions needed here */
-  will-change: transform, filter;
-}
-
-/* ─── Editorial photo cell: forced 4/5 on mobile, natural aspect on desktop ─── */
-.photo-slot {
-  aspect-ratio: 4 / 5;
-}
-@media (min-width: 768px) {
-  .photo-slot {
-    aspect-ratio: var(--photo-ar, 4 / 5);
-  }
-}
-
-/* Detail overlay grid */
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 1024px) {
-  .detail-grid {
-    grid-template-columns: 1fr 1.5fr;
-    gap: 4rem;
-  }
-}
-
-/* Apple-like spring timing */
-.apple-spring {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ═══════════════════════════════════════════════════════
- *  Mapbox GL Popup — clean, minimal overrides
- * ═══════════════════════════════════════════════════════ */
-.map-popup-custom .mapboxgl-popup-content {
+/* Premium dark photo box on the atlas map — the card carries its own bg, radius,
+   shadow and pointer, so strip Mapbox's default white chrome entirely. */
+.premium-map-popup .mapboxgl-popup-content {
+  background: transparent;
   padding: 0;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.2);
-  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.premium-map-popup .mapboxgl-popup-tip {
+  display: none;
 }
 
-.map-popup-custom .mapboxgl-popup-tip {
-  border-top-color: white;
+/* Map cluster "breathing" halo — CSS keyframes run on the compositor (off the
+   main thread), so a field of perpetual rings never steals frames from Lenis's
+   main-thread smooth scroll. transform: scale animates about the element centre. */
+@keyframes marker-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.18); opacity: 0.15; }
+}
+.marker-breathe {
+  animation: marker-breathe 2.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marker-breathe { animation: none; opacity: 0.35; }
+}
+
+/* ── Shared perpetual pulse vocabulary — same rationale as marker-breathe:
+   every repeat-forever cue lives in CSS keyframes (compositor / off the main
+   thread) instead of a framer `repeat: Infinity` JS loop that competes with
+   Lenis's main-thread smooth scroll. Parameterized via CSS vars so one pair of
+   keyframes serves every call site. ── */
+/* Opacity breathing (e.g. "Tap to expand", mini-map coordinate dot) */
+@keyframes soft-pulse {
+  0%, 100% { opacity: var(--pulse-min, 0.45); }
+  50% { opacity: 1; }
+}
+.soft-pulse { animation: soft-pulse var(--pulse-dur, 2.2s) ease-in-out infinite; }
+
+/* Gentle scale breathing (e.g. the collapsed-region chevron circle) */
+@keyframes ring-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+.ring-pulse { animation: ring-pulse 2.2s ease-in-out infinite; }
+
+/* Expanding ping that fades out (e.g. route-rail waypoint, map hover ring) */
+@keyframes ping-out {
+  from { transform: scale(var(--ping-from, 1)); opacity: var(--ping-op, 0.55); }
+  to { transform: scale(var(--ping-to, 2.6)); opacity: 0; }
+}
+.ping-out { animation: ping-out var(--ping-dur, 1.8s) ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .soft-pulse { animation: none; opacity: 1; }
+  .ring-pulse { animation: none; }
+  .ping-out { animation: none; opacity: 0; }
 }
 
 /* ═══════════════════════════════════════════════════════
  *  Atmospheric / Cinematic Homepage Effects
  * ═══════════════════════════════════════════════════════ */
 
-.font-signature {
-  font-family: var(--font-signature);
-  font-weight: 400;
-}
-
-/* SVG-based noise grain overlay — subtle film texture */
-.noise-grain {
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.015;
-  pointer-events: none;
-  z-index: 1000;
-  animation: grain-animation 0.5s steps(3) infinite;
-}
-
-/* Warm ambient glow — dual-radial orange/blue light */
-.ambient-glow {
+/* Global film grain — a fine, STATIC, monochrome emulsion over the whole site
+   (fixed, pointer-events-none, NO animation → zero flicker, self-contained data
+   URI → no network). Makes the archive read like film prints, not renders.
+   Mounted once in Layout.astro so every page inherits it. */
+.film-grain {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 100;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(255, 180, 100, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(100, 150, 255, 0.05) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(10, 10, 10, 1) 0%, rgba(5, 5, 5, 1) 100%);
-  animation: glow-shift 20s ease-in-out infinite alternate;
+  /* No blend mode: overlay-blending a fixed layer over composited (transformed)
+     elements makes their GPU layer edges visible as faint boxes around colored
+     text/components. Plain low opacity keeps the emulsion without the seams. */
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* Own compositor layer → never repaints while (smooth-)scrolling underneath. */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
-/* Camera lens breathing — subtle scale/blur cycle */
-.lens-breathing {
-  animation: breath 15s ease-in-out infinite;
-}
-
-/* Shutter flicker — subtle brightness oscillation */
-.shutter-flicker {
-  animation: flicker 4s ease-in-out infinite;
-}
-
-/* Angled warm sunbeam light leak */
-.sunbeam {
-  /* MUST stay fixed (viewport-relative). As `absolute` it sat in page flow with
-     height:150% + rotate(25deg), extending the page ~1000px below the content
-     (scroll-into-void) and poking out sideways (horizontal scroll). The markup
-     and Layout both treat it as a fixed ambient layer. */
+/* Soft edge vignette — deepens the corners a hair so the olive field has depth
+   instead of reading dead-flat. A radial gradient (cheap to paint) rather than a
+   huge inset box-shadow blur (which the CPU re-rasterises and stutters Lenis). */
+.page-vignette {
   position: fixed;
-  top: -20%;
-  left: 10%;
-  width: 30vw;
-  height: 150%;
-  background: linear-gradient(to right, rgba(255, 230, 180, 0.15) 0%, transparent 60%);
-  transform: rotate(25deg);
-  filter: blur(120px);
+  inset: 0;
+  z-index: 1;
   pointer-events: none;
-  z-index: 5;
-  mix-blend-mode: overlay;
+  background: radial-gradient(125% 125% at 50% 48%, transparent 56%, rgba(9, 11, 6, 0.34) 100%);
+  transform: translateZ(0);
 }
 
-/* Stardust paper texture */
-.paper-texture {
-  background-image: url("https://www.transparenttextures.com/patterns/stardust.png");
-  opacity: 0.01;
-}
-
-/* Newsprint halftone — fine dot screen, the "printed page" grain. Used on
-   editorial transition sheets (page-transition + MagazineLayout cover). */
-.newsprint-halftone {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.5) 0.5px, transparent 0.6px);
-  background-size: 4px 4px;
-}
-/* Coarser ink screen for large display areas — reads as offset print */
+/* Newsprint ink screen — a fine dot grain that reads as offset print. Used on
+   the MagazineLayout cover. */
 .newsprint-screen {
   background-image: radial-gradient(rgba(255, 255, 255, 0.5) 0.6px, transparent 0.7px);
   background-size: 6px 6px;
 }
 
-@keyframes grain-animation {
-  0% { transform: translate(0, 0); }
-  33% { transform: translate(-5%, -5%); }
-  66% { transform: translate(5%, 5%); }
-  100% { transform: translate(0, 0); }
-}
-
-@keyframes breath {
-  0%, 100% { filter: blur(0px); transform: scale(1); }
-  45% { filter: blur(2px); transform: scale(1.02); }
-  50% { filter: blur(10px); transform: scale(1.05); }
-  55% { filter: blur(2px); transform: scale(1.02); }
-}
-
-@keyframes flicker {
-  0%, 100% { opacity: 1; }
-  30% { opacity: 0.95; }
-  32% { opacity: 1; }
-  80% { opacity: 0.97; }
-}
-
-@keyframes glow-shift {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.1); }
-}
-
-@keyframes dust-drift {
-  0% { transform: translateY(0) translateX(0); }
-  100% { transform: translateY(-200px) translateX(-100px); }
-}
-
-@keyframes float {
-  0% { transform: translate(0, 0) scale(1); opacity: 0.1; }
-  50% { transform: translate(20px, -20px) scale(1.1); opacity: 0.2; }
-  100% { transform: translate(-10px, 10px) scale(0.9); opacity: 0.1; }
-}
-
-@keyframes scanline {
-  0% { top: -10%; }
-  100% { top: 110%; }
-}
-
 /* ── Global motion-accessibility guard ──
    Neutralises every CSS @keyframes animation + transition for visitors who ask
-   for reduced motion (sunbeam, noise-grain, ambient-glow, lens-breathing,
-   dust-drift, float, scanline, etc.). Framer's JS-driven `repeat: Infinity`
-   loops are gated separately in the components via useReducedMotion(). */
+   for reduced motion. Delays are zeroed too — a collapsed 0.001ms animation that
+   still waits 0.3s would hold `opacity: 0` starting states hidden for the delay.
+   Framer's JS-driven loops are gated separately via useReducedMotion(). */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 }

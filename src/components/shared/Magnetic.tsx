@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { motion, useMotionValue, useSpring } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 
 interface Props {
@@ -18,13 +18,16 @@ interface Props {
 export default function Magnetic({ children, strength = 0.35, className = '' }: Props) {
   const ref = useRef<HTMLSpanElement>(null);
   const canHover = useHoverCapable();
+  // Continuous pointer-tracking motion — disabled for reduced-motion visitors
+  // (the CSS neutralizer can't reach framer's inline spring writes).
+  const reduce = useReducedMotion();
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const sx = useSpring(x, { stiffness: 220, damping: 16, mass: 0.25 });
   const sy = useSpring(y, { stiffness: 220, damping: 16, mass: 0.25 });
 
   const onMove = (e: React.MouseEvent) => {
-    if (!canHover || !ref.current) return;
+    if (reduce || !canHover || !ref.current) return;
     const r = ref.current.getBoundingClientRect();
     x.set((e.clientX - (r.left + r.width / 2)) * strength);
     y.set((e.clientY - (r.top + r.height / 2)) * strength);

@@ -4,57 +4,57 @@ import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion
 /**
  * WalkIn — the site's OPENING.
  *
- *  · Load: an HOURGLASS spins at centre (the loading rotor, fast).
- *  · Reveal: it BLOOMS OPEN — a dynamic, silky morph — the hourglass fades as
- *    a solid lime X scales up from centre with an overshoot while its spin
- *    decelerates hard; a centre glow fills the middle so there's no void.
- *  · The CARD is a full-viewport window (crisp downscale) that scales out from
- *    a point, tilts in real 3D toward the pointer (perspective rotateX/rotateY),
- *    and carries layered material texture (soft-light sheen + overlay lime
- *    wash) that shifts as an inner figure parallaxes with the pointer.
- *  · Scroll grows the card to full and dims to olive → into the archive.
+ *  BEAT 0 — intro (the anchor): a LIGHT paper field; the giant "VISUAL ARCHIVE"
+ *    rises from the bottom, tone-on-tone (barely-there), as the sole focus — a
+ *    work developing out of a bright field, NOT a black loading screen. A small
+ *    ink hourglass turns quietly as the loading tell. Nav pills stay hidden.
+ *  BEAT 1 — bloom (reveal): once resources are ready (min dwell), the field
+ *    darkens to olive in one breath while the hourglass OPENS OUT into the solid
+ *    lime X (overshoot bloom + spin decelerate), the card pops from a point in
+ *    real 3D, the nav slides down, and the card's lines wipe up staggered.
+ *  Then scroll grows the card to full and dims into the archive.
+ *
+ * Pointer: card 3D tilt ±5°, inner figure parallaxes the material light layers,
+ * the shaft sways — all spring-damped in one rAF.
  */
 
 const GROUND = '#20241a';
 const CARD = '#30352a';
 const OFF = '#F4F4ED';
+const PAPER = '#EDEAE3'; // opening light field (before the dark sunburst blooms)
+const PAPER_WORD = '#E3DED5'; // tone-on-tone giant word on the paper field
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const LIME_A = (a: number) => `rgba(var(--accent-r), var(--accent-g), var(--accent-b), ${a})`;
-const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
-const BLOOM = 'cubic-bezier(0.34, 1.45, 0.5, 1)'; // back-overshoot — the dynamic pop
-const ROTOR = 0.05;
+const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'; // house expo-out — the "liquid reach" curve for the beams
+const SILK = 'cubic-bezier(0.19, 1, 0.22, 1)'; // card's pure long-tail glide, no bounce
+const CARD_IN = 0.4; // card grows from ~2/5 out of the X centre (not a pinpoint punch)
 
-/* Wide solid X — four broad wedges (thin gaps, no hollow middle). */
-const X_CLIP = 'polygon(50% 50%, 92% 8%, 100% 42%, 50% 50%, 100% 58%, 92% 92%, 50% 50%, 8% 92%, 0% 58%, 50% 50%, 0% 42%, 8% 8%)';
-/* Hourglass / sand-timer for the loading rotor. */
-const HOURGLASS = 'polygon(24% 6%, 76% 6%, 53% 50%, 76% 94%, 24% 94%, 47% 50%)';
+const WORD_GHOST = '#333a24'; // giant backdrop wordmark — tone-on-tone lift off the olive field
 
 export default function WalkIn({
   collections,
   places,
-  frames,
 }: {
   collections: { name: string; frames: number }[];
   places: number;
-  frames: number;
 }) {
   const ref = useRef<HTMLElement>(null);
   const tiltRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
-  const xRef = useRef<HTMLDivElement>(null);
-  const glassRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef(0); // scroll-scrub progress — damps the tilt to 0 as the card grows
   const reduce = useReducedMotion();
 
-  // ── Load sequence ──
-  const [phase, setPhase] = useState<'blank' | 'load' | 'reveal'>('blank');
+  // ── Load sequence: intro (paper + word rising) → reveal (bloom) ──
+  const [phase, setPhase] = useState<'intro' | 'reveal'>('intro');
+  const [raised, setRaised] = useState(false); // giant word rise, from mount
   const revealedRef = useRef(false);
   useEffect(() => {
     if (reduce) {
-      setPhase('reveal');
-      revealedRef.current = true;
+      setRaised(true); setPhase('reveal'); revealedRef.current = true;
       document.body.classList.add('walkin-in');
       return;
     }
+    const rf = requestAnimationFrame(() => setRaised(true));
     let minOk = false;
     let loadOk = document.readyState === 'complete';
     let fired = false;
@@ -63,16 +63,16 @@ export default function WalkIn({
       fired = true;
       revealedRef.current = true;
       setPhase('reveal');
-      // Body flag — the fixed nav (in HomePage) keys its slide-down off this.
       document.body.classList.add('walkin-in');
     };
-    const t1 = window.setTimeout(() => setPhase('load'), 300);
-    const t2 = window.setTimeout(() => { minOk = true; go(); }, 1800);
+    // word rises 0.9s, then ~0.15s breath, then bloom (min floor; waits longer
+    // only if resources aren't ready — the reference holds for load too)
+    const t = window.setTimeout(() => { minOk = true; go(); }, 1050);
     const onLoad = () => { loadOk = true; go(); };
     if (!loadOk) window.addEventListener('load', onLoad);
     const cap = window.setTimeout(() => { minOk = true; loadOk = true; go(); }, 4000);
     return () => {
-      window.clearTimeout(t1); window.clearTimeout(t2); window.clearTimeout(cap);
+      cancelAnimationFrame(rf); window.clearTimeout(t); window.clearTimeout(cap);
       window.removeEventListener('load', onLoad);
     };
   }, [reduce]);
@@ -86,43 +86,38 @@ export default function WalkIn({
     return () => window.clearInterval(t);
   }, [reduce, collections.length]);
 
-  // ── Pointer + spin rAF ──
-  //  · card 3D tilt: rotateX/rotateY ±5° (0.08)
-  //  · figure parallax: translate ±8/±4px (0.08) — shifts the light layers
-  //  · shaft spin: FAST during load, then hard-decelerates into a gentle sway
-  //    on reveal (the dynamic bloom). Same angle drives hourglass + X.
+  // ── Pointer parallax rAF — card 3D tilt + inner-figure drift (beam is static) ──
   useEffect(() => {
     if (reduce) return;
     let tTX = 0, cTX = 0, tTY = 0, cTY = 0;
     let tFX = 0, cFX = 0, tFY = 0, cFY = 0;
-    let tSway = -18, cSpin = 0;
     let raf = 0;
     const onMove = (e: MouseEvent) => {
       const nx = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2);
       const ny = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2);
-      tTY = nx * 5;
-      tTX = -ny * 5;
-      tFX = nx * 8;
-      tFY = ny * 4;
-      tSway = -18 + nx * 9;
+      tTY = nx * 5; tTX = -ny * 5;
+      tFX = nx * 8; tFY = ny * 4;
     };
+    let idle = false; // true once the last write was the settled/identity state
     const loop = () => {
-      cTX += (tTX - cTX) * 0.08;
-      cTY += (tTY - cTY) * 0.08;
-      cFX += (tFX - cFX) * 0.08;
-      cFY += (tFY - cFY) * 0.08;
-      if (!revealedRef.current) {
-        cSpin = (cSpin + 5.4) % 360; // fast rotor spin
-      } else {
-        let d = tSway - cSpin;
-        d = ((d + 540) % 360) - 180;
-        cSpin += d * 0.045; // hard decelerate into the sway
+      cTX += (tTX - cTX) * 0.08; cTY += (tTY - cTY) * 0.08;
+      cFX += (tFX - cFX) * 0.08; cFY += (tFY - cFY) * 0.08;
+      // Fade the 3D tilt out as the card grows to full page — a tilted plane at
+      // full-bleed reads as a skewed page with dark wedges at the edges. Fully
+      // flat by ~40% of the scrub.
+      const damp = Math.max(0, 1 - progressRef.current * 2.5);
+      // Skip the style writes once settled (pointer still / opener scrolled
+      // past). The loop keeps ticking (4 float lerps ≈ free) but stops touching
+      // the DOM, so an idle hero costs the main thread nothing while Lenis
+      // scrolls. One final write lands the settled state before going idle.
+      const settled =
+        damp === 0 ||
+        (Math.abs(tTX - cTX) + Math.abs(tTY - cTY) + Math.abs(tFX - cFX) + Math.abs(tFY - cFY)) < 0.01;
+      if (!settled || !idle) {
+        if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${cTX * damp}deg) rotateY(${cTY * damp}deg)`;
+        if (figureRef.current) figureRef.current.style.transform = `translate(${cFX * damp}px, ${cFY * damp}px)`;
+        idle = settled;
       }
-      if (tiltRef.current) tiltRef.current.style.transform = `rotateX(${cTX}deg) rotateY(${cTY}deg)`;
-      if (figureRef.current) figureRef.current.style.transform = `translate(${cFX}px, ${cFY}px)`;
-      const rot = `rotate(${cSpin}deg)`;
-      if (xRef.current) xRef.current.style.transform = rot;
-      if (glassRef.current) glassRef.current.style.transform = rot;
       raf = requestAnimationFrame(loop);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
@@ -132,7 +127,7 @@ export default function WalkIn({
 
   // ── Scroll scrub ──
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
-  const scale = useTransform(scrollYProgress, [0, 0.8], [0.6, 1], { clamp: true });
+  const scale = useTransform(scrollYProgress, [0, 0.8], [0.54, 1], { clamp: true });
   const radius = useTransform(scrollYProgress, [0, 0.6], [44, 0]);
 
   const wordRef = useRef<HTMLDivElement>(null);
@@ -141,6 +136,7 @@ export default function WalkIn({
     if (reduce) return;
     const seg = (v: number, a: number, b: number) => Math.min(1, Math.max(0, (v - a) / (b - a)));
     const apply = (v: number) => {
+      progressRef.current = v;
       if (wordRef.current) {
         wordRef.current.style.opacity = String(1 - seg(v, 0.02, 0.25));
         wordRef.current.style.transform = `translateY(${seg(v, 0, 0.8) * 140}px)`;
@@ -154,16 +150,16 @@ export default function WalkIn({
   if (!collections.length) return null;
   const city = collections[cityIdx % collections.length];
 
-  /* Line-mask reveal (the reference's signature): each text line sits in an
-   * overflow-clip container and rises 112%→0 with a per-line staggered delay
-   * once the reveal fires. JS state flips the styles; the browser tweens. */
+  /* Line-mask reveal — overflow-clip line, inner rises 112%→0 on reveal, tight
+   * ~0.06s stagger (the reference's crisp roll-up). */
   const lineMask = (content: React.ReactNode, delay: number) => (
     <span className="block overflow-hidden w-full">
       <span
         className="block w-full"
         style={{
           transform: reduce || revealed ? 'translateY(0%)' : 'translateY(112%)',
-          transition: `transform 0.9s ${EXPO} ${delay}s`,
+          transition: `transform 0.95s ${EXPO} ${delay}s`,
+          willChange: 'transform',
         }}
       >
         {content}
@@ -173,91 +169,49 @@ export default function WalkIn({
 
   const stage = (
     <>
-      {/* L1 — deep-olive ground */}
-      <div className="absolute inset-0" style={{ background: GROUND }} />
-
-      {/* L2 — the shaft field. `beamScale` blooms from rotor size to full with
-           an OVERSHOOT; inside, the hourglass (load) crossfades to the solid X
-           (reveal), both spun by the rAF. A centre glow fills the middle. */}
+      {/* L1 — the field: PAPER during intro, darkens to olive in the bloom */}
       <div
-        aria-hidden="true"
-        className="absolute inset-[-30%] z-[3] pointer-events-none"
-        style={{
-          transform: reduce || revealed ? 'scale(1)' : `scale(${ROTOR})`,
-          transformOrigin: 'center center',
-          transition: `transform 1.3s ${BLOOM}`,
-          willChange: 'transform',
-        }}
-      >
-        {/* Solid X — reveal */}
-        <div
-          ref={xRef}
-          className="absolute inset-0"
-          style={{
-            clipPath: X_CLIP,
-            background: LIME,
-            opacity: reduce ? 0.5 : revealed ? 0.5 : 0,
-            transition: `opacity 0.9s ${EXPO} 0.15s`,
-            transformOrigin: 'center center',
-            willChange: 'transform',
-          }}
-        />
-        {/* Hourglass — load */}
-        <div
-          ref={glassRef}
-          className="absolute inset-[43%]"
-          style={{
-            clipPath: HOURGLASS,
-            background: LIME,
-            opacity: reduce ? 0 : revealed ? 0 : phase === 'blank' ? 0 : 1,
-            transition: `opacity 0.55s ${EXPO}`,
-            transformOrigin: 'center center',
-            willChange: 'transform',
-          }}
-        />
-      </div>
-
-      {/* L2b — centre glow: fills the middle so the X has no hollow void */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 z-[2] pointer-events-none"
-        style={{
-          background: `radial-gradient(38% 42% at 50% 50%, ${LIME_A(0.42)} 0%, ${LIME_A(0.12)} 45%, transparent 72%)`,
-          opacity: reduce ? 1 : revealed ? 1 : 0,
-          transition: `opacity 1.2s ${EXPO} 0.2s`,
-        }}
+        className="absolute inset-0"
+        style={{ background: reduce || revealed ? GROUND : PAPER, transition: `background-color 1.25s ${EXPO}` }}
       />
 
-      {/* L5 — giant word; difference blend so the shaft reads THROUGH it */}
+      {/* Giant ghosted wordmark — the backdrop. Huge tone-on-tone type filling
+           the viewport BEHIND the card (peeks out top & bottom). Paper-ghost
+           during load → olive-ghost as the field darkens; fades + drifts up once
+           on reveal, then drifts down + fades on scroll (wordRef, scroll-scrub). */}
       <div
         ref={wordRef}
         aria-hidden="true"
-        className="absolute inset-x-0 z-20 text-center font-serif uppercase whitespace-nowrap leading-none pointer-events-none overflow-hidden"
-        style={{ bottom: '-1.5vw', fontSize: '13.5vw', letterSpacing: '-0.03em', mixBlendMode: revealed ? 'difference' : 'normal' }}
+        className="absolute inset-0 z-[2] flex flex-col items-center justify-center pointer-events-none overflow-hidden select-none"
       >
-        <span className="block overflow-hidden">
-          <span
-            className="block"
-            style={{
-              color: reduce || revealed ? OFF : CARD,
-              transform: phase === 'blank' ? 'translateY(105%)' : 'translateY(0)',
-              opacity: phase === 'blank' ? 0 : 1,
-              transition: `transform 1.1s ${EXPO}, opacity 1.1s ${EXPO}, color 1.2s ${EXPO}`,
-            }}
-          >
-            Visual&nbsp;Archive
-          </span>
-        </span>
+        <div
+          className="font-serif uppercase text-center tracking-[-0.035em]"
+          style={{
+            fontSize: '21vw',
+            lineHeight: 0.78,
+            color: reduce || revealed ? WORD_GHOST : PAPER_WORD,
+            opacity: reduce || raised ? 1 : 0,
+            transform: reduce || raised ? 'translateY(0)' : 'translateY(4%)',
+            transition: `opacity 1.0s ${EXPO}, transform 1.1s ${EXPO}, color 0.9s ${EXPO}`,
+          }}
+        >
+          <span className="block">Visual</span>
+          <span className="block italic" style={{ letterSpacing: '-0.02em' }}>Archive</span>
+        </div>
       </div>
 
-      {/* L3 — the CARD: scales OUT from centre, then real 3D tilt + scroll */}
+      {/* L3 — the CARD: second beat. The X light-bars pour out FIRST (liquid);
+           only once they're mostly extended does the card develop out of the X
+           centre — a slow no-bounce glide + blur→sharp, like a print coming up
+           in the bath. One after the other, never at once. */}
       <div
         className="absolute inset-0 z-10"
         style={{
-          transform: reduce || revealed ? 'scale(1)' : `scale(${ROTOR})`,
-          opacity: reduce ? 1 : phase === 'blank' ? 0 : revealed ? 1 : 0,
+          transform: reduce || revealed ? 'scale(1)' : `scale(${CARD_IN})`,
+          opacity: reduce || revealed ? 1 : 0,
+          filter: reduce || revealed ? 'blur(0px)' : 'blur(14px)',
           transformOrigin: 'center center',
-          transition: `transform 1.25s ${BLOOM} 0.1s, opacity 0.8s ${EXPO} 0.1s`,
+          transition: `transform 1.8s ${SILK} 0.95s, opacity 1.1s ${EXPO} 0.95s, filter 1.5s ${EXPO} 0.95s`,
           willChange: 'transform',
         }}
       >
@@ -266,13 +220,12 @@ export default function WalkIn({
             <motion.div
               className="absolute inset-0 overflow-hidden will-change-transform"
               style={{
-                scale: reduce ? 0.62 : scale,
+                scale: reduce ? 0.56 : scale,
                 borderRadius: reduce ? 44 : radius,
                 transformOrigin: 'center center',
                 boxShadow: '0 48px 130px rgba(0, 0, 0, 0.55), 0 14px 38px rgba(0, 0, 0, 0.42)',
               }}
             >
-              {/* FIGURE — oversized; parallaxes the light layers with the pointer */}
               <div ref={figureRef} className="absolute will-change-transform" style={{ inset: '-6%', background: CARD }}>
                 <div
                   className="absolute inset-0 pointer-events-none"
@@ -294,43 +247,49 @@ export default function WalkIn({
                         Nº {String((cityIdx % collections.length) + 1).padStart(2, '0')} / {String(places).padStart(2, '0')}
                       </span>
                     </span>,
-                    0.45,
+                    1.55,
                   )}
                 </div>
 
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                {/* Centre — a photo-book cover lockup: kicker, serif city hero,
+                     and an italic-serif caption ruled on both sides. No photos. */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-[9%]">
+                  {lineMask(
+                    <span
+                      className="flex items-center justify-center gap-2 font-ui uppercase"
+                      style={{ color: LIME, fontSize: 'clamp(9px, 0.78vw, 12px)', letterSpacing: '0.42em' }}
+                    >
+                      <span className="inline-block rounded-full" style={{ width: '0.42em', height: '0.42em', background: LIME }} />
+                      Selected Frames
+                    </span>,
+                    1.58,
+                  )}
                   {lineMask(
                     <span
                       key={reduce ? 'static' : cityIdx}
-                      className={`block font-serif uppercase text-center leading-[0.9] tracking-[-0.02em] ${reduce ? '' : 'walkin-city'}`}
-                      style={{ color: OFF, fontSize: 'clamp(40px, 7.5vw, 130px)' }}
+                      className={`block font-serif uppercase text-center leading-[0.84] tracking-[-0.038em] mt-[2%] ${reduce ? '' : 'walkin-city'}`}
+                      style={{ color: OFF, fontSize: 'clamp(42px, 7.6vw, 128px)' }}
                     >
                       {city.name}
                     </span>,
-                    0.55,
+                    1.64,
                   )}
                   {lineMask(
                     <span
                       key={reduce ? 'static-f' : `f${cityIdx}`}
-                      className={`block text-center font-ui uppercase mt-[1.5%] ${reduce ? '' : 'walkin-city'}`}
-                      style={{ color: 'rgba(244,244,237,0.85)', fontSize: 'clamp(10px, 0.95vw, 14px)', letterSpacing: '0.32em', animationDelay: '0.07s' }}
+                      className={`flex items-center justify-center gap-3 mt-[3%] ${reduce ? '' : 'walkin-city'}`}
+                      style={{ animationDelay: '0.07s' }}
                     >
-                      {String(city.frames).padStart(2, '0')} frames
+                      <span className="block h-px w-7 md:w-9" style={{ background: 'rgba(244,244,237,0.22)' }} />
+                      <span
+                        className="font-serif italic whitespace-nowrap lowercase"
+                        style={{ color: 'rgba(244,244,237,0.72)', fontSize: 'clamp(11px, 1.05vw, 16px)', letterSpacing: '0.005em' }}
+                      >
+                        {city.frames} frames · since 2023
+                      </span>
+                      <span className="block h-px w-7 md:w-9" style={{ background: 'rgba(244,244,237,0.22)' }} />
                     </span>,
-                    0.64,
-                  )}
-                </div>
-
-                <div
-                  className="absolute bottom-[7%] inset-x-[8%] font-ui uppercase"
-                  style={{ color: 'rgba(244,244,237,0.42)', fontSize: 'clamp(9px, 0.8vw, 12px)', letterSpacing: '0.28em' }}
-                >
-                  {lineMask(
-                    <span className="flex items-center justify-between w-full">
-                      <span>A record of light &amp; place</span>
-                      <span>{frames} frames</span>
-                    </span>,
-                    0.72,
+                    1.70,
                   )}
                 </div>
               </div>

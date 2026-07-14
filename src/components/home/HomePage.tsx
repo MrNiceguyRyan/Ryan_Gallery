@@ -2,17 +2,16 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import type { Collection } from '../../types';
-import ScrollSignature from './ScrollSignature';
 import SidebarItem from './SidebarItem';
 import StatementReveal from './StatementReveal';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
-import ArchiveIndex from './ArchiveIndex';
 import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
 import Magnetic from '../shared/Magnetic';
-import { useVelocitySkew } from '../../lib/useVelocitySkew';
-import Lenis from 'lenis';
+import { useInViewOnce } from '../../lib/useInViewOnce';
+import { startLenis } from '../../lib/smoothScroll';
+import type Lenis from 'lenis';
 
 /* Hero epigraphs — first sentences distilled from the per-collection
  * narratives in src/lib/narratives.tsx. The hero cycles through these
@@ -31,7 +30,7 @@ const HERO_EPIGRAPHS = [
   { line: 'Ocean Drive at dusk exists in two registers.', place: 'Miami' },
 ];
 
-const expo = [0.23, 1, 0.32, 1] as const;
+const expo = [0.16, 1, 0.3, 1] as const;
 
 interface Props {
   collections: Collection[];
@@ -77,14 +76,24 @@ function MobileFilmstripItem({
   const reduce = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: cardRef, offset: ['start end', 'end start'] });
   const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-16%']);
+  // Reliable in-view trigger (whileInView is unreliable under Astro view-transitions
+  // + Lenis). Fires once, cascades the `active` variant to the img / dim / affordance.
+  const [ref, shown] = useInViewOnce<HTMLDivElement>('-25% 0px -25% 0px');
+  // Merge the observer ref with cardRef (still drives the parallax useScroll above).
+  const setRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      cardRef.current = node;
+      (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [ref],
+  );
 
   return (
     <motion.div
-      ref={cardRef}
+      ref={setRefs}
       onClick={onClick}
-      whileInView="active"
+      animate={shown ? 'active' : undefined}
       whileTap={{ scale: 0.985 }}
-      viewport={{ margin: '-25% 0px -25% 0px' }}
       transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="relative w-full h-[28vh] overflow-hidden cursor-pointer border-b border-white/5 block group"
     >
@@ -98,8 +107,8 @@ function MobileFilmstripItem({
           variants={{
             active: { scale: 1.08, filter: 'grayscale(0%)' },
           }}
-          initial={{ filter: 'grayscale(100%)', scale: 1.02 }}
-          transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
+          initial={reduce ? false : { filter: 'grayscale(100%)', scale: 1.02 }}
+          transition={{ duration: reduce ? 0 : 2.5, ease: [0.16, 1, 0.3, 1] }}
           className="absolute inset-0 w-full h-[126%] object-cover object-center"
           loading="lazy"
           decoding="async"
@@ -109,7 +118,7 @@ function MobileFilmstripItem({
       <motion.div
         variants={{ active: { backgroundColor: 'rgba(0,0,0,0.2)' } }}
         initial={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-        transition={{ duration: 1 }}
+        transition={{ duration: reduce ? 0 : 1 }}
         className="absolute inset-0 transition-colors"
       />
 
@@ -130,10 +139,10 @@ function MobileFilmstripItem({
       <motion.div
         variants={{ active: { opacity: 1, x: 0 } }}
         initial={{ opacity: 0.6, x: 0 }}
-        transition={{ duration: 0.7 }}
+        transition={{ duration: reduce ? 0 : 0.7 }}
         className="absolute right-5 bottom-6 flex items-center gap-2 z-10 text-white"
       >
-        <span className="rounded-full border border-white/25 bg-black/40 backdrop-blur-md px-3.5 py-1.5 text-[8px] uppercase tracking-[0.3em] font-bold flex items-center gap-1.5">
+        <span className="rounded-full border border-white/10 bg-black/40 backdrop-blur-md px-3.5 py-1.5 text-[8px] uppercase tracking-[0.3em] font-bold flex items-center gap-1.5">
           Tap to open
           <ArrowRight size={11} />
         </span>
@@ -225,28 +234,6 @@ function CollapsedRegionStrip({
 /* ═══════════════════════════════════════════════════════
  *  HomePage — atmospheric dark archive
  * ═══════════════════════════════════════════════════════ */
-/* Native-IO reveal trigger. The page-transition view-transition snapshot can
- * leave framer's `whileInView` observer stuck at `initial` (content never
- * un-hides), so below-fold reveals flip a flag from a real IntersectionObserver
- * instead — guaranteed to fire. Mirrors the Reveal pattern in AboutPage. */
-function useInViewOnce<T extends Element>(rootMargin = '0px 0px -12% 0px') {
-  const ref = useRef<T>(null);
-  const reduce = useReducedMotion();
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (reduce) { setShown(true); return; }
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === 'undefined') { setShown(true); return; }
-    const io = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }),
-      { rootMargin, threshold: 0.12 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [reduce]);
-  return [ref, shown] as const;
-}
-
 /* ═══════════════════════════════════════════════════════
  *  Kinetic big-type — the "distilled lens." line rises word-by-word
  *  on scroll PROGRESS (not whileInView), reversing on scroll-up.
@@ -364,19 +351,21 @@ export default function HomePage({ collections }: Props) {
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
 
-  // Kinetic type for the Selected Works heading (hero language, smaller dose).
-  const swKinetic = useVelocitySkew(4, 18);
-
   // Nav pills (Map/About) stay hidden over the opening stage and fade in once
   // the walk-in hands off to the inner pages. Direct writes off scroll — no
-  // React state churn, works identically under Lenis.
+  // React state churn, works identically under Lenis. Writes only happen on the
+  // show/hide TRANSITION (not every scroll event) so the handler is ~free while
+  // Lenis is driving the main thread.
   const navPillsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = navPillsRef.current;
     if (!el) return;
-    el.style.transition = 'opacity 0.5s ease';
+    el.style.transition = 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
+    let last: boolean | null = null;
     const apply = () => {
       const show = window.scrollY > window.innerHeight * 1.15;
+      if (show === last) return;
+      last = show;
       el.style.opacity = show ? '1' : '0';
       el.style.pointerEvents = show ? 'auto' : 'none';
     };
@@ -385,35 +374,22 @@ export default function HomePage({ collections }: Props) {
     return () => window.removeEventListener('scroll', apply);
   }, []);
 
-
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
-  // Inertial smooth scroll for the homepage. framer's useScroll reads the same
-  // window position Lenis drives, so the existing scroll effects keep working.
-  // Skipped for reduced-motion. Torn down on unmount (e.g. route change).
-  // Held in a ref so the collection overlay can pause it — Lenis otherwise eats
-  // the wheel on the window and the overlay's own scroll never moves.
+  // Boots via the shared startLenis() helper (single source of truth for the
+  // site's scroll feel — travel/about use the same). framer's useScroll reads
+  // the same window position Lenis drives, so the scroll effects keep working.
+  // startLenis no-ops under reduced-motion. Held in a ref so the collection
+  // overlay can pause it — Lenis otherwise eats the wheel on the window and the
+  // overlay's own scroll never moves.
   const lenisRef = useRef<Lenis | null>(null);
   useEffect(() => {
-    if (reduce) return;
-    const lenis = new Lenis({
-      duration: 1.05,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-      touchMultiplier: 1.6,
-    });
+    const { lenis, destroy } = startLenis();
     lenisRef.current = lenis;
-    let raf = 0;
-    const loop = (time: number) => {
-      lenis.raf(time);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
     return () => {
-      cancelAnimationFrame(raf);
-      lenis.destroy();
+      destroy();
       lenisRef.current = null;
     };
-  }, [reduce]);
+  }, []);
 
   // "Selected Works" heading block — reliable scroll reveal (not whileInView).
   const [selectedWorksRef, selectedWorksShown] = useInViewOnce<HTMLDivElement>();
@@ -470,10 +446,6 @@ export default function HomePage({ collections }: Props) {
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
-  const totalFrames = useMemo(
-    () => activeCollections.reduce((a, c) => a + (c.photoCount ?? c.photos?.length ?? 0), 0),
-    [activeCollections],
-  );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
 
 
@@ -576,28 +548,14 @@ export default function HomePage({ collections }: Props) {
   // Scroll progress for sidebar bar
   const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
 
-  // ── Per-chapter dynamic accent color ──
-  // Resolve the currently visible chapter's color palette → RGB. When no
-  // chapter intersects (hero state), fall back to neutral white so the page
-  // looks unchanged at scrollY=0. The `accent-tint-transition` class on the
-  // wrapper interpolates these three CSS vars over 1.2s as `activeArchiveId`
-  // flips, giving a slow crossfade between "rooms".
-  // Single signature accent for all chrome (rails, dividers, dots) — Man City
-  // sky-blue. No per-chapter colour shift; the photographs carry the rest.
-  const accentRgb = { r: 210, g: 255, b: 0 };
+  // Site accent is a single fixed electric lime, defined once via the
+  // @property initial values in global.css (--accent-r/g/b = 210/255/0);
+  // every descendant reads it with rgb(var(--accent-r), ...). The former
+  // per-chapter retint system is gone — nothing sets these vars at runtime.
 
   return (
     <>
-      <div
-        className="accent-tint-transition min-h-screen font-sans transition-colors duration-1000 apple-spring relative bg-[#282c20] text-[#F4F4ED] opacity-100"
-        style={{
-          // Drive per-chapter retint. The browser interpolates these natively
-          // thanks to @property registration in global.css.
-          ['--accent-r' as never]: accentRgb.r,
-          ['--accent-g' as never]: accentRgb.g,
-          ['--accent-b' as never]: accentRgb.b,
-        }}
-      >
+      <div className="min-h-screen font-sans relative bg-[#282c20] text-[#F4F4ED]">
         {/* Background canvas removed — a clean solid-dark canvas; the "wow"
              comes from content (monumental type, image reveals), not an ambient
              backdrop. */}
@@ -636,13 +594,13 @@ export default function HomePage({ collections }: Props) {
             </span>
           </motion.button>
 
-          <div ref={navPillsRef} className="flex items-center gap-2 md:gap-3">
+          <div ref={navPillsRef} className="flex items-center gap-2 md:gap-3" style={{ opacity: 0, pointerEvents: 'none' }}>
             <Magnetic strength={0.5}>
               <motion.a
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/travel"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/10 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
               >
                 Map
               </motion.a>
@@ -653,7 +611,7 @@ export default function HomePage({ collections }: Props) {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 href="/about"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/20 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/10 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
               >
                 About
               </motion.a>
@@ -671,7 +629,6 @@ export default function HomePage({ collections }: Props) {
             frames: c.photoCount ?? c.photos?.length ?? 0,
           }))}
           places={orderedCities.length}
-          frames={totalFrames}
         />
 
         {/* ── The Ethos — the first beat inside the archive world ── */}
@@ -731,7 +688,7 @@ export default function HomePage({ collections }: Props) {
                         'linear-gradient(to bottom, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.15), rgb(var(--accent-r), var(--accent-g), var(--accent-b)))',
                     }}
                     animate={{ height: activeRouteIndex >= 0 ? activeRouteIndex * ROW_H + ROW_H / 2 : 0 }}
-                    transition={{ type: 'spring', stiffness: 220, damping: 32 }}
+                    transition={reduce ? { duration: 0 } : { duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                   />
 
                   <div className="flex flex-col">
@@ -782,7 +739,7 @@ export default function HomePage({ collections }: Props) {
               <div ref={selectedWorksRef} className="max-w-2xl">
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-4">
                 <motion.div
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={reduce ? false : { opacity: 0, x: -20 }}
                   animate={selectedWorksShown ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
                   transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold opacity-30"
@@ -790,15 +747,15 @@ export default function HomePage({ collections }: Props) {
                   <motion.div
                     className="h-px origin-left"
                     style={{ width: 32, background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                    initial={{ scaleX: 0 }}
+                    initial={reduce ? false : { scaleX: 0 }}
                     animate={selectedWorksShown ? { scaleX: 1 } : { scaleX: 0 }}
                     transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                   />
                   <span>Selected Works</span>
                 </motion.div>
-                <motion.h2
-                  className="font-serif uppercase tracking-tight leading-[0.95] pb-2 will-change-transform"
-                  style={{ fontSize: 'clamp(32px, 5.5vw, 76px)', skewX: swKinetic.skewX, x: swKinetic.x }}
+                <h2
+                  className="font-serif uppercase tracking-tight leading-[0.95] pb-2"
+                  style={{ fontSize: 'clamp(32px, 5.5vw, 76px)' }}
                 >
                   {SW_WORDS.map((w, i) => (
                     <RisingWord
@@ -810,7 +767,7 @@ export default function HomePage({ collections }: Props) {
                       accent={w === 'lens.'}
                     />
                   ))}
-                </motion.h2>
+                </h2>
                 <div className="flex items-center gap-2.5 pt-2 text-[10px] font-ui uppercase tracking-[0.3em] text-white/35">
                   <span className="relative flex h-1.5 w-1.5">
                     <span
@@ -909,31 +866,28 @@ export default function HomePage({ collections }: Props) {
                   <span className="font-serif uppercase text-2xl tracking-tight text-white leading-none">
                     {section.region}
                   </span>
+                  {/* Pulses via shared CSS keyframes (compositor), not framer loops. */}
                   {isCollapsed && (
-                    <motion.span
-                      className="ml-auto font-ui text-[8px] tracking-[0.3em] uppercase"
+                    <span
+                      className="ml-auto font-ui text-[8px] tracking-[0.3em] uppercase soft-pulse"
                       style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                      animate={reduce ? { opacity: 1 } : { opacity: [0.45, 1, 0.45] }}
-                      transition={reduce ? { duration: 0.3 } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                     >
                       Tap to expand
-                    </motion.span>
+                    </span>
                   )}
-                  <motion.span
-                    className={`flex items-center justify-center w-9 h-9 rounded-full border ${isCollapsed ? '' : 'ml-auto'}`}
+                  <span
+                    className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors duration-300 ${isCollapsed ? 'ring-pulse' : 'ml-auto'}`}
                     style={{
                       borderColor: isCollapsed ? 'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.7)' : 'rgba(255,255,255,0.15)',
                       color: isCollapsed ? 'rgb(var(--accent-r),var(--accent-g),var(--accent-b))' : 'rgba(255,255,255,0.4)',
                       boxShadow: isCollapsed ? '0 0 18px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)' : 'none',
                     }}
-                    animate={isCollapsed && !reduce ? { scale: [1, 1.1, 1] } : { scale: 1 }}
-                    transition={isCollapsed && !reduce ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
                   >
                     <ChevronDown
                       size={15}
                       className={`transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}
                     />
-                  </motion.span>
+                  </span>
                 </button>,
               );
             }
@@ -954,9 +908,7 @@ export default function HomePage({ collections }: Props) {
 
         </div>
 
-        {/* ── Archive back matter — full contents index + single end-cap
-             (shared by desktop + mobile, in on-screen order) ── */}
-        <ArchiveIndex collections={orderedCities} onOpen={setSelectedCollection} totalFrames={totalFrames} />
+        {/* ── Archive end-cap — the page's closing punctuation ── */}
         <div className="pt-6 pb-16 flex flex-col items-center gap-3 opacity-30">
           <div
             className="w-px h-10"
@@ -966,8 +918,6 @@ export default function HomePage({ collections }: Props) {
             End of archive
           </span>
         </div>
-
-        <ScrollSignature />
 
       </div>
 

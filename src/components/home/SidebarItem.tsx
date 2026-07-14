@@ -51,6 +51,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
             initial={{ opacity: 0, x: -10, rotate: -3, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, rotate: 0, scale: 1 }}
             exit={{ opacity: 0, x: -10, rotate: -3, scale: 0.9 }}
+            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
             className="absolute left-[-150px] top-[-54px] w-28 h-40 border border-white/20 z-50 overflow-hidden pointer-events-none shadow-[0_0_30px_rgba(255,255,255,0.06)]"
           >
             <img
@@ -66,14 +67,13 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
         )}
       </AnimatePresence>
 
-      {/* Waypoint node on the route rail (rail sits at left-[4px]) */}
+      {/* Waypoint node on the route rail (rail sits at left-[4px]). The active
+          ping is a CSS keyframe (compositor), not a framer repeat:Infinity loop. */}
       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[9px] h-[9px] flex items-center justify-center">
         {isActive && !reduce && (
-          <motion.span
-            className="absolute inset-0 rounded-full"
+          <span
+            className="absolute inset-0 rounded-full ping-out"
             style={{ border: `1px solid ${ACCENT}` }}
-            animate={{ scale: [1, 2.6], opacity: [0.55, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
           />
         )}
         <span
@@ -85,14 +85,14 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
             border: state === 'future' ? '1px solid rgba(255,255,255,0.25)' : `1px solid ${ACCENT}`,
             opacity: state === 'past' ? 0.65 : 1,
             boxShadow: isActive ? `0 0 14px ${ACCENT}, 0 0 28px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.5)` : 'none',
-            transition: 'all 0.4s ease',
+            transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1), height 0.4s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />
       </span>
 
       {/* Index */}
       <span
-        className={`text-[8px] font-ui leading-none transition-all duration-500 ${
+        className={`text-[8px] font-ui leading-none transition-[opacity,color] duration-500 ${
           isActive ? 'opacity-100 text-white' : 'opacity-25 group-hover:opacity-100'
         }`}
       >
@@ -101,7 +101,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
 
       {/* Name */}
       <span
-        className={`text-[10px] md:text-[11px] uppercase tracking-[0.32em] font-black leading-none transition-all duration-700 truncate w-full ${
+        className={`text-[10px] md:text-[11px] uppercase tracking-[0.32em] font-black leading-none transition-[opacity,color,translate] duration-700 truncate w-full ${
           isActive
             ? 'opacity-100 text-white'
             : 'opacity-25 group-hover:opacity-100 group-hover:translate-x-0.5'

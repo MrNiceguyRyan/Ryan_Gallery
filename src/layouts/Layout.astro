@@ -16,7 +16,7 @@ interface Props {
 const {
   title = 'Ryan | Visual Archive',
   description = 'A curated collection of photographic moments — shot on Nikon Zf, engineered with intention.',
-  ogImage = 'https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1200&q=85',
+  ogImage = 'https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1200&h=630&fit=crop&q=85',
   ogType = 'website',
   dark = false,
   jsonLd,
@@ -75,7 +75,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     {/* mapbox preconnect only on /travel */}
     {/* One combined request; dropped the unused Noto Sans SC (Chinese) family
         that was a ~91 KB render-blocking stylesheet for nothing. */}
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..600&family=Space+Grotesk:wght@400;500;600;700&family=Mrs+Saint+Delafield&family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
     {/* mapbox-gl CSS is only needed on /travel — loaded by that page's head, not globally */}
 
     <!-- Primary Meta -->
@@ -121,6 +121,12 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     dark ? "bg-[#282c20] text-[#F4F4ED]" : "bg-white text-gray-900"
   ]}>
     <slot />
+
+    {/* Global craft layers — a soft olive vignette for depth (behind content) and
+        a fine STATIC film grain over everything (fixed, pointer-events-none, no
+        animation → no flicker). The whole archive reads like film prints. */}
+    <div class="page-vignette" aria-hidden="true"></div>
+    <div class="film-grain" aria-hidden="true"></div>
 
     <!-- Global image protection: prevent right-click, drag, long-press save, and print -->
     <style is:global>
@@ -348,7 +354,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         function isBackTo(toPath) {
           if (!toPath) return false;
           if (toPath === '/') return true;
-          return depth(toPath) < depth(window.location.pathname);
+          // fromPath must be passed explicitly where the URL has already
+          // changed (popstate) — window.location would self-compare there.
+          var fromPath = arguments.length > 1 ? arguments[1] : window.location.pathname;
+          return depth(toPath) < depth(fromPath);
         }
 
         // Pick background color that will be revealed under the sliding body.
@@ -359,6 +368,13 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
         function runExit(href, bg) {
           if (EXITING) return;
+          // Reduced-motion: plain navigation. The CSS neutralizer collapses the
+          // 0.55s slide to 0.001ms, which would otherwise park the body
+          // off-screen (blank page) for the full DUR timeout.
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            window.location.href = href;
+            return;
+          }
           EXITING = true;
           // Paint the background the destination page will use, so the strip
           // exposed beneath the sliding body is the right color.
@@ -405,13 +421,19 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         //    the URL has already changed, so we push the original URL back,
         //    run the exit animation, then navigate for real.
         var _lastPath = window.location.pathname;
+        // Keep the tracked "previous page" fresh across ClientRouter swaps —
+        // popstate fires AFTER the URL has changed, so the back-direction test
+        // must compare against where we actually were, not the (new) location.
+        document.addEventListener('astro:page-load', function() {
+          _lastPath = window.location.pathname;
+        });
         window.addEventListener('popstate', function() {
           var toPath = window.location.pathname;
-          if (!isBackTo.call(null, toPath)) { _lastPath = toPath; return; }
+          if (!isBackTo(toPath, _lastPath)) { _lastPath = toPath; return; }
           if (EXITING) return;
           var target = window.location.href;
           // Undo the popstate so the visible URL reflects the page we're still showing.
-          // We use replaceState with the _lastPath so history length stays sane.
+          // We use pushState with the _lastPath so history length stays sane.
           history.pushState(null, '', _lastPath);
           runExit(target, bgFor(toPath));
         });

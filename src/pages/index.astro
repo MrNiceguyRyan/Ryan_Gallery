@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
-import Footer from '../components/Footer.astro';
+import Colophon from '../components/home/Colophon';
 
 // ─── GROQ: All collections with photos + location data ───
 const collections: Collection[] = await sanityClient.fetch(`
@@ -13,13 +13,11 @@ const collections: Collection[] = await sanityClient.fetch(`
     "slug": slug.current,
     subtitle,
     "coverImageUrl": coverImage.asset->url,
-    "palette": coverImage.asset->metadata.palette,
     location,
     region,
     year,
     description,
     introduction,
-    gridSize,
     "photoCount": count(*[_type == "photo" && references(^._id)]),
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
       _id,
@@ -41,5 +39,8 @@ const collections: Collection[] = await sanityClient.fetch(`
 
 <Layout>
   <HomePage client:load collections={collections} />
-  <Footer />
+  {/* Scroll-scrubbed GSAP island — hydrate on idle so ScrollTrigger is
+      registered well before the user scrolls down, guaranteeing the
+      signature draw plays from the very start of its range. */}
+  <Colophon client:idle />
 </Layout>

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { motion, useScroll, AnimatePresence } from 'framer-motion';
+import { motion, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, type MotionValue } from 'framer-motion';
 import { ArrowRight, Share2, Check, MapPin } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
@@ -8,7 +8,10 @@ import { EDITORIAL_FALLBACKS, renderPortableText, renderFallback } from '../../l
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import Magnetic from '../shared/Magnetic';
 
-const expo = [0.23, 1, 0.32, 1] as const;
+const expo = [0.16, 1, 0.3, 1] as const;
+// Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
+// plane of UI entering/leaving reads better with symmetric weight than expo).
+const overlayEase = [0.32, 0, 0.07, 1] as const;
 
 /** Optional per-collection background for the story cover transition.
  *  Drop the asset in `public/` and map the collection slug here. Missing
@@ -62,6 +65,7 @@ function PhotoCell({
     span === 'half' ? '(min-width: 1024px) 30vw, 50vw' :
                       '(min-width: 1024px) 20vw, 33vw';
 
+  const reduce = useReducedMotion();
   const [isLoaded, setIsLoaded] = useState(false);
   // On touch devices we treat the grid as if no one is hovered: every
   // photo stays at full clarity, no blur/scale-down ever fires. We also
@@ -85,6 +89,12 @@ function PhotoCell({
         whileTap: { scale: 0.98 },
       })}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      aria-label={photo.title ? `View photo: ${photo.title}` : `View photo ${index + 1}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+      }}
       animate={{
         opacity: isAnyHovered && !isThisHovered ? 0.4 : 1,
         filter: isAnyHovered && !isThisHovered ? 'blur(2px)' : 'blur(0px)',
@@ -102,7 +112,7 @@ function PhotoCell({
           every cell reaches full opacity; the index stagger still cascades. */}
       <motion.div
         className="relative"
-        initial={{ opacity: 0, y: 38, clipPath: 'inset(14% 0% 14% 0%)' }}
+        initial={reduce ? false : { opacity: 0, y: 38, clipPath: 'inset(14% 0% 14% 0%)' }}
         animate={{ opacity: 1, y: 0, clipPath: 'inset(0% 0% 0% 0%)' }}
         transition={{ duration: 1.0, delay: Math.min(index * 0.04, 0.5), ease: expo }}
       >
@@ -129,18 +139,30 @@ function PhotoCell({
           sizes={sizesAttr}
           alt={photo.title || `Photograph by Ryan Xu — frame ${index + 1}`}
           className={`w-full h-auto block grayscale-[0.15] transition-[filter] duration-[600ms] ${canHover ? 'hover:grayscale-0' : ''}`}
-          loading="eager"
+          loading={index < 4 ? 'eager' : 'lazy'}
           decoding="async"
           draggable={false}
         />
-        {/* NOTE: the image is no longer opacity-gated on `isLoaded` — inside the
-            story's inner scroll container that (plus lazy loading) left
-            below-fold photos invisible. The placeholder above still fades on
-            load; eager loading guarantees every photo in an opened story
-            actually loads. */}
+        {/* NOTE: the image is no longer opacity-gated on `isLoaded` — the old
+            opacity gate (combined with lazy loading) once left below-fold photos
+            invisible inside the story's inner scroll container. With the gate
+            gone, the first rows load eagerly and the rest lazy-load as the
+            story scrolls — an opened 40-photo story no longer fires 40
+            full-size requests up front. */}
       </motion.div>
     </motion.div>
   );
+}
+
+/* Reading-progress % label — holds the ONLY state driven by story scroll, so
+   each scroll tick re-renders this one span instead of the whole overlay. */
+function ProgressPercent({ progress }: { progress: MotionValue<number> }) {
+  const [pct, setPct] = useState(0);
+  useMotionValueEvent(progress, 'change', (latest) => {
+    const next = Math.round(latest * 100);
+    setPct((prev) => (prev === next ? prev : next));
+  });
+  return <span className="font-ui">{pct}%</span>;
 }
 
 /* ── Full-screen lightbox using existing shared component ── */
@@ -154,7 +176,7 @@ function LightboxShell({
   onClose: () => void;
 }) {
   return (
-    <Lightbox photos={photos} initialIndex={activeIndex} onClose={onClose} zIndex={60} />
+    <Lightbox photos={photos} initialIndex={activeIndex} onClose={onClose} />
   );
 }
 
@@ -172,9 +194,9 @@ export default function MagazineLayout({
   onSelectCollection: (c: Collection) => void;
   onClose: () => void;
 }) {
+  const reduce = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ container: containerRef });
-  const [scrollPercent, setScrollPercent] = useState(0);
   const [isShared, setIsShared] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -187,12 +209,13 @@ export default function MagazineLayout({
   // the story opens (collection name as masthead headline + column rules +
   // folio + newsprint halftone), then peels up to reveal the grid. Replays
   // whenever the collection changes (e.g. "Keep Reading" → next story).
-  const [coverGone, setCoverGone] = useState(false);
+  const [coverGone, setCoverGone] = useState(!!reduce);
   useEffect(() => {
+    if (reduce) { setCoverGone(true); return; }
     setCoverGone(false);
     const t = setTimeout(() => setCoverGone(true), 1150);
     return () => clearTimeout(t);
-  }, [collection._id]);
+  }, [collection._id, reduce]);
 
   // Reorder photos so the first landscape (horizontal) photo leads the story
   const photos = useMemo(() => {
@@ -209,12 +232,6 @@ export default function MagazineLayout({
     reordered.unshift(landscape);
     return reordered;
   }, [collection.photos]);
-
-  useEffect(() => {
-    return scrollYProgress.on('change', (latest) => {
-      setScrollPercent(Math.round(latest * 100));
-    });
-  }, [scrollYProgress]);
 
   // Reset internal scroll position whenever the user switches to a new
   // collection (e.g. clicks "Keep Reading"). Without this the next story
@@ -260,21 +277,34 @@ export default function MagazineLayout({
 
   /* 7-image editorial cycle: full → half×2 → full → third×3, repeat */
 
+  // Escape closes the story (unless the lightbox is open — it owns Escape then).
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && lightboxIndex === null) onClose();
+    };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [onClose, lightboxIndex]);
+
   return (
     <>
-      {/* Overlay shell — slide-up/down */}
+      {/* Overlay shell — slide-up/down. (No backdrop-blur: the panel covers the
+          backdrop within a second, so the blur cost never reads.) */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+        className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center bg-black/40"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Story: ${collection.name}`}
       >
         <motion.div
-          initial={{ y: '100%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '100%' }}
-          transition={{ duration: 0.9, ease: [0.32, 0, 0.07, 1] }}
+          initial={reduce ? { opacity: 0 } : { y: '100%' }}
+          animate={reduce ? { opacity: 1 } : { y: 0 }}
+          exit={reduce ? { opacity: 0 } : { y: '100%' }}
+          transition={{ duration: 0.9, ease: overlayEase }}
           ref={containerRef}
           data-lenis-prevent
           className="w-full h-full overflow-y-auto no-scrollbar relative bg-[#30352a] text-[#F4F4ED]"
@@ -300,8 +330,6 @@ export default function MagazineLayout({
 
           {/* Content */}
           <div className="relative z-0 px-6 md:px-12">
-            <div className="fixed inset-0 pointer-events-none opacity-[0.03] mix-blend-multiply z-[80] paper-texture" />
-
             <div className="max-w-7xl mx-auto py-12 md:py-24 relative">
               <div className="grid lg:grid-cols-12 gap-8 md:gap-12 relative z-10">
                 {/* ── Sidebar — fixed to viewport on desktop, three vertical regions:
@@ -326,7 +354,7 @@ export default function MagazineLayout({
                       <motion.span
                         key={collection._id}
                         className="block"
-                        initial={{ y: '110%' }}
+                        initial={reduce ? false : { y: '110%' }}
                         animate={{ y: '0%' }}
                         transition={{ duration: 0.85, delay: 0.1, ease: expo }}
                       >
@@ -370,17 +398,19 @@ export default function MagazineLayout({
 
                   {/* BOTTOM — pinned: scroll progress + frame count + mini-map */}
                   <footer className="lg:shrink-0 space-y-5">
-                    {/* Scroll progress */}
+                    {/* Scroll progress — the bar binds scaleX straight to the
+                        scroll MotionValue (compositor-only, zero re-renders);
+                        the % label isolates its own state so scrolling a story
+                        re-renders one <span>, not the whole overlay tree. */}
                     <div className="space-y-2.5">
                       <div className="flex justify-between text-[9px] uppercase tracking-widest font-bold opacity-30">
                         <span>Reading Progress</span>
-                        <span className="font-ui">{scrollPercent}%</span>
+                        <ProgressPercent progress={scrollYProgress} />
                       </div>
                       <div className="h-[1px] w-full bg-white/5 relative overflow-hidden">
                         <motion.div
-                          className="absolute top-0 left-0 h-full bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
-                          style={{ width: `${scrollPercent}%` }}
-                          transition={{ duration: 0.15, ease: 'linear' }}
+                          className="absolute top-0 left-0 h-full w-full origin-left bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
+                          style={{ scaleX: scrollYProgress }}
                         />
                       </div>
                     </div>
@@ -420,10 +450,10 @@ export default function MagazineLayout({
 
                         <div className="absolute inset-0 flex flex-col justify-end p-4">
                           <div className="flex items-center gap-2 mb-1.5">
-                            <motion.div
-                              className="w-1.5 h-1.5 rounded-full bg-white/60"
-                              animate={{ opacity: [0.4, 1, 0.4] }}
-                              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                            {/* CSS pulse (compositor) — not a framer repeat loop */}
+                            <span
+                              className="w-1.5 h-1.5 rounded-full bg-white/60 soft-pulse"
+                              style={{ ['--pulse-min' as never]: 0.4, ['--pulse-dur' as never]: '2.5s' }}
                             />
                             <span className="text-[8px] font-ui uppercase tracking-[0.3em] text-white/40 group-hover:text-white/80 transition-colors duration-300">
                               {coords.lat.toFixed(4)}°N, {Math.abs(coords.lng).toFixed(4)}°{coords.lng >= 0 ? 'E' : 'W'}
@@ -518,7 +548,7 @@ export default function MagazineLayout({
                             <h3 className="text-4xl md:text-6xl font-serif uppercase tracking-tighter overflow-hidden py-1">
                               <motion.span
                                 className="block"
-                                initial={{ y: '115%' }}
+                                initial={reduce ? false : { y: '115%' }}
                                 animate={{ y: '0%' }}
                                 transition={{ duration: 0.8, ease: expo }}
                               >
@@ -599,7 +629,7 @@ export default function MagazineLayout({
                   className="absolute inset-0 pointer-events-none"
                   initial={{ scale: 1.12, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 1.7, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: 1.7, ease: expo }}
                 >
                   <img
                     src={COVER_BG[collection.slug]}
@@ -664,7 +694,7 @@ export default function MagazineLayout({
                   <motion.span
                     initial={{ y: '110%' }}
                     animate={{ y: '0%' }}
-                    transition={{ duration: 0.85, delay: 0.32, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: 0.85, delay: 0.32, ease: expo }}
                     className="inline-block font-serif uppercase font-normal leading-[0.92] tracking-tight text-white/[0.98]"
                     style={{ fontSize: 'clamp(48px,11vw,168px)' }}
                   >

@@ -45,8 +45,13 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const sx = useSpring(sheenX, { stiffness: 150, damping: 20, mass: 0.4 });
   const sy = useSpring(sheenY, { stiffness: 150, damping: 20, mass: 0.4 });
   const sheen = useMotionTemplate`radial-gradient(32% 42% at ${sx}% ${sy}%, rgba(255,255,255,0.20), rgba(255,255,255,0.04) 45%, transparent 70%)`;
+  // The cover's rect is cached on hover-start — getBoundingClientRect on every
+  // mousemove is a forced layout read, and browsers synthesize mousemove during
+  // scroll-under-cursor, which would interleave layout reads with Lenis's
+  // main-thread scroll work.
+  const sheenRect = useRef<DOMRect | null>(null);
   const onCoverMove = (e: React.MouseEvent) => {
-    const r = e.currentTarget.getBoundingClientRect();
+    const r = sheenRect.current ?? (sheenRect.current = e.currentTarget.getBoundingClientRect());
     sheenX.set(((e.clientX - r.left) / r.width) * 100);
     sheenY.set(((e.clientY - r.top) / r.height) * 100);
   };
@@ -118,7 +123,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
           alt={collection.name}
           loading="lazy"
           decoding="async"
-          animate={{ scale: isHovered ? 1.12 : isActive ? 1.02 : 1 }}
+          animate={{ scale: reduce ? 1 : isHovered ? 1.12 : isActive ? 1.02 : 1 }}
           transition={{ duration: 1.1, ease: expo }}
           className="absolute inset-0 w-full h-[140%] object-cover"
           draggable={false}
@@ -160,15 +165,16 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
   const interactive = {
     onClick,
     onHoverStart: () => { setIsHovered(true); setArmed(true); },
-    onHoverEnd: () => setIsHovered(false),
+    onHoverEnd: () => { setIsHovered(false); sheenRect.current = null; },
     onMouseMove: onCoverMove,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+    },
     'data-cursor': 'View Story',
     role: 'button' as const,
+    tabIndex: 0,
     'aria-label': `View story: ${collection.name}`,
   };
-  // Hover glow removed — the lime flash read as flicker; the dim-lift + scale +
-  // sheen + baseline carry the hover calmly.
-  const glow = {};
   const baseline = (
     <div
       className="absolute left-0 right-0 bottom-0 h-[5px] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-[750ms] ease-[cubic-bezier(0.16,1,0.3,1)] z-10"
@@ -188,8 +194,6 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
         <div className="lg:grid lg:grid-cols-12 lg:gap-12 lg:items-center">
           <motion.div
             {...interactive}
-            animate={glow}
-            transition={{ duration: 0.6, ease: expo }}
             className="lg:col-span-8 group relative cursor-pointer overflow-hidden bg-white/[0.02] border border-white/5 hover:border-white/15 transition-colors duration-700"
           >
             {imageBlock}
@@ -208,10 +212,6 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             {deck && <p className="text-deck max-w-[32ch]">{deck}</p>}
             {lede && <p className="text-[13.5px] leading-relaxed text-white/45 font-light max-w-[42ch]">{lede}</p>}
             <div className="h-px w-16" style={{ background: ACCENT }} />
-            <div className="text-dateline space-y-1">
-              <p>{dateline}{collection.year ? ` · ${collection.year}` : ''} · {frames} frames</p>
-              {exifLine && <p className="text-white/30">{exifLine}</p>}
-            </div>
             <Magnetic strength={0.4}>
               <button
                 onClick={onClick}
@@ -220,7 +220,7 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
                 className="group/cta mt-1 shrink-0 inline-flex items-center gap-3 font-ui text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 hover:text-white transition-colors duration-500"
               >
                 View Story
-                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover/cta:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover/cta:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover/cta:text-[#282c20] transition-all duration-500">
+                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover/cta:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover/cta:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover/cta:text-[#282c20] transition-[border-color,background-color,color] duration-500">
                   <ArrowRight size={16} />
                 </span>
               </button>
@@ -241,8 +241,6 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
     >
       <motion.div
         {...interactive}
-        animate={glow}
-        transition={{ duration: 0.6, ease: expo }}
         className="relative group cursor-pointer w-full overflow-hidden bg-white/[0.02] border border-white/5 hover:border-white/15 transition-colors duration-700"
       >
         {imageBlock}
@@ -274,20 +272,11 @@ export default function ArchiveChapter({ id, collection, onClick, index, isActiv
             {leadWords && <>{leadWords} </>}
             <motion.span style={{ color: reduce ? 'rgb(210,255,0)' : igniteColor }}>{igniteWord}</motion.span>
           </h3>
-          <div className={`mt-4 md:mt-6 flex items-end justify-between gap-6 ${flip ? 'flex-row-reverse' : ''}`}>
-            <div className="font-ui text-[10px] md:text-[11px] tracking-[0.3em] uppercase text-white/55 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>{frames} frames</span>
-              {exifLine && <span className="text-white/35">{exifLine}</span>}
-              {coords && (
-                <span className="text-white/35">
-                  {coords.lat.toFixed(3)}°, {coords.lng.toFixed(3)}°
-                </span>
-              )}
-            </div>
+          <div className={`mt-4 md:mt-6 flex ${flip ? 'justify-start' : 'justify-end'}`}>
             <Magnetic strength={0.4}>
               <span className="shrink-0 inline-flex items-center gap-3 font-ui text-[10px] md:text-[11px] tracking-[0.35em] uppercase text-white/80 group-hover:text-white transition-colors duration-500">
                 View Story
-                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] transition-all duration-500">
+                <span className="flex items-center justify-center w-10 h-10 rounded-full border border-white/25 group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] transition-[border-color,background-color,color] duration-500">
                   <ArrowRight size={16} />
                 </span>
               </span>

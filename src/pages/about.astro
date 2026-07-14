@@ -2,7 +2,6 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import AboutPage from '../components/about/AboutPage';
-import Footer from '../components/Footer.astro';
 import { sanityClient } from 'sanity:client';
 import type { SiteSettings } from '../types';
 
@@ -20,7 +19,6 @@ const rawSettings = await sanityClient.fetch(`
     "avatarUrl": avatar.asset->url,
     email,
     instagram,
-    skills,
     timeline[] {
       year,
       title,
@@ -35,10 +33,9 @@ const settings: SiteSettings = rawSettings ?? {};
 <Layout
   title="About | Ryan"
   description="Photographic archive. Operator: Ryan Xu. Base: New York."
-  ogImage={settings.avatarUrl ?? undefined}
+  ogImage={settings.avatarUrl ? `${settings.avatarUrl}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}
   dark={true}
 >
-  <Nav client:load currentPath={currentPath} dark={true} />
+  <Nav client:load currentPath={currentPath} />
   <AboutPage client:load settings={settings} />
-  <Footer dark={true} />
 </Layout>
