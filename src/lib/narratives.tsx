@@ -67,7 +67,7 @@ export function renderPortableText(
   blockquoteBorderColor = 'border-white/10',
 ): React.ReactNode {
   return blocks.map((block) => {
-    const text = block.children.map((span) => {
+    const text = (block.children ?? []).map((span) => {
       let node: React.ReactNode = span.text;
       if (span.marks?.includes('em')) node = <em key={span._key}>{node}</em>;
       if (span.marks?.includes('strong')) node = <strong key={span._key}>{node}</strong>;
