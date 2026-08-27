@@ -12,10 +12,11 @@ import exifr from 'exifr';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { createReadStream } from 'fs';
+import { requireSanityToken } from './sanity-token.mjs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = requireSanityToken('upload-photos.mjs');
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
