@@ -5,15 +5,16 @@
  *   node scripts/backfill-region.mjs --dry-run   (show what would change)
  *   node scripts/backfill-region.mjs             (apply with setIfMissing)
  *
+ * Requires: SANITY_TOKEN env var for Sanity access.
+ *
  * Safe to re-run: uses setIfMissing, so a manually-set region is never
  * overwritten, and already-tagged collections are skipped.
  */
 
 import { createClient } from '@sanity/client';
+import { getRequiredSanityToken } from './sanity-token.mjs';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = getRequiredSanityToken();
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
