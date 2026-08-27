@@ -11,9 +11,7 @@
 
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = requireEnv('SANITY_TOKEN');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -24,6 +22,14 @@ const sanity = createClient({
   token: SANITY_TOKEN,
   useCdn: false,
 });
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required. Set it in your environment before running this Sanity mutation script.`);
+  }
+  return value;
+}
 
 // City slug → Region. Mirrors the Desktop/PHOTO folder structure
 // (Region → City). Keys are collection slugs (and a few name variants).
