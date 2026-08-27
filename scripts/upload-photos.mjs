@@ -15,8 +15,13 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN. Export a Sanity write token before running this uploader.');
+  process.exit(1);
+}
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
