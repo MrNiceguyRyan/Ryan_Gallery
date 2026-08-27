@@ -55,6 +55,23 @@ const pageJsonLd = jsonLd
   ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd])
   : [];
 const allJsonLd = [personSchema, websiteSchema, ...pageJsonLd];
+const serializeJsonLd = (schema: Record<string, unknown>) =>
+  JSON.stringify(schema).replace(/[<>&\u2028\u2029]/g, (char) => {
+    switch (char) {
+      case '<':
+        return '\\u003c';
+      case '>':
+        return '\\u003e';
+      case '&':
+        return '\\u0026';
+      case '\u2028':
+        return '\\u2028';
+      case '\u2029':
+        return '\\u2029';
+      default:
+        return char;
+    }
+  });
 
 // ─── Optional hub link (rel=me + footer link) ───
 // Driven by PUBLIC_HUB_URL env var. Hidden when not set.
@@ -106,7 +123,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
     {/* ── Structured data: Person + WebSite + page-specific blocks ── */}
     {allJsonLd.map((schema) => (
-      <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+      <script type="application/ld+json" set:html={serializeJsonLd(schema)} />
     ))}
 
     {/* Page-specific <head> injections (preconnects, stylesheets) */}
