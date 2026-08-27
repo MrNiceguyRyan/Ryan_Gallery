@@ -4,7 +4,8 @@
  *        node scripts/upload-photos.mjs Florida            (upload one state)
  *        node scripts/upload-photos.mjs Florida/Miami      (upload one city)
  *
- * Requires: ANTHROPIC_API_KEY env var for AI naming (optional)
+ * Requires: SANITY_TOKEN env var with write permissions
+ * Optional: ANTHROPIC_API_KEY env var for AI naming
  */
 
 import { createClient } from '@sanity/client';
@@ -15,8 +16,13 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+if (!SANITY_TOKEN) {
+  console.error('Fatal error: SANITY_TOKEN env var is required for Sanity uploads.');
+  process.exit(1);
+}
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
 const LOCATION_MAP = {
