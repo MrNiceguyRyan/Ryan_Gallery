@@ -5,17 +5,25 @@
  *   node scripts/backfill-region.mjs --dry-run   (show what would change)
  *   node scripts/backfill-region.mjs             (apply with setIfMissing)
  *
+ * Requires: SANITY_TOKEN env var for CMS writes.
+ *
  * Safe to re-run: uses setIfMissing, so a manually-set region is never
  * overwritten, and already-tagged collections are skipped.
  */
 
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
-
 const DRY_RUN = process.argv.includes('--dry-run');
+const SANITY_TOKEN = DRY_RUN ? process.env.SANITY_TOKEN : requireEnv('SANITY_TOKEN');
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`Missing required environment variable: ${name}`);
+    process.exit(1);
+  }
+  return value;
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
