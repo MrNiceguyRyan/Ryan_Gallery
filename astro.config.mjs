@@ -4,6 +4,30 @@ import react from '@astrojs/react';
 import sanity from '@sanity/astro';
 import sitemap from '@astrojs/sitemap';
 
+// Astro's build also starts a temporary Vite server. Keep its dependency
+// cache separate so a build cannot replace the React modules in a live preview.
+function stablePreview() {
+  return {
+    name: 'gallery:stable-preview',
+    hooks: {
+      'astro:config:setup': ({ command, config, updateConfig }) => {
+        updateConfig({
+          vite: {
+            cacheDir: new URL(`./node_modules/.vite-${command}/`, config.root).pathname,
+            ...(command === 'dev' ? {
+              server: {
+                port: config.server.port,
+                strictPort: true,
+                hmr: { clientPort: config.server.port },
+              },
+            } : {}),
+          },
+        });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
   site: 'https://ryanxugallery.com',
@@ -17,13 +41,14 @@ export default defineConfig({
   },
   vite: {
     plugins: [tailwindcss()],
-    // Pre-bundle styled-components (pulled in by @sanity/astro) to avoid
-    // the "Failed to resolve dependency" build warning in Vite 7
+    // Pre-bundle the lazily hydrated map and homepage motion stacks so Vite
+    // does not invalidate them while their Astro islands are loading.
     optimizeDeps: {
-      include: ['styled-components'],
+      include: ['framer-motion', 'lucide-react', 'lenis', 'mapbox-gl', 'react-map-gl/mapbox', 'supercluster'],
     },
   },
   integrations: [
+    stablePreview(),
     react(),
     sanity({
       projectId: 'z610fooo',

@@ -39,6 +39,16 @@ export interface Collection {
    *  homepage to group multi-place regions into a single region chapter/hub. */
   region?: string;
   year?: number;
+  /** Optional editorial route position. Existing collections may omit it;
+   *  the homepage keeps their current order until the route is fully ordered. */
+  routeOrder?: number;
+  /** Canonical map point for the collection. Sanity geopoints use lng/lat. */
+  mapLocation?: {
+    _type?: 'geopoint';
+    lat: number;
+    lng: number;
+    alt?: number;
+  };
   description?: string;
   /** Portable Text — editorial introduction shown in the collection sidebar */
   introduction?: PortableTextBlock[];

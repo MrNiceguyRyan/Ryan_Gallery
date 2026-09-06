@@ -3,13 +3,15 @@ import Layout from '../../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../../types';
 import WorkStory from '../../components/works/WorkStory';
+import { fetchSanityWithRetry } from '../../lib/sanityFetch';
+import { photoDisplayTitle } from '../../lib/narratives';
 
 export async function getStaticPaths() {
-  const collections = await sanityClient.fetch(`
+  const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Array<{ slug: string }>>(`
     *[_type == "collection" && defined(slug.current)] {
       "slug": slug.current
     }
-  `);
+  `));
 
   return collections.map((c: { slug: string }) => ({
     params: { slug: c.slug },
@@ -18,11 +20,12 @@ export async function getStaticPaths() {
 
 const { slug } = Astro.params;
 
-// Fetch ALL collections (with embedded photos) exactly as the homepage does,
-// so the story experience — and "Keep Reading" order — matches the homepage
-// overlay. The visited collection is found within this list by slug.
-const collections: Collection[] = await sanityClient.fetch(`
-  *[_type == "collection"] | order(year desc) {
+// Hydrate this story with only its own full photo set. The rest of the archive
+// is a lightweight index used solely for "Keep Reading"; serialising every
+// photograph twice made each standalone story pay for the entire site.
+const [collection, collectionIndex] = await Promise.all([
+  fetchSanityWithRetry(() => sanityClient.fetch<Collection | null>(`
+  *[_type == "collection" && slug.current == $slug][0] {
     _id,
     name,
     "slug": slug.current,
@@ -47,12 +50,35 @@ const collections: Collection[] = await sanityClient.fetch(`
       location
     }
   }
-`);
+  `, { slug })),
+  fetchSanityWithRetry(() => sanityClient.fetch<Collection[]>(`
+    *[_type == "collection"] | order(year desc) {
+      _id,
+      name,
+      "slug": slug.current,
+      "coverImageUrl": coverImage.asset->url,
+      location,
+      year,
+      routeOrder,
+      "photoCount": count(*[_type == "photo" && references(^._id)])
+    }
+  `)),
+]);
+
+if (!collection) {
+  throw new Error(`Collection not found: ${slug}`);
+}
 
 // Collections that actually have photos drive "Keep Reading" (mirrors the
 // homepage's activeCollections).
-const activeCollections = collections.filter((c) => (c.photos?.length || 0) > 0);
-const collection = collections.find((c) => c.slug === slug) ?? collections[0];
+const activeCollectionsWithPhotos = collectionIndex.filter((c) => (c.photoCount || 0) > 0);
+const hasCompleteRouteOrder = activeCollectionsWithPhotos.length > 0
+  && activeCollectionsWithPhotos.every((item) => Number.isFinite(item.routeOrder));
+const activeCollections = hasCompleteRouteOrder
+  ? [...activeCollectionsWithPhotos].sort(
+      (a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0),
+    )
+  : activeCollectionsWithPhotos;
 const photos: Photo[] = collection.photos ?? [];
 
 // ─── Build per-page SEO values ───
@@ -87,11 +113,11 @@ const ogImage =
 const siteUrl = (Astro.site ?? new URL('https://ryanxugallery.com')).toString().replace(/\/$/, '');
 const pageUrl = `${siteUrl}/works/${collection.slug}`;
 
-const imageObjects = photos.slice(0, 12).map((p) => ({
+const imageObjects = photos.slice(0, 12).map((p, index) => ({
   '@type': 'ImageObject',
   contentUrl: `${p.imageUrl}?auto=format&w=1600&q=85`,
   thumbnailUrl: `${p.imageUrl}?auto=format&w=400&q=70`,
-  name: p.title || `${collection.name} — photograph`,
+  name: photoDisplayTitle(p) || `${collection.name}, photograph ${index + 1} of ${photos.length}`,
   width: p.width ?? undefined,
   height: p.height ?? undefined,
   author: { '@type': 'Person', name: 'Ryan Xu' },
@@ -120,6 +146,9 @@ const collectionSchema = {
   dark={true}
   jsonLd={collectionSchema}
 >
+  <Fragment slot="head">
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+  </Fragment>
   {/* Same MagazineLayout story used by the homepage overlay — so arriving
        from the Map's "Explore Story" link is identical to opening a story
        on the homepage. */}

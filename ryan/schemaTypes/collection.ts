@@ -55,6 +55,19 @@ export default defineType({
       description: 'e.g. "Florida", "Arizona", "DMV", "Macau" — 用于首页按区域聚类（同一 region 的多个城市会归到一个区域中枢）',
     }),
     defineField({
+      name: 'routeOrder',
+      title: 'Route / Chapter Order',
+      type: 'number',
+      description: '首页旅行路线中的明确顺序。数值越小越靠前；新增地点可以插入任意位置，不再依赖年份或创建时间。',
+      validation: (rule) => rule.integer().positive(),
+    }),
+    defineField({
+      name: 'mapLocation',
+      title: 'Map Location',
+      type: 'geopoint',
+      description: '该系列在首页路线地图上的正式锚点。建议设在城市或地标中心；未填写时网站才会使用照片定位作为后备。',
+    }),
+    defineField({
       name: 'year',
       title: 'Year',
       type: 'number',

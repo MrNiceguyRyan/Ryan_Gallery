@@ -1,4 +1,55 @@
-import type { PortableTextBlock } from '../types';
+import type { Photo, PortableTextBlock } from '../types';
+
+/**
+ * Sanity photo titles have historically arrived as both strings and portable
+ * text-like values. Keep that inconsistency at the data boundary so no view
+ * can accidentally expose "[object Object]" to visitors or assistive tech.
+ */
+function readableText(value: unknown, depth = 0): string {
+  if (depth > 3 || value == null) return '';
+  if (typeof value === 'string') {
+    // Once object serialization has leaked into a title, the surrounding
+    // characters are no longer trustworthy (for example, a frame number may
+    // have been concatenated twice). Prefer the factual positional fallback.
+    if (/\[object Object\]/i.test(value)) return '';
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    return normalized && /[\p{L}\p{N}]/u.test(normalized) ? normalized : '';
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => readableText(item, depth + 1))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  if (typeof value !== 'object') return '';
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['text', 'title', 'caption', 'alt', 'name', 'en']) {
+    const candidate = readableText(record[key], depth + 1);
+    if (candidate) return candidate;
+  }
+  return readableText(record.children, depth + 1);
+}
+
+export function photoDisplayTitle(photo: Pick<Photo, 'title'>): string {
+  return readableText(photo.title);
+}
+
+/** A unique, position-aware label shared by the story grid and lightbox. */
+export function photoAccessibleLabel(
+  photo: Pick<Photo, 'title'>,
+  index: number,
+  total: number,
+  collectionName?: string,
+): string {
+  const position = `Photo ${index + 1} of ${Math.max(total, 1)}`;
+  const title = photoDisplayTitle(photo);
+  if (title) return `${position}, ${title}`;
+  if (collectionName) return `${position}, ${collectionName}`;
+  return position;
+}
 
 /**
  * Per-collection editorial fallbacks. Used when Sanity has no
@@ -38,6 +89,25 @@ export const EDITORIAL_FALLBACKS: Record<string, string[]> = {
     'South Beach operates on a logic of surfaces — the gloss of a rental car hood, reflections in hotel lobby glass, the particular turquoise of the Atlantic at noon when the sand below is still visible and the water seems lit from within.',
   ],
 };
+
+/**
+ * Short, complete homepage captions. These deliberately do not reuse the
+ * longer story introductions: the homepage only needs one clear observation
+ * per place, while the full narrative belongs inside the story view.
+ */
+export const HOMEPAGE_CAPTIONS: Record<string, string> = {
+  'new-york-stories': 'Early light cuts between Manhattan towers, revealing steam, steel, and the texture of the street.',
+  page: 'Inside Antelope Canyon, sandstone folds a few minutes of noon light into color.',
+  'zion-national-park': 'The Virgin River threads beneath sandstone walls that erase the horizon.',
+  arizona: 'Desert light strips the landscape back to shadow, stone, and open distance.',
+  orlando: 'Florida light holds spectacle and ordinary streets in the same bright register.',
+  'bryce-canyon-national-park': 'At sunrise, thousands of hoodoos move from blue shadow into amber light.',
+  miami: 'Ocean Drive holds pastel facades and the first glow of neon in the same frame.',
+};
+
+export function homepageCaption(slug: string | undefined): string {
+  return (slug && HOMEPAGE_CAPTIONS[slug]) || '';
+}
 
 /**
  * Render Sanity Portable Text into React nodes.

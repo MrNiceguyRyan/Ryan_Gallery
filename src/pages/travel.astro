@@ -4,21 +4,17 @@ import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
 import type { Photo } from '../types';
 import MapboxMap from '../components/MapboxMap';
+import TravelEntryCover from '../components/TravelEntryCover';
 import { getMapboxToken } from '../config/mapbox';
+import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 const currentPath = Astro.url.pathname;
 
-const photos: Photo[] = await sanityClient.fetch(`
-  *[_type == "photo" && defined(location)] | order(_createdAt desc) {
+const photos = await fetchSanityWithRetry(() => sanityClient.fetch<Photo[]>(`
+  *[_type == "photo" && defined(location.lat) && defined(location.lng)] | order(_createdAt desc) {
     _id,
     title,
     "imageUrl": image.asset->url,
-    camera,
-    focalLength,
-    aperture,
-    shutterSpeed,
-    iso,
-    styleCategory,
     location,
     collection->{
       name,
@@ -26,7 +22,7 @@ const photos: Photo[] = await sanityClient.fetch(`
       region
     }
   }
-`);
+`));
 
 const mapboxToken = getMapboxToken();
 
@@ -37,335 +33,85 @@ const locations = new Set(
     .filter((p) => p.location?.lat != null && p.location?.lng != null)
     .map((p) => `${p.location!.lat.toFixed(2)},${p.location!.lng.toFixed(2)}`)
 ).size;
-const collections = new Set(
-  photos.map((p) => p.collection?.name).filter(Boolean)
-).size;
-
-const stats = [
-  { value: String(locations).padStart(2, '0'), label: 'Locations' },
-  { value: String(frames).padStart(2, '0'), label: 'Frames' },
-  { value: String(collections).padStart(2, '0'), label: 'Collections' },
-  { value: 'US', label: 'Coverage' },
-];
-
-// City names for the kinetic marquee (artistic typographic band).
-const cityNames = [
-  ...new Set(
-    photos.map((p) => p.location?.city).filter((c): c is string => !!c)
-  ),
-];
 ---
 
 <Layout title="Map | Ryan" description="Geo-tagged photographic archive. Every frame placed on the map across the United States." dark={true} ogImage={photos[0]?.imageUrl ? `${photos[0].imageUrl}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}>
-  {/* Mapbox-only head injections — these were moved off the global Layout so
-       /, /about, /works/[slug] no longer pay for them. */}
+  {/* Mapbox-only connection hints. Its CSS ships with the island so ClientRouter
+       navigation cannot start the map before its styles are available. */}
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
-    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.20.0/mapbox-gl.css" />
   </Fragment>
 
-  <Nav client:load currentPath={currentPath} />
+  <TravelEntryCover client:load locations={locations} frames={frames} />
+  <Nav client:load currentPath={currentPath} scrim />
 
-  <!-- ── Hero — pure-typographic kinetic "light band" over dark ── -->
-  <section class="relative h-[68vh] md:h-[76vh] overflow-hidden bg-[#282c20]" data-travel-hero>
-    <!-- Atmospheric warm glow (fills the dark, echoes the LED dots) -->
-    <div
-      class="absolute inset-0 z-0 hero-glow"
-      style="background: radial-gradient(58vmax 46vmax at 50% 44%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.07), transparent 70%);"
-    ></div>
-    <!-- Faint coordinate hairlines for atlas texture -->
-    <div class="absolute inset-0 z-0 opacity-[0.04] hidden md:block" style="background-image: linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px); background-size: 120px 120px;"></div>
-
-    <!-- Background light band: two opposing rows of outlined place names -->
-    {cityNames.length > 0 && (
-      <div class="absolute inset-0 z-[1] flex flex-col justify-center gap-2 md:gap-4 pointer-events-none select-none" data-travel-band>
-        <div class="atlas-marquee">
-          <div class="atlas-marquee-track atlas-row-a flex whitespace-nowrap will-change-transform">
-            {[0, 1].map(() => (
-              <div class="flex items-center shrink-0" aria-hidden="true">
-                {cityNames.map((city) => (
-                  <span class="flex items-center">
-                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif uppercase tracking-tight">{city}</span>
-                    <span class="band-dot">&bull;</span>
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div class="atlas-marquee">
-          <div class="atlas-marquee-track atlas-row-b flex whitespace-nowrap will-change-transform">
-            {[0, 1].map(() => (
-              <div class="flex items-center shrink-0" aria-hidden="true">
-                {cityNames.map((city) => (
-                  <span class="flex items-center">
-                    <span class="band-name px-5 md:px-8 text-6xl md:text-8xl font-serif uppercase tracking-tight">{city}</span>
-                    <span class="band-dot">&bull;</span>
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )}
-
-    <!-- Title-legibility wash: solid dark anchored bottom-left, fading up/right
-         so the band stays visible elsewhere; plus a soft top/bottom vignette. -->
-    <div class="absolute inset-0 z-[2] bg-gradient-to-tr from-[#282c20] via-[#282c20]/65 to-transparent"></div>
-    <div class="absolute inset-0 z-[2] bg-gradient-to-t from-[#282c20] via-transparent to-[#282c20]/55"></div>
-
-    <!-- Foreground content (outer wrapper carries scroll-parallax; inner keeps
-         the one-shot mount fade so the two transforms never collide) -->
-    <div class="absolute bottom-12 md:bottom-20 left-5 right-5 md:left-16 md:right-auto z-[3] max-w-2xl" data-travel-fg>
-      <div class="animate-fade-in-up">
-        <p class="font-ui text-[10px] md:text-xs tracking-[0.5em] uppercase text-white/45 mb-4">
-          The Territory
-        </p>
-        <h1 class="text-5xl md:text-7xl lg:text-8xl font-serif uppercase tracking-tight leading-[0.9] text-[#F4F4ED]">
-          Mapping the<br /><span class="draw-underline heat-glow" style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b)); --draw-delay: 0.9s; --glow-intensity: 0.5;">Archive.</span>
-        </h1>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Atlas intro + live stats masthead ── -->
-  <section class="max-w-7xl mx-auto px-6 md:px-16 pt-16 md:pt-20 animate-fade-in-up">
-    <p class="text-[15px] md:text-lg leading-[1.8] text-white/55 font-light max-w-2xl border-b border-white/10 pb-10 md:pb-12">
-      A geographic index of the archive. Each pin marks where a frame
-      was made. Drag, zoom, and trace the route across the United States;
-      select a city to open its coordinates.
-    </p>
-
-    <!-- Stats row -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-6 pt-10 md:pt-12">
-      {stats.map((s, i) => {
-        const numeric = /^\d+$/.test(s.value);
-        return (
-          <div class={`flex flex-col gap-2 ${i > 0 ? 'md:border-l md:border-white/10 md:pl-8' : ''}`}>
-            <span
-              class="text-4xl md:text-5xl lg:text-6xl font-serif uppercase tracking-tight text-[#F4F4ED] leading-none tabular-nums"
-              data-countup={numeric ? s.value : undefined}
-            >
-              {s.value}
-            </span>
-            <span class="font-ui text-[9px] tracking-[0.4em] uppercase text-white/35">
-              {s.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  </section>
-
-  <!-- ── Interactive Atlas — near-fullscreen map, location list on the right ── -->
-  <section
-    id="atlas-map"
-    class="max-w-[1800px] mx-auto px-4 md:px-6 pt-8 md:pt-10 pb-8"
-    style="scroll-margin-top: 5rem;"
+  <!-- The standalone Atlas is a fixed exploration workspace. The masthead and
+       map share one viewport; only the location rail / mobile sheet can scroll. -->
+  <main
+    id="main-content"
+    tabindex="-1"
+    class="travel-workspace relative flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#282c20]"
+    data-travel-workspace
   >
-    <div class="flex items-end justify-between mb-4 md:mb-5 px-1">
-      <div class="flex items-center gap-3">
-        <span class="font-ui text-[10px] tracking-[0.4em] uppercase text-white/45">
-          Interactive Atlas
-        </span>
+    <header
+      class="travel-workspace__masthead safe-inline-page relative z-10 h-[clamp(9.5rem,17svh,10.75rem)] shrink-0 overflow-hidden"
+      data-travel-hero
+      style="padding-top: calc(4.7rem + env(safe-area-inset-top));"
+    >
+      <div
+        class="pointer-events-none absolute inset-0 opacity-70"
+        style="background: radial-gradient(64rem 20rem at 70% 105%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.065), transparent 70%);"
+        aria-hidden="true"
+      ></div>
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-b from-[#282c20]/88 to-transparent" aria-hidden="true"></div>
+
+      <div class="travel-workspace__masthead-inner relative flex h-full items-end justify-between gap-8 pb-3 md:pb-4">
+        <div class="min-w-0">
+          <p class="mb-1.5 flex items-center gap-2 font-ui text-[9px] uppercase tracking-[0.32em] text-white/56 md:tracking-[0.4em]">
+            <span>The Territory · Geographic Index</span>
+            <span class="xl:hidden">· {locations} locations · {frames} frames</span>
+          </p>
+          <h1 class="travel-workspace__title font-serif text-[clamp(1.85rem,8.3vw,2.45rem)] uppercase leading-[0.86] tracking-tight text-[#F4F4ED] md:text-[clamp(2.6rem,4.8vw,4.15rem)]">
+            Mapping the <span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
+          </h1>
+        </div>
+
+        <div class="mb-0.5 hidden shrink-0 items-center gap-4 font-ui text-[9px] uppercase tracking-[0.2em] text-white/58 xl:flex">
+          <span class="flex items-center gap-2.5">
+            <span class="h-1.5 w-1.5 rounded-full bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] shadow-[0_0_12px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)]"></span>
+            {String(locations).padStart(2, '0')} locations · {String(frames).padStart(2, '0')} frames
+          </span>
+        </div>
       </div>
-      <span class="hidden md:block font-ui text-[9px] tracking-[0.3em] uppercase text-white/25">
-        Drag · Scroll to zoom · Pick a city →
-      </span>
-    </div>
+    </header>
 
-    {/* client:visible — Mapbox hydrates when scrolled into view. The region/city
-         list sits on the RIGHT of the near-fullscreen map.
-         data-lenis-prevent: keep raw wheel events here so the map still zooms
-         (Lenis smooth-scrolls the rest of the page). */}
-    <div data-lenis-prevent>
-      <MapboxMap client:visible photos={photos} mapboxToken={mapboxToken} />
-    </div>
-
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-4 px-1 font-ui text-[9px] tracking-[0.3em] uppercase text-white/25">
-      <span>Coordinates sourced from frame EXIF</span>
-      <span>{frames} geotagged frames · {locations} locations</span>
-    </div>
-  </section>
-
-  {/* End-of-mapped-frames terminator — matches the homepage's "End of archive"
-       and the about page's markers. Same visual signature across pages. */}
-  <div class="pt-10 pb-4 flex flex-col items-center gap-3 opacity-30">
-    <div class="w-px h-10" style="background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30);"></div>
-    <span class="text-[9px] uppercase tracking-[0.5em] font-ui">
-      End of mapped frames
-    </span>
-    <span class="text-[8px] font-ui opacity-60">
-      {locations} coordinates
-    </span>
-  </div>
+    <section
+      id="atlas-map"
+      class="relative -mt-2 mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 px-0 pb-0 md:-mt-3 md:px-5 md:pb-5 xl:px-6"
+      aria-label="Interactive photographic atlas"
+    >
+      {/* This region owns every remaining pixel in the viewport. Map gestures
+           stay fully enabled; list and detail surfaces isolate their scrolling. */}
+      <div class="min-h-0 flex-1" data-lenis-prevent>
+        <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} />
+      </div>
+    </section>
+  </main>
 </Layout>
 
-<style>
-  /* ── Kinetic place-name "light band" (hero background) ──
-     Two opposing rows of outlined serif type with glowing LED-like dots,
-     each row edge-faded to read as a band of light. Seamless loop (each
-     track holds two identical copies → translateX(-50%) repeats). */
-  .atlas-marquee {
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-            mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  }
-  .atlas-marquee-track {
-    animation: atlas-marquee 22s linear infinite;
-  }
-  .atlas-row-b {
-    animation-duration: 30s;
-    animation-direction: reverse;
-  }
-  @keyframes atlas-marquee {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-  }
+<style is:global>
+  @media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
+    .travel-workspace .atlas-mobile-sheet {
+      max-height: min(62svh, calc(100% - 4.5rem)) !important;
+    }
 
-  /* Outlined "light" type — slightly brighter now that it's the hero's
-     primary visual (no photo behind it). */
-  .band-name {
-    color: transparent;
-    -webkit-text-stroke: 1px rgba(255, 255, 255, 0.30);
-    text-shadow: 0 0 30px rgba(255, 255, 255, 0.06);
-  }
-  /* Glowing amber LED dot between names */
-  .band-dot {
-    padding: 0 0.15em;
-    font-size: 0.5em;
-    color: rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.75);
-    text-shadow: 0 0 12px rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.65), 0 0 4px rgba(var(--accent-r),var(--accent-g),var(--accent-b), 0.85);
-    transform: translateY(-0.35em);
-    display: inline-block;
-  }
+    .travel-workspace .atlas-map-workspace[data-mobile-sheet='browse'] .atlas-mobile-sheet {
+      height: 48svh !important;
+    }
 
-  /* Hero atmosphere glow breath */
-  .hero-glow { animation: hero-glow 9s ease-in-out infinite; }
-  @keyframes hero-glow { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
-
-  @media (prefers-reduced-motion: reduce) {
-    .atlas-marquee-track,
-    .hero-glow { animation: none; }
+    .travel-workspace .atlas-map-workspace[data-mobile-sheet='detail'] .atlas-mobile-sheet {
+      height: 62svh !important;
+    }
   }
 </style>
-
-<script>
-  import { startLenis } from '../lib/smoothScroll';
-
-  // ── Smooth scroll (same weighty momentum as the homepage) ──
-  // The map itself carries data-lenis-prevent so its wheel-zoom is untouched;
-  // everything else on the page browses with Lenis. Rebuilt on each page-load,
-  // destroyed before the view-transition swap.
-  // IMPORTANT: this module script PERSISTS across ClientRouter navigations, so
-  // the page-load handler fires on EVERY page afterwards — guard on a travel-
-  // page element or Lenis leaks onto other pages (double instances on About).
-  let travelLenisTeardown: (() => void) | null = null;
-  function initTravelLenis() {
-    if (travelLenisTeardown) { travelLenisTeardown(); travelLenisTeardown = null; }
-    if (!document.querySelector('[data-travel-hero]')) return;
-    travelLenisTeardown = startLenis().destroy;
-  }
-  document.addEventListener('astro:page-load', initTravelLenis);
-  document.addEventListener('astro:before-swap', () => {
-    if (travelLenisTeardown) { travelLenisTeardown(); travelLenisTeardown = null; }
-  });
-
-  // Count-up the atlas stats when they scroll into view. rAF/textContent
-  // animation — the CSS reduced-motion neutralizer can't reach it, so gate in
-  // JS; the server-rendered values are already the correct final numbers.
-  function runAtlasCountUps() {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const els = document.querySelectorAll<HTMLElement>('[data-countup]');
-    if (!els.length) return;
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const el = entry.target as HTMLElement;
-        io.unobserve(el);
-        const raw = el.getAttribute('data-countup') || '';
-        const target = parseInt(raw, 10);
-        const pad = raw.length;
-        if (isNaN(target)) return;
-        const dur = 1100;
-        const start = performance.now();
-        const tick = (now: number) => {
-          const t = Math.min((now - start) / dur, 1);
-          const eased = 1 - Math.pow(1 - t, 3);
-          el.textContent = String(Math.round(eased * target)).padStart(pad, '0');
-          if (t < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-    }, { threshold: 0.5 });
-    els.forEach((el) => io.observe(el));
-  }
-  document.addEventListener('astro:page-load', runAtlasCountUps);
-
-  // ── Hero scroll-parallax ──
-  // The kinetic name-band, the foreground title and the atmospheric glow drift
-  // at different rates as the hero scrolls toward the map — the same layered
-  // depth as the homepage hero, here on native scroll + rAF (this page is plain
-  // Astro, not a React island). Transforms live on non-animated wrappers so they
-  // never collide with the band's marquee or the title's mount fade. Reduced-
-  // motion users get the static hero.
-  let travelScrollHandler: (() => void) | null = null;
-  function initTravelParallax() {
-    if (travelScrollHandler) {
-      window.removeEventListener('scroll', travelScrollHandler);
-      window.removeEventListener('resize', travelScrollHandler);
-      travelScrollHandler = null;
-    }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const hero = document.querySelector<HTMLElement>('[data-travel-hero]');
-    if (!hero) return;
-    const band = document.querySelector<HTMLElement>('[data-travel-band]');
-    const fg = document.querySelector<HTMLElement>('[data-travel-fg]');
-    const glow = hero.querySelector<HTMLElement>('.hero-glow');
-    // Cache the hero's geometry so the per-frame path never touches layout.
-    // getBoundingClientRect() forces a synchronous reflow EVERY scroll frame —
-    // and because Lenis drives the smooth scroll on the main thread, that reflow
-    // competes with it and stutters the whole page (worst felt scrolling back up
-    // through the heavy map). offsetTop/offsetHeight are read only when the
-    // viewport actually changes size (the hero is vh-based), never during scroll.
-    let heroTop = 0;
-    let heroH = 1;
-    let lastW = -1;
-    let lastH = -1;
-    let lastP = -1;
-    let ticking = false;
-    const update = () => {
-      ticking = false;
-      if (window.innerWidth !== lastW || window.innerHeight !== lastH) {
-        lastW = window.innerWidth;
-        lastH = window.innerHeight;
-        heroTop = hero.offsetTop;
-        heroH = hero.offsetHeight || 1;
-      }
-      const p = Math.min(Math.max((window.scrollY - heroTop) / heroH, 0), 1); // 0 → 1 as hero exits
-      // Once the hero is fully scrolled past, the band/fg/glow are off-screen —
-      // stop writing to them so the map/bottom scroll costs zero parallax work.
-      if (p >= 1 && lastP >= 1) return;
-      lastP = p;
-      if (glow) glow.style.transform = `translate3d(0, ${p * 60}px, 0)`;
-      if (band) band.style.transform = `translate3d(0, ${p * 44}px, 0)`;
-      if (fg) {
-        fg.style.transform = `translate3d(0, ${p * -52}px, 0)`;
-        fg.style.opacity = String(1 - p * 0.85);
-      }
-    };
-    const onScroll = () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(update);
-      }
-    };
-    travelScrollHandler = onScroll;
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    update();
-  }
-  document.addEventListener('astro:page-load', initTravelParallax);
-</script>

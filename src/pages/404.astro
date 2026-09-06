@@ -1,0 +1,63 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Frame Not Found | Ryan"
+  description="The requested frame is not part of the Ryan Xu visual archive."
+  dark={true}
+>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex, follow" />
+  </Fragment>
+
+  <main
+    id="main-content"
+    tabindex="-1"
+    class="safe-inline-page relative isolate flex min-h-[100dvh] overflow-hidden bg-[#282c20] pb-10 pt-28 text-[#F4F4ED] focus:outline-none md:pb-12 md:pt-36"
+  >
+    <nav class="safe-inline-page fixed inset-x-0 top-0 z-20 flex items-center justify-between py-5 md:py-7" style="padding-top: max(1.25rem, env(safe-area-inset-top));" aria-label="Error page navigation">
+      <a href="/" class="font-serif text-lg font-medium uppercase leading-none tracking-[0.16em] text-[#F4F4ED] transition-opacity hover:opacity-60 md:text-xl">
+        Ryan Xu
+      </a>
+      <a href="/" class="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-4 font-ui text-[9px] font-bold uppercase tracking-[0.25em] text-white transition-colors hover:bg-[#171b15] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:text-[10px]">
+        Home
+      </a>
+    </nav>
+
+    <div class="pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" style="background: radial-gradient(60rem 38rem at 34% 92%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.09), transparent 68%);"></div>
+    <div class="pointer-events-none absolute inset-0 grid grid-cols-4 opacity-45" aria-hidden="true">
+      <span class="border-r border-white/[0.045]"></span>
+      <span class="border-r border-white/[0.045]"></span>
+      <span class="border-r border-white/[0.045]"></span>
+      <span></span>
+    </div>
+
+    <section class="relative z-10 my-auto w-full max-w-5xl">
+      <div class="mb-7 flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.34em] text-white/58">
+        <span class="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_12px_rgba(210,255,0,0.5)]"></span>
+        404 · Missing frame
+      </div>
+      <h1 class="max-w-[9ch] text-balance font-serif text-[clamp(3.5rem,10vw,9rem)] uppercase leading-[0.82] tracking-[-0.055em] text-[#F4F4ED]">
+        This frame was never exposed.
+      </h1>
+      <div class="mt-10 flex flex-col items-start gap-8 md:mt-14 md:flex-row md:items-end md:justify-between">
+        <p class="max-w-[42ch] text-pretty font-serif text-lg italic leading-relaxed text-white/68 md:text-xl">
+          The address points outside the archive. Return to the index and continue from a known coordinate.
+        </p>
+        <a href="/" class="group inline-flex min-h-11 items-center gap-3 border-b border-[#D2FF00]/55 pb-2 font-ui text-[10px] font-bold uppercase tracking-[0.28em] text-[#D2FF00] transition-colors hover:border-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]">
+          Return to archive
+          <span aria-hidden="true" class="transition-transform duration-300 group-hover:translate-x-1">→</span>
+        </a>
+      </div>
+    </section>
+
+    <div
+      class="absolute z-10 flex items-center justify-between border-t border-white/8 pt-4 font-ui text-[9px] uppercase tracking-[0.24em] text-white/52"
+      style="left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left)); right: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right)); bottom: max(2rem, env(safe-area-inset-bottom));"
+    >
+      <span>Ryan Xu · Visual Archive</span>
+      <span class="tabular-nums">00 / 00</span>
+    </div>
+  </main>
+</Layout>

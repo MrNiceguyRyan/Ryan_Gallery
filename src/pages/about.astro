@@ -3,7 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import AboutPage from '../components/about/AboutPage';
 import { sanityClient } from 'sanity:client';
-import type { SiteSettings } from '../types';
+import type { Collection, SiteSettings } from '../types';
+import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 const currentPath = Astro.url.pathname;
 
@@ -12,20 +13,31 @@ const currentPath = Astro.url.pathname;
  * The timeline array and other global fields are managed there.
  * Falls back gracefully if no document exists yet.
  */
-const rawSettings = await sanityClient.fetch(`
-  *[_type == "siteSettings"][0] {
-    name,
-    bio,
-    "avatarUrl": avatar.asset->url,
-    email,
-    instagram,
-    timeline[] {
-      year,
-      title,
-      description
+const [rawSettings, archiveCollections] = await Promise.all([
+  fetchSanityWithRetry(() => sanityClient.fetch<SiteSettings | null>(`
+    *[_type == "siteSettings"][0] {
+      name,
+      bio,
+      "avatarUrl": avatar.asset->url,
+      email,
+      instagram,
+      timeline[] {
+        year,
+        title,
+        description
+      }
     }
-  }
-`);
+  `)),
+  fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>>>(`
+    *[_type == "collection" && defined(year)] | order(year desc, name asc) {
+      _id,
+      name,
+      location,
+      year,
+      "photoCount": count(*[_type == "photo" && references(^._id)])
+    }
+  `)),
+]);
 
 const settings: SiteSettings = rawSettings ?? {};
 ---
@@ -37,5 +49,5 @@ const settings: SiteSettings = rawSettings ?? {};
   dark={true}
 >
   <Nav client:load currentPath={currentPath} />
-  <AboutPage client:load settings={settings} />
+  <AboutPage client:load settings={settings} collections={archiveCollections} />
 </Layout>

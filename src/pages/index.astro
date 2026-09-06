@@ -3,10 +3,10 @@ import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
-import Colophon from '../components/home/Colophon';
+import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 // ─── GROQ: All collections with photos + location data ───
-const collections: Collection[] = await sanityClient.fetch(`
+const collectionsQuery = `
   *[_type == "collection"] | order(year desc) {
     _id,
     name,
@@ -16,6 +16,8 @@ const collections: Collection[] = await sanityClient.fetch(`
     location,
     region,
     year,
+    routeOrder,
+    mapLocation,
     description,
     introduction,
     "photoCount": count(*[_type == "photo" && references(^._id)]),
@@ -34,13 +36,16 @@ const collections: Collection[] = await sanityClient.fetch(`
       location
     }
   }
-`);
+`;
+
+const collections = await fetchSanityWithRetry(() =>
+  sanityClient.fetch<Collection[]>(collectionsQuery),
+);
 ---
 
-<Layout>
+<Layout dark={true}>
+  <Fragment slot="head">
+    <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+  </Fragment>
   <HomePage client:load collections={collections} />
-  {/* Scroll-scrubbed GSAP island — hydrate on idle so ScrollTrigger is
-      registered well before the user scrolls down, guaranteeing the
-      signature draw plays from the very start of its range. */}
-  <Colophon client:idle />
 </Layout>

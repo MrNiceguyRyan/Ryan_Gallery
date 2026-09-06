@@ -16,6 +16,24 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.env.*
+!.env.example
+.dev.vars*
+
+# local deployment state, audits and design explorations
+.wrangler/
+.codex-audit/
+output/
+public/posters/
+cover-animation.html
+cover-reel.html
+cover-reel-prompt.md
+design-qa.md
+scripts/__pycache__/
+scripts/build_combined_a4_pdf.py
+scripts/build_miami_film_v3.py
+scripts/build_midcentury_posters.py
+scripts/build_midcentury_posters_landmark_v2.py
 
 # macOS-specific files
 .DS_Store

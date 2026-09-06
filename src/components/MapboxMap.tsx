@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
-import MapGL, { Marker, Popup, NavigationControl, FullscreenControl } from 'react-map-gl/mapbox';
+import MapGL, { Marker, NavigationControl, AttributionControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import Supercluster from 'supercluster';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'framer-motion';
+import { ArrowUpRight, RotateCcw } from 'lucide-react';
 import type { Photo } from '../types';
 import Magnetic from './shared/Magnetic';
 
@@ -15,14 +16,7 @@ const ACCENT_RGB = '210, 255, 0';
 const DOT = '#E7E1CF';
 const DOT_RGB = '231, 225, 207';
 
-// ─── Map style presets ───
-const MAP_STYLES = [
-  { id: 'light', label: 'Light', style: 'mapbox://styles/mapbox/light-v11' },
-  { id: 'streets', label: 'Streets', style: 'mapbox://styles/mapbox/streets-v12' },
-  { id: 'outdoors', label: 'Outdoors', style: 'mapbox://styles/mapbox/outdoors-v12' },
-  { id: 'satellite', label: 'Satellite', style: 'mapbox://styles/mapbox/satellite-streets-v12' },
-  { id: 'dark', label: 'Dark', style: 'mapbox://styles/mapbox/dark-v11' },
-] as const;
+const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
 // ─── Region grouping (countries → region label) ───
 const REGION_MAP: Record<string, string> = {
@@ -63,10 +57,11 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-[50vh] min-h-[300px] rounded-2xl bg-white/5 flex flex-col items-center justify-center text-center px-8">
-          <p className="text-white/40 text-sm font-light">Map failed to load</p>
-          <p className="text-white/20 text-xs font-ui mt-2 max-w-sm">{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-4 px-5 py-2 text-xs tracking-wider rounded-full border border-white/10 text-white/50 hover:border-white/30 hover:text-white transition-all duration-300">Retry</button>
+        <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
+          <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00] shadow-[0_0_16px_rgba(210,255,0,0.36)]" aria-hidden="true" />
+          <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas unavailable</p>
+          <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">The geographic archive could not be drawn.</p>
+          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Retry atlas</button>
         </div>
       );
     }
@@ -92,18 +87,37 @@ interface RegionGroup {
 }
 
 function clusterByLocation(photos: Photo[]): LocationCluster[] {
-  const groups: Record<string, LocationCluster> = {};
+  const groups: Record<string, LocationCluster & { coordinateCount: number; latTotal: number; lngTotal: number }> = {};
   for (const p of photos) {
     if (p.location?.lat == null || p.location?.lng == null) continue;
     const key = `${p.location.city || ''}|${p.location.country || ''}`;
     if (!groups[key]) {
-      groups[key] = { city: p.location.city || 'Unknown', country: p.location.country || '', region: p.collection?.region?.trim() || '', lat: p.location.lat, lng: p.location.lng, photos: [] };
+      groups[key] = {
+        city: p.location.city || 'Unknown',
+        country: p.location.country || '',
+        region: p.collection?.region?.trim() || '',
+        lat: p.location.lat,
+        lng: p.location.lng,
+        photos: [],
+        coordinateCount: 0,
+        latTotal: 0,
+        lngTotal: 0,
+      };
     }
     // Backfill region if the first photo of a city lacked a collection region.
     if (!groups[key].region && p.collection?.region?.trim()) groups[key].region = p.collection.region.trim();
+    groups[key].coordinateCount += 1;
+    groups[key].latTotal += p.location.lat;
+    groups[key].lngTotal += p.location.lng;
     groups[key].photos.push(p);
   }
-  return Object.values(groups).sort((a, b) => b.photos.length - a.photos.length);
+  return Object.values(groups)
+    .map(({ coordinateCount, latTotal, lngTotal, ...cluster }) => ({
+      ...cluster,
+      lat: latTotal / Math.max(1, coordinateCount),
+      lng: lngTotal / Math.max(1, coordinateCount),
+    }))
+    .sort((a, b) => b.photos.length - a.photos.length);
 }
 
 function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
@@ -124,49 +138,223 @@ function formatCoord(v: number, pos: string, neg: string) {
   return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
 }
 
+function slugifyPlace(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function clusterMatchesPlace(cluster: LocationCluster, place: string) {
+  if (slugifyPlace(cluster.city) === place) return true;
+  return cluster.photos.some((photo) => photo.collection?.slug === place);
+}
+
+function CityDetail({ cluster, mobile = false }: { cluster: LocationCluster; mobile?: boolean }) {
+  const storySlug = cluster.photos[0]?.collection?.slug;
+  return (
+    <div className={mobile ? 'pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}>
+      <div className={`relative overflow-hidden ${mobile ? 'h-40' : 'h-36'}`}>
+        <img
+          src={`${cluster.photos[0].imageUrl}?auto=format&w=800&q=82`}
+          alt={cluster.city}
+          className="h-full w-full object-cover"
+          draggable={false}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#11150f] via-black/15 to-transparent" />
+        <div className="atlas-sheet-safe-inline absolute inset-x-0 bottom-3 flex items-end justify-between gap-4 font-ui text-[9px] uppercase tracking-[0.18em] text-white/64">
+          <p>{cluster.country}</p>
+          <span className="shrink-0 font-ui text-[9px] uppercase tracking-[0.16em] text-white/60">{cluster.photos.length} frames</span>
+        </div>
+      </div>
+      <div className="atlas-sheet-safe-inline pb-4 pt-3">
+        <p className="mb-3 font-ui text-[9px] tracking-[0.14em] text-white/56">
+          {formatCoord(cluster.lat, 'N', 'S')} · {formatCoord(cluster.lng, 'E', 'W')}
+        </p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {cluster.photos.slice(0, 3).map((photo, index) => (
+            <div key={photo._id} className="aspect-[4/3] overflow-hidden rounded-[0.45rem]">
+              <img
+                src={`${photo.imageUrl}?auto=format&w=220&q=76`}
+                alt={typeof photo.title === 'string' && !photo.title.includes('[object Object]') ? photo.title : `${cluster.city} photograph ${index + 1}`}
+                className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                loading="lazy"
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
+        {storySlug && (
+          <a
+            href={`/works/${storySlug}`}
+            className="mt-4 flex min-h-11 w-full items-center justify-center gap-3 rounded-full bg-[#D2FF00] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.22em] text-[#171b15] transition-transform duration-300 hover:scale-[1.015] active:scale-[0.985]"
+          >
+            Explore story
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Camera framing — the map settles face-on over the continental US ───
 // No dive-from-space intro: the "from space" globe zoom was inherently heavy
 // (rendering the whole globe/atmosphere while a 60fps onMove re-render storm
-// ran), so the map now simply opens on the States, framed face-on (pitch:0).
 const FINAL_VIEW = { latitude: 38.8, longitude: -97.5, zoom: 3.5, pitch: 0, bearing: 0 };
+type MobileSheetMode = 'peek' | 'browse' | 'detail';
+
+type AtlasClusterFeature = {
+  id?: number | string;
+  properties: {
+    cluster?: boolean;
+    cluster_id?: number;
+    point_count?: number;
+    cityIndex?: number;
+  };
+  geometry: { type: 'Point'; coordinates: number[] };
+};
+
+type ClusterMorphRole = 'stable' | 'parent' | 'child';
+
+type ClusterMorphTopologyNode = {
+  key: string;
+  feature: AtlasClusterFeature;
+  role: ClusterMorphRole;
+  from: [number, number];
+  to: [number, number];
+  siblingCount: number;
+};
+
+type ClusterRenderNode = ClusterMorphTopologyNode & {
+  coordinates: [number, number];
+  opacity: number;
+  scale: number;
+  interactive: boolean;
+};
+
+const CLUSTER_WORLD_BOUNDS: [number, number, number, number] = [-180, -85, 180, 85];
+
+function clampUnit(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function smoothZoomMorph(value: number) {
+  const t = clampUnit(value);
+  return t * t * (3 - 2 * t);
+}
+
+function atlasFeatureKey(feature: AtlasClusterFeature) {
+  return feature.properties.cluster
+    ? `cluster-${String(feature.id ?? feature.properties.cluster_id)}`
+    : `city-${String(feature.properties.cityIndex)}`;
+}
 
 // ─── Main Inner Component ───
 function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
-  const prefersReduced = useMemo(
-    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  const atlasStyleReadyRef = useRef(false);
+  const atlasReadySignaledRef = useRef(false);
+  const sheetDragControls = useDragControls();
+  const mobileSheetHeaderRef = useRef<HTMLButtonElement>(null);
+  const activeClusterRef = useRef<LocationCluster | null>(null);
+  const initialPlaceAppliedRef = useRef(false);
+  const markerBloomPlayedRef = useRef(false);
+  const clusterZoomFrameRef = useRef(0);
+  const pendingClusterZoomRef = useRef(FINAL_VIEW.zoom);
+  const playInitialMarkerBloom = !markerBloomPlayedRef.current;
+  const prefersReduced = !!useReducedMotion();
+  const coarsePointer = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
     [],
   );
+  const [mobileLayout, setMobileLayout] = useState(false);
   const [viewState, setViewState] = useState(FINAL_VIEW);
+  const [clusterZoom, setClusterZoom] = useState(FINAL_VIEW.zoom);
+  const [clusterMorphing, setClusterMorphing] = useState(false);
   // No dive intro any more — the map opens settled on the US, so markers may
   // bloom in immediately (they still stagger-animate on mount for a little life).
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-  const [mapStyleIdx, setMapStyleIdx] = useState(0); // default to light style (the globe dive-in fog is light-tuned)
-  const [showStylePicker, setShowStylePicker] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapLoadFailed, setMapLoadFailed] = useState(false);
+  const [mobileSheet, setMobileSheet] = useState<MobileSheetMode>('peek');
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
+  const seededRegion = useRef(false);
+
+  // Only the markers present for the first rendered atlas field bloom. Any
+  // markers introduced by later pans or zoom-level clustering appear without
+  // a fresh stagger, so navigation never feels delayed.
+  useEffect(() => {
+    markerBloomPlayedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    activeClusterRef.current = activeCluster;
+  }, [activeCluster]);
+
+  useEffect(() => () => {
+    if (clusterZoomFrameRef.current) window.cancelAnimationFrame(clusterZoomFrameRef.current);
+    delete document.documentElement.dataset.atlasReady;
+  }, []);
 
   const cityClusters = useMemo(() => clusterByLocation(photos), [photos]);
   const regionGroups = useMemo(() => groupByRegion(cityClusters), [cityClusters]);
   const validPhotos = useMemo(() => photos.filter(p => p.location?.lat != null && p.location?.lng != null), [photos]);
+  const archiveBounds = useMemo(() => {
+    if (cityClusters.length === 0) return null;
+    const lngs = cityClusters.map((cluster) => cluster.lng);
+    const lats = cityClusters.map((cluster) => cluster.lat);
+    return [
+      [Math.min(...lngs), Math.min(...lats)],
+      [Math.max(...lngs), Math.max(...lats)],
+    ] as [[number, number], [number, number]];
+  }, [cityClusters]);
 
-  // Auto-expand the first region
   useEffect(() => {
-    if (regionGroups.length > 0 && !expandedRegion) {
-      setExpandedRegion(regionGroups[0].region);
-    }
+    if (seededRegion.current || regionGroups.length === 0) return;
+    seededRegion.current = true;
+    setExpandedRegion(regionGroups[0].region);
   }, [regionGroups]);
 
-  // GeoJSON points for Supercluster
+  // Keep interaction behavior aligned with the CSS breakpoint when a tablet
+  // rotates or a desktop window crosses into the compact layout.
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)');
+    const sync = () => setMobileLayout(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    if (mobileSheet !== 'detail' || !activeCluster) return;
+    requestAnimationFrame(() => mobileSheetHeaderRef.current?.focus({ preventScroll: true }));
+  }, [activeCluster, mobileSheet]);
+
+  // Never leave the visitor staring at an endless loading state if Mapbox is
+  // unreachable. A slow connection still gets a generous window, then the
+  // atlas becomes an explicit, retryable state instead of an apparent blank.
+  useEffect(() => {
+    if (mapReady || mapLoadFailed) return;
+    const timeout = window.setTimeout(() => setMapLoadFailed(true), 12000);
+    return () => window.clearTimeout(timeout);
+  }, [mapLoadFailed, mapReady]);
+
+  // Supercluster operates at the same semantic level as the atlas index: one
+  // point per city. Photos from one city may share the exact GPS coordinate;
+  // clustering every frame made that city a large badge that could never split
+  // before max zoom, even though there was only one actual destination.
   const points = useMemo(() =>
-    validPhotos.map((photo, index) => ({
+    cityClusters.map((cluster, cityIndex) => ({
       type: 'Feature' as const,
-      properties: { cluster: false, photoIndex: index },
-      geometry: { type: 'Point' as const, coordinates: [photo.location!.lng, photo.location!.lat] },
+      properties: { cluster: false, cityIndex },
+      geometry: { type: 'Point' as const, coordinates: [cluster.lng, cluster.lat] },
     })),
-    [validPhotos],
+    [cityClusters],
   );
 
   const clusterIndex = useMemo(() => {
@@ -175,64 +363,314 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     return idx;
   }, [points]);
 
-  const clusters = useMemo(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return clusterIndex.getClusters([-180, -85, 180, 85], Math.floor(viewState.zoom));
-    const bounds = map.getBounds()?.toArray().flat() as [number, number, number, number];
-    return bounds ? clusterIndex.getClusters(bounds, Math.floor(viewState.zoom)) : [];
-  }, [clusterIndex, viewState.zoom, viewState.latitude, viewState.longitude]);
+  const settledClusterZoom = Math.round(clusterZoom);
+  const lowerClusterZoom = Math.max(0, Math.min(16,
+    prefersReduced || !clusterMorphing ? settledClusterZoom : Math.floor(clusterZoom),
+  ));
+  const upperClusterZoom = prefersReduced || !clusterMorphing
+    ? lowerClusterZoom
+    : Math.min(16, lowerClusterZoom + 1);
 
-  // Apply globe + terrain on style load
+  // Build the cluster family only when an integer zoom boundary changes. The
+  // far cheaper render pass below then morphs that stable topology on every
+  // zoom frame. This gives children a real path out of their parent instead of
+  // replacing one DOM tree with another after the camera has already stopped.
+  const clusterMorphTopology = useMemo<ClusterMorphTopologyNode[]>(() => {
+    const lower = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, lowerClusterZoom) as AtlasClusterFeature[];
+    if (lowerClusterZoom === upperClusterZoom) {
+      return lower.map((feature) => {
+        const coordinates = feature.geometry.coordinates as [number, number];
+        return {
+          key: atlasFeatureKey(feature),
+          feature,
+          role: 'stable' as const,
+          from: coordinates,
+          to: coordinates,
+          siblingCount: 1,
+        };
+      });
+    }
+
+    const upper = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, upperClusterZoom) as AtlasClusterFeature[];
+    const lowerByKey = new Map(lower.map((feature) => [atlasFeatureKey(feature), feature]));
+    const upperKeys = new Set(upper.map(atlasFeatureKey));
+    const cityParent = new Map<number, AtlasClusterFeature>();
+
+    lower.forEach((feature) => {
+      if (feature.properties.cluster) {
+        try {
+          clusterIndex.getLeaves(feature.id as number, Infinity).forEach((leaf: any) => {
+            const cityIndex = leaf.properties.cityIndex;
+            if (Number.isInteger(cityIndex)) cityParent.set(cityIndex, feature);
+          });
+        } catch {
+          // A malformed cluster should degrade to the upper node's own position.
+        }
+      } else if (Number.isInteger(feature.properties.cityIndex)) {
+        cityParent.set(feature.properties.cityIndex as number, feature);
+      }
+    });
+
+    const parentForUpper = new Map<string, AtlasClusterFeature>();
+    const siblingCountByParent = new Map<string, number>();
+    upper.forEach((feature) => {
+      const key = atlasFeatureKey(feature);
+      if (lowerByKey.has(key)) return;
+      let representativeCity: number | undefined;
+      if (feature.properties.cluster) {
+        try {
+          representativeCity = clusterIndex.getLeaves(feature.id as number, 1)[0]?.properties?.cityIndex;
+        } catch {
+          representativeCity = undefined;
+        }
+      } else {
+        representativeCity = feature.properties.cityIndex;
+      }
+      if (!Number.isInteger(representativeCity)) return;
+      const parent = cityParent.get(representativeCity as number);
+      if (!parent) return;
+      const parentKey = atlasFeatureKey(parent);
+      parentForUpper.set(key, parent);
+      siblingCountByParent.set(parentKey, (siblingCountByParent.get(parentKey) ?? 0) + 1);
+    });
+
+    const outgoing = lower
+      .filter((feature) => !upperKeys.has(atlasFeatureKey(feature)))
+      .map((feature) => {
+        const coordinates = feature.geometry.coordinates as [number, number];
+        return {
+          key: atlasFeatureKey(feature),
+          feature,
+          role: 'parent' as const,
+          from: coordinates,
+          to: coordinates,
+          siblingCount: siblingCountByParent.get(atlasFeatureKey(feature)) ?? 1,
+        };
+      });
+
+    const incoming = upper.map((feature) => {
+      const key = atlasFeatureKey(feature);
+      const coordinates = feature.geometry.coordinates as [number, number];
+      const stable = lowerByKey.has(key);
+      const parent = parentForUpper.get(key);
+      const parentCoordinates = parent?.geometry.coordinates as [number, number] | undefined;
+      return {
+        key,
+        feature,
+        role: stable ? 'stable' as const : 'child' as const,
+        from: stable ? coordinates : parentCoordinates ?? coordinates,
+        to: coordinates,
+        siblingCount: parent ? siblingCountByParent.get(atlasFeatureKey(parent)) ?? 1 : 1,
+      };
+    });
+
+    return [...outgoing, ...incoming];
+  }, [clusterIndex, lowerClusterZoom, upperClusterZoom]);
+
+  const clusters = useMemo<ClusterRenderNode[]>(() => {
+    const rawFraction = prefersReduced || lowerClusterZoom === upperClusterZoom
+      ? 1
+      : clusterZoom - lowerClusterZoom;
+    // Leave a tiny quiet zone at each integer boundary to absorb trackpad
+    // micro-jitter, while preserving a reversible continuous curve in between.
+    const progress = smoothZoomMorph((rawFraction - 0.035) / 0.93);
+    const map = mapRef.current?.getMap();
+
+    return clusterMorphTopology.map((node) => {
+      let coordinates = node.to;
+      if (node.role === 'child' && progress < 1) {
+        if (map) {
+          const fromPoint = map.project(node.from);
+          const toPoint = map.project(node.to);
+          const point = map.unproject([
+            fromPoint.x + (toPoint.x - fromPoint.x) * progress,
+            fromPoint.y + (toPoint.y - fromPoint.y) * progress,
+          ]);
+          coordinates = [point.lng, point.lat];
+        } else {
+          coordinates = [
+            node.from[0] + (node.to[0] - node.from[0]) * progress,
+            node.from[1] + (node.to[1] - node.from[1]) * progress,
+          ];
+        }
+      }
+
+      if (node.role === 'parent') {
+        return {
+          ...node,
+          coordinates,
+          opacity: Math.pow(1 - progress, 1.35),
+          scale: 1 - progress * 0.2,
+          interactive: progress < 0.46,
+        };
+      }
+      if (node.role === 'child') {
+        const energyFloor = 1 / Math.sqrt(Math.max(1, node.siblingCount));
+        return {
+          ...node,
+          coordinates,
+          opacity: progress * (energyFloor + (1 - energyFloor) * progress),
+          scale: 0.64 + progress * 0.36,
+          interactive: progress > 0.54,
+        };
+      }
+      return { ...node, coordinates, opacity: 1, scale: 1, interactive: true };
+    });
+  }, [clusterMorphTopology, clusterZoom, lowerClusterZoom, prefersReduced, upperClusterZoom]);
+
+  const handleMapZoom = useCallback((event: { viewState: { zoom: number } }) => {
+    setClusterMorphing(true);
+    pendingClusterZoomRef.current = event.viewState.zoom;
+    if (clusterZoomFrameRef.current) return;
+    clusterZoomFrameRef.current = window.requestAnimationFrame(() => {
+      clusterZoomFrameRef.current = 0;
+      const next = pendingClusterZoomRef.current;
+      setClusterZoom((current) => Math.abs(current - next) < 0.0001 ? current : next);
+    });
+  }, []);
+
+  // Keep the Atlas in the same olive-black cartographic language as Home.
   const applyGlobeSettings = useCallback((map: any) => {
     map.setProjection('globe');
     map.setFog({
-      color: 'rgb(245, 245, 247)',
-      'high-color': 'rgb(200, 210, 230)',
+      color: 'rgb(30, 36, 28)',
+      'high-color': 'rgb(49, 58, 45)',
       'horizon-blend': 0.08,
-      'space-color': 'rgb(15, 15, 20)',
-      'star-intensity': 0.4,
+      'space-color': 'rgb(9, 12, 9)',
+      'star-intensity': 0.18,
     });
     // NOTE: 3D terrain (raster-DEM) intentionally removed. The atlas is framed
     // face-on at pitch:0, so terrain relief is never visible — it added real
     // per-frame GPU render cost + streamed DEM tiles that repaint on load,
     // hurting scroll smoothness on constrained compositors for zero visual gain.
+    if (coarsePointer) map.touchZoomRotate.disableRotation();
+  }, [coarsePointer]);
+
+  const frameArchiveOverview = useCallback((duration = 0) => {
+    const map = mapRef.current?.getMap();
+    if (!map || !archiveBounds) return;
+    const compact = window.matchMedia('(max-width: 1023px)').matches;
+    map.fitBounds(archiveBounds, {
+      padding: compact
+        ? { top: 42, right: 46, bottom: 118, left: 46 }
+        : { top: 58, right: 68, bottom: 58, left: 68 },
+      maxZoom: compact ? 4.15 : 3.7,
+      duration: prefersReduced ? 0 : duration,
+      essential: !prefersReduced,
+      retainPadding: false,
+    });
+  }, [archiveBounds, prefersReduced]);
+
+  // City details occupy the lower part of the mobile map. Frame the selected
+  // coordinates inside the remaining visible map, including very short
+  // landscape screens, instead of centering them behind the sheet.
+  const mobileFocusCamera = useCallback(() => {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return {};
+    const mapHeight = mapRef.current?.getMap().getContainer().clientHeight || window.innerHeight;
+    // Match the 62svh detail-sheet ceiling while preserving a useful map
+    // horizon even on short landscape screens.
+    const visibleMap = 72;
+    const sheetHeight = Math.min(window.innerHeight * 0.62, Math.max(78, mapHeight - visibleMap));
+    const top = mapHeight <= 280 ? 12 : 24;
+    const bottom = Math.min(mapHeight - top - 28, Math.round(sheetHeight + 12));
+    return {
+      padding: { top, right: 24, bottom: Math.max(78, bottom), left: 24 },
+      retainPadding: false,
+    };
   }, []);
 
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    // Apply the globe projection + atmosphere once the style is ready. No dive:
-    // the camera is already framed on the US (initial viewState = FINAL_VIEW).
-    if (map.isStyleLoaded()) applyGlobeSettings(map);
-    else map.once('style.load', () => applyGlobeSettings(map));
-  }, [applyGlobeSettings]);
+    const finish = () => {
+      applyGlobeSettings(map);
+      frameArchiveOverview(0);
+      atlasStyleReadyRef.current = true;
+      setMapLoadFailed(false);
+    };
+    if (map.isStyleLoaded()) finish();
+    else map.once('style.load', finish);
+  }, [applyGlobeSettings, frameArchiveOverview]);
 
-  // Re-apply globe settings when style changes
+  const handleMapIdle = useCallback(() => {
+    if (!atlasStyleReadyRef.current || atlasReadySignaledRef.current) return;
+    atlasReadySignaledRef.current = true;
+    setMapLoadFailed(false);
+    setMapReady(true);
+    document.documentElement.dataset.atlasReady = 'true';
+    window.dispatchEvent(new CustomEvent('gallery:atlas-ready'));
+  }, []);
+
+  // Mapbox does not automatically recompute its canvas or camera padding when
+  // a phone rotates while staying inside the mobile breakpoint. Coalesce the
+  // resize/orientation burst into one frame, resize the canvas, then reframe
+  // the current selection (or the archive overview when nothing is selected).
   useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-    const reapply = () => applyGlobeSettings(map);
-    map.once('style.load', reapply);
-  }, [mapStyleIdx, applyGlobeSettings]);
+    if (!mapReady) return;
 
-  // Cluster click. A cluster can hold photos from ONE city (proximity grouping
-  // at low zoom) or several. If it resolves to a single city we treat the click
-  // like selecting that city — smooth zoom in, highlight it in the sidebar, and
-  // pop its photo card on the map. A genuinely multi-city cluster just expands.
+    let resizeFrame = 0;
+    const reframe = () => {
+      resizeFrame = 0;
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+
+      map.stop();
+      map.resize();
+
+      const selected = activeClusterRef.current;
+      if (selected) {
+        map.easeTo({
+          center: [selected.lng, selected.lat],
+          zoom: map.getZoom(),
+          duration: 0,
+          essential: false,
+          ...mobileFocusCamera(),
+        });
+      } else {
+        frameArchiveOverview(0);
+      }
+    };
+    const scheduleReframe = () => {
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(reframe);
+    };
+
+    window.addEventListener('resize', scheduleReframe, { passive: true });
+    window.addEventListener('orientationchange', scheduleReframe, { passive: true });
+    return () => {
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+      window.removeEventListener('resize', scheduleReframe);
+      window.removeEventListener('orientationchange', scheduleReframe);
+    };
+  }, [frameArchiveOverview, mapReady, mobileFocusCamera]);
+
+  const updatePlaceUrl = useCallback((cluster: LocationCluster | null) => {
+    const url = new URL(window.location.href);
+    if (cluster) url.searchParams.set('place', cluster.photos[0]?.collection?.slug || slugifyPlace(cluster.city));
+    else url.searchParams.delete('place');
+    url.hash = 'atlas-map';
+    // Keep Astro's history index and scroll metadata while updating the map URL.
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  // Cluster click. The index now contains one point per city, so every cluster
+  // is geographic rather than a stack of frames at one GPS coordinate.
   const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
     let leaves: any[] = [];
     try { leaves = clusterIndex.getLeaves(clusterId, Infinity); } catch { leaves = []; }
     const citiesInCluster = Array.from(new Set(
-      leaves.map((l) => validPhotos[l.properties.photoIndex]?.location?.city).filter(Boolean),
+      leaves.map((leaf) => cityClusters[leaf.properties.cityIndex]?.city).filter(Boolean),
     ));
 
     if (citiesInCluster.length === 1) {
       const cluster = cityClusters.find((c) => c.city === citiesInCluster[0]) || null;
       if (cluster) {
-        mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(viewState.zoom, 7), duration: 1400, essential: !prefersReduced, curve: 1.42 });
+        mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(viewState.zoom, 7), duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, curve: 1.42, ...mobileFocusCamera() });
         setActiveCluster(cluster);
         setActiveClusterCity(cluster.city);
         setExpandedRegion(cluster.region || getRegion(cluster.country));
+        if (mobileLayout) setMobileSheet('detail');
+        updatePlaceUrl(cluster);
         return;
       }
     }
@@ -240,57 +678,83 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     // Multi-city (or unresolved) cluster → expand toward its break-apart zoom.
     try {
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
-      const targetZoom = Math.min(expansionZoom, viewState.zoom + 3.5, 14);
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: targetZoom, duration: 1400, essential: !prefersReduced, curve: 1.42, speed: 0.8 });
+      const targetZoom = Math.min(expansionZoom, viewState.zoom + 3.5, 16);
+      mapRef.current?.flyTo({ center: [lng, lat], zoom: targetZoom, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, curve: 1.42, speed: 0.8 });
     } catch {
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: 1200, essential: !prefersReduced });
+      mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: prefersReduced ? 0 : 1000, essential: !prefersReduced });
     }
     setActiveCluster(null);
     setActiveClusterCity(null);
-  }, [clusterIndex, viewState.zoom, validPhotos, cityClusters]);
+    if (mobileLayout) setMobileSheet('peek');
+    updatePlaceUrl(null);
+  }, [clusterIndex, viewState.zoom, cityClusters, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
-  // Photo marker click → highlight in sidebar (no map popup)
-  const handlePhotoClick = useCallback((photo: Photo) => {
-    const city = photo.location?.city || '';
-    const cluster = cityClusters.find(c => c.city === city) || null;
+  // A direct map point always represents a city, matching the sidebar and URL.
+  const handleMapCityClick = useCallback((cluster: LocationCluster) => {
+    const city = cluster.city;
     setActiveCluster(cluster);
     setActiveClusterCity(city);
-    // Expand the region containing this city so the card is visible. Use the
-    // same key groupByRegion does (fine-grained region wins over country map),
-    // otherwise the wrong sidebar group opens.
-    if (cluster) {
-      setExpandedRegion(cluster.region || getRegion(cluster.country));
-    }
-    // Gentle center, don't zoom aggressively
+    setExpandedRegion(cluster.region || getRegion(cluster.country));
+    if (mobileLayout) setMobileSheet('detail');
+    updatePlaceUrl(cluster);
+    // Gentle centre, using the same averaged coordinate as the marker itself.
     const targetZoom = Math.max(viewState.zoom, 6);
     mapRef.current?.flyTo({
-      center: [photo.location!.lng, photo.location!.lat],
+      center: [cluster.lng, cluster.lat],
       zoom: targetZoom,
-      duration: 1200,
+      duration: prefersReduced ? 0 : 1000,
       essential: !prefersReduced,
+      ...mobileFocusCamera(),
     });
     // Wait for AnimatePresence region expand (300ms) before scrolling
     setTimeout(() => {
       const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      el?.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'nearest' });
     }, 400);
-  }, [viewState.zoom, cityClusters]);
+  }, [viewState.zoom, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
   // Sidebar city click
   const handleCityClick = useCallback((cluster: LocationCluster) => {
+    if (mobileLayout) {
+      setActiveClusterCity(cluster.city);
+      setActiveCluster(cluster);
+      setExpandedRegion(cluster.region || getRegion(cluster.country));
+      setMobileSheet('detail');
+      updatePlaceUrl(cluster);
+      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, ...mobileFocusCamera() });
+      return;
+    }
     const isSame = activeClusterCity === cluster.city;
     setActiveClusterCity(isSame ? null : cluster.city);
     setActiveCluster(isSame ? null : cluster);
+    if (!isSame) setExpandedRegion(cluster.region || getRegion(cluster.country));
     if (!isSame) {
-      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: 1500, essential: !prefersReduced });
+      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced });
     }
-  }, [activeClusterCity]);
+    updatePlaceUrl(isSame ? null : cluster);
+  }, [activeClusterCity, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
-  // Handle #loc= hash navigation — from the mini-map AND the on-page Atlas
-  // Index. Runs on mount and on every hashchange so an already-mounted map
-  // still flies when the index sets a new #loc= hash.
+  // Accept stable place deep links from Home, while retaining the earlier
+  // coordinate hash used by story mini-maps.
   useEffect(() => {
-    const goToHash = () => {
+    if (!mapReady) return;
+    const goToRequestedPlace = () => {
+      const place = new URLSearchParams(window.location.search).get('place');
+      if (place) {
+        const match = cityClusters.find((cluster) => clusterMatchesPlace(cluster, slugifyPlace(place)));
+        if (!match) return;
+        setActiveClusterCity(match.city);
+        setActiveCluster(match);
+        setExpandedRegion(match.region || getRegion(match.country));
+        if (mobileLayout) setMobileSheet('detail');
+        const initialPlace = !initialPlaceAppliedRef.current;
+        initialPlaceAppliedRef.current = true;
+        const camera = { center: [match.lng, match.lat] as [number, number], zoom: 7, ...mobileFocusCamera() };
+        if (initialPlace) mapRef.current?.jumpTo(camera);
+        else mapRef.current?.flyTo({ ...camera, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced });
+        return;
+      }
+
       const hash = window.location.hash;
       if (!hash.startsWith('#loc=')) return;
       const parts = hash.replace('#loc=', '').split(',');
@@ -299,53 +763,105 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       const lng = parseFloat(parts[1]);
       const zoom = parts[2] ? parseFloat(parts[2]) : 8;
       if (isNaN(lat) || isNaN(lng)) return;
-      setTimeout(() => {
-        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: 2000, essential: !prefersReduced });
-        // Find and highlight closest city
-        let closest: LocationCluster | null = null;
-        let minDist = Infinity;
-        for (const c of cityClusters) {
-          const d = Math.abs(c.lat - lat) + Math.abs(c.lng - lng);
-          if (d < minDist) { minDist = d; closest = c; }
-        }
-        if (closest && minDist < 2) {
-          setActiveClusterCity(closest.city);
-          setActiveCluster(closest);
-          setExpandedRegion(closest.region || getRegion(closest.country));
-        }
-      }, 300);
-      // Clean the hash so it doesn't re-fire on reload
-      window.history.replaceState(null, '', window.location.pathname);
+      let closest: LocationCluster | null = null;
+      let minDist = Infinity;
+      for (const cluster of cityClusters) {
+        const distance = Math.abs(cluster.lat - lat) + Math.abs(cluster.lng - lng);
+        if (distance < minDist) { minDist = distance; closest = cluster; }
+      }
+      if (closest && minDist < 2) {
+        setActiveClusterCity(closest.city);
+        setActiveCluster(closest);
+        setExpandedRegion(closest.region || getRegion(closest.country));
+        if (mobileLayout) setMobileSheet('detail');
+        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: prefersReduced ? 0 : 1350, essential: !prefersReduced, ...mobileFocusCamera() });
+        const url = new URL(window.location.href);
+        url.searchParams.set('place', closest.photos[0]?.collection?.slug || slugifyPlace(closest.city));
+        url.hash = 'atlas-map';
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+      } else {
+        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: prefersReduced ? 0 : 1350, essential: !prefersReduced });
+      }
     };
-    goToHash();
-    window.addEventListener('hashchange', goToHash);
-    return () => window.removeEventListener('hashchange', goToHash);
-  }, [cityClusters]);
+    goToRequestedPlace();
+    window.addEventListener('hashchange', goToRequestedPlace);
+    window.addEventListener('popstate', goToRequestedPlace);
+    return () => {
+      window.removeEventListener('hashchange', goToRequestedPlace);
+      window.removeEventListener('popstate', goToRequestedPlace);
+    };
+  }, [cityClusters, mapReady, mobileLayout, mobileFocusCamera, prefersReduced]);
 
   const resetView = useCallback(() => {
-    mapRef.current?.flyTo({ center: [FINAL_VIEW.longitude, FINAL_VIEW.latitude], zoom: FINAL_VIEW.zoom, pitch: FINAL_VIEW.pitch, bearing: FINAL_VIEW.bearing, duration: 1600, essential: !prefersReduced });
+    frameArchiveOverview(1100);
     setActiveCluster(null);
     setActiveClusterCity(null);
-  }, []);
+    setMobileSheet('peek');
+    updatePlaceUrl(null);
+  }, [frameArchiveOverview, updatePlaceUrl]);
 
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') { setActiveCluster(null); setActiveClusterCity(null); setShowStylePicker(false); } };
+    const fn = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setActiveCluster(null);
+      setActiveClusterCity(null);
+      setMobileSheet('peek');
+      updatePlaceUrl(null);
+    };
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
-  }, []);
+  }, [updatePlaceUrl]);
 
-  if (!mapboxToken) return <div className="h-[500px] rounded-2xl bg-white/5 flex items-center justify-center"><p className="text-white/40 text-sm">Mapbox token not configured</p></div>;
-  if (validPhotos.length === 0) return <div className="h-[500px] rounded-2xl bg-white/5 flex items-center justify-center"><p className="text-white/40 text-sm">No geotagged photos found</p></div>;
+  const isMarkerAvailable = useCallback((lng: number, lat: number) => {
+    const map = mapRef.current?.getMap();
+    if (!mapReady || !map) return false;
+
+    const container = map.getContainer();
+    const point = map.project([lng, lat]);
+    const insideViewport = map.getBounds().contains([lng, lat])
+      && point.x >= 0
+      && point.x <= container.clientWidth
+      && point.y >= 0
+      && point.y <= container.clientHeight;
+    if (!insideViewport) return false;
+    if (!mobileLayout) return true;
+
+    const sheetHeight = mobileSheet === 'peek'
+      ? 78
+      : Math.min(
+          window.innerHeight * (mobileSheet === 'detail' ? 0.62 : 0.48),
+          Math.max(78, container.clientHeight - 72),
+        );
+
+    return point.y < container.clientHeight - sheetHeight - 8;
+  }, [clusterZoom, mapReady, mobileLayout, mobileSheet, viewState]);
+
+  if (!mapboxToken) return (
+    <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
+      <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00]/70" aria-hidden="true" />
+      <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas offline</p>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">Map access is not available in this build.</p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+    </div>
+  );
+  if (validPhotos.length === 0) return (
+    <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
+      <span className="mb-4 h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
+      <p className="font-serif text-2xl uppercase text-[#F4F4ED]">No coordinates yet</p>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">New photographic locations will appear here.</p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+    </div>
+  );
 
   return (
-    <div>
+    <div className="h-full min-h-0" aria-busy={!mapReady}>
       {/* translateZ(0) promotes the ENTIRE card (shadow + map + sidebar) to one
           cached compositor layer, so scrolling the page just translates that
           layer instead of re-compositing the heavy WebGL region every frame —
           the key win for constrained compositors (mobile / embedded webviews).
           Shadow blur trimmed 100px→64px (indistinguishable at 0.45 alpha) to
           shrink the layer's rasterised bounds. */}
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-0 rounded-[2rem] overflow-hidden shadow-[0_30px_64px_-24px_rgba(0,0,0,0.45)] border border-white/10 bg-[#111]" style={{ transform: 'translateZ(0)' }}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#151913] shadow-[0_26px_70px_-54px_rgba(7,9,6,0.4)] lg:flex-row lg:rounded-[1.35rem]" style={{ transform: 'translateZ(0)' }}>
         {/* ── Map ── */}
         {/* translateZ(0) promotes this map region to its own compositor layer.
             Two payoffs during page scroll: (1) the overlay controls' backdrop-blur
@@ -354,31 +870,50 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             (2) the whole map region translates as one cached layer. It's an ancestor
             of the Mapbox canvas — never the canvas itself — so map/marker geometry
             is untouched. This is a big win for smooth-scrolling back up past the map. */}
-        <div className="relative w-full lg:flex-1 h-[54vh] min-h-[360px] md:h-[64vh] lg:h-[72vh]" style={{ transform: 'translateZ(0)' }}>
+        <div className="atlas-map-workspace relative h-full min-h-0 w-full lg:flex-1" data-mobile-sheet={mobileSheet} style={{ transform: 'translateZ(0)' }}>
           <MapGL
-            {...viewState}
+            initialViewState={FINAL_VIEW}
             ref={mapRef}
-            onMove={evt => setViewState(evt.viewState)}
+            onZoom={handleMapZoom}
+            onMoveEnd={(event) => {
+              setViewState(event.viewState);
+              pendingClusterZoomRef.current = event.viewState.zoom;
+              setClusterZoom(event.viewState.zoom);
+              setClusterMorphing(false);
+            }}
             mapboxAccessToken={mapboxToken}
-            mapStyle={MAP_STYLES[mapStyleIdx].style}
+            mapStyle={MAP_STYLE}
             style={{ width: '100%', height: '100%' }}
             attributionControl={false}
             onLoad={handleMapLoad}
+            onIdle={handleMapIdle}
+            onError={() => {
+              if (typeof navigator !== 'undefined' && !navigator.onLine) setMapLoadFailed(true);
+            }}
             maxZoom={16}
             minZoom={1.5}
-            onClick={() => { setShowStylePicker(false); setActiveCluster(null); setActiveClusterCity(null); }}
+            onClick={() => {
+              setActiveCluster(null);
+              setActiveClusterCity(null);
+              setMobileSheet('peek');
+              updatePlaceUrl(null);
+            }}
+            cooperativeGestures={false}
           >
             <NavigationControl position="bottom-right" showCompass={false} />
-            <FullscreenControl position="bottom-right" />
+            <AttributionControl position="bottom-left" compact />
 
-            <AnimatePresence>
-            {clusters.map((feature) => {
-              const [lng, lat] = feature.geometry.coordinates;
+            {clusters.map((clusterNode) => {
+              const feature = clusterNode.feature;
+              const [lng, lat] = clusterNode.coordinates;
+              const [featureLng, featureLat] = feature.geometry.coordinates;
               const props = feature.properties;
+              const markerAvailable = isMarkerAvailable(lng, lat);
+              const markerInteractive = clusterNode.interactive && markerAvailable;
 
-              // Bloom outward from the framed centre once the dive settles —
-              // near markers first, distant ones trailing. Light jitter keeps
-              // it organic rather than a rigid ripple.
+              // Bloom outward from the framed centre on the first atlas field
+              // only. Subsequent cluster sets enter immediately while panning
+              // or zooming, so the map always responds without a new stagger.
               const dx = lng - viewState.longitude;
               const dy = lat - viewState.latitude;
               const dist = Math.sqrt(dx * dx + dy * dy);
@@ -386,57 +921,108 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               // so it doesn't change on every render — a fresh Math.random() here
               // would re-stagger whileHover/exit and cause hover lag + ghosting.
               const bloomSeed = String(
-                props.cluster ? feature.id : (validPhotos[props.photoIndex]?._id ?? feature.id),
+                props.cluster ? feature.id : (cityClusters[props.cityIndex ?? -1]?.city ?? feature.id),
               );
               let bloomHash = 0;
               for (let i = 0; i < bloomSeed.length; i++) bloomHash = (bloomHash * 31 + bloomSeed.charCodeAt(i)) & 0xffff;
               const bloomJitter = (bloomHash % 81) / 1000; // 0..0.08
-              const bloomDelay = Math.min(dist * 0.006, 0.5) + bloomJitter;
+              const bloomDelay = playInitialMarkerBloom
+                ? Math.min(dist * 0.006, 0.5) + bloomJitter
+                : 0;
 
               // ── Cluster ──
               if (props.cluster) {
-                const count = props.point_count;
-                const size = count < 10 ? 40 : count < 30 ? 48 : 56;
+                const count = props.point_count ?? 0;
+                const baseSize = count < 3 ? 38 : count < 6 ? 42 : 46;
+                const size = baseSize + (coarsePointer ? 4 : 0);
+                let clusterCities: string[] = [];
+                let clusterRegions: string[] = [];
+                try {
+                  clusterCities = Array.from(new Set(
+                    clusterIndex
+                      .getLeaves(feature.id as number, Infinity)
+                      .map((leaf: any) => cityClusters[leaf.properties.cityIndex]?.city)
+                      .filter(Boolean),
+                  )) as string[];
+                  clusterRegions = Array.from(new Set(
+                    clusterCities
+                      .map((city) => cityClusters.find((item) => item.city === city))
+                      .filter(Boolean)
+                      .map((item) => item!.region || getRegion(item!.country)),
+                  ));
+                } catch {
+                  clusterCities = [];
+                  clusterRegions = [];
+                }
+                const clusterLabel = clusterRegions.length === 1
+                  ? clusterRegions[0]
+                  : clusterRegions.length > 0 && clusterRegions.every((region) => region === 'Utah' || region === 'Arizona')
+                    ? 'Southwest'
+                    : 'Locations';
+                const isHoveredCluster = hoveredCity != null && clusterCities.includes(hoveredCity);
+                const isActiveCluster = Boolean(
+                  activeCluster
+                  && Math.abs(activeCluster.lng - featureLng) < 0.3
+                  && Math.abs(activeCluster.lat - featureLat) < 0.3,
+                );
                 return (
                   <Marker
-                    key={`cluster-${feature.id}`}
+                    key={clusterNode.key}
                     longitude={lng}
                     latitude={lat}
                     anchor="center"
-                    style={{ zIndex: 2 }}
-                    onClick={e => { e.originalEvent.stopPropagation(); handleClusterClick(feature.id as number, lng, lat); }}
+                    style={{ zIndex: clusterNode.role === 'child' ? 3 : 2 }}
                   >
-                    <motion.div
-                      className="relative flex items-center justify-center cursor-pointer group"
-                      style={{ width: size + 20, height: size + 20 }}
-                      initial={prefersReduced ? false : { opacity: 0, scale: 0.4 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.4, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
+                    <div
+                      data-atlas-marker-morph={clusterNode.role}
+                      aria-hidden={!markerInteractive}
+                      style={{
+                        opacity: clusterNode.opacity,
+                        transform: `scale(${clusterNode.scale})`,
+                        transformOrigin: 'center',
+                        pointerEvents: markerInteractive ? 'auto' : 'none',
+                        willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
+                      }}
+                    >
+                    <motion.button
+                      type="button"
+                      aria-label={`Explore ${clusterLabel} cluster, ${count} locations`}
+                      tabIndex={markerInteractive ? 0 : -1}
+                      onClick={(event) => { event.stopPropagation(); handleClusterClick(feature.id as number, featureLng, featureLat); }}
+                      className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+                      style={{ width: size + 18, height: size + 18 }}
+                      initial={prefersReduced || !playInitialMarkerBloom ? false : { opacity: 0, scale: 0.4 }}
+                      animate={{ opacity: activeCluster && !isActiveCluster ? 0.32 : 1, scale: isHoveredCluster ? 1.07 : 1 }}
+                      exit={prefersReduced
+                        ? { opacity: 0, scale: 1, transition: { duration: 0 } }
+                        : { opacity: 0, scale: 0.4, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
                       transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 22, delay: bloomDelay }}
                       whileHover={prefersReduced ? undefined : { scale: 1.08, transition: { type: 'spring', stiffness: 320, damping: 22 } }}
-                      whileTap={{ scale: 0.94 }}
+                      whileTap={prefersReduced ? undefined : { scale: 0.94 }}
                     >
-                      {/* Outer breathing ring — CSS keyframes (compositor, off the
-                          main thread) so N perpetual cluster rings never compete
-                          with Lenis's main-thread smooth scroll. */}
+                      {/* The cluster halo stays still while its geometry morphs.
+                          Breathing is reserved for intentional hover/focus so it
+                          never fights the split trajectory. */}
                       <div
-                        className="absolute rounded-full marker-breathe"
-                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${DOT_RGB},0.12)` }}
+                        className={`absolute rounded-full ${isActiveCluster || isHoveredCluster ? 'marker-breathe' : ''}`}
+                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${isActiveCluster || isHoveredCluster ? ACCENT_RGB : DOT_RGB},${isActiveCluster || isHoveredCluster ? 0.2 : 0.12})` }}
                       />
                       {/* Inner halo */}
                       <div
                         className="absolute rounded-full"
-                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${DOT_RGB},0.18)` }}
+                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${isActiveCluster || isHoveredCluster ? ACCENT_RGB : DOT_RGB},${isActiveCluster || isHoveredCluster ? 0.24 : 0.18})` }}
                       />
                       {/* Core badge */}
                       <div
                         className="relative rounded-full flex items-center justify-center font-bold shadow-lg border-[2.5px] border-black/15"
                         style={{
                           width: size, height: size,
-                          fontSize: count < 10 ? 13 : 14,
-                          background: DOT,
+                          fontSize: count < 10 ? 12 : 13,
+                          background: isActiveCluster || isHoveredCluster ? ACCENT : DOT,
                           color: '#20241a',
-                          boxShadow: `0 4px 16px rgba(0,0,0,0.35)`,
+                          boxShadow: isActiveCluster || isHoveredCluster
+                            ? `0 0 24px rgba(${ACCENT_RGB},0.38)`
+                            : '0 4px 16px rgba(0,0,0,0.35)',
                         }}
                       >
                         <AnimatePresence mode="wait">
@@ -445,56 +1031,77 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.2 }}
+                            transition={{ duration: prefersReduced ? 0 : 0.2 }}
                           >
                             {count}
                           </motion.span>
                         </AnimatePresence>
                       </div>
-                    </motion.div>
+                      <span className={`pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-full border px-2.5 py-1 font-ui text-[10px] font-semibold uppercase tracking-[0.12em] backdrop-blur-md transition-colors duration-300 ${isActiveCluster || isHoveredCluster ? 'border-[#D2FF00]/35 bg-[#171b15]/90 text-[#D2FF00]' : 'border-white/12 bg-[#171b15]/82 text-white/78'}`}>
+                        {clusterLabel}
+                      </span>
+                    </motion.button>
+                    </div>
                   </Marker>
                 );
               }
 
-              // ── Individual marker ──
-              const photo = validPhotos[props.photoIndex];
-              if (!photo) return null;
-              const isActive = activeCluster?.city === photo.location?.city;
-              // Highlight on direct marker hover OR when its city is hovered in
-              // the right-hand list (bidirectional list ↔ map linkage).
-              const isHovered = hoveredIdx === props.photoIndex
-                || (hoveredCity != null && photo.location?.city === hoveredCity);
+              // ── Individual city marker ──
+              const city = cityClusters[props.cityIndex ?? -1];
+              if (!city) return null;
+              const isActive = activeCluster?.city === city.city;
+              const isHovered = hoveredCity === city.city;
               // Active markers sit above map labels; idle markers sit below
               const markerZ = isActive ? 3 : isHovered ? 2 : 1;
-              // Container size matches the visual element — avoids invisible hit area
-              // covering map place-name labels
-              const containerSize = isActive ? 44 : isHovered ? 38 : 30;
+              const visualContainerSize = isActive ? 52 : isHovered ? 48 : 44;
+              const containerSize = coarsePointer ? Math.max(48, visualContainerSize) : visualContainerSize;
+              const markerCoreSize = isActive ? 22 : isHovered ? 19 : 16;
+              const labelOnLeft = city.lng > -82;
 
               return (
-                <Marker
-                  key={`photo-${photo._id}`}
-                  longitude={lng}
-                  latitude={lat}
-                  anchor="center"
-                  style={{ zIndex: markerZ }}
-                  onClick={e => { e.originalEvent.stopPropagation(); handlePhotoClick(photo); }}
-                >
-                  <motion.div
-                    className="relative flex items-center justify-center cursor-pointer group"
+                  <Marker
+                    key={clusterNode.key}
+                    longitude={lng}
+                    latitude={lat}
+                    anchor="center"
+                    style={{ zIndex: markerZ }}
+                  >
+                  <div
+                    data-atlas-marker-morph={clusterNode.role}
+                    aria-hidden={!markerInteractive}
+                    style={{
+                      opacity: clusterNode.opacity,
+                      transform: `scale(${clusterNode.scale})`,
+                      transformOrigin: 'center',
+                      pointerEvents: markerInteractive ? 'auto' : 'none',
+                      willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
+                    }}
+                  >
+                  <motion.button
+                    type="button"
+                    aria-label={`Explore ${city.city}, ${city.photos.length} frames`}
+                    tabIndex={markerInteractive ? 0 : -1}
+                    onClick={(event) => { event.stopPropagation(); handleMapCityClick(city); }}
+                    className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
                     style={{ width: containerSize, height: containerSize }}
-                    initial={prefersReduced ? false : { opacity: 0, scale: 0.3 }}
+                    initial={prefersReduced || !playInitialMarkerBloom ? false : { opacity: 0, scale: 0.3 }}
                     animate={{
                       // Dim the rest of the field when a city is selected, so
                       // the active one (and any hovered one) reads as focus.
                       opacity: activeCluster && !isActive && !isHovered ? 0.35 : 1,
                       scale: 1,
                     }}
-                    exit={{ opacity: 0, scale: 0.3, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
+                    exit={prefersReduced
+                      ? { opacity: 0, scale: 1, transition: { duration: 0 } }
+                      : { opacity: 0, scale: 0.3, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
                     transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 24, delay: bloomDelay, opacity: { duration: 0.5 } }}
-                    onMouseEnter={() => { setHoveredIdx(props.photoIndex); setHoveredCity(photo.location?.city || null); }}
-                    onMouseLeave={() => { setHoveredIdx(null); setHoveredCity(null); }}
+                    onMouseEnter={() => setHoveredCity(city.city)}
+                    onMouseLeave={() => setHoveredCity(null)}
+                    onFocus={() => setHoveredCity(city.city)}
+                    onBlur={() => setHoveredCity(null)}
                   >
-                    {/* Glow ring — only shown when active or hovered */}
+                    {/* The atlas uses cartographic points; photography is reserved
+                        for the single detail surface. */}
                     {(isActive || isHovered) && (
                       <div
                         className="absolute inset-0 rounded-full transition-colors duration-500"
@@ -525,387 +1132,374 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                       )
                     )}
                     <div
-                      className="relative rounded-full overflow-hidden shadow-lg transition-[width,height,box-shadow,outline] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                      className="relative rounded-full transition-[width,height,box-shadow,background-color,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
                       style={{
-                        width: isActive ? 40 : isHovered ? 34 : 26,
-                        height: isActive ? 40 : isHovered ? 34 : 26,
-                        outline: isActive
-                          ? `3px solid ${DOT}`
-                          : '2.5px solid rgba(255,255,255,0.9)',
-                        outlineOffset: '1px',
+                        width: markerCoreSize,
+                        height: markerCoreSize,
+                        background: isActive ? ACCENT : DOT,
+                        border: `1px solid ${isActive ? 'rgba(210,255,0,0.95)' : 'rgba(231,225,207,0.72)'}`,
                         boxShadow: isActive
-                          ? `0 0 18px rgba(${DOT_RGB},0.45), 0 4px 12px rgba(0,0,0,0.25)`
-                          : '0 2px 8px rgba(0,0,0,0.15)',
+                          ? `0 0 22px rgba(${ACCENT_RGB},0.66)`
+                          : `0 0 10px rgba(${DOT_RGB},0.2)`,
+                      }}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute top-1/2 block max-w-28 -translate-y-1/2 truncate whitespace-nowrap rounded-[0.35rem] border px-2.5 py-1 font-ui text-[10px] font-semibold uppercase backdrop-blur-md transition-colors duration-300 ${isActive || isHovered ? 'border-[#D2FF00]/38 bg-[#171b15]/92 text-[#D2FF00]' : 'border-white/12 bg-[#171b15]/84 text-white/78'}`}
+                      style={{
+                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 6}px)`,
+                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 6}px)` : 'auto',
+                        letterSpacing: coarsePointer ? '0.1em' : '0.14em',
+                        maxWidth: coarsePointer ? 96 : 112,
+                        zIndex: 10,
                       }}
                     >
-                      <img
-                        src={`${photo.imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`}
-                        alt={photo.title || photo.location?.city || 'Map location'}
-                        className="w-full h-full object-cover"
-                        draggable={false}
-                      />
-                    </div>
-                    <AnimatePresence>
-                      {isHovered && !isActive && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6, scale: 0.9 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -6, scale: 0.9 }}
-                          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                          className="absolute -top-9 left-1/2 -translate-x-1/2 pointer-events-none"
-                          style={{ zIndex: 10 }}
-                        >
-                          <div className="px-3 py-1.5 text-white text-[10px] font-semibold rounded-full shadow-xl whitespace-nowrap tracking-wide" style={{ background: ACCENT }}>
-                            {photo.location?.city || photo.title}
-                          </div>
-                          <div className="w-1.5 h-1.5 rotate-45 absolute -bottom-0.5 left-1/2 -translate-x-1/2" style={{ background: ACCENT }} />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
+                      {city.city}
+                    </span>
+                  </motion.button>
+                  </div>
                 </Marker>
               );
             })}
-            </AnimatePresence>
 
-            {/* ── Photo box — pops up on the map at the selected city, so a
-                 marker click reads clearly: map zooms in, the sidebar city
-                 highlights, and this preview appears. Mirrors the sidebar
-                 selection; dismiss via ×, another marker, or an empty-map click. ── */}
-            {activeCluster && (
-              <Popup
-                longitude={activeCluster.lng}
-                latitude={activeCluster.lat}
-                anchor="bottom"
-                offset={20}
-                closeButton={false}
-                closeOnClick={false}
-                className="premium-map-popup"
-                maxWidth="240px"
-              >
-                <motion.div
-                  key={activeCluster.city}
-                  initial={{ opacity: 0, y: 8, scale: 0.94 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative w-[218px] overflow-hidden rounded-2xl bg-[#15150f] border border-white/10 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]"
-                >
-                  <div className="relative h-28 overflow-hidden">
-                    <img
-                      src={`${activeCluster.photos[0].imageUrl}?auto=format&w=440&q=80`}
-                      alt={activeCluster.city}
-                      className="w-full h-full object-cover"
-                      draggable={false}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActiveCluster(null); setActiveClusterCity(null); }}
-                      className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white/70 hover:text-white hover:bg-black/70 transition-colors"
-                      aria-label="Close"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
-                    </button>
-                    <div className="absolute bottom-2.5 left-3.5 right-3.5">
-                      <p className="text-[8px] uppercase tracking-[0.2em] text-white/55 font-semibold">{activeCluster.country}</p>
-                      <h4 className="text-base font-serif uppercase text-white leading-tight truncate">{activeCluster.city}</h4>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between px-3.5 py-2.5 gap-2">
-                    <div className="flex -space-x-2">
-                      {activeCluster.photos.slice(0, 3).map((p) => (
-                        <div key={p._id} className="w-7 h-7 rounded-md overflow-hidden ring-2 ring-[#15150f]">
-                          <img src={`${p.imageUrl}?auto=format&w=64&h=64&fit=crop&q=70`} alt="" className="w-full h-full object-cover" draggable={false} />
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-[10px] font-ui uppercase tracking-[0.12em] font-semibold" style={{ color: ACCENT }}>
-                      {activeCluster.photos.length} frame{activeCluster.photos.length > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  {/* pointer toward the marker */}
-                  <div className="absolute left-1/2 -bottom-[7px] -translate-x-1/2 w-3.5 h-3.5 rotate-45 bg-[#15150f] border-r border-b border-white/10" />
-                </motion.div>
-              </Popup>
-            )}
           </MapGL>
 
-          {/* ── Floating status badge ── */}
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.6 }} className="absolute top-6 left-6 z-10 pointer-events-none">
-            <div className="bg-black/50 backdrop-blur-2xl px-5 py-3.5 rounded-2xl shadow-lg border border-white/10">
-              <p className="text-sm font-serif uppercase text-white/85 leading-none">United States</p>
-              <p className="text-[8px] font-ui uppercase tracking-[0.25em] text-white/30 mt-1.5">
-                {cityClusters.length} coordinates · {photos.length} frames
-              </p>
-            </div>
-          </motion.div>
-
-          {/* ── Top-right controls ── */}
-          <div className="absolute top-6 right-6 z-10 flex flex-col gap-2.5">
-            <Magnetic strength={0.4}>
-              <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }} onClick={resetView} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 hover:border-white/30 transition-colors duration-300" title="Reset view">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
-              </motion.button>
-            </Magnetic>
-
-            {/* Style switcher toggle */}
-            <Magnetic strength={0.4}>
-              <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setShowStylePicker(v => !v); }} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-2xl border border-white/10 shadow-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-black/70 hover:border-white/30 transition-colors duration-300" title="Map style">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0l4.179 2.25L12 17.25 2.25 12l4.179-2.25m11.142 0l-5.571 3-5.571-3m11.142 4.5L12 21.75l-5.571-3" /></svg>
-              </motion.button>
-            </Magnetic>
-          </div>
-
-          {/* ── Style picker dropdown ── */}
-          <AnimatePresence>
-            {showStylePicker && (
+          <AnimatePresence initial={false}>
+            {!mapReady && (
               <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className="absolute top-[7.5rem] right-6 z-20 bg-black/80 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/10 p-2 min-w-[140px]"
-                onClick={e => e.stopPropagation()}
+                key="atlas-loading"
+                className={`absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#151913] ${mapLoadFailed ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: prefersReduced ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+                role={mapLoadFailed ? 'alert' : 'status'}
+                aria-live="polite"
               >
-                {MAP_STYLES.map((s, i) => (
-                  <button
-                    key={s.id}
-                    onClick={() => { setMapStyleIdx(i); setShowStylePicker(false); }}
-                    className={`w-full text-left px-4 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-200 ${i === mapStyleIdx ? 'bg-white text-black' : 'text-white/60 hover:bg-white/10'}`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(231,225,207,0.055),transparent_42%)]" />
+                <div className="relative flex flex-col items-center gap-3 text-center">
+                  <motion.span
+                    className="h-1.5 w-1.5 rounded-full bg-[#D2FF00]"
+                    animate={prefersReduced || mapLoadFailed ? undefined : { opacity: [0.35, 1, 0.35] }}
+                    transition={{ duration: 1.65, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                  <p className="font-ui text-[8px] uppercase tracking-[0.36em] text-white/48">
+                    {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}
+                  </p>
+                  <p className="font-ui text-[9px] uppercase tracking-[0.2em] text-white/48">
+                    {mapLoadFailed ? 'Map tiles could not be loaded' : `${photos.length} geotagged frames`}
+                  </p>
+                  {mapLoadFailed && (
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="mt-2 min-h-11 rounded-full border border-white/14 px-5 font-ui text-[8px] uppercase tracking-[0.24em] text-white/68 transition-colors hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+                    >
+                      Retry map
+                    </button>
+                  )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* ── Bottom label ── */}
-          <div className="absolute bottom-6 left-6 z-10 pointer-events-none hidden lg:block">
-            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-[9px] font-bold text-white/30 uppercase tracking-[0.2em]">
-              Globe · {MAP_STYLES[mapStyleIdx].label}
-            </div>
+          {/* ── Quiet reset control, separated from the native zoom rail ── */}
+          <div
+            className="absolute left-4 top-4 z-10 flex flex-col md:left-5 md:top-5"
+            style={{ left: 'max(1rem, env(safe-area-inset-left))' }}
+          >
+            <Magnetic strength={0.3}>
+              <motion.button initial={prefersReduced ? false : { opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: prefersReduced ? 0 : 0.35, duration: prefersReduced ? 0 : 0.3 }} whileHover={prefersReduced ? undefined : { scale: 1.06 }} whileTap={prefersReduced ? undefined : { scale: 0.94 }} onClick={resetView} className="atlas-reset-control flex h-11 w-11 items-center justify-center rounded-full text-white/55 transition-colors duration-300 hover:text-white" title="Reset view" aria-label="Reset view">
+                <RotateCcw size={16} aria-hidden="true" />
+              </motion.button>
+            </Magnetic>
+
           </div>
 
-          {/* ── Live coordinate readout — bottom-center so it clears the
-               bottom-right Mapbox nav/fullscreen controls. Updates on pan/zoom. ── */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none hidden md:block">
-            <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 font-ui text-[9px] tracking-[0.12em] text-white/40 tabular-nums flex items-center gap-2.5">
-              <span style={{ color: ACCENT }}>◉</span>
-              <span>LAT {viewState.latitude.toFixed(2)}°</span>
-              <span className="opacity-30">·</span>
-              <span>LNG {viewState.longitude.toFixed(2)}°</span>
-              <span className="opacity-30">·</span>
-              <span>Z {viewState.zoom.toFixed(1)}</span>
-            </div>
-          </div>
+          {/* A legible first-use cue. The map is intentionally immersive, but
+              it should never look like a passive background or make visitors
+              guess whether the geographic index is interactive. */}
+          <motion.div
+            initial={prefersReduced ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: prefersReduced ? 0 : 0.45, duration: prefersReduced ? 0 : 0.45, ease: [0.16, 1, 0.3, 1] }}
+            className="pointer-events-none absolute left-1/2 top-5 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-[#11150f]/78 px-4 py-2 font-ui text-[9px] uppercase tracking-[0.18em] text-white/72 shadow-[0_12px_34px_rgba(7,9,6,0.22)] backdrop-blur-xl lg:flex"
+            aria-hidden="true"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_10px_rgba(210,255,0,0.45)]" />
+            <span>{activeCluster ? `Viewing ${activeCluster.city}` : 'Select a city or marker'}</span>
+            <span className="h-3 w-px bg-white/14" />
+            <span className="text-white/54">Drag to move · Scroll to zoom</span>
+          </motion.div>
+
+          {/* Mobile keeps the full explorer: the map owns the viewport while
+              browse and detail become one draggable, scroll-isolated sheet. */}
+          <motion.section
+            className="atlas-mobile-sheet absolute inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden rounded-t-[1.75rem] bg-[#20251d] shadow-[0_-24px_70px_rgba(7,9,6,0.42)] lg:hidden"
+            style={{ maxHeight: 'min(62svh, calc(100% - 4.5rem))' }}
+            initial={false}
+            animate={{
+              height: mobileSheet === 'peek' ? 78 : mobileSheet === 'browse' ? '48svh' : '62svh',
+            }}
+            transition={prefersReduced ? { duration: 0 } : { duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
+            drag={prefersReduced ? false : 'y'}
+            dragControls={sheetDragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.08}
+            onDragEnd={(_, info) => {
+              if (info.offset.y < -44) {
+                if (mobileSheet === 'peek') setMobileSheet('browse');
+                else if (mobileSheet === 'browse' && activeCluster) setMobileSheet('detail');
+              } else if (info.offset.y > 44) {
+                if (mobileSheet === 'detail') setMobileSheet('browse');
+                else if (mobileSheet === 'browse') setMobileSheet('peek');
+              }
+            }}
+            data-lenis-prevent
+            aria-label="Atlas locations"
+          >
+            <button
+              ref={mobileSheetHeaderRef}
+              type="button"
+              onPointerDown={(event) => {
+                if (!prefersReduced) sheetDragControls.start(event);
+              }}
+              onClick={() => setMobileSheet((current) => current === 'peek' ? 'browse' : current === 'browse' ? 'peek' : 'browse')}
+              className="atlas-mobile-sheet__header atlas-sheet-safe-inline flex min-h-[78px] min-w-0 shrink-0 touch-none items-center gap-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#D2FF00]"
+              aria-expanded={mobileSheet !== 'peek'}
+              aria-controls={mobileSheet === 'peek' ? undefined : 'atlas-sheet-content'}
+            >
+              <span className={`absolute left-1/2 top-3 h-[3px] w-10 -translate-x-1/2 rounded-full bg-white/24 ${prefersReduced ? 'hidden' : ''}`} aria-hidden="true" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D2FF00] font-ui text-[9px] font-bold text-[#171b15]">
+                {activeCluster ? String(cityClusters.findIndex((cluster) => cluster.city === activeCluster.city) + 1).padStart(2, '0') : String(cityClusters.length).padStart(2, '0')}
+              </span>
+              <span className="min-w-0 flex-1 overflow-hidden">
+                <span className="block font-ui text-[9px] uppercase tracking-[0.26em] text-white/62">
+                  {activeCluster ? 'Current location' : 'Interactive atlas'}
+                </span>
+                <span className="mt-1 block truncate font-serif text-xl uppercase leading-none text-[#F4F4ED]">
+                  {activeCluster?.city ?? 'Explore locations'}
+                </span>
+              </span>
+              <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-semibold uppercase tracking-[0.2em] text-[#D2FF00]/88">
+                {mobileSheet === 'peek' ? 'Open' : mobileSheet === 'detail' ? 'Back' : 'Close'}
+              </span>
+            </button>
+            <span className="sr-only" aria-live="polite">
+              {mobileSheet === 'detail' && activeCluster
+                ? `${activeCluster.city} details open`
+                : mobileSheet === 'browse'
+                  ? 'Location index open'
+                  : 'Location index collapsed'}
+            </span>
+
+            <AnimatePresence mode="wait" initial={false}>
+              {mobileSheet === 'browse' && (
+                <motion.div
+                  key="browse"
+                  initial={prefersReduced ? false : { opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  transition={{ duration: prefersReduced ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
+                  className="atlas-sheet-safe-inline min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+                  data-lenis-prevent
+                  id="atlas-sheet-content"
+                >
+                  {regionGroups.map((group) => (
+                    <div key={group.region} className="border-t border-white/7 py-4 first:border-t-0">
+                      <div className="mb-2 flex items-center justify-between font-ui text-[9px] uppercase tracking-[0.22em] text-white/60">
+                        <span>{group.region}</span>
+                        <span>{group.totalPhotos} frames</span>
+                      </div>
+                      {group.clusters.map((cluster) => (
+                        <button
+                          key={cluster.city}
+                          type="button"
+                          onClick={() => handleCityClick(cluster)}
+                          aria-pressed={activeClusterCity === cluster.city}
+                          className="flex min-h-12 w-full items-center gap-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+                        >
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full border ${activeClusterCity === cluster.city ? 'border-[#D2FF00] bg-[#D2FF00] shadow-[0_0_12px_rgba(210,255,0,0.55)]' : 'border-white/35 bg-transparent'}`} />
+                          <span className="min-w-0 flex-1 truncate font-serif text-lg uppercase text-[#F4F4ED]">{cluster.city}</span>
+                          <span className="font-ui text-[9px] uppercase tracking-[0.18em] text-white/62">{cluster.photos.length}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+
+              {mobileSheet === 'detail' && activeCluster && (
+                <motion.div
+                  key={`detail-${activeCluster.city}`}
+                  initial={prefersReduced ? false : { opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 12 }}
+                  transition={{ duration: prefersReduced ? 0 : 0.42, ease: [0.16, 1, 0.3, 1] }}
+                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                  data-lenis-prevent
+                  id="atlas-sheet-content"
+                >
+                  <CityDetail cluster={activeCluster} mobile />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
+
         </div>
 
-        {/* ── Desktop sidebar — grouped by region ── */}
-        <div className="hidden lg:flex flex-col w-[340px] border-l border-white/5 bg-[#30352a]">
-          <div className="px-5 py-4 border-b border-white/5">
-            <p className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-light">Regions</p>
-            <p className="text-xs text-white/20 font-ui mt-1">{regionGroups.length} regions · {cityClusters.length} cities · {photos.length} photos</p>
-          </div>
-          <div className="flex-1 overflow-y-auto no-scrollbar">
-            {regionGroups.map((group) => {
-              const isRegionOpen = expandedRegion === group.region;
-              return (
-                <div key={group.region}>
-                  {/* Region header */}
-                  <button
-                    onClick={() => setExpandedRegion(isRegionOpen ? null : group.region)}
-                    className="w-full text-left px-5 py-3 flex items-center justify-between bg-white/[0.02] border-b border-white/5 hover:bg-white/[0.05] transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/50">{group.region}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-ui text-white/20">{group.totalPhotos}</span>
-                      <motion.svg
-                        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                        className="text-white/20"
-                        animate={{ rotate: isRegionOpen ? 180 : 0 }}
-                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                      </motion.svg>
-                    </div>
-                  </button>
-
-                  {/* Cities within region */}
-                  <AnimatePresence>
-                    {isRegionOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], opacity: { duration: 0.35 } }}
-                        className="overflow-hidden"
-                      >
-                        {group.clusters.map((cluster, ci) => {
-                          const isSelected = activeClusterCity === cluster.city;
-                          const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
-                          return (
-                            <motion.div
-                              key={cluster.city}
-                              id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}
-                              initial={{ opacity: 0, x: -14 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: 0.04 + ci * 0.05, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                            >
-                              <button
-                                onClick={() => handleCityClick(cluster)}
-                                onMouseEnter={() => setHoveredCity(cluster.city)}
-                                onMouseLeave={() => setHoveredCity(null)}
-                                className={`relative w-full text-left px-5 py-3.5 border-b transition-[translate,background-color,border-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                                  isSelected
-                                    ? 'bg-white/10 text-white border-b-white/10 translate-x-0'
-                                    : isHoveredFromMap
-                                      ? 'bg-white/[0.05] border-b-white/5 translate-x-2'
-                                      : 'hover:bg-white/[0.03] border-b-white/[0.03]'
-                                }`}
-                              >
-                                {/* Accent rail — grows in from the middle when this city is
-                                    active or hovered (list ↔ map), soft-eased not a hard toggle */}
-                                <motion.span
-                                  className="absolute left-0 top-1 bottom-1 w-[2px] origin-center rounded-full"
-                                  style={{ background: ACCENT }}
-                                  initial={false}
-                                  animate={{
-                                    scaleY: isSelected || isHoveredFromMap ? 1 : 0,
-                                    opacity: isSelected || isHoveredFromMap ? 1 : 0,
-                                  }}
-                                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                                />
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 ring-2 transition-[scale,box-shadow,outline-color] duration-[550ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isSelected ? 'ring-white/30 scale-110' : isHoveredFromMap ? 'ring-white/20 scale-105' : 'ring-white/5'}`}>
-                                    <img src={`${cluster.photos[0].imageUrl}?auto=format&w=80&h=80&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : isHoveredFromMap ? 'text-white/80' : 'text-white/60'}`}>{cluster.city}</h3>
-                                    <p className={`text-[10px] mt-0.5 ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-[10px] font-ui ${isSelected ? 'text-white/50' : 'text-white/20'}`}>{cluster.photos.length}</span>
-                                    {(isSelected || isHoveredFromMap) && (
-                                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white/40' : 'bg-white/20'}`} />
-                                    )}
-                                  </div>
-                                </div>
-                              </button>
-                              {/* Rich expanded card for the selected city — framer
-                                  measures the real content height and animates it, so
-                                  the expand is smooth (no max-height:500px guess +
-                                  transition:all reflow on the 600px cover image). */}
-                              <AnimatePresence initial={false}>
-                                {isSelected && (
-                                  <motion.div
-                                    key="detail"
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ height: { duration: 0.5, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } }}
-                                    className="bg-[#111] border-b border-white/5 overflow-hidden"
-                                  >
-                                {/* Cover photo */}
-                                <div className="relative h-36 overflow-hidden">
-                                  <img
-                                    src={`${cluster.photos[0].imageUrl}?auto=format&w=600&q=80`}
-                                    alt={cluster.city}
-                                    className="w-full h-full object-cover"
-                                    draggable={false}
-                                  />
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                                  <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
-                                    <div>
-                                      <p className="text-[9px] uppercase tracking-[0.15em] text-white/60 font-semibold">{cluster.country}</p>
-                                      <h4 className="text-lg font-serif uppercase text-white leading-tight">{cluster.city}</h4>
-                                    </div>
-                                    <span className="text-[10px] font-ui text-white/50">{cluster.photos.length} photos</span>
-                                  </div>
-                                </div>
-                                {/* Content */}
-                                <div className="p-4">
-                                  <p className="text-[10px] text-white/30 font-ui tracking-wide mb-3">
-                                    {formatCoord(cluster.lat, 'N', 'S')}, {formatCoord(cluster.lng, 'E', 'W')}
-                                  </p>
-                                  <div className="grid grid-cols-3 gap-1.5">
-                                    {cluster.photos.slice(0, 6).map((photo) => (
-                                      <div key={photo._id} className="aspect-square rounded-lg overflow-hidden">
-                                        <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" loading="lazy" draggable={false} />
-                                      </div>
-                                    ))}
-                                  </div>
-                                  {cluster.photos[0]?.collection?.slug && (
-                                    <a
-                                      href={`/works/${cluster.photos[0].collection.slug}`}
-                                      className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] uppercase tracking-[0.1em] font-bold text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-                                      style={{ background: ACCENT }}
-                                    >
-                                      Explore Story
-                                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
-                                    </a>
-                                  )}
-                                </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </motion.div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+        {/* ── Desktop destination index. The feather is a separate visual layer;
+            copy and controls sit on a stable opaque surface so the basemap never
+            changes their contrast. Region disclosure restores the clearer,
+            explicitly interactive hierarchy of the earlier Atlas. ── */}
+        <aside
+          className="relative z-10 -ml-12 hidden h-full min-h-0 w-[340px] flex-col pl-12 lg:flex xl:-ml-20 xl:w-[420px] xl:pl-20"
+          aria-label="Photographic locations"
+        >
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-transparent via-[#30352a]/52 to-[#30352a]" aria-hidden="true" />
+          <div className="relative flex h-full min-h-0 flex-col bg-[#30352a]">
+            <header className="shrink-0 border-b border-white/8 px-5 pb-4 pt-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-ui text-[10px] font-semibold uppercase tracking-[0.24em] text-[#F4F4ED]/90">Select a location</p>
+                  <p className="mt-2 max-w-[235px] font-ui text-[11px] leading-relaxed tracking-[0.02em] text-white/62">
+                    Choose a city to focus the map and open its photographic record.
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+                <span className="font-serif text-[28px] leading-none text-[#F4F4ED]/78 tabular-nums">
+                  {String(cityClusters.length).padStart(2, '0')}
+                </span>
+              </div>
+            </header>
 
-      {/* ── Mobile city list — grouped by region ── */}
-      <div className="lg:hidden mt-4 space-y-4">
-        {regionGroups.map((group) => (
-          <div key={group.region}>
-            <div className="flex items-center gap-2 px-1 mb-2">
-              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40">{group.region}</span>
-              <div className="flex-1 h-px bg-white/5" />
-              <span className="text-[10px] font-ui text-white/20">{group.totalPhotos}</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {group.clusters.map((cluster) => {
-                const isSelected = activeClusterCity === cluster.city;
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar" data-lenis-prevent>
+              {regionGroups.map((group, regionIndex) => {
+                const isOpen = expandedRegion === group.region;
                 return (
-                  <button key={cluster.city} onClick={() => handleCityClick(cluster)} className={`group p-3.5 rounded-xl text-left transition-all duration-300 active:scale-[0.98] min-h-[60px] ${isSelected ? 'bg-white/10 text-white shadow-lg' : 'bg-white/[0.03] hover:bg-white/[0.06] active:bg-white/[0.08]'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 ring-1 transition-colors ${isSelected ? 'ring-white/20' : 'ring-white/5'}`}>
-                        <img src={`${cluster.photos[0].imageUrl}?auto=format&w=100&h=100&fit=crop&q=75`} alt={cluster.city} className="w-full h-full object-cover" draggable={false} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`text-[13px] font-medium tracking-tight truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{cluster.city}</h3>
-                        <p className={`text-[10px] ${isSelected ? 'text-white/40' : 'text-white/25'}`}>{cluster.country}</p>
-                      </div>
-                      <span className={`text-xs font-ui ${isSelected ? 'text-white/40' : 'text-white/20'}`}>{cluster.photos.length}</span>
-                    </div>
-                    <AnimatePresence>
-                      {isSelected && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden">
-                          <div className="grid grid-cols-4 gap-1.5 mt-3">
-                            {cluster.photos.slice(0, 4).map((photo) => (
-                              <div key={photo._id} className="aspect-square rounded-md overflow-hidden">
-                                <img src={`${photo.imageUrl}?auto=format&w=160&q=75`} alt={photo.title} className="w-full h-full object-cover" draggable={false} />
-                              </div>
-                            ))}
-                          </div>
+                  <section key={group.region} className="border-b border-white/7 last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedRegion(isOpen ? null : group.region)}
+                      className="group flex min-h-12 w-full cursor-pointer items-center gap-3 px-5 text-left hover:bg-white/[0.035] focus-visible:outline-none focus-visible:shadow-[inset_2px_0_0_#D2FF00]"
+                      aria-expanded={isOpen}
+                      aria-controls={isOpen ? `atlas-region-${slugifyPlace(group.region)}` : undefined}
+                    >
+                      <span className="min-w-0 flex-1 font-ui text-[9px] font-semibold uppercase tracking-[0.24em] text-white/70 group-hover:text-white/90">
+                        {group.region}
+                      </span>
+                      <span className="font-ui text-[9px] tabular-nums tracking-[0.1em] text-white/56">{group.totalPhotos} frames</span>
+                      <motion.span
+                        aria-hidden="true"
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ duration: prefersReduced ? 0 : 0.35, ease: [0.16, 1, 0.3, 1] }}
+                        className="flex h-6 w-6 items-center justify-center text-[13px] text-white/58"
+                      >
+                        ↓
+                      </motion.span>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          id={`atlas-region-${slugifyPlace(group.region)}`}
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ height: { duration: prefersReduced ? 0 : 0.42, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: prefersReduced ? 0 : 0.24 } }}
+                          className="overflow-hidden bg-[#292e25]"
+                        >
+                          {group.clusters.map((cluster, cityIndex) => {
+                            const isSelected = activeClusterCity === cluster.city;
+                            const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
+                            const itemNumber = regionGroups
+                              .slice(0, regionIndex)
+                              .reduce((total, item) => total + item.clusters.length, 0) + cityIndex + 1;
+                            return (
+                              <motion.div
+                                key={cluster.city}
+                                id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}
+                                initial={prefersReduced ? false : { opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: prefersReduced ? 0 : cityIndex * 0.045, duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleCityClick(cluster)}
+                                  onMouseEnter={() => setHoveredCity(cluster.city)}
+                                  onMouseLeave={() => setHoveredCity(null)}
+                                  onFocus={() => setHoveredCity(cluster.city)}
+                                  onBlur={() => setHoveredCity(null)}
+                                  aria-pressed={isSelected}
+                                  aria-expanded={isSelected}
+                                  aria-controls={isSelected ? `atlas-city-detail-${slugifyPlace(cluster.city)}` : undefined}
+                                  className={`group relative flex min-h-[66px] w-full cursor-pointer items-center gap-3 border-t border-white/6 px-5 text-left transition-[background-color,transform] duration-300 focus-visible:outline-none focus-visible:shadow-[inset_2px_0_0_#D2FF00] ${
+                                    isSelected
+                                      ? 'bg-[#D2FF00]/[0.075]'
+                                      : isHoveredFromMap
+                                        ? 'bg-white/[0.055]'
+                                        : 'hover:bg-white/[0.04]'
+                                  }`}
+                                >
+                                  <motion.span
+                                    className="absolute inset-y-3 left-0 w-[2px] rounded-full bg-[#D2FF00]"
+                                    initial={false}
+                                    animate={{ opacity: isSelected || isHoveredFromMap ? 1 : 0, scaleY: isSelected || isHoveredFromMap ? 1 : 0.3 }}
+                                    transition={{ duration: prefersReduced ? 0 : 0.3, ease: [0.16, 1, 0.3, 1] }}
+                                  />
+                                  <span className="relative h-10 w-12 shrink-0 overflow-hidden rounded-[0.35rem] bg-black/20">
+                                    <img
+                                      src={`${cluster.photos[0].imageUrl}?auto=format&w=160&h=120&fit=crop&q=76`}
+                                      alt=""
+                                      className="h-full w-full object-cover opacity-80 transition-[transform,opacity] duration-500 group-hover:scale-105 group-hover:opacity-100"
+                                      loading="lazy"
+                                      draggable={false}
+                                    />
+                                    <span className="absolute left-1.5 top-1 font-ui text-[8px] tabular-nums tracking-[0.12em] text-white/82 drop-shadow">
+                                      {String(itemNumber).padStart(2, '0')}
+                                    </span>
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block truncate font-serif text-[19px] uppercase leading-none tracking-[-0.01em] ${isSelected ? 'text-[#F4F4ED]' : 'text-[#F4F4ED]/88 group-hover:text-white'}`}>
+                                      {cluster.city}
+                                    </span>
+                                    <span className="mt-1.5 block font-ui text-[10px] uppercase tracking-[0.1em] text-white/62">
+                                      {cluster.country || group.region} · {cluster.photos.length} frames
+                                    </span>
+                                  </span>
+                                  <span className={`shrink-0 font-ui text-[10px] font-semibold uppercase tracking-[0.1em] ${isSelected ? 'text-[#D2FF00]' : 'text-white/62 group-hover:text-white/86'}`}>
+                                    {isSelected ? 'Viewing' : 'Focus'}
+                                  </span>
+                                </button>
+
+                                <AnimatePresence initial={false}>
+                                  {isSelected && (
+                                    <motion.div
+                                      key="detail"
+                                      id={`atlas-city-detail-${slugifyPlace(cluster.city)}`}
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ height: { duration: prefersReduced ? 0 : 0.46, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: prefersReduced ? 0 : 0.26 } }}
+                                      className="overflow-hidden border-t border-white/6 bg-[#171b15]/94"
+                                    >
+                                      <CityDetail cluster={cluster} />
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </motion.div>
+                            );
+                          })}
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </button>
+                  </section>
                 );
               })}
             </div>
+
           </div>
-        ))}
+        </aside>
       </div>
     </div>
   );

@@ -1,0 +1,6 @@
+# Local-only design explorations are not part of the approved website.
+/posters/
+**/*.md
+**/README.txt
+**/.DS_Store
+**/*.map

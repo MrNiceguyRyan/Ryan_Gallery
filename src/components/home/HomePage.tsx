@@ -1,39 +1,212 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform, useReducedMotion, type MotionValue } from 'framer-motion';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import {
+  lazy,
+  Suspense,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
+import {
+  motion,
+  AnimatePresence,
+  useScroll,
+  useTransform,
+  useReducedMotion,
+  useMotionValue,
+  type MotionValue,
+} from 'framer-motion';
 import type { Collection } from '../../types';
-import SidebarItem from './SidebarItem';
-import StatementReveal from './StatementReveal';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
-import RegionHeader from './RegionHeader';
 import MagazineLayout from './MagazineLayout';
+import type { RouteStop } from './RouteAtlas';
+import LivingAtlasStory from './LivingAtlasStory';
 import Magnetic from '../shared/Magnetic';
-import { useInViewOnce } from '../../lib/useInViewOnce';
 import { startLenis } from '../../lib/smoothScroll';
+import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES } from '../../lib/archiveEntrance';
 import type Lenis from 'lenis';
 
-/* Hero epigraphs — first sentences distilled from the per-collection
- * narratives in src/lib/narratives.tsx. The hero cycles through these
- * so the page itself "previews" what's in the archive, instead of
- * showing a single static tagline that says nothing specific. */
-// Field-notes that open the homepage "journey" — each dispatch is grounded
-// to the real place it was made, so the hero reads like a sequence of entries
-// from across the archive rather than free-floating taglines.
-const HERO_EPIGRAPHS = [
-  { line: 'Manhattan light arrives sideways in the early hours.', place: 'New York' },
-  { line: 'Sandstone narrows until sound itself goes muffled.', place: 'Zion' },
-  { line: 'The Virgin River runs cold and milky green.', place: 'Zion' },
-  { line: 'The Sonoran at midday offers nothing to hide behind.', place: 'Arizona' },
-  { line: 'Pink limestone spires standing close together.', place: 'Bryce Canyon' },
-  { line: 'Florida afternoon light is relentless and democratic.', place: 'Orlando' },
-  { line: 'Ocean Drive at dusk exists in two registers.', place: 'Miami' },
-];
+// Keep parsing separate from mounting. The handoff can warm these chunks while
+// the opening is settling without creating Mapbox's WebGL context or mounting
+// the story overlay before either one is needed.
+const loadRouteAtlas = () => import('./RouteAtlas');
+const RouteAtlas = lazy(loadRouteAtlas);
 
 const expo = [0.16, 1, 0.3, 1] as const;
+// Keep the more experimental Living Atlas composition on compact screens for
+// now, but restore the established desktop archive: persistent route rail,
+// real Mapbox geography and the active photograph sharing one editorial field.
+// The desktop direction is intentionally anchored to the published site.
+
+const ROUTE_FALLBACKS: Record<string, [number, number]> = {
+  miami: [-80.1918, 25.7617],
+  orlando: [-81.3792, 28.5383],
+  page: [-111.4558, 36.9147],
+  zion: [-112.987, 37.2982],
+  'bryce canyon': [-112.1871, 37.6283],
+  arizona: [-111.0937, 34.0489],
+  'new york': [-74.006, 40.7128],
+  manhattan: [-73.9857, 40.7484],
+  washington: [-77.0369, 38.9072],
+  baltimore: [-76.6122, 39.2904],
+};
+
+function routeCoordinateLabel([longitude, latitude]: [number, number]) {
+  const format = (value: number, positive: string, negative: string) =>
+    `${Math.abs(value).toFixed(4)}° ${value >= 0 ? positive : negative}`;
+  return `${format(latitude, 'N', 'S')}  /  ${format(longitude, 'E', 'W')}`;
+}
 
 interface Props {
   collections: Collection[];
+}
+
+// Keep the rendered tree aligned with Tailwind's `lg` breakpoint. The old
+// 768px switch selected the desktop tree on tablets while the desktop atlas
+// itself stayed hidden until 1024px, leaving an entire breakpoint without a
+// map.
+const DESKTOP_LAYOUT_QUERY = '(min-width: 1024px)';
+
+function subscribeToDesktopLayout(onChange: () => void) {
+  const query = window.matchMedia(DESKTOP_LAYOUT_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+function getDesktopLayoutSnapshot() {
+  return window.matchMedia(DESKTOP_LAYOUT_QUERY).matches;
+}
+
+function getDesktopLayoutServerSnapshot() {
+  return true;
+}
+
+function documentTop(node: HTMLElement) {
+  let top = 0;
+  let current: HTMLElement | null = node;
+  while (current) {
+    top += current.offsetTop;
+    current = current.offsetParent instanceof HTMLElement ? current.offsetParent : null;
+  }
+  return top;
+}
+
+// Navigation and the scroll timeline must meet at the same untransformed
+// photograph centre, not at the chapter's longer text-and-spacing container.
+function archiveChapterAnchorY(element: HTMLElement, desktop: boolean) {
+  const photoFrame = desktop
+    ? element.querySelector<HTMLElement>('.archive-photo-frame')
+    : null;
+  const visualAnchor = photoFrame && photoFrame.offsetHeight > 0
+    ? photoFrame
+    : element;
+  return documentTop(visualAnchor) + visualAnchor.offsetHeight * (desktop ? 0.5 : 0.19);
+}
+
+function useDesktopLayout() {
+  return useSyncExternalStore(
+    subscribeToDesktopLayout,
+    getDesktopLayoutSnapshot,
+    getDesktopLayoutServerSnapshot,
+  );
+}
+
+interface DeferredRouteAtlasProps {
+  stops: RouteStop[];
+  activeIndex: number;
+  engagedChapterId?: string | null;
+  chapterIds?: string[];
+  chapterProgress?: MotionValue<number>;
+  entryProgress?: MotionValue<number>;
+  reducedMotion: boolean;
+  mobile?: boolean;
+  paused?: boolean;
+  presentation?: 'classic' | 'living';
+  onNavigate?: (chapterId: string) => void;
+}
+
+function RouteAtlasFallback({ mobile = false, entryProgress, reducedMotion = false }: {
+  mobile?: boolean;
+  entryProgress?: MotionValue<number>;
+  reducedMotion?: boolean;
+}) {
+  const stableProgress = useMotionValue(1);
+  const opacity = useTransform(entryProgress ?? stableProgress, (p) =>
+    reducedMotion ? 1 : entrancePhase(p, ...ARCHIVE_ENTRANCE_PHASES.mapVisibility),
+  );
+  return (
+    <motion.div
+      aria-hidden="true"
+      style={{ opacity }}
+      className={`route-atlas route-atlas-fallback relative w-full overflow-hidden bg-[#282c20] ${
+        mobile ? 'route-atlas--mobile h-full min-h-[100svh]' : 'h-full'
+      }`}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_34%_42%,rgba(210,255,0,0.035),transparent_64%)]" />
+      <div className="route-atlas-fallback__art absolute inset-0">
+        <div className="absolute left-1/2 top-1/2 aspect-[1600/956] w-[132%] -translate-x-1/2 -translate-y-1/2 opacity-[0.24] md:w-[110%]">
+          <img
+            src="/assets/maps/walkin-us-atlas.webp"
+            alt=""
+            className="h-full w-full object-contain"
+            width="1600"
+            height="956"
+            loading="eager"
+            decoding="async"
+            draggable={false}
+          />
+        </div>
+      </div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_34%,rgba(40,44,32,0.34)_72%,#282c20_100%)]" />
+    </motion.div>
+  );
+}
+
+function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+  const mobile = !!props.mobile;
+
+  useEffect(() => {
+    if (nearViewport) return;
+    const shell = shellRef.current;
+    if (!shell || typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setNearViewport(true);
+        observer.disconnect();
+      },
+      // Import Mapbox only near the route handoff. A larger margin starts
+      // parsing the bundle halfway through the opening card animation and
+      // competes with its final scale/mask frames.
+      { rootMargin: props.reducedMotion ? '0px' : '120px 0px', threshold: 0 },
+    );
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [nearViewport, props.reducedMotion]);
+
+  return (
+    <div
+      ref={shellRef}
+      className="h-full w-full"
+    >
+      {nearViewport ? (
+        <Suspense fallback={<RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} reducedMotion={props.reducedMotion} />}>
+          <RouteAtlas {...props} />
+        </Suspense>
+      ) : (
+        <RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} reducedMotion={props.reducedMotion} />
+      )}
+    </div>
+  );
 }
 
 /* A homepage section — a run of city chapters that share a `region`. Sections
@@ -48,230 +221,8 @@ interface RegionSection {
 }
 
 /* ═══════════════════════════════════════════════════════
- *  MobileFilmstripItem — parallax mobile card
- * ═══════════════════════════════════════════════════════ */
-function MobileFilmstripItem({
-  coverBase,
-  title,
-  caption,
-  onClick,
-}: {
-  coverBase: string;
-  title: string;
-  /** Optional sub-label, e.g. "2 places · 47 frames" for a region card. */
-  caption?: string;
-  onClick: () => void;
-}) {
-  // Mobile filmstrip — 100vw container, 28vh tall. Real device widths span 360–430 px
-  // and Retina hits ~860 px; bracket 600 / 900 / 1200 and let the browser pick.
-  const coverUrl     = coverBase ? `${coverBase}?auto=format&w=900&q=80` : '';
-  const coverSrcSet  = coverBase
-    ? `${coverBase}?auto=format&w=600&q=80 600w, ${coverBase}?auto=format&w=900&q=80 900w, ${coverBase}?auto=format&w=1200&q=78 1200w`
-    : undefined;
-
-  // Scroll parallax — the cover drifts inside its frame as the card passes
-  // through the viewport, matching the desktop chapters. Image is sized h-[126%]
-  // so the drift never exposes an edge. Disabled for reduced-motion.
-  const cardRef = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: cardRef, offset: ['start end', 'end start'] });
-  const imgY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-16%']);
-  // Reliable in-view trigger (whileInView is unreliable under Astro view-transitions
-  // + Lenis). Fires once, cascades the `active` variant to the img / dim / affordance.
-  const [ref, shown] = useInViewOnce<HTMLDivElement>('-25% 0px -25% 0px');
-  // Merge the observer ref with cardRef (still drives the parallax useScroll above).
-  const setRefs = useCallback(
-    (node: HTMLDivElement | null) => {
-      cardRef.current = node;
-      (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    },
-    [ref],
-  );
-
-  return (
-    <motion.div
-      ref={setRefs}
-      onClick={onClick}
-      animate={shown ? 'active' : undefined}
-      whileTap={{ scale: 0.985 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      className="relative w-full h-[28vh] overflow-hidden cursor-pointer border-b border-white/5 block group"
-    >
-      {coverUrl && (
-        <motion.img
-          src={coverUrl}
-          srcSet={coverSrcSet}
-          sizes="100vw"
-          alt={title}
-          style={{ y: imgY }}
-          variants={{
-            active: { scale: 1.08, filter: 'grayscale(0%)' },
-          }}
-          initial={reduce ? false : { filter: 'grayscale(100%)', scale: 1.02 }}
-          transition={{ duration: reduce ? 0 : 2.5, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute inset-0 w-full h-[126%] object-cover object-center"
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-        />
-      )}
-      <motion.div
-        variants={{ active: { backgroundColor: 'rgba(0,0,0,0.2)' } }}
-        initial={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-        transition={{ duration: reduce ? 0 : 1 }}
-        className="absolute inset-0 transition-colors"
-      />
-
-      {/* Centered Title — clamps and shrinks to fit narrow screens */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-5 py-6 z-10 pointer-events-none">
-        <h3 className="text-3xl sm:text-4xl text-white font-serif uppercase tracking-tighter text-center mix-blend-difference drop-shadow-lg leading-[1.05] break-words max-w-full">
-          {title}
-        </h3>
-        {caption && (
-          <span className="font-ui text-[8px] uppercase tracking-[0.35em] text-white/75 mix-blend-difference">
-            {caption}
-          </span>
-        )}
-      </div>
-
-      {/* Tap affordance — always visible (touch has no hover), brightens
-           and slides in when the card is the active one in view. */}
-      <motion.div
-        variants={{ active: { opacity: 1, x: 0 } }}
-        initial={{ opacity: 0.6, x: 0 }}
-        transition={{ duration: reduce ? 0 : 0.7 }}
-        className="absolute right-5 bottom-6 flex items-center gap-2 z-10 text-white"
-      >
-        <span className="rounded-full border border-white/10 bg-black/40 backdrop-blur-md px-3.5 py-1.5 text-[8px] uppercase tracking-[0.3em] font-bold flex items-center gap-1.5">
-          Tap to open
-          <ArrowRight size={11} />
-        </span>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
- *  CollapsedRegionStrip — compact "stowed" view of a region
- * ═══════════════════════════════════════════════════════ */
-const STRIP_ACCENT = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
-
-/** A single stowed-region card. Hover is driven by Framer off one hover state
- *  so the dim-lift + gentle scale animate TOGETHER on one synced, eased
- *  timeline — no "flash then scale", identical feel to the collection covers. */
-function StripCard({ c, onOpen }: { c: Collection; onOpen: (c: Collection) => void }) {
-  const [hovered, setHovered] = useState(false);
-  const url = c.coverImageUrl ?? c.photos?.[0]?.imageUrl ?? '';
-  // One shared, gentle timeline for every hover property → moves as one piece.
-  const ease = [0.16, 1, 0.3, 1] as const;
-  const tween = { duration: 0.9, ease };
-
-  return (
-    <motion.button
-      onClick={() => onOpen(c)}
-      onHoverStart={() => setHovered(true)}
-      onHoverEnd={() => setHovered(false)}
-      data-cursor="View Story"
-      aria-label={`View ${c.name.trim()}`}
-      animate={{ borderColor: hovered ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)' }}
-      transition={tween}
-      className="relative h-28 md:h-32 flex-1 min-w-[200px] overflow-hidden border cursor-pointer"
-    >
-      {url && (
-        <motion.img
-          src={`${url}?auto=format&w=600&q=70`}
-          alt={c.name}
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-          animate={{ scale: hovered ? 1.05 : 1 }}
-          transition={tween}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
-      {/* Dim lift — opacity only, same timeline as the scale (no filter jank). */}
-      <motion.div
-        className="absolute inset-0 bg-[#282c20] pointer-events-none"
-        animate={{ opacity: hovered ? 0.12 : 0.42 }}
-        transition={tween}
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent pointer-events-none" />
-      {/* Accent baseline wipes in on hover */}
-      <motion.span
-        className="absolute left-0 right-0 bottom-0 h-[2px] origin-left"
-        style={{ background: STRIP_ACCENT }}
-        animate={{ scaleX: hovered ? 1 : 0 }}
-        transition={tween}
-      />
-      <div className="absolute inset-x-0 bottom-0 p-4 flex items-baseline justify-between gap-2">
-        <span className="font-serif uppercase text-xl md:text-2xl text-white tracking-tight truncate drop-shadow">
-          {c.name.trim()}
-        </span>
-        <span className="font-ui text-[9px] text-white/50 tracking-widest shrink-0">
-          {c.photoCount ?? c.photos?.length ?? 0}
-        </span>
-      </div>
-    </motion.button>
-  );
-}
-
-function CollapsedRegionStrip({
-  cities,
-  onOpen,
-}: {
-  cities: Collection[];
-  onOpen: (c: Collection) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-3 w-full">
-      {cities.map((c) => (
-        <StripCard key={c._id} c={c} onOpen={onOpen} />
-      ))}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
  *  HomePage — atmospheric dark archive
  * ═══════════════════════════════════════════════════════ */
-/* ═══════════════════════════════════════════════════════
- *  Kinetic big-type — the "distilled lens." line rises word-by-word
- *  on scroll PROGRESS (not whileInView), reversing on scroll-up.
- * ═══════════════════════════════════════════════════════ */
-const SW_WORDS = ['Curating', 'the', 'world', 'through', 'a', 'distilled', 'lens.'] as const;
-
-function RisingWord({
-  word,
-  index,
-  progress,
-  reduce,
-  accent,
-}: {
-  word: string;
-  index: number;
-  progress: MotionValue<number>;
-  reduce: boolean;
-  accent?: boolean;
-}) {
-  const y = useTransform(progress, [index * 0.09, index * 0.09 + 0.4], ['110%', '0%'], { clamp: true });
-  const scale = useTransform(progress, [index * 0.09, index * 0.09 + 0.45], [0.9, 1], { clamp: true });
-  return (
-    <span className="overflow-hidden inline-block align-bottom pb-[0.12em] -mb-[0.12em]">
-      <motion.span
-        className={`inline-block origin-bottom ${accent ? 'heat-glow' : ''}`}
-        style={{
-          y: reduce ? '0%' : y,
-          scale: reduce ? 1 : scale,
-          ...(accent ? { ['--glow-intensity' as never]: 0.85 } : {}),
-          color: accent ? 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' : undefined,
-        }}
-      >
-        {word}&nbsp;
-      </motion.span>
-    </span>
-  );
-}
-
 /* ═══════════════════════════════════════════════════════
  *  QuietIndexBand — a restrained marquee seam (landonorris-style),
  *  cooler/quieter than /travel's: one row, filled 14% type, em-dash
@@ -281,13 +232,27 @@ function RisingWord({
 function QuietIndexBand({
   names,
   activeArchiveId,
+  fallbackArchiveId,
 }: {
   names: { name: string; id: string | null }[];
   activeArchiveId: string | null;
+  fallbackArchiveId: string | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
   const firstId = names.find((n) => n.id)?.id ?? null;
-  const activeId = activeArchiveId ?? firstId;
+  const activeId = activeArchiveId ?? fallbackArchiveId ?? firstId;
+  const { scrollYProgress: handoffProgress } = useScroll({
+    target: rootRef,
+    // Keep the index connected to the whole seam instead of completing its
+    // motion as soon as the first line reaches mid-screen. The names continue
+    // drifting while the atlas develops and reverse cleanly on upward scroll.
+    offset: ['start end', 'end start'],
+  });
+  const handoffOpacity = useTransform(handoffProgress, [0, 0.14, 0.32], [0, 0.42, 1]);
+  const handoffY = useTransform(handoffProgress, [0, 0.18, 0.42], [30, 15, 0]);
+  const trackX = useTransform(handoffProgress, [0, 0.54, 1], ['3vw', '0vw', '-6vw']);
+  const trackY = useTransform(handoffProgress, [0, 0.52, 1], [12, 0, -10]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -313,65 +278,145 @@ function QuietIndexBand({
   );
 
   return (
-    <div
+    <motion.div
       ref={rootRef}
+      id="archive-index"
       role="presentation"
-      className="quiet-marquee w-full border-y py-3 md:py-4"
-      style={{ borderColor: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.10)' }}
+      className="quiet-marquee quiet-marquee-handoff relative z-30 -mt-[24svh] flex h-[24svh] w-full items-center"
+      style={reduce ? undefined : { opacity: handoffOpacity, y: handoffY }}
     >
-      <div className="quiet-marquee-track">
+      <motion.div
+        className="quiet-marquee-track relative"
+        style={reduce ? undefined : { x: trackX, y: trackY }}
+      >
         {run('a')}
         {run('b')}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 export default function HomePage({ collections }: Props) {
+  const lenisRef = useRef<Lenis | null>(null);
+  // A render-free, fractional chapter timeline. Lenis supplies the smooth
+  // desktop transport while native momentum supplies touch; the atlas route
+  // reads this value directly, so geography advances between chapter
+  // thresholds instead of jumping only after the active city changes.
+  const archiveProgress = useMotionValue(0);
+  // The atlas enters on the same physical scroll axis as the archive. Unlike
+  // the chapter timeline (which is expressed in chapter-space), this value is
+  // a dedicated 0–1 handoff runway. It starts only after more than half of The
+  // Route is visible and finishes as the first cover settles into the viewport,
+  // giving the geographic zoom enough physical scroll distance to stay calm.
+  const atlasEntryProgress = useMotionValue(0);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
-  // Region collapse ("收纳") — set of collapsed section keys. DEFAULT: every
-  // multi-city region starts collapsed, so the homepage opens as a compact
-  // index the visitor expands. Computed from the props up-front (no flash).
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    const counts = new Map<string, number>();
-    for (const c of collections) {
-      if ((c.photos?.length || 0) === 0) continue;
-      const r = c.region?.trim();
-      if (r) counts.set(r, (counts.get(r) || 0) + 1);
-    }
-    const init = new Set<string>();
-    counts.forEach((n, r) => {
-      if (n >= 2) init.add(`r:${r}`);
-    });
-    return init;
-  });
+  const [storyClosing, setStoryClosing] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
-  const { scrollYProgress } = useScroll();
+  const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
+  // Semantic city changes belong to React, but the optical timeline does not.
+  // Keeping the current ID in a ref prevents every scroll frame from entering
+  // React's state queue just to return the existing value.
+  const activeArchiveIdRef = useRef<string | null>(null);
+  const commitActiveArchiveId = useCallback((next: string | null) => {
+    if (activeArchiveIdRef.current === next) return;
+    activeArchiveIdRef.current = next;
+    setActiveArchiveId(next);
+  }, []);
+  const storyOpenRef = useRef(false);
+  const storyScrollYRef = useRef(0);
+  const storyReturnFocusRef = useRef<HTMLElement | null>(null);
+  const storySourceChapterIdRef = useRef<string | null>(null);
+  const bodyPaddingRightRef = useRef('');
+  const openCollection = useCallback((collection: Collection) => {
+    const chapterId = `archive-item-${collection._id}`;
+    const chapter = document.getElementById(chapterId);
+    const chapterControl = chapter?.querySelector<HTMLElement>('[role="button"], button');
+    storyReturnFocusRef.current = chapterControl ?? (
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    );
+    // Freeze the page in the same event frame as the story selection. Waiting
+    // for the state effect left one residual smooth-scroll frame moving behind
+    // the full-screen cover on quick trackpad clicks.
+    storyOpenRef.current = true;
+    storySourceChapterIdRef.current = chapterId;
+    setStoryClosing(false);
+    storyScrollYRef.current = window.scrollY;
+    commitActiveArchiveId(`archive-item-${collection._id}`);
+    lenisRef.current?.stop();
+    setSelectedCollection(collection);
+  }, [commitActiveArchiveId]);
+  const closeCollection = useCallback(() => {
+    // Keep the homepage frozen until the editorial Story cover and panel have
+    // completed their exit. The map timeline resumes only after AnimatePresence.
+    setStoryClosing(true);
+    setSelectedCollection(null);
+  }, []);
+  const selectCollectionWithinStory = useCallback((collection: Collection) => {
+    setSelectedCollection(collection);
+  }, []);
+  const finishStoryClose = useCallback(() => {
+    storyOpenRef.current = false;
+    setStoryClosing(false);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const sourceChapter = storySourceChapterIdRef.current
+          ? document.getElementById(storySourceChapterIdRef.current)
+          : null;
+        const focusTarget = storyReturnFocusRef.current?.isConnected
+          ? storyReturnFocusRef.current
+          : sourceChapter?.querySelector<HTMLElement>('[role="button"], button') ??
+            document.getElementById('main-content');
+        focusTarget?.focus({ preventScroll: true });
+        storySourceChapterIdRef.current = null;
+      });
+    });
+  }, []);
+  const storyActive = !!selectedCollection || storyClosing;
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
+  const desktopLayout = useDesktopLayout();
+  const useLivingAtlas = !desktopLayout;
 
-  // Nav pills (Map/About) stay hidden over the opening stage and fade in once
-  // the walk-in hands off to the inner pages. Direct writes off scroll — no
-  // React state churn, works identically under Lenis. Writes only happen on the
-  // show/hide TRANSITION (not every scroll event) so the handler is ~free while
-  // Lenis is driving the main thread.
-  const navPillsRef = useRef<HTMLDivElement>(null);
+  // Nav pills (Map/About) stay hidden only while the opening title is resolving.
+  // WalkIn marks that hand-off on the body; the custom event is supported as a
+  // second signal so navigation never waits for the user to scroll.
+  const [navPillsVisible, setNavPillsVisible] = useState(false);
   useEffect(() => {
-    const el = navPillsRef.current;
-    if (!el) return;
-    el.style.transition = 'opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
-    let last: boolean | null = null;
-    const apply = () => {
-      const show = window.scrollY > window.innerHeight * 1.15;
-      if (show === last) return;
-      last = show;
-      el.style.opacity = show ? '1' : '0';
-      el.style.pointerEvents = show ? 'auto' : 'none';
+    let revealed = document.body.classList.contains('walkin-in');
+    let detached = false;
+    let bodyObserver: MutationObserver | null = null;
+
+    const detach = () => {
+      if (detached) return;
+      detached = true;
+      bodyObserver?.disconnect();
+      window.removeEventListener('scroll', apply);
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('walkin:reveal', onReveal);
     };
-    apply();
+
+    const apply = () => {
+      const show =
+        revealed ||
+        document.body.classList.contains('walkin-in') ||
+        window.scrollY > window.innerHeight * 1.15;
+      setNavPillsVisible((current) => (current === show ? current : show));
+      if (show) detach();
+    };
+
+    const onReveal = () => {
+      revealed = true;
+      apply();
+    };
+    bodyObserver = new MutationObserver(apply);
+    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
     window.addEventListener('scroll', apply, { passive: true });
-    return () => window.removeEventListener('scroll', apply);
+    window.addEventListener('resize', apply, { passive: true });
+    window.addEventListener('walkin:reveal', onReveal);
+    apply();
+    return detach;
   }, []);
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
@@ -381,7 +426,6 @@ export default function HomePage({ collections }: Props) {
   // startLenis no-ops under reduced-motion. Held in a ref so the collection
   // overlay can pause it — Lenis otherwise eats the wheel on the window and the
   // overlay's own scroll never moves.
-  const lenisRef = useRef<Lenis | null>(null);
   useEffect(() => {
     const { lenis, destroy } = startLenis();
     lenisRef.current = lenis;
@@ -389,10 +433,52 @@ export default function HomePage({ collections }: Props) {
       destroy();
       lenisRef.current = null;
     };
-  }, []);
+  }, [reduce]);
 
-  // "Selected Works" heading block — reliable scroll reveal (not whileInView).
-  const [selectedWorksRef, selectedWorksShown] = useInViewOnce<HTMLDivElement>();
+  // Warm Mapbox after the opening reveal has had its visual beat. Its WebGL
+  // canvas remains separately gated near the viewport.
+  useEffect(() => {
+    let delay = 0;
+    let idle = 0;
+    let disposed = false;
+
+    const importDestinations = () => {
+      if (disposed) return;
+      void loadRouteAtlas();
+    };
+    const scheduleImport = () => {
+      delay = window.setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+          idle = window.requestIdleCallback(importDestinations, { timeout: 1400 });
+        } else {
+          importDestinations();
+        }
+      }, reduce ? 0 : 1800);
+    };
+
+    if (document.body.classList.contains('walkin-in')) scheduleImport();
+    else window.addEventListener('walkin:reveal', scheduleImport, { once: true });
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(delay);
+      if (idle && 'cancelIdleCallback' in window) window.cancelIdleCallback(idle);
+      window.removeEventListener('walkin:reveal', scheduleImport);
+    };
+  }, [reduce]);
+
+  // "Selected Works" is part of the handoff, not a second entrance. Its layers
+  // resolve directly from the same page scroll so fast and slow scrolling keep
+  // the same visual order and reversing the gesture reverses the transition.
+  const selectedWorksRef = useRef<HTMLDivElement>(null);
+  const desktopAtlasSectionRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!desktopLayout || !desktopAtlasSectionRef.current) return;
+    // Restored/deep-linked pages enter at their current position, never replay
+    // a zero-progress opening for the first hydrated frame.
+    const progress = archiveEntryProgress(window.scrollY, documentTop(desktopAtlasSectionRef.current), window.innerHeight);
+    atlasEntryProgress.set(reduce ? (progress > 0 ? 1 : 0) : progress);
+  }, [desktopLayout, atlasEntryProgress, reduce]);
   // Reverse parallax — the heading block counter-drifts (down) against the
   // covers' upward drift, so the text plane reads as nearer than the photos.
   // useScroll measures the static outer wrapper; the drift is applied to an
@@ -402,18 +488,28 @@ export default function HomePage({ collections }: Props) {
     offset: ['start end', 'end start'],
   });
   const headingReverseY = useTransform(swScrollProgress, [0, 1], reduce ? [0, 0] : [36, -36]);
-  // Word-by-word rise for the "distilled lens." headline, scrubbed on the
-  // heading's own scroll progress (separate offset; measures the static ref).
-  const { scrollYProgress: swRevealProgress } = useScroll({
-    target: selectedWorksRef,
-    offset: ['start 0.85', 'start 0.35'],
-  });
-
+  // The section heading announces the archive before its first frame opens;
+  // photo titles and geographic controls resolve in the later score phases.
+  const swKickerOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.04, 0.3));
+  const swKickerX = useTransform(swKickerOpacity, [0, 1], [-16, 0]);
+  const swRuleScale = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.02, 0.26));
+  const swTitleOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.1, 0.5));
+  const swTitleY = useTransform(swTitleOpacity, [0, 1], [42, 0]);
+  const swCountOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.26, 0.62));
+  const swCountX = useTransform(swCountOpacity, [0, 1], [12, 0]);
   // Filter to collections that have photos
-  const activeCollections = useMemo(
-    () => collections.filter((c) => (c.photos?.length || 0) > 0),
-    [collections],
-  );
+  const activeCollections = useMemo(() => {
+    const withPhotos = collections.filter((collection) => (collection.photos?.length || 0) > 0);
+    // A partial route-order rollout must not reshuffle the published archive.
+    // Once every active collection has a value, routeOrder becomes the single
+    // deterministic source for inserting future locations between chapters.
+    const hasCompleteRouteOrder = withPhotos.length > 0 && withPhotos.every(
+      (collection) => Number.isFinite(collection.routeOrder),
+    );
+    return hasCompleteRouteOrder
+      ? [...withPhotos].sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0))
+      : withPhotos;
+  }, [collections]);
 
   // Group active cities into ordered region sections. A section shows a
   // divider HEADER only when it has ≥2 cities; single-city regions (and
@@ -446,107 +542,474 @@ export default function HomePage({ collections }: Props) {
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
+  const orderedChapterIds = useMemo(
+    () => orderedCities.map((city) => city._id),
+    [orderedCities],
+  );
+  const chapterPreloadUrls = useMemo(() => {
+    const covers = orderedCities.map(
+      (city) => city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? '',
+    );
+    return covers.map((_, index) => [covers[index - 1], covers[index + 1]].filter(Boolean));
+  }, [orderedCities]);
+  const walkInCollections = useMemo(
+    () => orderedCities.map((city) => ({
+      name: city.name.trim(),
+      frames: city.photoCount ?? city.photos?.length ?? 0,
+    })),
+    [orderedCities],
+  );
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
+  const mobileCityDomId = (c: Collection) => `mobile-archive-item-${c._id}`;
 
-
-  // Marquee index — real place names (hero epigraphs) + archive cities, deduped.
-  // Each maps to its archive id so the band can spotlight the live active one.
-  const indexNames = useMemo(
+  // The route inset is driven by the archive's real geotags. A named-place
+  // fallback keeps older, untagged collections on the same geographic trace.
+  const routeStops = useMemo<RouteStop[]>(
     () =>
-      Array.from(
-        new Set([...HERO_EPIGRAPHS.map((e) => e.place), ...orderedCities.map((c) => c.name.trim())]),
-      ).map((name) => {
-        const city = orderedCities.find((c) => c.name.trim() === name);
-        return { name, id: city ? cityDomId(city) : null };
+      orderedCities.flatMap((city) => {
+        const points = (city.photos ?? [])
+          .map((photo) => photo.location)
+          .filter((location): location is NonNullable<typeof location> =>
+            location?.lat != null && location?.lng != null,
+          );
+        const fallbackKey = [city.name, city.location, city.region]
+          .filter(Boolean)
+          .map((value) => value!.trim().toLowerCase())
+          .find((value) => ROUTE_FALLBACKS[value]);
+        const canonicalMapLocation = city.mapLocation;
+        const hasCanonicalMapLocation =
+          Number.isFinite(canonicalMapLocation?.lng) &&
+          Number.isFinite(canonicalMapLocation?.lat) &&
+          canonicalMapLocation!.lng >= -180 &&
+          canonicalMapLocation!.lng <= 180 &&
+          canonicalMapLocation!.lat >= -90 &&
+          canonicalMapLocation!.lat <= 90;
+        const coordinates: [number, number] | undefined = hasCanonicalMapLocation
+          ? [canonicalMapLocation!.lng, canonicalMapLocation!.lat]
+          : points.length
+            ? [
+                points.reduce((sum, point) => sum + point.lng, 0) / points.length,
+                points.reduce((sum, point) => sum + point.lat, 0) / points.length,
+              ]
+            : fallbackKey
+              ? ROUTE_FALLBACKS[fallbackKey]
+              : undefined;
+
+        const landscapePreview = (city.photos ?? []).find((photo) =>
+          !!photo.imageUrl &&
+          photo.width != null &&
+          photo.height != null &&
+          photo.width >= photo.height,
+        )?.imageUrl;
+        const imageUrl = landscapePreview || city.coverImageUrl || city.photos?.[0]?.imageUrl || '';
+        const rawLocationLabel = city.location || city.region;
+        const locationLabel = rawLocationLabel?.trim().toLowerCase() === city.name.trim().toLowerCase()
+          ? undefined
+          : rawLocationLabel;
+
+        return coordinates
+          ? [{
+              id: city._id,
+              name: city.name.trim(),
+              slug: city.slug,
+              coordinates,
+              imageUrl,
+              frameCount: city.photoCount ?? city.photos?.length ?? 0,
+              year: city.year,
+              locationLabel,
+              coordinateLabel: routeCoordinateLabel(coordinates),
+            }]
+          : [];
       }),
     [orderedCities],
   );
 
-  // ── Region collapse helpers ──
-  const sectionKeyOfCity = useMemo(() => {
-    const m = new Map<string, string>();
-    sections.forEach((s) => s.cities.forEach((c) => m.set(c._id, s.key)));
-    return m;
-  }, [sections]);
-
-  const toggleRegion = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }, []);
-
-  // Rail click for a city in a collapsed region: expand it, then scroll.
-  const jumpToCity = useCallback(
-    (c: Collection) => {
-      const key = sectionKeyOfCity.get(c._id);
-      if (key) {
-        setCollapsed((prev) => {
-          if (!prev.has(key)) return prev;
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-      }
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          document.getElementById(`archive-item-${c._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }),
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const orderedCount = activeCollections.filter((collection) =>
+      Number.isFinite(collection.routeOrder),
+    ).length;
+    if (orderedCount > 0 && orderedCount < activeCollections.length) {
+      console.warn(
+        '[Living Atlas] routeOrder is only partially configured; preserving the published collection order.',
       );
-    },
-    [sectionKeyOfCity],
+    }
+    const mappedIds = new Set(routeStops.map((stop) => stop.id));
+    const missing = orderedCities.filter((city) => !mappedIds.has(city._id));
+    if (missing.length) {
+      console.warn(
+        `[Living Atlas] Missing canonical coordinates: ${missing.map((city) => city.name).join(', ')}`,
+      );
+    }
+  }, [activeCollections, orderedCities, routeStops]);
+
+
+  // The index mirrors the real chapter order exactly. It does not preview
+  // places that have no corresponding story in this archive.
+  const indexNames = useMemo(
+    () => useLivingAtlas
+      ? routeStops.map((stop) => ({ name: stop.name, id: `archive-item-${stop.id}` }))
+      : orderedCities.map((city) => ({ name: city.name.trim(), id: cityDomId(city) })),
+    [orderedCities, routeStops, useLivingAtlas],
   );
 
-  const collapsibleKeys = useMemo(() => sections.filter((s) => s.showHeader).map((s) => s.key), [sections]);
-  const allCollapsed = collapsibleKeys.length > 0 && collapsibleKeys.every((k) => collapsed.has(k));
-  const toggleAll = useCallback(() => {
-    setCollapsed(allCollapsed ? new Set() : new Set(collapsibleKeys));
-  }, [allCollapsed, collapsibleKeys]);
-
-  // Index of the active city — drives the "route rail" fill (−1 in the hero).
-  // `activeArchiveId` holds the active city's full DOM id. Each row is 52 px.
-  const ROW_H = 52;
+  // Index of the active city — drives the geographic trace (−1 in the hero).
+  // `activeArchiveId` holds the active city's full DOM id.
   const activeRouteIndex = activeArchiveId
     ? orderedCities.findIndex((c) => cityDomId(c) === activeArchiveId)
     : -1;
+  const activeRouteCity = activeRouteIndex >= 0 ? orderedCities[activeRouteIndex] : null;
+  const livingAtlasActiveIndex = useMemo(() => {
+    const index = routeStops.findIndex((stop) => stop.id === activeRouteCity?._id);
+    return index >= 0 ? index : routeStops.length > 0 ? 0 : -1;
+  }, [activeRouteCity?._id, routeStops]);
+  const atlasHref = activeRouteCity?.slug
+    ? `/travel?place=${encodeURIComponent(activeRouteCity.slug)}#atlas-map`
+    : '/travel';
 
-  // IntersectionObserver for sidebar active state — observes each city chapter.
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) setActiveArchiveId(entry.target.id);
-        });
-      },
-      { threshold: 0.1, rootMargin: '-30% 0px -30% 0px' },
-    );
+  const navigateLivingChapter = useCallback((anchorId: string) => {
+    const target = document.getElementById(anchorId);
+    if (!target) return;
 
-    orderedCities.forEach((c) => {
-      const el = document.getElementById(cityDomId(c));
-      if (el) observer.observe(el);
+    // Move keyboard focus with the visual journey. `preventScroll` keeps focus
+    // from snapping the page before Lenis/native scroll performs the same
+    // calibrated movement used by pointer users.
+    const chapterControl = target.querySelector<HTMLElement>('[role="button"], button');
+    const chapterImage = target.querySelector<HTMLImageElement>('.archive-photo-frame img');
+    if (chapterImage) {
+      chapterImage.loading = 'eager';
+      chapterImage.fetchPriority = 'high';
+      if (typeof chapterImage.decode === 'function') void chapterImage.decode().catch(() => {});
+    }
+    chapterControl?.focus({ preventScroll: true });
+
+    const readingLine = window.innerHeight * (desktopLayout ? 0.48 : 0.56);
+    const targetY = archiveChapterAnchorY(target, desktopLayout) - readingLine;
+    const lenis = lenisRef.current;
+    if (lenis && !reduce) {
+      lenis.scrollTo(targetY, {
+        duration: 1.05,
+        easing: (progress) => Math.min(1, 1.001 - Math.pow(2, -10 * progress)),
+      });
+      return;
+    }
+
+    window.scrollTo({
+      top: targetY,
+      behavior: reduce ? 'auto' : 'smooth',
     });
+  }, [desktopLayout, reduce]);
 
-    return () => observer.disconnect();
-    // Re-observe when a region collapses/expands (chapters mount/unmount).
-  }, [orderedCities, collapsed]);
+  // Keep the active city tied to the chapter nearest the visual reading line.
+  // IntersectionObserver only fires when thresholds are crossed; during a
+  // long smooth-scroll it could leave Orlando on screen while the atlas still
+  // reported Miami. A single rAF-throttled scroll sampler makes the chapter,
+  // route rail and map camera share one source of truth.
+  useEffect(() => {
+    // The full-screen story owns the viewport while open. Freezing the atlas
+    // index here prevents scrollbar/overlay geometry changes from nominating a
+    // neighbouring chapter behind the cover.
+    if (storyActive) return;
+    let scrollFrame = 0;
+    let measureFrame = 0;
+    let lastVisualFrameAt = 0;
+    let visualFrameBudget = 0;
+    let disposed = false;
+    const trackedIds = useLivingAtlas
+      ? routeStops.map((stop) => stop.id)
+      : orderedCities.map((city) => city._id);
+    const queryTracked = () =>
+      trackedIds.flatMap((id, chapterIndex) => {
+        const element = document.getElementById(
+          `${desktopLayout ? 'archive-item-' : 'mobile-archive-item-'}${id}`,
+        );
+        if (!element) return [];
+        return [{ element, chapterIndex }];
+      });
+    let anchors: { id: string; documentY: number; chapterIndex: number }[] = [];
+    let atlasEntryDocumentY: number | null = null;
+    const writeProgress = (value: MotionValue<number>, next: number) => {
+      const current = value.get();
+      // Preserve every chapter centre, not only 0/1, and discard only changes
+      // below roughly a fifth of a route pixel.
+      const nearestChapter = Math.round(next);
+      const normalized = Math.abs(next - nearestChapter) < 0.0002 ? nearestChapter : next;
+      if (Math.abs(current - normalized) < 0.0002) return;
+      value.set(normalized);
+    };
+
+    const applyAtlasEntry = () => {
+      if (!desktopLayout) {
+        writeProgress(atlasEntryProgress, 1);
+        return;
+      }
+      if (atlasEntryDocumentY == null) return;
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const raw = archiveEntryProgress(window.scrollY, atlasEntryDocumentY, viewportHeight);
+      writeProgress(atlasEntryProgress, reduce ? (raw > 0 ? 1 : 0) : raw);
+    };
+
+    const applyActiveChapter = () => {
+      if (!anchors.length || storyOpenRef.current) return;
+
+      applyAtlasEntry();
+
+      const viewportHeight = window.innerHeight;
+      const scrollTop = window.scrollY;
+      const readingLine = viewportHeight * (desktopLayout ? 0.48 : 0.56);
+      const validTop = viewportHeight * 0.18;
+      const validBottom = viewportHeight * (desktopLayout ? 0.86 : 0.90);
+      let nearest: { id: string; viewportY: number } | null = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      let nearestOutsideWindow: { id: string; viewportY: number } | null = null;
+      let nearestOutsideDistance = Number.POSITIVE_INFINITY;
+
+      // `archiveProgress` is the only visual chapter clock on both layouts.
+      // Integer positions are chapter centres; the interval between them is
+      // preserved as a continuous decimal so geography, route, coordinates,
+      // halos and photographic focus can all sample the exact same moment.
+      const timelineY = scrollTop + readingLine;
+      let fractionalChapter = 0;
+      if (timelineY >= anchors.at(-1)!.documentY) {
+        fractionalChapter = anchors.at(-1)!.chapterIndex;
+      } else if (timelineY <= anchors[0].documentY) {
+        fractionalChapter = anchors[0].chapterIndex;
+      } else if (timelineY > anchors[0].documentY) {
+        for (let index = 0; index < anchors.length - 1; index += 1) {
+          const fromAnchor = anchors[index];
+          const toAnchor = anchors[index + 1];
+          if (timelineY > toAnchor.documentY) continue;
+          const span = Math.max(1, toAnchor.documentY - fromAnchor.documentY);
+          const local = Math.max(0, Math.min(1, (timelineY - fromAnchor.documentY) / span));
+          fractionalChapter = fromAnchor.chapterIndex +
+            (toAnchor.chapterIndex - fromAnchor.chapterIndex) * local;
+          break;
+        }
+      }
+      writeProgress(archiveProgress, reduce ? Math.round(fractionalChapter) : fractionalChapter);
+
+      if (useLivingAtlas) {
+        const activeAnchor = anchors.reduce((nearestAnchor, candidate) =>
+          Math.abs(candidate.chapterIndex - fractionalChapter) <
+          Math.abs(nearestAnchor.chapterIndex - fractionalChapter)
+            ? candidate
+            : nearestAnchor,
+        );
+        if (activeAnchor) {
+          const canonicalId = activeAnchor.id.startsWith('mobile-archive-item-')
+            ? activeAnchor.id.slice('mobile-'.length)
+            : activeAnchor.id;
+          commitActiveArchiveId(canonicalId);
+        }
+        return;
+      }
+
+      for (const anchor of anchors) {
+        const viewportY = anchor.documentY - scrollTop;
+        const distance = Math.abs(viewportY - readingLine);
+        if (distance < nearestOutsideDistance) {
+          nearestOutsideDistance = distance;
+          nearestOutsideWindow = { id: anchor.id, viewportY };
+        }
+        if (viewportY <= validTop || viewportY >= validBottom) continue;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = { id: anchor.id, viewportY };
+        }
+      }
+
+      if (!nearest) {
+        const firstY = anchors[0].documentY - scrollTop;
+        const last = anchors.at(-1);
+        const lastY = last ? last.documentY - scrollTop : Number.POSITIVE_INFINITY;
+        if (firstY >= validBottom) {
+          commitActiveArchiveId(null);
+          return;
+        } else if (last && lastY <= validTop) {
+          const canonicalLast = last.id.startsWith('mobile-archive-item-')
+            ? last.id.slice('mobile-'.length)
+            : last.id;
+          commitActiveArchiveId(canonicalLast);
+          return;
+        }
+        nearest = nearestOutsideWindow;
+        nearestDistance = nearestOutsideDistance;
+      }
+
+      if (!nearest) return;
+
+      const canonicalId = nearest.id.startsWith('mobile-archive-item-')
+        ? nearest.id.slice('mobile-'.length)
+        : nearest.id;
+      const current = activeArchiveIdRef.current;
+      if (current === canonicalId) return;
+
+      // Keep the current city through tiny trackpad reversals or touch bounce.
+      // A challenger must be meaningfully closer to the reading line unless the
+      // current anchor has already left the valid window.
+      if (current) {
+        const currentAnchor = anchors.find((anchor) => {
+          const id = anchor.id.startsWith('mobile-archive-item-')
+            ? anchor.id.slice('mobile-'.length)
+            : anchor.id;
+          return id === current;
+        });
+        if (currentAnchor) {
+          const currentViewportY = currentAnchor.documentY - scrollTop;
+          const currentIsValid = currentViewportY > validTop && currentViewportY < validBottom;
+          const currentDistance = Math.abs(currentViewportY - readingLine);
+          if (currentIsValid && nearestDistance + (desktopLayout ? 36 : 72) >= currentDistance) return;
+        }
+      }
+
+      commitActiveArchiveId(canonicalId);
+    };
+
+    const runActiveChapter = (time: number) => {
+      // Cap the heavy visual clock near 60Hz without a fixed 14.5ms skip gate.
+      // Carrying the fractional budget prevents 90/120/144Hz displays from
+      // accidentally falling into a visibly uneven 45/48fps cadence.
+      if (!reduce) {
+        const elapsed = lastVisualFrameAt ? Math.min(34, time - lastVisualFrameAt) : 1000 / 60;
+        lastVisualFrameAt = time;
+        visualFrameBudget += elapsed;
+        if (visualFrameBudget < 1000 / 60) {
+          scrollFrame = requestAnimationFrame(runActiveChapter);
+          return;
+        }
+        visualFrameBudget %= 1000 / 60;
+      }
+      scrollFrame = 0;
+      applyActiveChapter();
+    };
+
+    const syncActiveChapter = () => {
+      if (storyOpenRef.current) return;
+      // The opener owns the first part of the page. Avoid scheduling an archive
+      // sampler on every WalkIn frame before the first chapter is even near the
+      // viewport; when returning upward, also restore the atlas overview early.
+      if (
+        anchors.length > 0 &&
+        window.scrollY + window.innerHeight * 1.15 < anchors[0].documentY
+      ) {
+        applyAtlasEntry();
+        writeProgress(archiveProgress, 0);
+        commitActiveArchiveId(null);
+        return;
+      }
+      if (!scrollFrame) scrollFrame = requestAnimationFrame(runActiveChapter);
+    };
+    // Lenis itself runs in rAF. Queueing the sampler once more lets multiple
+    // high-refresh events collapse into the latest scroll position rather than
+    // making every intermediate event redraw the map and all six chapters.
+    const syncSmoothChapter = syncActiveChapter;
+    const measureAnchors = () => {
+      if (measureFrame) cancelAnimationFrame(measureFrame);
+      measureFrame = requestAnimationFrame(() => {
+        measureFrame = 0;
+        if (disposed) return;
+        atlasEntryDocumentY = desktopAtlasSectionRef.current
+          ? documentTop(desktopAtlasSectionRef.current)
+          : null;
+        anchors = queryTracked().flatMap(({ element, chapterIndex }) => {
+          if (element.offsetWidth <= 0 || element.offsetHeight <= 0) return [];
+          return [{
+            id: element.id,
+            chapterIndex,
+            // Desktop chapter centres cross the 48% reading line exactly.
+            // offsetTop ignores Framer's visual transforms, so this optical
+            // clock cannot drift with the photograph's entry/parallax. Mobile
+            // keeps its earlier image-led anchor as a regression-safe layout.
+            documentY: archiveChapterAnchorY(element, desktopLayout),
+          }];
+        });
+        if (scrollFrame) cancelAnimationFrame(scrollFrame);
+        scrollFrame = 0;
+        applyActiveChapter();
+      });
+    };
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(measureAnchors);
+    let measuredViewportWidth = window.innerWidth;
+    const handleViewportResize = () => {
+      const nextWidth = window.innerWidth;
+      // Mobile browser chrome changes the visual viewport height while the
+      // document geometry itself stays put. Re-measuring every address-bar
+      // tick would move the chapter timeline under the user's finger.
+      if (useLivingAtlas && !desktopLayout && Math.abs(nextWidth - measuredViewportWidth) < 1) return;
+      measuredViewportWidth = nextWidth;
+      measureAnchors();
+    };
+    queryTracked().forEach(({ element }) => resizeObserver?.observe(element));
+    measureAnchors();
+    document.fonts?.ready.then(() => {
+      if (!disposed) measureAnchors();
+    });
+    const lenis = lenisRef.current;
+    if (lenis) lenis.on('scroll', syncSmoothChapter);
+    else window.addEventListener('scroll', syncActiveChapter, { passive: true });
+    window.addEventListener('resize', handleViewportResize, { passive: true });
+    return () => {
+      disposed = true;
+      if (scrollFrame) cancelAnimationFrame(scrollFrame);
+      if (measureFrame) cancelAnimationFrame(measureFrame);
+      resizeObserver?.disconnect();
+      if (lenis) lenis.off('scroll', syncSmoothChapter);
+      else window.removeEventListener('scroll', syncActiveChapter);
+      window.removeEventListener('resize', handleViewportResize);
+    };
+  }, [orderedCities, routeStops, desktopLayout, storyActive, archiveProgress, atlasEntryProgress, commitActiveArchiveId, reduce, useLivingAtlas]);
 
   useEffect(() => {
-    const isOverlayOpen = !!selectedCollection;
-    document.body.style.overflow = isOverlayOpen ? 'hidden' : 'auto';
+    const isOverlayOpen = storyActive;
+    storyOpenRef.current = isOverlayOpen;
     document.body.style.backgroundColor = '#282c20';
     // Pause Lenis while the overlay is up so its own overflow-y-auto scrolls
     // natively; resume on close.
-    if (isOverlayOpen) lenisRef.current?.stop();
-    else lenisRef.current?.start();
+    if (isOverlayOpen) {
+      const lockedScrollY = storyScrollYRef.current || window.scrollY;
+      storyScrollYRef.current = lockedScrollY;
+      lenisRef.current?.stop();
+      bodyPaddingRightRef.current = document.body.style.paddingRight;
+      const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+      if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+      document.body.style.position = 'fixed';
+      document.body.style.inset = `-${lockedScrollY}px 0 auto`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.position = '';
+      document.body.style.inset = '';
+      document.body.style.width = '';
+      document.body.style.overflow = 'auto';
+      document.body.style.paddingRight = bodyPaddingRightRef.current;
+      if (storyScrollYRef.current > 0) {
+        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        // The body lock moves the native window to the top while Lenis is
+        // stopped. Reconcile Lenis' internal target before restarting it, or
+        // a keyboard-opened Story can resume toward that stale top position.
+        lenisRef.current?.scrollTo(storyScrollYRef.current, {
+          immediate: true,
+          force: true,
+        });
+      }
+      lenisRef.current?.start();
+    }
     return () => {
+      if (isOverlayOpen) {
+        document.body.style.position = '';
+        document.body.style.inset = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = bodyPaddingRightRef.current;
+        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+      }
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [selectedCollection]);
-
-  // Scroll progress for sidebar bar
-  const sidebarScrollWidth = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
+  }, [storyActive]);
 
   // Site accent is a single fixed electric lime, defined once via the
   // @property initial values in global.css (--accent-r/g/b = 210/255/0);
@@ -555,37 +1018,45 @@ export default function HomePage({ collections }: Props) {
 
   return (
     <>
-      <div className="min-h-screen font-sans relative bg-[#282c20] text-[#F4F4ED]">
+      <div
+        className="min-h-screen font-sans relative bg-[#282c20] text-[#F4F4ED]"
+        inert={storyActive}
+        aria-hidden={storyActive}
+      >
+        <a
+          href="#main-content"
+          className="fixed left-4 top-4 z-[100] inline-flex min-h-11 translate-y-[-160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.2em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+        >
+          Skip to archive
+        </a>
+        <h1 className="sr-only">Ryan Xu — Visual Archive</h1>
+
         {/* Background canvas removed — a clean solid-dark canvas; the "wow"
              comes from content (monumental type, image reveals), not an ambient
              backdrop. */}
 
-        {/* ── Continuous page vignette ──
-             A page-level fixed frame (not hero-bound) so the cinematic
-             darkening is the SAME from the opening through the whole archive
-             — the "journey" and the content below share one frame instead of
-             a vignetted hero meeting an un-vignetted page. */}
-        <div
-          className={`fixed inset-0 pointer-events-none z-[2] transition-opacity duration-1000 ${
-            selectedCollection ? 'opacity-0' : 'opacity-100'
-          }`}
-          style={{ background: 'radial-gradient(125% 95% at 50% 38%, transparent 52%, rgba(4,6,12,0.46) 100%)' }}
-        />
-
         {/* ── Nav — signature font + pill buttons ── */}
         <nav
+          aria-label="Primary navigation"
+          data-site-nav
           className="fixed top-0 left-0 w-full z-50 px-6 py-5 md:py-8 md:px-12 flex justify-between items-center bg-transparent"
-          style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
+          style={{
+            paddingTop: 'max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top))',
+            paddingLeft: 'max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left))',
+            paddingRight: 'max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right))',
+          }}
         >
           <motion.button
+            type="button"
+            aria-label="Ryan Xu — back to top"
             onClick={() => {
               setSelectedCollection(null);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
             }}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
+            whileHover={reduce ? undefined : { scale: 1.04 }}
+            whileTap={reduce ? undefined : { scale: 0.96 }}
             transition={{ duration: 0.2, ease: expo }}
-            className="flex items-center gap-3 hover:opacity-60 transition-opacity duration-200 font-serif uppercase text-lg md:text-xl tracking-[0.16em] font-medium leading-none text-[#F4F4ED] mix-blend-difference py-1"
+            className="flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.16em] text-[#F4F4ED] mix-blend-difference transition-opacity duration-200 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px] md:tracking-[0.12em]"
           >
             {/* Slides down from above once the opening reveals (body.walkin-in,
                  flipped by WalkIn) — the reference's header entrance. */}
@@ -594,24 +1065,35 @@ export default function HomePage({ collections }: Props) {
             </span>
           </motion.button>
 
-          <div ref={navPillsRef} className="flex items-center gap-2 md:gap-3" style={{ opacity: 0, pointerEvents: 'none' }}>
-            <Magnetic strength={0.5}>
+          <div
+            className="flex items-center gap-2 transition-opacity duration-500 md:gap-3"
+            aria-hidden={!navPillsVisible}
+            inert={!navPillsVisible}
+            style={{
+              opacity: navPillsVisible ? 1 : 0,
+              pointerEvents: navPillsVisible ? 'auto' : 'none',
+            }}
+          >
+            <Magnetic strength={0.32}>
               <motion.a
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                href="/travel"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/10 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                whileHover={reduce ? undefined : { scale: 1.05 }}
+                whileTap={reduce ? undefined : { scale: 0.95 }}
+                href={atlasHref}
+                data-astro-prefetch="hover"
+                tabIndex={navPillsVisible ? 0 : -1}
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.3em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 Map
               </motion.a>
             </Magnetic>
 
-            <Magnetic strength={0.5}>
+            <Magnetic strength={0.32}>
               <motion.a
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={reduce ? undefined : { scale: 1.05 }}
+                whileTap={reduce ? undefined : { scale: 0.95 }}
                 href="/about"
-                className="inline-block px-3.5 md:px-6 py-2 md:py-2.5 rounded-full text-[9px] md:text-[10px] uppercase tracking-[0.25em] md:tracking-[0.3em] font-bold transition-colors duration-300 border border-white/10 bg-white/5 hover:bg-white/10 text-white backdrop-blur-md"
+                tabIndex={navPillsVisible ? 0 : -1}
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.3em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 About
               </motion.a>
@@ -619,206 +1101,144 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── The opening — the iventions-mechanics hero: cream stage, purple
-             light band, the centre card cycling real city names with a
-             mouse-aimed spotlight cone, giant bottom word; scroll zooms the
-             card to full-bleed, then it dims into the dark archive. ── */}
-        <WalkIn
-          collections={orderedCities.map((c) => ({
-            name: c.name.trim(),
-            frames: c.photoCount ?? c.photos?.length ?? 0,
-          }))}
-          places={orderedCities.length}
-        />
+        {/* ── The opening — the original paper-to-olive entrance develops the
+             quiet editorial cover, then grows it to full bleed. ── */}
+        <WalkIn collections={walkInCollections} places={walkInCollections.length} />
 
-        {/* ── The Ethos — the first beat inside the archive world ── */}
-        <StatementReveal />
+        {/* The city index is the single, lightweight seam between the opening
+            cover and the live atlas chapter. */}
+        {!useLivingAtlas && (
+          <QuietIndexBand
+            names={indexNames}
+            activeArchiveId={activeArchiveId}
+            fallbackArchiveId={orderedCities[0] ? cityDomId(orderedCities[0]) : null}
+          />
+        )}
 
-        {/* ── Quiet index marquee — restrained seam into the archive ── */}
-        <QuietIndexBand names={indexNames} activeArchiveId={activeArchiveId} />
-
-        {/* ── Desktop Main — sidebar + archive chapters ── */}
-        <main className="hidden md:block max-w-7xl mx-auto px-6 md:px-12 pt-24 lg:pt-32 pb-8 relative z-10">
+        {/* One responsive archive tree at a time. This keeps Mapbox and every
+             motion observer from mounting twice behind CSS-only visibility. */}
+        <main id="main-content" tabIndex={-1} className="relative z-10 focus:outline-none">
+          {useLivingAtlas ? (
+            <LivingAtlasStory
+              stops={routeStops}
+              activeIndex={livingAtlasActiveIndex}
+              chapterProgress={archiveProgress}
+              mobile={!desktopLayout}
+              reducedMotion={!!reduce}
+              paused={storyActive}
+              atlas={
+                <DeferredRouteAtlas
+                  stops={routeStops}
+                  activeIndex={livingAtlasActiveIndex}
+                  chapterProgress={archiveProgress}
+                  reducedMotion={!!reduce}
+                  mobile={!desktopLayout}
+                  paused={storyActive}
+                  presentation="living"
+                />
+              }
+              onOpen={(stop) => {
+                const collection = orderedCities.find((city) => city._id === stop.id);
+                if (collection) openCollection(collection);
+              }}
+              onNavigate={navigateLivingChapter}
+            />
+          ) : desktopLayout ? (
+          /* ── Desktop Main — full-height geographic atlas + archive chapters ── */
+          <div ref={desktopAtlasSectionRef} className="relative pb-8 pt-24 lg:pt-0">
           {/* The blurred active-chapter photo backdrop was removed — no photo
                used as background anywhere; the contour atmosphere carries it. */}
 
-          {/* Decorative Grid Lines */}
-          <div className="fixed left-24 top-0 bottom-0 w-px bg-white/[0.03] z-0 hidden lg:block" />
-          <div className="fixed right-24 top-0 bottom-0 w-px bg-white/[0.03] z-0 hidden lg:block" />
-
-          <div className="flex flex-col lg:flex-row gap-16 md:gap-24">
-            {/* Side Navigation */}
-            <aside className="hidden lg:block lg:w-48 sticky top-24 h-fit shrink-0 z-50">
-              <div className="relative space-y-8">
-                {/* Header — reframed as a route/itinerary */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-1 rounded-full bg-white opacity-20 animate-pulse" />
-                    <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">
-                      The Route // {orderedCities.length} stops
-                    </span>
-                  </div>
-                  {collapsibleKeys.length > 0 && (
-                    <button
-                      onClick={toggleAll}
-                      data-cursor={allCollapsed ? 'Expand' : 'Collapse'}
-                      className="flex items-center gap-1.5 pl-4 text-[8px] uppercase tracking-[0.3em] font-ui text-white/30 hover:text-white/70 transition-colors cursor-pointer"
-                    >
-                      <ChevronDown
-                        size={11}
-                        className={`transition-transform duration-300 ${allCollapsed ? '' : 'rotate-180'}`}
-                      />
-                      {allCollapsed ? 'Expand regions' : 'Collapse regions'}
-                    </button>
-                  )}
-                </div>
-
-                {/* Route rail — a vertical itinerary line with a waypoint node
-                     per chapter. The line fills with the accent up to the
-                     active node (distance "traveled"); passed nodes are filled,
-                     the active node pulses, upcoming nodes stay hollow. */}
-                <div className="relative">
-                  {/* base rail */}
-                  <span className="absolute left-[4px] top-0 bottom-0 w-px bg-white/10" />
-                  {/* traveled rail */}
-                  <motion.span
-                    className="absolute left-[4px] top-0 w-px"
-                    style={{
-                      background:
-                        'linear-gradient(to bottom, rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.15), rgb(var(--accent-r), var(--accent-g), var(--accent-b)))',
-                    }}
-                    animate={{ height: activeRouteIndex >= 0 ? activeRouteIndex * ROW_H + ROW_H / 2 : 0 }}
-                    transition={reduce ? { duration: 0 } : { duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                  />
-
-                  <div className="flex flex-col">
-                    {orderedCities.map((city, idx) => (
-                      <SidebarItem
-                        key={city._id}
-                        id={`archive-item-${city._id}`}
-                        label={city.name}
-                        coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
-                        idx={idx}
-                        onActivate={() => jumpToCity(city)}
-                        state={
-                          activeRouteIndex < 0
-                            ? 'future'
-                            : idx < activeRouteIndex
-                              ? 'past'
-                              : idx === activeRouteIndex
-                                ? 'active'
-                                : 'future'
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 space-y-4">
-                  <div className="space-y-2">
-                    <span className="text-[7px] uppercase tracking-widest opacity-20 block font-ui">
-                      Journey Progress
-                    </span>
-                    <div className="w-full h-[1px] bg-white/5 relative overflow-hidden">
-                      <motion.div
-                        className="absolute top-0 left-0 h-full"
-                        style={{
-                          width: sidebarScrollWidth,
-                          background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))',
-                          boxShadow: '0 0 10px rgba(var(--heat-r), var(--heat-g), var(--heat-b), 0.7)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <div className="relative flex w-full flex-col lg:flex-row lg:items-start lg:overflow-visible">
+            {/* A full-bleed Mapbox field anchors the archive. The photo column
+                 overlaps its soft seam so map and work read as one editorial
+                 spread instead of two adjacent widgets. */}
+            <aside className="sticky top-0 z-10 hidden h-screen h-[100dvh] w-[78%] shrink-0 lg:block">
+              <DeferredRouteAtlas
+                stops={routeStops}
+                activeIndex={routeStops.findIndex((stop) => stop.id === orderedCities[activeRouteIndex]?._id)}
+                chapterIds={orderedChapterIds}
+                chapterProgress={archiveProgress}
+                entryProgress={atlasEntryProgress}
+                reducedMotion={!!reduce}
+                paused={storyActive}
+                engagedChapterId={engagedChapterId}
+                onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
+              />
             </aside>
 
+            {/* The atlas does not stop on a section boundary. Near the end of
+                 the archive a long, page-coloured veil rises through the sticky
+                 map, so geography releases into the site canvas before the
+                 sticky layer unpins. It sits above the map and below the work. */}
+            <div
+              aria-hidden="true"
+              className="route-atlas-release pointer-events-none absolute -bottom-px inset-x-0 z-[15] hidden h-[52svh] lg:block"
+            />
+
             {/* Exhibition Content — leans subtly with scroll velocity */}
-            <div className="flex-1 space-y-12 md:space-y-20 overflow-x-clip">
-              <div ref={selectedWorksRef} className="max-w-2xl">
-                <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-4">
+            <div className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-28 xl:pr-16">
+              <div ref={selectedWorksRef} className="relative max-w-2xl lg:ml-[12%]">
+                <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
                 <motion.div
-                  initial={reduce ? false : { opacity: 0, x: -20 }}
-                  animate={selectedWorksShown ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold opacity-30"
+                  style={reduce ? undefined : { opacity: swKickerOpacity, x: swKickerX }}
+                  className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold text-white/52"
                 >
                   <motion.div
                     className="h-px origin-left"
-                    style={{ width: 32, background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                    initial={reduce ? false : { scaleX: 0 }}
-                    animate={selectedWorksShown ? { scaleX: 1 } : { scaleX: 0 }}
-                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                    style={{
+                      width: 32,
+                      background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))',
+                      scaleX: reduce ? 1 : swRuleScale,
+                    }}
                   />
                   <span>Selected Works</span>
                 </motion.div>
-                <h2
-                  className="font-serif uppercase tracking-tight leading-[0.95] pb-2"
-                  style={{ fontSize: 'clamp(32px, 5.5vw, 76px)' }}
+                <motion.h2
+                  className="max-w-[12ch] font-serif uppercase leading-[0.86] tracking-[-0.055em]"
+                  style={{
+                    fontSize: 'clamp(44px, 5.6vw, 84px)',
+                    ...(reduce ? {} : { opacity: swTitleOpacity, y: swTitleY }),
+                  }}
                 >
-                  {SW_WORDS.map((w, i) => (
-                    <RisingWord
-                      key={i}
-                      word={w}
-                      index={i}
-                      progress={swRevealProgress}
-                      reduce={!!reduce}
-                      accent={w === 'lens.'}
-                    />
-                  ))}
-                </h2>
-                <div className="flex items-center gap-2.5 pt-2 text-[10px] font-ui uppercase tracking-[0.3em] text-white/35">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span
-                      className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
-                      style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                    />
-                    <span
-                      className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                      style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                    />
+                  Curating the world through a distilled{' '}
+                  <span className="text-[#D2FF00]">lens.</span>
+                </motion.h2>
+                <motion.div
+                  className="flex min-h-11 items-center gap-3 font-ui text-[9px] uppercase tracking-[0.3em] text-white/48"
+                  style={reduce ? undefined : { opacity: swCountOpacity, x: swCountX }}
+                >
+                  <span className="relative flex h-1.5 w-1.5 shrink-0">
+                    <span className="marker-breathe absolute inset-0 rounded-full bg-[#D2FF00]" />
+                    <span className="relative h-1.5 w-1.5 rounded-full bg-[#D2FF00]" />
                   </span>
                   <span>Select any frame to enter its story</span>
-                </div>
+                </motion.div>
                 </motion.div>
               </div>
 
-              <div className="space-y-12 md:space-y-20">
-                {sections.map((section) => {
-                  const isCollapsed = section.showHeader && collapsed.has(section.key);
-                  return (
-                    <div key={section.key} className="space-y-12 md:space-y-20">
+              <div className="space-y-14 md:space-y-20 lg:pl-[2%]">
+                {sections.map((section) => (
+                    <section
+                      key={section.key}
+                      aria-label={section.region ? `Region: ${section.region}` : undefined}
+                      className="space-y-8 md:space-y-12"
+                    >
                       {section.showHeader && section.region && (
-                        <RegionHeader
-                          region={section.region}
-                          placeCount={section.cities.length}
-                          frameCount={section.frameCount}
-                          collapsible
-                          collapsed={isCollapsed}
-                          onToggle={() => toggleRegion(section.key)}
-                        />
+                        <div
+                          className="relative flex w-full items-center gap-4 py-5"
+                        >
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#D2FF00]" />
+                          <span className="font-ui text-[9px] uppercase tracking-[0.32em] text-white/54">Region</span>
+                          <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
+                            {section.region}
+                          </span>
+                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.22em] text-white/52">
+                            {section.cities.length} places · {section.frameCount} frames
+                          </span>
+                        </div>
                       )}
-                      <AnimatePresence initial={false} mode="wait">
-                        {isCollapsed ? (
-                          <motion.div
-                            key="strip"
-                            initial={{ opacity: 0, y: -8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                          >
-                            <CollapsedRegionStrip cities={section.cities} onOpen={setSelectedCollection} />
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="full"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                            className="space-y-12 md:space-y-20"
-                          >
+                      <div className="space-y-14 md:space-y-20">
                             {section.cities.map((city) => {
                               const index = orderedCities.indexOf(city);
                               const domId = `archive-item-${city._id}`;
@@ -828,107 +1248,116 @@ export default function HomePage({ collections }: Props) {
                                   id={domId}
                                   collection={city}
                                   isActive={activeArchiveId === domId}
-                                  onClick={() => setSelectedCollection(city)}
+                                  onClick={() => openCollection(city)}
                                   index={index}
-                                  variant={index === 0 ? 'feature' : 'cover'}
-                                  flip={index % 2 === 1}
+                                  chapterIndex={index}
+                                  chapterProgress={archiveProgress}
+                                  handoffProgress={index === 0 ? atlasEntryProgress : undefined}
+                                  preloadImageUrls={chapterPreloadUrls[index]}
+                                  prioritizeImage={
+                                    activeRouteIndex < 0
+                                      ? index === 0
+                                      : Math.abs(index - activeRouteIndex) <= 1
+                                  }
+                                  onEngagementChange={setEngagedChapterId}
+                                  variant="cover"
                                 />
                               );
                             })}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
+                      </div>
+                    </section>
+                ))}
               </div>
             </div>
           </div>
+          </div>
+
+          ) : (
+          /* ── Mobile Main — the same route narrative, recomposed vertically ── */
+          <div className="mobile-route-story relative isolate bg-[#282c20]">
+            <h2 className="sr-only">Selected Works</h2>
+            <div className="sticky top-0 z-0 h-[100dvh] min-h-[100svh]">
+              <DeferredRouteAtlas
+                stops={routeStops}
+                activeIndex={routeStops.findIndex((stop) => stop.id === orderedCities[activeRouteIndex]?._id)}
+                reducedMotion={!!reduce}
+                mobile
+                paused={storyActive}
+              />
+            </div>
+
+            <div className="mobile-route-story__scenes relative z-20">
+              <div className="mobile-route-story__lead-in" aria-hidden="true" />
+              {sections.flatMap((section) =>
+                section.cities.map((city) => {
+                  const index = orderedCities.indexOf(city);
+                  return (
+                    <div key={city._id} className="mobile-route-story__scene relative">
+                      {section.showHeader && section.region && section.cities[0]?._id === city._id && (
+                        <div className="mobile-route-region pointer-events-none absolute left-5 top-[12svh] flex items-center gap-3 font-ui text-[9px] uppercase tracking-[0.3em] text-white/56">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00]" />
+                          Region · {section.region}
+                        </div>
+                      )}
+                      <div className="mobile-route-card ml-auto w-[88vw] max-w-[620px] pr-4">
+                        <ArchiveChapter
+                          id={mobileCityDomId(city)}
+                          collection={city}
+                          isActive={activeArchiveId === cityDomId(city)}
+                          onClick={() => openCollection(city)}
+                          index={index}
+                          chapterIndex={index}
+                          chapterProgress={archiveProgress}
+                          preloadImageUrls={chapterPreloadUrls[index]}
+                          prioritizeImage={
+                            activeRouteIndex < 0
+                              ? index === 0
+                              : Math.abs(index - activeRouteIndex) <= 1
+                          }
+                          variant="cover"
+                        />
+                      </div>
+                    </div>
+                  );
+                }),
+              )}
+              <div className="mobile-route-story__release route-atlas-release--mobile" aria-hidden="true" />
+            </div>
+          </div>
+          )}
         </main>
 
-        {/* ── Mobile Filmstrip Waterfall ── */}
-        <div className="block md:hidden pt-12 pb-12">
-          {sections.flatMap((section) => {
-            const els: React.ReactNode[] = [];
-            const isCollapsed = section.showHeader && collapsed.has(section.key);
-            if (section.showHeader && section.region) {
-              els.push(
-                <button
-                  key={`mh-${section.key}`}
-                  onClick={() => toggleRegion(section.key)}
-                  className="w-full px-5 pt-10 pb-4 flex items-center gap-3 text-left"
-                  aria-expanded={!isCollapsed}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                  />
-                  <span className="font-serif uppercase text-2xl tracking-tight text-white leading-none">
-                    {section.region}
-                  </span>
-                  {/* Pulses via shared CSS keyframes (compositor), not framer loops. */}
-                  {isCollapsed && (
-                    <span
-                      className="ml-auto font-ui text-[8px] tracking-[0.3em] uppercase soft-pulse"
-                      style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
-                    >
-                      Tap to expand
-                    </span>
-                  )}
-                  <span
-                    className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors duration-300 ${isCollapsed ? 'ring-pulse' : 'ml-auto'}`}
-                    style={{
-                      borderColor: isCollapsed ? 'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.7)' : 'rgba(255,255,255,0.15)',
-                      color: isCollapsed ? 'rgb(var(--accent-r),var(--accent-g),var(--accent-b))' : 'rgba(255,255,255,0.4)',
-                      boxShadow: isCollapsed ? '0 0 18px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)' : 'none',
-                    }}
-                  >
-                    <ChevronDown
-                      size={15}
-                      className={`transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}
-                    />
-                  </span>
-                </button>,
-              );
-            }
-            if (!isCollapsed) {
-              section.cities.forEach((city) => {
-                els.push(
-                  <MobileFilmstripItem
-                    key={city._id}
-                    coverBase={city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? ''}
-                    title={city.name}
-                    onClick={() => setSelectedCollection(city)}
-                  />,
-                );
-              });
-            }
-            return els;
-          })}
-
-        </div>
-
         {/* ── Archive end-cap — the page's closing punctuation ── */}
-        <div className="pt-6 pb-16 flex flex-col items-center gap-3 opacity-30">
+        <div className="flex flex-col items-center gap-4 pb-16 pt-8 text-center opacity-70">
           <div
-            className="w-px h-10"
-            style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.30)' }}
+            className="h-1 w-1 rounded-full"
+            style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.72)' }}
           />
-          <span className="text-[9px] uppercase tracking-[0.5em] font-ui">
-            End of archive
+          <span className="font-ui text-[10px] uppercase tracking-[0.34em] text-white/72">
+            {String(orderedCities.length).padStart(2, '0')} / {String(orderedCities.length).padStart(2, '0')} · Archive complete
           </span>
+          <button
+            type="button"
+            onClick={() => document.getElementById('archive-index')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })}
+            className="min-h-11 font-ui text-[9px] uppercase tracking-[0.32em] text-[#D2FF00]/82 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+          >
+            Back to index ↑
+          </button>
         </div>
 
       </div>
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={finishStoryClose}>
         {selectedCollection && (
           <MagazineLayout
             collection={selectedCollection}
             allCollections={activeCollections}
-            onSelectCollection={setSelectedCollection}
-            onClose={() => setSelectedCollection(null)}
+            onSelectCollection={selectCollectionWithinStory}
+            onClose={closeCollection}
+            returnFocusElement={storyReturnFocusRef.current}
+            canonicalUrl={selectedCollection.slug ? `/works/${selectedCollection.slug}` : undefined}
+            entryMode="cover"
           />
         )}
       </AnimatePresence>

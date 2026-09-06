@@ -3,13 +3,18 @@
   "type": "module",
   "version": "0.0.1",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "jsdom": "29.0.1"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.0",

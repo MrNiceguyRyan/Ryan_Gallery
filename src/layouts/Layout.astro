@@ -1,4 +1,7 @@
 ---
+// Keep Mapbox's base styles across ClientRouter head swaps. A cached lazy
+// island does not re-run its CSS side effect when returning to the Homepage.
+import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 
@@ -59,12 +62,14 @@ const allJsonLd = [personSchema, websiteSchema, ...pageJsonLd];
 // ─── Optional hub link (rel=me + footer link) ───
 // Driven by PUBLIC_HUB_URL env var. Hidden when not set.
 const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
+const showGlobalSkipLink = Astro.url.pathname !== '/';
+const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/travel';
 ---
 
-<html lang="en">
+<html lang="en" class:list={[travelWorkspaceActive && 'travel-workspace-active']}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" sizes="32x32" />
     <link rel="shortcut icon" href="/favicon.ico?v=3" />
@@ -76,13 +81,13 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
     {/* One combined request; dropped the unused Noto Sans SC (Chinese) family
         that was a ~91 KB render-blocking stylesheet for nothing. */}
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    {/* mapbox-gl CSS is only needed on /travel — loaded by that page's head, not globally */}
+    {/* Mapbox CSS is bundled with the Travel island; only its API hosts are preconnected there. */}
 
     <!-- Primary Meta -->
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalURL} />
-    <meta name="theme-color" content="#30352a" />
+    <meta name="theme-color" content={dark ? '#282c20' : '#ffffff'} />
 
     <!-- Open Graph -->
     <meta property="og:type" content={ogType} />
@@ -118,8 +123,17 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
   <body class:list={[
     "min-h-screen font-sans antialiased overflow-x-hidden",
-    dark ? "bg-[#282c20] text-[#F4F4ED]" : "bg-white text-gray-900"
+    dark ? "bg-[#282c20] text-[#F4F4ED]" : "bg-white text-gray-900",
+    travelWorkspaceActive && "travel-workspace-active"
   ]}>
+    {showGlobalSkipLink && (
+      <a
+        href="#main-content"
+        class="fixed left-4 top-4 z-[100] inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.2em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+      >
+        Skip to content
+      </a>
+    )}
     <slot />
 
     {/* Global craft layers — a soft olive vignette for depth (behind content) and
@@ -181,7 +195,7 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       /* ─────────────────────────────────────────────────
        *  Default root swap — no animation. Directional motion is opted into
        *  per-navigation via html[data-axis] (below): "enter" depth-zoom for
-       *  Home→section, "forward"/"back" shared-axis push for Map↔About.
+       *  standard sections and "forward"/"back" for lateral siblings.
        *  Everything else (e.g. →Home via the DIY slide-down) swaps instantly.
        *  ───────────────────────────────────────────────── */
       ::view-transition-old(root),
@@ -205,69 +219,60 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       html[data-axis]::view-transition-new(root) { z-index: 2; }
 
       html[data-axis="forward"]::view-transition-old(root) {
-        animation: sa-old-fwd 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
+        animation: sa-old-fwd 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       html[data-axis="forward"]::view-transition-new(root) {
-        animation: sa-new-fwd 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
+        animation: sa-new-fwd 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       html[data-axis="back"]::view-transition-old(root) {
-        animation: sa-old-back 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
+        animation: sa-old-back 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       html[data-axis="back"]::view-transition-new(root) {
-        animation: sa-new-back 0.54s cubic-bezier(0.65, 0, 0.35, 1) both;
+        animation: sa-new-back 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
-      /* Whip/swish pan: both frames streak across with horizontal motion
-         blur + a slight horizontal stretch, crossing blurred at mid-point
-         then resolving — a fast camera pan between two scenes. */
+      /* Quiet shared-axis movement. Keep it compositor-only: the earlier
+         20px blur + 60% travel looked flashy and made Mapbox exits expensive. */
       @keyframes sa-old-fwd  {
-        0%   { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
-        100% { transform: translateX(-60%) scaleX(1.08); opacity: 0; filter: blur(20px); }
+        0%   { transform: translateX(0); opacity: 1; }
+        100% { transform: translateX(-14%); opacity: 0.28; }
       }
       @keyframes sa-new-fwd  {
-        0%   { transform: translateX(60%)  scaleX(1.08); opacity: 0; filter: blur(20px); }
-        45%  { opacity: 1; }
-        100% { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+        0%   { transform: translateX(14%); opacity: 0.28; }
+        100% { transform: translateX(0); opacity: 1; }
       }
       @keyframes sa-old-back {
-        0%   { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
-        100% { transform: translateX(60%)  scaleX(1.08); opacity: 0; filter: blur(20px); }
+        0%   { transform: translateX(0); opacity: 1; }
+        100% { transform: translateX(14%); opacity: 0.28; }
       }
       @keyframes sa-new-back {
-        0%   { transform: translateX(-60%) scaleX(1.08); opacity: 0; filter: blur(20px); }
-        45%  { opacity: 1; }
-        100% { transform: translateX(0)    scaleX(1);    opacity: 1; filter: blur(0); }
+        0%   { transform: translateX(-14%); opacity: 0.28; }
+        100% { transform: translateX(0); opacity: 1; }
       }
 
       /* ───────────────────────────────────────────────
        *  Enter a section from Home (Home → Map / About) — Apple depth zoom.
        *
        *  A strong, intuitive "push forward into the destination": the new
-       *  page rushes toward you, growing from smaller to full while fading
-       *  in; the Home page recedes — scaling up past the camera and
-       *  blurring out. Reads as moving INTO the content, not sliding next
+       *  page grows gently from smaller to full while fading in; the Home
+       *  page recedes by a few percent. Reads as moving into the content,
+       *  not sliding next
        *  to it. (Map↔About stays lateral; this is descent into depth.)
        *  ─────────────────────────────────────────────── */
       html[data-axis="enter"]::view-transition-old(root) {
-        /* Home rushes out — accelerating away, blowing up, over-exposing
-           into a bright bloom as you punch through it. */
-        animation: enter-old 0.8s cubic-bezier(0.7, 0, 0.84, 0) both;
+        animation: enter-old 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
         transform-origin: 50% 46%;
       }
       html[data-axis="enter"]::view-transition-new(root) {
-        /* Destination warps in from far away with motion blur that clears,
-           overshoots, then snaps to rest. */
-        animation: enter-new 0.86s cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation: enter-new 0.54s cubic-bezier(0.16, 1, 0.3, 1) both;
         transform-origin: 50% 46%;
       }
       @keyframes enter-old {
-        0%   { opacity: 1; transform: scale(1);   filter: blur(0)    brightness(1); }
-        100% { opacity: 0; transform: scale(1.6); filter: blur(22px) brightness(1.5); }
+        0%   { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(1.045); }
       }
       @keyframes enter-new {
-        0%   { opacity: 0; transform: scale(0.55); filter: blur(16px) brightness(1.4) saturate(1.25); }
-        45%  { opacity: 1; }
-        80%  { opacity: 1; transform: scale(1.04); filter: blur(0)    brightness(1.08) saturate(1.04); }
-        100% { opacity: 1; transform: scale(1);    filter: blur(0)    brightness(1)    saturate(1); }
+        0%   { opacity: 0; transform: scale(0.975); }
+        100% { opacity: 1; transform: scale(1); }
       }
 
       /* Reduced-motion: disable the directional view transitions. */
@@ -281,9 +286,10 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       /* Back-nav slide-down: applied to <body> via JS. Uses compositor-only
          `transform` so it stays smooth even with heavy pages (Mapbox etc.). */
       body.vt-back-exit {
-        transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-        transform: translateY(100vh);
-        will-change: transform;
+        transition: transform 0.46s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.34s ease;
+        transform: translateY(12vh);
+        opacity: 0;
+        will-change: transform, opacity;
       }
 
       /* Reduce motion: instant transition for accessibility */
@@ -297,6 +303,13 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
     {/* Custom cursor removed — the native cursor is the cursor. Interactive
         elements use standard `cursor: pointer` affordance. */}
+
+    <script>
+      import { navigate } from 'astro:transitions/client';
+      // The exit layer below is inline so it can intercept links in capture
+      // phase. Hand the actual route change back to Astro once it has finished.
+      (window as Window & { __galleryNavigate?: typeof navigate }).__galleryNavigate = navigate;
+    </script>
 
     <script is:inline>
       // ── Image protection ──
@@ -333,12 +346,23 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
       // sliding body is the browser background — set to match the destination
       // (dark for home, light for light pages) so no jarring flash appears.
       //
-      // Back detection:
-      //   1. Browser back/forward button (popstate)
-      //   2. Link click where dest is "/" or has fewer path segments
+      // This exit layer owns back-direction LINK CLICKS only. Browser history
+      // remains owned by Astro, with its animation selected below by data-axis.
       (function() {
-        var DUR = 550; // ms — must match CSS `body.vt-back-exit` transition
+        var DUR = 460; // ms — must match CSS `body.vt-back-exit` transition
         var EXITING = false;
+        var exitFrame = 0;
+        var exitTimer = 0;
+
+        function resetExit() {
+          if (exitFrame) cancelAnimationFrame(exitFrame);
+          if (exitTimer) clearTimeout(exitTimer);
+          exitFrame = 0;
+          exitTimer = 0;
+          EXITING = false;
+          document.body.classList.remove('vt-back-exit');
+          document.documentElement.style.removeProperty('background-color');
+        }
 
         function depth(path) { return path.split('/').filter(Boolean).length; }
 
@@ -354,25 +378,33 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
         function isBackTo(toPath) {
           if (!toPath) return false;
           if (toPath === '/') return true;
-          // fromPath must be passed explicitly where the URL has already
-          // changed (popstate) — window.location would self-compare there.
-          var fromPath = arguments.length > 1 ? arguments[1] : window.location.pathname;
-          return depth(toPath) < depth(fromPath);
+          // Link clicks are checked before Astro changes the current URL.
+          return depth(toPath) < depth(window.location.pathname);
         }
 
-        // Pick background color that will be revealed under the sliding body.
-        // All pages use dark theme (#30352a).
+        // Pick the canvas color revealed beneath the sliding body. This must
+        // match the global page field exactly; using the slightly lighter
+        // story surface here creates a visible horizontal band during return.
         function bgFor(toPath) {
-          return '#30352a';
+          return '#282c20';
         }
 
-        function runExit(href, bg) {
+        function navigateAfterExit(href, replace) {
+          var clientNavigate = window.__galleryNavigate;
+          if (typeof clientNavigate === 'function') {
+            clientNavigate(href, { history: replace ? 'replace' : 'push' });
+          } else {
+            window.location.href = href;
+          }
+        }
+
+        function runExit(href, bg, replace) {
           if (EXITING) return;
           // Reduced-motion: plain navigation. The CSS neutralizer collapses the
           // 0.55s slide to 0.001ms, which would otherwise park the body
           // off-screen (blank page) for the full DUR timeout.
           if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            window.location.href = href;
+            navigateAfterExit(href, replace);
             return;
           }
           EXITING = true;
@@ -381,13 +413,14 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
           document.documentElement.style.backgroundColor = bg;
           document.body.style.backgroundColor = getComputedStyle(document.body).backgroundColor || '';
           // Kick the animation on the next frame so the transition has a
-          // clean starting state (transform:none → translateY(100vh))
-          requestAnimationFrame(function() {
+          // clean starting state (transform:none → the short exit offset)
+          exitFrame = requestAnimationFrame(function() {
+            exitFrame = 0;
             document.body.classList.add('vt-back-exit');
           });
-          setTimeout(function() {
-            // Full navigation — simpler than splicing into ClientRouter
-            window.location.href = href;
+          exitTimer = setTimeout(function() {
+            exitTimer = 0;
+            navigateAfterExit(href, replace);
           }, DUR + 20);
         }
 
@@ -414,62 +447,83 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
           e.preventDefault();
           e.stopPropagation();
-          runExit(url.pathname + url.search + url.hash, bgFor(toPath));
+          runExit(url.pathname + url.search + url.hash, bgFor(toPath), false);
         }, true); // capture phase — run before ClientRouter
 
-        // 2) Intercept browser Back/Forward button. `popstate` fires after
-        //    the URL has already changed, so we push the original URL back,
-        //    run the exit animation, then navigate for real.
-        var _lastPath = window.location.pathname;
-        // Keep the tracked "previous page" fresh across ClientRouter swaps —
-        // popstate fires AFTER the URL has changed, so the back-direction test
-        // must compare against where we actually were, not the (new) location.
-        document.addEventListener('astro:page-load', function() {
-          _lastPath = window.location.pathname;
-        });
-        window.addEventListener('popstate', function() {
-          var toPath = window.location.pathname;
-          if (!isBackTo(toPath, _lastPath)) { _lastPath = toPath; return; }
-          if (EXITING) return;
-          var target = window.location.href;
-          // Undo the popstate so the visible URL reflects the page we're still showing.
-          // We use pushState with the _lastPath so history length stays sane.
-          history.pushState(null, '', _lastPath);
-          runExit(target, bgFor(toPath));
-        });
+        // Astro already handles this same popstate. Rewriting its URL and
+        // issuing a second navigate after a timeout races the real traversal.
+        // Only cancel a pending click exit, so it cannot hide the incoming body
+        // or redirect a subsequent Map -> About navigation back to Map.
+        window.addEventListener('popstate', resetExit);
+        document.addEventListener('astro:page-load', resetExit);
       })();
 
       // ── Filmstrip scroll restoration ──
-      // Save scroll position when leaving homepage; restore when returning
-      document.addEventListener('astro:before-preparation', function(e) {
-        if (window.location.pathname === '/') {
-          sessionStorage.setItem('home-filmstrip-scroll', String(window.scrollY));
+      // Save scroll position when leaving Homepage. A direct Home link restores
+      // it before the incoming transition snapshot; browser history traversal
+      // keeps Astro's own stored scroll state instead of being overwritten.
+      var restoreHomeScrollOnSwap = false;
+      function readHomeFilmstripScroll() {
+        var body = document.body;
+        // An open Homepage Story fixes body at the negative archive offset;
+        // window.scrollY is then zero. Reuse that actual lock position rather
+        // than saving a new top-of-page position over the visitor's chapter.
+        if (body.style.position === 'fixed') {
+          var fixedTop = parseFloat(body.style.top || getComputedStyle(body).top);
+          if (Number.isFinite(fixedTop)) return Math.max(0, -fixedTop);
         }
+        return window.scrollY;
+      }
+      function transitionPath(value, fallback) {
+        if (!value) return fallback;
+        try { return new URL(value, window.location.origin).pathname; }
+        catch (err) { return fallback; }
+      }
+      document.addEventListener('astro:before-preparation', function(e) {
+        var fromPath = transitionPath(e && e.from, window.location.pathname);
+        var toPath = transitionPath(e && e.to, window.location.pathname);
+        if (fromPath === '/' && toPath !== '/') {
+          sessionStorage.setItem('home-filmstrip-scroll', String(readHomeFilmstripScroll()));
+        }
+        restoreHomeScrollOnSwap = toPath === '/' && (!e || e.navigationType !== 'traverse');
       });
-      document.addEventListener('astro:page-load', function() {
-        if (window.location.pathname === '/') {
+      document.addEventListener('astro:before-swap', function(e) {
+        var fromPath = transitionPath(e && e.from, window.location.pathname);
+        var toPath = transitionPath(e && e.to, window.location.pathname);
+        if (fromPath !== '/' || toPath === '/' || e.navigationType === 'traverse' || !history.state) return;
+        // Astro has finished sampling scroll by this point but has not pushed
+        // the destination entry yet. Correct the existing Home entry so native
+        // Back restores it too; never overwrite the destination of a traversal.
+        history.replaceState(Object.assign({}, history.state, { scrollY: readHomeFilmstripScroll() }), '');
+      });
+      function restoreHomeFilmstrip() {
+        if (restoreHomeScrollOnSwap && window.location.pathname === '/') {
+          restoreHomeScrollOnSwap = false;
           var saved = sessionStorage.getItem('home-filmstrip-scroll');
           if (saved) {
             sessionStorage.removeItem('home-filmstrip-scroll');
             var y = parseInt(saved, 10);
             // Only restore if user was past the hero (i.e., in the filmstrip area)
             if (y > 100) {
-              // Delay to allow React hydration before scrolling
-              setTimeout(function() {
-                window.scrollTo({ top: y, behavior: 'instant' });
-              }, 120);
+              // after-swap runs before the browser captures the incoming View
+              // Transition snapshot. Restore now so Home never appears at the
+              // top and then jumps to the visitor's previous chapter.
+              window.scrollTo({ top: y, behavior: 'instant' });
             }
           }
         }
-      });
+      }
+      document.addEventListener('astro:after-swap', restoreHomeFilmstrip);
 
       // ── Page-transition direction (View Transitions) ──
       // Sets html[data-axis] from the route relationship so the global
       // ::view-transition(root) rules animate the right way:
-      //   Home → Map/About : depth zoom ("enter")
+      //   Home → Map      : Atlas editorial cover (TravelEntryCover)
+      //   Map → Home      : the same downward return used by About
+      //   Home → About    : contributor cover (AboutPage)
       //   Map ↔ About      : shared-axis push ("forward" / "back")
-      // (→Home is the DIY body slide-down; opening a story is the React
-      // MagazineLayout cover — neither uses this.)
+      // (Other back routes retain the DIY body slide-down; opening a story is
+      // the React MagazineLayout cover.)
       (function() {
         function normalize(path) {
           if (!path) return '/';
@@ -479,23 +533,22 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 
         // Route order for lateral sibling nav (Map ↔ About).
         var LATERAL = { '/travel': 1, '/about': 2 };
-        var pendingAxis = null; // 'forward' | 'back' | 'enter'
+        var pendingAxis = null; // 'forward' | 'back'
 
         document.addEventListener('astro:before-preparation', function(e) {
           if (!(e && e.to)) return;
           var toPath = '';
           try { toPath = new URL(e.to, window.location.origin).pathname; }
           catch (err) { return; }
-          var nf = normalize(window.location.pathname);
+          var fromPath = window.location.pathname;
+          try {
+            if (e.from) fromPath = new URL(e.from, window.location.origin).pathname;
+          } catch (err) {}
+          var nf = normalize(fromPath);
           var nt = normalize(toPath);
           document.documentElement.removeAttribute('data-axis');
           pendingAxis = null;
           if (nt === nf) return;
-
-          // Arriving at About has its own editorial "contributor cover"
-          // entrance (in AboutPage), so skip the root axis animation there —
-          // no double reveal. (Leaving About still animates normally.)
-          if (nt === '/about') return;
 
           // Lateral sibling nav (Map ↔ About): shared-axis push.
           if (LATERAL[nf] && LATERAL[nt]) {
@@ -503,11 +556,21 @@ const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
             document.documentElement.setAttribute('data-axis', pendingAxis);
             return;
           }
-          // Enter a section from Home (Home → Map / About): depth zoom.
-          if (nf === '/' && LATERAL[nt]) {
-            pendingAxis = 'enter';
+
+          // Browser Back keeps Astro's original target, history state and
+          // single navigation. Reuse the existing back animation without the
+          // link-click exit layer starting another route change.
+          if (e.navigationType === 'traverse' && e.direction === 'back') {
+            pendingAxis = 'back';
             document.documentElement.setAttribute('data-axis', pendingAxis);
+            return;
           }
+
+          // When entering either primary destination from elsewhere, its own
+          // editorial cover remains the single handoff. This check must follow
+          // the sibling case above or Map ↔ About can never receive an axis.
+          if (nt === '/about' || nt === '/travel') return;
+
         });
 
         // Astro wipes <html> attributes during the DOM swap, so the axis set

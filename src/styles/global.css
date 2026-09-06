@@ -1,10 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
 @import "@fontsource-variable/inter";
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
   /* Display serif — Fraunces (high-contrast, Brier-like): every editorial headline.
      (.font-serif below maps to THIS, not --font-serif.) */
   --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
@@ -35,16 +34,25 @@ html.lenis body {
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
 }
+.quiet-marquee-handoff {
+  /* Start with a genuinely clear area. The former top-anchored radial wash
+     introduced a faint horizontal edge exactly where this overlapping band
+     began, which made the cover and atlas read as stacked sections. */
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 10%,
+    rgba(40, 44, 32, 0.035) 24%,
+    rgba(40, 44, 32, 0.14) 42%,
+    rgba(40, 44, 32, 0.34) 60%,
+    rgba(40, 44, 32, 0.68) 80%,
+    #282c20 100%
+  );
+}
 .quiet-marquee-track {
   display: flex;
   width: max-content;
   white-space: nowrap;
-  animation: quiet-marquee var(--qm-dur, 48s) linear infinite;
-  will-change: transform;
-}
-@keyframes quiet-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
 }
 .qm-name {
   padding: 0 0.55em;
@@ -53,25 +61,20 @@ html.lenis body {
   text-transform: uppercase;
   font-size: clamp(2.1rem, 4.2vw, 3.4rem);
   letter-spacing: -0.02em;
-  color: rgba(230, 233, 231, 0.14);
+  color: rgba(230, 233, 231, 0.18);
   transition: color 0.6s ease;
 }
 .qm-name.is-active {
   color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  opacity: 0.55;
+  opacity: 0.62;
 }
 .qm-sep {
   font-size: clamp(1.5rem, 3vw, 2.4rem);
-  color: rgba(230, 233, 231, 0.1);
+  color: rgba(230, 233, 231, 0.12);
 }
-@media (prefers-reduced-motion: reduce) {
-  .quiet-marquee-track {
-    animation: none;
-  }
-}
-
 /* ─── Base reset ─── */
 html {
+  position: relative;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -91,6 +94,15 @@ body {
 /* Multi-line headings break into balanced lines instead of a ragged orphan */
 h1, h2, h3 {
   text-wrap: balance;
+}
+
+/* Short landscape phones need a dedicated lightbox composition: reserve a
+   stable band for metadata instead of letting a 78vh image overlap it. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .gallery-lightbox-photo {
+    max-height: 58dvh;
+    max-width: 76vw;
+  }
 }
 
 /* ─── Blob morph animation ─── */
@@ -147,6 +159,18 @@ h1, h2, h3 {
   background: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
 }
 
+@media (max-width: 767px) {
+  html {
+    scrollbar-width: none;
+  }
+
+  ::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
 /* ─── Display serif (Fraunces) — drives every editorial headline via the
    existing `font-serif` utility, so the whole site flips face from one spot. ─── */
 .font-serif {
@@ -162,7 +186,6 @@ h1, h2, h3 {
 .text-eyebrow { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.5em; text-transform: uppercase; color: rgba(244, 244, 237, 0.32); }
 .text-kicker { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; }
 .text-deck { font-family: var(--font-display); font-style: italic; font-size: clamp(17px, 1.4vw, 21px); line-height: 1.5; color: rgba(244, 244, 237, 0.72); }
-
 /* ─── On-mount self-drawing lime underline (for headline keywords) ───
    Draws once, left→right, after `--draw-delay`. Width spans the element it
    wraps (give it a relative inline-block host). */
@@ -185,6 +208,10 @@ h1, h2, h3 {
   to { transform: scaleX(1); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .travel-entry-cover {
+    display: none !important;
+  }
+
   .draw-underline::after { animation: none; transform: scaleX(1); }
 }
 
@@ -194,27 +221,32 @@ h1, h2, h3 {
   color: #282c20;
 }
 
-/* ─── Global interaction polish (eloqwnt-inspired: smooth, organic, 0.4s base) ───
-   Lives in @layer base so any Tailwind utility (transition-*, duration-*) beats it —
-   unlayered it silently overrode every per-element transition on the site.
-   `translate`/`scale`/`rotate` are listed because Tailwind v4's scale-*/translate-*
-   utilities set those STANDALONE properties, not `transform` — a transition that
-   only names `transform` lets them snap.
-   NOTE: deliberately no global `img` transition — framer-motion drives image
-   transforms per-frame (parallax, hover zooms), and a CSS transition on top makes
-   every one of those writes lag toward its target (mushy motion). The two pure-CSS
-   hover-zoom images carry their own `transition-transform` utilities. */
+/* ─── Global interaction polish ───
+   Geometry is intentionally excluded here. Motion components and the few pure-CSS
+   hover treatments each own their transform timing; a global transform/scale
+   transition otherwise interpolates on top of Framer's spring writes and makes
+   controls feel late or "rubbery". */
 @layer base {
   a, button {
-    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                translate 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                scale 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-                border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  a[href],
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
   }
 }
+
+
+
 
 /* Focus-visible ring for keyboard navigation */
 *:focus-visible {
@@ -292,11 +324,22 @@ h1, h2, h3 {
 }
 
 /* ─── WalkIn opener — CSS-driven entrances (no framer mount anims there) ─── */
-/* Cycling city name inside the card: wipes in TOP-DOWN on each remount. */
-.walkin-city { animation: walkin-city 0.65s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* City changes are deliberately quieter than the opening: a short focus-pull
+   rather than another full title reveal. */
+.walkin-city {
+  animation: walkin-city 0.62s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 @keyframes walkin-city {
-  from { clip-path: inset(0 0 100% 0); }
-  to   { clip-path: inset(0 0 0% 0); }
+  from {
+    opacity: 0;
+    transform: translateY(0.16em);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
 }
 /* (WalkIn entrance — word rise, rotor spin→aim, card scale-out — is all
    transition/rAF-driven in WalkIn.tsx, not keyframes.) */
@@ -304,23 +347,575 @@ h1, h2, h3 {
    body.walkin-in when its reveal fires. */
 .walkin-nav {
   transform: translateY(-110%);
-  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+  transition: transform 0.76s cubic-bezier(0.16, 1, 0.3, 1) 0.14s;
 }
 body.walkin-in .walkin-nav { transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {
   .walkin-nav { transform: none !important; transition: none !important; }
+  .walkin-city {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
 }
 
-/* Premium dark photo box on the atlas map — the card carries its own bg, radius,
-   shadow and pointer, so strip Mapbox's default white chrome entirely. */
-.premium-map-popup .mapboxgl-popup-content {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  box-shadow: none;
+@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
+  /* Preserve enough physical scroll distance for the cover to read as a
+     controlled camera move on short phones, and keep its micro header clear of
+     the fixed 44px navigation targets. */
+  .walkin-scroll-stage { height: 270svh !important; }
+  .walkin-running-head { top: 14% !important; }
 }
-.premium-map-popup .mapboxgl-popup-tip {
-  display: none;
+
+/* Homepage route — keep Mapbox's geographic detail, but grade the basemap into
+   the same olive-black emulsion as the archive. The right edge feathers under
+   the overlapping photo column, removing the old hard 40/60 split. */
+.route-atlas .mapboxgl-map,
+.route-atlas .mapboxgl-canvas-container,
+.route-atlas .mapboxgl-canvas {
+  width: 100%;
+  height: 100%;
+}
+.route-atlas .mapboxgl-map {
+  pointer-events: none;
+}
+.route-atlas-fallback__art {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.52) 4%, #000 12%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.52) 4%, #000 12%, #000 100%);
+}
+.route-atlas-static-map {
+  opacity: 0.76;
+  filter: brightness(0.58) saturate(0.46) contrast(1.22);
+}
+.route-atlas-print-base {
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 76% 64% at 48% 46%, rgba(112, 121, 94, 0.08), transparent 74%),
+    #0d120d;
+}
+.route-atlas-print-base::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  background-image:
+    linear-gradient(rgba(218, 224, 207, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(218, 224, 207, 0.035) 1px, transparent 1px);
+  background-size: 9.5vw 9.5vw;
+  -webkit-mask-image: radial-gradient(ellipse 78% 70% at 52% 48%, #000 12%, transparent 82%);
+  mask-image: radial-gradient(ellipse 78% 70% at 52% 48%, #000 12%, transparent 82%);
+}
+.route-atlas-print-paper {
+  opacity: 0.29;
+  filter: brightness(0.58) saturate(0.42) contrast(1.08);
+  mix-blend-mode: screen;
+}
+.route-atlas-print-map {
+  opacity: 1;
+}
+.route-atlas-print-silhouette {
+  opacity: 0.052;
+  filter: sepia(0.6) hue-rotate(32deg) saturate(0.6);
+}
+.route-atlas-print-states {
+  opacity: 0.14;
+  filter: sepia(0.52) hue-rotate(28deg) saturate(0.52) brightness(0.82);
+}
+.route-atlas-print-label {
+  position: absolute;
+  color: rgba(213, 219, 204, 0.16);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.55;
+  letter-spacing: 0.48em;
+  text-align: center;
+}
+.route-atlas-print-label--canada { left: 43%; top: 13%; }
+.route-atlas-print-label--usa { left: 35%; top: 39%; }
+.route-atlas-print-label--mexico { left: 53%; top: 89%; }
+.route-atlas-print-label--pacific { left: 9%; top: 58%; }
+.route-atlas-print-label--atlantic { right: 2.8%; top: 61%; }
+.route-atlas-print-label--gulf { right: 23%; top: 78%; }
+.route-atlas__route-overlay {
+  filter: drop-shadow(0 0 5px rgba(210, 255, 0, 0.12));
+}
+.route-atlas-tone {
+  background: linear-gradient(90deg, transparent 48%, rgba(40,44,32,0.025) 58%, rgba(40,44,32,0.12) 69%, rgba(40,44,32,0.37) 82%, rgba(40,44,32,0.72) 93%, #282c20 100%);
+}
+.route-atlas-release {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(40, 44, 32, 0.04) 24%,
+    rgba(40, 44, 32, 0.18) 48%,
+    rgba(40, 44, 32, 0.56) 72%,
+    rgba(40, 44, 32, 0.9) 90%,
+    #282c20 100%
+  );
+}
+.route-atlas-release--mobile {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(40, 44, 32, 0.08) 26%,
+    rgba(40, 44, 32, 0.38) 58%,
+    rgba(40, 44, 32, 0.82) 82%,
+    #282c20 100%
+  );
+}
+.route-atlas-interface-veil {
+  width: min(360px, 40%);
+  background: radial-gradient(ellipse 110% 72% at 0% 46%, rgba(7, 9, 6, 0.28) 0%, rgba(7, 9, 6, 0.12) 42%, rgba(7, 9, 6, 0.03) 72%, transparent 100%);
+}
+.route-atlas-entry-dissolve {
+  background: linear-gradient(
+    180deg,
+    #282c20 0%,
+    rgba(40, 44, 32, 0.82) 14%,
+    rgba(40, 44, 32, 0.45) 46%,
+    rgba(40, 44, 32, 0.1) 76%,
+    transparent 100%
+  );
+}
+.archive-film__rail,
+.archive-film__edge-light { display: none; }
+@media (min-width: 1024px) {
+  .archive-film {
+    --film-rail: clamp(27px, 2.15vw, 33px);
+    background: transparent;
+    isolation: isolate;
+  }
+  .archive-film::before,
+  .archive-film::after {
+    content: '';
+    position: absolute;
+    top: var(--film-rail);
+    bottom: var(--film-rail);
+    width: 5px;
+    background: #1a2017;
+    pointer-events: none;
+  }
+  .archive-film::before { left: 0; }
+  .archive-film::after { right: 0; }
+  .archive-film__media {
+    inset: var(--film-rail) 5px;
+    overflow: hidden;
+  }
+  .archive-film__image-plane { inset: -6px; }
+  .archive-film .archive-photo-shade-top { opacity: 0.36; }
+  .archive-film .archive-photo-shade-bottom { opacity: 0.46; }
+  .archive-film__rail {
+    position: absolute;
+    inset-inline: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--film-rail);
+    padding-inline: 17px;
+    pointer-events: none;
+    font-family: var(--font-ui);
+    font-size: 8px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.23em;
+    text-transform: uppercase;
+    color: rgba(230, 233, 205, 0.63);
+  }
+  .archive-film__rail--top { top: 0; }
+  .archive-film__rail--bottom { bottom: 0; justify-content: flex-end; }
+  /* Two masks cut actual apertures in the rebate: geographic detail remains
+     visible through the perforations, with no extra images or DOM per hole. */
+  .archive-film__stock {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, #24291e, #191f16 46%, #1b2118);
+    box-shadow: inset 0 1px rgba(231, 234, 210, 0.1), inset 0 -1px rgba(7, 12, 7, 0.56);
+    -webkit-mask-image: linear-gradient(#000 0 0), repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 29px);
+    -webkit-mask-size: 100% 100%, calc(100% - 203px) 8px;
+    -webkit-mask-position: center, 126px center;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-composite: xor;
+    mask-image: linear-gradient(#000 0 0), repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 29px);
+    mask-size: 100% 100%, calc(100% - 203px) 8px;
+    mask-position: center, 126px center;
+    mask-repeat: no-repeat;
+    mask-composite: exclude;
+  }
+  .archive-film__rail--bottom .archive-film__stock {
+    -webkit-mask-size: 100% 100%, calc(100% - 316px) 8px;
+    -webkit-mask-position: center, 142px center;
+    mask-size: 100% 100%, calc(100% - 316px) 8px;
+    mask-position: center, 142px center;
+  }
+  .archive-film__code,
+  .archive-film__year,
+  .archive-film__cue { position: relative; }
+  .archive-film__code span { margin-left: 8px; color: #c5d28a; }
+  .archive-film__cue {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: rgba(244, 244, 237, 0.86);
+    transition: color 360ms ease;
+  }
+  .archive-film__cue svg { color: #c5d28a; }
+  .group:hover .archive-film__cue,
+  .group:focus-visible .archive-film__cue { color: #d2ff00; }
+  .archive-film__edge-light {
+    position: absolute;
+    inset: var(--film-rail) 5px;
+    z-index: 9;
+    display: block;
+    pointer-events: none;
+    box-shadow: inset 0 1px rgba(238, 236, 204, 0.44), inset 0 -1px rgba(238, 236, 204, 0.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-film__cue { transition: none; }
+}
+.route-atlas--mobile .route-atlas-fallback__art {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.42) 4%, #000 9%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.42) 4%, #000 9%, #000 100%);
+}
+.route-atlas .mapboxgl-ctrl-logo {
+  opacity: 0.28;
+  filter: grayscale(1) invert(1);
+  transform: scale(0.72);
+  transform-origin: left bottom;
+}
+.route-atlas .mapboxgl-ctrl-attrib {
+  opacity: 0.22;
+  font-size: 8px;
+}
+.route-atlas--mobile .mapboxgl-ctrl-logo {
+  opacity: 0.18;
+  transform: scale(0.62);
+}
+@media (max-width: 1023px) {
+  .atlas-map-workspace .mapboxgl-ctrl-bottom-left {
+    left: max(0px, env(safe-area-inset-left));
+    bottom: 82px;
+    transition: bottom 0.46s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .atlas-map-workspace[data-mobile-sheet='browse'] .mapboxgl-ctrl-bottom-left {
+    bottom: calc(min(48svh, calc(100% - 4.5rem)) + 8px);
+  }
+  .atlas-map-workspace[data-mobile-sheet='detail'] .mapboxgl-ctrl-bottom-left {
+    bottom: calc(min(68svh, calc(100% - 4.5rem)) + 8px);
+  }
+  /* Keep the primary map controls in the always-visible upper map area. The
+     lower edge belongs to the mobile sheet once browse or detail is open. */
+  .atlas-map-workspace .mapboxgl-ctrl-bottom-right {
+    right: max(0px, env(safe-area-inset-right));
+    top: 16px;
+    bottom: auto;
+  }
+}
+
+.atlas-sheet-safe-inline {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+
+/* Standalone Atlas controls share the same olive glass material as the index.
+   Mapbox's default white button stack was the last visually foreign surface. */
+.atlas-map-workspace .mapboxgl-ctrl-group,
+.atlas-reset-control {
+  overflow: hidden;
+  border: 1px solid rgba(244, 244, 237, 0.1);
+  background: rgba(17, 21, 15, 0.72);
+  box-shadow: 0 12px 34px rgba(7, 9, 6, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.atlas-map-workspace .mapboxgl-ctrl-group {
+  border-radius: 0.8rem;
+}
+.atlas-map-workspace .mapboxgl-ctrl-group button {
+  width: 40px;
+  height: 40px;
+  background-color: transparent;
+}
+.atlas-map-workspace .mapboxgl-ctrl-group button + button {
+  border-top-color: rgba(244, 244, 237, 0.08);
+}
+.atlas-map-workspace .mapboxgl-ctrl-group button:hover {
+  background-color: rgba(244, 244, 237, 0.065);
+}
+.atlas-map-workspace .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  background-size: 18px 18px;
+  filter: invert(1) sepia(0.08);
+  opacity: 0.62;
+}
+.atlas-map-workspace .mapboxgl-ctrl-logo {
+  opacity: 0.3;
+  filter: grayscale(1) invert(1);
+  transform: scale(0.76);
+  transform-origin: left bottom;
+}
+.atlas-map-workspace .mapboxgl-ctrl-attrib {
+  border-radius: 0.55rem;
+  background: rgba(17, 21, 15, 0.68);
+  color: rgba(244, 244, 237, 0.42);
+  font-size: 8px;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.atlas-map-workspace .mapboxgl-ctrl-attrib a {
+  color: rgba(244, 244, 237, 0.52);
+}
+.atlas-map-workspace .mapboxgl-ctrl-attrib-button {
+  filter: invert(1);
+  opacity: 0.5;
+}
+@media (max-width: 1023px) {
+  .atlas-map-workspace .mapboxgl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* The standalone Atlas is a viewport-sized tool, not a scrolling document.
+   This class is attached only while /travel is active and is removed during
+   Astro page swaps; map/list/sheet surfaces keep their own internal scrolling. */
+html.travel-workspace-active,
+body.travel-workspace-active {
+  height: 100%;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+@media (max-height: 620px) {
+  .travel-workspace__masthead {
+    height: 7rem !important;
+    padding-top: 4.25rem !important;
+  }
+  .travel-workspace__masthead p {
+    display: none;
+  }
+  .travel-workspace__masthead h1 {
+    font-size: clamp(1.55rem, 5.2vw, 2.35rem);
+  }
+}
+@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
+  /* Keep the fixed Travel workspace useful on 568 x 320 class screens: the
+     global navigation remains a full 44px target, but releases its surplus
+     vertical padding so the masthead and bottom sheet do not compete. */
+  body.travel-workspace-active nav[data-site-nav] {
+    padding-top: max(0.5rem, env(safe-area-inset-top)) !important;
+    padding-bottom: 0.5rem !important;
+  }
+  .travel-workspace__masthead {
+    height: calc(5.75rem + env(safe-area-inset-top)) !important;
+    padding-top: calc(4rem + env(safe-area-inset-top)) !important;
+  }
+  .travel-workspace__masthead-inner {
+    padding-bottom: 0.25rem !important;
+  }
+  .travel-workspace__title {
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: clamp(1.45rem, 4.6vw, 1.7rem) !important;
+    line-height: 0.9;
+  }
+  .atlas-mobile-sheet {
+    max-height: calc(100% - 2.25rem) !important;
+  }
+  .atlas-mobile-sheet__header {
+    min-height: 60px;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .atlas-map-workspace[data-mobile-sheet='browse'] .atlas-mobile-sheet,
+  .atlas-map-workspace[data-mobile-sheet='detail'] .atlas-mobile-sheet {
+    height: calc(100% - 2.25rem) !important;
+  }
+  .atlas-map-workspace[data-mobile-sheet='peek'] .mapboxgl-ctrl-bottom-left {
+    bottom: 70px;
+  }
+  .atlas-map-workspace[data-mobile-sheet='browse'] .mapboxgl-ctrl-bottom-left,
+  .atlas-map-workspace[data-mobile-sheet='detail'] .mapboxgl-ctrl-bottom-left {
+    bottom: calc(100% - 5rem);
+  }
+  .atlas-map-workspace .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group {
+    display: flex;
+  }
+  .atlas-map-workspace .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group button + button {
+    border-top: 0;
+    border-left: 1px solid rgba(244, 244, 237, 0.08);
+  }
+}
+
+/* Shared horizontal safe-area gutters for full-bleed editorial surfaces. */
+.safe-inline-page {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+.safe-inline-story-header {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+.safe-inline-story-content {
+  padding-left: max(1.5rem, env(safe-area-inset-left));
+  padding-right: max(1.5rem, env(safe-area-inset-right));
+}
+@media (min-width: 768px) {
+  .safe-inline-page,
+  .safe-inline-story-header,
+  .safe-inline-story-content {
+    padding-left: max(3rem, env(safe-area-inset-left));
+    padding-right: max(3rem, env(safe-area-inset-right));
+  }
+}
+@media (min-width: 1280px) {
+  .safe-inline-page {
+    padding-left: max(4rem, env(safe-area-inset-left));
+    padding-right: max(4rem, env(safe-area-inset-right));
+  }
+}
+.mobile-route-story {
+  --atlas-mobile-height: 100dvh;
+}
+.mobile-route-story__scenes {
+  margin-top: calc(-1 * var(--atlas-mobile-height));
+  pointer-events: none;
+}
+.mobile-route-story__lead-in {
+  height: 68svh;
+}
+.mobile-route-story__scene {
+  display: flex;
+  min-height: 108svh;
+  align-items: center;
+  padding: 18svh 0 14svh;
+}
+.mobile-route-story__scene [role="button"],
+.mobile-route-story__scene button,
+.mobile-route-story__scene a {
+  pointer-events: auto;
+}
+.mobile-route-story__release {
+  height: 56svh;
+}
+.mobile-route-region {
+  left: max(1.25rem, env(safe-area-inset-left));
+}
+.mobile-route-card {
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+.route-atlas--mobile .route-atlas-header {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+.route-atlas--mobile .route-atlas-nav {
+  left: max(1.25rem, env(safe-area-inset-left));
+}
+.route-atlas--mobile .route-atlas-status {
+  left: max(1.25rem, env(safe-area-inset-left));
+  right: max(1.25rem, env(safe-area-inset-right));
+}
+.route-atlas--mobile .mapboxgl-ctrl-bottom-left {
+  left: env(safe-area-inset-left);
+  bottom: env(safe-area-inset-bottom);
+}
+.route-atlas--mobile .mapboxgl-ctrl-bottom-right {
+  right: env(safe-area-inset-right);
+  bottom: env(safe-area-inset-bottom);
+}
+@media (max-width: 1023px) and (max-height: 520px) {
+  /* A short landscape phone has room for one clear story at a time. Keep the
+     global wordmark, route rail and photograph; remove the duplicate atlas
+     running head and give the image a deliberate right-hand column. */
+  .route-atlas--mobile .route-atlas-header {
+    display: none;
+  }
+  .route-atlas--mobile .route-atlas-status {
+    width: 8.25rem;
+    right: auto;
+    bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+  }
+  .route-atlas--mobile .route-atlas-footer {
+    display: block;
+    padding-top: 0;
+  }
+  .route-atlas--mobile .route-atlas-footer > span {
+    display: none;
+  }
+  .route-atlas--mobile .route-atlas-overview-title {
+    font-size: clamp(24px, 6vw, 34px);
+  }
+  .route-atlas--mobile .route-atlas-nav {
+    top: 28% !important;
+    width: 8.25rem;
+    padding-top: 0;
+  }
+  .route-atlas--mobile .route-atlas-stop {
+    min-height: 13px;
+    padding-block: 1px !important;
+  }
+  .route-atlas--mobile .route-atlas-stop:not(.is-active) > span:last-child {
+    display: none;
+  }
+  .route-atlas--mobile .route-atlas-stop.is-active {
+    padding-block: 1px !important;
+  }
+  .route-atlas--mobile .route-atlas-stop > span:first-child {
+    height: 11px;
+    width: 11px;
+  }
+  .route-atlas--mobile .route-atlas-stop.is-active > span:last-child > span:first-child {
+    display: none;
+  }
+  .route-atlas--mobile .route-atlas-stop.is-active > span:last-child > span:last-child {
+    margin-top: 0;
+    font-size: 9px;
+  }
+  .mobile-route-region {
+    display: none;
+  }
+  .mobile-route-card {
+    width: 72vw !important;
+  }
+}
+@media (min-width: 1024px) and (max-height: 620px) {
+  .route-atlas-header { padding-top: 5rem; }
+  .route-atlas-nav { top: 8.25rem !important; }
+  .route-atlas-status { bottom: 1rem !important; }
+}
+.location-atlas .mapboxgl-ctrl-bottom-left {
+  top: 3px;
+  bottom: auto;
+}
+@keyframes route-marker-ping {
+  0% { transform: scale(0.68); opacity: 0.68; }
+  76%, 100% { transform: scale(1.85); opacity: 0; }
+}
+.route-marker-ping {
+  animation: route-marker-ping 1.1s cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+@media (orientation: landscape) and (max-width: 1023px) {
+  .mobile-route-story__lead-in { height: 76svh; }
+  .mobile-route-story__scene {
+    min-height: 155svh;
+    padding-top: 14svh;
+    padding-bottom: 10svh;
+  }
+  .mobile-route-story__release { height: 45svh; }
+  .mobile-route-story .archive-cover-title {
+    font-size: clamp(44px, 11vw, 64px) !important;
+  }
+  .mobile-route-story .archive-cover-title-wrap {
+    bottom: -30px !important;
+  }
+}
+@media (orientation: landscape) and (max-width: 639px) and (max-height: 520px) {
+  .mobile-route-story .archive-photo-frame {
+    aspect-ratio: 16 / 10 !important;
+  }
 }
 
 /* Map cluster "breathing" halo — CSS keyframes run on the compositor (off the
@@ -332,6 +927,19 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 }
 .marker-breathe {
   animation: marker-breathe 2.8s ease-in-out infinite;
+}
+.route-marker-orbit {
+  --ping-from: 0.7;
+  --ping-to: 1.9;
+  --ping-dur: 2.8s;
+  --ping-op: 0.5;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+.route-marker-orbit--secondary {
+  --ping-from: 0.78;
+  --ping-to: 1.62;
+  --ping-op: 0.34;
 }
 @media (prefers-reduced-motion: reduce) {
   .marker-breathe { animation: none; opacity: 0.35; }
@@ -362,6 +970,7 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   to { transform: scale(var(--ping-to, 2.6)); opacity: 0; }
 }
 .ping-out { animation: ping-out var(--ping-dur, 1.8s) ease-out infinite; }
+.route-marker-orbit--secondary { animation-delay: -1.4s; }
 
 @media (prefers-reduced-motion: reduce) {
   .soft-pulse { animation: none; opacity: 1; }
@@ -387,9 +996,7 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
      text/components. Plain low opacity keeps the emulsion without the seams. */
   opacity: 0.06;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  /* Own compositor layer → never repaints while (smooth-)scrolling underneath. */
-  transform: translateZ(0);
-  will-change: transform;
+  /* A static overlay does not need a permanent promoted layer on mobile. */
 }
 
 /* Soft edge vignette — deepens the corners a hair so the olive field has depth
@@ -401,7 +1008,415 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   z-index: 1;
   pointer-events: none;
   background: radial-gradient(125% 125% at 50% 48%, transparent 56%, rgba(9, 11, 6, 0.34) 100%);
-  transform: translateZ(0);
+}
+
+@media (max-width: 767px) {
+  .film-grain { opacity: 0.045; }
+}
+
+/* ─── Living Atlas homepage trial ───────────────────────────────────────────
+   Keep the continuous route timeline, but return to the earlier editorial
+   composition: the geographic field reads on the left and a clean photographic
+   dispatch sits on the right. Scroll-only scene anchors keep the motion and
+   story order independent from that presentation. */
+.living-atlas {
+  min-height: 100svh;
+  contain: paint;
+}
+
+.living-atlas__stage {
+  isolation: isolate;
+}
+
+.living-atlas__entry-wash {
+  background: linear-gradient(
+    180deg,
+    rgba(15, 19, 14, 0.48) 0%,
+    rgba(15, 19, 14, 0.2) 38%,
+    transparent 100%
+  );
+  height: 14svh;
+}
+
+.living-atlas__photo {
+  top: 16.5%;
+  height: 58%;
+  width: 50vw;
+  overflow: hidden;
+  background: #10140f;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.living-atlas__photo--right {
+  right: 5%;
+}
+
+.living-atlas__photo--left {
+  left: 12.5%;
+}
+
+/* Keep the photographic aperture geographically fixed while the image itself
+   carries the tiny pointer parallax. The overscan keeps that movement from
+   exposing a dark seam along the clean frame edge. */
+.living-atlas__photo > .living-atlas__photo-layer,
+.living-atlas__photo > div {
+  inset: -3%;
+}
+
+.living-atlas__photo img {
+  filter: saturate(0.72) contrast(1.08) brightness(0.8) sepia(0.04) hue-rotate(-3deg);
+  opacity: 1;
+}
+
+.living-atlas__photo-grade {
+  background: linear-gradient(
+    180deg,
+    rgba(8, 10, 7, 0.22) 0%,
+    rgba(8, 10, 7, 0.035) 34%,
+    rgba(8, 10, 7, 0.03) 62%,
+    rgba(8, 10, 7, 0.28) 100%
+  );
+}
+
+.living-atlas__photo-grade::after {
+  position: absolute;
+  inset: 0;
+  background: url('/assets/maps/walkin-silver-paper.webp') center / cover no-repeat;
+  content: '';
+  mix-blend-mode: soft-light;
+  opacity: 0.06;
+}
+
+.living-atlas__map-overprint {
+  display: none;
+}
+
+.living-atlas__rail-list {
+  max-height: min(48svh, 430px);
+}
+
+.living-atlas__rail-list.is-expanded {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.living-atlas__rail-list.is-expanded::-webkit-scrollbar {
+  display: none;
+}
+
+.living-atlas__rail::before {
+  content: '';
+  position: absolute;
+  bottom: 0.8rem;
+  left: 0.25rem;
+  top: 1.35rem;
+  width: 1px;
+  background: rgba(244, 244, 237, 0.22);
+}
+
+.living-atlas__rail-node {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.living-atlas__rail-item.is-active .living-atlas__rail-node {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+.living-atlas__rail-item.is-passed .living-atlas__rail-node {
+  border-color: rgba(244, 244, 237, 0.28);
+  background: #171b15;
+}
+
+.living-atlas__rail-item.is-active .living-atlas__rail-node {
+  border-color: #d2ff00;
+  background: #d2ff00;
+  box-shadow: 0 0 16px rgba(210, 255, 0, 0.72);
+}
+
+.living-atlas__rail-item.is-active > span:last-child > span:first-child {
+  color: #d2ff00;
+}
+
+.living-atlas__rail-item.is-active > span:last-child > span:last-child {
+  color: #f4f4ed;
+}
+
+.living-atlas__title {
+  font-size: clamp(60px, 5.2vw, 76px);
+  line-height: 0.82;
+  letter-spacing: -0.045em;
+  text-shadow: 0 10px 38px rgba(7, 9, 6, 0.48);
+}
+
+.living-atlas__slash {
+  font-size: clamp(30px, 3.4vw, 48px);
+}
+
+.living-atlas__lead-in {
+  height: 34svh;
+}
+
+.living-atlas__scene {
+  min-height: 92svh;
+}
+
+.living-atlas__release {
+  height: 58svh;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(40, 44, 32, 0.2) 32%,
+    rgba(40, 44, 32, 0.76) 72%,
+    #282c20 100%
+  );
+}
+
+.route-atlas--living .route-atlas-tone {
+  background: rgba(40, 44, 32, 0.04);
+}
+
+.route-atlas--living .mapboxgl-map {
+  opacity: 0.92;
+}
+
+.route-atlas--living .route-atlas-entry-dissolve {
+  display: none;
+}
+
+.route-atlas--living .route-atlas-interface-veil {
+  width: min(320px, 28%);
+}
+
+.route-atlas--living .mapboxgl-ctrl-bottom-left {
+  bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  .living-atlas__running-head {
+    left: 3rem;
+    top: 5.45rem;
+  }
+
+  .living-atlas__follow {
+    top: 2.25rem;
+  }
+
+  .living-atlas__rail {
+    left: clamp(2.5rem, 3.1vw, 3.25rem);
+    top: 25.6%;
+    width: 9.5rem;
+  }
+
+  .living-atlas__rail-item {
+    min-height: 5.75rem;
+    padding-block: 0;
+  }
+
+  .living-atlas__rail-item > span:last-child > span:first-child {
+    font-size: 9px;
+  }
+
+  .living-atlas__rail-item > span:last-child > span:last-child {
+    max-width: 8.5rem;
+    font-size: 13px;
+    color: rgba(244, 244, 237, 0.68);
+  }
+
+  .living-atlas__caption {
+    left: 33.1%;
+    right: auto;
+    bottom: 13%;
+    width: min(42vw, 600px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .living-atlas__running-head {
+    max-width: calc(100vw - 11.5rem);
+  }
+
+  .living-atlas__photo {
+    top: 14%;
+    left: 38%;
+    right: 2%;
+    width: auto;
+    height: auto;
+    aspect-ratio: 8 / 5;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .living-atlas__photo--right {
+    left: 38%;
+    right: 2%;
+  }
+
+  .living-atlas__photo--left {
+    left: -2%;
+    right: auto;
+  }
+
+  .living-atlas__rail {
+    top: 24%;
+  }
+
+  .living-atlas__rail-list {
+    max-height: 36svh;
+  }
+
+  .living-atlas__rail-item {
+    min-height: 3rem;
+  }
+
+  .living-atlas__caption {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .living-atlas__title {
+    max-width: 92vw;
+    font-size: clamp(48px, 13vw, 72px);
+  }
+
+  .living-atlas__lead-in {
+    height: 28svh;
+  }
+
+  .living-atlas__scene {
+    min-height: 96svh;
+  }
+
+  .living-atlas__release {
+    height: 46svh;
+  }
+
+  .route-atlas--living .mapboxgl-ctrl-logo,
+  .route-atlas--living .mapboxgl-ctrl-attrib {
+    opacity: 0.42;
+  }
+}
+
+@media (max-width: 639px) {
+  .living-atlas__running-head {
+    left: max(1rem, env(safe-area-inset-left));
+    top: 4.65rem;
+    max-width: calc(100vw - 2rem);
+  }
+
+  .living-atlas__photo {
+    top: 17%;
+    left: 35%;
+    right: -2%;
+    width: auto;
+    max-width: none;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+
+  .living-atlas__photo--right {
+    left: 35%;
+    right: -2%;
+  }
+
+  .living-atlas__photo--left {
+    left: -7%;
+    right: auto;
+  }
+
+  .living-atlas__rail {
+    left: max(1rem, env(safe-area-inset-left));
+    top: 19%;
+    width: 7.25rem;
+  }
+
+  .living-atlas__rail-item {
+    gap: 0.55rem;
+  }
+
+  .living-atlas__rail-item span span:last-child {
+    max-width: 5.7rem;
+    font-size: 8px;
+  }
+
+  .living-atlas__caption {
+    left: max(1rem, env(safe-area-inset-left));
+    right: max(1rem, env(safe-area-inset-right));
+    bottom: max(2.5rem, env(safe-area-inset-bottom));
+  }
+
+  .living-atlas__caption > div:first-child {
+    margin-bottom: 0.55rem;
+  }
+
+  .living-atlas__title {
+    font-size: clamp(46px, 14vw, 62px);
+  }
+
+  .living-atlas__slash {
+    font-size: clamp(25px, 9vw, 36px);
+  }
+}
+
+@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
+  .living-atlas__photo {
+    left: auto;
+    right: 1%;
+    top: 9%;
+    width: 68%;
+    height: 72%;
+    aspect-ratio: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .living-atlas__photo--right {
+    left: auto;
+    right: 1%;
+  }
+
+  .living-atlas__rail {
+    top: 24%;
+    width: 7.25rem;
+  }
+
+  .living-atlas__rail-item {
+    min-height: 2.75rem;
+  }
+
+  .living-atlas__caption {
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    left: 31%;
+  }
+
+  .living-atlas__caption > div:first-child,
+  .living-atlas__caption > div:last-child > div:last-child {
+    display: none;
+  }
+
+  .living-atlas__title {
+    font-size: clamp(38px, 8vw, 62px);
+  }
+
+  .living-atlas__scene {
+    min-height: 120svh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .living-atlas__scene {
+    min-height: 82svh;
+  }
+
+  .living-atlas__photo img {
+    transform: none;
+  }
 }
 
 /* Newsprint ink screen — a fine dot grain that reads as offset print. Used on

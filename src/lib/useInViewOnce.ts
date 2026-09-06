@@ -10,7 +10,7 @@ import { useReducedMotion } from 'framer-motion';
  * `initial` (content never un-hides). Reduced-motion (and no-IO environments)
  * short-circuit to shown immediately so nothing is ever trapped invisible.
  *
- * Shared by HomePage, StatementReveal and AboutPage's <Reveal> — tune the
+ * Shared by HomePage and AboutPage's <Reveal> — tune the
  * trigger window per call site via rootMargin/threshold.
  */
 export function useInViewOnce<T extends Element>(
