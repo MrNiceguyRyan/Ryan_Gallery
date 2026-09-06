@@ -1,0 +1,54 @@
+name: Validate Gallery
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+    inputs:
+      require_mapbox:
+        type: boolean
+        default: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Reproducible dependency install
+        run: npm ci
+      - name: Interaction regression tests
+        run: npm run test:regression
+      - name: Release guard tests
+        run: npm run test:release
+      - name: Security report and critical vulnerability gate
+        run: npm audit --audit-level=critical
+      - name: Studio critical vulnerability gate
+        working-directory: ryan
+        run: npm audit --audit-level=critical
+      - name: Build
+        env:
+          PUBLIC_MAPBOX_TOKEN: ${{ vars.PUBLIC_MAPBOX_TOKEN || secrets.PUBLIC_MAPBOX_TOKEN }}
+          REQUIRE_MAPBOX: ${{ inputs.require_mapbox || false }}
+        run: |
+          if [ "$REQUIRE_MAPBOX" = true ] && [ -z "$PUBLIC_MAPBOX_TOKEN" ]; then
+            echo 'Configure PUBLIC_MAPBOX_TOKEN at repository level before publishing.'
+            exit 1
+          fi
+          npm run build
+      - name: Verify generated pages and assets
+        run: npm run check:release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gallery-build-${{ github.sha }}
+          path: dist
+          include-hidden-files: true
+          retention-days: 7

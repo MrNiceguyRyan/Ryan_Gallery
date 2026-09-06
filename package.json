@@ -9,6 +9,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs",
+    "test:release": "node --test scripts/release-check.test.mjs",
+    "check:release": "node scripts/release-check.mjs",
+    "check:site": "node scripts/site-health.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
