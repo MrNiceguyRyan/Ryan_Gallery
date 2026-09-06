@@ -1,7 +1,6 @@
 import { defineConfig } from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@astrojs/react';
-import sanity from '@sanity/astro';
 import sitemap from '@astrojs/sitemap';
 
 // Astro's build also starts a temporary Vite server. Keep its dependency
@@ -32,6 +31,8 @@ export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
   site: 'https://ryanxugallery.com',
   output: 'static',
+  // Preserve the approved inline spacing when upgrading to Astro 7.
+  compressHTML: true,
   prefetch: {
     // Enable Astro's built-in link prefetching. Opt-in via `data-astro-prefetch`
     // on links (e.g. the collection mini-map → /travel) to warm the HTML cache
@@ -50,13 +51,6 @@ export default defineConfig({
   integrations: [
     stablePreview(),
     react(),
-    sanity({
-      projectId: 'z610fooo',
-      dataset: 'production',
-      useCdn: true,
-      // Keep in sync with Sanity API releases: https://www.sanity.io/docs/api-versioning
-      apiVersion: '2025-04-01',
-    }),
     sitemap({
       // Exclude Sanity Studio route if ever served under the same domain
       filter: (page) => !page.includes('/studio'),

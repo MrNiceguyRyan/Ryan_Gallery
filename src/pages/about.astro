@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import AboutPage from '../components/about/AboutPage';
-import { sanityClient } from 'sanity:client';
+import { sanityClient } from '../lib/sanityClient';
 import type { Collection, SiteSettings } from '../types';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 

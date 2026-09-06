@@ -23,17 +23,32 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            ryan/package-lock.json
       - name: Reproducible dependency install
         run: npm ci
       - name: Interaction regression tests
         run: npm run test:regression
       - name: Release guard tests
         run: npm run test:release
-      - name: Security report and critical vulnerability gate
-        run: npm audit --audit-level=critical
-      - name: Studio critical vulnerability gate
+      - name: Website vulnerability gate
+        run: npm audit --audit-level=low
+      - name: Reproducible Studio dependency install
         working-directory: ryan
-        run: npm audit --audit-level=critical
+        run: npm ci --legacy-peer-deps
+      - name: Studio security compatibility tests
+        working-directory: ryan
+        run: npm run test:security
+      - name: Studio vulnerability gate
+        working-directory: ryan
+        run: npm audit --audit-level=low
+      - name: Verify Studio build without publishing
+        working-directory: ryan
+        env:
+          CI: true
+          SANITY_TELEMETRY_DISABLED: 1
+        run: npm run build
       - name: Build
         env:
           PUBLIC_MAPBOX_TOKEN: ${{ vars.PUBLIC_MAPBOX_TOKEN || secrets.PUBLIC_MAPBOX_TOKEN }}

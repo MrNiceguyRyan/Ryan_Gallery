@@ -1,5 +1,7 @@
 # Maintenance and release protection — 2026-09-05
 
+This is the phase-one record at commit `41d5d02`. The subsequent framework/Studio isolation, zero-advisory result, stricter gates and current acceptance limitations are recorded in [phase two](maintenance-security-phase-two.md). Statements below describe phase one, not the final branch state.
+
 ## Scope and release state
 
 This maintenance is isolated on `codex/security-release-guardrails`, based on released commit `7dc98fd`. It does not change `src/`, public design assets, Astro configuration, Cloudflare configuration, or Sanity schemas. The separate spatial-design experiment is not included.

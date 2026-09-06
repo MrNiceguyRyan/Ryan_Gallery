@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { sanityClient } from 'sanity:client';
+import { sanityClient } from '../../lib/sanityClient';
 import type { Collection, Photo } from '../../types';
 import WorkStory from '../../components/works/WorkStory';
 import { fetchSanityWithRetry } from '../../lib/sanityFetch';

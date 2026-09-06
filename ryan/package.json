@@ -9,16 +9,17 @@
     "deploy": "sanity deploy",
     "deploy-graphql": "sanity graphql deploy",
     "dev": "sanity dev",
-    "start": "sanity start"
+    "start": "sanity start",
+    "test:security": "node --test scripts/security-dependencies.test.mjs"
   },
   "keywords": [
     "sanity"
   ],
   "dependencies": {
-    "@sanity/vision": "^5.16.0",
+    "@sanity/vision": "^6.12.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "sanity": "^5.16.0",
+    "sanity": "^6.12.0",
     "styled-components": "^6.1.18"
   },
   "devDependencies": {
@@ -27,6 +28,15 @@
     "eslint": "^9.28",
     "prettier": "^3.5",
     "typescript": "^5.8"
+  },
+  "overrides": {
+    "@vercel/frameworks": {
+      "js-yaml": "3.15.2",
+      "smol-toml": "1.8.0"
+    },
+    "typeid-js": {
+      "uuid": "11.1.1"
+    }
   },
   "prettier": {
     "bracketSpacing": false,

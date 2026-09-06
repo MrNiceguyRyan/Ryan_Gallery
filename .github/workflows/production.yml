@@ -45,8 +45,8 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      - name: Block production while high or critical advisories remain
-        run: npm audit --audit-level=high
+      - name: Block production while known dependency advisories remain
+        run: npm audit --audit-level=low
       - name: Verify required build configuration
         env:
           MAPBOX_TOKEN: ${{ vars.PUBLIC_MAPBOX_TOKEN || secrets.PUBLIC_MAPBOX_TOKEN }}
