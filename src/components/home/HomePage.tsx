@@ -26,6 +26,7 @@ import type { RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
 import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
+import { restoreStoryFocus } from '../../lib/storyFocus';
 import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES } from '../../lib/archiveEntrance';
 import type Lenis from 'lenis';
 
@@ -326,8 +327,11 @@ export default function HomePage({ collections }: Props) {
   const storyScrollYRef = useRef(0);
   const storyReturnFocusRef = useRef<HTMLElement | null>(null);
   const storySourceChapterIdRef = useRef<string | null>(null);
+  const cancelStoryFocusRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelStoryFocusRef.current?.(), []);
   const bodyPaddingRightRef = useRef('');
   const openCollection = useCallback((collection: Collection) => {
+    cancelStoryFocusRef.current?.();
     const chapterId = `archive-item-${collection._id}`;
     const chapter = document.getElementById(chapterId);
     const chapterControl = chapter?.querySelector<HTMLElement>('[role="button"], button');
@@ -357,19 +361,12 @@ export default function HomePage({ collections }: Props) {
   const finishStoryClose = useCallback(() => {
     storyOpenRef.current = false;
     setStoryClosing(false);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const sourceChapter = storySourceChapterIdRef.current
-          ? document.getElementById(storySourceChapterIdRef.current)
-          : null;
-        const focusTarget = storyReturnFocusRef.current?.isConnected
-          ? storyReturnFocusRef.current
-          : sourceChapter?.querySelector<HTMLElement>('[role="button"], button') ??
-            document.getElementById('main-content');
-        focusTarget?.focus({ preventScroll: true });
-        storySourceChapterIdRef.current = null;
-      });
-    });
+    cancelStoryFocusRef.current?.();
+    const sourceId = storySourceChapterIdRef.current?.replace(/^archive-item-/, '');
+    if (sourceId) {
+      cancelStoryFocusRef.current = restoreStoryFocus(storyReturnFocusRef.current, sourceId);
+    }
+    storySourceChapterIdRef.current = null;
   }, []);
   const storyActive = !!selectedCollection || storyClosing;
 
@@ -986,7 +983,9 @@ export default function HomePage({ collections }: Props) {
       document.body.style.overflow = 'auto';
       document.body.style.paddingRight = bodyPaddingRightRef.current;
       if (storyScrollYRef.current > 0) {
-        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        // `auto` inherits the page's smooth CSS behavior while Lenis is
+        // stopped. Restoration must not replay the archive from scroll zero.
+        window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
         // The body lock moves the native window to the top while Lenis is
         // stopped. Reconcile Lenis' internal target before restarting it, or
         // a keyboard-opened Story can resume toward that stale top position.
@@ -1004,7 +1003,7 @@ export default function HomePage({ collections }: Props) {
         document.body.style.width = '';
         document.body.style.overflow = '';
         document.body.style.paddingRight = bodyPaddingRightRef.current;
-        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
       }
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';

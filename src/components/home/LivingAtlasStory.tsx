@@ -376,6 +376,7 @@ export default function LivingAtlasStory({
           onClick={() => onOpen(chapter.stop)}
           tabIndex={interactive ? undefined : -1}
           data-cursor="Enter Story"
+          data-story-source={interactive ? chapter.stop.id : undefined}
           className="group max-w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           aria-label={`Open ${chapter.stop.name} story`}
         >
@@ -483,6 +484,7 @@ export default function LivingAtlasStory({
                     onClick={() => scrollToChapter(index)}
                     tabIndex={!railExpanded && !inCompactWindow ? -1 : undefined}
                     aria-current={active ? 'step' : undefined}
+                    data-story-source={active ? stop.id : undefined}
                     aria-label={active ? `Open ${stop.name} story` : `Go to chapter ${index + 1}, ${stop.name}`}
                     className={`living-atlas__rail-item group relative flex min-h-11 w-full items-center gap-3 py-1 text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] ${active ? 'is-active' : ''} ${passed ? 'is-passed' : ''}`}
                   >

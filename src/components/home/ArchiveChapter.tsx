@@ -469,6 +469,7 @@ export default function ArchiveChapter({
       }
     },
     'data-cursor': 'Enter Story',
+    'data-story-source': collection._id,
     whileTap: reduce ? undefined : { scale: 0.996 },
     role: 'button' as const,
     tabIndex: entryInteractive ? 0 : -1,

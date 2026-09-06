@@ -1,5 +1,7 @@
 # Security maintenance — phase two
 
+Subsequent acceptance found and repaired a Story return-state bug. See [Story return verification](maintenance-story-return-2026-09-06.md) for that separately scoped follow-up; phase-two dependency and content-parity results below remain historical.
+
 ## Scope and release state
 
 Continuation of `codex/security-release-guardrails`, after `41d5d02`. This worktree remains separate from the spatial-design experiment in the root checkout. No production or Sanity Studio deployment, main-branch merge, schema publication, content edits or visitor telemetry activation occurred.
