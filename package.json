@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "test": "node src/lib/jsonLd.test.js && node scripts/security.test.mjs",
     "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
