@@ -9,6 +9,7 @@ The changes are dependency maintenance and build/data-client wiring, not a visua
 ## Changes
 
 - Website: Astro 7.3.1, its supported React integration 6.0.5 and esbuild 0.28.2. `compressHTML: true` explicitly preserves the prior inline whitespace behavior described in the [Astro 7 migration guide](https://docs.astro.build/en/guides/upgrade-to/v7/).
+- Vite 8 is declared directly for the Tailwind plugin. The first hosted build exposed an undeclared peer dependency: the nested worktree could resolve Vite from its parent checkout, while a clean GitHub checkout could not. The explicit dependency removes that environment-dependent resolution; hosted CI, not only a worktree install, is required to validate it.
 - The static public website now imports its read-only data client directly from `@sanity/client`. The project, production dataset, CDN setting and API date are exactly those used by the removed `@sanity/astro` integration. No credentials are added. The existing separate `ryan/` Studio remains the content editor.
 - Removed the website's unused Studio integration/runtime and direct `react-is` dependency. The install removed 849 packages and added 26 as part of the framework migration; this is toolchain reduction, not a claim of equivalent visitor bundle savings.
 - Studio: Sanity and Vision 6.12.0, following the [official v6 migration requirements](https://www.sanity.io/docs/help/v5-to-v6). Existing Node 22 and React 19 settings satisfy these requirements. No auth providers or custom search overrides needed migration.
@@ -36,7 +37,7 @@ GitHub environment reviewers, branch protection, repository-level Mapbox configu
 
 ## Remaining non-blocking build warnings and pending work
 
-- Astro's supported React integration currently brings an upstream Vite plugin that still specifies deprecated esbuild options. Builds pass; no unsupported plugin-major override was added merely to hide warnings.
+- Early local builds reported deprecated Vite esbuild options while resolving dependencies through the parent checkout. After declaring Vite explicitly and clean-installing, those warnings no longer appeared; no unsupported plugin-major override was added.
 - Existing Mapbox large-chunk warning remains visible. No performance benefit is inferred from dependency-count reduction.
 - Studio still has its pre-existing auto-update configuration without an appId. No Studio publication was performed. Confirm the deployment channel/appId before any future Studio release.
 - Sentry remains proposed, not installed or enabled. The user allowed minimized browser-error monitoring but requested a specific-service confirmation; that confirmation and configuration are still pending. No visitor events have been transmitted by this maintenance.
