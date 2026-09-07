@@ -148,12 +148,27 @@ interface Props {
   collections?: ArchiveCollection[];
 }
 
+/** Only allow http(s) hrefs from CMS-controlled fields (blocks javascript:). */
+function safeHttpUrl(url: string | undefined | null, fallback: string): string {
+  if (!url) return fallback;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.toString();
+  } catch {
+    /* ignore malformed */
+  }
+  return fallback;
+}
+
 export default function AboutPage({ settings, collections = [] }: Props) {
   const name      = settings?.name      ?? 'Ryan Xu';
   const bio       = settings?.bio       ?? null;
   const avatarUrl = settings?.avatarUrl ?? 'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg';
   const email     = settings?.email     ?? 'ryan2420159421@gmail.com';
-  const instagram = settings?.instagram ?? 'https://www.instagram.com/ryan_photoo/';
+  const instagram = safeHttpUrl(
+    settings?.instagram,
+    'https://www.instagram.com/ryan_photoo/',
+  );
   const timeline  = (settings?.timeline?.length ?? 0) > 0
     ? settings!.timeline!
     : timelineFromCollections(collections);
