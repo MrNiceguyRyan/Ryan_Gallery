@@ -15,7 +15,11 @@ import { createReadStream } from 'fs';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 const PHOTO_ROOT = '/Users/ryan/Desktop/PHOTO';
-const SANITY_TOKEN = 'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
+if (!SANITY_TOKEN) {
+  console.error('Missing SANITY_TOKEN env var. Set it before running mutation scripts.');
+  process.exit(1);
+}
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // City folder name → location metadata (fuzzy-matched by lowercase)
@@ -136,6 +140,11 @@ async function generateTitle(cityName, stateName, index, exifData) {
 // Find or create a collection for the city
 async function findOrCreateCollection(cityFolderName, stateName) {
   const slug = slugify(cityFolderName);
+  if (!slug) {
+    throw new Error(
+      `Refusing to create collection with empty slug from city folder "${cityFolderName}" (state "${stateName}")`,
+    );
+  }
   const locationInfo = LOCATION_MAP[cityFolderName.toLowerCase()] || {};
   const displayCity = locationInfo.city || cityFolderName;
 
@@ -217,9 +226,14 @@ function parseCameraInfo(exif) {
 }
 
 // ─── Upload a single city folder ─────────────────────────────────────────────
-async function uploadCity(stateName, cityFolderName) {
+// cityFolderName is the filesystem entry under the state folder (use '.' for
+// photos stored directly in the state folder). collectionLabel is the CMS /
+// metadata name — for flat state folders pass the state name so we never
+// create a collection named "." with an empty slug.
+async function uploadCity(stateName, cityFolderName, collectionLabel = cityFolderName) {
   const cityPath = join(PHOTO_ROOT, stateName, cityFolderName);
-  const locationKey = cityFolderName.toLowerCase().trim();
+  const metaName = collectionLabel === '.' ? stateName : collectionLabel;
+  const locationKey = metaName.toLowerCase().trim();
   const locationInfo = LOCATION_MAP[locationKey];
   const stateStyle = STATE_STYLE_MAP[stateName.toLowerCase()] || 'street';
 
@@ -229,10 +243,10 @@ async function uploadCity(stateName, cityFolderName) {
     console.log(`    ⚠️  No images in ${cityFolderName}, skipping.`);
     return;
   }
-  console.log(`    📷 ${cityFolderName}: ${files.length} images`);
+  console.log(`    📷 ${metaName}: ${files.length} images`);
 
-  // Find or create collection
-  const collectionId = await findOrCreateCollection(cityFolderName, stateName);
+  // Find or create collection (metadata uses metaName, not the '.' sentinel)
+  const collectionId = await findOrCreateCollection(metaName, stateName);
 
   // Check existing photos — get filenames to skip duplicates
   const existingPhotos = await sanity.fetch(
@@ -267,7 +281,7 @@ async function uploadCity(stateName, cityFolderName) {
       }).catch(() => ({}));
 
       // Generate title
-      const title = await generateTitle(cityFolderName, stateName, existingPhotos.length + i, exif);
+      const title = await generateTitle(metaName, stateName, existingPhotos.length + i, exif);
 
       // Upload image asset
       const assetId = await uploadImage(filePath);
@@ -354,8 +368,8 @@ async function uploadState(stateName) {
     const directPhotos = readdirSync(statePath).filter(isImage);
     if (directPhotos.length > 0) {
       console.log(`  📷 Photos directly in ${stateName} (no city subfolders)`);
-      // Treat state as city
-      await uploadCity(stateName, '.');
+      // Treat state as city for CMS metadata; keep '.' as the filesystem path.
+      await uploadCity(stateName, '.', stateName);
     } else {
       console.log(`  ⚠️  No city folders or photos found, skipping.`);
     }
