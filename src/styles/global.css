@@ -1242,6 +1242,24 @@ body.travel-workspace-active {
     bottom: 13%;
     width: min(42vw, 600px);
   }
+
+  /* ── The photographic window trades sides with geography ──
+     The desktop positions above were written for a frame that always sat on
+     the right: the caption is pinned opposite it and the chapter rail owns the
+     left gutter. When `computeAtlasLayout` puts the frame on the left, both
+     have to move, or the caption lands on the photograph and the frame lands
+     on the rail. `data-photo-side` is set on the section for exactly this. */
+  .living-atlas__photo--left {
+    /* Clear the rail (left gutter + 9.5rem) instead of the base 12.5%. */
+    left: max(15.5%, 13.5rem);
+  }
+
+  /* Beats the element's own `md:left-[32%] md:right-[7%]` utilities: unlayered
+     CSS wins over Tailwind's layered ones. */
+  .living-atlas[data-photo-side='left'] .living-atlas__caption {
+    left: auto;
+    right: 4.5%;
+  }
 }
 
 @media (max-width: 1023px) {

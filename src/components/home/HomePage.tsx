@@ -425,7 +425,15 @@ export default function HomePage({ collections }: Props) {
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
   const desktopLayout = useDesktopLayout();
-  const useLivingAtlas = !desktopLayout;
+  // The living atlas — a full-bleed map stage with the photographic window
+  // floating on it — is the composition at every width now. Desktop used to
+  // get the classic two-column atlas with a permanently right-hand photo
+  // column; the living tree was written for both ends all along (`idPrefix`,
+  // rail sizing, source width and the pointer parallax all branch on `mobile`)
+  // but only ever rendered below 1024px, so its desktop half never ran.
+  // The classic desktop branch below is left intact and unreachable: setting
+  // this back to `!desktopLayout` restores it exactly.
+  const useLivingAtlas = true;
 
   // Desktop CAN open a story by morphing the cover photograph itself into the
   // story's opening frame (MagazineLayout's `shared-photo` entry). It is off:
@@ -754,11 +762,17 @@ export default function HomePage({ collections }: Props) {
 
   // The index mirrors the real chapter order exactly. It does not preview
   // places that have no corresponding story in this archive.
+  // The band's ids must match the anchors the living tree actually renders,
+  // which carry the `mobile-` prefix below 1024px (LivingAtlasStory's own
+  // `idPrefix`) — otherwise nothing highlights and every name jumps nowhere.
   const indexNames = useMemo(
     () => useLivingAtlas
-      ? routeStops.map((stop) => ({ name: stop.name, id: `archive-item-${stop.id}` }))
+      ? routeStops.map((stop) => ({
+        name: stop.name,
+        id: `${desktopLayout ? 'archive-item-' : 'mobile-archive-item-'}${stop.id}`,
+      }))
       : orderedCities.map((city) => ({ name: city.name.trim(), id: cityDomId(city) })),
-    [orderedCities, routeStops, useLivingAtlas],
+    [desktopLayout, orderedCities, routeStops, useLivingAtlas],
   );
 
   // Index of the active city — drives the geographic trace (−1 in the hero).
@@ -1224,11 +1238,15 @@ export default function HomePage({ collections }: Props) {
 
         {/* The city index is the single, lightweight seam between the opening
             cover and the live atlas chapter. */}
-        {!useLivingAtlas && (
+        {/* The seam between the opening cover and the atlas, and the target of
+            the end-cap's "Back to index". Desktop keeps it now that the living
+            composition renders there too; below 1024px the atlas stage starts
+            immediately under the opener and the band has no room. */}
+        {desktopLayout && (
           <QuietIndexBand
             names={indexNames}
             activeArchiveId={activeArchiveId}
-            fallbackArchiveId={orderedCities[0] ? cityDomId(orderedCities[0]) : null}
+            fallbackArchiveId={orderedCities[0] ? `archive-item-${routeStops[0]?.id ?? ''}` : null}
             onSelect={navigateLivingChapter}
           />
         )}

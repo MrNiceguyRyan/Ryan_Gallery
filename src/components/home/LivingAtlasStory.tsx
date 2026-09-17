@@ -15,6 +15,7 @@ import {
   useTransform,
 } from 'framer-motion';
 import type { RouteStop } from './RouteAtlas';
+import { computeAtlasLayout } from '../../lib/atlasLayout';
 
 interface Props {
   stops: RouteStop[];
@@ -104,22 +105,36 @@ function clampChapter(value: number, total: number) {
   return Math.max(0, Math.min(total - 1, value));
 }
 
-function smoothChapterWeight(progress: number, index: number) {
-  const proximity = Math.max(0, 1 - Math.abs(progress - index));
-  return proximity * proximity * (3 - 2 * proximity);
-}
-
-// Photographs cross-dissolve well; type does not. The wide weight above gives
-// both neighbouring chapters 0.5 at the midpoint, so on mobile two city names
-// sat superimposed at any resting scroll inside a handoff and read as neither
-// ("MIAMI" over "ORLANDO", each with its own pager and coordinates). Captions
-// therefore ramp only across the last 8% before the midpoint: adjacent
-// distances always sum to 1, so at most one caption is ever above zero.
+// Both weights below replace one symmetric smoothstep on `1 - |progress - index|`.
+// It gave BOTH neighbouring chapters 0.5 at the midpoint of every handoff, and
+// a scroll can rest anywhere, so that midpoint was a reachable state rather
+// than a passing frame. Type and photographs each needed their own answer.
+//
+// Type cannot cross-dissolve at all: two superimposed city names read as
+// neither ("MIAMI" over "ORLANDO", each with its own pager and coordinates).
+// Captions therefore ramp only across the last 8% before the midpoint, where
+// adjacent distances always sum to 1 — so at most one caption is above zero.
 const CAPTION_HANDOFF_BAND = 0.08;
 
 function captionChapterWeight(progress: number, index: number) {
   const distance = Math.abs(progress - index);
   const ramp = Math.max(0, Math.min(1, (0.5 - distance) / CAPTION_HANDOFF_BAND));
+  return ramp * ramp * (3 - 2 * ramp);
+}
+
+// Photographs do dissolve, but not symmetrically. At full-bleed desktop size a
+// 50/50 blend of two unrelated frames is not a dissolve — it reads as a double
+// exposure. Any symmetric curve has that midpoint, so this one is one-sided:
+// the chapter already reached stays fully opaque underneath, and the arriving
+// one (later in the DOM, so painted over it) rises across the last stretch of
+// its approach. One blend at a time, never a gap, never two ghosts.
+const PHOTO_ARRIVAL_BAND = 0.35;
+
+function photoChapterWeight(progress: number, index: number) {
+  const delta = index - progress;
+  if (Math.abs(delta) >= 1) return 0;
+  if (delta <= 0) return 1;
+  const ramp = Math.max(0, Math.min(1, (PHOTO_ARRIVAL_BAND - delta) / PHOTO_ARRIVAL_BAND));
   return ramp * ramp * (3 - 2 * ramp);
 }
 
@@ -143,7 +158,7 @@ function ScrubbedPhotoLayer({
   photoX: MotionValue<number>;
   photoY: MotionValue<number>;
 }) {
-  const opacity = useTransform(progress, (value) => smoothChapterWeight(value, chapter.index));
+  const opacity = useTransform(progress, (value) => photoChapterWeight(value, chapter.index));
   const scale = useTransform(progress, (value) => 1 + Math.min(1, Math.abs(value - chapter.index)) * 0.012);
 
   return (
@@ -340,10 +355,17 @@ export default function LivingAtlasStory({
 
   if (!activeStop) return null;
 
-  // Keep every chapter in the same right-hand photographic window. The map,
-  // route and index remain readable on the left while the existing scrubbed
-  // crossfade and pointer parallax continue inside this stable frame.
-  const photoSide = 'right';
+  // Where the photographic window sits is geography, not layout: western stops
+  // put the frame on the right, eastern ones on the left, and the middle of the
+  // route alternates. That keeps the frame off the part of the map the route is
+  // currently crossing, and it stops six chapters reading as one repeated
+  // composition. `computeAtlasLayout` has always computed this — every chapter
+  // was pinned to the right-hand window instead.
+  //
+  // Only `photoSide` is read here. `cameraOffset` is viewport-derived and
+  // belongs to the camera, which keeps its one stable overview in this
+  // presentation, so no measurement is needed at this point.
+  const { photoSide } = computeAtlasLayout(activeStop, stops, mobile, { width: 0, height: 0 });
   const idPrefix = mobile ? 'mobile-archive-item-' : 'archive-item-';
 
   const scrollToChapter = (index: number) => {
@@ -416,7 +438,11 @@ export default function LivingAtlasStory({
       onPointerLeave={resetPointer}
     >
       <div className="living-atlas__stage sticky top-0 h-[100svh] min-h-[100svh] overflow-hidden">
-        <div className="absolute inset-0">{atlas}</div>
+        {/* `isolate` keeps the atlas's own stacking inside the atlas. Without a
+            stacking context here its marker overlay (z-20) competed directly
+            with the photographic window (z-10), so the route's place labels
+            printed over the photograph. */}
+        <div className="absolute inset-0 isolate z-0">{atlas}</div>
 
         <div className="living-atlas__entry-wash pointer-events-none absolute inset-x-0 top-0 z-10 h-[24svh]" aria-hidden="true" />
 
