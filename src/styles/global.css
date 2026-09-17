@@ -68,6 +68,16 @@ html.lenis body {
   color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
   opacity: 0.62;
 }
+/* The band is a real index now — every name jumps the archive to its chapter.
+   Specificity beats `.is-active` so hovering the current city still responds. */
+button.qm-name {
+  cursor: pointer;
+}
+button.qm-name:hover,
+button.qm-name:focus-visible {
+  color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+  opacity: 0.92;
+}
 .qm-sep {
   font-size: clamp(1.5rem, 3vw, 2.4rem);
   color: rgba(230, 233, 231, 0.12);

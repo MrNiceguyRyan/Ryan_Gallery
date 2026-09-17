@@ -68,6 +68,11 @@ interface Props {
 // 768px switch selected the desktop tree on tablets while the desktop atlas
 // itself stayed hidden until 1024px, leaving an entire breakpoint without a
 // map.
+/** The one chapter rendered as ArchiveChapter's two-column editorial spread.
+ *  Mid-stack on purpose: chapter 0 owns the archive entrance, whose album
+ *  unfold is gated on `variant === 'cover'`. */
+const FEATURE_CHAPTER_INDEX = 3;
+
 const DESKTOP_LAYOUT_QUERY = '(min-width: 1024px)';
 
 function subscribeToDesktopLayout(onChange: () => void) {
@@ -233,10 +238,15 @@ function QuietIndexBand({
   names,
   activeArchiveId,
   fallbackArchiveId,
+  onSelect,
 }: {
   names: { name: string; id: string | null }[];
   activeArchiveId: string | null;
   fallbackArchiveId: string | null;
+  /** Jumps the archive to a city. The band was a highlight-synced list of
+   *  every city that could not be clicked, while "Back to index" pointed
+   *  straight at it — so it already read as an index to the visitor. */
+  onSelect: (anchorId: string) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -264,24 +274,41 @@ function QuietIndexBand({
 
   if (!names.length) return null;
 
-  const run = (key: string) => (
-    <div className="flex shrink-0" aria-hidden="true" key={key}>
+  // The track is duplicated so the band reads as a continuous line of type.
+  // Only the first copy is in the accessibility tree and the tab order; the
+  // echo stays mouse-clickable so a name is never inert just because the
+  // visitor happened to click the second copy of it.
+  const run = (key: string, echo: boolean) => (
+    <div className="flex shrink-0" aria-hidden={echo || undefined} key={key}>
       {names.map((n, i) => (
         <span key={i} className="flex items-baseline">
-          <span className="qm-name" data-id={n.id ?? ''}>
-            {n.name}
-          </span>
-          <span className="qm-sep">&mdash;</span>
+          {n.id ? (
+            <button
+              type="button"
+              className="qm-name focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+              data-id={n.id}
+              data-cursor="Go to chapter"
+              aria-current={n.id === activeId ? 'true' : undefined}
+              aria-label={`Go to ${n.name}`}
+              tabIndex={echo ? -1 : 0}
+              onClick={() => onSelect(n.id as string)}
+            >
+              {n.name}
+            </button>
+          ) : (
+            <span className="qm-name">{n.name}</span>
+          )}
+          <span className="qm-sep" aria-hidden="true">&mdash;</span>
         </span>
       ))}
     </div>
   );
 
   return (
-    <motion.div
+    <motion.nav
       ref={rootRef}
       id="archive-index"
-      role="presentation"
+      aria-label="Archive index"
       className="quiet-marquee quiet-marquee-handoff relative z-30 -mt-[24svh] flex h-[24svh] w-full items-center"
       style={reduce ? undefined : { opacity: handoffOpacity, y: handoffY }}
     >
@@ -289,10 +316,10 @@ function QuietIndexBand({
         className="quiet-marquee-track relative"
         style={reduce ? undefined : { x: trackX, y: trackY }}
       >
-        {run('a')}
-        {run('b')}
+        {run('a', false)}
+        {run('b', true)}
       </motion.div>
-    </motion.div>
+    </motion.nav>
   );
 }
 
@@ -327,6 +354,7 @@ export default function HomePage({ collections }: Props) {
   const storyReturnFocusRef = useRef<HTMLElement | null>(null);
   const storySourceChapterIdRef = useRef<string | null>(null);
   const bodyPaddingRightRef = useRef('');
+  const storySharedImageUrlRef = useRef('');
   const openCollection = useCallback((collection: Collection) => {
     const chapterId = `archive-item-${collection._id}`;
     const chapter = document.getElementById(chapterId);
@@ -334,6 +362,11 @@ export default function HomePage({ collections }: Props) {
     storyReturnFocusRef.current = chapterControl ?? (
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     );
+    // Morph the exact frame the visitor is looking at. `currentSrc` is the
+    // responsive candidate the browser already decoded, so the story's opening
+    // photograph cannot cache-miss or land on a different candidate mid-flight.
+    const chapterImage = chapter?.querySelector<HTMLImageElement>('.archive-photo-frame img');
+    storySharedImageUrlRef.current = chapterImage?.currentSrc || chapterImage?.src || '';
     // Freeze the page in the same event frame as the story selection. Waiting
     // for the state effect left one residual smooth-scroll frame moving behind
     // the full-screen cover on quick trackpad clicks.
@@ -357,18 +390,34 @@ export default function HomePage({ collections }: Props) {
   const finishStoryClose = useCallback(() => {
     storyOpenRef.current = false;
     setStoryClosing(false);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const sourceChapter = storySourceChapterIdRef.current
-          ? document.getElementById(storySourceChapterIdRef.current)
-          : null;
-        const focusTarget = storyReturnFocusRef.current?.isConnected
-          ? storyReturnFocusRef.current
-          : sourceChapter?.querySelector<HTMLElement>('[role="button"], button') ??
-            document.getElementById('main-content');
-        focusTarget?.focus({ preventScroll: true });
+    // Focusing into a subtree that is still `inert` silently no-ops, and the
+    // page root only drops `inert` once the state above has painted. Two
+    // frames covered the editorial-cover exit, but the shared-photograph exit
+    // is longer and lost that race intermittently — leaving focus on <body>.
+    // Retry, bounded, until the focus actually lands.
+    let attempts = 0;
+    const restoreFocus = () => {
+      const sourceChapter = storySourceChapterIdRef.current
+        ? document.getElementById(storySourceChapterIdRef.current)
+        : null;
+      const focusTarget = storyReturnFocusRef.current?.isConnected
+        ? storyReturnFocusRef.current
+        : sourceChapter?.querySelector<HTMLElement>('[role="button"], button') ??
+          document.getElementById('main-content');
+      if (!focusTarget) {
         storySourceChapterIdRef.current = null;
-      });
+        return;
+      }
+      focusTarget.focus({ preventScroll: true });
+      if (document.activeElement === focusTarget || attempts >= 8) {
+        storySourceChapterIdRef.current = null;
+        return;
+      }
+      attempts += 1;
+      window.requestAnimationFrame(restoreFocus);
+    };
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(restoreFocus);
     });
   }, []);
   const storyActive = !!selectedCollection || storyClosing;
@@ -377,6 +426,58 @@ export default function HomePage({ collections }: Props) {
   const reduce = useReducedMotion();
   const desktopLayout = useDesktopLayout();
   const useLivingAtlas = !desktopLayout;
+
+  // Desktop opens a story by morphing the cover photograph itself into the
+  // story's opening frame. Mobile has no ArchiveChapter to morph FROM, and
+  // shared-photo without a matching source degrades to a bare 0.35s fade —
+  // worse than the editorial cover — so mobile keeps the cover entry.
+  const storySharedLayoutId = desktopLayout && selectedCollection
+    ? `story-photo-${selectedCollection._id}`
+    : undefined;
+  const focusStoryEntry = useCallback((focusTarget: HTMLButtonElement | null) => {
+    focusTarget?.focus({ preventScroll: true });
+  }, []);
+
+  // In shared-photo mode MagazineLayout hands Escape and focus containment
+  // back to the Homepage — its own handler early-returns on `sharedEntry`
+  // because the photograph is mid-flight between two surfaces and the outgoing
+  // shell must not keep trapping focus. The page root is already `inert` while
+  // a story is open, so Tab cannot reach the archive; what is missing is the
+  // Escape key and a wrap inside the story dialog. The Lightbox registers
+  // keydown in the capture phase and stops propagation, so it still owns
+  // Escape (and the arrows) whenever it is open.
+  useEffect(() => {
+    if (!storySharedLayoutId || !storyActive) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCollection();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute('aria-hidden') && element.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [closeCollection, storyActive, storySharedLayoutId]);
 
   // Nav pills (Map/About) stay hidden only while the opening title is resolving.
   // WalkIn marks that hand-off on the body; the custom event is supported as a
@@ -1121,6 +1222,7 @@ export default function HomePage({ collections }: Props) {
             names={indexNames}
             activeArchiveId={activeArchiveId}
             fallbackArchiveId={orderedCities[0] ? cityDomId(orderedCities[0]) : null}
+            onSelect={navigateLivingChapter}
           />
         )}
 
@@ -1213,8 +1315,18 @@ export default function HomePage({ collections }: Props) {
                   Curating the world through a distilled{' '}
                   <span className="text-[#D2FF00]">lens.</span>
                 </motion.h2>
-                <motion.div
-                  className="flex min-h-11 items-center gap-3 font-ui text-[9px] uppercase tracking-[0.3em] text-white/48"
+                {/* This line instructed but did not act: a breathing lime cue
+                    inside a 44px row that was not a control. It keeps the
+                    orientation copy and now enters the archive. */}
+                <motion.button
+                  type="button"
+                  onClick={() => {
+                    const first = orderedCities[0];
+                    if (first) navigateLivingChapter(cityDomId(first));
+                  }}
+                  aria-label="Enter the archive at the first chapter"
+                  data-cursor="Enter the archive"
+                  className="flex min-h-11 items-center gap-3 self-start font-ui text-[9px] uppercase tracking-[0.3em] text-white/62 transition-colors duration-300 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
                   style={reduce ? undefined : { opacity: swCountOpacity, x: swCountX }}
                 >
                   <span className="relative flex h-1.5 w-1.5 shrink-0">
@@ -1222,7 +1334,7 @@ export default function HomePage({ collections }: Props) {
                     <span className="relative h-1.5 w-1.5 rounded-full bg-[#D2FF00]" />
                   </span>
                   <span>Select any frame to enter its story</span>
-                </motion.div>
+                </motion.button>
                 </motion.div>
               </div>
 
@@ -1269,7 +1381,14 @@ export default function HomePage({ collections }: Props) {
                                       : Math.abs(index - activeRouteIndex) <= 1
                                   }
                                   onEngagementChange={setEngagedChapterId}
-                                  variant="cover"
+                                  sharedLayoutId={
+                                    selectedCollection?._id === city._id ? storySharedLayoutId : undefined
+                                  }
+                                  /* One editorial spread breaks the run of
+                                     look-alike covers. Never chapter 0 — the
+                                     album unfold that carries the archive
+                                     entrance only applies to `cover`. */
+                                  variant={index === FEATURE_CHAPTER_INDEX ? 'feature' : 'cover'}
                                 />
                               );
                             })}
@@ -1366,7 +1485,10 @@ export default function HomePage({ collections }: Props) {
             onClose={closeCollection}
             returnFocusElement={storyReturnFocusRef.current}
             canonicalUrl={selectedCollection.slug ? `/works/${selectedCollection.slug}` : undefined}
-            entryMode="cover"
+            entryMode={storySharedLayoutId ? 'shared-photo' : 'cover'}
+            sharedLayoutId={storySharedLayoutId}
+            sharedImageUrl={storySharedLayoutId ? storySharedImageUrlRef.current : undefined}
+            onEntryReady={storySharedLayoutId ? focusStoryEntry : undefined}
           />
         )}
       </AnimatePresence>

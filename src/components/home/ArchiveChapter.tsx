@@ -485,12 +485,17 @@ export default function ArchiveChapter({
     />
   );
 
-  // ── FEATURE — editorial 2-column spread (the opener) ──
+  // ── FEATURE — editorial 2-column spread ──
+  // Carries the same diagnostic markers as the cover so the chapter stack can
+  // be inspected uniformly, whichever variant a chapter renders.
   if (variant === 'feature') {
     return (
       <motion.section
         id={id}
         ref={chapterRef}
+        data-archive-chapter="true"
+        data-chapter-index={resolvedChapterIndex}
+        data-active={isActive ? 'true' : 'false'}
         style={{ opacity: reduce ? 1 : opacity, y: reduce ? 0 : entryY }}
         className="relative pb-12 lg:pb-20"
       >
@@ -506,7 +511,7 @@ export default function ArchiveChapter({
           <div className="lg:col-span-4 mt-8 lg:mt-0 flex flex-col gap-5">
             <p className="text-kicker flex items-center gap-2 text-white/55">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
-              In&nbsp;the&nbsp;Archive · Nº&nbsp;01
+              In&nbsp;the&nbsp;Archive · Nº&nbsp;{String(index + 1).padStart(2, '0')}
             </p>
             <h3 className="font-serif uppercase text-white tracking-tight leading-[0.88]" style={{ fontSize: 'clamp(40px, 5vw, 84px)' }}>
               {leadWords && <>{leadWords} </>}
