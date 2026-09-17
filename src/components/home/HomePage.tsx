@@ -427,11 +427,18 @@ export default function HomePage({ collections }: Props) {
   const desktopLayout = useDesktopLayout();
   const useLivingAtlas = !desktopLayout;
 
-  // Desktop opens a story by morphing the cover photograph itself into the
-  // story's opening frame. Mobile has no ArchiveChapter to morph FROM, and
-  // shared-photo without a matching source degrades to a bare 0.35s fade —
-  // worse than the editorial cover — so mobile keeps the cover entry.
-  const storySharedLayoutId = desktopLayout && selectedCollection
+  // Desktop CAN open a story by morphing the cover photograph itself into the
+  // story's opening frame (MagazineLayout's `shared-photo` entry). It is off:
+  // taking that path makes `coverGone`/`coverExited` start true, which skips
+  // the whole editorial cover — the 1.12→1 backdrop, the four staggered column
+  // rules, the masthead and folio clipPath wipes, the masked headline — and
+  // shortens the exit. The morph is quick but that sequence is the transition
+  // into and back out of a story, and losing it was a downgrade. Flip this to
+  // true to trade the cover for the morph; everything else stays wired.
+  // Mobile could never morph anyway: with no ArchiveChapter to morph FROM,
+  // `shared-photo` degrades to a bare 0.35s fade.
+  const SHARED_PHOTO_ENTRY = false;
+  const storySharedLayoutId = SHARED_PHOTO_ENTRY && desktopLayout && selectedCollection
     ? `story-photo-${selectedCollection._id}`
     : undefined;
   const focusStoryEntry = useCallback((focusTarget: HTMLButtonElement | null) => {
