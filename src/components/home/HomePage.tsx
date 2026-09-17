@@ -425,15 +425,13 @@ export default function HomePage({ collections }: Props) {
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
   const desktopLayout = useDesktopLayout();
-  // The living atlas — a full-bleed map stage with the photographic window
-  // floating on it — is the composition at every width now. Desktop used to
-  // get the classic two-column atlas with a permanently right-hand photo
-  // column; the living tree was written for both ends all along (`idPrefix`,
-  // rail sizing, source width and the pointer parallax all branch on `mobile`)
-  // but only ever rendered below 1024px, so its desktop half never ran.
-  // The classic desktop branch below is left intact and unreachable: setting
-  // this back to `!desktopLayout` restores it exactly.
-  const useLivingAtlas = true;
+  // Desktop keeps the classic two-column composition: the sticky atlas with
+  // the column of film covers beside it. Rendering the living atlas — a
+  // full-bleed map stage with one photographic window floating on it — at
+  // desktop width was built and rejected by the owner. The same "map is the
+  // stage" shape had already been rejected once before. The living tree is the
+  // mobile composition only. Do not widen this to desktop again.
+  const useLivingAtlas = !desktopLayout;
 
   // Desktop CAN open a story by morphing the cover photograph itself into the
   // story's opening frame (MagazineLayout's `shared-photo` entry). It is off:

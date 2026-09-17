@@ -15,7 +15,6 @@ import {
   useTransform,
 } from 'framer-motion';
 import type { RouteStop } from './RouteAtlas';
-import { computeAtlasLayout } from '../../lib/atlasLayout';
 
 interface Props {
   stops: RouteStop[];
@@ -355,17 +354,13 @@ export default function LivingAtlasStory({
 
   if (!activeStop) return null;
 
-  // Where the photographic window sits is geography, not layout: western stops
-  // put the frame on the right, eastern ones on the left, and the middle of the
-  // route alternates. That keeps the frame off the part of the map the route is
-  // currently crossing, and it stops six chapters reading as one repeated
-  // composition. `computeAtlasLayout` has always computed this — every chapter
-  // was pinned to the right-hand window instead.
-  //
-  // Only `photoSide` is read here. `cameraOffset` is viewport-derived and
-  // belongs to the camera, which keeps its one stable overview in this
-  // presentation, so no measurement is needed at this point.
-  const { photoSide } = computeAtlasLayout(activeStop, stops, mobile, { width: 0, height: 0 });
+  // Keep every chapter in the same right-hand photographic window. The map,
+  // route and index remain readable on the left while the existing scrubbed
+  // crossfade and pointer parallax continue inside this stable frame.
+  // (`computeAtlasLayout` in src/lib/atlasLayout.ts derives an alternating
+  // side from each stop's place on the route. It was wired up and rejected —
+  // leave it unused.)
+  const photoSide = 'right';
   const idPrefix = mobile ? 'mobile-archive-item-' : 'archive-item-';
 
   const scrollToChapter = (index: number) => {
