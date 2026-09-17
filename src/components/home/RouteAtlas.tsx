@@ -1564,20 +1564,26 @@ export default function RouteAtlas({
               map.setLayoutProperty(layer.id, 'visibility', 'none');
               return;
             }
+            // The basemap's own type has to sit BELOW the page's typography.
+            // At the previous values (atlas 0.54, place 0.64 of #C8CEC2) a state
+            // name landed at roughly the same luminance as the site's own
+            // labels, so "02 ORLANDO" in the route rail collided with
+            // "MISSISSIPPI" underneath it and the seam read as noise. Geography
+            // stays legible on approach; place names are the page's job.
             map.setPaintProperty(
               layer.id,
               'text-opacity',
               isAtlasLabel
                 ? living
-                  ? (mobile ? 0.21 : 0.19)
-                  : (mobile ? 0.4 : 0.54)
+                  ? (mobile ? 0.16 : 0.15)
+                  : (mobile ? 0.2 : 0.26)
                 : isPlaceLabel
-                  ? (mobile ? 0.42 : 0.64)
+                  ? (mobile ? 0.2 : 0.28)
                   : isRoadLabel
-                    ? (mobile ? 0.2 : 0.36)
-                    : (mobile ? 0.34 : 0.4),
+                    ? (mobile ? 0.12 : 0.18)
+                    : (mobile ? 0.16 : 0.2),
             );
-            map.setPaintProperty(layer.id, 'text-color', '#C8CEC2');
+            map.setPaintProperty(layer.id, 'text-color', '#AEB5A6');
             map.setPaintProperty(layer.id, 'text-halo-color', '#11150F');
             map.setPaintProperty(layer.id, 'text-halo-width', 0.7);
             map.setPaintProperty(layer.id, 'text-halo-blur', 0.5);

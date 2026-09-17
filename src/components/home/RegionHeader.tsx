@@ -81,7 +81,7 @@ export default function RegionHeader({
              pulse are never sliced at the right edge */
           className="flex items-center gap-4 pb-2 pr-2 md:pr-6 shrink-0"
         >
-          <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.25em] uppercase text-white/40 leading-relaxed">
+          <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.25em] uppercase text-white/58 leading-relaxed">
             {placeCount} places
             <br />
             {frameCount} frames

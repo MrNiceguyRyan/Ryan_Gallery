@@ -1046,6 +1046,15 @@ export default function HomePage({ collections }: Props) {
             paddingRight: 'max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right))',
           }}
         >
+          {/* The fixed layer needs a floor. Without one the pills sat directly
+              on the archive's own type — the masthead's "…distilled lens." and
+              each chapter's dateline passed straight through them. The scrim
+              waits for the opening to reveal so the cover is untouched. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[clamp(5.5rem,10vh,7.75rem)] bg-[linear-gradient(180deg,rgba(40,44,32,0.94)_0%,rgba(40,44,32,0.76)_56%,transparent_100%)] transition-opacity duration-700"
+            style={{ opacity: navPillsVisible ? 1 : 0 }}
+          />
           <motion.button
             type="button"
             aria-label="Ryan Xu — back to top"

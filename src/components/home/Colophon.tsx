@@ -96,7 +96,7 @@ export default function Colophon() {
         {/* Columns — PAGES | GET IN TOUCH | FOLLOW ON */}
         <div className="colophon-reveal relative z-10 mt-14 md:mt-16 grid grid-cols-2 md:grid-cols-3 gap-y-10 items-center">
           <div className="text-center md:text-left md:pl-[8%]">
-            <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/30 mb-4">Pages</p>
+            <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/58 mb-4">Pages</p>
             <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
               {[['Home', '/'], ['Map', '/travel'], ['About', '/about']].map(([label, href]) => (
                 <li key={href}>
@@ -118,7 +118,7 @@ export default function Colophon() {
           </div>
 
           <div className="text-center md:text-right md:pr-[8%]">
-            <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/30 mb-4">Follow on</p>
+            <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/58 mb-4">Follow on</p>
             <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
               <li><a href={INSTAGRAM} target="_blank" rel="noopener noreferrer" className="inline-block transition-colors duration-300 hover:text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]">Instagram</a></li>
               <li><a href={`mailto:${EMAIL}`} className="inline-block transition-colors duration-300 hover:text-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]">Email</a></li>
@@ -127,7 +127,7 @@ export default function Colophon() {
         </div>
 
         {/* Bottom bar */}
-        <div className="colophon-reveal relative z-10 mt-14 pt-5 border-t border-white/10 flex flex-col md:flex-row gap-2 items-center justify-between font-ui text-[9px] tracking-[0.25em] uppercase text-white/30">
+        <div className="colophon-reveal relative z-10 mt-14 pt-5 border-t border-white/10 flex flex-col md:flex-row gap-2 items-center justify-between font-ui text-[9px] tracking-[0.25em] uppercase text-white/58">
           <span>© {new Date().getFullYear()} Ryan Xu. All rights reserved.</span>
           <a href="/" className="hover:text-white/60 transition-colors duration-300">ryanxugallery.com</a>
         </div>

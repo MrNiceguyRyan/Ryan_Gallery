@@ -555,7 +555,7 @@ export default function ArchiveChapter({
             className="pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.28em] lg:flex"
           >
             <span className="text-white/54">Chapter {String(index + 1).padStart(2, '0')}</span>
-            <span className="mr-[1%] text-right text-white/46">
+            <span className="mr-[1%] text-right text-white/58">
               {dateline}{collection.year ? ` · ${collection.year}` : ''}
             </span>
           </motion.div>

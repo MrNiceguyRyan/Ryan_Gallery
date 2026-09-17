@@ -109,6 +109,20 @@ function smoothChapterWeight(progress: number, index: number) {
   return proximity * proximity * (3 - 2 * proximity);
 }
 
+// Photographs cross-dissolve well; type does not. The wide weight above gives
+// both neighbouring chapters 0.5 at the midpoint, so on mobile two city names
+// sat superimposed at any resting scroll inside a handoff and read as neither
+// ("MIAMI" over "ORLANDO", each with its own pager and coordinates). Captions
+// therefore ramp only across the last 8% before the midpoint: adjacent
+// distances always sum to 1, so at most one caption is ever above zero.
+const CAPTION_HANDOFF_BAND = 0.08;
+
+function captionChapterWeight(progress: number, index: number) {
+  const distance = Math.abs(progress - index);
+  const ramp = Math.max(0, Math.min(1, (0.5 - distance) / CAPTION_HANDOFF_BAND));
+  return ramp * ramp * (3 - 2 * ramp);
+}
+
 function formatCoordinate(value: number, positive: string, negative: string) {
   const normalized = Math.abs(value) < 0.00005 ? 0 : value;
   return `${Math.abs(normalized).toFixed(4)}° ${normalized >= 0 ? positive : negative}`;
@@ -167,7 +181,7 @@ function ScrubbedCaptionLayer({
   reducedMotion: boolean;
   children: ReactNode;
 }) {
-  const opacity = useTransform(progress, (value) => smoothChapterWeight(value, chapter.index));
+  const opacity = useTransform(progress, (value) => captionChapterWeight(value, chapter.index));
   const y = useTransform(progress, (value) => {
     const offset = Math.max(-1, Math.min(1, value - chapter.index));
     return offset * -10;
@@ -488,7 +502,7 @@ export default function LivingAtlasStory({
                   >
                     <span className="living-atlas__rail-node relative z-10 h-2.5 w-2.5 shrink-0 rounded-full border border-white/24 bg-[#171b15] transition-colors duration-500" aria-hidden="true" />
                     <span className="min-w-0">
-                      <span className="block font-ui text-[8px] uppercase tracking-[0.24em] text-white/42 transition-colors duration-500 group-hover:text-white/68">
+                      <span className="block font-ui text-[8px] uppercase tracking-[0.24em] text-white/58 transition-colors duration-500 group-hover:text-white/68">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <span className="mt-0.5 block truncate font-ui text-[10px] uppercase tracking-[0.24em] text-white/58 transition-colors duration-500 group-hover:text-white md:text-[11px]">

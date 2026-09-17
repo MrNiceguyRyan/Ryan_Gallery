@@ -54,8 +54,13 @@ const locations = new Set(
     class="travel-workspace relative flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#282c20]"
     data-travel-workspace
   >
+    <!-- The masthead is bottom-aligned, so its own height is what clears the
+         fixed nav. At the previous height the eyebrow landed at ~68px, inside
+         the nav's ~90px scrim band, which greyed "The Territory · Geographic
+         Index" almost out of existence (worse on mobile, where the title
+         wraps). -->
     <header
-      class="travel-workspace__masthead safe-inline-page relative z-10 h-[clamp(9.5rem,17svh,10.75rem)] shrink-0 overflow-hidden"
+      class="travel-workspace__masthead safe-inline-page relative z-10 h-[clamp(11.75rem,21svh,13rem)] shrink-0 overflow-hidden"
       data-travel-hero
       style="padding-top: calc(4.7rem + env(safe-area-inset-top));"
     >
@@ -68,9 +73,12 @@ const locations = new Set(
 
       <div class="travel-workspace__masthead-inner relative flex h-full items-end justify-between gap-8 pb-3 md:pb-4">
         <div class="min-w-0">
-          <p class="mb-1.5 flex items-center gap-2 font-ui text-[9px] uppercase tracking-[0.32em] text-white/56 md:tracking-[0.4em]">
-            <span>The Territory · Geographic Index</span>
-            <span class="xl:hidden">· {locations} locations · {frames} frames</span>
+          <!-- Each phrase stays whole: with plain wrapping the two spans broke
+               mid-phrase ("…Territory ·" / "Geographic Index"), which only
+               became visible once the masthead cleared the nav. -->
+          <p class="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-ui text-[9px] uppercase tracking-[0.32em] text-white/56 md:tracking-[0.4em]">
+            <span class="whitespace-nowrap">The Territory · Geographic Index</span>
+            <span class="whitespace-nowrap xl:hidden">· {locations} locations · {frames} frames</span>
           </p>
           <h1 class="travel-workspace__title font-serif text-[clamp(1.85rem,8.3vw,2.45rem)] uppercase leading-[0.86] tracking-tight text-[#F4F4ED] md:text-[clamp(2.6rem,4.8vw,4.15rem)]">
             Mapping the <span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>

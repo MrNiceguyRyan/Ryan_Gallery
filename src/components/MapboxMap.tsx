@@ -18,6 +18,99 @@ const DOT_RGB = '231, 225, 207';
 
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
+/**
+ * Grade dark-v11 into the same olive emulsion the homepage atlas uses.
+ * Two reasons, both visible side by side before this existed: the atlas read
+ * neutral grey while every other surface on the site is olive, so the same
+ * geography looked like it came from a different product; and the basemap's own
+ * type sat at roughly the luminance of the page's labels, so the location rail
+ * competed with whatever city name happened to be underneath it.
+ *
+ * This map IS the interface here (unlike the homepage's backdrop), so place
+ * names stay readable — one clear step below the UI, not hidden.
+ */
+function gradeAtlasBasemap(map: any) {
+  map.getStyle()?.layers?.forEach((layer: any) => {
+    const id = layer.id.toLowerCase();
+
+    if (layer.type === 'fill-extrusion') {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+      return;
+    }
+
+    if (layer.type === 'background') {
+      map.setPaintProperty(layer.id, 'background-color', '#1B2319');
+      return;
+    }
+
+    if (layer.type === 'fill') {
+      if (id.includes('water')) {
+        map.setPaintProperty(layer.id, 'fill-color', '#0B1210');
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
+      } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
+        map.setPaintProperty(layer.id, 'fill-color', '#263024');
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.34);
+      } else if (id.includes('building')) {
+        map.setPaintProperty(layer.id, 'fill-color', '#2A3028');
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.12);
+      }
+      return;
+    }
+
+    if (layer.type === 'line') {
+      if (id.includes('admin') || id.includes('boundary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#AEB6A9');
+        map.setPaintProperty(layer.id, 'line-width', 0.74);
+        map.setPaintProperty(layer.id, 'line-opacity', 0.42);
+      } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#8C9588');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.4);
+      } else if (id.includes('secondary') || id.includes('tertiary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#737D6D');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.26);
+      } else if (id.includes('road') || id.includes('street')) {
+        map.setPaintProperty(layer.id, 'line-color', '#667064');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.15);
+      } else if (id.includes('waterway')) {
+        map.setPaintProperty(layer.id, 'line-color', '#657168');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.3);
+      }
+      return;
+    }
+
+    if (layer.type !== 'symbol' || !layer.layout?.['text-field']) return;
+
+    if (
+      id.includes('poi')
+      || id.includes('transit')
+      || id.includes('airport')
+      || id.includes('building-number')
+    ) {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+      return;
+    }
+
+    const isPlaceLabel =
+      id.includes('settlement')
+      || id.includes('place')
+      || id.includes('city')
+      || id.includes('town')
+      || id.includes('village');
+    const isAtlasLabel = id.includes('state-label') || id.includes('country-label');
+    const isRoadLabel = id.includes('road') || id.includes('street');
+
+    map.setPaintProperty(
+      layer.id,
+      'text-opacity',
+      isPlaceLabel ? 0.6 : isAtlasLabel ? 0.38 : isRoadLabel ? 0.2 : 0.24,
+    );
+    map.setPaintProperty(layer.id, 'text-color', '#C2C8B8');
+    map.setPaintProperty(layer.id, 'text-halo-color', '#11150F');
+    map.setPaintProperty(layer.id, 'text-halo-width', 0.7);
+    map.setPaintProperty(layer.id, 'text-halo-blur', 0.5);
+  });
+}
+
 // ─── Region grouping (countries → region label) ───
 const REGION_MAP: Record<string, string> = {
   'United States': 'North America',
@@ -584,6 +677,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     if (!map) return;
     const finish = () => {
       applyGlobeSettings(map);
+      gradeAtlasBasemap(map);
       frameArchiveOverview(0);
       atlasStyleReadyRef.current = true;
       setMapLoadFailed(false);
