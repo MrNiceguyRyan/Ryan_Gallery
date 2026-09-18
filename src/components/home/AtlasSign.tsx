@@ -94,25 +94,42 @@ interface SignStop {
 }
 
 /**
- * The current place as a small 3D standee planted at the route head: a
+ * The current place as a small 3D standee planted at the atlas focal point: a
  * paper-framed split-flap board on a post, leaning back a few degrees, with a
- * contact shadow on the map. It stays at the atlas focal point while the map
- * travels beneath it; between chapters it rises slightly and turns toward the
- * direction of travel, then the name flaps over to the next place.
+ * contact shadow on the map. When the atlas hops to the next place the board
+ * and its post lift off together, turn a few degrees toward the direction of
+ * travel and flap over to the new name; the shadow shrinks while it is up.
+ * On touchdown it settles into the ground and a ring runs out across the map.
  */
-export function AtlasSignboard({ stop, number, total, visibility, lift, sway, reducedMotion }: {
+export function AtlasSignboard({
+  stop,
+  number,
+  total,
+  visibility,
+  lift,
+  sway,
+  shadowScale,
+  shadowOpacity,
+  arrivalKey,
+  reducedMotion,
+}: {
   stop: SignStop;
   number: number;
   total: number;
   visibility: MotionValue<number>;
   lift: MotionValue<number>;
   sway: MotionValue<number>;
+  shadowScale: MotionValue<number>;
+  shadowOpacity: MotionValue<number>;
+  /** Increments on every touchdown; each value plays the landing ring once. */
+  arrivalKey: number;
   reducedMotion: boolean;
 }) {
   const index = String(number).padStart(2, '0');
   return (
     <motion.div aria-hidden="true" className="atlas-sign" style={{ opacity: visibility }}>
-      <motion.div className="atlas-sign__body" style={{ y: lift, rotateY: sway }}>
+      <motion.div className="atlas-sign__hop" style={{ y: lift }}>
+      <motion.div className="atlas-sign__body" style={{ rotateY: sway }}>
         <div className="atlas-sign__tabs">
           <span className="atlas-sign__tab is-current">Stop {index}</span>
           <span className="atlas-sign__tab">{index} / {String(total).padStart(2, '0')}</span>
@@ -140,32 +157,35 @@ export function AtlasSignboard({ stop, number, total, visibility, lift, sway, re
         </div>
       </motion.div>
       <span className="atlas-sign__post" />
-      <span className="atlas-sign__shadow" />
+      </motion.div>
+      <motion.span className="atlas-sign__shadow" style={{ scale: shadowScale, opacity: shadowOpacity }} />
+      {arrivalKey > 0 && !reducedMotion && <span key={arrivalKey} className="atlas-sign__ring" />}
     </motion.div>
   );
 }
 
 /**
  * Every other place carries a small standing pin — a STOP badge on a post,
- * upright to the camera like the reference's markers. The current place hides
- * its pin: the signboard stands there instead.
+ * upright to the camera like the reference's markers. Where the signboard
+ * stands the pin is pressed into the ground; when the board leaves, the pin
+ * pops back up (350 ms, cubic-bezier(0.2, 0.7, 0.2, 1)).
  */
-export function StopStandee({ number, current, visibility }: {
+export function StopStandee({ number, planted, visibility }: {
   number: number;
-  current: boolean;
+  planted: boolean;
   visibility: MotionValue<number>;
 }) {
   return (
-    <motion.span
-      aria-hidden="true"
-      className={`stop-standee ${current ? 'is-current' : ''}`}
-      style={{ opacity: visibility }}
-    >
-      <span className="stop-standee__badge">
-        <span className="stop-standee__kicker">Stop</span>
-        <span className="stop-standee__number">{String(number).padStart(2, '0')}</span>
+    <motion.span aria-hidden="true" className="stop-standee" style={{ opacity: visibility }}>
+      {/* The atlas fade lives on the outer span (an inline opacity); the
+          plant/pop lives on this one, so the two never fight. */}
+      <span className={`stop-standee__pin ${planted ? 'is-planted' : ''}`}>
+        <span className="stop-standee__badge">
+          <span className="stop-standee__kicker">Stop</span>
+          <span className="stop-standee__number">{String(number).padStart(2, '0')}</span>
+        </span>
+        <span className="stop-standee__post" />
       </span>
-      <span className="stop-standee__post" />
     </motion.span>
   );
 }

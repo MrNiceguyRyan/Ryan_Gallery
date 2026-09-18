@@ -5,6 +5,7 @@ import {
   AnimatePresence,
   animate,
   cancelFrame,
+  cubicBezier,
   frame,
   motion,
   useMotionValue,
@@ -91,6 +92,84 @@ const ACCENT = '#D2FF00';
 // planted in the map, north kept nearly straight up.
 const CHAPTER_PITCH = 46;
 const CHAPTER_BEARING = -2;
+
+// ── Chapter hops ──
+// Once the archive is entered, scroll no longer drags the camera along the
+// route. It only decides which place is current; each change plays one short,
+// time-based flight (after 11 mois sans toi(t)): lift off, pull back far
+// enough to see the whole leg, set down on the next place. The map rests while
+// a place's cover is read. Pitch and bearing never change — only distance.
+const HOP = {
+  // Commit hysteresis in route-leg units: forward at 45% of the way to the
+  // next place, back at 31% (−0.69), so small reversals never flutter.
+  forward: 0.45,
+  back: 0.69,
+  // Rest zoom: close enough that neighbouring places sit ≥150px apart (the
+  // Utah canyons), never tighter than zoom 6.
+  restZoom: 5.05,
+  restZoomMax: 6,
+  restSpacingPx: 150,
+  // Duration grows with the log of the distance: 1.1 s hops to 2.1 s crossings.
+  durationBase: 950,
+  durationRange: 1250,
+  nearDegrees: 1.2,
+  farDegrees: 40,
+  continueFloor: 700,
+  // The apex pulls back until the whole leg spans this share of the clear
+  // stage between the route rail and the covers.
+  fitShare: 0.48,
+  apexFloor: 3.15,
+  apexMargin: 0.32,
+  // Rendered pose chases the flight with this time constant (11 mois: 0.12
+  // per frame), which rounds retargets and adds a short settle.
+  followMs: 110,
+  // The travelled line reaches the destination this early in the flight.
+  routeShare: 0.42,
+  // Sign: flips shortly after take-off, debounced so a fling flips once.
+  flipDelay: 90,
+  flipQuiet: 120,
+  flipCap: 360,
+  // STOP pins: the origin's pin stands back up just after take-off; the
+  // destination's is pressed down just before touchdown.
+  unplantDelay: 120,
+  plantLead: 160,
+  landingMs: 180,
+  // After the camera effect (re)starts, commits snap rather than fly, and the
+  // snapped place reaches the sign once things have been still this long.
+  restartSnapMs: 900,
+  settleStateMs: 120,
+} as const;
+const hopLaunchEase = cubicBezier(0.45, 0.05, 0.15, 1);
+const hopContinueEase = cubicBezier(0.3, 0.45, 0.15, 1);
+
+function mercatorLatitudeDegrees(latitude: number) {
+  const clamped = Math.max(-85, Math.min(85, latitude));
+  return (180 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360));
+}
+
+/** Straight-line distance on the Web Mercator plane, in degrees of longitude. */
+function mercatorDegrees(from: GeoCoordinate, to: GeoCoordinate) {
+  return Math.hypot(
+    to[0] - from[0],
+    mercatorLatitudeDegrees(to[1]) - mercatorLatitudeDegrees(from[1]),
+  );
+}
+
+function pixelsAtZoom(degrees: number, zoom: number) {
+  return (degrees * 512 * 2 ** zoom) / 360;
+}
+
+function hopRestZooms(route: Array<{ stop: { coordinates: GeoCoordinate } }>) {
+  return route.map((entry, index) => {
+    let nearest = Number.POSITIVE_INFINITY;
+    route.forEach((other, otherIndex) => {
+      if (otherIndex === index) return;
+      nearest = Math.min(nearest, pixelsAtZoom(mercatorDegrees(entry.stop.coordinates, other.stop.coordinates), HOP.restZoom));
+    });
+    if (!Number.isFinite(nearest) || nearest <= 0) return HOP.restZoom;
+    return Math.max(HOP.restZoom, Math.min(HOP.restZoomMax, HOP.restZoom + Math.log2(HOP.restSpacingPx / nearest)));
+  });
+}
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 const US_OVERVIEW = { longitude: -97.7, latitude: 38.3, zoom: 3.15, bearing: -3, pitch: 0 };
 const LIVING_OVERVIEW = { longitude: -98.5, latitude: 37.5, zoom: 4.05, bearing: 0, pitch: 0 };
@@ -893,6 +972,56 @@ export default function RouteAtlas({
     resolvedChapterProgress,
     (position) => sampleChapter(chapterRoute, position, reducedMotion),
   );
+  // ── Signs ── the standing signboard names the current place; STOP pins
+  // stand on the others. With chapter hops the draw loop's hop controller
+  // drives both (flip after take-off, plant before touchdown). In scrubbed
+  // mode (reduced motion) the board simply names the place nearest the camera.
+  const signs = !living && !mobile;
+  const hopEnabled = signs && classicEntrance && !reducedMotion && !!chapterProgress;
+  const chapterRestZooms = useMemo(() => hopRestZooms(chapterRoute), [chapterRoute]);
+  const nearestStopId = (sample: ChapterSample | null) =>
+    sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : chapterRoute[0]?.stop.id ?? null;
+  const [signStopId, setSignStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
+  const [plantedStopId, setPlantedStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
+  const [arrivalKey, setArrivalKey] = useState(0);
+  const signStopRef = useRef(signStopId);
+  // chapterSample can re-emit while this component renders (its transformer is
+  // rebuilt each render), so the state write is ref-guarded and deferred to a
+  // microtask — never a render-phase update.
+  useEffect(() => {
+    if (!signs || hopEnabled) return;
+    let disposed = false;
+    const update = (sample: ChapterSample | null) => {
+      const next = sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : null;
+      if (!next || next === signStopRef.current) return;
+      signStopRef.current = next;
+      queueMicrotask(() => {
+        if (!disposed) setSignStopId(next);
+      });
+    };
+    update(chapterSample.get());
+    const unsubscribe = chapterSample.on('change', update);
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [chapterSample, hopEnabled, signs]);
+  const signEntry = chapterRoute.find((entry) => entry.stop.id === signStopId) ?? chapterRoute[0];
+  const plantedId = hopEnabled ? plantedStopId : signEntry?.stop.id ?? null;
+  // Written by the hop controller: the board (with its post) lifts and turns
+  // toward the direction of travel; its contact shadow shrinks and fades.
+  const signLift = useMotionValue(0);
+  const signSway = useMotionValue(0);
+  // The draw loop owns the travelled line's trim. The JSX only seeds it with a
+  // value fixed at mount: a per-render value would be diffed and re-applied by
+  // react-map-gl on unrelated re-renders, behind the draw loop's back.
+  const [initialRouteTrim] = useState<[number, number]>(() => [chapterSample.get()?.routeProgress ?? 0, 1]);
+  // The committed place survives camera-effect restarts (Story close, resize),
+  // so a restart re-applies hysteresis from it instead of re-deriving it.
+  const committedPlaceRef = useRef<number | null>(null);
+  const signShadowScale = useMotionValue(1);
+  const signShadowOpacity = useMotionValue(1);
+
   const livingTravelProgress = useTransform(
     chapterSample,
     (sample) => sample?.routeProgress ?? 0,
@@ -1245,6 +1374,308 @@ export default function RouteAtlas({
     // globe by screen position.
     const canvasBox = prologue ? map.getContainer().getBoundingClientRect() : null;
 
+    // ── Chapter hop controller (see HOP) ──
+    const lastRouteIndex = Math.max(0, chapterRoute.length - 1);
+    const routePosition = (sample: ChapterSample | null) => {
+      if (!sample) return 0;
+      const fromIndex = chapterRoute.indexOf(sample.from);
+      const toIndex = chapterRoute.indexOf(sample.to);
+      if (fromIndex < 0) return 0;
+      if (toIndex < 0 || toIndex === fromIndex) return fromIndex;
+      return fromIndex + (toIndex - fromIndex) * sample.localProgress;
+    };
+    const restCenter = (index: number): GeoCoordinate => chapterRoute[index]?.stop.coordinates ?? [US_OVERVIEW.longitude, US_OVERVIEW.latitude];
+    const restZoom = (index: number) => chapterRestZooms[index] ?? HOP.restZoom;
+    const restRoute = (index: number) => chapterRoute[index]?.routeProgress ?? 0;
+    const chapterMode = () => hopEnabled && queuedEntry >= 0.999 && (!prologue || queuedPrologue >= 1);
+    // A fresh run (first draw, resize, late map load, Story close) snaps to the
+    // place the scroll position commits to — it never replays a flight.
+    const hysteresisFrom = (start: number, position: number) => {
+      let next = Math.max(0, Math.min(lastRouteIndex, start));
+      while (next < lastRouteIndex && position >= next + HOP.forward) next += 1;
+      while (next > 0 && position <= next - HOP.back) next -= 1;
+      return next;
+    };
+    const restartPosition = routePosition(queuedSample);
+    let committed = committedPlaceRef.current != null
+      ? hysteresisFrom(committedPlaceRef.current, restartPosition)
+      : Math.max(0, Math.min(lastRouteIndex, Math.floor(restartPosition + (1 - HOP.forward))));
+    committedPlaceRef.current = committed;
+    let hopCenter: GeoCoordinate = restCenter(committed);
+    let hopZoom = restZoom(committed);
+    let hopTrim = restRoute(committed);
+    let targetCenter: GeoCoordinate = hopCenter;
+    let targetZoom = hopZoom;
+    interface Flight {
+      originCenter: GeoCoordinate;
+      originZoom: number;
+      destCenter: GeoCoordinate;
+      destZoom: number;
+      controlZoom: number;
+      duration: number;
+      ease: (t: number) => number;
+      trimFrom: number;
+      trimTo: number;
+      heading: number;
+      reach: number;
+      /** Retargeted mid-air: the sign is already up, so it stays up. */
+      continued: boolean;
+      start: number;
+    }
+    let flight: Flight | null = null;
+    let landedAt = 0;
+    let hopFrame = 0;
+    let lastHopTime = 0;
+    let flipTimer = 0;
+    let flipBurstStart = 0;
+    let pendingSignId: string | null = null;
+    let plantTimers: number[] = [];
+    let paintMode: 'prologue' | 'archive' | null = null;
+    // Mirrors plantedStopId inside this closure, so a flight back to the place
+    // the board is standing on does not pop its pin up and press it down again.
+    let plantedLocal: string | null = null;
+    const plant = (id: string | null) => {
+      plantedLocal = id;
+      if (!disposed) setPlantedStopId(id);
+    };
+    // Right after a (re)start — Story close, late map load, resize — the scroll
+    // timeline can still be catching up to the restored position. Commits in
+    // that window snap to the place instead of flying there, and the sign and
+    // pins are written once, when the window closes, so returning to the page
+    // never replays a journey or flaps through stale names.
+    const snapUntil = performance.now() + HOP.restartSnapMs;
+    let settleTimer = 0;
+    const settleSignOn = (index: number) => {
+      const settledId = chapterRoute[index]?.stop.id ?? null;
+      signStopRef.current = settledId;
+      window.clearTimeout(settleTimer);
+      plantedLocal = settledId;
+      settleTimer = window.setTimeout(() => {
+        settleTimer = 0;
+        if (disposed) return;
+        setSignStopId(settledId);
+        setPlantedStopId(settledId);
+      }, Math.max(HOP.settleStateMs, snapUntil - performance.now() + HOP.settleStateMs));
+    };
+    if (hopEnabled) settleSignOn(committed);
+
+    const applyPaintMode = (mode: 'prologue' | 'archive') => {
+      paintMode = mode;
+      // At a long flight's apex the camera climbs past the prologue's zoom
+      // keys: keep a modest photographic veil (more real ground from higher
+      // up) and never bring the prologue's lime route and dots back.
+      if (map.getLayer('prologue-satellite')) {
+        map.setPaintProperty('prologue-satellite', 'raster-opacity', mode === 'archive'
+          ? ['interpolate', ['linear'], ['zoom'], 3.1, 0.62, 4.6, PROLOGUE_SATELLITE_RESIDUAL]
+          : ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], PROLOGUE_SATELLITE_RESIDUAL]);
+      }
+      ['prologue-route', 'prologue-stops-halo', 'prologue-stops-dot'].forEach((layerId) => {
+        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', mode === 'archive' ? 'none' : 'visible');
+      });
+    };
+
+    const clearPlantTimers = () => {
+      plantTimers.forEach((timer) => window.clearTimeout(timer));
+      plantTimers = [];
+    };
+
+    const launch = (dest: number, now: number) => {
+      const inAir = !!flight;
+      const originCenter: GeoCoordinate = [hopCenter[0], hopCenter[1]];
+      const originZoom = hopZoom;
+      const destCenter = restCenter(dest);
+      const destZoom = restZoom(dest);
+      const degrees = (angularDistance(originCenter, destCenter) * 180) / Math.PI;
+      const reach = clamp01(Math.log(1 + degrees / HOP.nearDegrees) / Math.log(1 + HOP.farDegrees / HOP.nearDegrees));
+      let duration = HOP.durationBase + HOP.durationRange * reach;
+      const fitWidth = Math.max(160, (map.getContainer().clientWidth - activePadding.right) * HOP.fitShare);
+      const span = Math.max(1e-6, mercatorDegrees(originCenter, destCenter));
+      const apex = Math.max(
+        HOP.apexFloor,
+        Math.min(Math.min(originZoom, destZoom) - HOP.apexMargin, Math.log2((fitWidth * 360) / (512 * span))),
+      );
+      let controlZoom = 2 * apex - (originZoom + destZoom) / 2;
+      if (inAir) {
+        // Retargeted mid-air: keep flying from the live pose. The target
+        // height is the lower of where the camera is and the new leg's apex;
+        // the Bezier control point is then solved for that height (the curve
+        // never passes through its control point).
+        duration = Math.max(HOP.continueFloor, 0.9 * duration);
+        controlZoom = 2 * Math.min(hopZoom, apex) - (originZoom + destZoom) / 2;
+      }
+      flight = {
+        originCenter,
+        originZoom,
+        destCenter,
+        destZoom,
+        controlZoom,
+        duration,
+        ease: inAir ? hopContinueEase : hopLaunchEase,
+        trimFrom: hopTrim,
+        trimTo: restRoute(dest),
+        heading: Math.sign(destCenter[0] - originCenter[0]) || 1,
+        reach,
+        continued: inAir,
+        start: now,
+      };
+      committed = dest;
+      committedPlaceRef.current = dest;
+      window.clearTimeout(settleTimer);
+      settleTimer = 0;
+
+      // The board flips shortly after take-off; a burst of commits (a fling
+      // across several places) flips once, to the final place.
+      pendingSignId = chapterRoute[dest]?.stop.id ?? null;
+      const wait = Math.min(
+        flipTimer ? HOP.flipQuiet : HOP.flipDelay,
+        Math.max(0, HOP.flipCap - (flipBurstStart ? now - flipBurstStart : 0)),
+      );
+      if (!flipBurstStart) flipBurstStart = now;
+      window.clearTimeout(flipTimer);
+      flipTimer = window.setTimeout(() => {
+        flipTimer = 0;
+        flipBurstStart = 0;
+        if (disposed || !pendingSignId) return;
+        signStopRef.current = pendingSignId;
+        setSignStopId(pendingSignId);
+      }, wait);
+
+      // The origin's pin stands back up as the board leaves it; the
+      // destination's pin is pressed down just before the board lands on it.
+      clearPlantTimers();
+      const destId = chapterRoute[dest]?.stop.id ?? null;
+      if (plantedLocal !== destId) {
+        plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
+        plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, duration - HOP.plantLead)));
+      }
+      wakeHop();
+    };
+
+    const snapTo = (index: number) => {
+      committed = index;
+      committedPlaceRef.current = index;
+      flight = null;
+      landedAt = 0;
+      hopCenter = restCenter(index);
+      hopZoom = restZoom(index);
+      hopTrim = restRoute(index);
+      targetCenter = hopCenter;
+      targetZoom = hopZoom;
+      clearPlantTimers();
+      window.clearTimeout(flipTimer);
+      flipTimer = 0;
+      flipBurstStart = 0;
+      settleSignOn(index);
+    };
+    // Outside the archive (the entrance, or a jump back to the index) the
+    // committed place still follows the scroll — without a flight: the pose
+    // glides to it through the follow smoothing, and any flight in progress is
+    // dropped, so the entrance never dives onto a stale place.
+    const settleTo = (index: number) => {
+      committed = index;
+      committedPlaceRef.current = index;
+      flight = null;
+      landedAt = 0;
+      hopTrim = restRoute(index);
+      targetCenter = restCenter(index);
+      targetZoom = restZoom(index);
+      clearPlantTimers();
+      window.clearTimeout(flipTimer);
+      flipTimer = 0;
+      flipBurstStart = 0;
+      settleSignOn(index);
+      wakeHop();
+    };
+    const evaluateCommit = (sample: ChapterSample | null) => {
+      if (!hopEnabled) return;
+      const position = routePosition(sample);
+      const next = hysteresisFrom(committed, position);
+      if (!chapterMode()) {
+        if (next !== committed || flight) settleTo(next);
+        return;
+      }
+      if (next === committed) return;
+      const now = performance.now();
+      if (now < snapUntil && !flight) snapTo(next);
+      else launch(next, now);
+    };
+
+    const hopStep = (time: number) => {
+      hopFrame = 0;
+      if (disposed) return;
+      const dt = lastHopTime ? Math.min(64, time - lastHopTime) : 16.7;
+      lastHopTime = time;
+      const now = performance.now();
+      let lift = 0;
+      let sway = 0;
+      let raise = 0;
+      if (flight) {
+        const t = clamp01((now - flight.start) / flight.duration);
+        const s = flight.ease(t);
+        targetCenter = greatCirclePoint(flight.originCenter, flight.destCenter, s);
+        targetZoom = (1 - s) * (1 - s) * flight.originZoom + 2 * s * (1 - s) * flight.controlZoom + s * s * flight.destZoom;
+        // The lit line is thrown ahead and reaches the destination before
+        // the camera does.
+        const routeT = 1 - Math.pow(1 - clamp01(t / HOP.routeShare), 3);
+        hopTrim = flight.trimFrom + (flight.trimTo - flight.trimFrom) * routeT;
+        raise = t < 0.16 && !flight.continued
+          ? smootherstep(t / 0.16)
+          : t > 0.8
+            ? 1 - ((t - 0.8) / 0.2) ** 2
+            : 1;
+        lift = -(10 + 14 * flight.reach) * raise;
+        sway = flight.heading * (3 + 6 * flight.reach) * Math.sin(Math.PI * t);
+        if (t >= 1) {
+          flight = null;
+          landedAt = now;
+          targetCenter = restCenter(committed);
+          targetZoom = restZoom(committed);
+          hopTrim = restRoute(committed);
+          queueMicrotask(() => {
+            if (!disposed) setArrivalKey((key) => key + 1);
+          });
+        }
+      } else {
+        targetCenter = restCenter(committed);
+        targetZoom = restZoom(committed);
+      }
+      let shadowBump = 0;
+      if (!flight && landedAt) {
+        // Touchdown: the board settles 3px into the ground and springs back.
+        const settle = (now - landedAt) / HOP.landingMs;
+        if (settle < 1) {
+          lift = 3 * (1 - (1 - (1 - settle) ** 3));
+          shadowBump = 0.06 * (1 - settle);
+        } else {
+          landedAt = 0;
+        }
+      }
+      const follow = 1 - Math.exp(-dt / HOP.followMs);
+      hopCenter = [
+        hopCenter[0] + (targetCenter[0] - hopCenter[0]) * follow,
+        hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
+      ];
+      hopZoom += (targetZoom - hopZoom) * follow;
+      signLift.set(lift);
+      signSway.set(sway);
+      signShadowScale.set(1 - 0.38 * raise + shadowBump);
+      signShadowOpacity.set(1 - 0.6 * raise);
+      const gap = pixelsAtZoom(mercatorDegrees(hopCenter, targetCenter), hopZoom);
+      const settling = gap > 0.3 || Math.abs(targetZoom - hopZoom) > 0.0008;
+      if (!flight && !landedAt && !settling) {
+        hopCenter = targetCenter;
+        hopZoom = targetZoom;
+      }
+      schedule(queuedSample);
+      if (flight || landedAt || settling) hopFrame = requestAnimationFrame(hopStep);
+      else lastHopTime = 0;
+    };
+    const wakeHop = () => {
+      if (hopFrame || disposed) return;
+      lastHopTime = 0;
+      hopFrame = requestAnimationFrame(hopStep);
+    };
+
     const draw: Process = () => {
       if (disposed) return;
       classicMapFrameRef.current = null;
@@ -1331,6 +1762,11 @@ export default function RouteAtlas({
         // Leaving the prologue must resubmit the atlas padding.
         padded = null;
       } else if (sample && focused) {
+        // With hops, the entrance (and every non-flying frame) aims at the
+        // committed place's rest pose rather than the scrubbed route head.
+        const aim: ChapterSample = hopEnabled
+          ? { ...sample, coordinate: hopCenter, zoom: hopZoom, pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING }
+          : sample;
         if (prologue && prologuePaddingKey) {
           prologuePaddingKey = '';
           if (map.getLayer('prologue-route')) map.setPaintProperty('prologue-route', 'line-trim-offset', [1, 1]);
@@ -1352,19 +1788,19 @@ export default function RouteAtlas({
         let entryCoordinate = entryProgress
           ? greatCirclePoint(
               entryOverview,
-              sample.coordinate,
+              aim.coordinate,
               entryCameraProgress,
             )
-          : sample.coordinate;
+          : aim.coordinate;
         let entryZoom = entryProgress
-          ? entryOverviewZoom + (sample.zoom - entryOverviewZoom) * entryCameraProgress
-          : sample.zoom;
+          ? entryOverviewZoom + (aim.zoom - entryOverviewZoom) * entryCameraProgress
+          : aim.zoom;
         const entryPoseProgress = classicEntrance ? entryCameraProgress : smootherstep(entryCameraProgress);
-        let entryPitch = sample.pitch * entryPoseProgress;
+        let entryPitch = aim.pitch * entryPoseProgress;
         let entryBearing = US_OVERVIEW.bearing +
-          (sample.bearing - US_OVERVIEW.bearing) * entryPoseProgress;
+          (aim.bearing - US_OVERVIEW.bearing) * entryPoseProgress;
         if (classicGlobe) {
-          const globePose = globeEntryPose(sample, globeEntryProgress(queuedEntry), globeMode);
+          const globePose = globeEntryPose(aim, globeEntryProgress(queuedEntry), globeMode);
           entryCoordinate = globePose.center;
           entryZoom = globePose.zoom;
           entryPitch = globePose.pitch;
@@ -1374,6 +1810,13 @@ export default function RouteAtlas({
             map.setProjection(onGlobe ? 'globe' : 'mercator');
             map.setFog(onGlobe ? (prologue ? PROLOGUE_FOG : GLOBE_FOG) : null);
           }
+        }
+        if (chapterMode()) {
+          // Inside the archive the hop controller owns the camera.
+          entryCoordinate = hopCenter;
+          entryZoom = hopZoom;
+          entryPitch = CHAPTER_PITCH;
+          entryBearing = CHAPTER_BEARING;
         }
         const atChapterEndpoint = sample.easedProgress <= 0.000001 || sample.easedProgress >= 0.999999;
         const lastScreenPoint = lastCoordinate ? map.project(lastCoordinate) : null;
@@ -1417,10 +1860,16 @@ export default function RouteAtlas({
         }
       }
 
-      const routeProgress = sample?.routeProgress ?? 0;
-      const atRouteEndpoint = !!sample && (
+      const routeProgress = hopEnabled
+        ? chapterMode() ? hopTrim : restRoute(committed)
+        : sample?.routeProgress ?? 0;
+      const atRouteEndpoint = hopEnabled || (!!sample && (
         sample.easedProgress <= 0.000001 || sample.easedProgress >= 0.999999
-      );
+      ));
+      if (prologue) {
+        const mode = chapterMode() ? 'archive' : 'prologue';
+        if (mode !== paintMode) applyPaintMode(mode);
+      }
       if (
         !Number.isFinite(lastRouteProgress) ||
         Math.abs(routeProgress - lastRouteProgress) >= 0.0002 ||
@@ -1447,13 +1896,19 @@ export default function RouteAtlas({
     };
     const scheduleEntry = (progress: number) => {
       queuedEntry = progress;
+      if (hopEnabled) evaluateCommit(queuedSample);
       schedule(queuedSample);
     };
-    const unsubscribe = chapterSample.on('change', schedule);
+    const onChapterSample = (sample: ChapterSample | null) => {
+      if (hopEnabled) evaluateCommit(sample);
+      schedule(sample);
+    };
+    const unsubscribe = chapterSample.on('change', onChapterSample);
     const unsubscribeEntry = sampledEntryProgress.on('change', scheduleEntry);
     const unsubscribePrologue = prologue
       ? resolvedPrologueProgress.on('change', (progress) => {
           queuedPrologue = progress;
+          if (hopEnabled) evaluateCommit(queuedSample);
           schedule(queuedSample);
         })
       : () => {};
@@ -1519,12 +1974,20 @@ export default function RouteAtlas({
       unsubscribeIntro();
       unsubscribeLife();
       if (lifeFrame) cancelAnimationFrame(lifeFrame);
+      if (hopFrame) cancelAnimationFrame(hopFrame);
+      window.clearTimeout(flipTimer);
+      window.clearTimeout(settleTimer);
+      clearPlantTimers();
+      signLift.set(0);
+      signSway.set(0);
+      signShadowScale.set(1);
+      signShadowOpacity.set(1);
       window.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('visibilitychange', wakeLife);
       cancelFrame(draw);
       if (classicMapFrameRef.current === draw) classicMapFrameRef.current = null;
     };
-  }, [atlasEngaged, canvasExtension, chapterSample, classicEntrance, classicGlobe, entryProgress, globeIntro, globeMode, layoutRevision, living, mapLoaded, paused, prologue, resolvedPrologueProgress, sampledEntryProgress]);
+  }, [atlasEngaged, canvasExtension, chapterRestZooms, chapterRoute, chapterSample, classicEntrance, classicGlobe, entryProgress, globeIntro, globeMode, hopEnabled, layoutRevision, living, mapLoaded, paused, prologue, resolvedPrologueProgress, sampledEntryProgress, signLift, signShadowOpacity, signShadowScale, signSway]);
 
   const mapReadiness = {
     loaded: mapLoaded,
@@ -1557,48 +2020,6 @@ export default function RouteAtlas({
       ? entrancePhase(entry, ...ARCHIVE_ENTRANCE_PHASES.interface)
       : smootherstep(clamp01((entry - 0.54) / 0.42))) * gate,
   );
-  // The standing signboard names the place nearest the camera: it flips over
-  // at each leg's midpoint, when the next place has become the one in view.
-  const signs = !living && !mobile;
-  const nearestStopId = (sample: ChapterSample | null) =>
-    sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : chapterRoute[0]?.stop.id ?? null;
-  const [signStopId, setSignStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
-  const signStopRef = useRef(signStopId);
-  // chapterSample can re-emit while this component renders (its transformer is
-  // rebuilt each render), so the state write is ref-guarded and deferred to a
-  // microtask — never a render-phase update.
-  useEffect(() => {
-    if (!signs) return;
-    let disposed = false;
-    const update = (sample: ChapterSample | null) => {
-      const next = sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : null;
-      if (!next || next === signStopRef.current) return;
-      signStopRef.current = next;
-      queueMicrotask(() => {
-        if (!disposed) setSignStopId(next);
-      });
-    };
-    update(chapterSample.get());
-    const unsubscribe = chapterSample.on('change', update);
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, [chapterSample, signs]);
-  const signEntry = chapterRoute.find((entry) => entry.stop.id === signStopId) ?? chapterRoute[0];
-  // Between places the sign rises a little and turns toward the direction of
-  // travel; both return to rest as the camera settles on the next place.
-  const signLift = useTransform(chapterSample, (sample) => {
-    if (!sample || reducedMotion) return 0;
-    const lift = Math.sin(Math.PI * sample.localProgress);
-    return -16 * lift * lift;
-  });
-  const signSway = useTransform(chapterSample, (sample) => {
-    if (!sample || reducedMotion) return 0;
-    const lift = Math.sin(Math.PI * sample.localProgress);
-    const heading = Math.sign(sample.to.stop.coordinates[0] - sample.from.stop.coordinates[0]);
-    return heading * 11 * lift * lift;
-  });
   const classicHeaderOpacity = useTransform(
     [sampledEntryProgress, interfaceGate],
     ([entry, gate]) => (classicEntrance
@@ -2065,7 +2486,7 @@ export default function RouteAtlas({
               'line-width': mobile ? 5.5 : 4,
               'line-opacity': living ? 0 : mobile ? 0.075 : 0.065,
               'line-blur': mobile ? 5 : 3,
-              'line-trim-offset': [chapterSample.get()?.routeProgress ?? 0, 1],
+              'line-trim-offset': initialRouteTrim,
             }}
           />
           <Layer
@@ -2076,7 +2497,7 @@ export default function RouteAtlas({
               'line-color': '#C3D78B',
               'line-width': mobile ? 1.45 : 1.65,
               'line-opacity': living ? 0 : mobile ? 0.84 : 0.82,
-              'line-trim-offset': [chapterSample.get()?.routeProgress ?? 0, 1],
+              'line-trim-offset': initialRouteTrim,
             }}
           />
           {prologue && (
@@ -2153,7 +2574,7 @@ export default function RouteAtlas({
           >
             <StopStandee
               number={entry.chapterIndex + 1}
-              current={entry.stop.id === signEntry?.stop.id}
+              planted={entry.stop.id === plantedId}
               visibility={classicInterfaceOpacity}
             />
           </Marker>
@@ -2294,6 +2715,9 @@ export default function RouteAtlas({
           visibility={classicInterfaceOpacity}
           lift={signLift}
           sway={signSway}
+          shadowScale={signShadowScale}
+          shadowOpacity={signShadowOpacity}
+          arrivalKey={arrivalKey}
           reducedMotion={reducedMotion}
         />
       )}

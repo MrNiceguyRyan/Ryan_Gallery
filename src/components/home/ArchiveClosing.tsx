@@ -61,7 +61,9 @@ export default function ArchiveClosing({ chapters, frames, years, onBackToIndex 
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end end'] });
   const lipScale = useTransform(scrollYProgress, [0, 0.62], [1, 0], { clamp: true });
   const contentY = useTransform(scrollYProgress, [0, 1], ['-58%', '0%'], { clamp: true });
-  const [statsRef, statsShown] = useInViewOnce<HTMLDListElement>('0px 0px -18% 0px', 0.4);
+  // Count from the first sliver in view: the closing page peeks in under the
+  // last chapter, and a row of zeros there would read as broken.
+  const [statsRef, statsShown] = useInViewOnce<HTMLDListElement>('0px', 0);
 
   return (
     <section

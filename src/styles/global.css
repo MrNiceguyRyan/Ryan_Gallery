@@ -74,6 +74,13 @@ html.lenis body {
   pointer-events: none;
   perspective: 900px;
 }
+.atlas-sign__hop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The board's turn needs its perspective from its direct parent. */
+  perspective: 900px;
+}
 .atlas-sign__body {
   transform-origin: 50% 100%;
   transform-style: preserve-3d;
@@ -196,19 +203,55 @@ html.lenis body {
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(4, 6, 3, 0.55), transparent);
 }
+/* Touchdown: one lime ring runs out across the ground, foreshortened like the
+   map plane. Keyed per landing, so it plays exactly once each time. */
+.atlas-sign__ring {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 44px;
+  height: 14px;
+  margin-left: -22px;
+  margin-bottom: -7px;
+  border: 1.5px solid #D2FF00;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: atlas-sign-ring 620ms cubic-bezier(0.2, 0.7, 0.2, 1) 1 both;
+}
+@keyframes atlas-sign-ring {
+  0% { opacity: 0.6; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(2.4); }
+}
 
 .stop-standee {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: opacity 0s, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: 50% 100%;
+  display: block;
   /* clip-path would cut a box-shadow, so the shield's shadow is a filter. */
   filter: drop-shadow(0 6px 8px rgba(6, 8, 5, 0.5));
 }
-.stop-standee.is-current {
+.stop-standee__pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: 50% 100%;
+}
+.stop-standee__pin.is-planted {
   transform: scale(0.4);
-  visibility: hidden;
+  opacity: 0;
+  transition: transform 180ms cubic-bezier(0.4, 0, 1, 1), opacity 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+/* Removing .is-planted re-applies this animation, so a freed pin pops up. */
+.stop-standee__pin:not(.is-planted) {
+  animation: stop-standee-pop 350ms cubic-bezier(0.2, 0.7, 0.2, 1) 1 both;
+}
+@keyframes stop-standee-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stop-standee__pin:not(.is-planted) { animation: none; }
+  .stop-standee__pin.is-planted { transition: none; }
 }
 .stop-standee__badge {
   display: flex;
