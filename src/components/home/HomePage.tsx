@@ -701,19 +701,12 @@ export default function HomePage({ collections }: Props) {
   }, [activeCollections, orderedCities, routeStops]);
 
 
-  // The index mirrors the real chapter order exactly. It does not preview
-  // places that have no corresponding story in this archive.
-  // The band's ids must match the anchors the living tree actually renders,
-  // which carry the `mobile-` prefix below 1024px (LivingAtlasStory's own
-  // `idPrefix`) — otherwise nothing highlights and every name jumps nowhere.
-  const indexNames = useMemo(
-    () => useLivingAtlas
-      ? routeStops.map((stop) => ({
-        name: stop.name,
-        id: `${desktopLayout ? 'archive-item-' : 'mobile-archive-item-'}${stop.id}`,
-      }))
-      : orderedCities.map((city) => ({ name: city.name.trim(), id: cityDomId(city) })),
-    [desktopLayout, orderedCities, routeStops, useLivingAtlas],
+  // The desktop prologue's index mirrors the real chapter order exactly and
+  // previews no place without a story. Each entry carries its chapter anchor
+  // plus the collection id the globe uses to light the stop.
+  const prologueCities = useMemo(
+    () => orderedCities.map((city) => ({ name: city.name.trim(), id: cityDomId(city), chapterId: city._id })),
+    [orderedCities],
   );
 
   // Index of the active city — drives the geographic trace (−1 in the hero).
@@ -1238,8 +1231,9 @@ export default function HomePage({ collections }: Props) {
             chapters={orderedCities.length}
             frames={archiveFrameTotal}
             years={archiveYearSpan}
-            cities={indexNames.filter((entry): entry is { name: string; id: string } => !!entry.id)}
+            cities={prologueCities}
             onSelect={navigateLivingChapter}
+            onHighlight={setEngagedChapterId}
           />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the

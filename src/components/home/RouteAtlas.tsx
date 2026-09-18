@@ -223,12 +223,26 @@ const PROLOGUE_GLOBE = {
   // The stretch of the prologue spent gliding from the corner to the atlas
   // focus — finished before the index (which sits on the right) is read.
   glideStart: 0.5,
-  glideEnd: 0.88,
+  glideEnd: 0.8,
   // The load-in: the globe spins into place and grows from a smaller disc.
   introSpin: 150,
   introZoom: 0.62,
+  // Axial tilt while it sits in the corner; straightens during the glide.
+  tilt: -14,
+  // Left alone, the globe keeps turning — easing toward `driftMax` degrees
+  // over roughly `driftTau` ms — and leans a few degrees toward the cursor.
+  driftMax: 30,
+  driftTau: 12000,
+  pointerLongitude: 5,
+  pointerLatitude: 3,
+  // Drift and cursor fold back to zero across this stretch, so the glide and
+  // the dive always start from the exact scroll-owned pose.
+  lifeFade: [0.28, 0.5] as [number, number],
 } as const;
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
+// After the dive the photography does not vanish: it stays under the graded
+// atlas at this strength, so chapters keep a little real ground.
+const PROLOGUE_SATELLITE_RESIDUAL = 0.3;
 
 interface GlobeMode { turnDegrees: number; startZoom: number }
 const FLAT_ENTRY_GLOBE: GlobeMode = { turnDegrees: GLOBE_TURN_DEGREES, startZoom: GLOBE_START_ZOOM };
@@ -1206,6 +1220,14 @@ export default function RouteAtlas({
     // Mirrors the live projection; starts on the globe when the opening does.
     let onGlobe = classicGlobe && map.getProjection?.()?.name === 'globe';
     let queuedPrologue = resolvedPrologueProgress.get();
+    // Prologue "life": idle drift and cursor lean, advanced by a small rAF
+    // loop below that only runs while the globe sits in the corner.
+    let drift = 0;
+    let pointerX = 0;
+    let pointerY = 0;
+    let pointerTargetX = 0;
+    let pointerTargetY = 0;
+    let lastBearingKey = Number.NaN;
     let lastPrologueRoute = Number.NaN;
     let prologuePaddingKey = '';
     // The canvas reaches past the atlas column by `canvasExtension`; widening
@@ -1262,10 +1284,15 @@ export default function RouteAtlas({
           left: cornerPadding.left + (activePadding.left - cornerPadding.left) * glide,
         };
         const target = sample.coordinate;
+        const [lifeStart, lifeEnd] = PROLOGUE_GLOBE.lifeFade;
+        const life = 1 - smootherstep(clamp01((q - lifeStart) / (lifeEnd - lifeStart)));
         const center: GeoCoordinate = [
-          target[0] - PROLOGUE_GLOBE.spin * Math.pow(1 - q, 1.25) - PROLOGUE_GLOBE.introSpin * intro,
-          PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q),
+          target[0] - PROLOGUE_GLOBE.spin * Math.pow(1 - q, 1.25) - PROLOGUE_GLOBE.introSpin * intro +
+            (drift + pointerX * PROLOGUE_GLOBE.pointerLongitude) * life,
+          PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q) +
+            pointerY * PROLOGUE_GLOBE.pointerLatitude * life,
         ];
+        const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
         // The corner globe keeps its share of the screen on wider displays
         // (radius doubles per zoom level), then settles to the entrance pose.
         const cornerZoom = PROLOGUE_GLOBE.zoom + Math.log2(Math.max(0.75, viewportWidth / 1440));
@@ -1280,13 +1307,14 @@ export default function RouteAtlas({
         const paddingChanged = paddingKey !== prologuePaddingKey;
         if (paddingChanged || !lastCoordinate ||
           Math.abs(lastCoordinate[0] - center[0]) > 0.004 || Math.abs(lastCoordinate[1] - center[1]) > 0.004 ||
-          Math.abs(lastZoom - zoom) > 0.0004 || lastPitch !== 0) {
-          map.jumpTo({ center, zoom, bearing: 0, pitch: 0, padding });
+          Math.abs(lastZoom - zoom) > 0.0004 || lastPitch !== 0 || Math.abs(lastBearingKey - bearing) > 0.01) {
+          map.jumpTo({ center, zoom, bearing, pitch: 0, padding });
           prologuePaddingKey = paddingKey;
           lastCoordinate = center;
           lastZoom = zoom;
           lastPitch = 0;
-          lastBearing = 0;
+          lastBearing = bearing;
+          lastBearingKey = bearing;
           lastOverview = false;
         }
         // The route is drawn across the globe as North America turns in.
@@ -1425,6 +1453,56 @@ export default function RouteAtlas({
         })
       : () => {};
     const unsubscribeIntro = prologue ? globeIntro.on('change', () => schedule(queuedSample)) : () => {};
+
+    // The prologue globe's life loop: it wakes on scroll into the corner
+    // stretch or on pointer movement, advances drift and cursor lean with
+    // frame-rate-independent easing, and sleeps once both have settled.
+    let lifeFrame = 0;
+    let lastLifeTime = 0;
+    const lifeActive = () => prologue && queuedPrologue < PROLOGUE_GLOBE.lifeFade[1] &&
+      document.visibilityState === 'visible';
+    const lifeStep = (time: number) => {
+      lifeFrame = 0;
+      if (disposed || !lifeActive()) {
+        lastLifeTime = 0;
+        return;
+      }
+      const dt = lastLifeTime ? Math.min(64, time - lastLifeTime) : 16.7;
+      lastLifeTime = time;
+      const previousDrift = drift;
+      const previousX = pointerX;
+      const previousY = pointerY;
+      drift += (PROLOGUE_GLOBE.driftMax - drift) * (1 - Math.exp(-dt / (PROLOGUE_GLOBE.driftTau / 3)));
+      const lean = 1 - Math.exp(-dt / 320);
+      pointerX += (pointerTargetX - pointerX) * lean;
+      pointerY += (pointerTargetY - pointerY) * lean;
+      const moving = Math.abs(drift - previousDrift) > 0.0004 ||
+        Math.abs(pointerX - previousX) > 0.0004 || Math.abs(pointerY - previousY) > 0.0004;
+      if (moving) {
+        schedule(queuedSample);
+        lifeFrame = requestAnimationFrame(lifeStep);
+      } else {
+        lastLifeTime = 0;
+      }
+    };
+    const wakeLife = () => {
+      if (!lifeFrame && lifeActive()) lifeFrame = requestAnimationFrame(lifeStep);
+    };
+    const finePointer = typeof window !== 'undefined' &&
+      window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+    const onPointerMove = (event: PointerEvent) => {
+      pointerTargetX = clamp01(event.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
+      pointerTargetY = -(clamp01(event.clientY / Math.max(1, window.innerHeight)) * 2 - 1);
+      wakeLife();
+    };
+    const unsubscribeLife = prologue
+      ? resolvedPrologueProgress.on('change', () => wakeLife())
+      : () => {};
+    if (prologue) {
+      if (finePointer) window.addEventListener('pointermove', onPointerMove, { passive: true });
+      document.addEventListener('visibilitychange', wakeLife);
+      wakeLife();
+    }
     // Mapbox may finish loading after several chapters have already passed, and
     // Story close may resume on a stationary scroll position. Always replay now.
     schedule(chapterSample.get());
@@ -1434,6 +1512,10 @@ export default function RouteAtlas({
       unsubscribeEntry();
       unsubscribePrologue();
       unsubscribeIntro();
+      unsubscribeLife();
+      if (lifeFrame) cancelAnimationFrame(lifeFrame);
+      window.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('visibilitychange', wakeLife);
       cancelFrame(draw);
       if (classicMapFrameRef.current === draw) classicMapFrameRef.current = null;
     };
@@ -1750,9 +1832,10 @@ export default function RouteAtlas({
           // terrain startup cost or extra animation competing with the photos.
           map.setTerrain(null);
           // The prologue globe is photographic: satellite imagery at globe
-          // zooms, graded toward the archive's olive, fading out as the camera
-          // dives so the dark atlas takes over by the first chapter. Inserted
-          // under the first label layer; the route layers draw above it.
+          // zooms, graded toward the archive's olive. As the camera dives it
+          // settles to a residual veil under the dark atlas rather than
+          // vanishing. Inserted under the first label layer; the route layers
+          // draw above it.
           if (prologue && !map.getSource('prologue-satellite')) {
             const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
             map.addSource('prologue-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
@@ -1760,13 +1843,12 @@ export default function RouteAtlas({
               id: 'prologue-satellite',
               type: 'raster',
               source: 'prologue-satellite',
-              maxzoom: PROLOGUE_SATELLITE_FADE[1] + 0.2,
               paint: {
-                'raster-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
+                'raster-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], PROLOGUE_SATELLITE_RESIDUAL],
                 'raster-saturation': -0.32,
                 'raster-contrast': 0.08,
                 'raster-brightness-max': 0.86,
-                'raster-fade-duration': 0,
+                'raster-fade-duration': 160,
               },
             }, firstLabel);
           }
@@ -1970,18 +2052,25 @@ export default function RouteAtlas({
               id="prologue-stops-halo"
               type="circle"
               paint={{
-                'circle-radius': 13,
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 30, 13],
+                'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
                 'circle-color': '#D2FF00',
                 'circle-blur': 1,
                 'circle-pitch-alignment': 'map',
-                'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.34, PROLOGUE_SATELLITE_FADE[1], 0],
+                'circle-opacity': [
+                  'interpolate', ['linear'], ['zoom'],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.82, 0.3],
+                  PROLOGUE_SATELLITE_FADE[1], 0,
+                ],
+                'circle-opacity-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
               }}
             />
             <Layer
               id="prologue-stops-dot"
               type="circle"
               paint={{
-                'circle-radius': 3.4,
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 6, 3.4],
+                'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
                 'circle-color': '#EAFF8C',
                 'circle-stroke-color': '#20241a',
                 'circle-stroke-width': 1,

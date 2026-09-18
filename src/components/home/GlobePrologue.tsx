@@ -8,6 +8,8 @@ interface PrologueCity {
   name: string;
   /** DOM id of the chapter the name jumps to. */
   id: string;
+  /** Collection id — the stop the globe lights while the name is pointed at. */
+  chapterId: string;
 }
 
 interface Props {
@@ -16,6 +18,8 @@ interface Props {
   years: string;
   cities: PrologueCity[];
   onSelect: (anchorId: string) => void;
+  /** Hover/focus on an index name lights its stop on the globe (null clears). */
+  onHighlight?: (chapterId: string | null) => void;
 }
 
 /**
@@ -54,7 +58,7 @@ function RiseLine({ children, shown, index, className = '' }: {
  * first chapter. The globe itself is the RouteAtlas map (driven by
  * `prologueProgress`); this component is only the type.
  */
-export default function GlobePrologue({ chapters, frames, years, cities, onSelect }: Props) {
+export default function GlobePrologue({ chapters, frames, years, cities, onSelect, onHighlight }: Props) {
   const reduce = useReducedMotion();
   const [heroShown, setHeroShown] = useState(false);
   const [statsRef, statsShown] = useInViewOnce<HTMLDivElement>('0px 0px -22% 0px', 0.2);
@@ -156,6 +160,10 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
                 <motion.button
                   type="button"
                   onClick={() => onSelect(city.id)}
+                  onPointerEnter={() => onHighlight?.(city.chapterId)}
+                  onPointerLeave={() => onHighlight?.(null)}
+                  onFocus={() => onHighlight?.(city.chapterId)}
+                  onBlur={() => onHighlight?.(null)}
                   data-cursor="Go to chapter"
                   aria-label={`Go to chapter ${index + 1}: ${city.name}`}
                   className="prologue-index-row group flex w-full items-baseline gap-6 whitespace-nowrap py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
