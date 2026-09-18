@@ -520,7 +520,7 @@ export default function ArchiveChapter({
             {deck && <p className="text-deck max-w-[32ch]">{deck}</p>}
             {lede && <p className="text-[13.5px] leading-relaxed text-white/62 font-light max-w-[42ch]">{lede}</p>}
             <div className="h-px w-16" style={{ background: ACCENT }} />
-            <span aria-hidden="true" className="mt-1 inline-flex min-h-11 shrink-0 items-center gap-3 font-ui text-[10px] uppercase tracking-[0.35em] text-white/80 md:text-[11px]">
+            <span aria-hidden="true" className="mt-1 inline-flex min-h-11 shrink-0 items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/80 md:text-[11px]">
               View Story
               <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/25 transition-[border-color,background-color,color] duration-500 group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20]">
                 <ArrowRight size={16} />
@@ -573,7 +573,7 @@ export default function ArchiveChapter({
               opacity: reduce ? 1 : coverCopyOpacity,
               x: reduce ? 0 : titleInteractionX,
             }}
-            className="absolute inset-x-0 top-0 flex items-start p-5 pt-24 font-ui text-[10px] uppercase tracking-[0.32em] md:p-8 md:pt-20 md:text-[11px] lg:hidden"
+            className="absolute inset-x-0 top-0 flex items-start p-5 pt-24 font-ui text-[10px] uppercase tracking-[0.1em] md:p-8 md:pt-20 md:text-[11px] lg:hidden"
           >
             <span className="flex max-w-[78%] items-center gap-2 text-white/72">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: ACCENT }} />
@@ -607,7 +607,7 @@ export default function ArchiveChapter({
           className="relative z-30 ml-[-12%] mt-[clamp(64px,6.5vw,92px)] hidden w-[88%] grid-cols-[96px_minmax(0,1fr)] items-start gap-x-8 pr-3 lg:grid"
         >
         <div className="pt-1 font-ui uppercase">
-          <p className="text-[10px] tracking-[0.34em] text-[#D2FF00]">{frames} frames</p>
+          <p className="text-[10px] tracking-[0.1em] text-[#D2FF00]">{frames} frames</p>
           <span className="mt-5 block h-px w-10 bg-[#D2FF00]/65" />
         </div>
 
@@ -622,7 +622,7 @@ export default function ArchiveChapter({
           style={reduce ? undefined : { opacity: fieldNoteOpacity, y: fieldNoteShift }}
           className="relative z-30 mt-[clamp(72px,18vw,96px)] px-5 pr-6 lg:hidden"
         >
-          <p className="font-ui text-[9px] uppercase tracking-[0.3em] text-[#D2FF00]/86">{frames} frames</p>
+          <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-[#D2FF00]/86">{frames} frames</p>
           <p className="mt-4 max-w-[34ch] font-serif text-[15px] leading-[1.5] text-white/66">
             {lede || deck || `A photographic dispatch from ${dateline}.`}
           </p>

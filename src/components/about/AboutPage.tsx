@@ -146,9 +146,11 @@ function timelineFromCollections(collections: ArchiveCollection[]): TimelineItem
 interface Props {
   settings?: SiteSettings;
   collections?: ArchiveCollection[];
+  /** ISO timestamp stamped by about.astro at build time. */
+  builtAt?: string;
 }
 
-export default function AboutPage({ settings, collections = [] }: Props) {
+export default function AboutPage({ settings, collections = [], builtAt }: Props) {
   const name      = settings?.name      ?? 'Ryan Xu';
   const bio       = settings?.bio       ?? null;
   const avatarUrl = settings?.avatarUrl ?? 'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg';
@@ -159,6 +161,23 @@ export default function AboutPage({ settings, collections = [] }: Props) {
     : timelineFromCollections(collections);
   const reduce = useReducedMotion();
   const igHandle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'instagram');
+
+  // Colophon facts — all derived or stamped at build time, so none of them can
+  // drift out of date by hand. The date is pinned to one named timezone: this
+  // page is server-rendered and then hydrated, and a visitor-local date could
+  // differ from the build's and mismatch. New York, where the archive is based,
+  // rather than UTC — a 9pm build would otherwise read as tomorrow.
+  const publishedChapters = collections.filter((entry) => (entry.photoCount ?? 0) > 0);
+  const frameTotal = publishedChapters.reduce((sum, entry) => sum + (entry.photoCount ?? 0), 0);
+  const chapterYears = publishedChapters
+    .map((entry) => entry.year)
+    .filter((year): year is number => typeof year === 'number' && Number.isFinite(year));
+  const firstYear = chapterYears.length ? Math.min(...chapterYears) : null;
+  const lastYear = chapterYears.length ? Math.max(...chapterYears) : null;
+  const yearSpan = firstYear == null ? '' : firstYear === lastYear ? String(firstYear) : `${firstYear}–${lastYear}`;
+  const updatedOn = builtAt
+    ? new Date(builtAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
+    : '';
   const heroItem = makeHeroItem(!!reduce);
   const avatarIsSanity = avatarUrl.includes('cdn.sanity.io/images/');
   const avatarBase = avatarUrl.split('?')[0];
@@ -292,7 +311,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
               animate={{ clipPath: 'inset(0 0% 0 0)' }}
               transition={{ duration: 0.65, delay: 0.1, ease: expo }}
             >
-              <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase">
+              <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase">
                 <span className="font-medium text-white/60">The Journal Gallery</span>
                 <span className="text-white/58">The Profile</span>
               </div>
@@ -325,7 +344,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.46, ease: expo }}
-                className="flex items-center gap-3 font-ui text-[10px] tracking-[0.34em] uppercase text-white/58"
+                className="flex items-center gap-3 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
               >
                 <span>New York, NY</span>
               </motion.div>
@@ -333,7 +352,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
 
             {/* Folio — camera EXIF line for the photography theme */}
             <motion.div
-              className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase text-white/58"
+              className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
               style={{
                 bottom: 'max(clamp(1.5rem,4vh,3rem), env(safe-area-inset-bottom))',
                 left: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-left))',
@@ -357,7 +376,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
       <section className="safe-inline-page pt-28 md:pt-36 pb-10 md:pb-14 max-w-5xl mx-auto">
         {/* Running head / folio bar */}
         <motion.div
-          className="flex items-baseline justify-between border-b border-white/10 pb-3 mb-10 md:mb-14 font-ui text-[10px] tracking-[0.32em] uppercase text-white/52"
+          className="flex items-baseline justify-between border-b border-white/10 pb-3 mb-10 md:mb-14 font-ui text-[10px] tracking-[0.1em] uppercase text-white/52"
           variants={heroItem}
           custom={0}
           initial="hidden"
@@ -441,7 +460,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
               <div className="text-white/70">Photographer</div>
               <div>New York, NY</div>
               <div>Fujifilm X-T50 · Nikon Zf</div>
-              <div className="pt-2.5 mt-1 border-t border-white/10 tracking-[0.3em] uppercase text-white/52 text-[10px]">
+              <div className="pt-2.5 mt-1 border-t border-white/10 tracking-[0.1em] uppercase text-white/52 text-[10px]">
                 Since 2023
               </div>
             </motion.div>
@@ -532,7 +551,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
       {timeline.length > 0 && (
         <section className="safe-inline-page max-w-3xl mx-auto py-12 md:py-16 border-t border-white/5">
           <Reveal>
-            <p className="font-ui text-[10px] tracking-[0.4em] uppercase text-white/52 mb-3">The Log</p>
+            <p className="font-ui text-[10px] tracking-[0.1em] uppercase text-white/52 mb-3">The Log</p>
             <h2 className="text-3xl md:text-4xl font-serif uppercase text-[#F4F4ED] tracking-tight py-1 mb-8">
               Timeline
             </h2>
@@ -579,7 +598,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
           <div className="relative z-10 mt-12 md:mt-16 grid grid-cols-2 md:grid-cols-3 gap-y-10 items-center">
             {/* PAGES */}
             <Reveal className="text-center md:text-left md:pl-[8%]">
-              <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/52 mb-4">Pages</p>
+              <p className="font-ui text-[9px] tracking-[0.1em] uppercase text-white/52 mb-4">Pages</p>
               <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
                 {[['Home', '/'], ['Map', '/travel'], ['About', '/about']].map(([label, href]) => (
                   <li key={href}>
@@ -608,7 +627,7 @@ export default function AboutPage({ settings, collections = [] }: Props) {
 
             {/* FOLLOW ON */}
             <Reveal delay={0.1} className="text-center md:text-right md:pr-[8%]">
-              <p className="font-ui text-[9px] tracking-[0.4em] uppercase text-white/52 mb-4">Follow on</p>
+              <p className="font-ui text-[9px] tracking-[0.1em] uppercase text-white/52 mb-4">Follow on</p>
               <ul className="space-y-1.5 font-ui font-bold uppercase tracking-[0.08em] text-lg md:text-xl text-white/85">
                 <li>
                   <a href={instagram} target="_blank" rel="noopener noreferrer" className="group inline-flex min-h-11 items-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]">
@@ -623,6 +642,33 @@ export default function AboutPage({ settings, collections = [] }: Props) {
               </ul>
             </Reveal>
           </div>
+
+          {/* Colophon — the personal-site convention (Robin Sloan, Maggie
+              Appleton, Jason Santa Maria all publish one): what the archive is
+              set in, what made it, what it runs on, how much of it there is,
+              and when it last changed. Facts only, no copy. */}
+          <dl className="relative z-10 mt-12 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 border-t border-white/10 pt-6 text-left md:grid-cols-[auto_1fr_auto_1fr] md:gap-x-8">
+            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Type</dt>
+            <dd className="m-0 font-serif text-[15px] text-white/80">Fraunces, Space Grotesk, Inter</dd>
+            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Cameras</dt>
+            <dd className="m-0 font-serif text-[15px] text-white/80">Fujifilm X-T50, Nikon Zf</dd>
+            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Built with</dt>
+            <dd className="m-0 font-serif text-[15px] text-white/80">Astro, React, Sanity and Mapbox GL, on Cloudflare Workers</dd>
+            {publishedChapters.length > 0 && (
+              <>
+                <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Archive</dt>
+                <dd className="m-0 font-serif text-[15px] text-white/80">
+                  {publishedChapters.length} chapters, {frameTotal} frames{yearSpan ? `, ${yearSpan}` : ''}
+                </dd>
+              </>
+            )}
+            {updatedOn && (
+              <>
+                <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Updated</dt>
+                <dd className="m-0 font-serif text-[15px] text-white/80">{updatedOn}</dd>
+              </>
+            )}
+          </dl>
 
           {/* Bottom bar */}
           <div className="relative z-10 mt-12 pt-5 border-t border-white/10 flex flex-col md:flex-row gap-2 items-center justify-between font-ui text-[9px] tracking-[0.25em] uppercase text-white/52">

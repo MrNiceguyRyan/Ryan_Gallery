@@ -1277,7 +1277,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     animate={prefersReduced || mapLoadFailed ? undefined : { opacity: [0.35, 1, 0.35] }}
                     transition={{ duration: 1.65, repeat: Infinity, ease: 'easeInOut' }}
                   />
-                  <p className="font-ui text-[8px] uppercase tracking-[0.36em] text-white/48">
+                  <p className="font-ui text-[8px] uppercase tracking-[0.1em] text-white/48">
                     {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}
                   </p>
                   <p className="font-ui text-[9px] uppercase tracking-[0.2em] text-white/48">

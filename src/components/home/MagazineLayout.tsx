@@ -6,6 +6,7 @@ import Lightbox from '../shared/Lightbox';
 import {
   EDITORIAL_FALLBACKS,
   photoAccessibleLabel,
+  photoDescription,
   renderPortableText,
   renderFallback,
 } from '../../lib/narratives';
@@ -17,6 +18,12 @@ const expo = [0.16, 1, 0.3, 1] as const;
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
 const overlayEase = [0.32, 0, 0.07, 1] as const;
+// Back-out curve for the photographs arriving as a story opens — the second
+// sanctioned exception to house expo, approved by the owner so each page
+// "springs out" instead of sliding in. The 1.56 overshoots and settles, so the
+// frames lift just past rest and land. It drives transform only: opacity keeps
+// expo, because an overshooting opacity has nothing to overshoot into.
+const popEase = [0.34, 1.56, 0.64, 1] as const;
 const SHARED_OPEN_DURATION = 0.78;
 const SHARED_CLOSE_DURATION = 0.62;
 const SHARED_CONTENT_DELAY = SHARED_OPEN_DURATION * 0.55;
@@ -160,6 +167,8 @@ function PhotoCell({
   hideOnMobile = false,
   collectionName,
   total,
+  frameNumber,
+  year,
 }: {
   photo: Photo;
   span: 'full' | 'half' | 'third' | 'portrait';
@@ -174,6 +183,12 @@ function PhotoCell({
   hideOnMobile?: boolean;
   collectionName: string;
   total: number;
+  /** 1-based position within this chapter. Numbered per chapter rather than
+   *  across the archive: the homepage shows chapters grouped by region while
+   *  `allCollections` arrives in data order, so an archive-wide count would
+   *  give the same photograph a different number on each surface. */
+  frameNumber: number;
+  year?: number;
 }) {
   const colSpan =
     span === 'full' ? 'col-span-6'
@@ -204,7 +219,19 @@ function PhotoCell({
     setIsLoaded(!!image?.complete && image.naturalWidth > 0);
     setHasError(!!image?.complete && image.naturalWidth === 0);
   }, [photo.imageUrl]);
-  const accessibleLabel = photoAccessibleLabel(photo, index, total, collectionName);
+  // The caption is the photograph's written description when someone has
+  // written one, and otherwise a factual line derived from data that is
+  // always present: the archive-wide frame number, the photo's own city
+  // (58 of 58 carry one, and it is sometimes more specific than the chapter —
+  // "Manhattan", "Midtown"), and the chapter's year. The page never shows an
+  // empty caption and never prints a machine title such as "Miami #24".
+  const frameLabel = `Frame ${String(frameNumber).padStart(2, '0')}`;
+  const description = photoDescription(photo);
+  const place = photo.location?.city?.trim() || collectionName;
+  const factualCaption = [frameLabel, place, year ? String(year) : ''].filter(Boolean).join(' · ');
+  // What is shown is what is announced: the button's name and the image's
+  // alt follow the visible caption instead of "Photo 12 of 58, Miami #24".
+  const accessibleLabel = description ? `${frameLabel}, ${description}` : factualCaption;
   // On touch devices we treat the grid as if no one is hovered: every
   // photo stays at full clarity, no blur/scale-down ever fires. We also
   // skip the hover handlers entirely so a tap → onHoverStart → flash of
@@ -215,6 +242,24 @@ function PhotoCell({
   const animateEntrance = !reduce && index < 7;
 
   return (
+    // The figure owns the grid placement and the entrance, so the photograph
+    // and its caption rise together. The button wraps only the image: a
+    // caption inside the control would be read as part of its name and would
+    // make the whole caption a click target for the lightbox.
+    <motion.figure
+      className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} m-0`}
+      initial={animateEntrance ? { opacity: 0, y: 26, scale: 0.962 } : false}
+      animate={animateEntrance && !revealReady ? { opacity: 0, y: 26, scale: 0.962 } : { opacity: 1, y: 0, scale: 1 }}
+      transition={(() => {
+        const delay = animateEntrance && revealReady ? index * 0.05 : 0;
+        if (!animateEntrance) return { duration: 0 };
+        return {
+          opacity: { duration: 0.5, delay, ease: expo },
+          y: { duration: 0.74, delay, ease: popEase },
+          scale: { duration: 0.74, delay, ease: popEase },
+        };
+      })()}
+    >
     <motion.button
       type="button"
       {...(interactiveHover && {
@@ -233,22 +278,12 @@ function PhotoCell({
         opacity: isAnyHovered && !isThisHovered ? 0.84 : 1,
       }}
       transition={{ duration: 0.32, ease: expo }}
-      className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} group relative w-full cursor-pointer overflow-hidden bg-[#30352a] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]`}
+      className="group relative block w-full cursor-pointer overflow-hidden bg-[#30352a] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
     >
       {/* The opening row follows the cover's departure, not mount time.
           Images load underneath it; opacity never depends on image loading
           or an intersection observer. Keep the reveal compositor-only. */}
-      <motion.div
-        className="relative"
-        initial={animateEntrance ? { opacity: 0, y: 22 } : false}
-        animate={animateEntrance && !revealReady ? { opacity: 0, y: 22 } : { opacity: 1, y: 0 }}
-        transition={{ duration: animateEntrance ? 0.72 : 0, delay: animateEntrance && revealReady ? index * 0.04 : 0, ease: expo }}
-      >
-        {/* Index number */}
-        <div className="absolute top-3 right-3 z-20 text-[9px] tabular-nums font-ui text-white/0 group-hover:text-white/60 group-focus-visible:text-white/60 transition-colors duration-300 pointer-events-none">
-          {String(index + 1).padStart(2, '0')}
-        </div>
-
+      <div className="relative">
         {/* Loading placeholder */}
         <motion.div
           animate={{ opacity: isLoaded || hasError ? 0 : 1 }}
@@ -290,8 +325,23 @@ function PhotoCell({
             gone, the first rows load eagerly and the rest lazy-load as the
             story scrolls — an opened 40-photo story no longer fires 40
             full-size requests up front. */}
-      </motion.div>
+      </div>
     </motion.button>
+    {/* Set in the other family from the text, at ~0.66x of it — the one ratio
+        every editorial site sampled agrees on (0.54–0.86x). No rule above or
+        below the frame; the caption sits directly under the image. */}
+    <figcaption className="mt-2.5 font-ui text-[12.5px] leading-snug text-white/62">
+      {description ? (
+        <>
+          <span className="tabular-nums text-white/48">{String(frameNumber).padStart(2, '0')}</span>
+          <span aria-hidden="true" className="text-white/40">&nbsp;—&nbsp;</span>
+          {description}
+        </>
+      ) : (
+        <span className="uppercase tracking-[0.06em] tabular-nums">{factualCaption}</span>
+      )}
+    </figcaption>
+    </motion.figure>
   );
 }
 
@@ -713,12 +763,12 @@ export default function MagazineLayout({
               whileHover={reduce ? undefined : { x: -2 }}
               whileTap={reduce ? undefined : { scale: 0.96, x: -4 }}
               transition={{ duration: 0.2, ease: expo }}
-              className="flex min-h-11 items-center gap-3 -ml-1 pl-1 pr-2 text-[10px] uppercase tracking-[0.4em] font-bold hover:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+              className="flex min-h-11 items-center gap-3 -ml-1 pl-1 pr-2 text-[10px] uppercase tracking-[0.1em] font-bold hover:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
               aria-label={`${standalone ? 'Back from' : 'Close'} ${collection.name} story`}
             >
               <ArrowRight size={16} className="rotate-180" /> Back
             </motion.button>
-            <div className="text-[10px] md:text-[11px] uppercase tracking-[0.36em] md:tracking-[0.5em] font-bold opacity-[0.58] truncate max-w-[55vw] md:max-w-none">
+            <div className="text-[10px] md:text-[11px] uppercase tracking-[0.1em] md:tracking-[0.1em] font-bold opacity-[0.58] truncate max-w-[55vw] md:max-w-none">
               {collection.name}
             </div>
             <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.04] lg:hidden" aria-hidden="true">
@@ -746,7 +796,7 @@ export default function MagazineLayout({
                   {/* TOP — header */}
                   <header className="lg:shrink-0 space-y-4">
                     <div className="flex items-center gap-4">
-                      <span className="text-[10px] uppercase tracking-[0.5em] font-bold opacity-[0.52]">
+                      <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.52]">
                         Vol. {folio}
                       </span>
                       <div className="h-[1px] flex-1 bg-white/10" />
@@ -768,14 +818,14 @@ export default function MagazineLayout({
                     </StoryHeading>
                     <div className="flex items-center gap-4">
                       {distinctLocation && (
-                        <p className="text-[10px] uppercase tracking-[0.4em] font-bold">
+                        <p className="text-[10px] uppercase tracking-[0.1em] font-bold">
                           {distinctLocation}
                         </p>
                       )}
                       {distinctLocation && collection.year && (
                         <div className="w-1 h-1 rounded-full bg-white/20" />
                       )}
-                      <p className="text-[10px] uppercase tracking-[0.36em] opacity-[0.58] font-ui italic">
+                      <p className="text-[10px] uppercase tracking-[0.1em] opacity-[0.58] font-ui italic">
                         {collection.year || ''}
                       </p>
                     </div>
@@ -834,13 +884,23 @@ export default function MagazineLayout({
                         role="region"
                         aria-label={`${collection.name} introduction`}
                         tabIndex={0}
-                        className="max-w-[38ch] lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar lg:pr-2 lg:-mr-2 text-[14px] md:text-[15px] leading-[1.75] text-pretty font-serif italic opacity-80 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]/60"
+                        // Set as reading text rather than as an epigraph. It was
+                        // styled as a pull quote — whole-block italic at 80%
+                        // opacity behind a floated open-quote with no close —
+                        // which is how captions and quotations are set, not the
+                        // one passage a chapter has. Roman, full contrast, one
+                        // paragraph. The measure is set by the 352px sticky rail,
+                        // not by `max-w`, so the size stays at 15px: roman glyphs
+                        // are wider than italic ones, and measured in that rail
+                        // 16px roman already fell to ~39 characters a line, below
+                        // the 45–90 reading range.
+                        className="max-w-[68ch] lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar lg:pr-2 lg:-mr-2 text-[15px] leading-[1.65] text-pretty font-serif text-white/88 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]/60"
                       >
-                        <span className="text-4xl md:text-5xl float-left mr-2.5 mt-1 font-serif not-italic leading-none opacity-25 select-none">&ldquo;</span>
+                        {/* One paragraph: the chapter's lead, not its whole text. */}
                         {hasIntro
-                          ? renderPortableText(collection.introduction!, 'border-white/15')
+                          ? renderPortableText(collection.introduction!.slice(0, 1), 'border-white/15')
                           : fallbackParas
-                            ? renderFallback(fallbackParas)
+                            ? renderFallback(fallbackParas.slice(0, 1))
                             : <p>{collection.description}</p>}
                       </div>
                     );
@@ -866,7 +926,7 @@ export default function MagazineLayout({
                     </div>
 
                     {/* Frame count — compact line */}
-                    <div className="hidden lg:flex items-center gap-3 text-[10px] uppercase tracking-[0.34em] font-ui opacity-[0.62]">
+                    <div className="hidden lg:flex items-center gap-3 text-[10px] uppercase tracking-[0.1em] font-ui opacity-[0.62]">
                       <div className="w-8 h-[1px] bg-white opacity-30" />
                       <span>{photos.length} Captured Frames</span>
                     </div>
@@ -921,11 +981,15 @@ export default function MagazineLayout({
                 {/* Orientation-aware photo sequence. Landscapes may open into
                     a wide plate; portraits share the line so no vertical frame
                     becomes an accidental full-screen wall. */}
-                <div className="lg:col-span-8 space-y-2 md:space-y-3">
+                {/* Rows sit 32–40px apart so each caption reads as belonging to the frame
+                    above it. The old 8–12px spacing was set for bare images; with a
+                    caption ~10px under each one, it left the caption equidistant
+                    from its own photograph and the next. */}
+                <div className="lg:col-span-8 space-y-8 md:space-y-10">
                   {editorialRows.map((row, rowIdx) => (
                     <div
                       key={row.items.map(({ photo }) => photo._id).join('-')}
-                      className={`grid grid-cols-6 gap-2 md:gap-3 items-end ${
+                      className={`grid grid-cols-6 gap-x-2 gap-y-8 md:gap-x-3 md:gap-y-10 items-end ${
                         rowIdx > 0 && rowIdx % 4 === 0 ? 'pt-12 md:pt-16' : ''
                       }`}
                     >
@@ -944,6 +1008,8 @@ export default function MagazineLayout({
                           }
                           index={index}
                           total={photos.length}
+                          frameNumber={index + 1}
+                          year={collection.year}
                           collectionName={collection.name}
                           hoveredIndex={hoveredIndex}
                           setHoveredIndex={setHoveredIndex}
@@ -964,7 +1030,7 @@ export default function MagazineLayout({
                           onClick={() => onSelectCollection(nextCollection)}
                           aria-label={`Read next story: ${nextCollection.name}`}
                         >
-                          <span className="text-[10px] uppercase tracking-[0.5em] font-bold opacity-[0.56]">
+                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56]">
                             Keep Reading
                           </span>
                           <span className="flex flex-col items-center gap-8">
@@ -1008,7 +1074,7 @@ export default function MagazineLayout({
                           <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                             {isShared ? <Check size={16} /> : <Share2 size={16} />}
                           </div>
-                          <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
+                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
                             {isShared ? 'Link Copied' : 'Share Story'}
                           </span>
                         </motion.button>
@@ -1024,7 +1090,7 @@ export default function MagazineLayout({
                           <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                             <ArrowRight className="-rotate-90" size={16} />
                           </div>
-                          <span className="text-[10px] uppercase tracking-[0.4em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
+                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
                             Back to Top
                           </span>
                         </motion.button>
@@ -1126,7 +1192,7 @@ export default function MagazineLayout({
                   right: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-right))',
                 }}
               >
-                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase">
+                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase">
                   <span className="font-medium text-white/60">The Journal Gallery</span>
                   <span className="text-white/58">Vol. 01 · {collection.year || 'Archive'}</span>
                 </div>
@@ -1159,7 +1225,7 @@ export default function MagazineLayout({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.46, delay: 0.34, ease: expo }}
-                  className="flex items-center gap-3 font-ui text-[10px] tracking-[0.34em] uppercase text-white/58"
+                  className="flex items-center gap-3 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
                 >
                   {distinctLocation && <span>{distinctLocation}</span>}
                   {distinctLocation && (
@@ -1174,7 +1240,7 @@ export default function MagazineLayout({
                 initial={{ clipPath: 'inset(0 0 0 100%)' }}
                 animate={{ clipPath: 'inset(0 0 0 0%)' }}
                 transition={{ duration: 0.65, delay: 0.12, ease: expo }}
-                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.42em] uppercase text-white/58"
+                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
                 style={{
                   bottom: 'max(clamp(1.5rem,4vh,3rem), env(safe-area-inset-bottom))',
                   left: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-left))',

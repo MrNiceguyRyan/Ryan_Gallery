@@ -1210,7 +1210,7 @@ export default function HomePage({ collections }: Props) {
                 href={atlasHref}
                 data-astro-prefetch="hover"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.3em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 Map
               </motion.a>
@@ -1222,7 +1222,7 @@ export default function HomePage({ collections }: Props) {
                 whileTap={reduce ? undefined : { scale: 0.95 }}
                 href="/about"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.3em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 About
               </motion.a>
@@ -1316,7 +1316,7 @@ export default function HomePage({ collections }: Props) {
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
                 <motion.div
                   style={reduce ? undefined : { opacity: swKickerOpacity, x: swKickerX }}
-                  className="flex items-center gap-4 text-[9px] uppercase tracking-[0.6em] font-bold text-white/52"
+                  className="flex items-center gap-4 text-[9px] uppercase tracking-[0.1em] font-bold text-white/52"
                 >
                   <motion.div
                     className="h-px origin-left"
@@ -1349,7 +1349,7 @@ export default function HomePage({ collections }: Props) {
                   }}
                   aria-label="Enter the archive at the first chapter"
                   data-cursor="Enter the archive"
-                  className="flex min-h-11 items-center gap-3 self-start font-ui text-[9px] uppercase tracking-[0.3em] text-white/62 transition-colors duration-300 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+                  className="flex min-h-11 items-center gap-3 self-start font-ui text-[9px] uppercase tracking-[0.1em] text-white/62 transition-colors duration-300 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
                   style={reduce ? undefined : { opacity: swCountOpacity, x: swCountX }}
                 >
                   <span className="relative flex h-1.5 w-1.5 shrink-0">
@@ -1373,7 +1373,7 @@ export default function HomePage({ collections }: Props) {
                           className="relative flex w-full items-center gap-4 py-5"
                         >
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#D2FF00]" />
-                          <span className="font-ui text-[9px] uppercase tracking-[0.32em] text-white/54">Region</span>
+                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Region</span>
                           <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
                             {section.region}
                           </span>
@@ -1445,7 +1445,7 @@ export default function HomePage({ collections }: Props) {
                   return (
                     <div key={city._id} className="mobile-route-story__scene relative">
                       {section.showHeader && section.region && section.cities[0]?._id === city._id && (
-                        <div className="mobile-route-region pointer-events-none absolute left-5 top-[12svh] flex items-center gap-3 font-ui text-[9px] uppercase tracking-[0.3em] text-white/56">
+                        <div className="mobile-route-region pointer-events-none absolute left-5 top-[12svh] flex items-center gap-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/56">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00]" />
                           Region · {section.region}
                         </div>
@@ -1484,13 +1484,13 @@ export default function HomePage({ collections }: Props) {
             className="h-1 w-1 rounded-full"
             style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.72)' }}
           />
-          <span className="font-ui text-[10px] uppercase tracking-[0.34em] text-white/72">
+          <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/72">
             {String(orderedCities.length).padStart(2, '0')} / {String(orderedCities.length).padStart(2, '0')} · Archive complete
           </span>
           <button
             type="button"
             onClick={() => document.getElementById('archive-index')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })}
-            className="min-h-11 font-ui text-[9px] uppercase tracking-[0.32em] text-[#D2FF00]/82 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+            className="min-h-11 font-ui text-[9px] uppercase tracking-[0.1em] text-[#D2FF00]/82 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           >
             Back to index ↑
           </button>

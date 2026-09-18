@@ -398,7 +398,7 @@ export default function LivingAtlasStory({
     const countLabel = `${String(chapter.index + 1).padStart(2, '0')} / ${String(stops.length).padStart(2, '0')}`;
     return (
       <>
-        <div className="mb-3 font-ui text-[8px] font-bold uppercase tracking-[0.32em] text-[#D2FF00]/82">
+        <div className="mb-3 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#D2FF00]/82">
           <span>Chapter {String(chapter.index + 1).padStart(2, '0')}</span>
           <span className="sr-only">, {chapter.stop.frameCount} frames</span>
         </div>
@@ -442,7 +442,7 @@ export default function LivingAtlasStory({
         <div className="living-atlas__entry-wash pointer-events-none absolute inset-x-0 top-0 z-10 h-[24svh]" aria-hidden="true" />
 
         <div className="living-atlas__running-head pointer-events-none absolute left-6 top-[5.15rem] z-30 md:left-12 md:top-[5.55rem]">
-          <p className="font-ui text-[7px] font-medium uppercase tracking-[0.34em] text-white/54 md:text-[8px] md:tracking-[0.36em]">
+          <p className="font-ui text-[7px] font-medium uppercase tracking-[0.1em] text-white/54 md:text-[8px] md:tracking-[0.1em]">
             <span className="md:hidden">Travel archive&nbsp;&nbsp;/&nbsp;&nbsp;{range}</span>
             <span className="hidden md:inline">Travel photographic documentary&nbsp;&nbsp;/&nbsp;&nbsp;{range}</span>
           </p>
@@ -451,7 +451,7 @@ export default function LivingAtlasStory({
         <button
           type="button"
           onClick={followRoute}
-          className="living-atlas__follow absolute left-1/2 top-[5.1rem] z-40 hidden min-h-11 -translate-x-1/2 items-center px-4 font-ui text-[8px] font-bold uppercase tracking-[0.38em] text-[#D2FF00]/78 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00] md:inline-flex"
+          className="living-atlas__follow absolute left-1/2 top-[5.1rem] z-40 hidden min-h-11 -translate-x-1/2 items-center px-4 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#D2FF00]/78 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00] md:inline-flex"
         >
           {atLastStop ? 'Enter story ↘' : 'Follow the route ↓'}
         </button>

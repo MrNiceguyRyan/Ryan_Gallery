@@ -4,7 +4,7 @@ import { sanityClient } from 'sanity:client';
 import type { Collection, Photo } from '../../types';
 import WorkStory from '../../components/works/WorkStory';
 import { fetchSanityWithRetry } from '../../lib/sanityFetch';
-import { photoDisplayTitle } from '../../lib/narratives';
+import { photoDescription } from '../../lib/narratives';
 
 export async function getStaticPaths() {
   const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Array<{ slug: string }>>(`
@@ -117,7 +117,7 @@ const imageObjects = photos.slice(0, 12).map((p, index) => ({
   '@type': 'ImageObject',
   contentUrl: `${p.imageUrl}?auto=format&w=1600&q=85`,
   thumbnailUrl: `${p.imageUrl}?auto=format&w=400&q=70`,
-  name: photoDisplayTitle(p) || `${collection.name}, photograph ${index + 1} of ${photos.length}`,
+  name: photoDescription(p) || `${collection.name}, photograph ${index + 1} of ${photos.length}`,
   width: p.width ?? undefined,
   height: p.height ?? undefined,
   author: { '@type': 'Person', name: 'Ryan Xu' },

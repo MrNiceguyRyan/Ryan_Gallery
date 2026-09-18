@@ -1765,7 +1765,7 @@ export default function RouteAtlas({
             className="pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2"
             aria-live="polite"
           >
-            <div className="rounded-full border border-white/10 bg-[#171b15]/76 px-4 py-3 font-ui text-[9px] uppercase tracking-[0.3em] text-white/62 shadow-[0_12px_36px_rgba(7,9,6,0.2)] backdrop-blur-md">
+            <div className="rounded-full border border-white/10 bg-[#171b15]/76 px-4 py-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/62 shadow-[0_12px_36px_rgba(7,9,6,0.2)] backdrop-blur-md">
               Route signal delayed
             </div>
           </motion.div>
@@ -1802,7 +1802,7 @@ export default function RouteAtlas({
         <div>
           <div className="flex items-center gap-3">
             <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_14px_rgba(210,255,0,0.75)]" />
-            <p className="font-ui text-[8px] font-bold uppercase tracking-[0.46em] text-white/72">The Route</p>
+            <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/72">The Route</p>
           </div>
           <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.28em] text-white/54">Photographic coordinates</p>
         </div>

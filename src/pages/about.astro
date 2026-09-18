@@ -40,6 +40,9 @@ const [rawSettings, archiveCollections] = await Promise.all([
 ]);
 
 const settings: SiteSettings = rawSettings ?? {};
+// Stamped when the page is built — the colophon's "Updated" line. The site is
+// static, so the build is the last moment its content changed.
+const builtAt = new Date().toISOString();
 ---
 
 <Layout
@@ -49,5 +52,5 @@ const settings: SiteSettings = rawSettings ?? {};
   dark={true}
 >
   <Nav client:load currentPath={currentPath} />
-  <AboutPage client:load settings={settings} collections={archiveCollections} />
+  <AboutPage client:load settings={settings} collections={archiveCollections} builtAt={builtAt} />
 </Layout>

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { Photo } from '../../types';
-import { photoAccessibleLabel, photoDisplayTitle } from '../../lib/narratives';
+import { photoAccessibleLabel, photoDescription } from '../../lib/narratives';
 import { lightboxImageSources, prepareLightboxImage } from '../../lib/lightboxImage';
 
 interface LightboxProps {
@@ -42,8 +42,31 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
   const [failedPhotoIds, setFailedPhotoIds] = useState<Set<string>>(() => new Set());
   const photo = photos[index];
   const imageFailed = failedPhotoIds.has(photo._id);
-  const displayTitle = photoDisplayTitle(photo);
+  // The viewer's heading: a written description if one exists, otherwise the
+  // place. Never the machine title — "Miami #24" reads as a filename.
+  const displayTitle = photoDescription(photo) || photo.location?.city?.trim() || collectionName || '';
   const currentPhotoLabel = photoAccessibleLabel(photo, index, photos.length, collectionName);
+  // Print only what varies. Craig Mod's Leica Q essay publishes an exposure
+  // triplet per frame but leaves out camera and focal length, because the
+  // whole essay is one fixed-lens body — a constant dimension carries no
+  // information and repeats on every frame. This archive uses two bodies and
+  // mostly one focal length, so those two stay only when they actually change
+  // within the set being viewed; aperture, shutter and ISO always show.
+  const varies = useMemo(() => {
+    const distinct = (pick: (entry: Photo) => string | undefined) =>
+      new Set(photos.map((entry) => pick(entry)?.trim()).filter(Boolean)).size;
+    return {
+      camera: distinct((entry) => entry.camera) > 1,
+      focalLength: distinct((entry) => entry.focalLength) > 1,
+    };
+  }, [photos]);
+  const exposure = [
+    varies.camera ? photo.camera : undefined,
+    varies.focalLength ? photo.focalLength : undefined,
+    photo.aperture,
+    photo.shutterSpeed,
+    photo.iso ? `ISO ${photo.iso}` : undefined,
+  ].filter((part): part is string => Boolean(part?.trim()));
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -237,7 +260,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       {/* Photo (+ subtle anti-screenshot watermark overlay) */}
       <div className={`relative ${imageFailed ? 'flex h-[min(60dvh,32rem)] w-[min(92vw,48rem)] items-center justify-center bg-[#171b15]' : ''}`} onClick={(e) => e.stopPropagation()}>
         {imageFailed && (
-          <p className="font-ui text-[10px] uppercase tracking-[0.3em] text-white/58">
+          <p className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">
             Frame unavailable
           </p>
         )}
@@ -345,11 +368,12 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           </span>
         </div>
         <div className="flex items-center justify-center gap-2 md:gap-4 text-[11px] md:text-[13px] text-white/58 font-ui tracking-wide flex-wrap">
-          {photo.camera && <span className="text-white/68">{photo.camera}</span>}
-          {photo.focalLength && (<><span className="text-white/28" aria-hidden="true">|</span><span>{photo.focalLength}</span></>)}
-          {photo.aperture && (<><span className="text-white/28" aria-hidden="true">|</span><span>{photo.aperture}</span></>)}
-          {photo.shutterSpeed && (<><span className="text-white/28" aria-hidden="true">|</span><span>{photo.shutterSpeed}</span></>)}
-          {photo.iso && (<><span className="text-white/28" aria-hidden="true">|</span><span>ISO {photo.iso}</span></>)}
+          {exposure.map((part, partIndex) => (
+            <Fragment key={part}>
+              {partIndex > 0 && <span className="text-white/40" aria-hidden="true">|</span>}
+              <span>{part}</span>
+            </Fragment>
+          ))}
         </div>
       </div>
 

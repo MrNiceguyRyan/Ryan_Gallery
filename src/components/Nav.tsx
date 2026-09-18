@@ -58,7 +58,7 @@ export default function Nav({ currentPath, scrim = false }: Props) {
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                 href={link.href}
                 data-astro-prefetch={link.href === '/travel' || link.href === '/' ? 'hover' : undefined}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.3em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 {link.label}
               </motion.a>

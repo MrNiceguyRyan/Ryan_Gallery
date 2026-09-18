@@ -187,7 +187,7 @@ export default function TravelEntryCover({ locations, frames }: Props) {
             animate={{ clipPath: 'inset(0 0% 0 0)' }}
             transition={{ duration: 0.65, delay: 0.1, ease: expo }}
           >
-            <div className="flex items-baseline justify-between gap-4 border-b border-white/20 pb-2 font-ui text-[10px] uppercase tracking-[0.42em]">
+            <div className="flex items-baseline justify-between gap-4 border-b border-white/20 pb-2 font-ui text-[10px] uppercase tracking-[0.1em]">
               <span className="font-medium text-white/60">The Journal Gallery</span>
               <span className="text-white/58">The Territory</span>
             </div>
@@ -225,14 +225,14 @@ export default function TravelEntryCover({ locations, frames }: Props) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.46, ease: expo }}
-              className="font-ui text-[10px] uppercase tracking-[0.34em] text-white/58"
+              className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"
             >
               Geographic Index
             </motion.div>
           </div>
 
           <motion.div
-            className="absolute flex items-baseline justify-between gap-4 border-t border-white/20 pt-2 font-ui text-[10px] uppercase tracking-[0.42em] text-white/58"
+            className="absolute flex items-baseline justify-between gap-4 border-t border-white/20 pt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"
             style={{
               bottom:
                 'max(clamp(1.5rem,4vh,3rem), env(safe-area-inset-bottom))',
@@ -262,7 +262,7 @@ export default function TravelEntryCover({ locations, frames }: Props) {
               transition={{ duration: reduce ? 0 : 0.12 }}
               aria-hidden="true"
             >
-              <span className="font-ui text-[10px] uppercase tracking-[0.42em] text-white/52">
+              <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/52">
                 Atlas
               </span>
             </motion.div>

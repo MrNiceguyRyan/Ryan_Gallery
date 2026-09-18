@@ -41,7 +41,7 @@ const result = await build({
       export const useIsPresent = () => true;
     `, loader: 'js' }));
     builder.onResolve({ filter: /lib\/narratives$/ }, () => ({ path: 'labels', namespace: 'labels' }));
-    builder.onLoad({ filter: /.*/, namespace: 'labels' }, () => ({ contents: `export const photoDisplayTitle = p => p.title; export const photoAccessibleLabel = (p,i,n) => p.title + ', ' + (i+1) + ' of ' + n;`, loader: 'js' }));
+    builder.onLoad({ filter: /.*/, namespace: 'labels' }, () => ({ contents: `export const photoDisplayTitle = p => p.title; export const photoDescription = p => p.title; export const photoAccessibleLabel = (p,i,n) => p.title + ', ' + (i+1) + ' of ' + n;`, loader: 'js' }));
   } }],
 });
 const compiled = new Module(fileURLToPath(new URL('./lightbox-under-test.cjs', import.meta.url)));

@@ -37,6 +37,25 @@ export function photoDisplayTitle(photo: Pick<Photo, 'title'>): string {
   return readableText(photo.title);
 }
 
+/**
+ * A photograph's written description, or '' when nobody has written one.
+ *
+ * There is no separate caption field: the Sanity `title` doubles as the
+ * description, and today every one of them is machine-made — `Miami #24`,
+ * `Bryce Canyon #05`, a filename-like `NY_2`, and on the Page chapter a
+ * serialized `Page #[object Object],…101` (which `readableText` already
+ * reduces to ''). Those read as filenames, not captions, so they are treated
+ * as "not written yet". Replace a title in Sanity with real words and it
+ * becomes the caption on its own — no schema change, no deploy of code.
+ */
+export function photoDescription(photo: Pick<Photo, 'title'>): string {
+  const title = photoDisplayTitle(photo);
+  if (!title) return '';
+  if (/#\s*\S*\d+\s*$/.test(title)) return '';
+  if (/^[A-Za-z]{1,6}[_-]\d+$/.test(title)) return '';
+  return title;
+}
+
 /** A unique, position-aware label shared by the story grid and lightbox. */
 export function photoAccessibleLabel(
   photo: Pick<Photo, 'title'>,
@@ -45,7 +64,8 @@ export function photoAccessibleLabel(
   collectionName?: string,
 ): string {
   const position = `Photo ${index + 1} of ${Math.max(total, 1)}`;
-  const title = photoDisplayTitle(photo);
+  // A written description only — "Miami #24" is a filename, not a name.
+  const title = photoDescription(photo);
   if (title) return `${position}, ${title}`;
   if (collectionName) return `${position}, ${collectionName}`;
   return position;
