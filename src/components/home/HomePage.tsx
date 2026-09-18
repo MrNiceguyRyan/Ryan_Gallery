@@ -673,6 +673,7 @@ export default function HomePage({ collections }: Props) {
               imageUrl,
               frameCount: city.photoCount ?? city.photos?.length ?? 0,
               year: city.year,
+              region: city.region?.trim() || undefined,
               locationLabel,
               coordinateLabel: routeCoordinateLabel(coordinates),
             }]

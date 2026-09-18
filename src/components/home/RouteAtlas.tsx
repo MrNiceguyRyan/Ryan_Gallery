@@ -14,12 +14,12 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
+import { AtlasSignboard, StopStandee } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
   angularDistance,
   greatCirclePoint,
-  initialBearing,
   routeCoordinates,
   type GeoCoordinate,
 } from '../../lib/routeGeometry';
@@ -33,6 +33,8 @@ export interface RouteStop {
   frameCount: number;
   year?: number | string;
   locationLabel?: string;
+  /** State or region, shown on the place's signboard. */
+  region?: string;
   coordinateLabel: string;
 }
 
@@ -85,6 +87,10 @@ interface ChapterSample {
 }
 
 const ACCENT = '#D2FF00';
+// The fixed chapter camera: oblique enough for the standing signs to read as
+// planted in the map, north kept nearly straight up.
+const CHAPTER_PITCH = 46;
+const CHAPTER_BEARING = -2;
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 const US_OVERVIEW = { longitude: -97.7, latitude: 38.3, zoom: 3.15, bearing: -3, pitch: 0 };
 const LIVING_OVERVIEW = { longitude: -98.5, latitude: 37.5, zoom: 4.05, bearing: 0, pitch: 0 };
@@ -373,10 +379,9 @@ function sampleChapter(
   // plateau pair. It is symmetric, reversible and has no hidden flat section.
   const lift = Math.sin(Math.PI * rawLocal);
   const travelLift = lift * lift;
-  // An oblique, north-legible flight instead of a target sliding over a flat
-  // map. Every leg returns to the same pose with zero angular velocity, so
-  // neighbouring headings cannot whip the camera around at a chapter boundary.
-  const bank = Math.sin(initialBearing(from.stop.coordinates, to.stop.coordinates) * Math.PI / 180) * 14;
+  // Once zoomed in, the camera angle holds still between places: one oblique,
+  // north-up pose for every chapter and every leg. Only the distance breathes
+  // (the mid-leg zoom-out); the pitch and bearing no longer swing per leg.
   return {
     position,
     from,
@@ -386,8 +391,8 @@ function sampleChapter(
     coordinate: greatCirclePoint(from.stop.coordinates, to.stop.coordinates, travelProgress),
     routeProgress: from.routeProgress + (to.routeProgress - from.routeProgress) * travelProgress,
     zoom: 5.05 - travelLift * distanceZoomOut,
-    pitch: 42 + travelLift * 16,
-    bearing: -2 + travelLift * bank,
+    pitch: CHAPTER_PITCH,
+    bearing: CHAPTER_BEARING,
   };
 }
 
@@ -1552,6 +1557,48 @@ export default function RouteAtlas({
       ? entrancePhase(entry, ...ARCHIVE_ENTRANCE_PHASES.interface)
       : smootherstep(clamp01((entry - 0.54) / 0.42))) * gate,
   );
+  // The standing signboard names the place nearest the camera: it flips over
+  // at each leg's midpoint, when the next place has become the one in view.
+  const signs = !living && !mobile;
+  const nearestStopId = (sample: ChapterSample | null) =>
+    sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : chapterRoute[0]?.stop.id ?? null;
+  const [signStopId, setSignStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
+  const signStopRef = useRef(signStopId);
+  // chapterSample can re-emit while this component renders (its transformer is
+  // rebuilt each render), so the state write is ref-guarded and deferred to a
+  // microtask — never a render-phase update.
+  useEffect(() => {
+    if (!signs) return;
+    let disposed = false;
+    const update = (sample: ChapterSample | null) => {
+      const next = sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : null;
+      if (!next || next === signStopRef.current) return;
+      signStopRef.current = next;
+      queueMicrotask(() => {
+        if (!disposed) setSignStopId(next);
+      });
+    };
+    update(chapterSample.get());
+    const unsubscribe = chapterSample.on('change', update);
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [chapterSample, signs]);
+  const signEntry = chapterRoute.find((entry) => entry.stop.id === signStopId) ?? chapterRoute[0];
+  // Between places the sign rises a little and turns toward the direction of
+  // travel; both return to rest as the camera settles on the next place.
+  const signLift = useTransform(chapterSample, (sample) => {
+    if (!sample || reducedMotion) return 0;
+    const lift = Math.sin(Math.PI * sample.localProgress);
+    return -16 * lift * lift;
+  });
+  const signSway = useTransform(chapterSample, (sample) => {
+    if (!sample || reducedMotion) return 0;
+    const lift = Math.sin(Math.PI * sample.localProgress);
+    const heading = Math.sign(sample.to.stop.coordinates[0] - sample.from.stop.coordinates[0]);
+    return heading * 11 * lift * lift;
+  });
   const classicHeaderOpacity = useTransform(
     [sampledEntryProgress, interfaceGate],
     ([entry, gate]) => (classicEntrance
@@ -2093,6 +2140,24 @@ export default function RouteAtlas({
             />
           </Marker>
         ))}
+        {/* Standing pins: upright to the camera, their posts planted on the
+            stop's ground dot. */}
+        {signs && chapterRoute.map((entry) => (
+          <Marker
+            key={`standee-${entry.stop.id}`}
+            longitude={entry.stop.coordinates[0]}
+            latitude={entry.stop.coordinates[1]}
+            anchor="bottom"
+            pitchAlignment="viewport"
+            rotationAlignment="viewport"
+          >
+            <StopStandee
+              number={entry.chapterIndex + 1}
+              current={entry.stop.id === signEntry?.stop.id}
+              visibility={classicInterfaceOpacity}
+            />
+          </Marker>
+        ))}
           </MapGL>
         )}
 
@@ -2220,6 +2285,18 @@ export default function RouteAtlas({
       />
       {!mobile && <motion.div className="route-atlas-tone pointer-events-none absolute inset-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
       {!mobile && <motion.div className="route-atlas-interface-veil pointer-events-none absolute inset-y-0 left-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
+
+      {signs && signEntry && (
+        <AtlasSignboard
+          stop={signEntry.stop}
+          number={signEntry.chapterIndex + 1}
+          total={chapterRoute.length}
+          visibility={classicInterfaceOpacity}
+          lift={signLift}
+          sway={signSway}
+          reducedMotion={reducedMotion}
+        />
+      )}
 
       {!living && <motion.header
         initial={false}
