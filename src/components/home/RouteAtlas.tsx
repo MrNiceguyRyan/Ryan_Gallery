@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import {
@@ -45,6 +45,9 @@ interface Props {
   chapterIds?: string[];
   /** Optional 0–1 handoff from the opener into the classic atlas. */
   entryProgress?: MotionValue<number>;
+  /** Desktop globe prologue, 0–1: the atlas map is the lit globe behind the
+   *  homepage's opening statements until the archive entrance takes over. */
+  prologueProgress?: MotionValue<number>;
   reducedMotion: boolean;
   mobile?: boolean;
   paused?: boolean;
@@ -188,26 +191,64 @@ const GLOBE_FOG = {
   'star-intensity': 0,
 };
 
+// The prologue globe carries a brighter limb, the halo 11 mois draws with two
+// white drop-shadows — here the atmosphere itself, in the archive's pale lime.
+const PROLOGUE_FOG = {
+  range: [9, 20] as [number, number],
+  color: 'rgba(176, 192, 136, 0.42)',
+  'high-color': '#b7c48f',
+  'space-color': '#282c20',
+  'horizon-blend': 0.05,
+  'star-intensity': 0,
+};
+
 function globeEntryProgress(entry: number) {
   const [start, end] = GLOBE_ENTRY_WINDOW;
   return clamp01((entry - start) / (end - start));
 }
 
-function globeStartCenter(target: GeoCoordinate): GeoCoordinate {
-  return [target[0] - GLOBE_TURN_DEGREES, GLOBE_START_LATITUDE];
+// With the prologue in front of it, the globe has already been turned to North
+// America by the time the entrance begins, so the entrance only descends.
+const PROLOGUE_GLOBE = {
+  turnDegrees: 0,
+  startZoom: 2.25,
+  // Where the prologue keeps the globe: its centre low on the right, most of
+  // the disc off-screen, big enough to read as a planet rather than a map.
+  centerX: 0.84,
+  centerY: 0.93,
+  zoom: 2.78,
+  // Degrees the globe turns across the prologue (11 mois: 90° per viewport).
+  spin: 210,
+  startLatitude: 9,
+  // The stretch of the prologue spent gliding from the corner to the atlas
+  // focus — finished before the index (which sits on the right) is read.
+  glideStart: 0.5,
+  glideEnd: 0.88,
+  // The load-in: the globe spins into place and grows from a smaller disc.
+  introSpin: 150,
+  introZoom: 0.62,
+} as const;
+const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
+
+interface GlobeMode { turnDegrees: number; startZoom: number }
+const FLAT_ENTRY_GLOBE: GlobeMode = { turnDegrees: GLOBE_TURN_DEGREES, startZoom: GLOBE_START_ZOOM };
+
+function globeStartCenter(target: GeoCoordinate, mode: GlobeMode = FLAT_ENTRY_GLOBE): GeoCoordinate {
+  return [target[0] - mode.turnDegrees, GLOBE_START_LATITUDE];
 }
 
 function globeEntryPose(
   target: { coordinate: GeoCoordinate; zoom: number; pitch: number; bearing: number },
   progress: number,
+  mode: GlobeMode = FLAT_ENTRY_GLOBE,
 ) {
   const turn = smootherstep(clamp01(progress / GLOBE_TURN_END));
-  const start = globeStartCenter(target.coordinate);
+  const start = globeStartCenter(target.coordinate, mode);
   const center: GeoCoordinate = [
     start[0] + (target.coordinate[0] - start[0]) * turn,
     start[1] + (target.coordinate[1] - start[1]) * turn,
   ];
-  const turningZoom = GLOBE_START_ZOOM + 0.5 * turn;
+  const turningZoom = mode.startZoom + 0.5 * turn;
   const dive = clamp01((progress - GLOBE_DIVE_START) / (GLOBE_HANDOFF_AT - GLOBE_DIVE_START));
   const diveEase = dive * dive * (3 - 2 * dive);
   const settle = smootherstep(clamp01((progress - GLOBE_HANDOFF_AT) / (1 - GLOBE_HANDOFF_AT)));
@@ -779,6 +820,7 @@ export default function RouteAtlas({
   chapterProgress,
   chapterIds,
   entryProgress,
+  prologueProgress,
   reducedMotion,
   mobile = false,
   paused = false,
@@ -797,6 +839,12 @@ export default function RouteAtlas({
   const living = presentation === 'living';
   const classicEntrance = !living && !mobile && !!entryProgress;
   const classicGlobe = classicEntrance && !reducedMotion;
+  const prologue = classicGlobe && !!prologueProgress;
+  const globeMode: GlobeMode = prologue ? PROLOGUE_GLOBE : FLAT_ENTRY_GLOBE;
+  // How far past the atlas column's right edge the map canvas reaches. During
+  // the prologue the globe sits in the viewport's bottom-right corner, over the
+  // (still empty) cover column; afterwards that strip is masked back to page.
+  const [canvasExtension, setCanvasExtension] = useState(0);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapSettled, setMapSettled] = useState(false);
   const [mapCameraSynced, setMapCameraSynced] = useState(false);
@@ -861,10 +909,22 @@ export default function RouteAtlas({
     (classicEntrance ? 28 : 18) * (1 - progress),
   );
   const classicEntryVeilOpacity = useTransform(sampledEntryProgress, (progress) =>
-    classicEntrance
-      ? 1 - entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.mapVisibility)
-      : 1 - clamp01(progress / 0.96),
+    prologue
+      ? 0
+      : classicEntrance
+        ? 1 - entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.mapVisibility)
+        : 1 - clamp01(progress / 0.96),
   );
+  // The atlas's own framing — right-edge tone, vignette, top dissolve and the
+  // strip under the cover column — returns as the globe dives into the archive.
+  const archiveFrameOpacity = useTransform(sampledEntryProgress, (progress) =>
+    prologue ? entrancePhase(progress, 0.06, 0.42) : 1,
+  );
+  const fallbackPrologueProgress = useMotionValue(1);
+  const resolvedPrologueProgress = prologueProgress ?? fallbackPrologueProgress;
+  // The globe's load-in, played once when the map first appears at the top of
+  // the page (1 → 0). Held at 0 when the page opens mid-scroll.
+  const globeIntro = useMotionValue(0);
 
   useEffect(() => {
     activeStopRef.current = activeStop;
@@ -872,6 +932,14 @@ export default function RouteAtlas({
 
   const fullRouteCoordinates = useMemo(() => routeCoordinates(mappedStops), [mappedStops]);
   const fullRoute = useMemo(() => lineFeature(fullRouteCoordinates), [fullRouteCoordinates]);
+  const prologueStops = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: mappedStops.map((stop) => ({
+      type: 'Feature' as const,
+      properties: { id: stop.id },
+      geometry: { type: 'Point' as const, coordinates: stop.coordinates },
+    })),
+  }), [mappedStops]);
   const staticMapUrl = useMemo(
     () => living ? '' : staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, living, mapboxToken, mobile],
@@ -971,6 +1039,35 @@ export default function RouteAtlas({
       window.removeEventListener('resize', resize);
     };
   }, [living]);
+
+  // The globe spins into place the first time it appears — only when the page
+  // is at its top; a restored mid-page visit sees the globe already settled.
+  const globeIntroPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!prologue || globeIntroPlayedRef.current) return;
+    if (!mapCameraSynced) {
+      if (resolvedPrologueProgress.get() < 0.02) globeIntro.set(1);
+      return;
+    }
+    globeIntroPlayedRef.current = true;
+    if (globeIntro.get() <= 0) return;
+    const controls = animate(globeIntro, 0, { duration: 2.4, ease: [0.16, 1, 0.3, 1] });
+    return () => {
+      controls.stop();
+      globeIntro.set(0);
+    };
+  }, [globeIntro, mapCameraSynced, prologue, resolvedPrologueProgress]);
+
+  useLayoutEffect(() => {
+    if (!prologue) {
+      setCanvasExtension(0);
+      return;
+    }
+    const atlas = routeAtlasRef.current;
+    if (!atlas) return;
+    const extension = Math.max(0, Math.round(document.documentElement.clientWidth - atlas.getBoundingClientRect().right));
+    setCanvasExtension((current) => (current === extension ? current : extension));
+  }, [layoutRevision, prologue, viewportReady]);
 
   // Mapbox is the heaviest homepage dependency. HomePage first imports this
   // module near the atlas; this tighter second gate waits to create WebGL until
@@ -1108,8 +1205,18 @@ export default function RouteAtlas({
     let lastRouteProgress = Number.NaN;
     // Mirrors the live projection; starts on the globe when the opening does.
     let onGlobe = classicGlobe && map.getProjection?.()?.name === 'globe';
-    const activePadding = { top: 48, right: 264, bottom: 0, left: 0 };
+    let queuedPrologue = resolvedPrologueProgress.get();
+    let lastPrologueRoute = Number.NaN;
+    let prologuePaddingKey = '';
+    // The canvas reaches past the atlas column by `canvasExtension`; widening
+    // the right padding by the same amount keeps every chapter's focal point
+    // exactly where it was before the canvas grew.
+    const activePadding = { top: 48, right: 264 + (prologue ? canvasExtension : 0), bottom: 0, left: 0 };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
+    // Measured once per layout (this effect re-runs on layoutRevision), never
+    // per frame: the canvas box in viewport pixels, for placing the prologue
+    // globe by screen position.
+    const canvasBox = prologue ? map.getContainer().getBoundingClientRect() : null;
 
     const draw: Process = () => {
       if (disposed) return;
@@ -1125,12 +1232,77 @@ export default function RouteAtlas({
       // Padding defines the permanent editorial focal point; applying it only
       // when the map changes mode avoids resubmitting the same layout object on
       // every camera frame.
-      if (padded !== focused) {
+      const inPrologue = prologue && !!sample && !!canvasBox && queuedPrologue < 1;
+      if (!inPrologue && padded !== focused) {
         padded = focused;
         map.setPadding(focused ? activePadding : neutralPadding);
       }
 
-      if (sample && focused) {
+      if (inPrologue && sample && canvasBox) {
+        // ── Globe prologue ── the lit globe low in the bottom-right corner,
+        // turning with the page; over the last third it glides into the atlas
+        // focus and arrives exactly at the entrance's starting pose.
+        const q = clamp01(queuedPrologue);
+        const intro = globeIntro.get();
+        const glide = smootherstep(clamp01((q - PROLOGUE_GLOBE.glideStart) / (PROLOGUE_GLOBE.glideEnd - PROLOGUE_GLOBE.glideStart)));
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight;
+        const cx = PROLOGUE_GLOBE.centerX * viewportWidth - canvasBox.left;
+        const cy = PROLOGUE_GLOBE.centerY * viewportHeight - canvasBox.top;
+        const cornerPadding = {
+          top: Math.max(0, Math.min(canvasBox.height * 0.96, 2 * cy - canvasBox.height)),
+          right: Math.max(0, canvasBox.width - 2 * cx),
+          bottom: Math.max(0, canvasBox.height - 2 * cy),
+          left: Math.max(0, Math.min(canvasBox.width * 0.96, 2 * cx - canvasBox.width)),
+        };
+        const padding = {
+          top: cornerPadding.top + (activePadding.top - cornerPadding.top) * glide,
+          right: cornerPadding.right + (activePadding.right - cornerPadding.right) * glide,
+          bottom: cornerPadding.bottom + (activePadding.bottom - cornerPadding.bottom) * glide,
+          left: cornerPadding.left + (activePadding.left - cornerPadding.left) * glide,
+        };
+        const target = sample.coordinate;
+        const center: GeoCoordinate = [
+          target[0] - PROLOGUE_GLOBE.spin * Math.pow(1 - q, 1.25) - PROLOGUE_GLOBE.introSpin * intro,
+          PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q),
+        ];
+        // The corner globe keeps its share of the screen on wider displays
+        // (radius doubles per zoom level), then settles to the entrance pose.
+        const cornerZoom = PROLOGUE_GLOBE.zoom + Math.log2(Math.max(0.75, viewportWidth / 1440));
+        const zoom = cornerZoom + (PROLOGUE_GLOBE.startZoom - cornerZoom) * glide -
+          PROLOGUE_GLOBE.introZoom * intro;
+        if (!onGlobe) {
+          onGlobe = true;
+          map.setProjection('globe');
+          map.setFog(PROLOGUE_FOG);
+        }
+        const paddingKey = `${padding.top.toFixed(1)}|${padding.right.toFixed(1)}|${padding.bottom.toFixed(1)}|${padding.left.toFixed(1)}`;
+        const paddingChanged = paddingKey !== prologuePaddingKey;
+        if (paddingChanged || !lastCoordinate ||
+          Math.abs(lastCoordinate[0] - center[0]) > 0.004 || Math.abs(lastCoordinate[1] - center[1]) > 0.004 ||
+          Math.abs(lastZoom - zoom) > 0.0004 || lastPitch !== 0) {
+          map.jumpTo({ center, zoom, bearing: 0, pitch: 0, padding });
+          prologuePaddingKey = paddingKey;
+          lastCoordinate = center;
+          lastZoom = zoom;
+          lastPitch = 0;
+          lastBearing = 0;
+          lastOverview = false;
+        }
+        // The route is drawn across the globe as North America turns in.
+        const drawn = smootherstep(clamp01((q - 0.42) / 0.46));
+        if (Math.abs(drawn - lastPrologueRoute) >= 0.002 || (drawn >= 1 && lastPrologueRoute !== 1)) {
+          lastPrologueRoute = drawn;
+          if (map.getLayer('prologue-route')) map.setPaintProperty('prologue-route', 'line-trim-offset', [drawn, 1]);
+        }
+        // Leaving the prologue must resubmit the atlas padding.
+        padded = null;
+      } else if (sample && focused) {
+        if (prologue && prologuePaddingKey) {
+          prologuePaddingKey = '';
+          if (map.getLayer('prologue-route')) map.setPaintProperty('prologue-route', 'line-trim-offset', [1, 1]);
+          lastPrologueRoute = 1;
+        }
         // Enter The Route through geography, not through a scaled interface
         // panel. The same scroll-owned entry clock carries the camera from a
         // continental overview into the first chapter, so slow, fast and
@@ -1159,7 +1331,7 @@ export default function RouteAtlas({
         let entryBearing = US_OVERVIEW.bearing +
           (sample.bearing - US_OVERVIEW.bearing) * entryPoseProgress;
         if (classicGlobe) {
-          const globePose = globeEntryPose(sample, globeEntryProgress(queuedEntry));
+          const globePose = globeEntryPose(sample, globeEntryProgress(queuedEntry), globeMode);
           entryCoordinate = globePose.center;
           entryZoom = globePose.zoom;
           entryPitch = globePose.pitch;
@@ -1167,7 +1339,7 @@ export default function RouteAtlas({
           if (globePose.globe !== onGlobe) {
             onGlobe = globePose.globe;
             map.setProjection(onGlobe ? 'globe' : 'mercator');
-            map.setFog(onGlobe ? GLOBE_FOG : null);
+            map.setFog(onGlobe ? (prologue ? PROLOGUE_FOG : GLOBE_FOG) : null);
           }
         }
         const atChapterEndpoint = sample.easedProgress <= 0.000001 || sample.easedProgress >= 0.999999;
@@ -1246,6 +1418,13 @@ export default function RouteAtlas({
     };
     const unsubscribe = chapterSample.on('change', schedule);
     const unsubscribeEntry = sampledEntryProgress.on('change', scheduleEntry);
+    const unsubscribePrologue = prologue
+      ? resolvedPrologueProgress.on('change', (progress) => {
+          queuedPrologue = progress;
+          schedule(queuedSample);
+        })
+      : () => {};
+    const unsubscribeIntro = prologue ? globeIntro.on('change', () => schedule(queuedSample)) : () => {};
     // Mapbox may finish loading after several chapters have already passed, and
     // Story close may resume on a stationary scroll position. Always replay now.
     schedule(chapterSample.get());
@@ -1253,10 +1432,12 @@ export default function RouteAtlas({
       disposed = true;
       unsubscribe();
       unsubscribeEntry();
+      unsubscribePrologue();
+      unsubscribeIntro();
       cancelFrame(draw);
       if (classicMapFrameRef.current === draw) classicMapFrameRef.current = null;
     };
-  }, [atlasEngaged, chapterSample, classicEntrance, classicGlobe, entryProgress, layoutRevision, living, mapLoaded, paused, sampledEntryProgress]);
+  }, [atlasEngaged, canvasExtension, chapterSample, classicEntrance, classicGlobe, entryProgress, globeIntro, globeMode, layoutRevision, living, mapLoaded, paused, prologue, resolvedPrologueProgress, sampledEntryProgress]);
 
   const mapReadiness = {
     loaded: mapLoaded,
@@ -1411,7 +1592,7 @@ export default function RouteAtlas({
       aria-label={living ? undefined : 'Scroll-driven photographic route'}
       role={living ? 'presentation' : undefined}
       data-atlas-engaged={atlasEngaged ? 'true' : 'false'}
-      className={`route-atlas relative w-full overflow-hidden bg-transparent ${living ? '' : 'isolate'} ${mobile ? 'route-atlas--mobile' : ''} ${living ? 'route-atlas--living' : ''} ${
+      className={`route-atlas relative w-full ${prologue ? 'overflow-visible' : 'overflow-hidden'} bg-transparent ${living ? '' : 'isolate'} ${mobile ? 'route-atlas--mobile' : ''} ${living ? 'route-atlas--living' : ''} ${
         mobile ? 'h-full min-h-[100svh]' : 'h-full'
       }`}
     >
@@ -1426,7 +1607,11 @@ export default function RouteAtlas({
               ? { scale: 1, y: 0 }
               : { scale: mobile ? 1.045 : 1.03, y: mobile ? 18 : 12 }}
         style={!living && entryProgress
-          ? { opacity: classicEntryOpacity, scale: classicEntryScale, y: classicEntryY }
+          ? prologue
+            // Visible from the top of the page; reaches the viewport's right
+            // edge so the globe can sit in the corner over the cover column.
+            ? { right: -(32 + canvasExtension) }
+            : { opacity: classicEntryOpacity, scale: classicEntryScale, y: classicEntryY }
           : undefined}
         transition={{ duration: reducedMotion ? 0 : 1.08, ease: [0.16, 1, 0.3, 1] }}
         className={`absolute origin-center overflow-hidden ${classicEntrance ? '-inset-8' : 'inset-0'}`}
@@ -1434,7 +1619,7 @@ export default function RouteAtlas({
         <motion.div
           aria-hidden="true"
           initial={false}
-          animate={{ opacity: living ? (mapSettled ? 0.42 : 1) : mapSettled ? 0 : 0.3 }}
+          animate={{ opacity: living ? (mapSettled ? 0.42 : 1) : prologue || mapSettled ? 0 : 0.3 }}
           transition={{ duration: reducedMotion ? 0 : 0.85, ease: [0.16, 1, 0.3, 1] }}
           className="route-atlas-fallback__art pointer-events-none absolute inset-0"
         >
@@ -1564,7 +1749,28 @@ export default function RouteAtlas({
           // Classic depth comes from the scroll-owned oblique camera, with no
           // terrain startup cost or extra animation competing with the photos.
           map.setTerrain(null);
-          map.setFog(classicGlobe && map.getProjection?.()?.name === 'globe' ? GLOBE_FOG : null);
+          // The prologue globe is photographic: satellite imagery at globe
+          // zooms, graded toward the archive's olive, fading out as the camera
+          // dives so the dark atlas takes over by the first chapter. Inserted
+          // under the first label layer; the route layers draw above it.
+          if (prologue && !map.getSource('prologue-satellite')) {
+            const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
+            map.addSource('prologue-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+            map.addLayer({
+              id: 'prologue-satellite',
+              type: 'raster',
+              source: 'prologue-satellite',
+              maxzoom: PROLOGUE_SATELLITE_FADE[1] + 0.2,
+              paint: {
+                'raster-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
+                'raster-saturation': -0.32,
+                'raster-contrast': 0.08,
+                'raster-brightness-max': 0.86,
+                'raster-fade-duration': 0,
+              },
+            }, firstLabel);
+          }
+          map.setFog(classicGlobe && map.getProjection?.()?.name === 'globe' ? (prologue ? PROLOGUE_FOG : GLOBE_FOG) : null);
 
           map.getStyle().layers?.forEach((layer) => {
             const id = layer.id.toLowerCase();
@@ -1658,18 +1864,23 @@ export default function RouteAtlas({
             // labels, so "02 ORLANDO" in the route rail collided with
             // "MISSISSIPPI" underneath it and the seam read as noise. Geography
             // stays legible on approach; place names are the page's job.
+            const labelOpacity = isAtlasLabel
+              ? living
+                ? (mobile ? 0.16 : 0.15)
+                : (mobile ? 0.2 : 0.26)
+              : isPlaceLabel
+                ? (mobile ? 0.2 : 0.28)
+                : isRoadLabel
+                  ? (mobile ? 0.12 : 0.18)
+                  : (mobile ? 0.16 : 0.2);
+            // The prologue globe is unlabelled photography; names arrive with
+            // the dive, before the first chapter's zoom.
             map.setPaintProperty(
               layer.id,
               'text-opacity',
-              isAtlasLabel
-                ? living
-                  ? (mobile ? 0.16 : 0.15)
-                  : (mobile ? 0.2 : 0.26)
-                : isPlaceLabel
-                  ? (mobile ? 0.2 : 0.28)
-                  : isRoadLabel
-                    ? (mobile ? 0.12 : 0.18)
-                    : (mobile ? 0.16 : 0.2),
+              prologue
+                ? ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0] + 0.3, 0, PROLOGUE_SATELLITE_FADE[1] - 0.1, labelOpacity]
+                : labelOpacity,
             );
             map.setPaintProperty(layer.id, 'text-color', '#AEB5A6');
             map.setPaintProperty(layer.id, 'text-halo-color', '#11150F');
@@ -1739,7 +1950,48 @@ export default function RouteAtlas({
               'line-trim-offset': [chapterSample.get()?.routeProgress ?? 0, 1],
             }}
           />
+          {prologue && (
+            <Layer
+              id="prologue-route"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': '#D2FF00',
+                'line-width': 1.7,
+                'line-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.95, PROLOGUE_SATELLITE_FADE[1], 0],
+                'line-trim-offset': [0, 1],
+              }}
+            />
+          )}
         </Source>}
+        {prologue && (
+          <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
+            <Layer
+              id="prologue-stops-halo"
+              type="circle"
+              paint={{
+                'circle-radius': 13,
+                'circle-color': '#D2FF00',
+                'circle-blur': 1,
+                'circle-pitch-alignment': 'map',
+                'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.34, PROLOGUE_SATELLITE_FADE[1], 0],
+              }}
+            />
+            <Layer
+              id="prologue-stops-dot"
+              type="circle"
+              paint={{
+                'circle-radius': 3.4,
+                'circle-color': '#EAFF8C',
+                'circle-stroke-color': '#20241a',
+                'circle-stroke-width': 1,
+                'circle-pitch-alignment': 'map',
+                'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
+                'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
+              }}
+            />
+          </Source>
+        )}
 
         {!living && chapterRoute.map((entry) => (
           <Marker key={entry.stop.id} longitude={entry.stop.coordinates[0]} latitude={entry.stop.coordinates[1]} anchor="center" pitchAlignment="map" rotationAlignment="map">
@@ -1756,6 +2008,14 @@ export default function RouteAtlas({
         )}
 
       </motion.div>
+
+      {prologue && (
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-full bg-[#282c20]"
+          style={{ width: canvasExtension + 40, opacity: archiveFrameOpacity }}
+        />
+      )}
 
       {living && projectedStops.length === mappedStops.length && (
         <motion.div
@@ -1828,9 +2088,10 @@ export default function RouteAtlas({
         </motion.div>
       )}
 
-      <div
+      <motion.div
         aria-hidden="true"
         className={`route-atlas-entry-dissolve pointer-events-none absolute inset-x-0 top-0 z-[5] ${mobile ? 'h-[18%]' : 'h-[24%]'}`}
+        style={prologue ? { opacity: archiveFrameOpacity } : undefined}
       />
 
       <motion.div
@@ -1860,15 +2121,16 @@ export default function RouteAtlas({
         )}
       </AnimatePresence>
 
-      <div
+      <motion.div
         className={`route-atlas-grade pointer-events-none absolute inset-0 ${
           mobile
             ? 'bg-[radial-gradient(circle_at_48%_54%,rgba(210,255,0,0.025)_0%,transparent_38%,rgba(7,9,6,0.2)_100%)]'
             : 'shadow-[inset_0_0_120px_rgba(7,9,6,0.23)]'
         }`}
+        style={prologue ? { opacity: archiveFrameOpacity } : undefined}
       />
-      {!mobile && <div className="route-atlas-tone pointer-events-none absolute inset-0" />}
-      {!mobile && <div className="route-atlas-interface-veil pointer-events-none absolute inset-y-0 left-0" />}
+      {!mobile && <motion.div className="route-atlas-tone pointer-events-none absolute inset-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
+      {!mobile && <motion.div className="route-atlas-interface-veil pointer-events-none absolute inset-y-0 left-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
 
       {!living && <motion.header
         initial={false}

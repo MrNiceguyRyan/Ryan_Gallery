@@ -28,82 +28,34 @@ html.lenis body {
   overflow: hidden;
 }
 
-/* ─── Quiet index marquee (homepage seam) — restrained, filled, no glow ─── */
-.quiet-marquee {
+/* Globe prologue (desktop homepage opening). Each display line rises out of
+   its own mask; the padding/negative margin pair gives the glyphs' overshoot
+   room without changing the line boxes. */
+.prologue-line {
+  display: block;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  padding: 0.04em 0 0.1em;
+  margin: -0.04em 0 -0.1em;
 }
-.quiet-marquee-handoff {
-  /* Start with a genuinely clear area. The former top-anchored radial wash
-     introduced a faint horizontal edge exactly where this overlapping band
-     began, which made the cover and atlas read as stacked sections. */
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    transparent 10%,
-    rgba(40, 44, 32, 0.035) 24%,
-    rgba(40, 44, 32, 0.14) 42%,
-    rgba(40, 44, 32, 0.34) 60%,
-    rgba(40, 44, 32, 0.68) 80%,
-    #282c20 100%
-  );
+.prologue-display {
+  line-height: 0.84;
+  letter-spacing: -0.045em;
+  text-shadow: 0 6px 44px rgba(12, 14, 9, 0.55);
 }
-.quiet-marquee-track {
-  display: flex;
-  width: max-content;
-  white-space: nowrap;
+.prologue-scroll-cue::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #D2FF00;
+  transform: translateX(-100%);
+  animation: prologue-scroll-cue 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
-.qm-name {
-  padding: 0 0.55em;
-  font-family: var(--font-display);
-  font-style: normal;
-  text-transform: uppercase;
-  font-size: clamp(2.1rem, 4.2vw, 3.4rem);
-  letter-spacing: -0.02em;
-  color: rgba(230, 233, 231, 0.18);
-  transition: color 0.6s ease;
-}
-.qm-name.is-active {
-  color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  opacity: 0.62;
-}
-/* The band is a real index now — every name jumps the archive to its chapter.
-   Specificity beats `.is-active` so hovering the current city still responds. */
-button.qm-name {
-  cursor: pointer;
-}
-button.qm-name:hover,
-button.qm-name:focus-visible {
-  color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  opacity: 0.92;
-}
-.qm-sep {
-  font-size: clamp(1.5rem, 3vw, 2.4rem);
-  color: rgba(230, 233, 231, 0.12);
-}
-/* The index band's velocity layer: drift and lean ride on this inner track so
-   the scroll-position transform on .quiet-marquee-track stays untouched. */
-.quiet-marquee-loop {
-  display: flex;
-  width: max-content;
-  will-change: transform;
-}
-/* About prose that lights up word by word, once (LitParagraphs). The delay
-   waits for the hero's own fade-up, then walks the words at 18ms apiece. */
-.lit-word {
-  opacity: 0.3;
-  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  transition-delay: calc(0.45s + var(--i, 0) * 18ms);
-}
-.is-lit .lit-word {
-  opacity: 1;
+@keyframes prologue-scroll-cue {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lit-word {
-    opacity: 1;
-    transition: none;
-  }
+  .prologue-scroll-cue::after { animation: none; transform: none; opacity: 0.5; }
 }
 /* One word of a rising chapter title. Padding gives the glyphs' overshoot room
    inside the clip; the equal negative margin cancels it, so line boxes, word

@@ -1,5 +1,5 @@
-import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
-import { motion, AnimatePresence, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from 'framer-motion';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { motion, AnimatePresence, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion';
 import type { Collection, SiteSettings } from '../../types';
 import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
@@ -108,161 +108,7 @@ function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNod
   );
 }
 
-type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'> &
-  Partial<Pick<Collection, 'slug' | 'coverImageUrl'>>;
-
-/** True from 768px up, where the scroll-owned About motion runs. Server and
- *  first client render agree on `false`; the real value arrives on mount. */
-function useWideLayout() {
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const query = window.matchMedia('(min-width: 768px)');
-    setWide(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setWide(event.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
-  return wide;
-}
-
-// The fallback profile prose, used while Sanity's `siteSettings.bio` is empty.
-const BIO_FALLBACK = [
-  'A photographic record of moving through cities and landscapes, from the high-contrast geometry of Manhattan to the geologic time of the American Southwest. No commissioned work, no client briefs. Frames selected on a slow timeline, organized by location, dated.',
-  'Off the camera: engineering and AI research. The discipline of careful observation transfers between the two; both reward patience over output volume. This site is one node in a personal archive, not a portfolio for hire.',
-];
-
-/**
- * Prose that lights up word by word, once, when it is first read (after Olivier
- * Larose's scroll-lit text — but time-based and one-shot: NN/g found text that
- * moves while you scroll the most disorienting). Whole words only; the CSS
- * lives in global.css (.lit-word) and reduced motion shows it lit.
- */
-function LitParagraphs({ paragraphs, lit, className }: { paragraphs: string[]; lit: boolean; className?: string }) {
-  let wordIndex = 0;
-  return (
-    <div className={`${className ?? ''} ${lit ? 'is-lit' : ''}`}>
-      {paragraphs.map((paragraph, paragraphIndex) => (
-        <p key={paragraphIndex} className="whitespace-pre-line">
-          {paragraph.split(/(\s+)/).map((token, tokenIndex) => {
-            if (!token.trim()) return token;
-            const index = wordIndex++;
-            return (
-              <span key={tokenIndex} className="lit-word" style={{ ['--i' as never]: index }}>
-                {token}
-              </span>
-            );
-          })}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/** "21:58 EDT" in New York, refreshed on the minute. Rendered only after mount
- *  so the server's clock can never disagree with the visitor's on hydration. */
-function NewYorkNow() {
-  const [now, setNow] = useState('');
-  useEffect(() => {
-    const format = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-      timeZoneName: 'short',
-    });
-    let timer = 0;
-    const tick = () => {
-      const parts = format.formatToParts(new Date());
-      const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
-      setNow(`${part('hour')}:${part('minute')} ${part('timeZoneName')}`);
-      timer = window.setTimeout(tick, 60_000 - (Date.now() % 60_000) + 50);
-    };
-    tick();
-    return () => window.clearTimeout(timer);
-  }, []);
-  return (
-    <>
-      New York{now ? ', ' : ''}
-      <span className="tabular-nums">{now}</span>
-    </>
-  );
-}
-
-const PRACTICE_CARDS = [
-  { label: 'Focus', statement: 'Light. Geometry. Stillness.', prefer: 'bryce-canyon-national-park' },
-  { label: 'Method', statement: 'One frame at a time. Real shutter, real exposure.', prefer: 'page' },
-  { label: 'Log', statement: 'Personal archive, selected frames only.', prefer: 'zion-national-park' },
-] as const;
-
-type PracticeCard = (typeof PRACTICE_CARDS)[number] & { photo?: ArchiveCollection };
-
-/**
- * One of the three practice cards that took the old timeline's place. On wide
- * screens they pin like folder tabs (darkroom.engineering's About: sticky
- * cards ~17px apart) and each one settles back as the next lands on it
- * (1 − (n − i) × 0.03). Compact screens and reduced motion get plain cards.
- */
-function StackCard({ card, index, count, progress, stacked }: {
-  card: PracticeCard;
-  index: number;
-  count: number;
-  progress: MotionValue<number>;
-  stacked: boolean;
-}) {
-  const settled = 1 - (count - 1 - index) * 0.03;
-  const scale = useTransform(progress, [index / count, 1], [1, settled], { clamp: true });
-  const dim = useTransform(progress, [index / count, 1], [0, (count - 1 - index) * 0.16], { clamp: true });
-  const photo = card.photo;
-  const photoBase = photo?.coverImageUrl;
-  const tone = ['#2c3124', '#30352a', '#343a2d'][index % 3];
-  return (
-    <motion.article
-      className={`relative grid gap-8 overflow-hidden border-t border-white/12 p-6 md:grid-cols-12 md:gap-10 md:p-10 ${
-        stacked ? 'md:sticky md:top-[var(--stack-top)] md:h-[62svh] md:min-h-[440px]' : ''
-      }`}
-      style={{
-        background: tone,
-        ['--stack-top' as never]: `calc(88px + ${index * 18}px)`,
-        ...(stacked ? { scale, transformOrigin: '50% 0%' } : {}),
-      }}
-    >
-      <div className="flex min-h-[200px] flex-col md:col-span-7">
-        <p className="font-ui text-[12px] uppercase tracking-[0.08em] text-white/60">
-          <span className="mr-3 tabular-nums text-[#D2FF00]">{String(index + 1).padStart(2, '0')}</span>
-          {card.label}
-        </p>
-        <p className="mt-auto max-w-[16ch] pt-10 font-serif leading-[1.04] tracking-[-0.02em] text-[#F4F4ED]" style={{ fontSize: 'clamp(34px, 4.4vw, 64px)' }}>
-          {card.statement}
-        </p>
-      </div>
-      {photoBase && (
-        <figure className="m-0 flex flex-col md:col-span-5 md:min-h-0">
-          <img
-            src={`${photoBase}?auto=format&w=720&q=80`}
-            srcSet={`${photoBase}?auto=format&w=480&q=80 480w, ${photoBase}?auto=format&w=720&q=80 720w, ${photoBase}?auto=format&w=1000&q=78 1000w`}
-            sizes="(min-width: 768px) 34vw, 100vw"
-            alt={`${photo?.name ?? 'Archive'} — a frame from the archive`}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            className="aspect-[4/3] w-full object-cover md:aspect-auto md:min-h-0 md:flex-1"
-          />
-          <figcaption className="mt-2.5 font-ui text-[11px] uppercase tracking-[0.08em] text-white/55">
-            {photo?.name}{photo?.year ? ` · ${photo.year}` : ''}
-          </figcaption>
-        </figure>
-      )}
-      {stacked && (
-        <motion.span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[#20241a]"
-          style={{ opacity: dim }}
-        />
-      )}
-    </motion.article>
-  );
-}
+type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>;
 
 interface Props {
   settings?: SiteSettings;
@@ -297,27 +143,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
     ? new Date(builtAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
     : '';
   const heroItem = makeHeroItem(!!reduce);
-  const wide = useWideLayout();
-  const scrollMotion = wide && !reduce;
-  const [bioRef, bioInView] = useInViewOnce<HTMLDivElement>('0px 0px -8% 0px', 0.2);
-
-  // Practice cards: one archive frame each, preferring a fixed chapter and
-  // falling back to any other cover so a renamed slug never leaves a hole.
-  const usedCovers = new Set<string>();
-  const practiceCards: PracticeCard[] = PRACTICE_CARDS.map((card) => {
-    const withCover = collections.filter((entry) => entry.coverImageUrl && !usedCovers.has(entry._id));
-    const photo = withCover.find((entry) => entry.slug === card.prefer) ?? withCover[0];
-    if (photo) usedCovers.add(photo._id);
-    return { ...card, photo };
-  });
-  const stackRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: stackProgress } = useScroll({ target: stackRef, offset: ['start start', 'end end'] });
-
-  // The closing card arrives with its 80px shoulders and flattens them as it
-  // fills the view (Dennis Snellenberg's footer edge).
-  const closingRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: closingProgress } = useScroll({ target: closingRef, offset: ['start end', 'start 22%'] });
-  const closingRadius = useTransform(closingProgress, [0, 1], [80, 0], { clamp: true });
   const avatarIsSanity = avatarUrl.includes('cdn.sanity.io/images/');
   const avatarBase = avatarUrl.split('?')[0];
   const avatarSized = (width: number) => `${avatarBase}?auto=format&w=${width}&q=82`;
@@ -636,73 +461,57 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
                 initial="hidden"
                 animate={coverGone ? 'show' : 'hidden'}
               >
-                <div ref={bioRef}>
-                  <LitParagraphs
-                    paragraphs={[bio]}
-                    lit={coverGone && bioInView}
-                    className="text-[15px] text-white/55 font-light leading-relaxed max-w-[60ch]"
-                  />
-                </div>
+                <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-[60ch] whitespace-pre-line">
+                  {bio}
+                </p>
               </motion.div>
             ) : (
               <motion.div
-                ref={bioRef}
-                className="mt-7"
+                className="mt-7 space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]"
                 variants={heroItem}
                 custom={0.34}
                 initial="hidden"
                 animate={coverGone ? 'show' : 'hidden'}
               >
-                <LitParagraphs
-                  paragraphs={BIO_FALLBACK}
-                  lit={coverGone && bioInView}
-                  className="space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]"
-                />
+                <p>
+                  A photographic record of moving through cities and
+                  landscapes, from the high-contrast geometry of Manhattan to
+                  the geologic time of the American Southwest. No commissioned
+                  work, no client briefs. Frames selected on a slow timeline,
+                  organized by location, dated.
+                </p>
+                <p>
+                  Off the camera: engineering and AI research. The discipline
+                  of careful observation transfers between the two; both
+                  reward patience over output volume. This site is one node in
+                  a personal archive, not a portfolio for hire.
+                </p>
+
+                {/* Terse system signature below the prose */}
+                <div className="space-y-2.5 max-w-md font-ui text-[12px] pt-5 mt-1 border-t border-white/5">
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
+                    <span className="text-white/60">Light. Geometry. Stillness.</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
+                    <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
+                    <span className="text-white/60">Personal archive, selected frames only.</span>
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>
         </div>
       </section>
 
-      {/* ═══════ PRACTICE — Focus / Method / Log as stacked cards. They took
-           the removed timeline's place: the page's middle is now what the
-           archive is for, not a list of dates. ═══════ */}
-      <section aria-label="Practice" className="safe-inline-page mx-auto mt-6 max-w-5xl md:mt-10">
-        <div ref={stackRef} className="relative">
-          {/* Spacing lives in spacer elements, not card margins: a sticky
-              card's margin counts against its container, so margins made
-              the first cards unpin early. The last spacer is a short dwell
-              with all three stacked before they leave together. */}
-          {practiceCards.map((card, index) => (
-            <Fragment key={card.label}>
-              <StackCard
-                card={card}
-                index={index}
-                count={practiceCards.length}
-                progress={stackProgress}
-                stacked={scrollMotion}
-              />
-              {(index < practiceCards.length - 1 || scrollMotion) && (
-                <div
-                  aria-hidden="true"
-                  className={scrollMotion
-                    ? index < practiceCards.length - 1 ? 'h-[20svh]' : 'h-[14svh]'
-                    : 'h-5'}
-                />
-              )}
-            </Fragment>
-          ))}
-        </div>
-      </section>
-
       {/* ═══════ CONTACT — Lando-style closing card: statement + signature,
            portrait centred between PAGES / FOLLOW columns, lime pill, © bar ═══════ */}
       <section className="safe-inline-page relative mt-14 md:mt-20">
-        <motion.div
-          ref={closingRef}
-          className="relative rounded-t-[2.5rem] md:rounded-t-[5rem] bg-[#20241a] ring-1 ring-white/[0.05] overflow-hidden px-6 md:px-14 pt-14 md:pt-20 pb-6"
-          style={scrollMotion ? { borderTopLeftRadius: closingRadius, borderTopRightRadius: closingRadius } : undefined}
-        >
+        <div className="relative rounded-t-[2.5rem] md:rounded-t-[5rem] bg-[#20241a] ring-1 ring-white/[0.05] overflow-hidden px-6 md:px-14 pt-14 md:pt-20 pb-6">
           {/* Statement + signature scribble */}
           <Reveal className="relative z-10 text-center">
             <SignatureScrub className="mx-auto mb-1 block w-[clamp(260px,31vw,440px)] max-w-full -rotate-[0.75deg] translate-x-[1%] select-none" />
@@ -767,8 +576,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
               set in, what made it, what it runs on, how much of it there is,
               and when it last changed. Facts only, no copy. */}
           <dl className="relative z-10 mt-12 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 border-t border-white/10 pt-6 text-left md:grid-cols-[auto_1fr_auto_1fr] md:gap-x-8">
-            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Now</dt>
-            <dd className="m-0 font-serif text-[15px] text-white/80"><NewYorkNow /></dd>
             <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Type</dt>
             <dd className="m-0 font-serif text-[15px] text-white/80">Fraunces, Space Grotesk, Inter</dd>
             <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Cameras</dt>
@@ -796,7 +603,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             <span>© {new Date().getFullYear()} {name}. All rights reserved.</span>
             <a href="/" className="inline-flex min-h-11 items-center hover:text-white/70 transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]">ryanxugallery.com</a>
           </div>
-        </motion.div>
+        </div>
       </section>
 
       </div>

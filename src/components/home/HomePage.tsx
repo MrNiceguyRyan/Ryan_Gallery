@@ -22,6 +22,7 @@ import type { Collection } from '../../types';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveClosing from './ArchiveClosing';
+import GlobePrologue from './GlobePrologue';
 import MagazineLayout from './MagazineLayout';
 import type { RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
@@ -73,10 +74,16 @@ interface Props {
  *  Mid-stack on purpose: chapter 0 owns the archive entrance, whose album
  *  unfold is gated on `variant === 'cover'`. */
 const FEATURE_CHAPTER_INDEX = 3;
-// Index band velocity layer: idle drift, and the most it may lean (degrees)
-// while the page is scrolled hard. Text only — photographs never skew.
-const INDEX_DRIFT_PX_PER_MS = 0.024;
-const INDEX_MAX_LEAN = 5;
+// Desktop globe prologue: the height of the opening laid over the atlas, and
+// how much of the viewport the atlas entrance overlaps it by (the entrance
+// begins when the archive's top edge is 56% down the screen).
+const PROLOGUE_HEIGHT = '300svh';
+const ARCHIVE_ENTRY_LEAD = 0.56;
+
+function prologueProgressAt(scrollY: number, prologueTop: number, archiveTop: number, viewportHeight: number) {
+  const span = Math.max(1, archiveTop - prologueTop - viewportHeight * ARCHIVE_ENTRY_LEAD);
+  return Math.max(0, Math.min(1, (scrollY - prologueTop) / span));
+}
 
 const DESKTOP_LAYOUT_QUERY = '(min-width: 1024px)';
 
@@ -131,6 +138,7 @@ interface DeferredRouteAtlasProps {
   chapterIds?: string[];
   chapterProgress?: MotionValue<number>;
   entryProgress?: MotionValue<number>;
+  prologueProgress?: MotionValue<number>;
   reducedMotion: boolean;
   mobile?: boolean;
   paused?: boolean;
@@ -233,178 +241,6 @@ interface RegionSection {
 /* ═══════════════════════════════════════════════════════
  *  HomePage — atmospheric dark archive
  * ═══════════════════════════════════════════════════════ */
-/* ═══════════════════════════════════════════════════════
- *  QuietIndexBand — a restrained marquee seam (landonorris-style),
- *  cooler/quieter than /travel's: one row, filled 14% type, em-dash
- *  separators, no glow. ONE name glows emerald — the live active
- *  chapter (or the first at top), a calm spotlight tied to scroll.
- * ═══════════════════════════════════════════════════════ */
-function QuietIndexBand({
-  names,
-  activeArchiveId,
-  fallbackArchiveId,
-  onSelect,
-}: {
-  names: { name: string; id: string | null }[];
-  activeArchiveId: string | null;
-  fallbackArchiveId: string | null;
-  /** Jumps the archive to a city. The band was a highlight-synced list of
-   *  every city that could not be clicked, while "Back to index" pointed
-   *  straight at it — so it already read as an index to the visitor. */
-  onSelect: (anchorId: string) => void;
-}) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const reduce = useReducedMotion();
-  const firstId = names.find((n) => n.id)?.id ?? null;
-  const activeId = activeArchiveId ?? fallbackArchiveId ?? firstId;
-  const { scrollYProgress: handoffProgress } = useScroll({
-    target: rootRef,
-    // Keep the index connected to the whole seam instead of completing its
-    // motion as soon as the first line reaches mid-screen. The names continue
-    // drifting while the atlas develops and reverse cleanly on upward scroll.
-    offset: ['start end', 'end start'],
-  });
-  const handoffOpacity = useTransform(handoffProgress, [0, 0.14, 0.32], [0, 0.42, 1]);
-  const handoffY = useTransform(handoffProgress, [0, 0.18, 0.42], [30, 15, 0]);
-  const trackX = useTransform(handoffProgress, [0, 0.54, 1], ['3vw', '0vw', '-6vw']);
-  const trackY = useTransform(handoffProgress, [0, 0.52, 1], [12, 0, -10]);
-  const runRef = useRef<HTMLDivElement>(null);
-  const loopX = useMotionValue(0);
-  const loopSkew = useMotionValue(0);
-
-  // Velocity layer (after Pelizzari's index marquee): the names idle at a slow
-  // drift and run faster, with a slight lean, while the page is scrolled hard,
-  // then relax back. Runs only while the band is on screen, reads scrollY (no
-  // layout) and writes two MotionValues — no React renders, no measurements
-  // per frame. The run width is measured by ResizeObserver, never per frame.
-  useEffect(() => {
-    loopX.set(0);
-    loopSkew.set(0);
-    if (reduce) return;
-    const root = rootRef.current;
-    const run = runRef.current;
-    if (!root || !run || typeof IntersectionObserver === 'undefined') return;
-    let runWidth = run.offsetWidth;
-    const resize = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(() => { runWidth = run.offsetWidth; });
-    resize?.observe(run);
-    let raf = 0;
-    let lastTime = 0;
-    let lastY = window.scrollY;
-    let velocity = 0;
-    let speed = 1;
-    let direction = 1;
-    let offset = loopX.get();
-    let skew = 0;
-    const frame = (time: number) => {
-      raf = requestAnimationFrame(frame);
-      const dt = lastTime ? Math.min(64, time - lastTime) : 16.7;
-      lastTime = time;
-      const y = window.scrollY;
-      const instant = ((y - lastY) / dt) * 1000;
-      lastY = y;
-      velocity += (instant - velocity) * (1 - Math.exp(-dt / 90));
-      if (Math.abs(instant) > 1) direction = instant > 0 ? 1 : -1;
-      const pace = Math.abs(velocity);
-      const targetSpeed = pace > 12 ? 3 + Math.min(4, pace / 800) : 1;
-      speed += (targetSpeed - speed) * (1 - Math.exp(-dt / 240));
-      offset -= direction * speed * INDEX_DRIFT_PX_PER_MS * dt;
-      if (runWidth > 0) {
-        while (offset <= -runWidth) offset += runWidth;
-        while (offset > 0) offset -= runWidth;
-      }
-      loopX.set(offset);
-      const targetSkew = Math.max(-INDEX_MAX_LEAN, Math.min(INDEX_MAX_LEAN, velocity / -300));
-      skew += (targetSkew - skew) * (1 - Math.exp(-dt / 160));
-      loopSkew.set(Math.abs(skew) < 0.005 ? 0 : skew);
-    };
-    const visibility = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) {
-        if (raf) return;
-        lastTime = 0;
-        lastY = window.scrollY;
-        raf = requestAnimationFrame(frame);
-      } else if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-    });
-    visibility.observe(root);
-    return () => {
-      visibility.disconnect();
-      resize?.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [loopSkew, loopX, reduce]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    root.querySelectorAll<HTMLElement>('.qm-name').forEach((el) => {
-      el.classList.toggle('is-active', !!activeId && el.dataset.id === activeId);
-    });
-  }, [activeId, names]);
-
-  if (!names.length) return null;
-
-  // The track is duplicated so the band reads as a continuous line of type.
-  // Only the first copy is in the accessibility tree and the tab order; the
-  // echo stays mouse-clickable so a name is never inert just because the
-  // visitor happened to click the second copy of it.
-  const run = (key: string, echo: boolean) => (
-    <div ref={echo ? undefined : runRef} className="flex shrink-0" aria-hidden={echo || undefined} key={key}>
-      {names.map((n, i) => (
-        <span key={i} className="flex items-baseline">
-          {n.id ? (
-            <button
-              type="button"
-              className="qm-name focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-              data-id={n.id}
-              data-cursor="Go to chapter"
-              aria-current={n.id === activeId ? 'true' : undefined}
-              aria-label={`Go to ${n.name}`}
-              tabIndex={echo ? -1 : 0}
-              onClick={() => onSelect(n.id as string)}
-            >
-              {n.name}
-            </button>
-          ) : (
-            <span className="qm-name">{n.name}</span>
-          )}
-          <span className="qm-sep" aria-hidden="true">&mdash;</span>
-        </span>
-      ))}
-    </div>
-  );
-
-  return (
-    <motion.nav
-      ref={rootRef}
-      id="archive-index"
-      aria-label="Archive index"
-      className="quiet-marquee quiet-marquee-handoff relative z-30 -mt-[24svh] flex h-[24svh] w-full items-center"
-      style={reduce ? undefined : { opacity: handoffOpacity, y: handoffY }}
-    >
-      <motion.div
-        className="quiet-marquee-track relative"
-        style={reduce ? undefined : { x: trackX, y: trackY }}
-      >
-        {/* Three copies: the velocity layer wraps by one run width, and the
-            remaining two must still span a wide desktop viewport. */}
-        <motion.div
-          className="quiet-marquee-loop"
-          style={reduce ? undefined : { x: loopX, skewX: loopSkew }}
-        >
-          {run('a', false)}
-          {run('b', true)}
-          {run('c', true)}
-        </motion.div>
-      </motion.div>
-    </motion.nav>
-  );
-}
-
 export default function HomePage({ collections }: Props) {
   const lenisRef = useRef<Lenis | null>(null);
   // A render-free, fractional chapter timeline. Lenis supplies the smooth
@@ -418,6 +254,7 @@ export default function HomePage({ collections }: Props) {
   // Route is visible and finishes as the first cover settles into the viewport,
   // giving the geographic zoom enough physical scroll distance to stay calm.
   const atlasEntryProgress = useMotionValue(0);
+  const prologueProgress = useMotionValue(0);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [storyClosing, setStoryClosing] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
@@ -668,13 +505,22 @@ export default function HomePage({ collections }: Props) {
   // the same visual order and reversing the gesture reverses the transition.
   const selectedWorksRef = useRef<HTMLDivElement>(null);
   const desktopAtlasSectionRef = useRef<HTMLDivElement>(null);
+  const desktopStageRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!desktopLayout || !desktopAtlasSectionRef.current) return;
     // Restored/deep-linked pages enter at their current position, never replay
     // a zero-progress opening for the first hydrated frame.
     const progress = archiveEntryProgress(window.scrollY, documentTop(desktopAtlasSectionRef.current), window.innerHeight);
     atlasEntryProgress.set(reduce ? (progress > 0 ? 1 : 0) : progress);
-  }, [desktopLayout, atlasEntryProgress, reduce]);
+    if (desktopStageRef.current) {
+      prologueProgress.set(prologueProgressAt(
+        window.scrollY,
+        documentTop(desktopStageRef.current),
+        documentTop(desktopAtlasSectionRef.current),
+        window.innerHeight,
+      ));
+    }
+  }, [desktopLayout, atlasEntryProgress, prologueProgress, reduce]);
   // Reverse parallax — the heading block counter-drifts (down) against the
   // covers' upward drift, so the text plane reads as nearer than the photos.
   // useScroll measures the static outer wrapper; the drift is applied to an
@@ -945,6 +791,7 @@ export default function HomePage({ collections }: Props) {
       });
     let anchors: { id: string; documentY: number; chapterIndex: number }[] = [];
     let atlasEntryDocumentY: number | null = null;
+    let prologueDocumentY: number | null = null;
     const writeProgress = (value: MotionValue<number>, next: number) => {
       const current = value.get();
       // Preserve every chapter centre, not only 0/1, and discard only changes
@@ -964,6 +811,12 @@ export default function HomePage({ collections }: Props) {
       const viewportHeight = Math.max(1, window.innerHeight);
       const raw = archiveEntryProgress(window.scrollY, atlasEntryDocumentY, viewportHeight);
       writeProgress(atlasEntryProgress, reduce ? (raw > 0 ? 1 : 0) : raw);
+      if (prologueDocumentY != null) {
+        writeProgress(
+          prologueProgress,
+          prologueProgressAt(window.scrollY, prologueDocumentY, atlasEntryDocumentY, viewportHeight),
+        );
+      }
     };
 
     const applyActiveChapter = () => {
@@ -1128,6 +981,9 @@ export default function HomePage({ collections }: Props) {
         atlasEntryDocumentY = desktopAtlasSectionRef.current
           ? documentTop(desktopAtlasSectionRef.current)
           : null;
+        prologueDocumentY = desktopStageRef.current
+          ? documentTop(desktopStageRef.current)
+          : null;
         anchors = queryTracked().flatMap(({ element, chapterIndex }) => {
           if (element.offsetWidth <= 0 || element.offsetHeight <= 0) return [];
           return [{
@@ -1177,7 +1033,7 @@ export default function HomePage({ collections }: Props) {
       else window.removeEventListener('scroll', syncActiveChapter);
       window.removeEventListener('resize', handleViewportResize);
     };
-  }, [orderedCities, routeStops, desktopLayout, storyActive, archiveProgress, atlasEntryProgress, commitActiveArchiveId, reduce, useLivingAtlas]);
+  }, [orderedCities, routeStops, desktopLayout, storyActive, archiveProgress, atlasEntryProgress, prologueProgress, commitActiveArchiveId, reduce, useLivingAtlas]);
 
   useEffect(() => {
     const isOverlayOpen = storyActive;
@@ -1329,7 +1185,12 @@ export default function HomePage({ collections }: Props) {
 
         {/* ── The opening — the original paper-to-olive entrance develops the
              quiet editorial cover, then grows it to full bleed. ── */}
-        <WalkIn collections={walkInCollections} places={walkInCollections.length} />
+        {/* Compact screens keep the WalkIn opener. On desktop the globe
+            prologue (inside the atlas section) replaces it; CSS hides it so the
+            server and every client render the same tree. */}
+        <div className="lg:hidden">
+          <WalkIn collections={walkInCollections} places={walkInCollections.length} />
+        </div>
 
         {/* The city index is the single, lightweight seam between the opening
             cover and the live atlas chapter. */}
@@ -1337,14 +1198,6 @@ export default function HomePage({ collections }: Props) {
             the end-cap's "Back to index". Desktop keeps it now that the living
             composition renders there too; below 1024px the atlas stage starts
             immediately under the opener and the band has no room. */}
-        {desktopLayout && (
-          <QuietIndexBand
-            names={indexNames}
-            activeArchiveId={activeArchiveId}
-            fallbackArchiveId={orderedCities[0] ? `archive-item-${routeStops[0]?.id ?? ''}` : null}
-            onSelect={navigateLivingChapter}
-          />
-        )}
 
         {/* One responsive archive tree at a time. This keeps Mapbox and every
              motion observer from mounting twice behind CSS-only visibility. */}
@@ -1376,7 +1229,27 @@ export default function HomePage({ collections }: Props) {
             />
           ) : desktopLayout ? (
           /* ── Desktop Main — full-height geographic atlas + archive chapters ── */
-          <div ref={desktopAtlasSectionRef} className="relative pb-8 pt-24 lg:pt-0">
+          <div
+            ref={desktopStageRef}
+            className="relative pb-8 pt-24 lg:pt-0"
+            style={{ ['--prologue-h' as never]: PROLOGUE_HEIGHT }}
+          >
+          <GlobePrologue
+            chapters={orderedCities.length}
+            frames={archiveFrameTotal}
+            years={archiveYearSpan}
+            cities={indexNames.filter((entry): entry is { name: string; id: string } => !!entry.id)}
+            onSelect={navigateLivingChapter}
+          />
+          {/* Where the archive proper begins: the entrance score is measured
+              from here, exactly as it was from the section's top before the
+              prologue was laid over the atlas. */}
+          <div
+            ref={desktopAtlasSectionRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 h-px"
+            style={{ top: 'var(--prologue-h)' }}
+          />
           {/* The blurred active-chapter photo backdrop was removed — no photo
                used as background anywhere; the contour atmosphere carries it. */}
 
@@ -1391,6 +1264,7 @@ export default function HomePage({ collections }: Props) {
                 chapterIds={orderedChapterIds}
                 chapterProgress={archiveProgress}
                 entryProgress={atlasEntryProgress}
+                prologueProgress={prologueProgress}
                 reducedMotion={!!reduce}
                 paused={storyActive}
                 engagedChapterId={engagedChapterId}
@@ -1408,7 +1282,7 @@ export default function HomePage({ collections }: Props) {
             />
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
-            <div className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-28 xl:pr-16">
+            <div className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
               <div ref={selectedWorksRef} className="relative max-w-2xl lg:ml-[12%]">
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
                 <motion.div
