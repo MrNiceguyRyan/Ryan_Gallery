@@ -10,7 +10,6 @@ const currentPath = Astro.url.pathname;
 
 /**
  * Fetch the single siteSettings document from Sanity.
- * The timeline array and other global fields are managed there.
  * Falls back gracefully if no document exists yet.
  */
 const [rawSettings, archiveCollections] = await Promise.all([
@@ -20,12 +19,7 @@ const [rawSettings, archiveCollections] = await Promise.all([
       bio,
       "avatarUrl": avatar.asset->url,
       email,
-      instagram,
-      timeline[] {
-        year,
-        title,
-        description
-      }
+      instagram
     }
   `)),
   fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>>>(`

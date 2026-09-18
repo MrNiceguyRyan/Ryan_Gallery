@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion';
-import type { Collection, SiteSettings, TimelineItem } from '../../types';
+import type { Collection, SiteSettings } from '../../types';
 import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
 import { useInViewOnce } from '../../lib/useInViewOnce';
@@ -110,39 +110,6 @@ function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNod
 
 type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>;
 
-/** Build the fallback log from the same collection records shown elsewhere.
- *  If no dated archive data is available, the section is omitted instead of
- *  presenting an invented or stale year. */
-function timelineFromCollections(collections: ArchiveCollection[]): TimelineItem[] {
-  const byYear = new Map<number, ArchiveCollection[]>();
-  collections.forEach((collection) => {
-    const year = Number(collection.year);
-    if (!Number.isFinite(year) || (collection.photoCount ?? 0) < 1) return;
-    byYear.set(year, [...(byYear.get(year) || []), collection]);
-  });
-
-  return [...byYear.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([year, entries]) => {
-      const names = [...new Set(entries.map(({ name }) => name).filter(Boolean))];
-      const frameCount = entries.reduce((sum, entry) => sum + (entry.photoCount || 0), 0);
-      const frameLabel = `${frameCount} selected frame${frameCount === 1 ? '' : 's'}.`;
-      const only = entries.length === 1 ? entries[0] : null;
-      const distinctLocation = only?.location
-        && only.location.trim().toLocaleLowerCase() !== only.name.trim().toLocaleLowerCase()
-        ? only.location.trim()
-        : '';
-
-      return {
-        year: String(year),
-        title: names.length === 1 ? names[0] : 'Archive Chapters',
-        description: names.length === 1
-          ? `${distinctLocation ? `${distinctLocation}. ` : ''}${frameLabel}`
-          : `${names.join(', ')}. ${frameLabel}`,
-      };
-    });
-}
-
 interface Props {
   settings?: SiteSettings;
   collections?: ArchiveCollection[];
@@ -156,9 +123,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
   const avatarUrl = settings?.avatarUrl ?? 'https://cdn.sanity.io/images/z610fooo/production/926d2d1c1fcba0de3a1b45fd60b64e7fce7ce650-3300x2200.jpg';
   const email     = settings?.email     ?? 'ryan2420159421@gmail.com';
   const instagram = settings?.instagram ?? 'https://www.instagram.com/ryan_photoo/';
-  const timeline  = (settings?.timeline?.length ?? 0) > 0
-    ? settings!.timeline!
-    : timelineFromCollections(collections);
   const reduce = useReducedMotion();
   const igHandle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'instagram');
 
@@ -258,9 +222,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
     };
   }, [coverExited]);
 
-  // Timeline rail draws itself when the log scrolls into view (not at mount,
-  // where it would finish unseen below the fold).
-  const [timelineRef, timelineShown] = useInViewOnce<HTMLOListElement>();
 
   return (
     <main
@@ -546,39 +507,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
           </div>
         </div>
       </section>
-
-      {/* ═══════ TIMELINE — vertical editorial log ═══════ */}
-      {timeline.length > 0 && (
-        <section className="safe-inline-page max-w-3xl mx-auto py-12 md:py-16 border-t border-white/5">
-          <Reveal>
-            <p className="font-ui text-[10px] tracking-[0.1em] uppercase text-white/52 mb-3">The Log</p>
-            <h2 className="text-3xl md:text-4xl font-serif uppercase text-[#F4F4ED] tracking-tight py-1 mb-8">
-              Timeline
-            </h2>
-          </Reveal>
-
-          <ol ref={timelineRef} className="relative ml-1.5">
-            <span className={`absolute left-0 top-0 h-full w-px bg-white/12 origin-top ${timelineShown ? 'animate-line-grow' : 'scale-y-0'}`} aria-hidden="true" />
-            {timeline.map((item, i) => (
-              <li
-                key={`${item.year}-${item.title}-${i}`}
-                className="relative pl-8 pb-9 last:pb-0 group"
-              >
-                <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white/20 bg-[#30352a] transition-[border-color,box-shadow] duration-500 group-hover:border-[rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.9)] group-hover:shadow-[0_0_10px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5)]" />
-                <Reveal y={18} delay={Math.min(i * 0.06, 0.18)}>
-                  <span className="font-ui text-[10px] text-white/52 tracking-[0.2em]">{item.year}</span>
-                  <h3 className="text-lg md:text-xl font-serif uppercase text-[#F4F4ED] mt-1 tracking-tight">
-                    {item.title}
-                  </h3>
-                  <p className="text-[13.5px] text-white/58 font-light mt-1.5 leading-relaxed max-w-[55ch]">
-                    {item.description}
-                  </p>
-                </Reveal>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
 
       {/* ═══════ CONTACT — Lando-style closing card: statement + signature,
            portrait centred between PAGES / FOLLOW columns, lime pill, © bar ═══════ */}

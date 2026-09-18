@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
-import { ArrowRight, Share2, Check, MapPin } from 'lucide-react';
+import { ArrowRight, Share2, Check } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
 import Lightbox from '../shared/Lightbox';
 import {
@@ -12,7 +12,6 @@ import {
 } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import Magnetic from '../shared/Magnetic';
-import LocationAtlas from './LocationAtlas';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
@@ -72,10 +71,55 @@ type EditorialRow = {
 const isPortrait = (photo: Photo) =>
   photo.width != null && photo.height != null && photo.height > photo.width;
 
+/** Length of the run of consecutive portraits starting at `from`. */
+function portraitRunLength(entries: IndexedPhoto[], from: number): number {
+  let end = from;
+  while (end < entries.length && isPortrait(entries[end].photo)) end += 1;
+  return end - from;
+}
+
+/**
+ * A run of three or more portraits alternates a three-up row with a single
+ * portrait given the width. Pairing them two by two turned Orlando — one
+ * landscape and sixteen portraits — into eight identical side-by-side rows in
+ * a row; this changes the rhythm on every row and never lays two portraits
+ * side by side unless exactly two are left over.
+ */
+function pushPortraitRun(rows: EditorialRow[], run: IndexedPhoto[]) {
+  let index = 0;
+  let wantTrio = rows[rows.length - 1]?.layout !== 'trio';
+  while (index < run.length) {
+    const left = run.length - index;
+    if (wantTrio && left >= 3) {
+      rows.push({ layout: 'trio', items: run.slice(index, index + 3) });
+      index += 3;
+    } else if (wantTrio && left === 2) {
+      rows.push({ layout: 'pair', items: run.slice(index, index + 2) });
+      index += 2;
+    } else if (wantTrio && left === 1) {
+      // A lone leftover after a single portrait joins it rather than stacking
+      // two single-portrait rows back to back.
+      const previous = rows[rows.length - 1];
+      if (previous?.layout === 'portrait-solo') {
+        rows[rows.length - 1] = { layout: 'pair', items: [...previous.items, run[index]] };
+      } else {
+        rows.push({ layout: 'portrait-solo', items: [run[index]] });
+      }
+      index += 1;
+    } else {
+      rows.push({ layout: 'portrait-solo', items: [run[index]] });
+      index += 1;
+    }
+    wantTrio = !wantTrio;
+  }
+}
+
 /**
  * A small orientation-aware editorial grammar. Landscapes may breathe at full
- * width, while portraits always share a row. A one-photo portrait archive gets
- * a restrained centered column rather than a viewport-filling treatment.
+ * width; a portrait or two sits beside its neighbours; longer runs of
+ * portraits alternate three-up rows with a single portrait (see
+ * `pushPortraitRun`). A one-photo portrait archive gets a restrained centered
+ * column rather than a viewport-filling treatment.
  */
 function buildEditorialRows(photos: Photo[]): EditorialRow[] {
   const entries = photos.map((photo, index) => ({ photo, index }));
@@ -83,7 +127,11 @@ function buildEditorialRows(photos: Photo[]): EditorialRow[] {
   let cursor = 0;
 
   if (entries[0]) {
-    if (isPortrait(entries[0].photo)) {
+    const openingRun = portraitRunLength(entries, 0);
+    if (openingRun >= 3) {
+      pushPortraitRun(rows, entries.slice(0, openingRun));
+      cursor = openingRun;
+    } else if (isPortrait(entries[0].photo)) {
       if (entries[1]) {
         rows.push({ layout: 'pair', items: entries.slice(0, 2) });
         cursor = 2;
@@ -102,6 +150,12 @@ function buildEditorialRows(photos: Photo[]): EditorialRow[] {
     const next = entries[cursor + 1];
 
     if (isPortrait(current.photo)) {
+      const run = portraitRunLength(entries, cursor);
+      if (run >= 3) {
+        pushPortraitRun(rows, entries.slice(cursor, cursor + run));
+        cursor += run;
+        continue;
+      }
       if (next) {
         rows.push({ layout: 'pair', items: [current, next] });
         cursor += 2;
@@ -168,7 +222,6 @@ function PhotoCell({
   collectionName,
   total,
   frameNumber,
-  year,
 }: {
   photo: Photo;
   span: 'full' | 'half' | 'third' | 'portrait';
@@ -188,7 +241,6 @@ function PhotoCell({
    *  `allCollections` arrives in data order, so an archive-wide count would
    *  give the same photograph a different number on each surface. */
   frameNumber: number;
-  year?: number;
 }) {
   const colSpan =
     span === 'full' ? 'col-span-6'
@@ -219,19 +271,18 @@ function PhotoCell({
     setIsLoaded(!!image?.complete && image.naturalWidth > 0);
     setHasError(!!image?.complete && image.naturalWidth === 0);
   }, [photo.imageUrl]);
-  // The caption is the photograph's written description when someone has
-  // written one, and otherwise a factual line derived from data that is
-  // always present: the archive-wide frame number, the photo's own city
-  // (58 of 58 carry one, and it is sometimes more specific than the chapter —
-  // "Manhattan", "Midtown"), and the chapter's year. The page never shows an
-  // empty caption and never prints a machine title such as "Miami #24".
+  // Caption: "Frame 01 · <title of the work>". Place and year are not
+  // repeated per frame — the chapter header already states them once. The
+  // title is the Sanity title only when it is a real one; every current title
+  // is machine-made ("Miami #24"), so until titles are written the caption is
+  // the frame number alone rather than a filename.
   const frameLabel = `Frame ${String(frameNumber).padStart(2, '0')}`;
-  const description = photoDescription(photo);
+  const workTitle = photoDescription(photo);
+  // What is shown is what is announced — plus the place, which the visible
+  // caption leaves to the chapter header but a screen-reader user landing on
+  // one frame would otherwise not hear.
   const place = photo.location?.city?.trim() || collectionName;
-  const factualCaption = [frameLabel, place, year ? String(year) : ''].filter(Boolean).join(' · ');
-  // What is shown is what is announced: the button's name and the image's
-  // alt follow the visible caption instead of "Photo 12 of 58, Miami #24".
-  const accessibleLabel = description ? `${frameLabel}, ${description}` : factualCaption;
+  const accessibleLabel = [frameLabel, workTitle, place].filter(Boolean).join(', ');
   // On touch devices we treat the grid as if no one is hovered: every
   // photo stays at full clarity, no blur/scale-down ever fires. We also
   // skip the hover handlers entirely so a tap → onHoverStart → flash of
@@ -331,14 +382,12 @@ function PhotoCell({
         every editorial site sampled agrees on (0.54–0.86x). No rule above or
         below the frame; the caption sits directly under the image. */}
     <figcaption className="mt-2.5 font-ui text-[12.5px] leading-snug text-white/62">
-      {description ? (
+      <span className="uppercase tracking-[0.06em] tabular-nums">{frameLabel}</span>
+      {workTitle && (
         <>
-          <span className="tabular-nums text-white/48">{String(frameNumber).padStart(2, '0')}</span>
-          <span aria-hidden="true" className="text-white/40">&nbsp;—&nbsp;</span>
-          {description}
+          <span aria-hidden="true" className="text-white/40">&nbsp;·&nbsp;</span>
+          <span>{workTitle}</span>
         </>
-      ) : (
-        <span className="uppercase tracking-[0.06em] tabular-nums">{factualCaption}</span>
       )}
     </figcaption>
     </motion.figure>
@@ -555,11 +604,6 @@ export default function MagazineLayout({
   // Folio / dispatch number for the editorial cover (1-based, zero-padded)
   const folio = String((currentIndex >= 0 ? currentIndex : 0) + 1).padStart(2, '0');
 
-  // Coords from first geotagged photo
-  const coords = useMemo(() => {
-    const p = photos.find((ph) => ph.location?.lat != null && ph.location?.lng != null);
-    return p?.location || null;
-  }, [photos]);
 
   useEffect(() => {
     setIsShared(false);
@@ -931,50 +975,6 @@ export default function MagazineLayout({
                       <span>{photos.length} Captured Frames</span>
                     </div>
 
-                    {/* Mini-map — immersive hover */}
-                    {coords && (
-                      <motion.a
-                        href={`/travel?place=${encodeURIComponent(collection.slug)}#atlas-map`}
-                        className="group block relative overflow-hidden rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
-                        whileHover={reduce ? undefined : { scale: 1.02 }}
-                        whileTap={reduce ? undefined : { scale: 0.98 }}
-                        transition={{ duration: 0.35, ease: expo }}
-                      >
-                        <div className="relative aspect-[15/8] lg:aspect-auto lg:h-28 xl:h-32 overflow-hidden rounded-xl bg-white/[0.03]">
-                          <LocationAtlas latitude={coords.lat} longitude={coords.lng} />
-                          <div className="absolute inset-0 bg-[#20241a]/18" />
-                        </div>
-
-                        <div className="absolute inset-0 flex flex-col justify-end p-4">
-                          <div className="flex items-center gap-2 mb-1.5">
-                            {/* CSS pulse (compositor) — not a framer repeat loop */}
-                            <span
-                              className="w-1.5 h-1.5 rounded-full bg-white/60 soft-pulse"
-                              style={{ ['--pulse-min' as never]: 0.4, ['--pulse-dur' as never]: '2.5s' }}
-                            />
-                            <span className="text-[9px] font-ui uppercase tracking-[0.26em] text-white/60 group-hover:text-white/88 transition-colors duration-300">
-                              {coords.lat.toFixed(4)}°N, {Math.abs(coords.lng).toFixed(4)}°{coords.lng >= 0 ? 'E' : 'W'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <MapPin size={11} className="text-white/62 group-hover:text-white/86 transition-colors duration-300" />
-                              <span className="text-[10px] uppercase tracking-[0.26em] font-bold text-white/72 group-hover:text-white/92 transition-colors duration-300">
-                                View on Map
-                              </span>
-                            </div>
-                            <motion.div
-                              className="flex items-center gap-1 text-white/56 group-hover:text-white/82 transition-colors duration-300"
-                              whileHover={reduce ? undefined : { x: 3 }}
-                            >
-                              <ArrowRight size={11} />
-                            </motion.div>
-                          </div>
-                        </div>
-
-                        <div className="absolute inset-0 rounded-xl border border-white/0 group-hover:border-white/15 transition-colors duration-300 pointer-events-none" />
-                      </motion.a>
-                    )}
                   </footer>
                 </aside>
 
@@ -1009,7 +1009,6 @@ export default function MagazineLayout({
                           index={index}
                           total={photos.length}
                           frameNumber={index + 1}
-                          year={collection.year}
                           collectionName={collection.name}
                           hoveredIndex={hoveredIndex}
                           setHoveredIndex={setHoveredIndex}
