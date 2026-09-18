@@ -82,6 +82,39 @@ button.qm-name:focus-visible {
   font-size: clamp(1.5rem, 3vw, 2.4rem);
   color: rgba(230, 233, 231, 0.12);
 }
+/* The index band's velocity layer: drift and lean ride on this inner track so
+   the scroll-position transform on .quiet-marquee-track stays untouched. */
+.quiet-marquee-loop {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+/* About prose that lights up word by word, once (LitParagraphs). The delay
+   waits for the hero's own fade-up, then walks the words at 18ms apiece. */
+.lit-word {
+  opacity: 0.3;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(0.45s + var(--i, 0) * 18ms);
+}
+.is-lit .lit-word {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lit-word {
+    opacity: 1;
+    transition: none;
+  }
+}
+/* One word of a rising chapter title. Padding gives the glyphs' overshoot room
+   inside the clip; the equal negative margin cancels it, so line boxes, word
+   spacing and the heading's drop-shadow are exactly as before. */
+.archive-title-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding: 0.1em 0.04em 0.16em;
+  margin: -0.1em -0.04em -0.16em;
+}
 /* ─── Base reset ─── */
 html {
   position: relative;

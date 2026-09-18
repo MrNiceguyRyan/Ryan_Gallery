@@ -22,12 +22,14 @@ const [rawSettings, archiveCollections] = await Promise.all([
       instagram
     }
   `)),
-  fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>>>(`
+  fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount' | 'slug' | 'coverImageUrl'>>>(`
     *[_type == "collection" && defined(year)] | order(year desc, name asc) {
       _id,
       name,
       location,
       year,
+      "slug": slug.current,
+      "coverImageUrl": coverImage.asset->url,
       "photoCount": count(*[_type == "photo" && references(^._id)])
     }
   `)),

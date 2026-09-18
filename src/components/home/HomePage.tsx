@@ -21,6 +21,7 @@ import {
 import type { Collection } from '../../types';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
+import ArchiveClosing from './ArchiveClosing';
 import MagazineLayout from './MagazineLayout';
 import type { RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
@@ -72,6 +73,10 @@ interface Props {
  *  Mid-stack on purpose: chapter 0 owns the archive entrance, whose album
  *  unfold is gated on `variant === 'cover'`. */
 const FEATURE_CHAPTER_INDEX = 3;
+// Index band velocity layer: idle drift, and the most it may lean (degrees)
+// while the page is scrolled hard. Text only — photographs never skew.
+const INDEX_DRIFT_PX_PER_MS = 0.024;
+const INDEX_MAX_LEAN = 5;
 
 const DESKTOP_LAYOUT_QUERY = '(min-width: 1024px)';
 
@@ -263,6 +268,75 @@ function QuietIndexBand({
   const handoffY = useTransform(handoffProgress, [0, 0.18, 0.42], [30, 15, 0]);
   const trackX = useTransform(handoffProgress, [0, 0.54, 1], ['3vw', '0vw', '-6vw']);
   const trackY = useTransform(handoffProgress, [0, 0.52, 1], [12, 0, -10]);
+  const runRef = useRef<HTMLDivElement>(null);
+  const loopX = useMotionValue(0);
+  const loopSkew = useMotionValue(0);
+
+  // Velocity layer (after Pelizzari's index marquee): the names idle at a slow
+  // drift and run faster, with a slight lean, while the page is scrolled hard,
+  // then relax back. Runs only while the band is on screen, reads scrollY (no
+  // layout) and writes two MotionValues — no React renders, no measurements
+  // per frame. The run width is measured by ResizeObserver, never per frame.
+  useEffect(() => {
+    loopX.set(0);
+    loopSkew.set(0);
+    if (reduce) return;
+    const root = rootRef.current;
+    const run = runRef.current;
+    if (!root || !run || typeof IntersectionObserver === 'undefined') return;
+    let runWidth = run.offsetWidth;
+    const resize = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => { runWidth = run.offsetWidth; });
+    resize?.observe(run);
+    let raf = 0;
+    let lastTime = 0;
+    let lastY = window.scrollY;
+    let velocity = 0;
+    let speed = 1;
+    let direction = 1;
+    let offset = loopX.get();
+    let skew = 0;
+    const frame = (time: number) => {
+      raf = requestAnimationFrame(frame);
+      const dt = lastTime ? Math.min(64, time - lastTime) : 16.7;
+      lastTime = time;
+      const y = window.scrollY;
+      const instant = ((y - lastY) / dt) * 1000;
+      lastY = y;
+      velocity += (instant - velocity) * (1 - Math.exp(-dt / 90));
+      if (Math.abs(instant) > 1) direction = instant > 0 ? 1 : -1;
+      const pace = Math.abs(velocity);
+      const targetSpeed = pace > 12 ? 3 + Math.min(4, pace / 800) : 1;
+      speed += (targetSpeed - speed) * (1 - Math.exp(-dt / 240));
+      offset -= direction * speed * INDEX_DRIFT_PX_PER_MS * dt;
+      if (runWidth > 0) {
+        while (offset <= -runWidth) offset += runWidth;
+        while (offset > 0) offset -= runWidth;
+      }
+      loopX.set(offset);
+      const targetSkew = Math.max(-INDEX_MAX_LEAN, Math.min(INDEX_MAX_LEAN, velocity / -300));
+      skew += (targetSkew - skew) * (1 - Math.exp(-dt / 160));
+      loopSkew.set(Math.abs(skew) < 0.005 ? 0 : skew);
+    };
+    const visibility = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        if (raf) return;
+        lastTime = 0;
+        lastY = window.scrollY;
+        raf = requestAnimationFrame(frame);
+      } else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+    });
+    visibility.observe(root);
+    return () => {
+      visibility.disconnect();
+      resize?.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [loopSkew, loopX, reduce]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -279,7 +353,7 @@ function QuietIndexBand({
   // echo stays mouse-clickable so a name is never inert just because the
   // visitor happened to click the second copy of it.
   const run = (key: string, echo: boolean) => (
-    <div className="flex shrink-0" aria-hidden={echo || undefined} key={key}>
+    <div ref={echo ? undefined : runRef} className="flex shrink-0" aria-hidden={echo || undefined} key={key}>
       {names.map((n, i) => (
         <span key={i} className="flex items-baseline">
           {n.id ? (
@@ -316,8 +390,16 @@ function QuietIndexBand({
         className="quiet-marquee-track relative"
         style={reduce ? undefined : { x: trackX, y: trackY }}
       >
-        {run('a', false)}
-        {run('b', true)}
+        {/* Three copies: the velocity layer wraps by one run width, and the
+            remaining two must still span a wide desktop viewport. */}
+        <motion.div
+          className="quiet-marquee-loop"
+          style={reduce ? undefined : { x: loopX, skewX: loopSkew }}
+        >
+          {run('a', false)}
+          {run('b', true)}
+          {run('c', true)}
+        </motion.div>
       </motion.div>
     </motion.nav>
   );
@@ -656,6 +738,21 @@ export default function HomePage({ collections }: Props) {
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
+  // Closing-page figures, derived from the archive itself. Some chapters store
+  // their year as a string, so parse rather than trust the type.
+  const archiveFrameTotal = useMemo(
+    () => orderedCities.reduce((sum, city) => sum + (city.photoCount ?? city.photos?.length ?? 0), 0),
+    [orderedCities],
+  );
+  const archiveYearSpan = useMemo(() => {
+    const years = orderedCities
+      .map((city) => Number(city.year))
+      .filter((year) => Number.isFinite(year) && year > 0);
+    if (!years.length) return '';
+    const first = Math.min(...years);
+    const last = Math.max(...years);
+    return first === last ? String(first) : `${first}–${last}`;
+  }, [orderedCities]);
   const orderedChapterIds = useMemo(
     () => orderedCities.map((city) => city._id),
     [orderedCities],
@@ -1412,6 +1509,7 @@ export default function HomePage({ collections }: Props) {
                                      album unfold that carries the archive
                                      entrance only applies to `cover`. */
                                   variant={index === FEATURE_CHAPTER_INDEX ? 'feature' : 'cover'}
+                                  desktopMotion
                                 />
                               );
                             })}
@@ -1478,7 +1576,17 @@ export default function HomePage({ collections }: Props) {
           )}
         </main>
 
-        {/* ── Archive end-cap — the page's closing punctuation ── */}
+        {/* ── Archive end-cap — the page's closing punctuation. Desktop: the
+             last chapter lifts off a closing page; compact screens keep the
+             quiet line. ── */}
+        {desktopLayout ? (
+          <ArchiveClosing
+            chapters={orderedCities.length}
+            frames={archiveFrameTotal}
+            years={archiveYearSpan}
+            onBackToIndex={() => document.getElementById('archive-index')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })}
+          />
+        ) : (
         <div className="flex flex-col items-center gap-4 pb-16 pt-8 text-center opacity-70">
           <div
             className="h-1 w-1 rounded-full"
@@ -1495,6 +1603,7 @@ export default function HomePage({ collections }: Props) {
             Back to index ↑
           </button>
         </div>
+        )}
 
       </div>
 

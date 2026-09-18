@@ -1,4 +1,5 @@
 import {
+  Fragment,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
@@ -12,6 +13,7 @@ import {
   useMotionValue,
   useSpring,
   useReducedMotion,
+  type MotionStyle,
   type MotionValue,
 } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
@@ -54,7 +56,24 @@ interface ArchiveChapterProps {
   /** 'cover' (default) = full-bleed magazine cover; 'feature' = a 2-column
    *  editorial spread (image + a text rail) used for the opening chapter. */
   variant?: 'feature' | 'cover';
+  /** Desktop archive only: the scroll-owned cover reveal, the masked title
+   *  rise and the focus-driven title weight. The mobile route story keeps its
+   *  own quieter treatment. */
+  desktopMotion?: boolean;
 }
+
+// Fraunces is served as a variable font (wght 400–900). The title thickens as
+// its chapter takes focus and thins again as it leaves — the weight follows the
+// same shared chapter timeline as the photograph's matte and scale.
+const TITLE_WEIGHT_REST = 400;
+const TITLE_WEIGHT_FOCUS = 640;
+// A chapter's title rises once, the first time the timeline comes this close.
+const TITLE_RISE_DISTANCE = 0.62;
+// Film pulled out of its canister: the frame is cropped open from the bottom
+// edge while the photograph inside settles from a slight overscan. Pure crop
+// and uniform scale — the picture itself is never warped.
+const COVER_REVEAL_RANGE = [0.03, 0.3] as const;
+const COVER_REVEAL_OVERSCAN = 1.2;
 
 // Match RouteAtlas's quintic smootherstep exactly. The photograph's focus,
 // matte and copy now accelerate and settle on the same curve as the map halo,
@@ -87,6 +106,7 @@ export default function ArchiveChapter({
   prioritizeImage = false,
   onEngagementChange,
   variant = 'cover',
+  desktopMotion = false,
 }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -258,6 +278,45 @@ export default function ArchiveChapter({
   // Keep the existing vertical arrival and internal parallax. Scale now belongs
   // to the shared chapter focus, avoiding a second competing zoom timeline.
   const entryY = useTransform(scrollYProgress, [0, 0.38], [52, 0], { clamp: true });
+  // Covers after the first open by crop instead of the 52px fade-up. The first
+  // cover keeps its album unfold, which already owns the archive entrance.
+  const coverReveal = desktopMotion && !handoffProgress && !reduce;
+  const revealOpen = useTransform(scrollYProgress, (progress) => {
+    if (!coverReveal) return 1;
+    const [start, end] = COVER_REVEAL_RANGE;
+    const value = Math.max(0, Math.min(1, (progress - start) / (end - start)));
+    return 1 - Math.pow(1 - value, 3);
+  });
+  const revealClip = useTransform(revealOpen, (open) =>
+    open >= 1 ? 'inset(0% 0% 0% 0%)' : `inset(${((1 - open) * 100).toFixed(3)}% 0% 0% 0%)`,
+  );
+  const mediaScale = useTransform([focusScale, revealOpen], ([focus, open]) =>
+    Number(focus) * (1 + (COVER_REVEAL_OVERSCAN - 1) * (1 - Number(open))),
+  );
+  const titleWeight = useTransform(chapterDelta, (delta) => {
+    if (!desktopMotion || reduce) return TITLE_WEIGHT_REST;
+    const focus = 1 - smoothFocus(Math.abs(delta));
+    return Math.round(TITLE_WEIGHT_REST + (TITLE_WEIGHT_FOCUS - TITLE_WEIGHT_REST) * focus);
+  });
+  // The masked rise plays once per visit, the first time this chapter nears
+  // focus. The first cover is excluded: its type already arrives on the
+  // entrance score (titleArrival).
+  const titleRiseEnabled = desktopMotion && !handoffProgress && !reduce;
+  const [titleRisen, setTitleRisen] = useState(!titleRiseEnabled);
+  useEffect(() => {
+    if (!titleRiseEnabled) {
+      setTitleRisen(true);
+      return;
+    }
+    if (titleRisen) return;
+    if (Math.abs(chapterDelta.get()) < TITLE_RISE_DISTANCE) {
+      setTitleRisen(true);
+      return;
+    }
+    return chapterDelta.on('change', (delta) => {
+      if (Math.abs(delta) < TITLE_RISE_DISTANCE) setTitleRisen(true);
+    });
+  }, [chapterDelta, titleRiseEnabled, titleRisen]);
   const albumOpen = useTransform(resolvedHandoffProgress, (progress) => {
     if (reduce || !handoffProgress) return 1;
     return entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.film);
@@ -292,11 +351,32 @@ export default function ArchiveChapter({
     ([timeline, pointer, open]) => Number(timeline) + Number(pointer) + Number(open),
   );
 
-  // Keyword-ignite (last word lights to lime on scroll-in) stays.
+  // Keyword-ignite (the feature title's last word lights to lime on scroll-in) stays.
   const igniteColor = useTransform(scrollYProgress, [0.3, 0.52], ['rgba(244,244,237,1)', 'rgb(210,255,0)']);
   const nameParts = collection.name.trim().split(/\s+/);
-  const igniteWord = nameParts.length > 1 ? nameParts[nameParts.length - 1] : collection.name.trim();
-  const leadWords = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : '';
+  // Each word rises inside its own mask, a line at a time — words are never
+  // split into letters, so screen readers still hear whole words. The mask's
+  // padding is cancelled by an equal negative margin, leaving layout and the
+  // h3's drop-shadow (drawn from the composited heading) untouched.
+  const risingWords = (words: string[], wordStyle?: (word: string, index: number) => MotionStyle | undefined) =>
+    words.map((word, wordIndex) => (
+      <Fragment key={`${word}-${wordIndex}`}>
+        {wordIndex > 0 && ' '}
+        <span className="archive-title-mask">
+          <motion.span
+            className="inline-block"
+            initial={false}
+            animate={{ y: titleRisen ? '0%' : '118%' }}
+            transition={titleRisen
+              ? { duration: 0.8, delay: wordIndex * 0.08, ease: expo }
+              : { duration: 0 }}
+            style={wordStyle?.(word, wordIndex)}
+          >
+            {word}
+          </motion.span>
+        </span>
+      </Fragment>
+    ));
 
   const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
@@ -361,16 +441,16 @@ export default function ArchiveChapter({
         opacity: albumOpen,
         scale: albumScale,
         rotateX: albumRotateX,
-        clipPath: handoffProgress ? albumClip : undefined,
+        clipPath: handoffProgress ? albumClip : coverReveal ? revealClip : undefined,
         transformPerspective: 1600,
         transformOrigin: '50% 100%',
-      } : undefined}
+      } : coverReveal ? { clipPath: revealClip } : undefined}
       className={`archive-photo-frame relative ${aspectClass} overflow-hidden ${variant === 'cover' ? 'archive-film' : ''}`}
     >
       <div className={`absolute inset-0 ${variant === 'cover' ? 'archive-film__media' : ''}`}>
         {/* Shared focus layer — exact centre at 1; adjacent/far chapters top out
             at a restrained 1.035. No blur is used for the depth cue. */}
-        <motion.div className="absolute inset-0" style={{ scale: focusScale }}>
+        <motion.div className="absolute inset-0" style={{ scale: mediaScale }}>
           <motion.div
             className={`absolute inset-0 ${variant === 'cover' ? 'archive-film__image-plane' : ''}`}
             style={{ x: pointerX, y: pointerY, scale: hoverScale }}
@@ -496,7 +576,7 @@ export default function ArchiveChapter({
         data-archive-chapter="true"
         data-chapter-index={resolvedChapterIndex}
         data-active={isActive ? 'true' : 'false'}
-        style={{ opacity: reduce ? 1 : opacity, y: reduce ? 0 : entryY }}
+        style={{ opacity: reduce ? 1 : opacity, y: reduce || coverReveal ? 0 : entryY }}
         className="relative pb-12 lg:pb-20"
       >
         <motion.div
@@ -513,10 +593,16 @@ export default function ArchiveChapter({
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
               In&nbsp;the&nbsp;Archive · Nº&nbsp;{String(index + 1).padStart(2, '0')}
             </p>
-            <h3 className="font-serif uppercase text-white tracking-tight leading-[0.88]" style={{ fontSize: 'clamp(40px, 5vw, 84px)' }}>
-              {leadWords && <>{leadWords} </>}
-              <motion.span style={{ color: reduce ? 'rgb(210,255,0)' : igniteColor }}>{igniteWord}</motion.span>
-            </h3>
+            <motion.h3
+              className="font-serif uppercase text-white tracking-tight leading-[0.88]"
+              style={{ fontSize: 'clamp(40px, 5vw, 84px)', fontWeight: titleWeight }}
+            >
+              {risingWords(nameParts, (_word, wordIndex) =>
+                wordIndex === nameParts.length - 1
+                  ? { color: reduce ? 'rgb(210,255,0)' : igniteColor }
+                  : undefined,
+              )}
+            </motion.h3>
             {deck && <p className="text-deck max-w-[32ch]">{deck}</p>}
             {lede && <p className="text-[13.5px] leading-relaxed text-white/62 font-light max-w-[42ch]">{lede}</p>}
             <div className="h-px w-16" style={{ background: ACCENT }} />
@@ -542,7 +628,7 @@ export default function ArchiveChapter({
       data-active={isActive ? 'true' : 'false'}
       style={{
         opacity: reduce ? 1 : opacity,
-        y: reduce ? 0 : entryY,
+        y: reduce || coverReveal ? 0 : entryY,
       }}
       className="relative overflow-visible pb-12 lg:pb-16"
     >
@@ -594,9 +680,9 @@ export default function ArchiveChapter({
           >
             <motion.h3
               className="archive-cover-title font-serif uppercase leading-[0.78] tracking-[-0.05em] text-[#F4F4ED] drop-shadow-[0_5px_36px_rgba(8,10,7,0.62)]"
-              style={{ fontSize: coverTitleSize, wordSpacing: '0.12em', y: coverTitleY }}
+              style={{ fontSize: coverTitleSize, wordSpacing: '0.12em', y: coverTitleY, fontWeight: titleWeight }}
             >
-              {collection.name}
+              {desktopMotion ? risingWords(nameParts) : collection.name}
             </motion.h3>
           </motion.div>
         </div>

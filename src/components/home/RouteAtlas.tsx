@@ -160,6 +160,69 @@ const smootherstep = (progress: number) =>
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
+// ── Globe opening (after 11 mois sans toi(t)) ──
+// The desktop archive entrance starts on a whole globe over the Pacific, turns
+// it to North America, then dives into the first chapter. Mapbox's globe is
+// pure Mercator from zoom 6 up, so the dive overshoots to GLOBE_HANDOFF_ZOOM,
+// swaps the projection there — where both render identically — and settles
+// back to the chapter camera. Scroll-owned and reversible like the rest of the
+// entrance; reduced motion keeps the flat Mercator entrance.
+const GLOBE_START_ZOOM = 1.9;
+const GLOBE_TURN_DEGREES = 108;
+const GLOBE_START_LATITUDE = 21;
+// The globe runs on the raw entrance score rather than the flat camera's
+// eased phase: that phase spends its first half while the map is still fading
+// in, which would hide the turn. Inside the window below, the shares are:
+// turning, diving to the handoff zoom, and settling back out in Mercator.
+const GLOBE_ENTRY_WINDOW = [0.06, 0.92] as const;
+const GLOBE_TURN_END = 0.5;
+const GLOBE_DIVE_START = 0.32;
+const GLOBE_HANDOFF_AT = 0.84;
+const GLOBE_HANDOFF_ZOOM = 6.05;
+const GLOBE_FOG = {
+  range: [9, 20] as [number, number],
+  color: '#1B2319',
+  'high-color': '#3b4330',
+  'space-color': '#282c20',
+  'horizon-blend': 0.09,
+  'star-intensity': 0,
+};
+
+function globeEntryProgress(entry: number) {
+  const [start, end] = GLOBE_ENTRY_WINDOW;
+  return clamp01((entry - start) / (end - start));
+}
+
+function globeStartCenter(target: GeoCoordinate): GeoCoordinate {
+  return [target[0] - GLOBE_TURN_DEGREES, GLOBE_START_LATITUDE];
+}
+
+function globeEntryPose(
+  target: { coordinate: GeoCoordinate; zoom: number; pitch: number; bearing: number },
+  progress: number,
+) {
+  const turn = smootherstep(clamp01(progress / GLOBE_TURN_END));
+  const start = globeStartCenter(target.coordinate);
+  const center: GeoCoordinate = [
+    start[0] + (target.coordinate[0] - start[0]) * turn,
+    start[1] + (target.coordinate[1] - start[1]) * turn,
+  ];
+  const turningZoom = GLOBE_START_ZOOM + 0.5 * turn;
+  const dive = clamp01((progress - GLOBE_DIVE_START) / (GLOBE_HANDOFF_AT - GLOBE_DIVE_START));
+  const diveEase = dive * dive * (3 - 2 * dive);
+  const settle = smootherstep(clamp01((progress - GLOBE_HANDOFF_AT) / (1 - GLOBE_HANDOFF_AT)));
+  const divedZoom = turningZoom + (GLOBE_HANDOFF_ZOOM - turningZoom) * diveEase;
+  const zoom = divedZoom + (target.zoom - divedZoom) * settle;
+  const pose = diveEase * 0.72 + settle * 0.28;
+  return {
+    center,
+    zoom,
+    pitch: target.pitch * pose,
+    bearing: target.bearing * pose,
+    globe: progress < GLOBE_HANDOFF_AT,
+  };
+}
+
 function isValidCoordinate(coordinates: unknown): coordinates is GeoCoordinate {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
   const [longitude, latitude] = coordinates;
@@ -733,6 +796,7 @@ export default function RouteAtlas({
   const resolvedIndex = activeIndex >= 0 && activeIndex < stops.length ? activeIndex : -1;
   const living = presentation === 'living';
   const classicEntrance = !living && !mobile && !!entryProgress;
+  const classicGlobe = classicEntrance && !reducedMotion;
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapSettled, setMapSettled] = useState(false);
   const [mapCameraSynced, setMapCameraSynced] = useState(false);
@@ -1042,6 +1106,8 @@ export default function RouteAtlas({
     let lastPitch = Number.NaN;
     let lastBearing = Number.NaN;
     let lastRouteProgress = Number.NaN;
+    // Mirrors the live projection; starts on the globe when the opening does.
+    let onGlobe = classicGlobe && map.getProjection?.()?.name === 'globe';
     const activePadding = { top: 48, right: 264, bottom: 0, left: 0 };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -1049,9 +1115,11 @@ export default function RouteAtlas({
       if (disposed) return;
       classicMapFrameRef.current = null;
       const sample = queuedSample;
+      // The globe opening owns the camera from the very first entry frame; the
+      // flat entrance waits for the map to be a little way in.
       const focused = !!sample && (
         !!activeStopRef.current ||
-        (!!entryProgress && queuedEntry > 0.02)
+        (!!entryProgress && (queuedEntry > 0.02 || classicGlobe))
       );
 
       // Padding defines the permanent editorial focal point; applying it only
@@ -1076,20 +1144,32 @@ export default function RouteAtlas({
           : 1;
         const entryOverview: GeoCoordinate = [-100.2, 38.6];
         const entryOverviewZoom = 2.32;
-        const entryCoordinate = entryProgress
+        let entryCoordinate = entryProgress
           ? greatCirclePoint(
               entryOverview,
               sample.coordinate,
               entryCameraProgress,
             )
           : sample.coordinate;
-        const entryZoom = entryProgress
+        let entryZoom = entryProgress
           ? entryOverviewZoom + (sample.zoom - entryOverviewZoom) * entryCameraProgress
           : sample.zoom;
         const entryPoseProgress = classicEntrance ? entryCameraProgress : smootherstep(entryCameraProgress);
-        const entryPitch = sample.pitch * entryPoseProgress;
-        const entryBearing = US_OVERVIEW.bearing +
+        let entryPitch = sample.pitch * entryPoseProgress;
+        let entryBearing = US_OVERVIEW.bearing +
           (sample.bearing - US_OVERVIEW.bearing) * entryPoseProgress;
+        if (classicGlobe) {
+          const globePose = globeEntryPose(sample, globeEntryProgress(queuedEntry));
+          entryCoordinate = globePose.center;
+          entryZoom = globePose.zoom;
+          entryPitch = globePose.pitch;
+          entryBearing = globePose.bearing;
+          if (globePose.globe !== onGlobe) {
+            onGlobe = globePose.globe;
+            map.setProjection(onGlobe ? 'globe' : 'mercator');
+            map.setFog(onGlobe ? GLOBE_FOG : null);
+          }
+        }
         const atChapterEndpoint = sample.easedProgress <= 0.000001 || sample.easedProgress >= 0.999999;
         const lastScreenPoint = lastCoordinate ? map.project(lastCoordinate) : null;
         const nextScreenPoint = map.project(entryCoordinate);
@@ -1176,7 +1256,7 @@ export default function RouteAtlas({
       cancelFrame(draw);
       if (classicMapFrameRef.current === draw) classicMapFrameRef.current = null;
     };
-  }, [atlasEngaged, chapterSample, classicEntrance, entryProgress, layoutRevision, living, mapLoaded, paused, sampledEntryProgress]);
+  }, [atlasEngaged, chapterSample, classicEntrance, classicGlobe, entryProgress, layoutRevision, living, mapLoaded, paused, sampledEntryProgress]);
 
   const mapReadiness = {
     loaded: mapLoaded,
@@ -1436,14 +1516,22 @@ export default function RouteAtlas({
             ref={mapRef}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLE}
-            projection={{ name: 'mercator' }}
+            projection={{ name: classicGlobe ? 'globe' : 'mercator' }}
             initialViewState={living
               ? mobile
                 ? { ...LIVING_OVERVIEW, zoom: 2.35, latitude: 37.5 }
                 : LIVING_OVERVIEW
               : mobile
                 ? { ...US_OVERVIEW, zoom: 2.3, pitch: 0 }
-                : { ...US_OVERVIEW, zoom: 3 }}
+                : classicGlobe && chapterRoute[0]
+                  ? {
+                      longitude: globeStartCenter(chapterRoute[0].stop.coordinates)[0],
+                      latitude: GLOBE_START_LATITUDE,
+                      zoom: GLOBE_START_ZOOM,
+                      bearing: 0,
+                      pitch: 0,
+                    }
+                  : { ...US_OVERVIEW, zoom: 3 }}
             style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
             attributionControl
             trackResize={false}
@@ -1457,7 +1545,7 @@ export default function RouteAtlas({
             doubleClickZoom={false}
             boxZoom={false}
             keyboard={false}
-            minZoom={2.2}
+            minZoom={classicGlobe ? 1.2 : 2.2}
             maxZoom={11}
             onIdle={() => setMapSettled(true)}
             onLoad={() => {
@@ -1476,7 +1564,7 @@ export default function RouteAtlas({
           // Classic depth comes from the scroll-owned oblique camera, with no
           // terrain startup cost or extra animation competing with the photos.
           map.setTerrain(null);
-          map.setFog(null);
+          map.setFog(classicGlobe && map.getProjection?.()?.name === 'globe' ? GLOBE_FOG : null);
 
           map.getStyle().layers?.forEach((layer) => {
             const id = layer.id.toLowerCase();
