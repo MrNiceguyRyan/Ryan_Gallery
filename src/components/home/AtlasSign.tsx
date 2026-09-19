@@ -442,6 +442,41 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   );
 });
 
+/** The small cover the prologue pins to a place on the globe. */
+export const prologueCardSrc = (base: string) => `${base}?auto=format&w=320&q=75`;
+
+/**
+ * PrologueCard — while a name in the prologue index is pointed at, that
+ * chapter's cover hangs off its point on the globe by a short leader line,
+ * captioned with its number, name and state. It grows from the point and
+ * shrinks back into it.
+ */
+export function PrologueCard({ number, name, region, imageUrl, reducedMotion }: {
+  number: number;
+  name: string;
+  region?: string;
+  imageUrl: string;
+  reducedMotion: boolean;
+}) {
+  return (
+    <motion.span
+      aria-hidden="true"
+      className="prologue-card"
+      style={{ originX: 0, originY: 1 }}
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ duration: reducedMotion ? 0 : 0.36, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <span className="prologue-card__lead" />
+      {imageUrl && <img src={prologueCardSrc(imageUrl)} alt="" decoding="async" />}
+      <span className="prologue-card__caption">
+        {pad2(number)} · {name}{region ? ` · ${region}` : ''}
+      </span>
+    </motion.span>
+  );
+}
+
 /**
  * Every other place on the map carries an inactive AF point: a small hollow
  * square with its chapter number. At the current place the square collapses

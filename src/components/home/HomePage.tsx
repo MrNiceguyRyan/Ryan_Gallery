@@ -674,6 +674,7 @@ export default function HomePage({ collections }: Props) {
               slug: city.slug,
               coordinates,
               imageUrl,
+              coverImageUrl: city.coverImageUrl || city.photos?.[0]?.imageUrl || undefined,
               frameCount: city.photoCount ?? city.photos?.length ?? 0,
               year: city.year,
               region: city.region?.trim() || undefined,
@@ -709,7 +710,19 @@ export default function HomePage({ collections }: Props) {
   // previews no place without a story. Each entry carries its chapter anchor
   // plus the collection id the globe uses to light the stop.
   const prologueCities = useMemo(
-    () => orderedCities.map((city) => ({ name: city.name.trim(), id: cityDomId(city), chapterId: city._id })),
+    () => orderedCities.map((city) => {
+      const name = city.name.trim();
+      const region = (city.region ?? city.location)?.trim();
+      return {
+        name,
+        id: cityDomId(city),
+        chapterId: city._id,
+        // A state that only repeats the city (New York, New York) is left off.
+        region: region && region.toLowerCase() !== name.toLowerCase() ? region : undefined,
+        frames: city.photoCount ?? city.photos?.length ?? 0,
+        year: city.year ?? undefined,
+      };
+    }),
     [orderedCities],
   );
 

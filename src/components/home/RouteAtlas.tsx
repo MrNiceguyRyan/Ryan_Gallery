@@ -15,7 +15,7 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AfPoint, AtlasViewfinder, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
+import { AfPoint, AtlasViewfinder, PrologueCard, prologueCardSrc, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -31,6 +31,8 @@ export interface RouteStop {
   slug: string;
   coordinates: [number, number];
   imageUrl: string;
+  /** The chapter's cover (portrait); `imageUrl` prefers a landscape frame. */
+  coverImageUrl?: string;
   frameCount: number;
   year?: number | string;
   locationLabel?: string;
@@ -335,6 +337,25 @@ const PROLOGUE_GLOBE = {
   // the dive always start from the exact scroll-owned pose.
   lifeFade: [0.28, 0.5] as [number, number],
 } as const;
+// The map canvas bleeds this far past the atlas column on every side
+// (`-inset-8`), and the atlas focal point is the centre of the canvas once
+// this padding is taken off its top and right.
+const CANVAS_BLEED = 32;
+const FOCAL_PADDING = { top: 48, right: 264 } as const;
+// How big the globe looks on screen. Its limb radius is not simply
+// proportional to 2^zoom: Mapbox draws it in perspective, so
+//   r = k · R · D / (D + R),  R = radiusAtZoom0 · 2^zoom,  D = depth · canvas height
+// (fitted against measured limbs at three canvas sizes; within 0.3%). The
+// index step inverts this to make the planet exactly fill the space beside
+// the index column.
+const PLANET_FIT = { radiusAtZoom0: 81.277, k: 1.428, depth: 1.0228, minZoom: 1.2, maxZoom: 2.6 };
+const PLANET_MARGIN = 48;
+function planetZoomFor(limbRadius: number, canvasHeight: number) {
+  const depth = PLANET_FIT.depth * canvasHeight;
+  const radius = (limbRadius * depth) / (PLANET_FIT.k * depth - limbRadius);
+  if (!(radius > 0)) return PLANET_FIT.minZoom;
+  return Math.min(PLANET_FIT.maxZoom, Math.max(PLANET_FIT.minZoom, Math.log2(radius / PLANET_FIT.radiusAtZoom0)));
+}
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // After the dive the photography does not vanish: it stays under the graded
 // atlas at this strength, so chapters keep a little real ground.
@@ -876,11 +897,17 @@ export default function RouteAtlas({
   const classicEntrance = !living && !mobile && !!entryProgress;
   const classicGlobe = classicEntrance && !reducedMotion;
   const prologue = classicGlobe && !!prologueProgress;
-  const globeMode: GlobeMode = prologue ? PROLOGUE_GLOBE : FLAT_ENTRY_GLOBE;
   // How far past the atlas column's right edge the map canvas reaches. During
   // the prologue the globe sits in the viewport's bottom-right corner, over the
   // (still empty) cover column; afterwards that strip is masked back to page.
   const [canvasExtension, setCanvasExtension] = useState(0);
+  // Zoom at which the prologue globe is a whole planet beside the index; the
+  // glide lands on it and the entrance dives from it.
+  const [planetZoom, setPlanetZoom] = useState<number>(PROLOGUE_GLOBE.startZoom);
+  const globeMode = useMemo<GlobeMode>(
+    () => (prologue ? { ...PROLOGUE_GLOBE, startZoom: planetZoom } : FLAT_ENTRY_GLOBE),
+    [planetZoom, prologue],
+  );
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapSettled, setMapSettled] = useState(false);
   const [mapCameraSynced, setMapCameraSynced] = useState(false);
@@ -1038,6 +1065,20 @@ export default function RouteAtlas({
 
   const fullRouteCoordinates = useMemo(() => routeCoordinates(mappedStops), [mappedStops]);
   const fullRoute = useMemo(() => lineFeature(fullRouteCoordinates), [fullRouteCoordinates]);
+  // The index hover: that place's cover, pinned to its point on the globe.
+  const engagedEntry = prologue && engagedChapterId
+    ? chapterRoute.find((entry) => entry.stop.id === engagedChapterId)
+    : undefined;
+  useEffect(() => {
+    if (!prologue || !mapLoaded) return;
+    // Warm the six small covers so the first hover shows a picture, not a load.
+    mappedStops.forEach((stop) => {
+      const base = stop.coverImageUrl || stop.imageUrl;
+      if (!base) return;
+      const image = new Image();
+      image.src = prologueCardSrc(base);
+    });
+  }, [mapLoaded, mappedStops, prologue]);
   const prologueStops = useMemo(() => ({
     type: 'FeatureCollection' as const,
     features: mappedStops.map((stop) => ({
@@ -1171,8 +1212,26 @@ export default function RouteAtlas({
     }
     const atlas = routeAtlasRef.current;
     if (!atlas) return;
-    const extension = Math.max(0, Math.round(document.documentElement.clientWidth - atlas.getBoundingClientRect().right));
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight;
+    const rect = atlas.getBoundingClientRect();
+    const extension = Math.max(0, Math.round(viewportWidth - rect.right));
     setCanvasExtension((current) => (current === extension ? current : extension));
+    // Size the index-step planet: a whole disc on the focal point, as large
+    // as the left margin, the index column and the viewport's top and bottom
+    // allow. The index nav sits to the right (GlobePrologue's #archive-index).
+    const canvasHeight = rect.height + 2 * CANVAS_BLEED;
+    const focalX = rect.left - CANVAS_BLEED + (rect.width + 2 * CANVAS_BLEED - FOCAL_PADDING.right) / 2;
+    const focalY = rect.top - CANVAS_BLEED + FOCAL_PADDING.top + (canvasHeight - FOCAL_PADDING.top) / 2;
+    const indexLeft = document.getElementById('archive-index')?.getBoundingClientRect().left ?? viewportWidth * 0.56;
+    const limb = Math.min(
+      indexLeft - PLANET_MARGIN - focalX,
+      focalX - PLANET_MARGIN,
+      focalY - 2 * PLANET_MARGIN,
+      viewportHeight - PLANET_MARGIN - focalY,
+    );
+    const zoom = planetZoomFor(limb, canvasHeight);
+    setPlanetZoom((current) => (Math.abs(current - zoom) < 0.002 ? current : zoom));
   }, [layoutRevision, prologue, viewportReady]);
 
   // Mapbox is the heaviest homepage dependency. HomePage first imports this
@@ -1325,7 +1384,7 @@ export default function RouteAtlas({
     // The canvas reaches past the atlas column by `canvasExtension`; widening
     // the right padding by the same amount keeps every chapter's focal point
     // exactly where it was before the canvas grew.
-    const activePadding = { top: 48, right: 264 + (prologue ? canvasExtension : 0), bottom: 0, left: 0 };
+    const activePadding = { top: FOCAL_PADDING.top, right: FOCAL_PADDING.right + (prologue ? canvasExtension : 0), bottom: 0, left: 0 };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
     // Measured once per layout (this effect re-runs on layoutRevision), never
     // per frame: the canvas box in viewport pixels, for placing the prologue
@@ -1679,7 +1738,7 @@ export default function RouteAtlas({
         // The corner globe keeps its share of the screen on wider displays
         // (radius doubles per zoom level), then settles to the entrance pose.
         const cornerZoom = PROLOGUE_GLOBE.zoom + Math.log2(Math.max(0.75, viewportWidth / 1440));
-        const zoom = cornerZoom + (PROLOGUE_GLOBE.startZoom - cornerZoom) * glide -
+        const zoom = cornerZoom + (globeMode.startZoom - cornerZoom) * glide -
           PROLOGUE_GLOBE.introZoom * intro;
         if (!onGlobe) {
           onGlobe = true;
@@ -2511,6 +2570,26 @@ export default function RouteAtlas({
             />
           </Source>
         )}
+
+        <AnimatePresence>
+          {engagedEntry && (
+            <Marker
+              key={`card-${engagedEntry.stop.id}`}
+              longitude={engagedEntry.stop.coordinates[0]}
+              latitude={engagedEntry.stop.coordinates[1]}
+              anchor="bottom-left"
+              offset={[26, -22]}
+            >
+              <PrologueCard
+                number={engagedEntry.chapterIndex + 1}
+                name={engagedEntry.stop.name}
+                region={engagedEntry.stop.region}
+                imageUrl={engagedEntry.stop.coverImageUrl || engagedEntry.stop.imageUrl}
+                reducedMotion={reducedMotion}
+              />
+            </Marker>
+          )}
+        </AnimatePresence>
 
         {/* AF points: upright to the camera, centred on each place. The current
             place's square collapses to a white focus point in the viewfinder's

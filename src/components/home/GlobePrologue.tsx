@@ -10,7 +10,13 @@ interface PrologueCity {
   id: string;
   /** Collection id — the stop the globe lights while the name is pointed at. */
   chapterId: string;
+  /** State or region, when it says more than the name. */
+  region?: string;
+  frames: number;
+  year?: number | string;
 }
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
 
 interface Props {
   chapters: number;
@@ -138,6 +144,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
       </div>
 
       {/* ── 3 · Index — the sides swap: names right, globe gliding left ── */}
+      {/* RouteAtlas measures this nav's left edge to size the globe beside it. */}
       <nav
         ref={indexRef}
         id="archive-index"
@@ -166,7 +173,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
                   onBlur={() => onHighlight?.(null)}
                   data-cursor="Go to chapter"
                   aria-label={`Go to chapter ${index + 1}: ${city.name}`}
-                  className="prologue-index-row group flex w-full items-baseline gap-6 whitespace-nowrap py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+                  className="prologue-index-row group flex w-full flex-wrap items-baseline gap-x-6 whitespace-nowrap pb-[13px] pt-[11px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
                   initial={false}
                   animate={{ y: reduce || indexShown ? '0%' : '105%' }}
                   transition={reduce || !indexShown ? { duration: 0 } : { duration: 0.85, delay: 0.08 + index * 0.07, ease: expo }}
@@ -175,19 +182,38 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
                     {String(index + 1).padStart(2, '0')}
                   </span>
                   <span
-                    className="font-serif uppercase leading-[0.9] tracking-[-0.03em] text-[#F4F4ED] transition-colors duration-300 group-hover:text-[#D2FF00] group-focus-visible:text-[#D2FF00]"
-                    style={{ fontSize: 'clamp(36px, 3.9vw, 72px)' }}
+                    className="font-serif uppercase leading-[0.86] tracking-[-0.03em] text-[#F4F4ED] transition-colors duration-300 group-hover:text-[#D2FF00] group-focus-visible:text-[#D2FF00]"
+                    style={{ fontSize: 'clamp(36px, 4vw, 72px)' }}
                   >
                     {city.name}
                   </span>
                   <span aria-hidden="true" className="ml-auto font-ui text-[12px] text-white/0 transition-colors duration-300 group-hover:text-[#D2FF00]">
                     →
                   </span>
+                  {/* The entry's figures, set under the name like an index line. */}
+                  <span className="mt-[7px] flex basis-full items-baseline gap-[14px] pl-14 font-ui text-[11px] uppercase tracking-[0.08em] text-white/42 tabular-nums transition-colors duration-300 group-hover:text-white/70 group-focus-visible:text-white/70">
+                    {city.region && <span>{city.region}</span>}
+                    <span className="font-medium text-white/62 transition-colors duration-300 group-hover:text-[#D2FF00] group-focus-visible:text-[#D2FF00]">
+                      {pad2(city.frames)} frames
+                    </span>
+                    {city.year != null && <span>{city.year}</span>}
+                  </span>
                 </motion.button>
               </li>
             </Fragment>
           ))}
         </ol>
+        {/* Scrolling on dives the globe into the first chapter. */}
+        <motion.p
+          aria-hidden="true"
+          className="mt-7 flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
+          initial={false}
+          animate={{ opacity: indexShown ? 1 : 0, y: reduce || indexShown ? 0 : 8 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.7, delay: indexShown ? 0.2 + cities.length * 0.07 : 0, ease: expo }}
+        >
+          <span className="block h-7 w-px bg-gradient-to-b from-white/0 to-[#D2FF00]" />
+          <span>Scroll to enter{cities[0] ? ` · 01 ${cities[0].name}` : ''}</span>
+        </motion.p>
       </nav>
     </div>
   );

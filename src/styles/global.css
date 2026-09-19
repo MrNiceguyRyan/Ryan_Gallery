@@ -243,6 +243,53 @@ html.lenis body {
   .af-point__mark.is-current .af-point__focus { transition: none; }
 }
 
+/* The prologue index's cover card, hung off a place on the globe. */
+.prologue-card {
+  position: relative;
+  display: block;
+  width: 132px;
+  aspect-ratio: 4 / 5;
+  pointer-events: none;
+  outline: 1px solid rgba(244, 244, 237, 0.16);
+  box-shadow: 0 24px 50px -18px rgba(0, 0, 0, 0.75);
+  background: #151a12;
+}
+.prologue-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.92);
+}
+.prologue-card__lead {
+  position: absolute;
+  left: -26px;
+  bottom: -22px;
+  width: 26px;
+  height: 22px;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 0.5px),
+    rgba(244, 244, 237, 0.85) calc(50% - 0.5px),
+    rgba(244, 244, 237, 0.85) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+.prologue-card__caption {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.85);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+
 /* One word of a rising chapter title. Padding gives the glyphs' overshoot room
    inside the clip; the equal negative margin cancels it, so line boxes, word
    spacing and the heading's drop-shadow are exactly as before. */
