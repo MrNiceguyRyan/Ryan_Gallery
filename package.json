@@ -10,7 +10,8 @@
     "build": "astro build",
     "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "node src/lib/jsonLd.test.js && node scripts/security.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.27.7",
