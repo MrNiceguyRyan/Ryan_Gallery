@@ -47,12 +47,12 @@ html.lenis body {
   position: absolute;
   inset: 0;
   background: #D2FF00;
-  transform: translateX(-100%);
+  transform: translateY(-100%);
   animation: prologue-scroll-cue 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 @keyframes prologue-scroll-cue {
-  0% { transform: translateX(-100%); }
-  55%, 100% { transform: translateX(100%); }
+  0% { transform: translateY(-100%); }
+  55%, 100% { transform: translateY(100%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .prologue-scroll-cue::after { animation: none; transform: none; opacity: 0.5; }

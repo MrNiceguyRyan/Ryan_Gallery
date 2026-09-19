@@ -15,7 +15,7 @@ interface Props {
  * when the closing page arrives. The server renders the final figure; the
  * visual count is aria-hidden and the real value stays in the accessible text.
  */
-function StepCount({ value, pad, run }: { value: number; pad: number; run: boolean }) {
+export function StepCount({ value, pad, run }: { value: number; pad: number; run: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const reduce = useReducedMotion();
 

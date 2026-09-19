@@ -374,6 +374,19 @@ const PROLOGUE_FOG = {
   'star-intensity': 0,
 };
 
+/** How much of the prologue's route is drawn at prologue progress `q`: it
+ *  starts once the globe has turned far enough for the Americas to be in
+ *  view, and is complete as the index arrives. */
+function prologueRouteDrawn(q: number) {
+  return smootherstep(clamp01((q - 0.62) / 0.3));
+}
+/** Places the drawn route has reached, in route order (the first at once). */
+function prologueLitCount(route: Array<{ routeProgress: number }>, q: number) {
+  const drawn = prologueRouteDrawn(q);
+  if (drawn <= 0) return 0;
+  return route.filter((entry) => entry.routeProgress <= drawn + 0.015).length;
+}
+
 function globeEntryProgress(entry: number) {
   const [start, end] = GLOBE_ENTRY_WINDOW;
   return clamp01((entry - start) / (end - start));
@@ -1163,6 +1176,14 @@ export default function RouteAtlas({
     const next = prologue && progress < 1;
     setPrologueStage((current) => (current === next ? current : next));
   });
+  // Each place lights as the prologue's route reaches it (the route is drawn
+  // across the globe by scroll, see `prologueRouteDrawn`); outside the
+  // prologue every place is lit.
+  const [litStops, setLitStops] = useState(() => (prologue ? prologueLitCount(chapterRoute, resolvedPrologueProgress.get()) : 99));
+  useMotionValueEvent(resolvedPrologueProgress, 'change', (progress) => {
+    const next = prologue ? prologueLitCount(chapterRoute, progress) : 99;
+    setLitStops((current) => (current === next ? current : next));
+  });
   const engagedEntry = prologueStage && engagedChapterId
     ? chapterRoute.find((entry) => entry.stop.id === engagedChapterId)
     : undefined;
@@ -1178,9 +1199,9 @@ export default function RouteAtlas({
   }, [mapLoaded, mappedStops, prologue]);
   const prologueStops = useMemo(() => ({
     type: 'FeatureCollection' as const,
-    features: mappedStops.map((stop) => ({
+    features: mappedStops.map((stop, index) => ({
       type: 'Feature' as const,
-      properties: { id: stop.id },
+      properties: { id: stop.id, order: index + 1 },
       geometry: { type: 'Point' as const, coordinates: stop.coordinates },
     })),
   }), [mappedStops]);
@@ -1927,8 +1948,9 @@ export default function RouteAtlas({
           lastBearingKey = bearing;
           lastOverview = false;
         }
-        // The route is drawn across the globe as North America turns in.
-        const drawn = smootherstep(clamp01((q - 0.42) / 0.46));
+        // The route is drawn across the globe as North America turns in, and
+        // each place lights as the line reaches it (litStops).
+        const drawn = prologueRouteDrawn(q);
         if (Math.abs(drawn - lastPrologueRoute) >= 0.002 || (drawn >= 1 && lastPrologueRoute !== 1)) {
           lastPrologueRoute = drawn;
           if (map.getLayer('prologue-route')) map.setPaintProperty('prologue-route', 'line-trim-offset', [drawn, 1]);
@@ -2718,7 +2740,7 @@ export default function RouteAtlas({
                 'circle-pitch-alignment': 'viewport',
                 'circle-opacity': [
                   'interpolate', ['linear'], ['zoom'],
-                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.2, 0.24],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedChapterId ?? ''], 0.2, 0.24],
                   PROLOGUE_SATELLITE_FADE[1], 0,
                 ],
                 'circle-opacity-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
@@ -2726,7 +2748,7 @@ export default function RouteAtlas({
                 'circle-stroke-width': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 1, 0],
                 'circle-stroke-opacity': [
                   'interpolate', ['linear'], ['zoom'],
-                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.95, 0],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedChapterId ?? ''], 0.95, 0],
                   PROLOGUE_SATELLITE_FADE[1], 0,
                 ],
               }}
@@ -2741,8 +2763,8 @@ export default function RouteAtlas({
                 'circle-stroke-color': MAP_BURN,
                 'circle-stroke-width': 0.75,
                 'circle-pitch-alignment': 'viewport',
-                'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
-                'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.6, PROLOGUE_SATELLITE_FADE[1], 0],
+                'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, 1], PROLOGUE_SATELLITE_FADE[1], 0],
+                'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, 0.6], PROLOGUE_SATELLITE_FADE[1], 0],
               }}
             />
           </Source>

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useInViewOnce } from '../../lib/useInViewOnce';
+import { StepCount } from './ArchiveClosing';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -113,12 +114,12 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
         </motion.p>
         <motion.p
           aria-hidden="true"
-          className="mt-14 flex items-center gap-4 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
+          className="mt-14 flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
           initial={false}
           animate={{ opacity: heroShown ? 1 : 0 }}
           transition={{ duration: reduce ? 0 : 0.8, delay: reduce ? 0 : 1.1, ease: expo }}
         >
-          <span className="prologue-scroll-cue relative block h-px w-14 overflow-hidden bg-white/18" />
+          <span className="prologue-scroll-cue relative block h-7 w-px overflow-hidden bg-white/18" />
           Scroll
         </motion.p>
       </div>
@@ -129,11 +130,14 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
           className="prologue-display font-serif uppercase"
           style={{ fontSize: 'clamp(64px, 8.6vw, 156px)' }}
         >
+          {/* The figures tick up in steps as their lines rise (ArchiveClosing's
+              StepCount): the server renders the final figure, the count is
+              visual only. */}
           <RiseLine shown={statsShown} index={0} className="tabular-nums text-[#F4F4ED]">
-            {String(chapters).padStart(2, '0')} chapters.
+            <StepCount value={chapters} pad={2} run={statsShown} /> chapters.
           </RiseLine>
           <RiseLine shown={statsShown} index={1} className="tabular-nums text-[#B2C73A]">
-            {frames} frames.
+            <StepCount value={frames} pad={2} run={statsShown} /> frames.
           </RiseLine>
           {years && (
             <RiseLine shown={statsShown} index={2} className="tabular-nums text-white/38">
@@ -216,7 +220,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
           animate={{ opacity: indexShown ? 1 : 0, y: reduce || indexShown ? 0 : 8 }}
           transition={reduce ? { duration: 0 } : { duration: 0.7, delay: indexShown ? 0.2 + cities.length * 0.07 : 0, ease: expo }}
         >
-          <span className="block h-7 w-px bg-gradient-to-b from-white/0 to-[#D2FF00]" />
+          <span className="prologue-scroll-cue relative block h-7 w-px overflow-hidden bg-white/18" />
           <span>Scroll to enter{cities[0] ? ` · 01 ${cities[0].name}` : ''}</span>
         </motion.p>
       </nav>

@@ -10,15 +10,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import {
-  motion,
-  AnimatePresence,
-  useScroll,
-  useTransform,
-  useReducedMotion,
-  useMotionValue,
-  type MotionValue,
-} from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useScroll, useTransform, type MotionValue } from 'framer-motion';
 import type { Collection } from '../../types';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
