@@ -141,9 +141,12 @@ const HOP = {
   continueFloor: 700,
   // The apex pulls back until the whole leg spans this share of the clear
   // stage between the route rail and the covers.
-  fitShare: 0.48,
-  apexFloor: 3.15,
-  apexMargin: 0.32,
+  // Flight path shape (van Wijk & Nuij): a bigger rho climbs higher for the
+  // same leg. 1.42 is Mapbox's flyTo default; this rises a good deal more,
+  // so the ground crosses the stage at the apex without racing.
+  rho: 2.1,
+  // The least a flight climbs, so even a neighbouring place is a hop.
+  minLift: 0.32,
   // Rendered pose chases the flight with this time constant (11 mois: 0.12
   // per frame), which rounds retargets and adds a short settle.
   followMs: 110,
@@ -164,7 +167,9 @@ const HOP = {
   voyageBlendMs: 320,
   settleStateMs: 120,
 } as const;
-const hopLaunchEase = cubicBezier(0.45, 0.05, 0.15, 1);
+// Take-off gathers speed over the first third; the landing is firm rather
+// than a long creep — the follow smoothing rounds off the last few pixels.
+const hopLaunchEase = cubicBezier(0.4, 0.05, 0.2, 1);
 const hopContinueEase = cubicBezier(0.3, 0.45, 0.15, 1);
 
 function mercatorLatitudeDegrees(latitude: number) {
@@ -182,6 +187,63 @@ function mercatorDegrees(from: GeoCoordinate, to: GeoCoordinate) {
 
 function pixelsAtZoom(degrees: number, zoom: number) {
   return (degrees * 512 * 2 ** zoom) / 360;
+}
+
+function mercatorLatitudeFromDegrees(y: number) {
+  return (360 / Math.PI) * Math.atan(Math.exp((y * Math.PI) / 180)) - 90;
+}
+
+/** A point `u` of the way from `from` to `to` in Mercator pixel space — the
+ *  straight line the map itself draws between them. */
+function mercatorLerp(from: GeoCoordinate, to: GeoCoordinate, u: number): GeoCoordinate {
+  const y0 = mercatorLatitudeDegrees(from[1]);
+  const y1 = mercatorLatitudeDegrees(to[1]);
+  return [from[0] + (to[0] - from[0]) * u, mercatorLatitudeFromDegrees(y0 + (y1 - y0) * u)];
+}
+
+/**
+ * The "smooth and efficient" zoom-and-pan path of van Wijk & Nuij (2003), as
+ * Mapbox's flyTo uses it: the camera climbs, glides and descends so that the
+ * ground appears to move at a constant speed throughout, instead of racing at
+ * the apex and creeping in to land. `w0` is the visible span at the start (in
+ * pixels), `u1` the distance to cover at the start zoom, `w1` the span at the
+ * destination zoom. `at(s)` for s in [0, 1] gives the fraction of the way
+ * travelled and the zoom change from the start.
+ */
+interface FlightPath {
+  at: (s: number) => { u: number; dz: number };
+  /** Zoom levels the path climbs above the start, at its highest. */
+  lift: number;
+}
+function flightPath(w0: number, w1: number, u1: number, rho: number): FlightPath {
+  const rho2 = rho * rho;
+  if (!(u1 > 1e-6)) {
+    // Same place, different height: a straight zoom.
+    const dz = Math.log2(w0 / w1);
+    return { at: (s) => ({ u: 0, dz: dz * s }), lift: Math.max(0, -dz) };
+  }
+  const r = (i: number) => {
+    const b = (w1 * w1 - w0 * w0 + (i ? -1 : 1) * rho2 * rho2 * u1 * u1) / (2 * (i ? w1 : w0) * rho2 * u1);
+    return Math.log(Math.sqrt(b * b + 1) - b);
+  };
+  const r0 = r(0);
+  const S = (r(1) - r0) / rho;
+  if (!Number.isFinite(S) || S <= 0) {
+    const dz = Math.log2(w0 / w1);
+    return { at: (s) => ({ u: s, dz: dz * s }), lift: Math.max(0, -dz) };
+  }
+  const coshR0 = Math.cosh(r0);
+  const sinhR0 = Math.sinh(r0);
+  const at = (s: number) => {
+    const k = r0 + rho * S * clamp01(s);
+    const w = coshR0 / Math.cosh(k);
+    const u = (w0 * (coshR0 * Math.tanh(k) - sinhR0)) / rho2 / u1;
+    return { u: clamp01(u), dz: Math.log2(1 / w) };
+  };
+  // The path is highest where cosh is smallest, at k = 0 — if it gets there.
+  const apexAt = -r0 / (rho * S);
+  const lift = apexAt > 0 && apexAt < 1 ? Math.log2(coshR0) : Math.max(0, -at(1).dz, 0);
+  return { at, lift };
 }
 
 function hopRestZooms(route: Array<{ stop: { coordinates: GeoCoordinate } }>) {
@@ -1493,7 +1555,9 @@ export default function RouteAtlas({
       originZoom: number;
       destCenter: GeoCoordinate;
       destZoom: number;
-      controlZoom: number;
+      path: FlightPath;
+      /** Extra climb, sin-shaped, so short legs still hop (see HOP.minLift). */
+      extraLift: number;
       duration: number;
       ease: (t: number) => number;
       trimFrom: number;
@@ -1567,27 +1631,24 @@ export default function RouteAtlas({
       const degrees = (angularDistance(originCenter, destCenter) * 180) / Math.PI;
       const reach = clamp01(Math.log(1 + degrees / HOP.nearDegrees) / Math.log(1 + HOP.farDegrees / HOP.nearDegrees));
       let duration = HOP.durationBase + HOP.durationRange * reach;
-      const fitWidth = Math.max(160, (map.getContainer().clientWidth - activePadding.right) * HOP.fitShare);
-      const span = Math.max(1e-6, mercatorDegrees(originCenter, destCenter));
-      const apex = Math.max(
-        HOP.apexFloor,
-        Math.min(Math.min(originZoom, destZoom) - HOP.apexMargin, Math.log2((fitWidth * 360) / (512 * span))),
-      );
-      let controlZoom = 2 * apex - (originZoom + destZoom) / 2;
-      if (inAir) {
-        // Retargeted mid-air: keep flying from the live pose. The target
-        // height is the lower of where the camera is and the new leg's apex;
-        // the Bezier control point is then solved for that height (the curve
-        // never passes through its control point).
-        duration = Math.max(HOP.continueFloor, 0.9 * duration);
-        controlZoom = 2 * Math.min(hopZoom, apex) - (originZoom + destZoom) / 2;
-      }
+      // The visible span is the clear stage (the canvas less the focal
+      // padding); the leg is measured in pixels at the starting zoom.
+      const container = map.getContainer();
+      const w0 = Math.max(160, Math.max(container.clientWidth - activePadding.right, container.clientHeight - activePadding.top));
+      const w1 = w0 * 2 ** (originZoom - destZoom);
+      const u1 = pixelsAtZoom(mercatorDegrees(originCenter, destCenter), originZoom);
+      const path = flightPath(w0, w1, u1, HOP.rho);
+      // Retargeted mid-air the path simply starts from the live pose, already
+      // high, so it glides on rather than climbing again.
+      if (inAir) duration = Math.max(HOP.continueFloor, 0.9 * duration);
+      const extraLift = inAir ? 0 : Math.max(0, HOP.minLift - path.lift);
       flight = {
         originCenter,
         originZoom,
         destCenter,
         destZoom,
-        controlZoom,
+        path,
+        extraLift,
         duration,
         ease: inAir ? hopContinueEase : hopLaunchEase,
         trimFrom: hopTrim,
@@ -1686,8 +1747,9 @@ export default function RouteAtlas({
       if (flight) {
         const t = clamp01((now - flight.start) / flight.duration);
         const s = flight.ease(t);
-        targetCenter = greatCirclePoint(flight.originCenter, flight.destCenter, s);
-        targetZoom = (1 - s) * (1 - s) * flight.originZoom + 2 * s * (1 - s) * flight.controlZoom + s * s * flight.destZoom;
+        const along = flight.path.at(s);
+        targetCenter = mercatorLerp(flight.originCenter, flight.destCenter, along.u);
+        targetZoom = flight.originZoom + along.dz - flight.extraLift * Math.sin(Math.PI * s);
         // The lit line is thrown ahead and reaches the destination before
         // the camera does.
         const routeT = 1 - Math.pow(1 - clamp01(t / HOP.routeShare), 3);
