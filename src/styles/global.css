@@ -61,7 +61,8 @@ html.lenis body {
    The current place, named like a camera would: focus brackets, a level with
    the coordinates, the year, the name and one readout line — all drawn by
    AtlasViewfinder around the atlas focal point. Other places carry inactive
-   AF points (small hollow squares with their chapter number). */
+   AF points (small hollow squares with their chapter number); the current
+   place's collapses to a white focus point. */
 .viewfinder {
   position: absolute;
   inset: 0;
@@ -173,10 +174,55 @@ html.lenis body {
   color: rgba(244, 244, 237, 0.62);
   text-shadow: 0 0 5px rgba(12, 15, 10, 0.6);
 }
-.af-point__mark.is-current {
+/* The current place's point: white ink, the one mark the map draws there. */
+.af-point__focus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 1px rgba(11, 14, 9, 0.28);
   opacity: 0;
-  transform: scale(0.6);
+  transform: scale(2.2);
+}
+/* A cover photograph pointed at in the archive rings its place. */
+.af-point__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 21px;
+  height: 21px;
+  margin: -10.5px 0 0 -10.5px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 244, 237, 0.95);
+  box-shadow: 0 0 0 1px rgba(11, 14, 9, 0.22);
+  opacity: 0;
+  transform: scale(1.35);
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.af-point__mark[data-engaged] .af-point__ring {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: 280ms;
+}
+/* Transitions only on the way in: when .is-current comes off, the children
+   snap back and af-point-on below drives the blink on its own. */
+.af-point__mark.is-current .af-point__square {
+  opacity: 0;
+  transform: scale(0.42);
   transition: opacity 160ms ease-in, transform 160ms ease-in;
+}
+.af-point__mark.is-current .af-point__number {
+  opacity: 0;
+  transition: opacity 160ms ease-in;
+}
+.af-point__mark.is-current .af-point__focus {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1) 90ms, transform 260ms cubic-bezier(0.16, 1, 0.3, 1) 90ms;
 }
 /* Removing .is-current re-applies this animation: the point lights up with one
    quick bright blink, then settles, like an inactive AF point coming on. */
@@ -191,7 +237,10 @@ html.lenis body {
 }
 @media (prefers-reduced-motion: reduce) {
   .af-point__mark:not(.is-current) { animation: none; }
-  .af-point__mark.is-current { transition: none; }
+  .af-point__ring,
+  .af-point__mark.is-current .af-point__square,
+  .af-point__mark.is-current .af-point__number,
+  .af-point__mark.is-current .af-point__focus { transition: none; }
 }
 
 /* One word of a rising chapter title. Padding gives the glyphs' overshoot room

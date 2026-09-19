@@ -57,7 +57,8 @@ interface Props {
   presentation?: 'classic' | 'living';
   /** Select a stop in the classic rail and move focus to its chapter. */
   onNavigate?: (chapterId: string) => void;
-  /** Temporarily links a desktop classic photograph to its map and rail stop. */
+  /** Temporarily links a desktop classic photograph to its map and rail stop
+   *  (the globe's point in the prologue, the AF point's ring in the archive). */
   engagedChapterId?: string | null;
 }
 
@@ -88,6 +89,10 @@ interface ChapterSample {
 }
 
 const ACCENT = '#D2FF00';
+// Marks drawn on the map itself are white ink — the photograph carries the
+// colour; lime stays in the interface around it. Casings are a dark burn.
+const MAP_INK = '#FFFFFF';
+const MAP_BURN = '#0B0E09';
 // The fixed chapter camera: oblique enough for the standing signs to read as
 // planted in the map, north kept nearly straight up.
 const CHAPTER_PITCH = 46;
@@ -223,7 +228,7 @@ function staticAtlasUrl(coordinates: [number, number][], token: string, mobile: 
   const route = encodeURIComponent(encodePolyline(coordinates));
   const camera = mobile ? '-98.5,37.5,2.75,0' : '-98.5,37.5,4.05,0';
   const size = mobile ? '960x960@2x' : '1280x720@2x';
-  return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/path-3+d2ff00-0.92(${route})/${camera}/${size}?access_token=${encodeURIComponent(token)}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/path-3+ffffff-0.92(${route})/${camera}/${size}?access_token=${encodeURIComponent(token)}`;
 }
 
 function graticuleFeature() {
@@ -283,13 +288,13 @@ const GLOBE_FOG = {
 };
 
 // The prologue globe carries a brighter limb, the halo 11 mois draws with two
-// white drop-shadows — here the atmosphere itself, in the archive's pale lime.
+// white drop-shadows — here the atmosphere itself, a neutral paper white.
 const PROLOGUE_FOG = {
   range: [9, 20] as [number, number],
-  color: 'rgba(176, 192, 136, 0.42)',
-  'high-color': '#b7c48f',
+  color: 'rgba(244, 244, 237, 0.55)',
+  'high-color': 'rgba(214, 217, 208, 0.34)',
   'space-color': '#282c20',
-  'horizon-blend': 0.05,
+  'horizon-blend': 0.035,
   'star-intensity': 0,
 };
 
@@ -611,7 +616,7 @@ function ScrubbedRouteStop({
   focusLocked: boolean;
   reducedMotion: boolean;
 }) {
-  // Both the rail and geographic waypoint read this same lighting state,
+  // The rail reads the same lighting state as the scrubbed camera,
   // including routes that bridge chapters without coordinates. Hysteresis is
   // retained only for the semantic announcement, never for visual brightness.
   const { focus, accent } = useRouteStopLighting(sample, entry);
@@ -845,79 +850,6 @@ function LivingMarkerNode({
   );
 }
 
-function ClassicMarkerNode({
-  entry,
-  sample,
-  visibility,
-  focusLocked,
-  reducedMotion,
-}: {
-  entry: ChapterRouteStop;
-  sample: MotionValue<ChapterSample | null>;
-  visibility: MotionValue<number>;
-  focusLocked: boolean;
-  reducedMotion: boolean;
-}) {
-  const { focus, accent } = useRouteStopLighting(sample, entry);
-  const dotScale = useTransform(focus, [0, 1], [0.82, 1]);
-  const focusLockProgress = useFocusLockProgress(focusLocked, reducedMotion);
-  const focusLockScale = useTransform(
-    focusLockProgress,
-    [0, 1],
-    reducedMotion ? [1, 1] : [1, 1.1],
-  );
-  const focusLockHaloOpacity = useTransform(
-    focusLockProgress,
-    (progress) => reducedMotion ? 0 : progress * 0.28,
-  );
-  const focusLockHaloScale = useTransform(
-    focusLockProgress,
-    [0, 1],
-    reducedMotion ? [1, 1] : [0.78, 1],
-  );
-  const focusLockContrast = useTransform(focusLockProgress, [0, 1], [0, 0.72]);
-
-  return (
-    <motion.span
-      aria-hidden="true"
-      data-route-stop={entry.stop.id}
-      data-route-focus-locked={focusLocked ? 'true' : undefined}
-      initial={false}
-      style={{ opacity: visibility }}
-      className="relative flex h-11 w-11 items-center justify-center"
-    >
-      {/* Small geographic anchors stay on the map. Camera perspective now
-          carries the journey; no screen-fixed focus ring competes with it. */}
-      <motion.span
-        className="route-waypoint relative block h-[22px] w-[22px] rounded-full"
-        style={{ scale: focusLockScale }}
-      >
-        <motion.span
-          className="pointer-events-none absolute inset-[-8px] rounded-full bg-[radial-gradient(circle,rgba(210,255,0,0.28)_0%,rgba(210,255,0,0.08)_38%,transparent_72%)]"
-          style={{ opacity: focusLockHaloOpacity, scale: focusLockHaloScale }}
-        />
-        <motion.span className="absolute inset-0 rounded-full" style={{ scale: dotScale }}>
-          <span className="absolute inset-0 rounded-full border border-[#E0E7CE]/60 bg-[#253021] shadow-[0_2px_6px_rgba(7,13,5,0.6)]" />
-          <motion.span
-            className="absolute inset-[3px] rounded-full bg-[#C3D78B]"
-            data-route-accent="true"
-            style={{ opacity: accent }}
-          />
-          <motion.span
-            className="absolute inset-[6px] rounded-full bg-[#F0F3DF]"
-            data-route-focus="true"
-            style={{ opacity: focus }}
-          />
-          <motion.span
-            className="absolute inset-[1px] rounded-full border border-[#F0F3DF]"
-            style={{ opacity: focusLockContrast }}
-          />
-        </motion.span>
-      </motion.span>
-    </motion.span>
-  );
-}
-
 export default function RouteAtlas({
   stops,
   activeIndex,
@@ -1006,7 +938,8 @@ export default function RouteAtlas({
     return index < 0 ? 0 : index;
   };
   const [initialViewfinderPlace] = useState(() => viewfinderPlace(nearestStopIndex(chapterSample.get())));
-  // The place whose AF point is hidden because the viewfinder is locked on it.
+  // The place whose AF point has collapsed to a focus point because the
+  // viewfinder is locked on it.
   // Toggled on the marker elements directly: a React state change here would
   // re-render the whole atlas in the middle of a flight.
   const currentStopRef = useRef<string | null>(initialViewfinderPlace?.id ?? null);
@@ -1485,7 +1418,7 @@ export default function RouteAtlas({
       paintMode = mode;
       // At a long flight's apex the camera climbs past the prologue's zoom
       // keys: keep a modest photographic veil (more real ground from higher
-      // up) and never bring the prologue's lime route and dots back.
+      // up) and never bring the prologue's route and dots back.
       if (map.getLayer('prologue-satellite')) {
         map.setPaintProperty('prologue-satellite', 'raster-opacity', mode === 'archive'
           ? ['interpolate', ['linear'], ['zoom'], 3.1, 0.62, 4.6, PROLOGUE_SATELLITE_RESIDUAL]
@@ -2474,11 +2407,11 @@ export default function RouteAtlas({
             type="line"
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             paint={{
-              'line-color': ACCENT,
-              'line-width': 7,
-              'line-opacity': living ? 0 : atlasEngaged ? 0.06 : 0,
+              'line-color': MAP_BURN,
+              'line-width': 4,
+              'line-opacity': living ? 0 : atlasEngaged ? 0.16 : 0,
               'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-              'line-blur': mobile ? 5 : 7,
+              'line-blur': 3,
               'line-trim-offset': [1, 1],
             }}
           />
@@ -2487,9 +2420,9 @@ export default function RouteAtlas({
             type="line"
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             paint={{
-              'line-color': ACCENT,
-              'line-width': mobile ? 1.1 : 1.25,
-              'line-opacity': living ? 0 : atlasEngaged ? (mobile ? 0.44 : 0.48) : 0,
+              'line-color': MAP_INK,
+              'line-width': 1,
+              'line-opacity': living ? 0 : atlasEngaged ? 0.5 : 0,
               'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
               'line-trim-offset': [1, 1],
             }}
@@ -2499,10 +2432,10 @@ export default function RouteAtlas({
             type="line"
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             paint={{
-              'line-color': '#BACF86',
-              'line-width': mobile ? 5.5 : 4,
-              'line-opacity': living ? 0 : mobile ? 0.075 : 0.065,
-              'line-blur': mobile ? 5 : 3,
+              'line-color': MAP_BURN,
+              'line-width': 4.5,
+              'line-opacity': living ? 0 : 0.22,
+              'line-blur': 3,
               'line-trim-offset': initialRouteTrim,
             }}
           />
@@ -2511,9 +2444,9 @@ export default function RouteAtlas({
             type="line"
             layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             paint={{
-              'line-color': '#C3D78B',
-              'line-width': mobile ? 1.45 : 1.65,
-              'line-opacity': living ? 0 : mobile ? 0.84 : 0.82,
+              'line-color': MAP_INK,
+              'line-width': 1.5,
+              'line-opacity': living ? 0 : 0.92,
               'line-trim-offset': initialRouteTrim,
             }}
           />
@@ -2523,8 +2456,8 @@ export default function RouteAtlas({
               type="line"
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
               paint={{
-                'line-color': '#D2FF00',
-                'line-width': 1.7,
+                'line-color': MAP_INK,
+                'line-width': 1.15,
                 'line-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.95, PROLOGUE_SATELLITE_FADE[1], 0],
                 'line-trim-offset': [0, 1],
               }}
@@ -2533,52 +2466,55 @@ export default function RouteAtlas({
         </Source>}
         {prologue && (
           <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
+            {/* Under each point a soft dark burn keeps the white legible on pale
+                ground; the place pointed at in the index gets a crisp white ring
+                instead. Both stay upright to the viewer (viewport alignment), so
+                they read as points rather than discs lying on the sphere. The
+                hover values are data-driven, so Mapbox swaps them without easing. */}
             <Layer
               id="prologue-stops-halo"
               type="circle"
               paint={{
-                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 30, 13],
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 9, 8],
                 'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
-                'circle-color': '#D2FF00',
-                'circle-blur': 1,
-                'circle-pitch-alignment': 'map',
+                'circle-color': MAP_BURN,
+                'circle-blur': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0, 1],
+                'circle-pitch-alignment': 'viewport',
                 'circle-opacity': [
                   'interpolate', ['linear'], ['zoom'],
-                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.82, 0.3],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.2, 0.24],
                   PROLOGUE_SATELLITE_FADE[1], 0,
                 ],
                 'circle-opacity-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
+                'circle-stroke-color': '#F4F4ED',
+                'circle-stroke-width': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 1, 0],
+                'circle-stroke-opacity': [
+                  'interpolate', ['linear'], ['zoom'],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0.95, 0],
+                  PROLOGUE_SATELLITE_FADE[1], 0,
+                ],
               }}
             />
             <Layer
               id="prologue-stops-dot"
               type="circle"
               paint={{
-                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 6, 3.4],
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 3.4, 2.6],
                 'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
-                'circle-color': '#EAFF8C',
-                'circle-stroke-color': '#20241a',
-                'circle-stroke-width': 1,
-                'circle-pitch-alignment': 'map',
+                'circle-color': MAP_INK,
+                'circle-stroke-color': MAP_BURN,
+                'circle-stroke-width': 0.75,
+                'circle-pitch-alignment': 'viewport',
                 'circle-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
-                'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 1, PROLOGUE_SATELLITE_FADE[1], 0],
+                'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.6, PROLOGUE_SATELLITE_FADE[1], 0],
               }}
             />
           </Source>
         )}
 
-        {!living && chapterRoute.map((entry) => (
-          <Marker key={entry.stop.id} longitude={entry.stop.coordinates[0]} latitude={entry.stop.coordinates[1]} anchor="center" pitchAlignment="map" rotationAlignment="map">
-            <ClassicMarkerNode
-              entry={entry}
-              sample={chapterSample}
-              visibility={classicInterfaceOpacity}
-              focusLocked={!mobile && engagedChapterId === entry.stop.id}
-              reducedMotion={reducedMotion}
-            />
-          </Marker>
-        ))}
-        {/* Inactive AF points: upright to the camera, centred on each place. */}
+        {/* AF points: upright to the camera, centred on each place. The current
+            place's square collapses to a white focus point in the viewfinder's
+            centre cross — the only mark the map itself draws for it. */}
         {signs && chapterRoute.map((entry) => (
           <Marker
             key={`af-${entry.stop.id}`}
@@ -2592,6 +2528,7 @@ export default function RouteAtlas({
               stopId={entry.stop.id}
               number={entry.chapterIndex + 1}
               initiallyCurrent={entry.stop.id === currentStopRef.current}
+              engaged={engagedChapterId === entry.stop.id}
               visibility={classicInterfaceOpacity}
             />
           </Marker>

@@ -450,13 +450,15 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
 
 /**
  * Every other place on the map carries an inactive AF point: a small hollow
- * square with its chapter number. The current place hides its point (the
- * viewfinder is locked there); a place the camera leaves lights its point
- * with one quick blink.
+ * square with its chapter number. At the current place the square collapses
+ * into a white focus point in the gap of the viewfinder's centre cross; a
+ * place the camera leaves lights its square again with one quick blink.
  */
-export function AfPoint({ stopId, number, initiallyCurrent, visibility }: {
+export function AfPoint({ stopId, number, initiallyCurrent, engaged, visibility }: {
   stopId: string;
   number: number;
+  /** Its chapter's cover photograph is hovered or focused in the archive. */
+  engaged: boolean;
   /** Only the first render reads this; afterwards the atlas toggles
    *  `is-current` on the element directly (no re-render mid-flight). */
   initiallyCurrent: boolean;
@@ -465,8 +467,12 @@ export function AfPoint({ stopId, number, initiallyCurrent, visibility }: {
   const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
   return (
     <motion.span aria-hidden="true" className="af-point" style={{ opacity: visibility }}>
-      <span data-af-stop={stopId} className={initialClass}>
+      {/* `data-engaged`, not a class: React owns the attribute, the atlas
+          owns the class list. */}
+      <span data-af-stop={stopId} data-engaged={engaged ? '' : undefined} className={initialClass}>
+        <span className="af-point__ring" />
         <span className="af-point__square" />
+        <span className="af-point__focus" />
         <span className="af-point__number">{String(number).padStart(2, '0')}</span>
       </span>
     </motion.span>
