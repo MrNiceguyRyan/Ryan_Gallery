@@ -57,233 +57,141 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .prologue-scroll-cue::after { animation: none; transform: none; opacity: 0.5; }
 }
-/* ─── Atlas signs ─────────────────────────────────────────────────────────
-   The current place's 3D standee (a split-flap board on a post, planted at the
-   atlas focal point) and the small STOP pins standing on every other place.
-   The focal point mirrors RouteAtlas's chapter padding (264px right, 48px top,
-   with the 2rem bleed): x = (width − 264) / 2, y = 50% + 24px. */
-.atlas-sign {
+/* ─── Atlas viewfinder ────────────────────────────────────────────────────
+   The current place, named like a camera would: focus brackets, a level with
+   the coordinates, the year, the name and one readout line — all drawn by
+   AtlasViewfinder around the atlas focal point. Other places carry inactive
+   AF points (small hollow squares with their chapter number). */
+.viewfinder {
   position: absolute;
-  left: calc((100% - 264px) / 2);
-  top: calc(50% + 24px);
+  inset: 0;
   z-index: 12;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transform: translate(-50%, -100%);
   pointer-events: none;
-  perspective: 900px;
+  overflow: hidden;
 }
-.atlas-sign__hop {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* The board's turn needs its perspective from its direct parent. */
-  perspective: 900px;
+.viewfinder__scrim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 420px;
+  height: 300px;
+  /* A barely-there local scrim so the hairlines hold on pale ground. */
+  background: radial-gradient(closest-side, rgba(16, 20, 13, 0.34), rgba(16, 20, 13, 0.16) 55%, rgba(16, 20, 13, 0) 100%);
 }
-.atlas-sign__body {
-  transform-origin: 50% 100%;
-  transform-style: preserve-3d;
-  filter: drop-shadow(0 18px 22px rgba(6, 8, 5, 0.5));
+.viewfinder__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.atlas-sign__tabs {
-  display: flex;
-  gap: 3px;
+.viewfinder__halo {
+  fill: none;
+  stroke: rgba(12, 15, 10, 0.42);
+  stroke-linecap: square;
 }
-.atlas-sign__tab {
-  padding: 5px 8px 4px;
-  border-radius: 4px 4px 0 0;
-  background: #3a4032;
-  color: rgba(244, 244, 237, 0.72);
+.viewfinder__line {
+  fill: none;
+  stroke-linecap: square;
+}
+.viewfinder__readout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
   font-family: var(--font-ui);
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 500;
   line-height: 1;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
+  color: rgba(244, 244, 237, 0.62);
+  text-shadow: 0 0 6px rgba(12, 15, 10, 0.55);
 }
-.atlas-sign__tab.is-current {
-  background: #151a12;
+.viewfinder__meta {
+  display: flex;
+  align-items: center;
+}
+.viewfinder__meta .is-lime {
   color: #D2FF00;
 }
-.atlas-sign__board {
-  /* Leans back a few degrees, like a standee propped on its post. */
-  transform: rotateX(7deg);
-  transform-origin: 50% 100%;
-  border-radius: 0 8px 8px 8px;
-  background: #EEF0E4;
-  padding: 7px;
-  /* The board's thickness: a pale-card edge under it, so it reads as a
-     physical standee rather than a floating label. */
-  box-shadow:
-    inset 0 -2px 0 rgba(20, 24, 16, 0.18),
-    0 1px 0 #d8dccb,
-    0 2px 0 #c8cdb8,
-    0 3px 0 #b7bda6,
-    0 4px 0 #a3aa92;
+.viewfinder__meta .is-dim {
+  color: rgba(244, 244, 237, 0.4);
 }
-.atlas-sign__screen {
-  display: flex;
-  justify-content: center;
-  padding: 8px 9px;
-  border-radius: 3px;
-  background: #151a12;
+.viewfinder__dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: #D2FF00;
 }
-.flap-board {
-  display: flex;
-  gap: 2px;
-}
-.flap-tile {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 0.74em;
-  height: 1.2em;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #2a3123 0%, #232a1d 49.5%, #1a2015 50.5%, #20271a 100%);
-  font-family: var(--font-ui);
-  font-size: 27px;
-  font-weight: 600;
-  line-height: 1;
-  color: #F4F4ED;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-.flap-tile::after {
-  /* The hinge line across every tile. */
-  content: '';
+.viewfinder__name {
   position: absolute;
-  inset: 50% 0 auto;
-  height: 1px;
-  background: rgba(0, 0, 0, 0.55);
-}
-.flap-tile.is-blank {
-  background: linear-gradient(180deg, #1f251a 0%, #1b2117 49.5%, #151a12 50.5%, #181e14 100%);
-}
-.atlas-sign__meta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 0.5px dashed rgba(21, 26, 18, 0.55);
-  font-family: var(--font-ui);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
-  color: #151a12;
+  left: 0;
+  top: 0;
   white-space: nowrap;
-}
-.atlas-sign__meta b {
-  padding: 3px 5px 2px;
-  border-radius: 2px;
-  background: #151a12;
+  transform-origin: 0 50%;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 560;
+  font-variation-settings: "opsz" 144;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
   color: #F4F4ED;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.atlas-sign__meta b + span {
-  margin-left: 5px;
-}
-.atlas-sign__post {
-  display: block;
-  width: 3px;
-  height: 58px;
-  border-radius: 0 0 2px 2px;
-  background: linear-gradient(90deg, #9aa38c 0%, #EEF0E4 45%, #7d8671 100%);
-}
-.atlas-sign__shadow {
-  display: block;
-  width: 64px;
-  height: 14px;
-  margin-top: -7px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(4, 6, 3, 0.55), transparent);
-}
-/* Touchdown: one lime ring runs out across the ground, foreshortened like the
-   map plane. Keyed per landing, so it plays exactly once each time. */
-.atlas-sign__ring {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 44px;
-  height: 14px;
-  margin-left: -22px;
-  margin-bottom: -7px;
-  border: 1.5px solid #D2FF00;
-  border-radius: 50%;
-  opacity: 0;
-  pointer-events: none;
-  animation: atlas-sign-ring 620ms cubic-bezier(0.2, 0.7, 0.2, 1) 1 both;
-}
-@keyframes atlas-sign-ring {
-  0% { opacity: 0.6; transform: scale(0.6); }
-  100% { opacity: 0; transform: scale(2.4); }
+  text-shadow: 0 0 14px rgba(12, 15, 10, 0.45);
 }
 
-.stop-standee {
+.af-point {
   display: block;
-  /* clip-path would cut a box-shadow, so the shield's shadow is a filter. */
-  filter: drop-shadow(0 6px 8px rgba(6, 8, 5, 0.5));
 }
-.stop-standee__pin {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transform-origin: 50% 100%;
+.af-point__mark {
+  position: relative;
+  display: block;
+  width: 12px;
+  height: 12px;
 }
-.stop-standee__pin.is-planted {
-  transform: scale(0.4);
+.af-point__square {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(244, 244, 237, 0.72);
+  box-shadow: 0 0 0 1px rgba(12, 15, 10, 0.45), inset 0 0 0 1px rgba(12, 15, 10, 0.3);
+}
+.af-point__number {
+  position: absolute;
+  left: 17px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 244, 237, 0.62);
+  text-shadow: 0 0 5px rgba(12, 15, 10, 0.6);
+}
+.af-point__mark.is-current {
   opacity: 0;
-  transition: transform 180ms cubic-bezier(0.4, 0, 1, 1), opacity 180ms cubic-bezier(0.4, 0, 1, 1);
+  transform: scale(0.6);
+  transition: opacity 160ms ease-in, transform 160ms ease-in;
 }
-/* Removing .is-planted re-applies this animation, so a freed pin pops up. */
-.stop-standee__pin:not(.is-planted) {
-  animation: stop-standee-pop 350ms cubic-bezier(0.2, 0.7, 0.2, 1) 1 both;
+/* Removing .is-current re-applies this animation: the point lights up with one
+   quick bright blink, then settles, like an inactive AF point coming on. */
+.af-point__mark:not(.is-current) {
+  animation: af-point-on 320ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
 }
-@keyframes stop-standee-pop {
-  0% { transform: scale(0.4); opacity: 0; }
-  60% { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes af-point-on {
+  0% { opacity: 0; transform: scale(1.9); }
+  18% { opacity: 1; }
+  30% { opacity: 0.55; }
+  100% { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stop-standee__pin:not(.is-planted) { animation: none; }
-  .stop-standee__pin.is-planted { transition: none; }
-}
-.stop-standee__badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 26px;
-  padding: 4px 5px 7px;
-  background: #151a12;
-  color: #F4F4ED;
-  font-family: var(--font-ui);
-  font-weight: 600;
-  line-height: 1;
-  text-transform: uppercase;
-  /* A shield: flat top, pointed foot. */
-  clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%);
-}
-.stop-standee__kicker {
-  font-size: 6.5px;
-  letter-spacing: 0.1em;
-  color: #D2FF00;
-}
-.stop-standee__number {
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.stop-standee__post {
-  display: block;
-  width: 2px;
-  height: 14px;
-  background: linear-gradient(180deg, #EEF0E4, rgba(238, 240, 228, 0.3));
+  .af-point__mark:not(.is-current) { animation: none; }
+  .af-point__mark.is-current { transition: none; }
 }
 
 /* One word of a rising chapter title. Padding gives the glyphs' overshoot room

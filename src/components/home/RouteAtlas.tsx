@@ -15,7 +15,7 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AtlasSignboard, StopStandee } from './AtlasSign';
+import { AfPoint, AtlasViewfinder, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -125,17 +125,14 @@ const HOP = {
   followMs: 110,
   // The travelled line reaches the destination this early in the flight.
   routeShare: 0.42,
-  // Sign: flips shortly after take-off, debounced so a fling flips once.
-  flipDelay: 90,
-  flipQuiet: 120,
-  flipCap: 360,
-  // STOP pins: the origin's pin stands back up just after take-off; the
-  // destination's is pressed down just before touchdown.
+  // AF points: the place being left gets its point back this long after
+  // take-off (the destination's hides when the viewfinder locks).
   unplantDelay: 120,
-  plantLead: 160,
-  landingMs: 180,
+  // The viewfinder locks this far through the flight: the landing ease has a
+  // long soft tail, and by here the camera is visually on the place.
+  lockShare: 0.8,
   // After the camera effect (re)starts, commits snap rather than fly, and the
-  // snapped place reaches the sign once things have been still this long.
+  // snapped place reaches the AF points once things have been still this long.
   restartSnapMs: 900,
   settleStateMs: 120,
 } as const;
@@ -972,31 +969,50 @@ export default function RouteAtlas({
     resolvedChapterProgress,
     (position) => sampleChapter(chapterRoute, position, reducedMotion),
   );
-  // ── Signs ── the standing signboard names the current place; STOP pins
-  // stand on the others. With chapter hops the draw loop's hop controller
-  // drives both (flip after take-off, plant before touchdown). In scrubbed
-  // mode (reduced motion) the board simply names the place nearest the camera.
+  // ── Signs ── a camera viewfinder names the current place; inactive AF
+  // points mark the others. With chapter hops the draw loop's hop controller
+  // drives it (hunt from take-off, lock at touchdown). In scrubbed mode
+  // (reduced motion) it simply settles on the place nearest the camera.
   const signs = !living && !mobile;
   const hopEnabled = signs && classicEntrance && !reducedMotion && !!chapterProgress;
   const chapterRestZooms = useMemo(() => hopRestZooms(chapterRoute), [chapterRoute]);
-  const nearestStopId = (sample: ChapterSample | null) =>
-    sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : chapterRoute[0]?.stop.id ?? null;
-  const [signStopId, setSignStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
-  const [plantedStopId, setPlantedStopId] = useState<string | null>(() => nearestStopId(chapterSample.get()));
-  const [arrivalKey, setArrivalKey] = useState(0);
-  const signStopRef = useRef(signStopId);
-  // chapterSample can re-emit while this component renders (its transformer is
-  // rebuilt each render), so the state write is ref-guarded and deferred to a
-  // microtask — never a render-phase update.
+  const viewfinderRef = useRef<ViewfinderHandle>(null);
+  const viewfinderPlace = (index: number): ViewfinderPlace | null => {
+    const entry = chapterRoute[index];
+    if (!entry) return null;
+    return {
+      id: entry.stop.id,
+      name: entry.stop.name,
+      number: entry.chapterIndex + 1,
+      total: chapterRoute.length,
+      year: entry.stop.year,
+      frames: entry.stop.frameCount,
+      region: entry.stop.region,
+      coordinates: entry.stop.coordinates,
+    };
+  };
+  const nearestStopIndex = (sample: ChapterSample | null) => {
+    if (!sample) return 0;
+    const index = chapterRoute.indexOf(sample.localProgress < 0.5 ? sample.from : sample.to);
+    return index < 0 ? 0 : index;
+  };
+  const [initialViewfinderPlace] = useState(() => viewfinderPlace(nearestStopIndex(chapterSample.get())));
+  // The place whose AF point is hidden because the viewfinder is locked on it.
+  const [currentStopId, setCurrentStopId] = useState<string | null>(() => initialViewfinderPlace?.id ?? null);
+  const currentStopRef = useRef(currentStopId);
+  // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
+  // this component renders (its transformer is rebuilt each render), so the
+  // state write is ref-guarded and deferred to a microtask.
   useEffect(() => {
     if (!signs || hopEnabled) return;
     let disposed = false;
     const update = (sample: ChapterSample | null) => {
-      const next = sample ? (sample.localProgress < 0.5 ? sample.from : sample.to).stop.id : null;
-      if (!next || next === signStopRef.current) return;
-      signStopRef.current = next;
+      const place = viewfinderPlace(nearestStopIndex(sample));
+      if (!place || place.id === currentStopRef.current) return;
+      currentStopRef.current = place.id;
+      viewfinderRef.current?.settle(place);
       queueMicrotask(() => {
-        if (!disposed) setSignStopId(next);
+        if (!disposed) setCurrentStopId(place.id);
       });
     };
     update(chapterSample.get());
@@ -1005,13 +1021,9 @@ export default function RouteAtlas({
       disposed = true;
       unsubscribe();
     };
-  }, [chapterSample, hopEnabled, signs]);
-  const signEntry = chapterRoute.find((entry) => entry.stop.id === signStopId) ?? chapterRoute[0];
-  const plantedId = hopEnabled ? plantedStopId : signEntry?.stop.id ?? null;
-  // Written by the hop controller: the board (with its post) lifts and turns
-  // toward the direction of travel; its contact shadow shrinks and fades.
-  const signLift = useMotionValue(0);
-  const signSway = useMotionValue(0);
+    // viewfinderPlace/nearestStopIndex only read chapterRoute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterRoute, chapterSample, hopEnabled, signs]);
   // The draw loop owns the travelled line's trim. The JSX only seeds it with a
   // value fixed at mount: a per-render value would be diffed and re-applied by
   // react-map-gl on unrelated re-renders, behind the draw loop's back.
@@ -1019,8 +1031,6 @@ export default function RouteAtlas({
   // The committed place survives camera-effect restarts (Story close, resize),
   // so a restart re-applies hysteresis from it instead of re-deriving it.
   const committedPlaceRef = useRef<number | null>(null);
-  const signShadowScale = useMotionValue(1);
-  const signShadowOpacity = useMotionValue(1);
 
   const livingTravelProgress = useTransform(
     chapterSample,
@@ -1416,45 +1426,39 @@ export default function RouteAtlas({
       ease: (t: number) => number;
       trimFrom: number;
       trimTo: number;
-      heading: number;
       reach: number;
-      /** Retargeted mid-air: the sign is already up, so it stays up. */
-      continued: boolean;
       start: number;
     }
     let flight: Flight | null = null;
-    let landedAt = 0;
     let hopFrame = 0;
     let lastHopTime = 0;
-    let flipTimer = 0;
-    let flipBurstStart = 0;
-    let pendingSignId: string | null = null;
     let plantTimers: number[] = [];
     let paintMode: 'prologue' | 'archive' | null = null;
-    // Mirrors plantedStopId inside this closure, so a flight back to the place
-    // the board is standing on does not pop its pin up and press it down again.
+    // Mirrors currentStopId inside this closure, so a flight back to the place
+    // the viewfinder is locked on does not blink its AF point on and off.
     let plantedLocal: string | null = null;
     const plant = (id: string | null) => {
       plantedLocal = id;
-      if (!disposed) setPlantedStopId(id);
+      currentStopRef.current = id;
+      if (!disposed) setCurrentStopId(id);
     };
     // Right after a (re)start — Story close, late map load, resize — the scroll
     // timeline can still be catching up to the restored position. Commits in
-    // that window snap to the place instead of flying there, and the sign and
-    // pins are written once, when the window closes, so returning to the page
-    // never replays a journey or flaps through stale names.
+    // that window snap to the place instead of flying there; the viewfinder
+    // settles without a hunt and the AF points are written once, when the
+    // window closes, so returning to the page never replays a journey.
     const snapUntil = performance.now() + HOP.restartSnapMs;
     let settleTimer = 0;
     const settleSignOn = (index: number) => {
-      const settledId = chapterRoute[index]?.stop.id ?? null;
-      signStopRef.current = settledId;
+      const place = viewfinderPlace(index);
+      if (place) viewfinderRef.current?.settle(place);
+      const settledId = place?.id ?? null;
       window.clearTimeout(settleTimer);
       plantedLocal = settledId;
+      currentStopRef.current = settledId;
       settleTimer = window.setTimeout(() => {
         settleTimer = 0;
-        if (disposed) return;
-        setSignStopId(settledId);
-        setPlantedStopId(settledId);
+        if (!disposed) setCurrentStopId(settledId);
       }, Math.max(HOP.settleStateMs, snapUntil - performance.now() + HOP.settleStateMs));
     };
     if (hopEnabled) settleSignOn(committed);
@@ -1513,9 +1517,7 @@ export default function RouteAtlas({
         ease: inAir ? hopContinueEase : hopLaunchEase,
         trimFrom: hopTrim,
         trimTo: restRoute(dest),
-        heading: Math.sign(destCenter[0] - originCenter[0]) || 1,
         reach,
-        continued: inAir,
         start: now,
       };
       committed = dest;
@@ -1523,30 +1525,20 @@ export default function RouteAtlas({
       window.clearTimeout(settleTimer);
       settleTimer = 0;
 
-      // The board flips shortly after take-off; a burst of commits (a fling
-      // across several places) flips once, to the final place.
-      pendingSignId = chapterRoute[dest]?.stop.id ?? null;
-      const wait = Math.min(
-        flipTimer ? HOP.flipQuiet : HOP.flipDelay,
-        Math.max(0, HOP.flipCap - (flipBurstStart ? now - flipBurstStart : 0)),
-      );
-      if (!flipBurstStart) flipBurstStart = now;
-      window.clearTimeout(flipTimer);
-      flipTimer = window.setTimeout(() => {
-        flipTimer = 0;
-        flipBurstStart = 0;
-        if (disposed || !pendingSignId) return;
-        signStopRef.current = pendingSignId;
-        setSignStopId(pendingSignId);
-      }, wait);
+      // The viewfinder hunts from take-off and locks as the camera settles
+      // onto the place; a retarget mid-air keeps the hunt going toward the
+      // new place.
+      const lockAfter = duration * HOP.lockShare;
+      const destPlace = viewfinderPlace(dest);
+      if (destPlace) viewfinderRef.current?.hunt(destPlace, now + lockAfter);
 
-      // The origin's pin stands back up as the board leaves it; the
-      // destination's pin is pressed down just before the board lands on it.
+      // The place being left gets its AF point back just after take-off; the
+      // destination's point hides when the viewfinder locks on it.
       clearPlantTimers();
       const destId = chapterRoute[dest]?.stop.id ?? null;
       if (plantedLocal !== destId) {
         plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
-        plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, duration - HOP.plantLead)));
+        plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, lockAfter)));
       }
       wakeHop();
     };
@@ -1555,16 +1547,12 @@ export default function RouteAtlas({
       committed = index;
       committedPlaceRef.current = index;
       flight = null;
-      landedAt = 0;
       hopCenter = restCenter(index);
       hopZoom = restZoom(index);
       hopTrim = restRoute(index);
       targetCenter = hopCenter;
       targetZoom = hopZoom;
       clearPlantTimers();
-      window.clearTimeout(flipTimer);
-      flipTimer = 0;
-      flipBurstStart = 0;
       settleSignOn(index);
     };
     // Outside the archive (the entrance, or a jump back to the index) the
@@ -1575,14 +1563,10 @@ export default function RouteAtlas({
       committed = index;
       committedPlaceRef.current = index;
       flight = null;
-      landedAt = 0;
       hopTrim = restRoute(index);
       targetCenter = restCenter(index);
       targetZoom = restZoom(index);
       clearPlantTimers();
-      window.clearTimeout(flipTimer);
-      flipTimer = 0;
-      flipBurstStart = 0;
       settleSignOn(index);
       wakeHop();
     };
@@ -1606,9 +1590,6 @@ export default function RouteAtlas({
       const dt = lastHopTime ? Math.min(64, time - lastHopTime) : 16.7;
       lastHopTime = time;
       const now = performance.now();
-      let lift = 0;
-      let sway = 0;
-      let raise = 0;
       if (flight) {
         const t = clamp01((now - flight.start) / flight.duration);
         const s = flight.ease(t);
@@ -1618,37 +1599,15 @@ export default function RouteAtlas({
         // the camera does.
         const routeT = 1 - Math.pow(1 - clamp01(t / HOP.routeShare), 3);
         hopTrim = flight.trimFrom + (flight.trimTo - flight.trimFrom) * routeT;
-        raise = t < 0.16 && !flight.continued
-          ? smootherstep(t / 0.16)
-          : t > 0.8
-            ? 1 - ((t - 0.8) / 0.2) ** 2
-            : 1;
-        lift = -(10 + 14 * flight.reach) * raise;
-        sway = flight.heading * (3 + 6 * flight.reach) * Math.sin(Math.PI * t);
         if (t >= 1) {
           flight = null;
-          landedAt = now;
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
           hopTrim = restRoute(committed);
-          queueMicrotask(() => {
-            if (!disposed) setArrivalKey((key) => key + 1);
-          });
         }
       } else {
         targetCenter = restCenter(committed);
         targetZoom = restZoom(committed);
-      }
-      let shadowBump = 0;
-      if (!flight && landedAt) {
-        // Touchdown: the board settles 3px into the ground and springs back.
-        const settle = (now - landedAt) / HOP.landingMs;
-        if (settle < 1) {
-          lift = 3 * (1 - (1 - (1 - settle) ** 3));
-          shadowBump = 0.06 * (1 - settle);
-        } else {
-          landedAt = 0;
-        }
       }
       const follow = 1 - Math.exp(-dt / HOP.followMs);
       hopCenter = [
@@ -1656,18 +1615,14 @@ export default function RouteAtlas({
         hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
       ];
       hopZoom += (targetZoom - hopZoom) * follow;
-      signLift.set(lift);
-      signSway.set(sway);
-      signShadowScale.set(1 - 0.38 * raise + shadowBump);
-      signShadowOpacity.set(1 - 0.6 * raise);
       const gap = pixelsAtZoom(mercatorDegrees(hopCenter, targetCenter), hopZoom);
       const settling = gap > 0.3 || Math.abs(targetZoom - hopZoom) > 0.0008;
-      if (!flight && !landedAt && !settling) {
+      if (!flight && !settling) {
         hopCenter = targetCenter;
         hopZoom = targetZoom;
       }
       schedule(queuedSample);
-      if (flight || landedAt || settling) hopFrame = requestAnimationFrame(hopStep);
+      if (flight || settling) hopFrame = requestAnimationFrame(hopStep);
       else lastHopTime = 0;
     };
     const wakeHop = () => {
@@ -1975,19 +1930,14 @@ export default function RouteAtlas({
       unsubscribeLife();
       if (lifeFrame) cancelAnimationFrame(lifeFrame);
       if (hopFrame) cancelAnimationFrame(hopFrame);
-      window.clearTimeout(flipTimer);
       window.clearTimeout(settleTimer);
       clearPlantTimers();
-      signLift.set(0);
-      signSway.set(0);
-      signShadowScale.set(1);
-      signShadowOpacity.set(1);
       window.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('visibilitychange', wakeLife);
       cancelFrame(draw);
       if (classicMapFrameRef.current === draw) classicMapFrameRef.current = null;
     };
-  }, [atlasEngaged, canvasExtension, chapterRestZooms, chapterRoute, chapterSample, classicEntrance, classicGlobe, entryProgress, globeIntro, globeMode, hopEnabled, layoutRevision, living, mapLoaded, paused, prologue, resolvedPrologueProgress, sampledEntryProgress, signLift, signShadowOpacity, signShadowScale, signSway]);
+  }, [atlasEngaged, canvasExtension, chapterRestZooms, chapterRoute, chapterSample, classicEntrance, classicGlobe, entryProgress, globeIntro, globeMode, hopEnabled, layoutRevision, living, mapLoaded, paused, prologue, resolvedPrologueProgress, sampledEntryProgress]);
 
   const mapReadiness = {
     loaded: mapLoaded,
@@ -2561,20 +2511,19 @@ export default function RouteAtlas({
             />
           </Marker>
         ))}
-        {/* Standing pins: upright to the camera, their posts planted on the
-            stop's ground dot. */}
+        {/* Inactive AF points: upright to the camera, centred on each place. */}
         {signs && chapterRoute.map((entry) => (
           <Marker
-            key={`standee-${entry.stop.id}`}
+            key={`af-${entry.stop.id}`}
             longitude={entry.stop.coordinates[0]}
             latitude={entry.stop.coordinates[1]}
-            anchor="bottom"
+            anchor="center"
             pitchAlignment="viewport"
             rotationAlignment="viewport"
           >
-            <StopStandee
+            <AfPoint
               number={entry.chapterIndex + 1}
-              planted={entry.stop.id === plantedId}
+              current={entry.stop.id === currentStopId}
               visibility={classicInterfaceOpacity}
             />
           </Marker>
@@ -2707,17 +2656,11 @@ export default function RouteAtlas({
       {!mobile && <motion.div className="route-atlas-tone pointer-events-none absolute inset-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
       {!mobile && <motion.div className="route-atlas-interface-veil pointer-events-none absolute inset-y-0 left-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
 
-      {signs && signEntry && (
-        <AtlasSignboard
-          stop={signEntry.stop}
-          number={signEntry.chapterIndex + 1}
-          total={chapterRoute.length}
+      {signs && (
+        <AtlasViewfinder
+          ref={viewfinderRef}
+          initial={initialViewfinderPlace}
           visibility={classicInterfaceOpacity}
-          lift={signLift}
-          sway={signSway}
-          shadowScale={signShadowScale}
-          shadowOpacity={signShadowOpacity}
-          arrivalKey={arrivalKey}
           reducedMotion={reducedMotion}
         />
       )}
