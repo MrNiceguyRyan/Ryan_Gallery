@@ -4,6 +4,7 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
+import { serializeJsonLd } from '../lib/jsonLd.js';
 
 interface Props {
   title?: string;
@@ -111,7 +112,7 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
 
     {/* ── Structured data: Person + WebSite + page-specific blocks ── */}
     {allJsonLd.map((schema) => (
-      <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+      <script type="application/ld+json" set:html={serializeJsonLd(schema)} />
     ))}
 
     {/* Page-specific <head> injections (preconnects, stylesheets) */}

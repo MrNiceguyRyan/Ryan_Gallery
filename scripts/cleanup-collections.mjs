@@ -3,9 +3,10 @@
  *
  *   node scripts/cleanup-collections.mjs              (DRY RUN — reports only)
  *   node scripts/cleanup-collections.mjs --apply      (trim whitespace names)
- *   node scripts/cleanup-collections.mjs --apply --delete-empty
- *                                                     (also delete photo-less
- *                                                      collections — destructive)
+ *   node scripts/cleanup-collections.mjs --apply --delete-empty --ids=<id,id>
+ *                                                     (delete only explicitly
+ *                                                      listed photo-less
+ *                                                      collections)
  *
  * Fixes surfaced by the audit:
  *   - "New York " → "New York"  (trailing-space name)
@@ -17,12 +18,26 @@
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
+const IDS_ARG = process.argv.find((arg) => arg.startsWith('--ids='));
+const DELETE_IDS = new Set(
+  IDS_ARG
+    ? IDS_ARG.slice('--ids='.length).split(',').map((id) => id.trim()).filter(Boolean)
+    : [],
+);
+
+if (!SANITY_TOKEN) {
+  console.error('Missing required SANITY_TOKEN environment variable.');
+  process.exit(1);
+}
+
+if (APPLY && DELETE_EMPTY && DELETE_IDS.size === 0) {
+  console.error('Refusing to delete all empty collections. Pass --ids=<collectionId,...> to delete explicit empty collections.');
+  process.exit(1);
+}
 
 const sanity = createClient({
   projectId: 'z610fooo',
@@ -52,7 +67,7 @@ async function main() {
   console.log(`\n   ${trims.length} name(s) to trim · ${empties.length} empty collection(s)\n`);
 
   if (!APPLY) {
-    console.log('   Re-run with --apply to trim names; add --delete-empty to remove the empties.\n');
+    console.log('   Re-run with --apply to trim names; add --delete-empty --ids=<collectionId,...> to remove explicit empties.\n');
     return;
   }
 
@@ -63,11 +78,15 @@ async function main() {
 
   if (DELETE_EMPTY) {
     for (const c of empties) {
+      if (!DELETE_IDS.has(c._id)) {
+        console.log(`   ⏭ left empty collection in place (not in --ids): "${c.name}" (${c._id})`);
+        continue;
+      }
       await sanity.delete(c._id);
       console.log(`   ✓ deleted empty collection "${c.name}" (${c._id})`);
     }
   } else if (empties.length) {
-    console.log('   (empties left in place — add --delete-empty to remove them)');
+    console.log('   (empties left in place — add --delete-empty --ids=<collectionId,...> to remove explicit empties)');
   }
   console.log('\n   ✅ Done.\n');
 }
