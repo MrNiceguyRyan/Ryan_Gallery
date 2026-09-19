@@ -41,6 +41,14 @@ export interface RouteStop {
   coordinateLabel: string;
 }
 
+/** A click on the index or the rail: the page scrolls to `chapterId` over
+ *  `duration` ms and the camera goes straight there. */
+export interface AtlasVoyage {
+  chapterId: string;
+  duration: number;
+  token: number;
+}
+
 interface Props {
   stops: RouteStop[];
   activeIndex: number;
@@ -62,6 +70,8 @@ interface Props {
   /** Temporarily links a desktop classic photograph to its map and rail stop
    *  (the globe's point in the prologue, the AF point's ring in the archive). */
   engagedChapterId?: string | null;
+  /** The trip a click set in motion, or null once the page has landed. */
+  voyage?: AtlasVoyage | null;
 }
 
 interface ProjectedPoint {
@@ -150,6 +160,8 @@ const HOP = {
   // After the camera effect (re)starts, commits snap rather than fly, and the
   // snapped place reaches the AF points once things have been still this long.
   restartSnapMs: 900,
+  // When a voyage is cut short, its time-driven entry eases onto the scroll's.
+  voyageBlendMs: 320,
   settleStateMs: 120,
 } as const;
 const hopLaunchEase = cubicBezier(0.45, 0.05, 0.15, 1);
@@ -361,11 +373,17 @@ const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // atlas at this strength, so chapters keep a little real ground.
 const PROLOGUE_SATELLITE_RESIDUAL = 0.3;
 
-interface GlobeMode { turnDegrees: number; startZoom: number }
+interface GlobeMode {
+  turnDegrees: number;
+  startZoom: number;
+  /** Where the globe was left when the prologue handed over; the entrance
+   *  turns from here to the target instead of starting on the target. */
+  startLongitude?: number;
+}
 const FLAT_ENTRY_GLOBE: GlobeMode = { turnDegrees: GLOBE_TURN_DEGREES, startZoom: GLOBE_START_ZOOM };
 
 function globeStartCenter(target: GeoCoordinate, mode: GlobeMode = FLAT_ENTRY_GLOBE): GeoCoordinate {
-  return [target[0] - mode.turnDegrees, GLOBE_START_LATITUDE];
+  return [mode.startLongitude ?? target[0] - mode.turnDegrees, GLOBE_START_LATITUDE];
 }
 
 function globeEntryPose(
@@ -884,6 +902,7 @@ export default function RouteAtlas({
   presentation = 'classic',
   onNavigate,
   engagedChapterId = null,
+  voyage = null,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -901,6 +920,15 @@ export default function RouteAtlas({
   // the prologue the globe sits in the viewport's bottom-right corner, over the
   // (still empty) cover column; afterwards that strip is masked back to page.
   const [canvasExtension, setCanvasExtension] = useState(0);
+  // A voyage's time-driven entry progress (−1 when none): the interface fades
+  // in with the dive, not with the scroll that outruns it.
+  const voyageEntry = useMotionValue(-1);
+  const voyageRef = useRef<AtlasVoyage | null>(voyage);
+  const voyageHandlerRef = useRef<((next: AtlasVoyage | null) => void) | null>(null);
+  useEffect(() => {
+    voyageRef.current = voyage;
+    voyageHandlerRef.current?.(voyage);
+  }, [voyage]);
   // Zoom at which the prologue globe is a whole planet beside the index; the
   // glide lands on it and the entrance dives from it.
   const [planetZoom, setPlanetZoom] = useState<number>(PROLOGUE_GLOBE.startZoom);
@@ -1065,8 +1093,15 @@ export default function RouteAtlas({
 
   const fullRouteCoordinates = useMemo(() => routeCoordinates(mappedStops), [mappedStops]);
   const fullRoute = useMemo(() => lineFeature(fullRouteCoordinates), [fullRouteCoordinates]);
-  // The index hover: that place's cover, pinned to its point on the globe.
-  const engagedEntry = prologue && engagedChapterId
+  // The index hover: that place's cover, pinned to its point on the globe —
+  // only while the globe is the prologue's (cover hovers in the archive set
+  // the same id, and there the AF point's ring answers instead).
+  const [prologueStage, setPrologueStage] = useState(() => prologue && resolvedPrologueProgress.get() < 1);
+  useMotionValueEvent(resolvedPrologueProgress, 'change', (progress) => {
+    const next = prologue && progress < 1;
+    setPrologueStage((current) => (current === next ? current : next));
+  });
+  const engagedEntry = prologueStage && engagedChapterId
     ? chapterRoute.find((entry) => entry.stop.id === engagedChapterId)
     : undefined;
   useEffect(() => {
@@ -1381,6 +1416,10 @@ export default function RouteAtlas({
     let lastBearingKey = Number.NaN;
     let lastPrologueRoute = Number.NaN;
     let prologuePaddingKey = '';
+    // The longitude the prologue globe was on when it handed over to the
+    // entrance, so a voyage to a later chapter turns from there.
+    let handoffLongitude = Number.NaN;
+    const entryMode: GlobeMode = { ...globeMode };
     // The canvas reaches past the atlas column by `canvasExtension`; widening
     // the right padding by the same amount keeps every chapter's focal point
     // exactly where it was before the canvas grew.
@@ -1404,7 +1443,33 @@ export default function RouteAtlas({
     const restCenter = (index: number): GeoCoordinate => chapterRoute[index]?.stop.coordinates ?? [US_OVERVIEW.longitude, US_OVERVIEW.latitude];
     const restZoom = (index: number) => chapterRestZooms[index] ?? HOP.restZoom;
     const restRoute = (index: number) => chapterRoute[index]?.routeProgress ?? 0;
-    const chapterMode = () => hopEnabled && queuedEntry >= 0.999 && (!prologue || queuedPrologue >= 1);
+    // ── Voyage (see AtlasVoyage) ──
+    // From the globe the trip is one dive driven by the voyage's own clock:
+    // the scroll's entry progress would finish long before the page lands.
+    // Inside the archive it is one flight. Places passed on the way are never
+    // committed; when the trip ends (or is cut short) the state reconciles
+    // with wherever the scroll is.
+    let voyageState: { index: number; start: number; duration: number; dive: boolean; from: number } | null = null;
+    let entryBlend: { from: number; start: number } | null = null;
+    // Sine in-out: its fastest stretch is only ~1.6× the average, so the dive
+    // (which the entry curve already concentrates mid-way) never blinks past.
+    const voyageEase = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+    const drivenEntry = (now: number) => {
+      if (!voyageState || !voyageState.dive) return null;
+      const t = clamp01((now - voyageState.start) / voyageState.duration);
+      return voyageState.from + (1 - voyageState.from) * voyageEase(t);
+    };
+    const effectiveEntry = (now = performance.now()) => {
+      const driven = drivenEntry(now);
+      if (driven != null) return driven;
+      if (entryBlend) {
+        const t = clamp01((now - entryBlend.start) / HOP.voyageBlendMs);
+        if (t >= 1) entryBlend = null;
+        else return entryBlend.from + (queuedEntry - entryBlend.from) * smootherstep(t);
+      }
+      return queuedEntry;
+    };
+    const chapterMode = () => hopEnabled && effectiveEntry() >= 0.999 && (!prologue || queuedPrologue >= 1);
     // A fresh run (first draw, resize, late map load, Story close) snaps to the
     // place the scroll position commits to — it never replays a flight.
     const hysteresisFrom = (start: number, position: number) => {
@@ -1584,7 +1649,7 @@ export default function RouteAtlas({
       wakeHop();
     };
     const evaluateCommit = (sample: ChapterSample | null) => {
-      if (!hopEnabled) return;
+      if (!hopEnabled || voyageState) return;
       const position = routePosition(sample);
       const next = hysteresisFrom(committed, position);
       if (!chapterMode()) {
@@ -1672,10 +1737,47 @@ export default function RouteAtlas({
         hopCenter = targetCenter;
         hopZoom = targetZoom;
       }
+      const driven = drivenEntry(now);
+      if (driven != null) voyageEntry.set(driven);
       schedule(queuedSample);
-      if (flight || settling) hopFrame = requestAnimationFrame(hopStep);
+      if (flight || settling || (voyageState && voyageState.dive) || entryBlend) hopFrame = requestAnimationFrame(hopStep);
       else lastHopTime = 0;
     };
+    const endVoyage = () => {
+      if (!voyageState) return;
+      const now = performance.now();
+      const driven = drivenEntry(now);
+      voyageState = null;
+      voyageEntry.set(-1);
+      if (driven != null && Math.abs(driven - queuedEntry) > 0.002) entryBlend = { from: driven, start: now };
+      evaluateCommit(queuedSample);
+      wakeHop();
+      schedule(queuedSample);
+    };
+    const beginVoyage = (next: AtlasVoyage | null) => {
+      if (!next) {
+        endVoyage();
+        return;
+      }
+      if (!hopEnabled) return;
+      const index = chapterRoute.findIndex((entry) => entry.stop.id === next.chapterId);
+      if (index < 0) return;
+      const now = performance.now();
+      entryBlend = null;
+      if (chapterMode()) {
+        voyageState = { index, start: now, duration: next.duration, dive: false, from: 1 };
+        if (committed !== index) {
+          preroll = [index, 0];
+          launch(index, now);
+        }
+      } else {
+        voyageState = { index, start: now, duration: next.duration, dive: true, from: effectiveEntry(now) };
+        snapTo(index);
+      }
+      wakeHop();
+      schedule(queuedSample);
+    };
+    voyageHandlerRef.current = beginVoyage;
     const wakeHop = () => {
       if (hopFrame || disposed) return;
       lastHopTime = 0;
@@ -1696,7 +1798,10 @@ export default function RouteAtlas({
       // Padding defines the permanent editorial focal point; applying it only
       // when the map changes mode avoids resubmitting the same layout object on
       // every camera frame.
-      const inPrologue = prologue && !!sample && !!canvasBox && queuedPrologue < 1;
+      // A dive voyage hands the camera to the entrance at once: the prologue
+      // would otherwise keep unwinding its spin toward the scrubbed chapter
+      // (east) while the entrance turns toward the destination (west).
+      const inPrologue = prologue && !!sample && !!canvasBox && queuedPrologue < 1 && !(voyageState && voyageState.dive);
       if (!inPrologue && padded !== focused) {
         padded = focused;
         map.setPadding(focused ? activePadding : neutralPadding);
@@ -1734,6 +1839,7 @@ export default function RouteAtlas({
           PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q) +
             pointerY * PROLOGUE_GLOBE.pointerLatitude * life,
         ];
+        handoffLongitude = center[0];
         const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
         // The corner globe keeps its share of the screen on wider displays
         // (radius doubles per zoom level), then settles to the entrance pose.
@@ -1784,10 +1890,11 @@ export default function RouteAtlas({
         // reverse gestures all resolve to the exact same optical state.
         // The formal entrance uses the same geographic phase as the map plane;
         // after that phase ends, the existing chapter camera is untouched.
+        const entryNow = effectiveEntry();
         const entryCameraProgress = entryProgress
           ? classicEntrance
-            ? entrancePhase(queuedEntry, ...ARCHIVE_ENTRANCE_PHASES.map)
-            : clamp01(queuedEntry)
+            ? entrancePhase(entryNow, ...ARCHIVE_ENTRANCE_PHASES.map)
+            : clamp01(entryNow)
           : 1;
         const entryOverview: GeoCoordinate = [-100.2, 38.6];
         const entryOverviewZoom = 2.32;
@@ -1806,7 +1913,8 @@ export default function RouteAtlas({
         let entryBearing = US_OVERVIEW.bearing +
           (aim.bearing - US_OVERVIEW.bearing) * entryPoseProgress;
         if (classicGlobe) {
-          const globePose = globeEntryPose(aim, globeEntryProgress(queuedEntry), globeMode);
+          if (prologue && Number.isFinite(handoffLongitude)) entryMode.startLongitude = handoffLongitude;
+          const globePose = globeEntryPose(aim, globeEntryProgress(entryNow), entryMode);
           entryCoordinate = globePose.center;
           entryZoom = globePose.zoom;
           entryPitch = globePose.pitch;
@@ -1971,8 +2079,11 @@ export default function RouteAtlas({
     }
     // Mapbox may finish loading after several chapters have already passed, and
     // Story close may resume on a stationary scroll position. Always replay now.
+    if (voyageRef.current) beginVoyage(voyageRef.current);
     schedule(chapterSample.get());
     return () => {
+      voyageHandlerRef.current = null;
+      voyageEntry.set(-1);
       disposed = true;
       unsubscribe();
       unsubscribeEntry();
@@ -2015,14 +2126,18 @@ export default function RouteAtlas({
   const playInterfaceIntro = interfaceVisible && !interfaceIntroPlayedRef.current;
   const sampledClassicActive = !!activeStop || entryOwnsClassicInterface;
   const interfaceGate = useMotionValue(interfaceVisible ? 1 : 0);
+  const entryForInterface = useTransform(
+    [sampledEntryProgress, voyageEntry],
+    ([entry, driven]) => (driven >= 0 ? driven : entry),
+  );
   const classicInterfaceOpacity = useTransform(
-    [sampledEntryProgress, interfaceGate],
+    [entryForInterface, interfaceGate],
     ([entry, gate]) => (classicEntrance
       ? entrancePhase(entry, ...ARCHIVE_ENTRANCE_PHASES.interface)
       : smootherstep(clamp01((entry - 0.54) / 0.42))) * gate,
   );
   const classicHeaderOpacity = useTransform(
-    [sampledEntryProgress, interfaceGate],
+    [entryForInterface, interfaceGate],
     ([entry, gate]) => (classicEntrance
       ? entrancePhase(entry,
           ARCHIVE_ENTRANCE_PHASES.interface[0] - CLASSIC_INTERFACE_STAGGER,

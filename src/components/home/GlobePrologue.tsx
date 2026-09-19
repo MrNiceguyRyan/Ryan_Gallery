@@ -166,7 +166,12 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
               <li className="prologue-line border-t border-white/12 last:border-b">
                 <motion.button
                   type="button"
-                  onClick={() => onSelect(city.id)}
+                  onClick={() => {
+                    // The pointer stays put while the page travels: end the
+                    // hover here, or the pinned cover would ride the dive.
+                    onHighlight?.(null);
+                    onSelect(city.id);
+                  }}
                   onPointerEnter={() => onHighlight?.(city.chapterId)}
                   onPointerLeave={() => onHighlight?.(null)}
                   onFocus={() => onHighlight?.(city.chapterId)}

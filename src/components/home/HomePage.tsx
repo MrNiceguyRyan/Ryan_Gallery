@@ -25,7 +25,7 @@ import ArchiveChapter from './ArchiveChapter';
 import ArchiveClosing from './ArchiveClosing';
 import GlobePrologue from './GlobePrologue';
 import MagazineLayout from './MagazineLayout';
-import type { RouteStop } from './RouteAtlas';
+import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
 import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
@@ -260,6 +260,9 @@ export default function HomePage({ collections }: Props) {
   const [storyClosing, setStoryClosing] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
+  // The trip a click on the index or the rail set in motion (desktop).
+  const [voyage, setVoyage] = useState<AtlasVoyage | null>(null);
+  const voyageTimerRef = useRef(0);
   // Semantic city changes belong to React, but the optical timeline does not.
   // Keeping the current ID in a ref prevents every scroll frame from entering
   // React's state queue just to return the existing value.
@@ -740,7 +743,10 @@ export default function HomePage({ collections }: Props) {
     ? `/travel?place=${encodeURIComponent(activeRouteCity.slug)}#atlas-map`
     : '/travel';
 
+  const voyageActiveRef = useRef(false);
   const navigateLivingChapter = useCallback((anchorId: string) => {
+    // One trip at a time: a second click mid-voyage would retarget the dive.
+    if (voyageActiveRef.current) return;
     const target = document.getElementById(anchorId);
     if (!target) return;
 
@@ -760,6 +766,32 @@ export default function HomePage({ collections }: Props) {
     const targetY = archiveChapterAnchorY(target, desktopLayout) - readingLine;
     const lenis = lenisRef.current;
     if (lenis && !reduce) {
+      const chapterId = desktopLayout && anchorId.startsWith('archive-item-')
+        ? anchorId.slice('archive-item-'.length)
+        : null;
+      if (chapterId) {
+        // Desktop: a voyage. The page takes a beat longer the further it
+        // goes, eases in and out so the camera can take off and land with it,
+        // and the atlas is told where it is heading so it goes straight there.
+        const distance = Math.abs(targetY - window.scrollY);
+        const duration = Math.min(2.6, Math.max(1.5, 1.3 + distance / 2400));
+        const token = Date.now();
+        const settle = () => {
+          voyageActiveRef.current = false;
+          setVoyage((current) => (current?.token === token ? null : current));
+        };
+        voyageActiveRef.current = true;
+        setVoyage({ chapterId, duration: duration * 1000, token });
+        window.clearTimeout(voyageTimerRef.current);
+        voyageTimerRef.current = window.setTimeout(settle, duration * 1000 + 500);
+        lenis.scrollTo(targetY, {
+          duration,
+          easing: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+          lock: true,
+          onComplete: settle,
+        });
+        return;
+      }
       lenis.scrollTo(targetY, {
         duration: 1.05,
         easing: (progress) => Math.min(1, 1.001 - Math.pow(2, -10 * progress)),
@@ -1279,6 +1311,7 @@ export default function HomePage({ collections }: Props) {
                 reducedMotion={!!reduce}
                 paused={storyActive}
                 engagedChapterId={engagedChapterId}
+                voyage={voyage}
                 onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
               />
             </aside>
