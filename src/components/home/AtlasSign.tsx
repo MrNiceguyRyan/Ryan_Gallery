@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { motion, type MotionValue } from 'framer-motion';
 
 /** Everything the viewfinder prints for a place. */
@@ -66,7 +66,7 @@ function reticleScale(u: number, lock: number): number {
     if (t < 140) return lerp(1, 0.92, easeOutQuad(t / 140));
     if (t < 420) return lerp(0.92, 1.95, easeOutCubic(progress(140, 420, t)));
     const w = t - 420;
-    return 1.64 + 0.31 * Math.cos((TAU * w) / 360) * (0.55 + 0.45 * Math.exp(-w / 600));
+    return 1.64 + 0.31 * Math.cos((TAU * w) / 420) * (0.5 + 0.5 * Math.exp(-w / 520));
   };
   if (u < snapStart) return hunting(u);
   if (u < lock) return lerp(hunting(snapStart), 0.86, easeInQuart(progress(snapStart, lock, u)));
@@ -178,11 +178,13 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const hunt = moving ? bell(t, 120, 330, lock - 190, lock - 20) : 0;
     const huntingNow = moving && t > 120 && t < lock;
     const scale = moving ? reticleScale(t, lock) : 1;
-    const breathe = hunt * 0.13 * Math.sin((TAU * (t - 140)) / 380);
+    // The hunt breathes and drifts rather than twitches: slow, low-amplitude
+    // oscillation, so the search reads as fluid focusing.
+    const breathe = hunt * 0.08 * Math.sin((TAU * (t - 140)) / 460);
     const hw = HALF_W * scale * (1 + breathe);
     const hh = HALF_H * scale * (1 - breathe);
-    const dx = 15 * hunt * Math.sin((TAU * t) / 560 + 0.6);
-    const dy = 9 * hunt * Math.sin((TAU * t) / 430 + 2.1);
+    const dx = 9 * hunt * Math.sin((TAU * t) / 720 + 0.6);
+    const dy = 5 * hunt * Math.sin((TAU * t) / 610 + 2.1);
     let lime = 0;
     if (moving && t >= lock - 10) {
       lime = t < lock + 6
@@ -200,8 +202,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     let topRightX = cx + hw;
     let topRightY = cy - hh;
     ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).forEach(([sx, sy], k) => {
-      const jx = 3.4 * hunt * Math.sin((TAU * t) / (170 + k * 23) + k * 1.7);
-      const jy = 2.8 * hunt * Math.sin((TAU * t) / (190 + k * 19) + k * 2.3);
+      const jx = 1.4 * hunt * Math.sin((TAU * t) / (300 + k * 37) + k * 1.7);
+      const jy = 1.1 * hunt * Math.sin((TAU * t) / (330 + k * 31) + k * 2.3);
       const x = cx + dx + sx * hw + jx;
       const y = cy + dy + sy * hh + jy;
       if (k === 1) {
@@ -244,7 +246,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     let tilt = 0;
     if (moving) {
       tilt = t < lock
-        ? hunt * (3.4 * Math.sin((TAU * t) / 640 + 0.4) + 1.1 * Math.sin((TAU * t) / 250))
+        ? hunt * 2.1 * Math.sin((TAU * t) / 760 + 0.4)
         : 1.3 * Math.exp(-(t - lock) / 120) * Math.sin((TAU * (t - lock)) / 300);
     }
     const gap = Math.max(hw, 40) + 12;
@@ -452,14 +454,18 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
  * viewfinder is locked there); a place the camera leaves lights its point
  * with one quick blink.
  */
-export function AfPoint({ number, current, visibility }: {
+export function AfPoint({ stopId, number, initiallyCurrent, visibility }: {
+  stopId: string;
   number: number;
-  current: boolean;
+  /** Only the first render reads this; afterwards the atlas toggles
+   *  `is-current` on the element directly (no re-render mid-flight). */
+  initiallyCurrent: boolean;
   visibility: MotionValue<number>;
 }) {
+  const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
   return (
     <motion.span aria-hidden="true" className="af-point" style={{ opacity: visibility }}>
-      <span className={`af-point__mark ${current ? 'is-current' : ''}`}>
+      <span data-af-stop={stopId} className={initialClass}>
         <span className="af-point__square" />
         <span className="af-point__number">{String(number).padStart(2, '0')}</span>
       </span>

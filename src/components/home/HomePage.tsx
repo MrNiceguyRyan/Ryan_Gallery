@@ -1,5 +1,6 @@
 import {
   lazy,
+  startTransition,
   Suspense,
   useState,
   useEffect,
@@ -266,7 +267,9 @@ export default function HomePage({ collections }: Props) {
   const commitActiveArchiveId = useCallback((next: string | null) => {
     if (activeArchiveIdRef.current === next) return;
     activeArchiveIdRef.current = next;
-    setActiveArchiveId(next);
+    // The chapter change re-renders the whole archive; as a transition it
+    // yields to the frames of the map flight and the scroll it coincides with.
+    startTransition(() => setActiveArchiveId(next));
   }, []);
   const storyOpenRef = useRef(false);
   const storyScrollYRef = useRef(0);

@@ -100,18 +100,25 @@ const CHAPTER_BEARING = -2;
 // enough to see the whole leg, set down on the next place. The map rests while
 // a place's cover is read. Pitch and bearing never change — only distance.
 const HOP = {
-  // Commit hysteresis in route-leg units: forward at 45% of the way to the
-  // next place, back at 31% (−0.69), so small reversals never flutter.
-  forward: 0.45,
-  back: 0.69,
+  // Commit hysteresis in route-leg units: forward at 32% of the way to the
+  // next place (so the map lands about as the next cover arrives), back at
+  // 22% (−0.78); the 1.1 total keeps small reversals from fluttering.
+  forward: 0.32,
+  back: 0.78,
+  // Before a commit the map is not frozen: it pre-rolls with the scroll,
+  // drifting up to this share of the leg (capped in pixels) toward the next
+  // place and easing out a touch, so the camera answers the hand at once.
+  prerollShare: 0.08,
+  prerollMaxPx: 70,
+  prerollZoom: 0.12,
   // Rest zoom: close enough that neighbouring places sit ≥150px apart (the
   // Utah canyons), never tighter than zoom 6.
   restZoom: 5.05,
   restZoomMax: 6,
   restSpacingPx: 150,
-  // Duration grows with the log of the distance: 1.1 s hops to 2.1 s crossings.
-  durationBase: 950,
-  durationRange: 1250,
+  // Duration grows with the log of the distance: 0.95 s hops to 1.75 s crossings.
+  durationBase: 850,
+  durationRange: 1000,
   nearDegrees: 1.2,
   farDegrees: 40,
   continueFloor: 700,
@@ -128,9 +135,11 @@ const HOP = {
   // AF points: the place being left gets its point back this long after
   // take-off (the destination's hides when the viewfinder locks).
   unplantDelay: 120,
-  // The viewfinder locks this far through the flight: the landing ease has a
-  // long soft tail, and by here the camera is visually on the place.
-  lockShare: 0.8,
+  // The viewfinder locks when the rendered camera is this close to the place
+  // (screen pixels): focus confirms on arrival, never while the map still
+  // slides the last stretch. It needs its 110 ms snap before that moment.
+  lockPx: 14,
+  lockSnapMs: 110,
   // After the camera effect (re)starts, commits snap rather than fly, and the
   // snapped place reaches the AF points once things have been still this long.
   restartSnapMs: 900,
@@ -998,8 +1007,15 @@ export default function RouteAtlas({
   };
   const [initialViewfinderPlace] = useState(() => viewfinderPlace(nearestStopIndex(chapterSample.get())));
   // The place whose AF point is hidden because the viewfinder is locked on it.
-  const [currentStopId, setCurrentStopId] = useState<string | null>(() => initialViewfinderPlace?.id ?? null);
-  const currentStopRef = useRef(currentStopId);
+  // Toggled on the marker elements directly: a React state change here would
+  // re-render the whole atlas in the middle of a flight.
+  const currentStopRef = useRef<string | null>(initialViewfinderPlace?.id ?? null);
+  const markCurrentStop = (id: string | null) => {
+    currentStopRef.current = id;
+    routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
+      element.classList.toggle('is-current', element.dataset.afStop === id);
+    });
+  };
   // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
   // this component renders (its transformer is rebuilt each render), so the
   // state write is ref-guarded and deferred to a microtask.
@@ -1009,10 +1025,9 @@ export default function RouteAtlas({
     const update = (sample: ChapterSample | null) => {
       const place = viewfinderPlace(nearestStopIndex(sample));
       if (!place || place.id === currentStopRef.current) return;
-      currentStopRef.current = place.id;
       viewfinderRef.current?.settle(place);
       queueMicrotask(() => {
-        if (!disposed) setCurrentStopId(place.id);
+        if (!disposed) markCurrentStop(place.id);
       });
     };
     update(chapterSample.get());
@@ -1428,8 +1443,13 @@ export default function RouteAtlas({
       trimTo: number;
       reach: number;
       start: number;
+      dest: number;
+      /** The viewfinder has been told to lock on arrival. */
+      lockCalled: boolean;
     }
     let flight: Flight | null = null;
+    // Pre-roll toward a neighbour: [index, amount 0..1].
+    let preroll: [number, number] = [committed, 0];
     let hopFrame = 0;
     let lastHopTime = 0;
     let plantTimers: number[] = [];
@@ -1439,8 +1459,7 @@ export default function RouteAtlas({
     let plantedLocal: string | null = null;
     const plant = (id: string | null) => {
       plantedLocal = id;
-      currentStopRef.current = id;
-      if (!disposed) setCurrentStopId(id);
+      if (!disposed) markCurrentStop(id);
     };
     // Right after a (re)start — Story close, late map load, resize — the scroll
     // timeline can still be catching up to the restored position. Commits in
@@ -1455,10 +1474,9 @@ export default function RouteAtlas({
       const settledId = place?.id ?? null;
       window.clearTimeout(settleTimer);
       plantedLocal = settledId;
-      currentStopRef.current = settledId;
       settleTimer = window.setTimeout(() => {
         settleTimer = 0;
-        if (!disposed) setCurrentStopId(settledId);
+        if (!disposed) markCurrentStop(settledId);
       }, Math.max(HOP.settleStateMs, snapUntil - performance.now() + HOP.settleStateMs));
     };
     if (hopEnabled) settleSignOn(committed);
@@ -1519,18 +1537,19 @@ export default function RouteAtlas({
         trimTo: restRoute(dest),
         reach,
         start: now,
+        dest,
+        lockCalled: false,
       };
       committed = dest;
       committedPlaceRef.current = dest;
       window.clearTimeout(settleTimer);
       settleTimer = 0;
 
-      // The viewfinder hunts from take-off and locks as the camera settles
-      // onto the place; a retarget mid-air keeps the hunt going toward the
-      // new place.
-      const lockAfter = duration * HOP.lockShare;
+      // The viewfinder hunts from take-off; the flight's end is only an upper
+      // bound for the lock — hopStep brings it forward to the moment the
+      // camera actually arrives. A retarget mid-air keeps the hunt going.
       const destPlace = viewfinderPlace(dest);
-      if (destPlace) viewfinderRef.current?.hunt(destPlace, now + lockAfter);
+      if (destPlace) viewfinderRef.current?.hunt(destPlace, now + duration);
 
       // The place being left gets its AF point back just after take-off; the
       // destination's point hides when the viewfinder locks on it.
@@ -1538,13 +1557,14 @@ export default function RouteAtlas({
       const destId = chapterRoute[dest]?.stop.id ?? null;
       if (plantedLocal !== destId) {
         plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
-        plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, lockAfter)));
+        plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, duration)));
       }
       wakeHop();
     };
 
     const snapTo = (index: number) => {
       committed = index;
+      preroll = [index, 0];
       committedPlaceRef.current = index;
       flight = null;
       hopCenter = restCenter(index);
@@ -1561,6 +1581,7 @@ export default function RouteAtlas({
     // dropped, so the entrance never dives onto a stale place.
     const settleTo = (index: number) => {
       committed = index;
+      preroll = [index, 0];
       committedPlaceRef.current = index;
       flight = null;
       hopTrim = restRoute(index);
@@ -1578,7 +1599,22 @@ export default function RouteAtlas({
         if (next !== committed || flight) settleTo(next);
         return;
       }
-      if (next === committed) return;
+      if (next === committed) {
+        // Not far enough to commit: lean the resting camera toward where the
+        // scroll is heading (reversible, eased, capped).
+        if (flight) return;
+        const lean = position - committed;
+        const neighbour = lean >= 0 ? Math.min(lastRouteIndex, committed + 1) : Math.max(0, committed - 1);
+        const amount = neighbour === committed
+          ? 0
+          : smootherstep(clamp01(lean >= 0 ? lean / HOP.forward : -lean / HOP.back));
+        if (neighbour !== preroll[0] || Math.abs(amount - preroll[1]) > 0.002) {
+          preroll = [neighbour, amount];
+          wakeHop();
+        }
+        return;
+      }
+      preroll = [next, 0];
       const now = performance.now();
       if (now < snapUntil && !flight) snapTo(next);
       else launch(next, now);
@@ -1606,8 +1642,18 @@ export default function RouteAtlas({
           hopTrim = restRoute(committed);
         }
       } else {
-        targetCenter = restCenter(committed);
-        targetZoom = restZoom(committed);
+        const [neighbour, amount] = preroll;
+        if (amount > 0 && neighbour !== committed) {
+          const from = restCenter(committed);
+          const to = restCenter(neighbour);
+          const legPixels = Math.max(1, pixelsAtZoom(mercatorDegrees(from, to), restZoom(committed)));
+          const share = Math.min(HOP.prerollShare, HOP.prerollMaxPx / legPixels) * amount;
+          targetCenter = greatCirclePoint(from, to, share);
+          targetZoom = restZoom(committed) - HOP.prerollZoom * amount;
+        } else {
+          targetCenter = restCenter(committed);
+          targetZoom = restZoom(committed);
+        }
       }
       const follow = 1 - Math.exp(-dt / HOP.followMs);
       hopCenter = [
@@ -1615,6 +1661,19 @@ export default function RouteAtlas({
         hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
       ];
       hopZoom += (targetZoom - hopZoom) * follow;
+      if (flight && !flight.lockCalled) {
+        const arrival = pixelsAtZoom(mercatorDegrees(hopCenter, flight.destCenter), hopZoom);
+        if (arrival < HOP.lockPx || now - flight.start >= flight.duration) {
+          flight.lockCalled = true;
+          const destPlace = viewfinderPlace(flight.dest);
+          if (destPlace) viewfinderRef.current?.hunt(destPlace, now + HOP.lockSnapMs);
+          const destId = destPlace?.id ?? null;
+          if (plantedLocal !== destId) {
+            clearPlantTimers();
+            plantTimers.push(window.setTimeout(() => plant(destId), HOP.lockSnapMs));
+          }
+        }
+      }
       const gap = pixelsAtZoom(mercatorDegrees(hopCenter, targetCenter), hopZoom);
       const settling = gap > 0.3 || Math.abs(targetZoom - hopZoom) > 0.0008;
       if (!flight && !settling) {
@@ -2231,6 +2290,14 @@ export default function RouteAtlas({
             boxZoom={false}
             keyboard={false}
             minZoom={classicGlobe ? 1.2 : 2.2}
+            // The desktop atlas is dark, graded and partly veiled: 1.5x device
+            // pixels look the same and cut the GPU fill of every flight frame.
+            pixelRatio={!living && !mobile && typeof window !== 'undefined'
+              ? Math.min(window.devicePixelRatio || 1, 1.5)
+              : undefined}
+            // Labels never need to avoid each other across sources here, and
+            // skipping it trims the per-frame placement work.
+            crossSourceCollisions={false}
             maxZoom={11}
             onIdle={() => setMapSettled(true)}
             onLoad={() => {
@@ -2345,7 +2412,7 @@ export default function RouteAtlas({
               id.includes('city') ||
               id.includes('town') ||
               id.includes('village');
-            if (isBaseNavigationNoise || (living && isRoadLabel)) {
+            if (isBaseNavigationNoise || ((living || !mobile) && isRoadLabel)) {
               map.setLayoutProperty(layer.id, 'visibility', 'none');
               return;
             }
@@ -2522,8 +2589,9 @@ export default function RouteAtlas({
             rotationAlignment="viewport"
           >
             <AfPoint
+              stopId={entry.stop.id}
               number={entry.chapterIndex + 1}
-              current={entry.stop.id === currentStopId}
+              initiallyCurrent={entry.stop.id === currentStopRef.current}
               visibility={classicInterfaceOpacity}
             />
           </Marker>

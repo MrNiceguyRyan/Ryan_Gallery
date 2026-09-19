@@ -18,10 +18,14 @@ export function startLenis(): { lenis: Lenis | null; destroy: () => void } {
     return { lenis: null, destroy: () => {} };
   }
 
+  // Continuous damping (lerp) rather than a fixed-duration ease per wheel
+  // event: a duration ease restarts on every trackpad event with a fresh burst
+  // of speed, so the velocity is never continuous. Lenis damps frame-rate
+  // independently; 0.085 keeps the site's weighty glide.
   const lenis = new Lenis({
-    duration: 1.05,
-    easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    lerp: 0.085,
     smoothWheel: true,
+    wheelMultiplier: 1,
     touchMultiplier: 1.6,
   });
 
