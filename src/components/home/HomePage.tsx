@@ -338,6 +338,18 @@ export default function HomePage({ collections }: Props) {
     });
   }, []);
   const storyActive = !!selectedCollection || storyClosing;
+  // The atlas keeps rendering while the story panel slides up over it and
+  // while it slides back down, so the page under the panel is the live page;
+  // it pauses only once the overlay fully covers it.
+  const [atlasPaused, setAtlasPaused] = useState(false);
+  useEffect(() => {
+    if (!selectedCollection || storyClosing) {
+      setAtlasPaused(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAtlasPaused(true), 900);
+    return () => window.clearTimeout(timer);
+  }, [selectedCollection, storyClosing]);
 
   // Honour "reduce motion": skip the always-on ambient animations entirely.
   const reduce = useReducedMotion();
@@ -1082,17 +1094,29 @@ export default function HomePage({ collections }: Props) {
       bodyPaddingRightRef.current = document.body.style.paddingRight;
       const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
       if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
-      document.body.style.position = 'fixed';
-      document.body.style.inset = `-${lockedScrollY}px 0 auto`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
+      if (desktopLayout) {
+        // Desktop: the page stays exactly where it is under the overlay —
+        // sticky atlas, scroll-driven covers and all — so the close simply
+        // uncovers it. Lenis, stopped, already puts `overflow: clip` on
+        // <html>; that stops the body's `auto` propagating to the viewport
+        // and would make the body its own scroll container, dropping the
+        // sticky atlas out of view. `clip` on the body never creates a
+        // scroll container, so the sticky holds. (A fixed body sat the page
+        // at the top, blanked the archive and replayed the scroll on close.)
+        document.body.style.overflow = 'clip';
+      } else {
+        document.body.style.position = 'fixed';
+        document.body.style.inset = `-${lockedScrollY}px 0 auto`;
+        document.body.style.width = '100%';
+        document.body.style.overflow = 'hidden';
+      }
     } else {
       document.body.style.position = '';
       document.body.style.inset = '';
       document.body.style.width = '';
       document.body.style.overflow = 'auto';
       document.body.style.paddingRight = bodyPaddingRightRef.current;
-      if (storyScrollYRef.current > 0) {
+      if (storyScrollYRef.current > 0 && Math.abs(window.scrollY - storyScrollYRef.current) > 1) {
         window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
         // The body lock moves the native window to the top while Lenis is
         // stopped. Reconcile Lenis' internal target before restarting it, or
@@ -1111,12 +1135,12 @@ export default function HomePage({ collections }: Props) {
         document.body.style.width = '';
         document.body.style.overflow = '';
         document.body.style.paddingRight = bodyPaddingRightRef.current;
-        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        if (Math.abs(window.scrollY - storyScrollYRef.current) > 1) window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
       }
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [storyActive]);
+  }, [desktopLayout, storyActive]);
 
   // Site accent is a single fixed electric lime, defined once via the
   // @property initial values in global.css (--accent-r/g/b = 210/255/0);
@@ -1243,7 +1267,7 @@ export default function HomePage({ collections }: Props) {
               chapterProgress={archiveProgress}
               mobile={!desktopLayout}
               reducedMotion={!!reduce}
-              paused={storyActive}
+              paused={atlasPaused}
               atlas={
                 <DeferredRouteAtlas
                   stops={routeStops}
@@ -1251,7 +1275,7 @@ export default function HomePage({ collections }: Props) {
                   chapterProgress={archiveProgress}
                   reducedMotion={!!reduce}
                   mobile={!desktopLayout}
-                  paused={storyActive}
+                  paused={atlasPaused}
                   presentation="living"
                 />
               }
@@ -1303,6 +1327,7 @@ export default function HomePage({ collections }: Props) {
                 reducedMotion={!!reduce}
                 paused={storyActive}
                 engagedChapterId={engagedChapterId}
+                paused={atlasPaused}
                 voyage={voyage}
                 onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
               />
