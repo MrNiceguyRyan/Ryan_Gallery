@@ -63,15 +63,17 @@ const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}
 function reticleScale(u: number, lock: number): number {
   const snapStart = Math.max(420, lock - SNAP_MS);
   const hunting = (t: number) => {
-    if (t < 140) return lerp(1, 0.92, easeOutQuad(t / 140));
-    if (t < 420) return lerp(0.92, 1.95, easeOutCubic(progress(140, 420, t)));
-    const w = t - 420;
-    return 1.64 + 0.31 * Math.cos((TAU * w) / 420) * (0.5 + 0.5 * Math.exp(-w / 520));
+    if (t < 140) return lerp(1, 0.94, easeOutQuad(t / 140));
+    if (t < 460) return lerp(0.94, 1.72, easeOutCubic(progress(140, 460, t)));
+    // Open, the brackets rack focus once — a slow, decaying in-and-out — and
+    // then hold still until the snap. No sway, no jitter.
+    const w = t - 460;
+    return 1.6 + 0.12 * Math.cos((TAU * w) / 760) * Math.exp(-w / 700);
   };
   if (u < snapStart) return hunting(u);
-  if (u < lock) return lerp(hunting(snapStart), 0.86, easeInQuart(progress(snapStart, lock, u)));
+  if (u < lock) return lerp(hunting(snapStart), 0.9, easeInQuart(progress(snapStart, lock, u)));
   const k = u - lock;
-  return 1 - 0.14 * Math.exp(-k / 115) * Math.cos((k / 1000) * TAU * 3.1);
+  return 1 - 0.1 * Math.exp(-k / 90) * Math.cos((k / 1000) * TAU * 2.6);
 }
 
 /**
@@ -81,9 +83,9 @@ function reticleScale(u: number, lock: number): number {
  * and one readout line below.
  *
  * When the atlas flies to the next place the autofocus hunts — the brackets
- * pinch, spring wide and breathe, the centre "+" turns to an unsure "×", the
- * level wobbles, the coordinates count across and the new name shows only as
- * an out-of-focus ghost — then, at touchdown, it snaps tight with a single
+ * pinch, open wide and rack focus once, the centre "+" turns to an unsure
+ * "×", the coordinates count across and the new name shows only as an
+ * out-of-focus ghost — then, at touchdown, it snaps tight with a single
  * lime confirmation flash, the name comes into focus and the readouts type
  * back in. All drawing is imperative inside one rAF loop that runs only while
  * something moves; React renders the component once.
@@ -175,16 +177,13 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const from = s.from;
     const to = s.to;
     const switching = moving && from?.id !== to?.id;
-    const hunt = moving ? bell(t, 120, 330, lock - 190, lock - 20) : 0;
     const huntingNow = moving && t > 120 && t < lock;
     const scale = moving ? reticleScale(t, lock) : 1;
-    // The hunt breathes and drifts rather than twitches: slow, low-amplitude
-    // oscillation, so the search reads as fluid focusing.
-    const breathe = hunt * 0.08 * Math.sin((TAU * (t - 140)) / 460);
-    const hw = HALF_W * scale * (1 + breathe);
-    const hh = HALF_H * scale * (1 - breathe);
-    const dx = 9 * hunt * Math.sin((TAU * t) / 720 + 0.6);
-    const dy = 5 * hunt * Math.sin((TAU * t) / 610 + 2.1);
+    // The reticle stays centred on the focal point throughout: the camera is
+    // what moves, so the brackets only change size (the rack in reticleScale),
+    // never position.
+    const hw = HALF_W * scale;
+    const hh = HALF_H * scale;
     let lime = 0;
     if (moving && t >= lock - 10) {
       lime = t < lock + 6
@@ -202,10 +201,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     let topRightX = cx + hw;
     let topRightY = cy - hh;
     ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).forEach(([sx, sy], k) => {
-      const jx = 1.4 * hunt * Math.sin((TAU * t) / (300 + k * 37) + k * 1.7);
-      const jy = 1.1 * hunt * Math.sin((TAU * t) / (330 + k * 31) + k * 2.3);
-      const x = cx + dx + sx * hw + jx;
-      const y = cy + dy + sy * hh + jy;
+      const x = cx + sx * hw;
+      const y = cy + sy * hh;
       if (k === 1) {
         topRightX = x;
         topRightY = y;
@@ -233,7 +230,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       const angle = ((k * 90 + rotation) * Math.PI) / 180;
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
-      crossPath += `M${(cx + dx + ca * inner).toFixed(2)},${(cy + dy + sa * inner).toFixed(2)}L${(cx + dx + ca * outer).toFixed(2)},${(cy + dy + sa * outer).toFixed(2)}`;
+      crossPath += `M${(cx + ca * inner).toFixed(2)},${(cy + sa * inner).toFixed(2)}L${(cx + ca * outer).toFixed(2)},${(cy + sa * outer).toFixed(2)}`;
     }
     crossHaloRef.current?.setAttribute('d', crossPath);
     crossRef.current?.setAttribute('d', crossPath);
@@ -242,13 +239,10 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       crossRef.current.style.opacity = String(huntingNow ? 0.55 : 0.9 + 0.1 * lime);
     }
 
-    // Electronic level: tilts while hunting, levels (with a small wobble) on lock.
+    // Electronic level: stays level through the hunt; one small, fast settle
+    // as the lock lands.
     let tilt = 0;
-    if (moving) {
-      tilt = t < lock
-        ? hunt * 2.1 * Math.sin((TAU * t) / 760 + 0.4)
-        : 1.3 * Math.exp(-(t - lock) / 120) * Math.sin((TAU * (t - lock)) / 300);
-    }
+    if (moving && t >= lock) tilt = 0.6 * Math.exp(-(t - lock) / 90) * Math.sin((TAU * (t - lock)) / 240);
     const gap = Math.max(hw, 40) + 12;
     const leftEnd = cx - ARM;
     const rightEnd = cx + ARM;
