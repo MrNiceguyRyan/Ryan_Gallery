@@ -10,6 +10,7 @@
     "build": "astro build",
     "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs",
     "preview": "astro preview",
+    "test": "node scripts/security.test.mjs",
     "astro": "astro"
   },
   "devDependencies": {
