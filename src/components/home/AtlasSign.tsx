@@ -79,6 +79,16 @@ function scrambledName(from: string, to: string, t: number, lock: number): Array
   }
   return out;
 }
+const EARTH_RADIUS_KM = 6371;
+function haversineKm(a: [number, number], b: [number, number]) {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+const formatKm = (km: number) => Math.round(km).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+const ARRIVAL_RING_MS = 480;
 const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
 const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
 
@@ -132,6 +142,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   const lonRef = useRef<HTMLSpanElement>(null);
   const nameRef = useRef<HTMLSpanElement>(null);
   const metaRef = useRef<HTMLSpanElement>(null);
+  const ringRef = useRef<SVGCircleElement>(null);
   const scrimRef = useRef<HTMLSpanElement>(null);
 
   const state = useRef({
@@ -147,6 +158,9 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     metaFor: '',
     dashOffset: 0,
     nameSpans: [] as HTMLSpanElement[],
+    /** The chapter number last shown in the readout, for the roll. */
+    ordinalShown: null as number | null,
+    legKm: null as HTMLSpanElement | null,
     metaChars: [] as HTMLSpanElement[],
     metaDot: null as HTMLElement | null,
     nameFor: '',
@@ -165,7 +179,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const node = metaRef.current;
     if (!node || !place || s.metaFor === place.id) return;
     const parts: Array<[string, string]> = [
-      ['is-lime', pad2(place.number)],
       ['is-dim', ` / ${pad2(place.total)}`],
       ['', '   '],
       ['', place.region ?? ''],
@@ -177,6 +190,32 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     dot.className = 'viewfinder__dot';
     node.appendChild(dot);
     const chars: HTMLSpanElement[] = [];
+    // The chapter number rolls like a counter: up when the archive moves on,
+    // down when it turns back — the letters shuffle, the figures roll.
+    const ordinal = document.createElement('span');
+    ordinal.className = 'is-lime viewfinder__ordinal';
+    const strip = document.createElement('span');
+    strip.className = 'viewfinder__ordinal-strip';
+    const previous = s.ordinalShown;
+    if (previous != null && previous !== place.number) {
+      const up = place.number > previous;
+      [up ? previous : place.number, up ? place.number : previous].forEach((value) => {
+        const line = document.createElement('span');
+        line.textContent = pad2(value);
+        strip.appendChild(line);
+      });
+      strip.style.transform = up ? 'translateY(0)' : 'translateY(-1em)';
+      requestAnimationFrame(() => {
+        strip.style.transition = 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1)';
+        strip.style.transform = up ? 'translateY(-1em)' : 'translateY(0)';
+      });
+    } else {
+      strip.textContent = pad2(place.number);
+    }
+    ordinal.appendChild(strip);
+    node.appendChild(ordinal);
+    chars.push(ordinal);
+    s.ordinalShown = place.number;
     parts.forEach(([className, text]) => {
       for (const character of text) {
         const span = document.createElement('span');
@@ -189,6 +228,40 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     s.metaChars = chars;
     s.metaDot = dot;
     s.metaFor = place.id;
+  };
+
+  // In flight the readout is the leg: where from, where to, and the distance
+  // covered so far.
+  const setLegMeta = (from: ViewfinderPlace, to: ViewfinderPlace) => {
+    const s = state.current;
+    const node = metaRef.current;
+    const key = `leg:${from.id}>${to.id}`;
+    if (!node || s.metaFor === key) return;
+    node.textContent = '';
+    const dot = document.createElement('i');
+    dot.className = 'viewfinder__dot';
+    node.appendChild(dot);
+    // Non-breaking spaces: ordinary ones collapse at the span boundaries.
+    const parts: Array<[string, string]> = [
+      ['is-lime', from.name],
+      ['is-dim', '\u00a0\u00a0→\u00a0\u00a0'],
+      ['', to.name],
+      ['', '\u00a0\u00a0\u00a0'],
+    ];
+    parts.forEach(([className, text]) => {
+      const span = document.createElement('span');
+      if (className) span.className = className;
+      span.textContent = text;
+      node.appendChild(span);
+    });
+    const km = document.createElement('span');
+    km.className = 'is-dim';
+    km.textContent = '0 KM';
+    node.appendChild(km);
+    s.legKm = km;
+    s.metaChars = [];
+    s.metaDot = dot;
+    s.metaFor = key;
   };
 
   // One frame of the viewfinder. `u` is ms since take-off; null = at rest.
@@ -366,15 +439,32 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       name.style.transform = `translate(${cx}px, ${cy + NAME_TOP}px) translateX(-50%)`;
     }
 
-    // Readout line: blanks right to left on take-off, types back in after the lock.
-    setMeta(switching && t < 300 ? from : to);
+    // Readout line: blanks right to left on take-off, shows the leg and the
+    // distance covered while the camera flies, types back in after the lock.
     if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${cy + META_TOP}px) translateX(-50%)`;
+    const inFlight = switching && !!from && !!to && t >= 300 && t < lock;
+    if (inFlight) {
+      setLegMeta(from, to);
+      if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(from.coordinates, to.coordinates) * travel)} KM`;
+      if (metaRef.current) metaRef.current.style.opacity = progress(300, 520, t).toFixed(3);
+    } else {
+      setMeta(switching && t < 300 ? from : to);
+      if (metaRef.current) metaRef.current.style.opacity = '1';
+    }
     const count = s.metaChars.length;
     s.metaChars.forEach((span, index) => {
       let on = 1;
       if (switching) on = t < 300 ? (t < 30 + (count - index) * 5 ? 1 : 0) : t >= lock + 30 + index * 10 ? 1 : 0;
       span.style.opacity = String(on);
     });
+    // Arrival: one ring spreads from the focal point as the lock lands.
+    if (ringRef.current) {
+      const p = moving && t >= lock ? clamp((t - lock) / ARRIVAL_RING_MS) : 1;
+      ringRef.current.setAttribute('cx', cx.toFixed(1));
+      ringRef.current.setAttribute('cy', cy.toFixed(1));
+      ringRef.current.setAttribute('r', (6 + 40 * easeOutCubic(p)).toFixed(1));
+      ringRef.current.style.opacity = moving && t >= lock && p < 1 ? (0.85 * (1 - p)).toFixed(3) : '0';
+    }
     if (s.metaDot) {
       if (!switching || t >= lock) {
         s.metaDot.style.opacity = '1';
@@ -476,6 +566,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
         <path ref={bracketRef} className="viewfinder__line" />
         <path ref={crossHaloRef} className="viewfinder__halo" strokeWidth={3} />
         <path ref={crossRef} className="viewfinder__line" strokeWidth={1.25} />
+        <circle ref={ringRef} className="viewfinder__ring" r={6} style={{ opacity: 0 }} />
       </svg>
       <span ref={yearRef} className="viewfinder__readout" />
       <span ref={latRef} className="viewfinder__readout" />

@@ -17,6 +17,17 @@ const expo = [0.16, 1, 0.3, 1] as const;
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
 const overlayEase = [0.32, 0, 0.07, 1] as const;
+// The developing-print reveal (after Adovasio's .appear-mask).
+const developEase = [0.455, 0.03, 0.515, 0.955] as const;
+const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
+const DEVELOP_MASK_STYLE = {
+  WebkitMaskImage: DEVELOP_MASK,
+  maskImage: DEVELOP_MASK,
+  WebkitMaskSize: '300% 100%',
+  maskSize: '300% 100%',
+  WebkitMaskRepeat: 'no-repeat',
+  maskRepeat: 'no-repeat',
+} as const;
 // Back-out curve for the photographs arriving as a story opens — the second
 // sanctioned exception to house expo, approved by the owner so each page
 // "springs out" instead of sliding in. The 1.56 overshoots and settles, so the
@@ -299,15 +310,22 @@ function PhotoCell({
     // make the whole caption a click target for the lightbox.
     <motion.figure
       className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} m-0`}
-      initial={animateEntrance ? { opacity: 0, y: 26, scale: 0.962 } : false}
-      animate={animateEntrance && !revealReady ? { opacity: 0, y: 26, scale: 0.962 } : { opacity: 1, y: 0, scale: 1 }}
+      // The photograph develops: a soft diagonal edge sweeps across it (the
+      // mask is three times the figure's width, so the edge crosses at an
+      // even pace), with a small rise. Reduced motion: no mask, no motion.
+      style={animateEntrance ? DEVELOP_MASK_STYLE : undefined}
+      initial={animateEntrance ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : false}
+      animate={animateEntrance && !revealReady
+        ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }
+        : { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }}
       transition={(() => {
-        const delay = animateEntrance && revealReady ? index * 0.05 : 0;
+        const delay = animateEntrance && revealReady ? index * 0.06 : 0;
         if (!animateEntrance) return { duration: 0 };
         return {
-          opacity: { duration: 0.5, delay, ease: expo },
-          y: { duration: 0.74, delay, ease: popEase },
-          scale: { duration: 0.74, delay, ease: popEase },
+          opacity: { duration: 0.25, delay, ease: expo },
+          y: { duration: 0.8, delay, ease: popEase },
+          WebkitMaskPosition: { duration: 0.8, delay, ease: developEase },
+          maskPosition: { duration: 0.8, delay, ease: developEase },
         };
       })()}
     >

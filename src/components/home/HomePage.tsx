@@ -1259,7 +1259,12 @@ export default function HomePage({ collections }: Props) {
 
         {/* One responsive archive tree at a time. This keeps Mapbox and every
              motion observer from mounting twice behind CSS-only visibility. */}
-        <main id="main-content" tabIndex={-1} className="relative z-10 focus:outline-none">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="relative z-10 focus:outline-none"
+          data-story-under={selectedCollection && !storyClosing ? 'true' : undefined}
+        >
           {useLivingAtlas ? (
             <LivingAtlasStory
               stops={routeStops}
@@ -1342,7 +1347,7 @@ export default function HomePage({ collections }: Props) {
             />
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
-            <div className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
+            <div data-archive-column className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
               <div ref={selectedWorksRef} className="relative max-w-2xl lg:ml-[12%]">
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
                 <motion.div

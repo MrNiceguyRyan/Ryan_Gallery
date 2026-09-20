@@ -120,6 +120,30 @@ html.lenis body {
 .viewfinder__meta .is-dim {
   color: rgba(244, 244, 237, 0.4);
 }
+.viewfinder__ring {
+  fill: none;
+  stroke: #F4F4ED;
+  stroke-width: 1;
+}
+/* The chapter number rolls between two lines inside a one-line window. */
+.viewfinder__ordinal {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: top;
+  line-height: 1;
+}
+.viewfinder__ordinal-strip {
+  display: block;
+}
+.viewfinder__ordinal-strip > span {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .viewfinder__ordinal-strip { transition: none !important; }
+}
 .viewfinder__dot {
   display: inline-block;
   width: 5px;
@@ -245,6 +269,29 @@ html.lenis body {
   .af-point__mark.is-current .af-point__square,
   .af-point__mark.is-current .af-point__number,
   .af-point__mark.is-current .af-point__focus { transition: none; }
+}
+
+/* Under a story the archive recedes: the atlas grows and softens behind the
+   rising panel and comes back into focus as the panel drops (after Gavin
+   Schneider Productions: 1.05 s cubic-bezier(.645,.045,.355,1)). */
+main .route-atlas,
+main [data-archive-column] {
+  transition: transform 1.05s cubic-bezier(0.645, 0.045, 0.355, 1), filter 1.05s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+main[data-story-under="true"] .route-atlas {
+  transform: scale(1.12);
+  filter: blur(10px);
+  transition-delay: 0.25s;
+}
+main[data-story-under="true"] [data-archive-column] {
+  filter: blur(10px);
+  transition-delay: 0.25s;
+}
+@media (prefers-reduced-motion: reduce) {
+  main .route-atlas,
+  main [data-archive-column] { transition: none; }
+  main[data-story-under="true"] .route-atlas,
+  main[data-story-under="true"] [data-archive-column] { transform: none; filter: none; }
 }
 
 /* The prologue index's cover card, hung off a place on the globe. */
