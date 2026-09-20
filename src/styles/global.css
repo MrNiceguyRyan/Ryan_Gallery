@@ -896,14 +896,31 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   opacity: 0.4;
   transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1), transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.25px; border-left-width: 1.25px; transform: translate(-7px, -7px); }
-.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.25px; border-right-width: 1.25px; transform: translate(7px, -7px); }
-.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.25px; border-right-width: 1.25px; transform: translate(7px, 7px); }
-.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.25px; border-left-width: 1.25px; transform: translate(-7px, 7px); }
+.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; transform: translate(-7px, -7px); }
+.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; transform: translate(7px, -7px); }
+.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; transform: translate(7px, 7px); }
+.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; transform: translate(-7px, 7px); }
 .archive-focus[data-focused] i {
   opacity: 0.95;
   transform: translate(0, 0);
 }
+/* The camera is flying to this plate: its corners stand off and dim, the way
+   the reticle used to open while it hunted. */
+[data-atlas-camera="flying"] [data-archive-chapter][data-active="true"] .archive-focus i {
+  opacity: 0.5;
+  transform: translate(calc(var(--focus-x) * 13px), calc(var(--focus-y) * 13px));
+}
+/* It lands: the corners snap in and the frame confirms once, in lime. */
+[data-atlas-camera="locked"] [data-archive-chapter][data-active="true"] .archive-focus i {
+  opacity: 1;
+  transform: translate(0, 0);
+  border-color: #D2FF00;
+  transition-duration: 180ms, 180ms;
+}
+.archive-focus i:nth-child(1) { --focus-x: -1; --focus-y: -1; }
+.archive-focus i:nth-child(2) { --focus-x: 1; --focus-y: -1; }
+.archive-focus i:nth-child(3) { --focus-x: 1; --focus-y: 1; }
+.archive-focus i:nth-child(4) { --focus-x: -1; --focus-y: 1; }
 .archive-plate__cue {
   position: absolute;
   right: 0;

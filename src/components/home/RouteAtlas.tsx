@@ -1441,6 +1441,21 @@ export default function RouteAtlas({
     // settles without a hunt and the AF points are written once, when the
     // window closes, so returning to the page never replays a journey.
     const snapUntil = performance.now() + HOP.restartSnapMs;
+    // The chapter column's focus corners read this: the camera is flying to
+    // the plate that is arriving, and lands on it. An attribute on <html>,
+    // not React state — nothing may re-render mid-flight.
+    let cameraStateTimer = 0;
+    const setCameraState = (state: 'flying' | 'locked' | 'rest') => {
+      if (typeof document === 'undefined') return;
+      window.clearTimeout(cameraStateTimer);
+      document.documentElement.dataset.atlasCamera = state;
+      if (state === 'locked') {
+        cameraStateTimer = window.setTimeout(() => {
+          if (document.documentElement.dataset.atlasCamera === 'locked') document.documentElement.dataset.atlasCamera = 'rest';
+        }, 620);
+      }
+    };
+
     // A restart (first draw, resize, Story close) must not replay a flight —
     // but if the reader is the one moving, their commit is a real flight even
     // inside that window. Only scroll intent counts: a pointer moving over
@@ -1451,6 +1466,7 @@ export default function RouteAtlas({
     ['wheel', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteReaderDrove, { passive: true }));
     let settleTimer = 0;
     const settleSignOn = (index: number) => {
+      setCameraState('rest');
       const place = viewfinderPlace(index);
       if (place) viewfinderRef.current?.settle(place);
       const settledId = place?.id ?? null;
@@ -1521,6 +1537,7 @@ export default function RouteAtlas({
       };
       committed = dest;
       committedPlaceRef.current = dest;
+      setCameraState('flying');
       window.clearTimeout(settleTimer);
       settleTimer = 0;
 
@@ -1696,6 +1713,7 @@ export default function RouteAtlas({
         const arrival = pixelsAtZoom(mercatorDegrees(hopCenter, flight.destCenter), hopZoom);
         if (arrival < HOP.lockPx || now - flight.start >= flight.duration) {
           flight.lockCalled = true;
+          setCameraState('locked');
           const destPlace = viewfinderPlace(flight.dest);
           if (destPlace) viewfinderRef.current?.hunt(destPlace, now + HOP.lockSnapMs);
           const destId = destPlace?.id ?? null;
@@ -2066,6 +2084,8 @@ export default function RouteAtlas({
       voyageHandlerRef.current = null;
       voyageEntry.set(-1);
       window.clearTimeout(idleTimer);
+      window.clearTimeout(cameraStateTimer);
+      if (typeof document !== 'undefined') delete document.documentElement.dataset.atlasCamera;
       ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteInput));
       window.removeEventListener('pointermove', notePointer);
       ['wheel', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteReaderDrove));

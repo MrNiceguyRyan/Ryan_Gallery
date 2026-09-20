@@ -136,8 +136,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
 }>(function AtlasViewfinder({ initial, visibility, reducedMotion }, forwardedRef) {
   const rootRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const bracketHaloRef = useRef<SVGPathElement>(null);
-  const bracketRef = useRef<SVGPathElement>(null);
   const crossHaloRef = useRef<SVGPathElement>(null);
   const crossRef = useRef<SVGPathElement>(null);
   const levelGroupRef = useRef<SVGGElement>(null);
@@ -299,37 +297,16 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
           : 1 - easeInOutSine(progress(lock + 160, lock + SETTLE_MS, t));
     }
     const color = mixColor(lime);
-    const arm = 14 * clamp(0.72 + 0.28 * scale, 0.7, 1.4);
-    // Scanning: the four corners reach along the edges — never far enough to
-    // meet, so the reticle stays four marks and never becomes a box — and
-    // draw back in at the lock.
-    const frame = moving ? bell(t, 120, 460, lock - 200, lock - 70) : 0;
-    const armX = lerp(arm, hw * 0.5, frame);
-    const armY = lerp(arm, hh * 0.5, frame);
-    const stroke = huntingNow ? lerp(1.25, 1, bell(t, 120, 300, lock - 190, lock)) : 1.25 + lime;
-    const bracketOpacity = huntingNow ? lerp(1, 0.78, bell(t, 120, 300, lock - 190, lock)) : 1;
-
-    let bracketPath = '';
-    let topRightX = cx + hw;
-    let topRightY = cy - hh;
-    ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).forEach(([sx, sy], k) => {
-      const x = cx + sx * hw;
-      const y = cy + sy * hh;
-      if (k === 1) {
-        topRightX = x;
-        topRightY = y;
-      }
-      bracketPath += `M${x.toFixed(2)},${(y - sy * armY).toFixed(2)}L${x.toFixed(2)},${y.toFixed(2)}L${(x - sx * armX).toFixed(2)},${y.toFixed(2)}`;
-    });
-    bracketHaloRef.current?.setAttribute('d', bracketPath);
-    bracketHaloRef.current?.setAttribute('stroke-width', (stroke + 2).toFixed(2));
-    bracketRef.current?.setAttribute('d', bracketPath);
-    bracketRef.current?.setAttribute('stroke-width', stroke.toFixed(2));
-    if (bracketRef.current) {
-      bracketRef.current.style.stroke = color;
-      bracketRef.current.style.opacity = String(bracketOpacity);
-    }
-    if (bracketHaloRef.current) bracketHaloRef.current.style.opacity = String(bracketOpacity * (1 - 0.5 * lime));
+    // The focus frame is not drawn here any more: it is the photograph's own
+    // four corners, over in the chapter column (`.archive-focus`). A frame on
+    // the map and a frame on the plate could only agree at one scroll
+    // position, and the rest of the time read as two rectangles missing each
+    // other. What stays on the map is the sign: the centre mark on the place,
+    // the level with its coordinates, the year, the name and the readout.
+    // `hw`/`hh` still describe the reticle's box, which the level's gap, the
+    // year's anchor and the centre mark are all measured from.
+    const topRightX = cx + hw;
+    const topRightY = cy - hh;
 
     // Centre mark: "+" at rest, turns to "×" while unsure, snaps back on lock.
     const rotation = moving && t < lock
@@ -572,8 +549,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
           <path ref={levelHaloRef} className="viewfinder__halo" strokeWidth={3} strokeDasharray="4 4" style={{ opacity: 0.6 }} />
           <path ref={levelRef} className="viewfinder__line" strokeWidth={1} strokeDasharray="4 4" />
         </g>
-        <path ref={bracketHaloRef} className="viewfinder__halo" />
-        <path ref={bracketRef} className="viewfinder__line" />
         <path ref={crossHaloRef} className="viewfinder__halo" strokeWidth={3} />
         <path ref={crossRef} className="viewfinder__line" strokeWidth={1.25} />
         <circle ref={ringRef} className="viewfinder__ring" r={6} style={{ opacity: 0 }} />
