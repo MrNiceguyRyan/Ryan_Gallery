@@ -60,21 +60,22 @@ const pad2 = (value: number) => String(value).padStart(2, '0');
 // Letters of a similar width in Fraunces, so the name barely changes width
 // while its letters are shuffled.
 const SCRAMBLE_GLYPHS = 'ACDEGHKNOPRSTUVXZ';
-const SCRAMBLE_FLIP_MS = 48;
+const SCRAMBLE_FLIP_MS = 55;
 /** The name `from` shuffled into `to` at `t` ms of a hunt that locks at
  *  `lock`: letters start flipping from the left, each settles on its new
- *  letter in turn, the last one just before the lock. */
-function scrambledName(from: string, to: string, t: number, lock: number) {
+ *  letter in turn, the last one just before the lock. Each entry is the
+ *  letter to show and whether it is still an unsettled glyph. */
+function scrambledName(from: string, to: string, t: number, lock: number): Array<[string, boolean]> {
   const length = Math.max(from.length, to.length);
   const flip = Math.floor(t / SCRAMBLE_FLIP_MS);
-  let out = '';
+  const out: Array<[string, boolean]> = [];
   for (let i = 0; i < length; i += 1) {
     const target = to[i];
     const start = lock * (0.05 + (0.25 * i) / length);
     const end = target != null ? lock * (0.48 + (0.5 * (i + 1)) / to.length) : start + 160;
-    if (t < start) out += from[i] ?? SCRAMBLE_GLYPHS[(i * 7) % SCRAMBLE_GLYPHS.length];
-    else if (t < end) out += target === ' ' ? ' ' : SCRAMBLE_GLYPHS[(i * 7 + flip * 13 + 3) % SCRAMBLE_GLYPHS.length];
-    else out += target ?? '';
+    if (t < start) out.push([from[i] ?? SCRAMBLE_GLYPHS[(i * 7) % SCRAMBLE_GLYPHS.length], from[i] == null]);
+    else if (t < end) out.push(target === ' ' ? [' ', false] : [SCRAMBLE_GLYPHS[(i * 7 + flip * 13 + 3) % SCRAMBLE_GLYPHS.length], true]);
+    else if (target != null) out.push([target, false]);
   }
   return out;
 }
@@ -145,6 +146,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     frame: 0,
     metaFor: '',
     dashOffset: 0,
+    nameSpans: [] as HTMLSpanElement[],
     metaChars: [] as HTMLSpanElement[],
     metaDot: null as HTMLElement | null,
     nameFor: '',
@@ -330,12 +332,35 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (name) {
       let opacity = 1;
       if (switching && from && to && t < lock) {
-        name.textContent = scrambledName(from.name, to.name, t, lock);
-        s.nameFor = '';
-        opacity = 0.9;
+        // One span per letter, so unsettled glyphs can sit dimmer than the
+        // letters already in place; kerning off, or the word hops as pairs
+        // change.
+        const letters = scrambledName(from.name, to.name, t, lock);
+        if (s.nameFor !== '') {
+          name.textContent = '';
+          s.nameSpans = [];
+          s.nameFor = '';
+          name.style.fontKerning = 'none';
+        }
+        while (s.nameSpans.length < letters.length) {
+          const span = document.createElement('span');
+          name.appendChild(span);
+          s.nameSpans.push(span);
+        }
+        while (s.nameSpans.length > letters.length) s.nameSpans.pop()?.remove();
+        letters.forEach(([letter, dud], index) => {
+          const span = s.nameSpans[index];
+          if (span.textContent !== letter) span.textContent = letter;
+          span.classList.toggle('is-dud', dud);
+        });
+        opacity = 0.94;
       } else {
+        if (s.nameFor === '') {
+          s.nameSpans = [];
+          name.style.fontKerning = '';
+        }
         setName(to);
-        if (switching) opacity = lerp(0.9, 1, easeOutCubic(progress(lock, lock + 160, t)));
+        if (switching) opacity = lerp(0.94, 1, easeOutCubic(progress(lock, lock + 160, t)));
       }
       name.style.opacity = opacity.toFixed(3);
       name.style.transform = `translate(${cx}px, ${cy + NAME_TOP}px) translateX(-50%)`;

@@ -128,6 +128,10 @@ html.lenis body {
   border-radius: 50%;
   background: #D2FF00;
 }
+/* A letter still being shuffled sits dimmer than the ones already in place. */
+.viewfinder__name .is-dud {
+  opacity: 0.58;
+}
 .viewfinder__name {
   position: absolute;
   left: 0;
