@@ -70,6 +70,10 @@ interface Props {
   engagedChapterId?: string | null;
   /** The trip a click set in motion, or null once the page has landed. */
   voyage?: AtlasVoyage | null;
+  /** An AF point is pointed at or focused (null when it is left). */
+  onEngage?: (chapterId: string | null) => void;
+  /** An AF point is clicked: go to that chapter. */
+  onNavigate?: (chapterId: string) => void;
 }
 
 interface ProjectedPoint {
@@ -163,6 +167,12 @@ const HOP = {
   restartSnapMs: 900,
   // When a voyage is cut short, its time-driven entry eases onto the scroll's.
   voyageBlendMs: 320,
+  // Left alone in the archive for this long, the resting camera begins a slow
+  // sway (the globe's idle drift, brought down to the map); any input ends it.
+  idleMs: 120000,
+  idleSwayPx: 22,
+  idleSwayZoom: 0.018,
+  idlePeriodMs: 9000,
   settleStateMs: 120,
 } as const;
 // Take-off gathers speed over the first third; the landing is firm rather
@@ -844,6 +854,8 @@ export default function RouteAtlas({
   presentation = 'classic',
   engagedChapterId = null,
   voyage = null,
+  onEngage,
+  onNavigate,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -1043,6 +1055,22 @@ export default function RouteAtlas({
   const engagedEntry = prologueStage && engagedChapterId
     ? chapterRoute.find((entry) => entry.stop.id === engagedChapterId)
     : undefined;
+  // When the pointer moves from one index row to the next, the card slides
+  // over from the previous point rather than vanishing and reappearing.
+  const previousCardRef = useRef<{ id: string; coordinates: GeoCoordinate } | null>(null);
+  let cardFrom: { x: number; y: number } | null = null;
+  if (engagedEntry) {
+    const previous = previousCardRef.current;
+    const map = mapRef.current?.getMap();
+    if (previous && previous.id !== engagedEntry.stop.id && map) {
+      const a = map.project(previous.coordinates);
+      const b = map.project(engagedEntry.stop.coordinates);
+      cardFrom = { x: a.x - b.x, y: a.y - b.y };
+    }
+  }
+  useEffect(() => {
+    previousCardRef.current = engagedEntry ? { id: engagedEntry.stop.id, coordinates: engagedEntry.stop.coordinates } : null;
+  });
   useEffect(() => {
     if (!prologue || !mapLoaded) return;
     // Warm the six small covers so the first hover shows a picture, not a load.
@@ -1615,12 +1643,29 @@ export default function RouteAtlas({
       else launch(next, now);
     };
 
+    // Idle sway: after HOP.idleMs without input the resting camera drifts a
+    // little, like the prologue globe; the first wheel, pointer or key ends it.
+    let lastInput = performance.now();
+    let idleTimer = 0;
+    let idleSince = 0;
+    const idleActive = () => !reducedMotion && lastInput + HOP.idleMs <= performance.now() && chapterMode() && !flight && !voyageState;
+    const noteInput = () => {
+      lastInput = performance.now();
+      if (idleSince) {
+        idleSince = 0;
+        wakeHop();
+      }
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(wakeHop, HOP.idleMs + 20);
+    };
     const hopStep = (time: number) => {
       hopFrame = 0;
       if (disposed) return;
       const dt = lastHopTime ? Math.min(64, time - lastHopTime) : 16.7;
       lastHopTime = time;
       const now = performance.now();
+      const idle = idleActive();
+      if (idle && !idleSince) idleSince = now;
       if (flight) {
         const t = clamp01((now - flight.start) / flight.duration);
         const s = flight.ease(t);
@@ -1646,12 +1691,23 @@ export default function RouteAtlas({
           const share = Math.min(HOP.prerollShare, HOP.prerollMaxPx / legPixels) * amount;
           targetCenter = greatCirclePoint(from, to, share);
           targetZoom = restZoom(committed) - HOP.prerollZoom * amount;
+        } else if (idle) {
+          const phase = (now - idleSince) / HOP.idlePeriodMs;
+          const rest = restCenter(committed);
+          const swayDegrees = (HOP.idleSwayPx * 360) / (512 * 2 ** restZoom(committed));
+          // Eases in over the first period so the sway begins from stillness.
+          const gain = smootherstep(clamp01(phase));
+          targetCenter = [
+            rest[0] + gain * swayDegrees * Math.sin(phase * 2 * Math.PI),
+            rest[1] + gain * swayDegrees * 0.55 * Math.sin(phase * 2 * Math.PI * 0.7 + 1.1),
+          ];
+          targetZoom = restZoom(committed) - gain * HOP.idleSwayZoom * (0.5 - 0.5 * Math.cos(phase * 2 * Math.PI * 0.5));
         } else {
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
         }
       }
-      const follow = 1 - Math.exp(-dt / HOP.followMs);
+      const follow = 1 - Math.exp(-dt / (idle ? HOP.followMs * 4 : HOP.followMs));
       hopCenter = [
         hopCenter[0] + (targetCenter[0] - hopCenter[0]) * follow,
         hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
@@ -1679,7 +1735,7 @@ export default function RouteAtlas({
       const driven = drivenEntry(now);
       if (driven != null) voyageEntry.set(driven);
       schedule(queuedSample);
-      if (flight || settling || (voyageState && voyageState.dive) || entryBlend) hopFrame = requestAnimationFrame(hopStep);
+      if (flight || settling || idle || (voyageState && voyageState.dive) || entryBlend) hopFrame = requestAnimationFrame(hopStep);
       else lastHopTime = 0;
     };
     const endVoyage = () => {
@@ -1722,6 +1778,11 @@ export default function RouteAtlas({
       lastHopTime = 0;
       hopFrame = requestAnimationFrame(hopStep);
     };
+    // Armed only now that wakeHop exists.
+    if (!reducedMotion) {
+      ['wheel', 'pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteInput, { passive: true }));
+      idleTimer = window.setTimeout(wakeHop, HOP.idleMs + 20);
+    }
 
     const draw: Process = () => {
       if (disposed) return;
@@ -2024,6 +2085,8 @@ export default function RouteAtlas({
     return () => {
       voyageHandlerRef.current = null;
       voyageEntry.set(-1);
+      window.clearTimeout(idleTimer);
+      ['wheel', 'pointermove', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteInput));
       disposed = true;
       unsubscribe();
       unsubscribeEntry();
@@ -2632,18 +2695,20 @@ export default function RouteAtlas({
         <AnimatePresence>
           {engagedEntry && (
             <Marker
-              key={`card-${engagedEntry.stop.id}`}
+              key="prologue-card"
               longitude={engagedEntry.stop.coordinates[0]}
               latitude={engagedEntry.stop.coordinates[1]}
               anchor="bottom-left"
               offset={[26, -22]}
             >
               <PrologueCard
+                key={engagedEntry.stop.id}
                 number={engagedEntry.chapterIndex + 1}
                 name={engagedEntry.stop.name}
                 region={engagedEntry.stop.region}
                 imageUrl={engagedEntry.stop.coverImageUrl || engagedEntry.stop.imageUrl}
                 reducedMotion={reducedMotion}
+                from={cardFrom}
               />
             </Marker>
           )}
@@ -2664,9 +2729,12 @@ export default function RouteAtlas({
             <AfPoint
               stopId={entry.stop.id}
               number={entry.chapterIndex + 1}
+              name={entry.stop.name}
               initiallyCurrent={entry.stop.id === currentStopRef.current}
               engaged={engagedChapterId === entry.stop.id}
               visibility={classicInterfaceOpacity}
+              onEngage={onEngage}
+              onNavigate={onNavigate}
             />
           </Marker>
         ))}

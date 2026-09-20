@@ -1330,10 +1330,11 @@ export default function HomePage({ collections }: Props) {
                 entryProgress={atlasEntryProgress}
                 prologueProgress={prologueProgress}
                 reducedMotion={!!reduce}
-                paused={storyActive}
                 engagedChapterId={engagedChapterId}
                 paused={atlasPaused}
                 voyage={voyage}
+                onEngage={setEngagedChapterId}
+                onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
               />
             </aside>
 
@@ -1440,6 +1441,7 @@ export default function HomePage({ collections }: Props) {
                                       : Math.abs(index - activeRouteIndex) <= 1
                                   }
                                   onEngagementChange={setEngagedChapterId}
+                                  highlighted={engagedChapterId === city._id}
                                   sharedLayoutId={
                                     selectedCollection?._id === city._id ? storySharedLayoutId : undefined
                                   }

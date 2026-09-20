@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import { motion, type MotionValue } from 'framer-motion';
+import { motion, useTransform, type MotionValue } from 'framer-motion';
 
 /** Everything the viewfinder prints for a place. */
 export interface ViewfinderPlace {
@@ -280,8 +280,10 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     // The reticle stays centred on the focal point throughout: the camera is
     // what moves, so the brackets only change size (the rack in reticleScale),
     // never position.
+    // The frame opens sideways while scanning — a wider field — but only a
+    // little downward, so it never runs into the name set beneath it.
     const hw = HALF_W * scale;
-    const hh = HALF_H * scale;
+    const hh = Math.min(HALF_H * scale, NAME_TOP - 6);
     let lime = 0;
     if (moving && t >= lock - 10) {
       lime = t < lock + 6
@@ -586,28 +588,41 @@ export const prologueCardSrc = (base: string) => `${base}?auto=format&w=320&q=75
  * captioned with its number, name and state. It grows from the point and
  * shrinks back into it.
  */
-export function PrologueCard({ number, name, region, imageUrl, reducedMotion }: {
+export function PrologueCard({ number, name, region, imageUrl, reducedMotion, from }: {
   number: number;
   name: string;
   region?: string;
   imageUrl: string;
   reducedMotion: boolean;
+  /** Screen offset of the previous point: the card slides over from there
+   *  instead of vanishing and reappearing. */
+  from?: { x: number; y: number } | null;
 }) {
+  const sliding = !!from && (Math.abs(from.x) > 0.5 || Math.abs(from.y) > 0.5);
+  const ease = [0.16, 1, 0.3, 1] as const;
   return (
     <motion.span
       aria-hidden="true"
       className="prologue-card"
       style={{ originX: 0, originY: 1 }}
-      initial={{ opacity: 0, scale: 0.94 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={sliding ? { opacity: 1, scale: 1, x: from!.x, y: from!.y } : { opacity: 0, scale: 0.94, x: 0, y: 0 }}
+      animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: reducedMotion ? 0 : 0.36, ease: [0.16, 1, 0.3, 1] }}
+      transition={reducedMotion
+        ? { duration: 0 }
+        : { opacity: { duration: 0.36, ease }, scale: { duration: 0.36, ease }, x: { duration: 0.55, ease }, y: { duration: 0.55, ease } }}
     >
       <span className="prologue-card__lead" />
       {imageUrl && <img src={prologueCardSrc(imageUrl)} alt="" decoding="async" />}
-      <span className="prologue-card__caption">
+      {/* The caption arrives a beat after the card — three speeds read as weight. */}
+      <motion.span
+        className="prologue-card__caption"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: reducedMotion ? 0 : 0.3, delay: reducedMotion ? 0 : 0.12, ease }}
+      >
         {pad2(number)} · {name}{region ? ` · ${region}` : ''}
-      </span>
+      </motion.span>
     </motion.span>
   );
 }
@@ -618,27 +633,48 @@ export function PrologueCard({ number, name, region, imageUrl, reducedMotion }: 
  * into a white focus point in the gap of the viewfinder's centre cross; a
  * place the camera leaves lights its square again with one quick blink.
  */
-export function AfPoint({ stopId, number, initiallyCurrent, engaged, visibility }: {
+export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
   stopId: string;
   number: number;
+  name: string;
   /** Its chapter's cover photograph is hovered or focused in the archive. */
   engaged: boolean;
   /** Only the first render reads this; afterwards the atlas toggles
    *  `is-current` on the element directly (no re-render mid-flight). */
   initiallyCurrent: boolean;
   visibility: MotionValue<number>;
+  /** Pointer or focus on the point (null when it leaves). */
+  onEngage?: (chapterId: string | null) => void;
+  /** A click: go to that chapter. */
+  onNavigate?: (chapterId: string) => void;
 }) {
   const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
+  // Invisible points (the prologue, the entrance) must not be hit targets.
+  const pointerEvents = useTransform(visibility, (value) => (value > 0.5 ? 'auto' : 'none'));
   return (
-    <motion.span aria-hidden="true" className="af-point" style={{ opacity: visibility }}>
+    <motion.span className="af-point" style={{ opacity: visibility, pointerEvents }}>
       {/* `data-engaged`, not a class: React owns the attribute, the atlas
-          owns the class list. */}
-      <span data-af-stop={stopId} data-engaged={engaged ? '' : undefined} className={initialClass}>
+          owns the class list. The point is a real button — with the route
+          rail gone it is the archive's in-map navigation. */}
+      <button
+        type="button"
+        data-af-stop={stopId}
+        data-engaged={engaged ? '' : undefined}
+        className={initialClass}
+        aria-label={`Go to chapter ${number}: ${name}`}
+        onPointerEnter={() => onEngage?.(stopId)}
+        onPointerLeave={() => onEngage?.(null)}
+        onFocus={() => onEngage?.(stopId)}
+        onBlur={() => onEngage?.(null)}
+        onClick={() => onNavigate?.(stopId)}
+      >
         <span className="af-point__ring" />
         <span className="af-point__square" />
         <span className="af-point__focus" />
-        <span className="af-point__number">{String(number).padStart(2, '0')}</span>
-      </span>
+        <span className="af-point__label" aria-hidden="true">
+          {String(number).padStart(2, '0')}&nbsp;·&nbsp;{name}
+        </span>
+      </button>
     </motion.span>
   );
 }

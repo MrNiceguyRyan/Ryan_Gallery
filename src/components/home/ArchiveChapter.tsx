@@ -53,6 +53,8 @@ interface ArchiveChapterProps {
   prioritizeImage?: boolean;
   /** Shares the cover's hover/focus lock with the geographic atlas. */
   onEngagementChange?: (chapterId: string | null) => void;
+  /** Its place is pointed at on the map: the cover answers as if hovered. */
+  highlighted?: boolean;
   /** 'cover' (default) = full-bleed magazine cover; 'feature' = a 2-column
    *  editorial spread (image + a text rail) used for the opening chapter. */
   variant?: 'feature' | 'cover';
@@ -105,6 +107,7 @@ export default function ArchiveChapter({
   preloadImageUrls = EMPTY_PRELOAD_IMAGE_URLS,
   prioritizeImage = false,
   onEngagementChange,
+  highlighted = false,
   variant = 'cover',
   desktopMotion = false,
 }: ArchiveChapterProps) {
@@ -114,7 +117,7 @@ export default function ArchiveChapter({
   const reduce = useReducedMotion();
   const canHover = useHoverCapable();
   const interactiveHover = canHover && !reduce;
-  const engaged = (canHover && isHovered) || isFocused;
+  const engaged = (canHover && isHovered) || isFocused || highlighted;
   const engagementTarget = useMotionValue(0);
   const engagementDepth = useSpring(engagementTarget, {
     stiffness: 250,
@@ -135,6 +138,12 @@ export default function ArchiveChapter({
   const filmCueX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : 4]);
   const photoBoundsRef = useRef<DOMRect | null>(null);
   const engagementRef = useRef(false);
+  // A highlight from the map lights the cover without reporting engagement
+  // back (that would only echo the id the map already has).
+  useEffect(() => {
+    if (highlighted) engagementTarget.set(1);
+    else if (!engagementRef.current) engagementTarget.set(0);
+  }, [engagementTarget, highlighted]);
 
   const setEngagement = (next: boolean) => {
     engagementTarget.set(next ? 1 : 0);
@@ -561,7 +570,7 @@ export default function ArchiveChapter({
       className="absolute left-0 right-0 bottom-0 z-10 h-[5px] origin-left"
       style={{ background: ACCENT }}
       animate={{ scaleX: engaged ? 1 : 0 }}
-      transition={{ duration: reduce ? 0 : engaged ? 0.58 : 0.42, ease: expo }}
+      transition={{ duration: reduce ? 0 : engaged ? 0.3 : 0.5, ease: expo }}
     />
   );
 

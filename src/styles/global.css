@@ -28,6 +28,15 @@ html.lenis body {
   overflow: hidden;
 }
 
+/* Hover in fast, out slow, across the prologue index (Tillmann Franzen). */
+.prologue-index-row span {
+  transition-duration: 400ms;
+}
+.prologue-index-row:hover span,
+.prologue-index-row:focus-visible span {
+  transition-duration: 200ms;
+}
+
 /* Globe prologue (desktop homepage opening). Each display line rises out of
    its own mask; the padding/negative margin pair gives the glyphs' overshoot
    room without changing the line boxes. */
@@ -181,6 +190,27 @@ html.lenis body {
   display: block;
   width: 12px;
   height: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow: visible;
+}
+/* A 36px hit area around the 12px mark. */
+.af-point__mark::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+.af-point__mark:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 6px;
+}
+.af-point__mark.is-current {
+  cursor: default;
 }
 .af-point__square {
   position: absolute;
@@ -188,19 +218,35 @@ html.lenis body {
   border: 1px solid rgba(244, 244, 237, 0.72);
   box-shadow: 0 0 0 1px rgba(12, 15, 10, 0.45), inset 0 0 0 1px rgba(12, 15, 10, 0.3);
 }
-.af-point__number {
+ /* The label — number and name — shows only while the point is pointed at,
+   focused or its cover is hovered: numbers belong in the index, not on the
+   map. Hover in fast, out slow. */
+.af-point__label {
   position: absolute;
-  left: 17px;
+  left: 19px;
   top: 50%;
   transform: translateY(-50%);
+  white-space: nowrap;
   font-family: var(--font-ui);
   font-size: 9px;
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-  color: rgba(244, 244, 237, 0.62);
-  text-shadow: 0 0 5px rgba(12, 15, 10, 0.6);
+  color: rgba(244, 244, 237, 0.86);
+  text-shadow: 0 0 5px rgba(12, 15, 10, 0.7);
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+.af-point__mark:hover .af-point__label,
+.af-point__mark:focus-visible .af-point__label,
+.af-point__mark[data-engaged] .af-point__label {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+.af-point__mark.is-current .af-point__label {
+  opacity: 0;
 }
 /* The current place's point: white ink, the one mark the map draws there. */
 .af-point__focus {
@@ -243,10 +289,7 @@ html.lenis body {
   transform: scale(0.42);
   transition: opacity 160ms ease-in, transform 160ms ease-in;
 }
-.af-point__mark.is-current .af-point__number {
-  opacity: 0;
-  transition: opacity 160ms ease-in;
-}
+
 .af-point__mark.is-current .af-point__focus {
   opacity: 1;
   transform: scale(1);
@@ -267,7 +310,7 @@ html.lenis body {
   .af-point__mark:not(.is-current) { animation: none; }
   .af-point__ring,
   .af-point__mark.is-current .af-point__square,
-  .af-point__mark.is-current .af-point__number,
+  .af-point__label,
   .af-point__mark.is-current .af-point__focus { transition: none; }
 }
 
@@ -311,6 +354,14 @@ main[data-story-under="true"] [data-archive-column] {
   height: 100%;
   object-fit: cover;
   filter: saturate(0.92);
+  animation: prologue-card-sharpen 360ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+@keyframes prologue-card-sharpen {
+  from { filter: saturate(0.92) blur(1.2px); }
+  to { filter: saturate(0.92) blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prologue-card img { animation: none; }
 }
 .prologue-card__lead {
   position: absolute;
