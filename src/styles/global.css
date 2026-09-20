@@ -890,40 +890,52 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   display: block;
   pointer-events: none;
 }
+/* The corners are driven from ONE place: `--focus-splay` and `--focus-glow`,
+   written per frame by the plate's own distance from the reading line. No
+   transition lives here — the values already arrive eased, and a transition on
+   a per-frame value would only ever be chasing a target that has already
+   moved. The camera's own states below are the exception: they are discrete,
+   so they bring their own timing. */
 .archive-focus i {
   position: absolute;
   width: 30px;
   height: 30px;
   border: 0 solid rgba(244, 244, 237, 0.82);
   filter: drop-shadow(0 1px 2px rgba(12, 15, 10, 0.55));
-  opacity: 0.4;
-  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1), transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: var(--focus-glow, 0.4);
+  transform: translate(
+    calc(var(--focus-x) * var(--focus-splay, 7px)),
+    calc(var(--focus-y) * var(--focus-splay, 7px))
+  );
+  /* Only `border-color` is eased here, and only because it is the one property
+     on this element that is never written per frame: it changes once when the
+     camera lands and once more when the lock lapses. */
+  transition: border-color 620ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; transform: translate(-7px, -7px); }
-.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; transform: translate(7px, -7px); }
-.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; transform: translate(7px, 7px); }
-.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; transform: translate(-7px, 7px); }
-.archive-focus[data-focused] i {
-  opacity: 0.95;
-  transform: translate(0, 0);
-}
-/* The camera is flying to this plate: its corners stand off and dim, the way
-   the reticle used to open while it hunted. */
-[data-atlas-camera="flying"] [data-archive-chapter][data-active="true"] .archive-focus i {
-  opacity: 0.5;
-  transform: translate(calc(var(--focus-x) * 13px), calc(var(--focus-y) * 13px));
-}
-/* It lands: the corners snap in and the frame confirms once, in lime. */
+/* Per-corner data, all of it in one place: which corner this is, and which way
+   it points — the sign pair the shared `--focus-splay` is multiplied by. */
+.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; --focus-x: -1; --focus-y: -1; }
+.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; --focus-x: 1; --focus-y: -1; }
+.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; --focus-x: 1; --focus-y: 1; }
+.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; --focus-x: -1; --focus-y: 1; }
+/* The camera never touches the corners' GEOMETRY. A flight begins on the same
+   commit that puts this plate on the reading line and lasts up to 1.85s, so a
+   flight that splayed the corners would blow them open at the exact instant
+   the rack is closing them — the binary snap this rack exists to remove,
+   wearing a different attribute. The hunt is already drawn where it belongs,
+   on the map. What the plate answers is the landing, and it answers in ink
+   rather than in position: the corners confirm the place in lime without ever
+   leaving the photograph's edges.
+
+   `--focus-glow` is set on the corner ITSELF. The rack's value reaches it only
+   by inheritance from the span, and a declaration always beats an inherited
+   value, so for the length of the lock this one wins — which keeps `opacity`
+   and `transform` each declared in exactly one rule in the stylesheet. */
 [data-atlas-camera="locked"] [data-archive-chapter][data-active="true"] .archive-focus i {
-  opacity: 1;
-  transform: translate(0, 0);
+  --focus-glow: 1;
   border-color: #D2FF00;
-  transition-duration: 180ms, 180ms;
+  transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.archive-focus i:nth-child(1) { --focus-x: -1; --focus-y: -1; }
-.archive-focus i:nth-child(2) { --focus-x: 1; --focus-y: -1; }
-.archive-focus i:nth-child(3) { --focus-x: 1; --focus-y: 1; }
-.archive-focus i:nth-child(4) { --focus-x: -1; --focus-y: 1; }
 .archive-plate__cue {
   position: absolute;
   right: 0;
@@ -950,6 +962,12 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {
   .archive-focus i,
   .archive-plate__cue { transition: none; }
+  /* The lock rule is (0,4,1) against the (0,1,1) above, so it has to be
+     answered at its own weight or the lime keeps easing here. Under reduce the
+     confirmation still happens; it just cuts. */
+  [data-atlas-camera="locked"] [data-archive-chapter][data-active="true"] .archive-focus i {
+    transition: none;
+  }
 }
 .route-atlas--mobile .route-atlas-fallback__art {
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.42) 4%, #000 9%, #000 100%);
@@ -1858,6 +1876,15 @@ body.travel-workspace-active {
   .living-atlas__photo img {
     transform: none;
   }
+}
+
+/* The viewer's controls leave as soon as it is closing, so the photograph has
+   the screen to itself for its flight home. The field and the frame are the
+   subject of that half-second; the buttons are not. */
+#lightbox[data-closing="true"] .lightbox-chrome {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Newsprint ink screen — a fine dot grain that reads as offset print. Used on

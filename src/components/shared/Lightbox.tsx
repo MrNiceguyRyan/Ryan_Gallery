@@ -9,6 +9,9 @@ import { lightboxImageSources, prepareLightboxImage } from '../../lib/lightboxIm
  *  out of it. */
 export interface LightboxOrigin { x: number; y: number; width: number; height: number }
 
+/** The frame a given index belongs to, resolved at the moment it is needed. */
+export interface LightboxTarget { box: LightboxOrigin; node: HTMLElement }
+
 interface LightboxProps {
   photos: Photo[];
   initialIndex: number;
@@ -16,6 +19,14 @@ interface LightboxProps {
   collectionName?: string;
   /** Where the viewer opens from (the clicked frame's box). */
   origin?: LightboxOrigin | null;
+  /**
+   * Where the viewer should go BACK to — the frame for whatever index is
+   * showing when it closes, which after paging is not the frame it opened
+   * from. Called once, at close, so the box is measured after any lazy image
+   * has loaded and after any resize; returns null when that frame is not on
+   * screen (a breakpoint-hidden cell), and the viewer then simply recedes.
+   */
+  resolveTarget?: (index: number) => LightboxTarget | null;
 }
 
 const photoVariants = {
@@ -36,7 +47,7 @@ const photoVariants = {
  * Shared Lightbox — fullscreen photo viewer
  * Keyboard ← → navigate · Escape close · touch swipe
  */
-export default function Lightbox({ photos, initialIndex, onClose, collectionName, origin }: LightboxProps) {
+export default function Lightbox({ photos, initialIndex, onClose, collectionName, origin, resolveTarget }: LightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const [requestedIndex, setRequestedIndex] = useState(initialIndex);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -79,6 +90,10 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const reduce = useReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
+  // The opening flight's clean-up timer. A reader who opens and closes inside
+  // 620ms would otherwise have the return flight wiped mid-air by the timer
+  // the opening left behind.
+  const settleTimerRef = useRef(0);
   // The viewer lifts out of the frame the reader clicked. The stage is
   // measured once, on mount, and placed over that frame before the first
   // paint; the next frame hands it to the compositor to travel back.
@@ -93,21 +108,53 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
     node.style.transition = 'none';
     node.style.transformOrigin = 'center';
     node.style.transform = `translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0) scale(${scale.toFixed(4)})`;
-    let settle = 0;
     const frame = requestAnimationFrame(() => {
       node.style.transition = 'transform 560ms cubic-bezier(0.16, 1, 0.3, 1)';
       node.style.transform = 'translate3d(0, 0, 0) scale(1)';
-      settle = window.setTimeout(() => {
+      settleTimerRef.current = window.setTimeout(() => {
         node.style.transition = '';
         node.style.transform = '';
       }, 620);
     });
     return () => {
       cancelAnimationFrame(frame);
-      window.clearTimeout(settle);
+      window.clearTimeout(settleTimerRef.current);
     };
   }, [origin, reduce]);
   const isPresent = useIsPresent();
+  // The frame the viewer will hand itself back to. Held in a ref because the
+  // unmount cleanup below — which is where focus is restored — runs after the
+  // exit, long after the last render.
+  const returnNodeRef = useRef<HTMLElement | null>(null);
+  // Closing mirrors opening: the photograph travels back into the frame it
+  // belongs to, rather than dissolving in the middle of the screen and leaving
+  // the reader to find their place again. The frame is resolved HERE, once, at
+  // the moment of closing — the reader may have paged several frames on from
+  // the one they clicked, and that frame's box is only knowable now.
+  useLayoutEffect(() => {
+    if (isPresent) return;
+    window.clearTimeout(settleTimerRef.current);
+    const target = resolveTarget?.(index) ?? null;
+    if (target?.node) returnNodeRef.current = target.node;
+    const node = stageRef.current;
+    if (!node || reduce) return;
+    const box = node.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    if (!target) {
+      // Nothing to fly to (the frame is hidden at this breakpoint): recede.
+      node.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+      node.style.transformOrigin = 'center';
+      node.style.transform = 'scale(0.965)';
+      node.style.opacity = '0';
+      return;
+    }
+    const scale = Math.max(0.05, target.box.width / box.width);
+    const dx = target.box.x + target.box.width / 2 - (box.x + box.width / 2);
+    const dy = target.box.y + target.box.height / 2 - (box.y + box.height / 2);
+    node.style.transition = 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1)';
+    node.style.transformOrigin = 'center';
+    node.style.transform = `translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0) scale(${scale.toFixed(4)})`;
+  }, [index, isPresent, reduce, resolveTarget]);
 
   const requestFrame = useCallback((offset: number) => {
     const target = Math.max(0, Math.min(requestedIndexRef.current + offset, photos.length - 1));
@@ -217,8 +264,14 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       document.body.style.overflow = prevOverflow;
       if (!wasCursorHidden) document.body.classList.remove('cursor-hidden');
       cancelAnimationFrame(frame);
+      // Hand the keyboard back to the frame the reader is actually on. Paging
+      // with the arrows moves the viewer but never moved this: closing after
+      // three frames used to drop focus back on the one originally clicked,
+      // three cells behind where the eye was.
+      const returning = returnNodeRef.current;
       const previous = previousFocusRef.current;
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      const target = returning?.isConnected ? returning : previous;
+      if (target?.isConnected) target.focus({ preventScroll: true });
     };
   }, []);
 
@@ -261,12 +314,27 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       aria-hidden={!isPresent || undefined}
       inert={!isPresent ? true : undefined}
       aria-label={collectionName ? `Photo viewer, ${collectionName}` : 'Photo viewer'}
-      className="fixed inset-0 z-[60] bg-black/97 flex items-center justify-center"
+      data-closing={!isPresent ? 'true' : undefined}
+      className="fixed inset-0 z-[60] flex items-center justify-center"
       style={{ cursor: 'default' }}
-      initial={reduce ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: reduce ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
+      // The black field is a property of this element, not a class, so it can
+      // fade on its own while the photograph stays solid: opacity compounds
+      // through a parent, so a root that fades takes the travelling picture
+      // with it. The root's own opacity is therefore held at 1 until the
+      // flight has all but landed, then spent in the last 130ms.
+      initial={reduce ? false : { opacity: 0, backgroundColor: 'rgba(0, 0, 0, 0)' }}
+      animate={{ opacity: 1, backgroundColor: 'rgba(0, 0, 0, 0.97)' }}
+      exit={{ opacity: [1, 1, 0], backgroundColor: 'rgba(0, 0, 0, 0)' }}
+      transition={reduce
+        ? { duration: 0 }
+        : {
+            duration: 0.4,
+            ease: [0.16, 1, 0.3, 1],
+            opacity: { duration: 0.46, times: [0, 0.72, 1], ease: 'linear' },
+            // Linear: on the house ease this emptied in 150ms and the flight
+            // then finished over a page that was already fully back.
+            backgroundColor: { duration: 0.32, ease: 'linear' },
+          }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -282,7 +350,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
         whileHover={reduce ? undefined : { scale: 1.08 }}
         whileTap={reduce ? undefined : { scale: 0.92 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/62 transition-colors duration-200 hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+        className="lightbox-chrome absolute z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/30 text-white/62 transition-colors duration-200 hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
         style={{
           top: 'max(0.75rem, env(safe-area-inset-top))',
           right: 'max(0.75rem, env(safe-area-inset-right))',
@@ -342,7 +410,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           whileHover={reduce ? undefined : { scale: 1.15, x: -2 }}
           whileTap={reduce ? undefined : { scale: 0.9, x: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+          className="lightbox-chrome absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           style={{ left: 'max(0.75rem, env(safe-area-inset-left))' }}
           aria-label={`Previous photo, ${requestedIndex} of ${photos.length}`}
         >
@@ -357,7 +425,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           whileHover={reduce ? undefined : { scale: 1.15, x: 2 }}
           whileTap={reduce ? undefined : { scale: 0.9, x: 4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+          className="lightbox-chrome absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           style={{ right: 'max(0.75rem, env(safe-area-inset-right))' }}
           aria-label={`Next photo, ${requestedIndex + 2} of ${photos.length}`}
         >
@@ -367,7 +435,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
 
       {/* Mobile swipe hint — shown only when there are more photos */}
       {photos.length > 1 && (
-        <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[10px] font-ui uppercase tracking-widest text-white/48 pointer-events-none md:hidden" style={{ top: 'max(1.1rem, env(safe-area-inset-top))' }}>
+        <div className="lightbox-chrome absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[10px] font-ui uppercase tracking-widest text-white/48 pointer-events-none md:hidden" style={{ top: 'max(1.1rem, env(safe-area-inset-top))' }}>
           <ChevronLeft className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
           swipe
           <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
@@ -376,7 +444,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
 
       {/* Bottom info — wraps gracefully on narrow viewports */}
       <div
-        className="absolute left-1/2 flex w-[90vw] max-w-3xl -translate-x-1/2 flex-col items-center gap-2 md:gap-3"
+        className="lightbox-chrome absolute left-1/2 flex w-[90vw] max-w-3xl -translate-x-1/2 flex-col items-center gap-2 md:gap-3"
         style={{ bottom: 'max(1.25rem, calc(env(safe-area-inset-bottom) + 0.25rem))' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -415,7 +483,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       </div>
 
       {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
+      <div className="lightbox-chrome absolute bottom-0 left-0 right-0 h-[2px] bg-white/5">
         <motion.div
           className="h-full bg-white/25"
           animate={{ width: `${((index + 1) / photos.length) * 100}%` }}

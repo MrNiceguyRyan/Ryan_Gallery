@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
 import { ArrowRight, Share2, Check } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
-import Lightbox, { type LightboxOrigin } from '../shared/Lightbox';
+import Lightbox, { type LightboxOrigin, type LightboxTarget } from '../shared/Lightbox';
 import {
   EDITORIAL_FALLBACKS,
   photoAccessibleLabel,
@@ -37,6 +37,9 @@ const DEVELOP_MASK_STYLE = {
 // frames lift just past rest and land. It drives transform only: opacity keeps
 // expo, because an overshooting opacity has nothing to overshoot into.
 const popEase = [0.34, 1.56, 0.64, 1] as const;
+// The card grows into the cover. Long enough to read as one object arriving,
+// short enough that expand + hold + peel stays inside a a single page turn.
+const COVER_EXPAND_MS = 500;
 const SHARED_OPEN_DURATION = 0.78;
 const SHARED_CLOSE_DURATION = 0.62;
 const SHARED_CONTENT_DELAY = SHARED_OPEN_DURATION * 0.55;
@@ -383,6 +386,7 @@ function PhotoCell({
         whileTap: { opacity: 0.9 },
       })}
       onClick={(event) => onClick(event.currentTarget)}
+      data-frame-index={index}
       aria-label={`Open ${accessibleLabel}`}
       animate={{
         opacity: isAnyHovered && !isThisHovered ? 0.84 : 1,
@@ -471,12 +475,14 @@ function LightboxShell({
   onClose,
   collectionName,
   origin,
+  resolveTarget,
 }: {
   photos: Photo[];
   activeIndex: number;
   onClose: () => void;
   collectionName: string;
   origin: LightboxOrigin | null;
+  resolveTarget: (index: number) => LightboxTarget | null;
 }) {
   return (
     <Lightbox
@@ -485,6 +491,7 @@ function LightboxShell({
       onClose={onClose}
       collectionName={collectionName}
       origin={origin}
+      resolveTarget={resolveTarget}
     />
   );
 }
@@ -530,6 +537,35 @@ export default function MagazineLayout({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The box of the frame that opened the viewer, read at click time.
   const [lightboxOrigin, setLightboxOrigin] = useState<LightboxOrigin | null>(null);
+  // Where a frame IS, asked for at the moment the viewer closes rather than
+  // remembered from when it opened. Two elements can carry the same index (the
+  // grid cell and the phone's opening frame, one of which is display:none at
+  // any width), so take the first one actually laid out.
+  const resolveFrameTarget = useCallback((index: number) => {
+    const root = containerRef.current;
+    if (!root) return null;
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(`[data-frame-index="${index}"]`));
+    const node = nodes.find((candidate) => candidate.offsetParent !== null);
+    if (!node) return null;
+    let box = node.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    // The reader may have paged a long way from the frame they opened, and the
+    // story underneath has not moved since. Bring that frame into view before
+    // measuring it: the viewer still covers the whole screen, so the story
+    // scrolling to meet it is never seen — and it means closing always returns
+    // the reader to the frame they were actually looking at, rather than to
+    // wherever they happened to start.
+    const rootBox = root.getBoundingClientRect();
+    if (box.top < rootBox.top + 24 || box.bottom > rootBox.bottom - 24) {
+      const previousBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      root.scrollTop += (box.top - rootBox.top) - (rootBox.height - box.height) / 2;
+      box = node.getBoundingClientRect();
+      root.style.scrollBehavior = previousBehavior;
+      if (!box.width || !box.height) return null;
+    }
+    return { box: { x: box.x, y: box.y, width: box.width, height: box.height }, node };
+  }, []);
   const openLightbox = (index: number, element: HTMLElement | null) => {
     const box = element?.getBoundingClientRect();
     setLightboxOrigin(box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null);
@@ -551,6 +587,14 @@ export default function MagazineLayout({
     setOpeningFrameError(false);
     setHoveredIndex(null);
     setLightboxIndex(null);
+    // The turn is over the moment this story is the current one. Cleared HERE
+    // rather than when the plane finishes growing: clearing it earlier would
+    // unmount the plane for the one frame before this effect re-arms the cover,
+    // and that frame is the whole story swapping in plain sight. Cleared ABOVE
+    // the two early returns, because under reduced motion (and on the shared
+    // path) they take the cover away themselves — and a pending turn left set
+    // there keeps the plane mounted over the story for good.
+    setPendingStory(null);
     if (sharedEntry) { setCoverGone(true); setCoverExited(true); return; }
     if (reduce) { setCoverGone(true); setCoverExited(true); return; }
     setCoverExited(false);
@@ -621,13 +665,61 @@ export default function MagazineLayout({
     : '');
   const hasSharedSource = sharedSourcePresent ?? !!returnFocusElement?.isConnected;
   const canMorphSharedPhoto = isSharedEntryCollection && !!sharedLayoutId && !!sharedPhotoUrl && hasSharedSource;
-  const transitionBackdropBase = (collection.slug && COVER_BG[collection.slug])
-    || collection.coverImageUrl
-    || photos[0]?.imageUrl
+
+  // ── The page turn ──
+  // "Keep Reading" used to swap the collection in the same frame the reader
+  // clicked: the next story's full-screen cover simply existed, whole, while an
+  // effect scrolled the page back to the top underneath it — the cut hidden by
+  // the thing doing the cutting. Now the card the reader clicked BECOMES the
+  // cover: its box is measured once, at click, and the plane grows out of it.
+  // The story underneath is swapped only once that plane is opaque and
+  // full-screen, so the swap is never seen, and the cover's own choreography
+  // holds until it has landed rather than playing while it travels.
+  const [pendingStory, setPendingStory] = useState<{ collection: Collection; box: LightboxOrigin } | null>(null);
+  const onSelectCollectionRef = useRef(onSelectCollection);
+  onSelectCollectionRef.current = onSelectCollection;
+  // The cover announces the story it is opening, which during the turn is not
+  // yet the story this component is rendering.
+  const coverStory = pendingStory?.collection ?? collection;
+  const coverArrived = !pendingStory;
+  const coverIndex = allCollections.findIndex((entry) => entry._id === coverStory._id);
+  const coverFolio = String((coverIndex >= 0 ? coverIndex : 0) + 1).padStart(2, '0');
+  const coverFrameCount = pendingStory
+    ? (pendingStory.collection.photos?.length ?? pendingStory.collection.photoCount ?? 0)
+    : photos.length;
+  const coverLocation = typeof coverStory.location === 'string' && !labelsMatch(coverStory.name, coverStory.location)
+    ? coverStory.location.trim()
+    : '';
+  const coverBackdropBase = (coverStory.slug && COVER_BG[coverStory.slug])
+    || coverStory.coverImageUrl
+    || (pendingStory ? '' : photos[0]?.imageUrl)
     || '';
-  const transitionBackdrop = transitionBackdropBase.includes('cdn.sanity.io/images/')
-    ? `${transitionBackdropBase.split('?')[0]}?auto=format&w=2000&q=78`
-    : transitionBackdropBase;
+  const coverBackdrop = coverBackdropBase.includes('cdn.sanity.io/images/')
+    ? `${coverBackdropBase.split('?')[0]}?auto=format&w=2000&q=78`
+    : coverBackdropBase;
+  const beginPageTurn = (next: Collection, card: HTMLElement | null) => {
+    if (pendingStory) return;
+    const box = card?.getBoundingClientRect();
+    // Focus the shell before the story body goes inert underneath the plane.
+    dialogRef.current?.focus({ preventScroll: true });
+    if (!box || !box.width || !box.height) {
+      onSelectCollection(next);
+      return;
+    }
+    setPendingStory({ collection: next, box: { x: box.x, y: box.y, width: box.width, height: box.height } });
+  };
+  // The swap is on a timer rather than on the plane's own animation callback:
+  // under reduced motion the plane arrives in zero seconds, and a page turn
+  // that depends on a callback firing for a zero-length animation is a page
+  // turn that can simply not happen.
+  useEffect(() => {
+    if (!pendingStory) return;
+    const timer = window.setTimeout(
+      () => onSelectCollectionRef.current(pendingStory.collection),
+      reduce ? 0 : COVER_EXPAND_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [pendingStory, reduce]);
 
   // The photograph owns the first 55% of the Homepage handoff. Navigation and
   // story content become interactive only once that expansion has established
@@ -960,6 +1052,7 @@ export default function MagazineLayout({
                     <motion.button
                       type="button"
                       onClick={(event) => openLightbox(0, event.currentTarget)}
+                      data-frame-index={0}
                       initial={reduce ? false : { opacity: 0, y: 18 }}
                       animate={photoRevealReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
                       transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 0.18, ease: expo }}
@@ -1112,7 +1205,17 @@ export default function MagazineLayout({
                           ref={endCapRef}
                           type="button"
                           className="w-full min-h-11 flex flex-col items-center gap-10 md:gap-12 group cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-                          onClick={() => onSelectCollection(nextCollection)}
+                          onClick={(event) => {
+                            // A standalone /works page turns by navigating, and
+                            // the whole document is replaced; there is nothing
+                            // here for a plane to grow into.
+                            if (standalone) {
+                              onSelectCollection(nextCollection);
+                              return;
+                            }
+                            const card = event.currentTarget.querySelector<HTMLElement>('[data-next-cover]');
+                            beginPageTurn(nextCollection, card ?? event.currentTarget);
+                          }}
                           aria-label={`Read next story: ${nextCollection.name}`}
                         >
                           <motion.span
@@ -1139,6 +1242,7 @@ export default function MagazineLayout({
                             </Magnetic>
                             {nextCollection.coverImageUrl && (
                               <motion.span
+                                data-next-cover
                                 className="block h-[150px] w-60 overflow-hidden transition-opacity duration-500 group-hover:opacity-100"
                                 style={reduce ? undefined : DEVELOP_MASK_STYLE}
                                 initial={reduce ? false : { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }}
@@ -1227,28 +1331,51 @@ export default function MagazineLayout({
              Strong newspaper character: masthead + double rule + column
              rules + halftone screen + folio. ── */}
         <AnimatePresence onExitComplete={() => setCoverExited(true)}>
-          {!coverGone && (
+          {(!coverGone || !!pendingStory) && (
             <motion.div
-              key={`cover-${collection._id}`}
+              /* Keyed on the story the cover ANNOUNCES. During a page turn that
+                 is the pending one, so when `collection` catches up a moment
+                 later the key does not change and the plane is never remounted
+                 mid-turn. */
+              key={`cover-${coverStory._id}`}
               aria-hidden="true"
-              initial={{ y: 0 }}
+              /* The plane starts as the card the reader clicked and grows to
+                 fill the shell. `transformOrigin: 0 0` makes that two numbers
+                 and a translate, on the compositor, with no layout. */
+              initial={pendingStory
+                ? {
+                    y: pendingStory.box.y,
+                    x: pendingStory.box.x,
+                    scaleX: pendingStory.box.width / window.innerWidth,
+                    scaleY: pendingStory.box.height / window.innerHeight,
+                  }
+                : { y: 0 }}
+              animate={{ x: 0, y: 0, scaleX: 1, scaleY: 1 }}
               exit={{ y: '-100%' }}
-              transition={{ duration: reduce ? 0 : 0.72, ease: [0.76, 0, 0.24, 1] }}
+              /* The cover arrives on the same curve it leaves on. House expo is
+                 so front-loaded that the plane was 84% of the way across in its
+                 first 117ms — a pop, not a travel; the cover's own peel curve
+                 spends the time in the middle of the move, where the growing
+                 card is actually legible as the page it is becoming. */
+              transition={pendingStory
+                ? { duration: reduce ? 0 : COVER_EXPAND_MS / 1000, ease: [0.76, 0, 0.24, 1] }
+                : { duration: reduce ? 0 : 0.72, ease: [0.76, 0, 0.24, 1] }}
+              style={{ transformOrigin: '0 0' }}
               className="pointer-events-none absolute inset-0 z-[75] overflow-hidden bg-[#30352a] text-[#F4F4ED]"
             >
               {/* Every collection enters through the same quiet image field.
                   Where an archive map exists it remains the preferred layer;
                   otherwise the collection cover supplies a calm, factual
                   fallback instead of dropping to an unrelated blank state. */}
-              {transitionBackdrop && (
+              {coverBackdrop && (
                 <motion.div
                   className="absolute inset-0 pointer-events-none"
                   initial={{ scale: 1.12, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
+                  animate={coverArrived ? { scale: 1, opacity: 1 } : { scale: 1.12, opacity: 0 }}
                   transition={{ duration: 1.3, ease: expo }}
                 >
                   <img
-                    src={transitionBackdrop}
+                    src={coverBackdrop}
                     alt=""
                     width={2000}
                     height={1126}
@@ -1275,7 +1402,7 @@ export default function MagazineLayout({
                   <motion.span
                     key={i}
                     initial={{ scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
+                    animate={{ scaleY: coverArrived ? 1 : 0 }}
                     transition={{ duration: 0.7, delay: 0.06 + i * 0.06, ease: expo }}
                     className="origin-top"
                     style={{ borderRight: i === 3 ? '0' : '1px solid rgba(255,255,255,0.05)' }}
@@ -1286,7 +1413,7 @@ export default function MagazineLayout({
               {/* Masthead / running head + double rule */}
               <motion.div
                 initial={{ clipPath: 'inset(0 100% 0 0)' }}
-                animate={{ clipPath: 'inset(0 0% 0 0)' }}
+                animate={{ clipPath: coverArrived ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)' }}
                 transition={{ duration: 0.65, delay: 0.1, ease: expo }}
                 className="absolute"
                 style={{
@@ -1297,7 +1424,7 @@ export default function MagazineLayout({
               >
                 <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase">
                   <span className="font-medium text-white/60">The Journal Gallery</span>
-                  <span className="text-white/58">Vol. 01 · {collection.year || 'Archive'}</span>
+                  <span className="text-white/58">Vol. 01 · {coverStory.year || 'Archive'}</span>
                 </div>
                 <div className="mt-[3px] border-b border-white/10" />
               </motion.div>
@@ -1306,42 +1433,42 @@ export default function MagazineLayout({
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
                 <motion.span
                   initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={coverArrived ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
                   transition={{ duration: 0.44, delay: 0.18, ease: expo }}
                   className="font-ui text-[11px] tracking-[0.5em] uppercase"
                   style={{ color: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.85)' }}
                 >
-                  // dispatch № {folio}
+                  // dispatch № {coverFolio}
                 </motion.span>
                 <h2 className="m-0 overflow-hidden" style={{ padding: '0.04em 0.02em' }}>
                   <motion.span
                     initial={{ y: '110%' }}
-                    animate={{ y: '0%' }}
+                    animate={{ y: coverArrived ? '0%' : '110%' }}
                     transition={{ duration: 0.68, delay: 0.24, ease: expo }}
                     className="inline-block font-serif uppercase font-normal leading-[0.92] tracking-tight text-white/[0.98]"
                     style={{ fontSize: 'clamp(42px,7.5vw,112px)' }}
                   >
-                    {collection.name}
+                    {coverStory.name}
                   </motion.span>
                 </h2>
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={coverArrived ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
                   transition={{ duration: 0.46, delay: 0.34, ease: expo }}
                   className="flex items-center gap-3 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
                 >
-                  {distinctLocation && <span>{distinctLocation}</span>}
-                  {distinctLocation && (
+                  {coverLocation && <span>{coverLocation}</span>}
+                  {coverLocation && (
                     <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.7)' }} />
                   )}
-                  <span>{photos.length} Frames</span>
+                  <span>{coverFrameCount} Frames</span>
                 </motion.div>
               </div>
 
               {/* Folio / page number */}
               <motion.div
                 initial={{ clipPath: 'inset(0 0 0 100%)' }}
-                animate={{ clipPath: 'inset(0 0 0 0%)' }}
+                animate={{ clipPath: coverArrived ? 'inset(0 0 0 0%)' : 'inset(0 0 0 100%)' }}
                 transition={{ duration: 0.65, delay: 0.12, ease: expo }}
                 className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
                 style={{
@@ -1350,7 +1477,7 @@ export default function MagazineLayout({
                   right: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-right))',
                 }}
               >
-                <span className="text-[13px] tracking-[0.2em] text-white/55">{folio}</span>
+                <span className="text-[13px] tracking-[0.2em] text-white/55">{coverFolio}</span>
                 <span>The Story Begins</span>
               </motion.div>
             </motion.div>
@@ -1367,6 +1494,7 @@ export default function MagazineLayout({
             onClose={() => setLightboxIndex(null)}
             collectionName={collection.name}
             origin={lightboxOrigin}
+            resolveTarget={resolveFrameTarget}
           />
         )}
       </AnimatePresence>

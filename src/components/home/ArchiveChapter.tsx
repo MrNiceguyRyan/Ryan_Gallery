@@ -128,7 +128,6 @@ export default function ArchiveChapter({
   const titlePointerX = useTransform(pointerX, (value) => reduce ? 0 : value * -0.32);
   const titleOpenX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -4]);
 
-  const plateCueOpacity = useTransform(interactionDepth, [0, 1], [0.42, 0.9]);
   const plateCueX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : 4]);
   const photoBoundsRef = useRef<DOMRect | null>(null);
   const engagementRef = useRef(false);
@@ -275,6 +274,50 @@ export default function ArchiveChapter({
     const distance = smoothFocus(Math.abs(delta));
     return distance * (delta < 0 ? 18 : -10);
   });
+
+  // The focus corners rack on the same distance everything else on this plate
+  // rides. They used to flip on `data-focused` — a binary React state governed
+  // by a 36px hysteresis window and a 0.18–0.86vh valid band, so the corners
+  // could be fully closed while the photograph was nowhere near the reading
+  // line, and they snapped at a moment with no visual relationship to it. Now
+  // they close as the photograph rises onto the line and splay as it leaves,
+  // on the same quintic curve as the map halo and the route head.
+  //
+  // Two custom properties, not four transforms: a single translate on the
+  // container cannot splay four corners outward, and animating each corner's
+  // inset would put layout on every scroll frame. `--focus-x/--focus-y` are
+  // already the per-corner signs, so one shared distance is all that is
+  // missing, and the work stays on the compositor.
+  const focusSplay = useTransform(chapterDelta, (delta) => {
+    const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
+    return `${(distance * 7).toFixed(2)}px`;
+  });
+  // Not multiplied by `albumOpen`: the corners live inside `.archive-plate__stage`,
+  // which already carries it, and squaring it would hold them dark through the
+  // first cover's unfold.
+  const focusGlow = useTransform(chapterDelta, (delta) => {
+    const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
+    return (0.95 - distance * 0.55).toFixed(3);
+  });
+  // One cue lit at a time. Resting at 0.42 on every plate, "OPEN STORY" was
+  // printed once per chapter down the whole column, which is not an invitation
+  // but a watermark. It now belongs to the plate on the reading line, and to
+  // the plate being pointed at — which are usually the same one.
+  const plateCueOpacity = useTransform(
+    [chapterDelta, interactionDepth],
+    ([delta, interaction]) => {
+      const distance = reduce
+        ? (Math.round(Number(delta)) === 0 ? 0 : 1)
+        : smoothFocus(Math.min(1, Math.abs(Number(delta))));
+      // Squared, so the cue belongs to the plate on the line rather than being
+      // shared out between the two either side of a handoff.
+      const proximity = (1 - distance) * (1 - distance);
+      // Added rather than `Math.max`ed: with a max, the hover spring has to
+      // climb past 0.55 before the cue on the line moves at all, so the first
+      // half of every hover is silent and the second half races.
+      return Math.min(0.9, proximity * 0.5 + Number(interaction) * 0.4);
+    },
+  );
 
   const { scrollYProgress } = useScroll({ target: chapterRef, offset: ['start end', 'end start'] });
   const opacity = useTransform(scrollYProgress, [0, 0.15, 0.92, 1], [0, 1, 1, 0.26]);
@@ -652,9 +695,16 @@ export default function ArchiveChapter({
               }}
             >
               {imageBlock}
-              <span aria-hidden="true" className="archive-focus" data-focused={isActive ? 'true' : undefined}>
+              <motion.span
+                aria-hidden="true"
+                className="archive-focus"
+                style={{
+                  ['--focus-splay' as never]: focusSplay,
+                  ['--focus-glow' as never]: focusGlow,
+                }}
+              >
                 <i /><i /><i /><i />
-              </span>
+              </motion.span>
               <motion.span
                 aria-hidden="true"
                 className="archive-plate__cue"
