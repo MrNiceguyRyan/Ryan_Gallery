@@ -871,103 +871,65 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
     transparent 100%
   );
 }
-.archive-film__rail,
-.archive-film__edge-light { display: none; }
+/* ─── The plate ─────────────────────────────────────────────────────────
+   A photograph gets no frame and no mat: the image is the surface, at its
+   own ratio (11 mois clamps its plates the same way and gives the card to
+   words and video instead). What marks it as the frame the camera is holding
+   is the viewfinder's own corners, drawn just outside its edges; they draw in
+   and brighten on the chapter at the reading line. */
+.archive-plate {
+  position: relative;
+}
+.archive-focus {
+  position: absolute;
+  inset: -9px;
+  z-index: 11;
+  display: block;
+  pointer-events: none;
+}
+.archive-focus i {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border: 0 solid rgba(244, 244, 237, 0.82);
+  filter: drop-shadow(0 1px 2px rgba(12, 15, 10, 0.55));
+  opacity: 0.4;
+  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1), transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.25px; border-left-width: 1.25px; transform: translate(-7px, -7px); }
+.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.25px; border-right-width: 1.25px; transform: translate(7px, -7px); }
+.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.25px; border-right-width: 1.25px; transform: translate(7px, 7px); }
+.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.25px; border-left-width: 1.25px; transform: translate(-7px, 7px); }
+.archive-focus[data-focused] i {
+  opacity: 0.95;
+  transform: translate(0, 0);
+}
+.archive-plate__cue {
+  position: absolute;
+  right: 0;
+  bottom: -30px;
+  z-index: 11;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.7);
+  pointer-events: none;
+  transition: color 360ms ease;
+}
+.archive-plate__cue svg { color: #c5d28a; }
+.group:hover .archive-plate__cue,
+.group:focus-visible .archive-plate__cue { color: #d2ff00; }
 @media (min-width: 1024px) {
-  .archive-film {
-    --film-rail: clamp(27px, 2.15vw, 33px);
-    background: transparent;
-    isolation: isolate;
-  }
-  .archive-film::before,
-  .archive-film::after {
-    content: '';
-    position: absolute;
-    top: var(--film-rail);
-    bottom: var(--film-rail);
-    width: 5px;
-    background: #1a2017;
-    pointer-events: none;
-  }
-  .archive-film::before { left: 0; }
-  .archive-film::after { right: 0; }
-  .archive-film__media {
-    inset: var(--film-rail) 5px;
-    overflow: hidden;
-  }
-  .archive-film__image-plane { inset: -6px; }
-  .archive-film .archive-photo-shade-top { opacity: 0.36; }
-  .archive-film .archive-photo-shade-bottom { opacity: 0.46; }
-  .archive-film__rail {
-    position: absolute;
-    inset-inline: 0;
-    z-index: 8;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: var(--film-rail);
-    padding-inline: 17px;
-    pointer-events: none;
-    font-family: var(--font-ui);
-    font-size: 8px;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.23em;
-    text-transform: uppercase;
-    color: rgba(230, 233, 205, 0.63);
-  }
-  .archive-film__rail--top { top: 0; }
-  .archive-film__rail--bottom { bottom: 0; justify-content: flex-end; }
-  /* Two masks cut actual apertures in the rebate: geographic detail remains
-     visible through the perforations, with no extra images or DOM per hole. */
-  .archive-film__stock {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, #24291e, #191f16 46%, #1b2118);
-    box-shadow: inset 0 1px rgba(231, 234, 210, 0.1), inset 0 -1px rgba(7, 12, 7, 0.56);
-    -webkit-mask-image: linear-gradient(#000 0 0), repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 29px);
-    -webkit-mask-size: 100% 100%, calc(100% - 203px) 8px;
-    -webkit-mask-position: center, 126px center;
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-composite: xor;
-    mask-image: linear-gradient(#000 0 0), repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 29px);
-    mask-size: 100% 100%, calc(100% - 203px) 8px;
-    mask-position: center, 126px center;
-    mask-repeat: no-repeat;
-    mask-composite: exclude;
-  }
-  .archive-film__rail--bottom .archive-film__stock {
-    -webkit-mask-size: 100% 100%, calc(100% - 316px) 8px;
-    -webkit-mask-position: center, 142px center;
-    mask-size: 100% 100%, calc(100% - 316px) 8px;
-    mask-position: center, 142px center;
-  }
-  .archive-film__code,
-  .archive-film__year,
-  .archive-film__cue { position: relative; }
-  .archive-film__code span { margin-left: 8px; color: #c5d28a; }
-  .archive-film__cue {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 9px;
-    letter-spacing: 0.18em;
-    color: rgba(244, 244, 237, 0.86);
-    transition: color 360ms ease;
-  }
-  .archive-film__cue svg { color: #c5d28a; }
-  .group:hover .archive-film__cue,
-  .group:focus-visible .archive-film__cue { color: #d2ff00; }
-  .archive-film__edge-light {
-    position: absolute;
-    inset: var(--film-rail) 5px;
-    z-index: 9;
-    display: block;
-    pointer-events: none;
-    box-shadow: inset 0 1px rgba(238, 236, 204, 0.44), inset 0 -1px rgba(238, 236, 204, 0.2);
-  }
+  .archive-plate__cue { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .archive-film__cue { transition: none; }
+  .archive-focus i,
+  .archive-plate__cue { transition: none; }
 }
 .route-atlas--mobile .route-atlas-fallback__art {
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.42) 4%, #000 9%, #000 100%);

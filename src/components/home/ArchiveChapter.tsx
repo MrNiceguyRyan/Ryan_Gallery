@@ -1,10 +1,4 @@
-import {
-  Fragment,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState, useMemo } from 'react';
 import {
   animate,
   motion,
@@ -134,8 +128,8 @@ export default function ArchiveChapter({
   const titlePointerX = useTransform(pointerX, (value) => reduce ? 0 : value * -0.32);
   const titleOpenX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -4]);
   const filmLift = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -3]);
-  const filmEdgeOpacity = useTransform(interactionDepth, [0, 1], [0.16, 0.58]);
-  const filmCueX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : 4]);
+  const plateCueOpacity = useTransform(interactionDepth, [0, 1], [0.42, 0.9]);
+  const plateCueX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : 4]);
   const photoBoundsRef = useRef<DOMRect | null>(null);
   const engagementRef = useRef(false);
   // A highlight from the map lights the cover without reporting engagement
@@ -346,11 +340,6 @@ export default function ArchiveChapter({
   const coverDetailOpacity = useTransform([fieldNoteOpacity, detailArrival], ([focus, entry]) => Number(focus) * Number(entry));
   const coverDetailY = useTransform([fieldNoteShift, detailArrival], ([shift, entry]) => Number(shift) + (1 - Number(entry)) * 24);
   const coverTitleY = useTransform(titleArrival, [0, 1], [34, 0]);
-  const imgY = useTransform(
-    scrollYProgress,
-    [0, 1],
-    ['0%', reduce ? '0%' : interactiveHover ? '-11.5%' : '-9%'],
-  );
   // Cover text planes counter-parallax against the photo — the masthead lifts,
   // the kicker sinks as the card passes, so name/kicker/photo read as depth.
   const mastheadY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-16%']);
@@ -388,6 +377,17 @@ export default function ArchiveChapter({
     ));
 
   const coverBase = collection.coverImageUrl ?? collection.photos?.[0]?.imageUrl ?? '';
+  // A photograph is never given a design ratio: the cover takes the file's
+  // own, clamped the way 11 mois clamps its plates (a tall 9:20 to a wide
+  // 2.4:1). Sanity puts the pixel dimensions in the asset's file name, so the
+  // frame is right on the first paint — no measuring, no layout shift.
+  const coverRatio = useMemo(() => {
+    const match = /-(\d+)x(\d+)\.[a-z]+/i.exec(coverBase);
+    if (!match) return null;
+    const ratio = Number(match[1]) / Number(match[2]);
+    return Number.isFinite(ratio) && ratio > 0 ? Math.min(2.4, Math.max(0.45, ratio)) : null;
+  }, [coverBase]);
+  const plateRatio = variant === 'cover' ? coverRatio : null;
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
   const coverSrcSet = coverBase
     ? `${coverBase}?auto=format&w=1000&q=82 1000w, ${coverBase}?auto=format&w=1600&q=82 1600w, ${coverBase}?auto=format&w=2000&q=78 2000w`
@@ -445,6 +445,7 @@ export default function ArchiveChapter({
       onPointerMove={handlePhotoPointerMove}
       onPointerLeave={handlePhotoPointerLeave}
       style={variant === 'cover' ? {
+        ...(plateRatio ? { aspectRatio: String(plateRatio) } : null),
         x: frameShiftX,
         y: albumPhotoY,
         opacity: albumOpen,
@@ -454,20 +455,19 @@ export default function ArchiveChapter({
         transformPerspective: 1600,
         transformOrigin: '50% 100%',
       } : coverReveal ? { clipPath: revealClip } : undefined}
-      className={`archive-photo-frame relative ${aspectClass} overflow-hidden ${variant === 'cover' ? 'archive-film' : ''}`}
+      className={`archive-photo-frame relative ${plateRatio ? '' : aspectClass} overflow-hidden`}
     >
-      <div className={`absolute inset-0 ${variant === 'cover' ? 'archive-film__media' : ''}`}>
+      <div className="absolute inset-0">
         {/* Shared focus layer — exact centre at 1; adjacent/far chapters top out
             at a restrained 1.035. No blur is used for the depth cue. */}
         <motion.div className="absolute inset-0" style={{ scale: mediaScale }}>
           <motion.div
-            className={`absolute inset-0 ${variant === 'cover' ? 'archive-film__image-plane' : ''}`}
+            className="absolute inset-0"
             style={{ x: pointerX, y: pointerY, scale: hoverScale }}
           >
             {coverUrl && (
               <motion.img
                 ref={sharedImageSourceRef}
-                style={{ y: imgY }}
                 src={coverUrl}
                 srcSet={coverSrcSet}
                 sizes="(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw"
@@ -475,7 +475,7 @@ export default function ArchiveChapter({
                 loading={prioritizeImage ? 'eager' : 'lazy'}
                 fetchPriority={prioritizeImage && (isActive || resolvedChapterIndex === 0) ? 'high' : 'auto'}
                 decoding="async"
-                className="absolute inset-0 h-[118%] w-full object-cover lg:h-[126%]"
+                className="absolute inset-0 h-full w-full object-cover"
                 draggable={false}
               />
             )}
@@ -489,29 +489,6 @@ export default function ArchiveChapter({
         <div className="archive-photo-shade-bottom pointer-events-none absolute inset-x-0 bottom-0 h-3/4 bg-[linear-gradient(0deg,rgba(20,24,17,0.72)_0%,rgba(20,24,17,0.30)_44%,transparent_100%)]" />
       </div>
 
-      {variant === 'cover' && (
-        <>
-          <div aria-hidden="true" className="archive-film__rail archive-film__rail--top">
-            <span className="archive-film__stock" />
-            <span className="archive-film__code">Archive <span>{String(index + 1).padStart(2, '0')}</span></span>
-            <span className="archive-film__year">{collection.year}</span>
-          </div>
-          <div aria-hidden="true" className="archive-film__rail archive-film__rail--bottom">
-            <span className="archive-film__stock" />
-            <span className="archive-film__cue">
-              Open story
-              <motion.span className="inline-flex" style={{ x: filmCueX }}>
-                <ArrowRight size={14} strokeWidth={1.4} />
-              </motion.span>
-            </span>
-          </div>
-          <motion.span
-            aria-hidden="true"
-            className="archive-film__edge-light"
-            style={{ opacity: filmEdgeOpacity }}
-          />
-        </>
-      )}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.24em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
@@ -659,7 +636,31 @@ export default function ArchiveChapter({
               {dateline}{collection.year ? ` · ${collection.year}` : ''}
             </span>
           </motion.div>
-          {imageBlock}
+          {/* The plate: the photograph at its own ratio, capped so a tall one
+              still fits the reading line, with the camera's focus corners on
+              its own four corners instead of a film rebate. */}
+          <div
+            className="archive-plate relative"
+            style={plateRatio ? { maxWidth: `calc(78vh * ${plateRatio})` } : undefined}
+          >
+            {imageBlock}
+            <motion.span
+              aria-hidden="true"
+              className="archive-focus"
+              data-focused={isActive ? 'true' : undefined}
+              style={handoffProgress ? { opacity: albumOpen } : undefined}
+            >
+              <i /><i /><i /><i />
+            </motion.span>
+            <motion.span
+              aria-hidden="true"
+              className="archive-plate__cue"
+              style={{ x: plateCueX, opacity: plateCueOpacity }}
+            >
+              Open story
+              <ArrowRight size={13} strokeWidth={1.4} />
+            </motion.span>
+          </div>
 
           {/* Compact screens retain the original in-image running head. */}
           <motion.div
