@@ -33,6 +33,12 @@ const ARM = 168;
 const NAME_TOP = 45;
 const META_TOP = 84;
 // The lock settles (spring, readouts typing in, lime cooling) over this long.
+/** Where the archive reads: the line a chapter's cover photograph sits on
+ *  (HomePage scrolls a chapter to it), and therefore the line the map's focal
+ *  point and the viewfinder must share — otherwise the brackets hold a place
+ *  40-odd pixels below the photograph they belong to. */
+export const ATLAS_READING_LINE = 0.48;
+
 const SETTLE_MS = 510;
 const SNAP_MS = 110;
 const MIN_HUNT_MS = 600;
@@ -537,14 +543,15 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   }, [reducedMotion]);
 
   // The focal point mirrors RouteAtlas's chapter padding: 264px off the atlas
-  // column's right edge, 48px from the top, inside the 2rem canvas bleed.
+  // column's right edge, and on the archive's reading line, where the
+  // chapter's photograph is.
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
     const measure = () => {
       const s = state.current;
       s.focalX = (root.clientWidth - 264) / 2;
-      s.focalY = root.clientHeight / 2 + 24;
+      s.focalY = ATLAS_READING_LINE * window.innerHeight - root.getBoundingClientRect().top;
       svgRef.current?.setAttribute('viewBox', `0 0 ${root.clientWidth} ${root.clientHeight}`);
       if (!s.hunting) draw(null);
     };

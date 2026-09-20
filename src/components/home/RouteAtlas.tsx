@@ -15,7 +15,7 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AfPoint, AtlasTicks, AtlasViewfinder, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
+import { AfPoint, AtlasTicks, AtlasViewfinder, ATLAS_READING_LINE, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -1161,7 +1161,7 @@ export default function RouteAtlas({
     // allow. The index nav sits to the right (GlobePrologue's #archive-index).
     const canvasHeight = rect.height + 2 * CANVAS_BLEED;
     const focalX = rect.left - CANVAS_BLEED + (rect.width + 2 * CANVAS_BLEED - FOCAL_PADDING.right) / 2;
-    const focalY = rect.top - CANVAS_BLEED + FOCAL_PADDING.top + (canvasHeight - FOCAL_PADDING.top) / 2;
+    const focalY = ATLAS_READING_LINE * viewportHeight;
     const indexLeft = document.getElementById('archive-index')?.getBoundingClientRect().left ?? viewportWidth * 0.56;
     const limb = Math.min(
       indexLeft - PLANET_MARGIN - focalX,
@@ -1328,7 +1328,17 @@ export default function RouteAtlas({
     // The canvas reaches past the atlas column by `canvasExtension`; widening
     // the right padding by the same amount keeps every chapter's focal point
     // exactly where it was before the canvas grew.
-    const activePadding = { top: FOCAL_PADDING.top, right: FOCAL_PADDING.right + (prologue ? canvasExtension : 0), bottom: 0, left: 0 };
+    // The camera's focal point sits on the reading line, where the chapter's
+    // photograph is: a bottom padding lifts the centre of the padded box up to
+    // it. Measured once per layout, never per frame.
+    const focusBox = map.getContainer().getBoundingClientRect();
+    const focalTarget = ATLAS_READING_LINE * window.innerHeight - focusBox.top;
+    const activePadding = {
+      top: FOCAL_PADDING.top,
+      right: FOCAL_PADDING.right + (prologue ? canvasExtension : 0),
+      bottom: Math.max(0, Math.round(focusBox.height + FOCAL_PADDING.top - 2 * focalTarget)),
+      left: 0,
+    };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
     // Measured once per layout (this effect re-runs on layoutRevision), never
     // per frame: the canvas box in viewport pixels, for placing the prologue
