@@ -579,6 +579,50 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   );
 });
 
+/**
+ * AtlasTicks — the archive as a strip of ticks under the map, one tick per
+ * frame, grouped by chapter (after Ian Coad DP's tick timeline). The current
+ * chapter's group is lime and a little taller; pointing at a group grows it
+ * and shows its number, name and frame count; a click is a voyage there.
+ * `is-current` is toggled on the group buttons by the atlas (no re-render
+ * mid-flight), so the class here is only the initial one.
+ */
+export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigate }: {
+  chapters: Array<{ id: string; number: number; name: string; frames: number }>;
+  currentId: string | null;
+  engagedId: string | null;
+  onEngage?: (chapterId: string | null) => void;
+  onNavigate?: (chapterId: string) => void;
+}) {
+  const [initialCurrent] = useState(currentId);
+  return (
+    <ol className="atlas-ticks" aria-label="Chapters">
+      {chapters.map((chapter) => (
+        <li key={chapter.id} className="atlas-ticks__item">
+          <button
+            type="button"
+            data-tick-group={chapter.id}
+            data-engaged={engagedId === chapter.id ? '' : undefined}
+            className={`atlas-ticks__group${chapter.id === initialCurrent ? ' is-current' : ''}`}
+            aria-label={`Go to chapter ${chapter.number}: ${chapter.name}, ${chapter.frames} frames`}
+            onPointerEnter={() => onEngage?.(chapter.id)}
+            onPointerLeave={() => onEngage?.(null)}
+            onFocus={() => onEngage?.(chapter.id)}
+            onBlur={() => onEngage?.(null)}
+            onClick={() => onNavigate?.(chapter.id)}
+          >
+            <span className="atlas-ticks__label" aria-hidden="true">
+              {pad2(chapter.number)}&nbsp;·&nbsp;{chapter.name}
+              <span className="atlas-ticks__frames">&nbsp;·&nbsp;{chapter.frames} frames</span>
+            </span>
+            {Array.from({ length: Math.max(1, chapter.frames) }, (_, index) => <i key={index} />)}
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** The small cover the prologue pins to a place on the globe. */
 export const prologueCardSrc = (base: string) => `${base}?auto=format&w=320&q=75`;
 

@@ -15,7 +15,7 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AfPoint, AtlasViewfinder, PrologueCard, prologueCardSrc, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
+import { AfPoint, AtlasTicks, AtlasViewfinder, PrologueCard, prologueCardSrc, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -74,6 +74,8 @@ interface Props {
   onEngage?: (chapterId: string | null) => void;
   /** An AF point is clicked: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
+  /** Where the prologue's planet sits on screen (viewport px), or null. */
+  onPlanet?: (planet: { x: number; y: number; r: number } | null) => void;
 }
 
 interface ProjectedPoint {
@@ -634,53 +636,6 @@ function formatCoordinateLabel([longitude, latitude]: [number, number]) {
   return `${formatCoordinate(latitude, 'N', 'S')}  ·  ${formatCoordinate(longitude, 'E', 'W')}`;
 }
 
-function ScrubbedCoordinateReadout({ sample }: { sample: MotionValue<ChapterSample | null> }) {
-  const latitudeRef = useRef<HTMLSpanElement>(null);
-  const longitudeRef = useRef<HTMLSpanElement>(null);
-  const write = (next: ChapterSample | null) => {
-    if (!next) return;
-    const [longitude, latitude] = next.coordinate;
-    if (latitudeRef.current) latitudeRef.current.textContent = formatCoordinate(latitude, 'N', 'S');
-    if (longitudeRef.current) longitudeRef.current.textContent = formatCoordinate(longitude, 'E', 'W');
-  };
-
-  useMotionValueEvent(sample, 'change', write);
-  useEffect(() => write(sample.get()), [sample]);
-
-  const [longitude, latitude] = sample.get()?.coordinate ?? [US_OVERVIEW.longitude, US_OVERVIEW.latitude];
-  return (
-    <span
-      aria-hidden="true"
-      className="mx-auto inline-grid grid-cols-[10.5ch_auto_11.5ch] items-center gap-2 whitespace-nowrap tabular-nums"
-    >
-      <span ref={latitudeRef} className="text-right">{formatCoordinate(latitude, 'N', 'S')}</span>
-      <span aria-hidden="true">·</span>
-      <span ref={longitudeRef} className="text-left">{formatCoordinate(longitude, 'E', 'W')}</span>
-    </span>
-  );
-}
-
-function ScrubbedPlaceName({
-  stop,
-  sample,
-}: {
-  stop: RouteStop;
-  sample: MotionValue<ChapterSample | null>;
-}) {
-  const opacity = useTransform(sample, (current) => chapterWeight(current, stop.id));
-  const y = useTransform(sample, (current) => {
-    if (!current) return 0;
-    if (current.to.stop.id === stop.id) return (1 - current.easedProgress) * 3;
-    if (current.from.stop.id === stop.id) return current.easedProgress * -3;
-    return 0;
-  });
-  return (
-    <motion.span className="absolute inset-0 block whitespace-nowrap" style={{ opacity, y }}>
-      {stop.name}
-    </motion.span>
-  );
-}
-
 function ScrubbedRouteOrdinal({
   sample,
   route,
@@ -856,6 +811,7 @@ export default function RouteAtlas({
   voyage = null,
   onEngage,
   onNavigate,
+  onPlanet,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -955,6 +911,9 @@ export default function RouteAtlas({
     currentStopRef.current = id;
     routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
       element.classList.toggle('is-current', element.dataset.afStop === id);
+    });
+    routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-tick-group]').forEach((element) => {
+      element.classList.toggle('is-current', element.dataset.tickGroup === id);
     });
   };
   // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
@@ -1210,6 +1169,7 @@ export default function RouteAtlas({
   useLayoutEffect(() => {
     if (!prologue) {
       setCanvasExtension(0);
+      onPlanet?.(null);
       return;
     }
     const atlas = routeAtlasRef.current;
@@ -1234,7 +1194,8 @@ export default function RouteAtlas({
     );
     const zoom = planetZoomFor(limb, canvasHeight);
     setPlanetZoom((current) => (Math.abs(current - zoom) < 0.002 ? current : zoom));
-  }, [layoutRevision, prologue, viewportReady]);
+    onPlanet?.({ x: focalX, y: focalY, r: limb });
+  }, [layoutRevision, onPlanet, prologue, viewportReady]);
 
   // Mapbox is the heaviest homepage dependency. HomePage first imports this
   // module near the atlas; this tighter second gate waits to create WebGL until
@@ -2129,7 +2090,6 @@ export default function RouteAtlas({
   // chapter keeps those layers from competing for the same bottom edge.
   const footerVisible = !living && interfaceVisible && (!mobile || !activeStop);
   const playInterfaceIntro = interfaceVisible && !interfaceIntroPlayedRef.current;
-  const sampledClassicActive = !!activeStop || entryOwnsClassicInterface;
   const interfaceGate = useMotionValue(interfaceVisible ? 1 : 0);
   const entryForInterface = useTransform(
     [sampledEntryProgress, voyageEntry],
@@ -2946,41 +2906,23 @@ export default function RouteAtlas({
             <span className="mb-1 shrink-0 font-ui text-[9px] uppercase tracking-[0.24em] text-white/54">Scroll to follow</span>
           </div>
         ) : (
-          <div className="route-atlas-footer grid grid-cols-[auto_1fr_auto] items-end gap-5 pt-5 font-ui uppercase">
+          <div className="route-atlas-footer pt-5">
             <span className="sr-only" aria-live="polite">
               {activeStop ? `Current place: ${activeStop.name}. Coordinates ${coordinateLabel}` : 'Route overview'}
             </span>
-            <div>
-              <ScrubbedRouteOrdinal
-                sample={chapterSample}
-                route={chapterRoute}
-                className="block text-[9px] tracking-[0.28em] text-[#D2FF00]"
-              />
-              <span className="relative mt-1 block h-[1.2em] min-w-[12ch] text-[9px] tracking-[0.24em] text-white/52">
-                {mappedStops.map((stop) => (
-                  <ScrubbedPlaceName key={stop.id} stop={stop} sample={chapterSample} />
-                ))}
-              </span>
-            </div>
-            <div className="relative min-w-0 text-center text-[9px] tracking-[0.22em] text-[#D2FF00]/72">
-              <motion.div
-                initial={false}
-                animate={{ opacity: sampledClassicActive ? 1 : 0, y: sampledClassicActive ? 0 : 4 }}
-                transition={{ duration: reducedMotion ? 0 : 0.38, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <ScrubbedCoordinateReadout sample={chapterSample} />
-              </motion.div>
-              <motion.p
-                aria-hidden="true"
-                initial={false}
-                animate={{ opacity: sampledClassicActive ? 0 : 1, y: sampledClassicActive ? -4 : 0 }}
-                transition={{ duration: reducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-0 flex items-center justify-center whitespace-nowrap"
-              >
-                {mappedStops.length} places · photographic atlas
-              </motion.p>
-            </div>
-            <span className={`mb-1 shrink-0 font-ui text-[9px] uppercase tracking-[0.23em] text-white/54 ${sampledClassicActive ? 'invisible' : ''}`}>Scroll to follow</span>
+            {/* The archive as a strip of ticks, one per frame, grouped by chapter. */}
+            <AtlasTicks
+              chapters={chapterRoute.map((entry) => ({
+                id: entry.stop.id,
+                number: entry.chapterIndex + 1,
+                name: entry.stop.name,
+                frames: entry.stop.frameCount,
+              }))}
+              currentId={currentStopRef.current}
+              engagedId={engagedChapterId}
+              onEngage={onEngage}
+              onNavigate={onNavigate}
+            />
           </div>
         )}
       </motion.footer>}

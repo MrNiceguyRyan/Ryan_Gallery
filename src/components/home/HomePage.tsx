@@ -254,6 +254,8 @@ export default function HomePage({ collections }: Props) {
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
   // The trip a click on the index or the rail set in motion (desktop).
   const [voyage, setVoyage] = useState<AtlasVoyage | null>(null);
+  // Where the prologue's planet sits on screen: the index bends around it.
+  const [planet, setPlanet] = useState<{ x: number; y: number; r: number } | null>(null);
   const voyageTimerRef = useRef(0);
   // Semantic city changes belong to React, but the optical timeline does not.
   // Keeping the current ID in a ref prevents every scroll frame from entering
@@ -1304,6 +1306,8 @@ export default function HomePage({ collections }: Props) {
             cities={prologueCities}
             onSelect={navigateLivingChapter}
             onHighlight={setEngagedChapterId}
+            planet={planet}
+            progress={prologueProgress}
           />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the
@@ -1335,6 +1339,7 @@ export default function HomePage({ collections }: Props) {
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
                 onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
+                onPlanet={setPlanet}
               />
             </aside>
 
