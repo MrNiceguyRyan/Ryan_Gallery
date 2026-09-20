@@ -628,10 +628,15 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
   onNavigate?: (chapterId: string) => void;
 }) {
   const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
-  // Invisible points (the prologue, the entrance) must not be hit targets.
+  // Invisible points (the prologue, the entrance) must not be hit targets —
+  // and `pointer-events: none` alone leaves the button in the tab order and
+  // in the accessibility tree, so a keyboard visitor tabs through six
+  // invisible chapter buttons on the way in. `visibility` removes both, off
+  // the same value, with no re-render.
   const pointerEvents = useTransform(visibility, (value) => (value > 0.5 ? 'auto' : 'none'));
+  const reachable = useTransform(visibility, (value) => (value > 0.5 ? 'visible' : 'hidden'));
   return (
-    <motion.span className="af-point" style={{ opacity: visibility, pointerEvents }}>
+    <motion.span className="af-point" style={{ opacity: visibility, pointerEvents, visibility: reachable }}>
       {/* `data-engaged`, not a class: React owns the attribute, the atlas
           owns the class list. The point is a real button — with the route
           rail gone it is the archive's in-map navigation. */}

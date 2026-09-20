@@ -98,6 +98,10 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
     if (committed == null) bentOpacity.set(scrollOpacity.get());
   }, [bentOpacity, committed, scrollOpacity]);
   const bentPointer = useTransform(bentOpacity, (value) => (value > 0.5 ? 'auto' : 'none'));
+  // Faded out, the index must also leave the tab order and the accessibility
+  // tree: `pointer-events: none` hides it from the mouse only, and a keyboard
+  // visitor at the top of the page would tab through six invisible rows.
+  const bentReachable = useTransform(bentOpacity, (value) => (value > 0.5 ? 'visible' : 'hidden'));
   const bent = !reduce && !!planet;
   const angleAt = (index: number) => ARC_SPREAD[0] + ((ARC_SPREAD[1] - ARC_SPREAD[0]) * index) / Math.max(1, cities.length - 1);
   const at = (angle: number, radius: number): [number, number] => planet
@@ -283,7 +287,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
              itself only gives the scroll its length. */
           <motion.div
             className="pointer-events-none fixed inset-0 z-30"
-            style={{ opacity: bentOpacity, pointerEvents: bentPointer }}
+            style={{ opacity: bentOpacity, pointerEvents: bentPointer, visibility: bentReachable }}
           >
             <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
               {(() => {

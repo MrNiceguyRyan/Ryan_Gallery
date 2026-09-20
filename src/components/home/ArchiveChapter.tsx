@@ -124,10 +124,10 @@ export default function ArchiveChapter({
   const pointerY = useSpring(pointerTargetY, { stiffness: 150, damping: 25, mass: 0.58 });
   const interactionDepth = reduce ? engagementTarget : engagementDepth;
   const hoverScale = useTransform(interactionDepth, [0, 1], [1, reduce ? 1 : 1.014]);
-  const frameShiftX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -4]);
+
   const titlePointerX = useTransform(pointerX, (value) => reduce ? 0 : value * -0.32);
   const titleOpenX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -4]);
-  const filmLift = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : -3]);
+
   const plateCueOpacity = useTransform(interactionDepth, [0, 1], [0.42, 0.9]);
   const plateCueX = useTransform(interactionDepth, [0, 1], [0, reduce ? 0 : 4]);
   const photoBoundsRef = useRef<DOMRect | null>(null);
@@ -335,7 +335,7 @@ export default function ArchiveChapter({
   const albumClip = useTransform(albumOpen, (open) =>
     `inset(${(1 - open) * 18}% 0% ${(1 - open) * 30}% 0%)`,
   );
-  const albumPhotoY = useTransform([albumOpen, filmLift], ([open, lift]) => (1 - Number(open)) * 88 + Number(lift));
+  const albumPhotoY = useTransform(albumOpen, (open) => (1 - Number(open)) * 88);
   const coverCopyOpacity = useTransform([editorialOpacity, titleArrival], ([focus, entry]) => Number(focus) * Number(entry));
   const coverDetailOpacity = useTransform([fieldNoteOpacity, detailArrival], ([focus, entry]) => Number(focus) * Number(entry));
   const coverDetailY = useTransform([fieldNoteShift, detailArrival], ([shift, entry]) => Number(shift) + (1 - Number(entry)) * 24);
@@ -446,14 +446,7 @@ export default function ArchiveChapter({
       onPointerLeave={handlePhotoPointerLeave}
       style={variant === 'cover' ? {
         ...(plateRatio ? { aspectRatio: String(plateRatio) } : null),
-        x: frameShiftX,
-        y: albumPhotoY,
-        opacity: albumOpen,
-        scale: albumScale,
-        rotateX: albumRotateX,
         clipPath: handoffProgress ? albumClip : coverReveal ? revealClip : undefined,
-        transformPerspective: 1600,
-        transformOrigin: '50% 100%',
       } : coverReveal ? { clipPath: revealClip } : undefined}
       className={`archive-photo-frame relative ${plateRatio ? '' : aspectClass} overflow-hidden`}
     >
@@ -643,23 +636,34 @@ export default function ArchiveChapter({
             className="archive-plate relative"
             style={plateRatio ? { maxWidth: `calc(78vh * ${plateRatio})` } : undefined}
           >
-            {imageBlock}
-            <motion.span
-              aria-hidden="true"
-              className="archive-focus"
-              data-focused={isActive ? 'true' : undefined}
-              style={handoffProgress ? { opacity: albumOpen } : undefined}
+            {/* One transformed stage holds the photograph, the corners that
+                declare its edges and its cue, so the frame can never be
+                somewhere the picture is not. The photograph's own crop
+                (clipPath) stays on the image inside it. */}
+            <motion.div
+              className="archive-plate__stage"
+              style={{
+                y: albumPhotoY,
+                opacity: albumOpen,
+                scale: albumScale,
+                rotateX: albumRotateX,
+                transformPerspective: 1600,
+                transformOrigin: '50% 100%',
+              }}
             >
-              <i /><i /><i /><i />
-            </motion.span>
-            <motion.span
-              aria-hidden="true"
-              className="archive-plate__cue"
-              style={{ x: plateCueX, opacity: plateCueOpacity }}
-            >
-              Open story
-              <ArrowRight size={13} strokeWidth={1.4} />
-            </motion.span>
+              {imageBlock}
+              <span aria-hidden="true" className="archive-focus" data-focused={isActive ? 'true' : undefined}>
+                <i /><i /><i /><i />
+              </span>
+              <motion.span
+                aria-hidden="true"
+                className="archive-plate__cue"
+                style={{ x: plateCueX, opacity: plateCueOpacity }}
+              >
+                Open story
+                <ArrowRight size={13} strokeWidth={1.4} />
+              </motion.span>
+            </motion.div>
           </div>
 
           {/* Compact screens retain the original in-image running head. */}

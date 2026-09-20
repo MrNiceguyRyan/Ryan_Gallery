@@ -394,17 +394,20 @@ main[data-story-under="true"] [data-archive-column] {
   display: block;
   width: 1px;
   height: 20px;
+  transform-origin: bottom;
   background: rgba(244, 244, 237, 0.32);
-  transition: height 400ms cubic-bezier(0.16, 1, 0.3, 1), background-color 400ms ease;
+  /* scaleY, not height: a tick is a compositor transform, not a layout. */
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1), background-color 400ms ease;
 }
+/* Height says one thing only — where the archive is. The pointer speaks in
+   brightness, so it can never outrank the current chapter. */
 .atlas-ticks__group.is-current i {
-  height: 28px;
+  transform: scaleY(1.4);
   background: #D2FF00;
 }
 .atlas-ticks__group:hover i,
 .atlas-ticks__group:focus-visible i,
 .atlas-ticks__group[data-engaged] i {
-  height: 40px;
   background: rgba(244, 244, 237, 0.92);
   transition-duration: 200ms;
 }
