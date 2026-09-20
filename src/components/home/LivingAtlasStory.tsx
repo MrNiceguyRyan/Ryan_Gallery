@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import {
+  animate,
   motion,
   type MotionValue,
   useMotionValue,
@@ -29,6 +30,28 @@ interface Props {
 }
 
 const expo = [0.16, 1, 0.3, 1] as const;
+// Photographic paper coming up in the developer: the same 115° sweep the story
+// pages use for their frames, so a chapter committed from the rail arrives the
+// way a story's photographs arrive.
+const developEase = [0.455, 0.03, 0.515, 0.955] as const;
+const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
+const DEVELOP_MASK_STYLE = {
+  WebkitMaskImage: DEVELOP_MASK,
+  maskImage: DEVELOP_MASK,
+  WebkitMaskSize: '300% 100%',
+  maskSize: '300% 100%',
+  WebkitMaskRepeat: 'no-repeat',
+  maskRepeat: 'no-repeat',
+} as const;
+const DEVELOP_MS = 620;
+// A committed flight that never lands (the visitor grabs the page mid-scroll,
+// the anchor cannot be reached) must not leave the departure frame frozen on
+// screen. Past this the commit is abandoned and the scrubbed crossfade resumes.
+const COMMIT_LIMIT_MS = 2400;
+// Close enough to the destination anchor to call it an arrival. `visualIndex`
+// flips at ±0.5 — the midpoint of the last gap — which is far too early to
+// start developing the photograph the flight is still travelling towards.
+const COMMIT_ARRIVAL_EPSILON = 0.18;
 
 function imageUrl(url: string, width: number) {
   if (!url) return '';
@@ -104,21 +127,34 @@ function clampChapter(value: number, total: number) {
   return Math.max(0, Math.min(total - 1, value));
 }
 
-// Both weights below replace one symmetric smoothstep on `1 - |progress - index|`.
-// It gave BOTH neighbouring chapters 0.5 at the midpoint of every handoff, and
-// a scroll can rest anywhere, so that midpoint was a reachable state rather
-// than a passing frame. Type and photographs each needed their own answer.
-//
 // Type cannot cross-dissolve at all: two superimposed city names read as
 // neither ("MIAMI" over "ORLANDO", each with its own pager and coordinates).
-// Captions therefore ramp only across the last 8% before the midpoint, where
-// adjacent distances always sum to 1 — so at most one caption is above zero.
-const CAPTION_HANDOFF_BAND = 0.08;
+// Fading them in turn was the first answer and it was never more than an
+// absence — the place name simply stopped being one thing and started being
+// another. So the names are one column inside a clip and the column ROLLS:
+// scrolling forward sends the old name up and out while the new one rises from
+// below, and scrolling back runs it in reverse. Direction is the sign of the
+// scroll, not a state flag, so a fling rolls the names past as fast as the
+// thumb moves and stops exactly where the thumb stops.
+//
+// The roll is not linear with the scroll, though. Each chapter owns ~92svh, so
+// a column dragged straight off `progress` would be sliding at every scroll
+// position and settled at almost none. It instead holds each name still and
+// rolls across the one band where the chapter itself changes — the midpoint —
+// spending the same scroll budget the old opacity ramp spent (0.08 either side).
+const CAPTION_ROLL_BAND = 0.16;
 
-function captionChapterWeight(progress: number, index: number) {
-  const distance = Math.abs(progress - index);
-  const ramp = Math.max(0, Math.min(1, (0.5 - distance) / CAPTION_HANDOFF_BAND));
-  return ramp * ramp * (3 - 2 * ramp);
+function captionRoll(progress: number, total: number) {
+  const clamped = clampChapter(progress, total);
+  const index = Math.floor(clamped);
+  const local = clamped - index;
+  const ramp = Math.max(0, Math.min(1, (local - (0.5 - CAPTION_ROLL_BAND / 2)) / CAPTION_ROLL_BAND));
+  return index + ramp * ramp * (3 - 2 * ramp);
+}
+
+function captionOffset(value: number, total: number) {
+  if (total <= 1) return '0%';
+  return `${(-value * 100) / total}%`;
 }
 
 // Photographs do dissolve, but not symmetrically. At full-bleed desktop size a
@@ -149,6 +185,8 @@ function ScrubbedPhotoLayer({
   reducedMotion,
   photoX,
   photoY,
+  commitRole,
+  develop,
 }: {
   chapter: VisualChapter;
   progress: MotionValue<number>;
@@ -156,16 +194,42 @@ function ScrubbedPhotoLayer({
   reducedMotion: boolean;
   photoX: MotionValue<number>;
   photoY: MotionValue<number>;
+  /**
+   * Set only while a chapter committed from the rail is in flight or arriving:
+   * `from` is the frame the visitor is leaving, `to` the one being developed,
+   * `other` every chapter the flight merely passes over.
+   */
+  commitRole: 'from' | 'to' | 'other' | null;
+  /** 0 → fully masked out, 1 → fully developed. */
+  develop: MotionValue<number>;
 }) {
   const opacity = useTransform(progress, (value) => photoChapterWeight(value, chapter.index));
   const scale = useTransform(progress, (value) => 1 + Math.min(1, Math.abs(value - chapter.index)) * 0.012);
+  const maskPosition = useTransform(develop, (value) => `${(1 - value) * 100}% 0%`);
+
+  // A rail tap is the one mobile gesture that IS a commit: a known destination
+  // reached over a known duration. Scrubbing it would mean cross-fading every
+  // chapter the flight passes over, so instead the departure frame holds, the
+  // passed-over chapters stay down, and the destination develops on arrival.
+  const committed = !reducedMotion && commitRole !== null;
+  const style = committed
+    ? {
+        opacity: commitRole === 'other' ? 0 : 1,
+        zIndex: commitRole === 'to' ? 2 : 1,
+        x: photoX,
+        y: photoY,
+        ...(commitRole === 'to'
+          ? { ...DEVELOP_MASK_STYLE, WebkitMaskPosition: maskPosition, maskPosition }
+          : null),
+      }
+    : reducedMotion
+      ? { opacity: selected ? 1 : 0 }
+      : { opacity, scale, x: photoX, y: photoY };
 
   return (
     <motion.div
       className="living-atlas__photo-layer absolute -inset-[3%]"
-      style={reducedMotion
-        ? { opacity: selected ? 1 : 0 }
-        : { opacity, scale, x: photoX, y: photoY }}
+      style={style}
     >
       {chapter.src && (
         <img
@@ -178,36 +242,6 @@ function ScrubbedPhotoLayer({
         />
       )}
       <div className="living-atlas__photo-grade absolute inset-0" />
-    </motion.div>
-  );
-}
-
-function ScrubbedCaptionLayer({
-  chapter,
-  progress,
-  selected,
-  reducedMotion,
-  children,
-}: {
-  chapter: VisualChapter;
-  progress: MotionValue<number>;
-  selected: boolean;
-  reducedMotion: boolean;
-  children: ReactNode;
-}) {
-  const opacity = useTransform(progress, (value) => captionChapterWeight(value, chapter.index));
-  const y = useTransform(progress, (value) => {
-    const offset = Math.max(-1, Math.min(1, value - chapter.index));
-    return offset * -10;
-  });
-
-  return (
-    <motion.div
-      className={`absolute inset-0 ${selected ? '' : 'pointer-events-none'}`}
-      style={reducedMotion ? { opacity: selected ? 1 : 0 } : { opacity, y }}
-      aria-hidden={selected ? undefined : 'true'}
-    >
-      {children}
     </motion.div>
   );
 }
@@ -315,6 +349,18 @@ export default function LivingAtlasStory({
   const photoX = useSpring(pointerX, { stiffness: 76, damping: 24, mass: 0.72 });
   const photoY = useSpring(pointerY, { stiffness: 76, damping: 24, mass: 0.72 });
 
+  // A chapter chosen from the rail, from the moment it is tapped until its
+  // photograph has finished developing. `token` lets the async arrival and the
+  // clean-up timers recognise their own commit after a second tap replaced it.
+  const [commit, setCommit] = useState<{ from: number; to: number; token: number; arrived: boolean } | null>(null);
+  const commitTokenRef = useRef(0);
+  const develop = useMotionValue(1);
+
+  const captionColumn = useTransform(progress, (value) =>
+    captionOffset(captionRoll(value, stops.length), stops.length),
+  );
+  const captionSettled = captionOffset(visualIndex, stops.length);
+
   useMotionValueEvent(progress, 'change', (value) => {
     const next = Math.round(clampChapter(value, stops.length));
     setVisualIndex((current) => current === next ? current : next);
@@ -352,6 +398,65 @@ export default function LivingAtlasStory({
     pointerY.set(0);
   }, [paused, pointerX, pointerY]);
 
+  // Watch the committed flight in. The destination is developed once the scroll
+  // is actually near its anchor AND the exact source the layer will paint has
+  // been decoded — the frame can then come up as one continuous sweep instead
+  // of appearing in whatever state the network left it.
+  useMotionValueEvent(progress, 'change', (value) => {
+    if (!commit || commit.arrived) return;
+    if (Math.abs(value - commit.to) > COMMIT_ARRIVAL_EPSILON) return;
+    const token = commit.token;
+    setCommit((current) => (current && current.token === token ? { ...current, arrived: true } : current));
+  });
+
+  useEffect(() => {
+    if (!commit) return;
+    const { token, to, arrived } = commit;
+    const clear = () => setCommit((current) => (current && current.token === token ? null : current));
+    if (!arrived) {
+      // Nothing has been masked yet while the flight is still travelling; the
+      // limit only covers a flight that never lands at all.
+      const limit = window.setTimeout(clear, COMMIT_LIMIT_MS);
+      return () => window.clearTimeout(limit);
+    }
+    let cancelled = false;
+    let timer = 0;
+    const src = imageUrl(stops[to]?.imageUrl ?? '', sourceWidth);
+    void decodeImage(src, 'high').then(() => {
+      if (cancelled) return;
+      animate(develop, 1, { duration: DEVELOP_MS / 1000, ease: developEase });
+      timer = window.setTimeout(clear, DEVELOP_MS + 90);
+    });
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [commit, develop, sourceWidth, stops]);
+
+  // Any real gesture during the flight hands the photograph back to the scroll.
+  // The commit is a promise about a destination; once the visitor is steering,
+  // holding the departure frame frozen would be a lie about where they are.
+  useEffect(() => {
+    if (!commit) return;
+    const abandon = () => setCommit(null);
+    const options = { passive: true } as const;
+    window.addEventListener('wheel', abandon, options);
+    window.addEventListener('touchstart', abandon, options);
+    window.addEventListener('keydown', abandon);
+    return () => {
+      window.removeEventListener('wheel', abandon);
+      window.removeEventListener('touchstart', abandon);
+      window.removeEventListener('keydown', abandon);
+    };
+  }, [commit]);
+
+  const commitRoleFor = (index: number): 'from' | 'to' | 'other' | null => {
+    if (!commit) return null;
+    if (index === commit.to) return 'to';
+    if (index === commit.from) return 'from';
+    return 'other';
+  };
+
   if (!activeStop) return null;
 
   // Keep every chapter in the same right-hand photographic window. The map,
@@ -371,6 +476,18 @@ export default function LivingAtlasStory({
       return;
     }
     setRailExpanded(false);
+    if (!reducedMotion) {
+      commitTokenRef.current += 1;
+      // Hold the destination back at the moment it is chosen, not at the moment
+      // it lands: the mask starts closed so the departure frame is the only one
+      // on screen for the whole flight. Left open, the destination appeared at
+      // full strength the instant it was tapped and then developed a second
+      // time on arrival — two reveals of one photograph.
+      develop.set(0);
+      setCommit({ from: visualIndex, to: index, token: commitTokenRef.current, arrived: false });
+      const src = imageUrl(stop.imageUrl, sourceWidth);
+      if (src) void decodeImage(src, 'high');
+    }
     onNavigate(`${idPrefix}${stop.id}`);
   };
 
@@ -469,6 +586,8 @@ export default function LivingAtlasStory({
               reducedMotion={reducedMotion}
               photoX={photoX}
               photoY={photoY}
+              commitRole={commitRoleFor(chapter.index)}
+              develop={develop}
             />
           ))}
         </div>
@@ -551,18 +670,24 @@ export default function LivingAtlasStory({
         </nav>
 
         <div className="living-atlas__caption absolute bottom-[max(2.25rem,env(safe-area-inset-bottom))] left-5 right-5 z-40 md:bottom-12 md:left-[32%] md:right-[7%]">
-          <div className="relative min-h-[6.5rem] md:min-h-[7.25rem]">
-            {visualChapters.map((chapter) => (
-              <ScrubbedCaptionLayer
-                key={visualChapterKey(chapter)}
-                chapter={chapter}
-                progress={progress}
-                selected={chapter.index === visualIndex}
-                reducedMotion={reducedMotion}
-              >
-                {renderCaptionContent(chapter, chapter.index === visualIndex)}
-              </ScrubbedCaptionLayer>
-            ))}
+          <div className="living-atlas__caption-window relative overflow-hidden">
+            <motion.div
+              className="living-atlas__caption-column"
+              style={{ y: reducedMotion ? captionSettled : captionColumn }}
+            >
+              {visualChapters.map((chapter) => {
+                const current = chapter.index === visualIndex;
+                return (
+                  <div
+                    key={visualChapterKey(chapter)}
+                    className={`living-atlas__caption-cell ${current ? '' : 'pointer-events-none'}`}
+                    aria-hidden={current ? undefined : 'true'}
+                  >
+                    {renderCaptionContent(chapter, current)}
+                  </div>
+                );
+              })}
+            </motion.div>
           </div>
           <ScrubbedCoordinateReadout stops={stops} progress={progress} />
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
 import { motion, AnimatePresence, useReducedMotion, useScroll, useSpring, useTransform } from 'framer-motion';
 import type { Collection, SiteSettings } from '../../types';
 import Magnetic from '../shared/Magnetic';
@@ -108,6 +108,83 @@ function Reveal({ children, className, y = 22, delay = 0 }: { children: ReactNod
   );
 }
 
+/**
+ * The colophon and the © bar arrive as one press run. Both used to be the only
+ * blocks on this page with no arrival at all — the columns above them reveal,
+ * then the page's closing facts were simply already there.
+ *
+ * One trigger for the whole block (the two are read as one footer, so two
+ * observers would have split it), and each fact is timed by the row it occupies
+ * on screen rather than by its place in the DOM: the grid pairs the terms two to
+ * a line above 768px, so a DOM-order stagger would have walked diagonally down
+ * the block instead of line by line.
+ */
+function ColophonBlock({ rows, footer }: { rows: Array<[string, ReactNode]>; footer: ReactNode }) {
+  const reduce = useReducedMotion();
+  const [ref, shown] = useInViewOnce<HTMLDivElement>('0px 0px -15% 0px', 0.2);
+  const [pairedRows, setPairedRows] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(min-width: 768px)');
+    const sync = () => setPairedRows(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  const visualRow = (index: number) => (pairedRows ? Math.floor(index / 2) : index);
+  const lastRow = visualRow(rows.length - 1);
+
+  return (
+    <div ref={ref} className="relative z-10">
+      {/* The rule the facts are printed under draws itself first. */}
+      <motion.span
+        aria-hidden="true"
+        className="mt-12 block h-px origin-left bg-white/10"
+        initial={reduce ? false : { scaleX: 0 }}
+        animate={reduce || shown ? { scaleX: 1 } : { scaleX: 0 }}
+        transition={{ duration: reduce ? 0 : 0.72, ease: expo }}
+      />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 pt-6 text-left md:grid-cols-[auto_1fr_auto_1fr] md:gap-x-8">
+        {rows.map(([term, value], index) => {
+          const delay = reduce ? 0 : 0.08 + visualRow(index) * 0.07;
+          return (
+            <Fragment key={term}>
+              <motion.dt
+                className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52"
+                initial={reduce ? false : { opacity: 0 }}
+                animate={reduce || shown ? { opacity: 1 } : { opacity: 0 }}
+                transition={{ duration: reduce ? 0 : 0.34, delay, ease: expo }}
+              >
+                {term}
+              </motion.dt>
+              {/* The value is printed, not faded: it clips open from the left,
+                  the way the masthead and folio open on the entrance cover. */}
+              <motion.dd
+                className="m-0 font-serif text-[15px] text-white/80"
+                initial={reduce ? false : { clipPath: 'inset(0 100% 0 0)' }}
+                animate={reduce || shown ? { clipPath: 'inset(0 0% 0 0)' } : { clipPath: 'inset(0 100% 0 0)' }}
+                transition={{ duration: reduce ? 0 : 0.56, delay, ease: expo }}
+              >
+                {value}
+              </motion.dd>
+            </Fragment>
+          );
+        })}
+      </dl>
+      <motion.div
+        className="mt-12 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-5 font-ui text-[9px] uppercase tracking-[0.25em] text-white/52 md:flex-row"
+        initial={reduce ? false : { opacity: 0, y: 12 }}
+        animate={reduce || shown ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
+        transition={{ duration: reduce ? 0 : 0.6, delay: reduce ? 0 : 0.16 + lastRow * 0.07, ease: expo }}
+      >
+        {footer}
+      </motion.div>
+    </div>
+  );
+}
+
 type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>;
 
 interface Props {
@@ -142,6 +219,20 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
   const updatedOn = builtAt
     ? new Date(builtAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
     : '';
+  // Facts only, in one array so the arrival can time each row by where it lands
+  // on screen. Conditional rows simply do not join the list.
+  const colophonRows: Array<[string, ReactNode]> = [
+    ['Type', 'Fraunces, Space Grotesk, Inter'],
+    ['Cameras', 'Fujifilm X-T50, Nikon Zf'],
+    ['Built with', 'Astro, React, Sanity and Mapbox GL, on Cloudflare Workers'],
+  ];
+  if (publishedChapters.length > 0) {
+    colophonRows.push([
+      'Archive',
+      `${publishedChapters.length} chapters, ${frameTotal} frames${yearSpan ? `, ${yearSpan}` : ''}`,
+    ]);
+  }
+  if (updatedOn) colophonRows.push(['Updated', updatedOn]);
   const heroItem = makeHeroItem(!!reduce);
   const avatarIsSanity = avatarUrl.includes('cdn.sanity.io/images/');
   const avatarBase = avatarUrl.split('?')[0];
@@ -575,34 +666,15 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
               Appleton, Jason Santa Maria all publish one): what the archive is
               set in, what made it, what it runs on, how much of it there is,
               and when it last changed. Facts only, no copy. */}
-          <dl className="relative z-10 mt-12 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 border-t border-white/10 pt-6 text-left md:grid-cols-[auto_1fr_auto_1fr] md:gap-x-8">
-            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Type</dt>
-            <dd className="m-0 font-serif text-[15px] text-white/80">Fraunces, Space Grotesk, Inter</dd>
-            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Cameras</dt>
-            <dd className="m-0 font-serif text-[15px] text-white/80">Fujifilm X-T50, Nikon Zf</dd>
-            <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Built with</dt>
-            <dd className="m-0 font-serif text-[15px] text-white/80">Astro, React, Sanity and Mapbox GL, on Cloudflare Workers</dd>
-            {publishedChapters.length > 0 && (
+          <ColophonBlock
+            rows={colophonRows}
+            footer={
               <>
-                <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Archive</dt>
-                <dd className="m-0 font-serif text-[15px] text-white/80">
-                  {publishedChapters.length} chapters, {frameTotal} frames{yearSpan ? `, ${yearSpan}` : ''}
-                </dd>
+                <span>© {new Date().getFullYear()} {name}. All rights reserved.</span>
+                <a href="/" className="inline-flex min-h-11 items-center hover:text-white/70 transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]">ryanxugallery.com</a>
               </>
-            )}
-            {updatedOn && (
-              <>
-                <dt className="pt-[3px] font-ui text-[11px] uppercase tracking-[0.08em] text-white/52">Updated</dt>
-                <dd className="m-0 font-serif text-[15px] text-white/80">{updatedOn}</dd>
-              </>
-            )}
-          </dl>
-
-          {/* Bottom bar */}
-          <div className="relative z-10 mt-12 pt-5 border-t border-white/10 flex flex-col md:flex-row gap-2 items-center justify-between font-ui text-[9px] tracking-[0.25em] uppercase text-white/52">
-            <span>© {new Date().getFullYear()} {name}. All rights reserved.</span>
-            <a href="/" className="inline-flex min-h-11 items-center hover:text-white/70 transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]">ryanxugallery.com</a>
-          </div>
+            }
+          />
         </div>
       </section>
 

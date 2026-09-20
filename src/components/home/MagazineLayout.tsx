@@ -781,7 +781,13 @@ export default function MagazineLayout({
         ref={dialogRef}
         id={standalone ? mainId : undefined}
         tabIndex={-1}
-        initial={sharedEntry && canMorphSharedPhoto ? false : { opacity: 0 }}
+        // A standalone /works page is server-rendered, and framer writes
+        // `initial` into the SSR style attribute — so this shell shipped its
+        // whole front page at `opacity: 0`. With /travel → /works getting no
+        // `data-axis` (the root view-transition rule is `animation: none`) the
+        // visitor got a hard cut to a blank screen that lasted until hydration,
+        // then a 700ms fade. The document must paint what it was sent.
+        initial={standalone || (sharedEntry && canMorphSharedPhoto) ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: sharedEntry && canMorphSharedPhoto ? 1 : 0 }}
         transition={{

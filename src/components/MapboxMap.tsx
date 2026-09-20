@@ -372,6 +372,22 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
   const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
+  // Arrival. The homepage atlas confirms the end of a flight with one thin ring
+  // at the focal point; this map flew for 1150ms and then simply stopped. The
+  // ring is keyed to the FLIGHT, not to `moveend` — a drag, a wheel zoom or a
+  // second selection cancels the promise, so a move the visitor made themselves
+  // never gets an arrival it didn't earn.
+  const flightCityRef = useRef<string | null>(null);
+  const [arrivedCity, setArrivedCity] = useState<string | null>(null);
+  const beginFlight = useCallback((city: string | null) => {
+    flightCityRef.current = city;
+    setArrivedCity(null);
+  }, []);
+  useEffect(() => {
+    if (!arrivedCity) return;
+    const timer = window.setTimeout(() => setArrivedCity(null), 760);
+    return () => window.clearTimeout(timer);
+  }, [arrivedCity]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [mobileSheet, setMobileSheet] = useState<MobileSheetMode>('peek');
@@ -750,6 +766,9 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   // Cluster click. The index now contains one point per city, so every cluster
   // is geographic rather than a stack of frames at one GPS coordinate.
   const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
+    // A cluster has no single destination marker, so nothing here earns an
+    // arrival ring — and it must not inherit one from an earlier selection.
+    beginFlight(null);
     let leaves: any[] = [];
     try { leaves = clusterIndex.getLeaves(clusterId, Infinity); } catch { leaves = []; }
     const citiesInCluster = Array.from(new Set(
@@ -781,7 +800,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     setActiveClusterCity(null);
     if (mobileLayout) setMobileSheet('peek');
     updatePlaceUrl(null);
-  }, [clusterIndex, viewState.zoom, cityClusters, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
+  }, [beginFlight, clusterIndex, viewState.zoom, cityClusters, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
   // A direct map point always represents a city, matching the sidebar and URL.
   const handleMapCityClick = useCallback((cluster: LocationCluster) => {
@@ -793,6 +812,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     updatePlaceUrl(cluster);
     // Gentle centre, using the same averaged coordinate as the marker itself.
     const targetZoom = Math.max(viewState.zoom, 6);
+    beginFlight(prefersReduced ? null : city);
     mapRef.current?.flyTo({
       center: [cluster.lng, cluster.lat],
       zoom: targetZoom,
@@ -805,7 +825,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
       el?.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'nearest' });
     }, 400);
-  }, [viewState.zoom, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
+  }, [beginFlight, viewState.zoom, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
   // Sidebar city click
   const handleCityClick = useCallback((cluster: LocationCluster) => {
@@ -815,6 +835,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       setExpandedRegion(cluster.region || getRegion(cluster.country));
       setMobileSheet('detail');
       updatePlaceUrl(cluster);
+      beginFlight(prefersReduced ? null : cluster.city);
       mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, ...mobileFocusCamera() });
       return;
     }
@@ -823,10 +844,13 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     setActiveCluster(isSame ? null : cluster);
     if (!isSame) setExpandedRegion(cluster.region || getRegion(cluster.country));
     if (!isSame) {
+      beginFlight(prefersReduced ? null : cluster.city);
       mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced });
+    } else {
+      beginFlight(null);
     }
     updatePlaceUrl(isSame ? null : cluster);
-  }, [activeClusterCity, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
+  }, [activeClusterCity, beginFlight, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
 
   // Accept stable place deep links from Home, while retaining the earlier
   // coordinate hash used by story mini-maps.
@@ -974,7 +998,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               pendingClusterZoomRef.current = event.viewState.zoom;
               setClusterZoom(event.viewState.zoom);
               setClusterMorphing(false);
+              const landed = flightCityRef.current;
+              if (landed) {
+                flightCityRef.current = null;
+                setArrivedCity(landed);
+              }
             }}
+            onDragStart={() => { flightCityRef.current = null; }}
+            onZoomStart={(event) => { if (!event.originalEvent) return; flightCityRef.current = null; }}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLE}
             style={{ width: '100%', height: '100%' }}
@@ -1194,6 +1225,12 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                     onFocus={() => setHoveredCity(city.city)}
                     onBlur={() => setHoveredCity(null)}
                   >
+                    {/* Arrival — one thin ring, snapped in and eased out, the
+                        same confirm the homepage atlas gives a landed flight. */}
+                    {!prefersReduced && arrivedCity === city.city && (
+                      <span aria-hidden="true" className="atlas-arrival-ring" />
+                    )}
+
                     {/* The atlas uses cartographic points; photography is reserved
                         for the single detail surface. */}
                     {(isActive || isHovered) && (

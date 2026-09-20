@@ -277,9 +277,33 @@ export default function HomePage({ collections }: Props) {
   const storySourceChapterIdRef = useRef<string | null>(null);
   const bodyPaddingRightRef = useRef('');
   const storySharedImageUrlRef = useRef('');
+  // The most opaque of the living atlas's stacked photographic layers — the one
+  // the visitor is actually looking at mid-scrub.
+  const liveAtlasFrame = () => {
+    const layers = Array.from(
+      document.querySelectorAll<HTMLElement>('.living-atlas__photo-layer'),
+    );
+    let best: HTMLElement | null = null;
+    let bestOpacity = -1;
+    layers.forEach((layer) => {
+      const opacity = Number.parseFloat(getComputedStyle(layer).opacity);
+      if (Number.isFinite(opacity) && opacity > bestOpacity) {
+        bestOpacity = opacity;
+        best = layer;
+      }
+    });
+    return (best as HTMLElement | null)?.querySelector<HTMLImageElement>('img') ?? null;
+  };
   const openCollection = useCallback((collection: Collection) => {
+    // Two trees, two anchor prefixes: the living (mobile) tree publishes its
+    // chapters as `mobile-archive-item-…`, so looking one up under the desktop
+    // prefix silently found nothing there — no source chapter to return focus
+    // to and no photograph to hand to the story. Only one tree is ever mounted,
+    // so asking for both and taking whichever answers needs no layout flag (and
+    // no dependency on one, which would have to be declared further down).
     const chapterId = `archive-item-${collection._id}`;
-    const chapter = document.getElementById(chapterId);
+    const chapter = document.getElementById(chapterId)
+      ?? document.getElementById(`mobile-${chapterId}`);
     const chapterControl = chapter?.querySelector<HTMLElement>('[role="button"], button');
     storyReturnFocusRef.current = chapterControl ?? (
       document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -287,13 +311,17 @@ export default function HomePage({ collections }: Props) {
     // Morph the exact frame the visitor is looking at. `currentSrc` is the
     // responsive candidate the browser already decoded, so the story's opening
     // photograph cannot cache-miss or land on a different candidate mid-flight.
-    const chapterImage = chapter?.querySelector<HTMLImageElement>('.archive-photo-frame img');
+    // The living tree has no per-chapter cover: its one photographic window
+    // holds the committed frame, so the frame being looked at is the layer
+    // currently carrying opacity there.
+    const chapterImage = chapter?.querySelector<HTMLImageElement>('.archive-photo-frame img')
+      ?? liveAtlasFrame();
     storySharedImageUrlRef.current = chapterImage?.currentSrc || chapterImage?.src || '';
     // Freeze the page in the same event frame as the story selection. Waiting
     // for the state effect left one residual smooth-scroll frame moving behind
     // the full-screen cover on quick trackpad clicks.
     storyOpenRef.current = true;
-    storySourceChapterIdRef.current = chapterId;
+    storySourceChapterIdRef.current = chapter?.id ?? chapterId;
     setStoryClosing(false);
     storyScrollYRef.current = window.scrollY;
     commitActiveArchiveId(`archive-item-${collection._id}`);

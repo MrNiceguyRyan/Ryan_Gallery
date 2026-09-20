@@ -1520,6 +1520,59 @@ body.travel-workspace-active {
   color: #f4f4ed;
 }
 
+/* The rolling place name. One cell per chapter, all of them the same height, so
+   the column can be translated by whole cells and the window shows exactly one
+   name at a time. Each cell sets its own type on the window's bottom edge — the
+   name's baseline must not move as the column rolls past it. */
+/* Arrival ring — the /travel map's confirm that a flight has landed on the city
+   it promised. One ring, snapped open and eased out (the asymmetry the focus
+   frame uses: fast in, slow out), then gone. It plays once, on mount. */
+@keyframes atlas-arrival-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+  22% {
+    opacity: 0.92;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.92);
+  }
+}
+
+.atlas-arrival-ring {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(210, 255, 0, 0.78);
+  border-radius: 9999px;
+  animation: atlas-arrival-ring 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+.living-atlas__caption-window {
+  height: var(--caption-cell);
+}
+
+.living-atlas__caption-cell {
+  display: flex;
+  height: var(--caption-cell);
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 0.4rem;
+}
+
+.living-atlas__caption {
+  /* Every cell in the column is this tall, so the height has to clear the
+     LONGEST caption at this width — "Bryce Canyon" wraps its name, or drops its
+     pager onto a second line, where the others do not. A cell that only fits the
+     short names pushes the tall one's first line up out of the clip (the column
+     is bottom-aligned), which reads as a crop. The air above a short name costs
+     nothing: the window is transparent and the type sits on its bottom edge. */
+  --caption-cell: 13rem;
+}
+
 .living-atlas__title {
   font-size: clamp(60px, 5.2vw, 76px);
   line-height: 0.82;
@@ -1730,6 +1783,13 @@ body.travel-workspace-active {
     margin-bottom: 0.55rem;
   }
 
+  /* Phone widths can wrap the name and its pager onto two lines, and every cell
+     in the rolling column has to clear the tallest one — a short cell would let
+     the neighbouring name's ascenders into the window. */
+  .living-atlas__caption {
+    --caption-cell: 12.25rem;
+  }
+
   .living-atlas__title {
     font-size: clamp(46px, 14vw, 62px);
   }
@@ -1768,10 +1828,16 @@ body.travel-workspace-active {
   .living-atlas__caption {
     bottom: max(0.75rem, env(safe-area-inset-bottom));
     left: 31%;
+    --caption-cell: 7.5rem;
   }
 
-  .living-atlas__caption > div:first-child,
-  .living-atlas__caption > div:last-child > div:last-child {
+  /* Short landscape windows keep the place name — it is the content — and drop
+     the two labels around it. This rule used to hide the name block itself: it
+     was written against an earlier DOM in which the chapter eyebrow was a
+     direct child of the caption, and its second selector had stopped matching
+     anything at all, so a phone held sideways showed coordinates and no place. */
+  .living-atlas__caption-cell > div:first-child,
+  .living-atlas__caption > div:last-child {
     display: none;
   }
 
