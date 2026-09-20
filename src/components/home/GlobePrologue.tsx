@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
 import { useInViewOnce } from '../../lib/useInViewOnce';
 import { StepCount } from './ArchiveClosing';
 
@@ -81,8 +81,22 @@ function RiseLine({ children, shown, index, className = '' }: {
 export default function GlobePrologue({ chapters, frames, years, cities, onSelect, onHighlight, planet = null, progress }: Props) {
   const reduce = useReducedMotion();
   const [hovered, setHovered] = useState<number | null>(null);
+  // The row the reader chose: the others fall away along their own spokes and
+  // the needle runs out to the limb, instead of the whole index blinking off.
+  const [committed, setCommitted] = useState<number | null>(null);
+  const committedRef = useRef<number | null>(null);
+  committedRef.current = committed;
   const steady = useMotionValue(1);
-  const bentOpacity = useTransform(progress ?? steady, progress ? [0.7, 0.78, 0.965, 1] : [0, 1], progress ? [0, 1, 1, 0] : [1, 1]);
+  const scrollOpacity = useTransform(progress ?? steady, progress ? [0.7, 0.78, 0.965, 1] : [0, 1], progress ? [0, 1, 1, 0] : [1, 1]);
+  // Once a chapter is chosen the scroll no longer owns the index's opacity —
+  // the commit does, so the dive cannot blink the rows away mid-choreography.
+  const bentOpacity = useMotionValue(1);
+  useMotionValueEvent(scrollOpacity, 'change', (value) => {
+    if (committedRef.current == null) bentOpacity.set(value);
+  });
+  useEffect(() => {
+    if (committed == null) bentOpacity.set(scrollOpacity.get());
+  }, [bentOpacity, committed, scrollOpacity]);
   const bentPointer = useTransform(bentOpacity, (value) => (value > 0.5 ? 'auto' : 'none'));
   const bent = !reduce && !!planet;
   const angleAt = (index: number) => ARC_SPREAD[0] + ((ARC_SPREAD[1] - ARC_SPREAD[0]) * index) / Math.max(1, cities.length - 1);
@@ -92,7 +106,45 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
   const arcRadius = planet ? planet.r + ARC_GAP : 0;
   const [heroShown, setHeroShown] = useState(false);
   const [statsRef, statsShown] = useInViewOnce<HTMLDivElement>('0px 0px -22% 0px', 0.2);
-  const [indexRef, indexShown] = useInViewOnce<HTMLElement>('0px 0px -18% 0px', 0.12);
+  const [indexRef, indexInView] = useInViewOnce<HTMLElement>('0px 0px -18% 0px', 0.12);
+  // Bent around the planet the index is fixed to the viewport, so an
+  // intersection observer on the nav in flow says nothing about when the arc
+  // is actually on screen. There the prologue's own clock starts it: a
+  // one-way latch the first time the glide has finished bringing the planet
+  // to the focal point.
+  const [bentShown, setBentShown] = useState(false);
+  const bentLatched = useRef(false);
+  useEffect(() => {
+    if (!progress) return;
+    const latch = (value: number) => {
+      if (bentLatched.current || value < 0.78) return;
+      bentLatched.current = true;
+      setBentShown(true);
+    };
+    latch(progress.get());
+    return progress.on('change', latch);
+  }, [progress]);
+  const indexShown = bent ? bentShown : indexInView;
+  // The chosen row holds while the others fall away; then the layer goes.
+  useEffect(() => {
+    if (committed == null) return;
+    const controls = animate(bentOpacity, 0, { duration: reduce ? 0 : 0.34, delay: reduce ? 0 : 0.58, ease: expo });
+    return () => controls.stop();
+  }, [bentOpacity, committed, reduce]);
+  // Scrolling back up to the index puts it back.
+  useEffect(() => {
+    if (!progress) return;
+    return progress.on('change', (value) => {
+      if (value < 0.68) setCommitted((current) => (current == null ? current : null));
+    });
+  }, [progress]);
+  /** Where a row sits once a chapter has been chosen: the others step outward
+   *  along their own spoke and go. */
+  const commitPose = (index: number) => {
+    if (committed == null || committed === index) return { x: 0, y: 0, opacity: 1 };
+    const angle = (angleAt(index) * Math.PI) / 180;
+    return { x: Math.cos(angle) * 24, y: Math.sin(angle) * 24, opacity: 0 };
+  };
 
   // The name rises as the page arrives (not on scroll): one beat after the
   // first paint, so the rise is seen rather than hydrated past.
@@ -113,6 +165,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
         // hover here, or the pinned cover would ride the dive.
         onHighlight?.(null);
         setHovered(null);
+        if (bent) setCommitted(index);
         onSelect(city.id);
       }}
       onPointerEnter={() => { onHighlight?.(city.chapterId); setHovered(index); }}
@@ -247,16 +300,19 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
               })}
               {/* The needle: from the planet's limb to the pointed-at row. */}
               {(() => {
-                const angle = angleAt(hovered ?? 0);
+                // The needle follows the pointer and, once a chapter is
+                // chosen, runs out past its name as the others leave.
+                const pointed = committed ?? hovered;
+                const angle = angleAt(pointed ?? 0);
                 const [nx0, ny0] = at(angle, planet!.r + 6);
-                const [nx1, ny1] = at(angle, arcRadius - 10);
+                const [nx1, ny1] = at(angle, committed == null ? arcRadius - 10 : arcRadius + 16);
                 return (
                   <motion.line
                     stroke="#D2FF00"
                     strokeWidth={1}
                     initial={false}
-                    animate={{ x1: nx0, y1: ny0, x2: nx1, y2: ny1, opacity: hovered == null ? 0 : 1 }}
-                    transition={{ duration: reduce ? 0 : 0.42, ease: expo }}
+                    animate={{ x1: nx0, y1: ny0, x2: nx1, y2: ny1, opacity: pointed == null ? 0 : 1 }}
+                    transition={{ duration: reduce ? 0 : (committed == null ? 0.42 : 0.5), ease: expo }}
                   />
                 );
               })()}
@@ -276,7 +332,17 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
                 const [x, y] = at(angleAt(index), arcRadius + ROW_GAP);
                 return (
                   <li key={city.id} className="prologue-line pointer-events-auto absolute -translate-y-1/2" style={{ left: x, top: y }}>
-                    {row(city, index)}
+                    <motion.div
+                      initial={false}
+                      animate={commitPose(index)}
+                      transition={{
+                        duration: reduce ? 0 : 0.42,
+                        delay: reduce || committed == null ? 0 : 0.03 * Math.abs(index - committed),
+                        ease: expo,
+                      }}
+                    >
+                      {row(city, index)}
+                    </motion.div>
                   </li>
                 );
               })}

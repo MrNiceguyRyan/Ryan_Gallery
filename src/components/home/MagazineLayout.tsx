@@ -1,8 +1,8 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
 import { ArrowRight, Share2, Check } from 'lucide-react';
 import type { Collection, Photo } from '../../types';
-import Lightbox from '../shared/Lightbox';
+import Lightbox, { type LightboxOrigin } from '../shared/Lightbox';
 import {
   EDITORIAL_FALLBACKS,
   photoAccessibleLabel,
@@ -11,12 +11,15 @@ import {
   renderFallback,
 } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
+import { useInViewOnce } from '../../lib/useInViewOnce';
 import Magnetic from '../shared/Magnetic';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
 const overlayEase = [0.32, 0, 0.07, 1] as const;
+/** True once this row's frames should arrive (see EditorialRowFrames). */
+const RowRevealContext = createContext(true);
 // The developing-print reveal (after Adovasio's .appear-mask).
 const developEase = [0.455, 0.03, 0.515, 0.955] as const;
 const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
@@ -220,6 +223,28 @@ function labelsMatch(a?: string, b?: string): boolean {
 }
 
 /* ── Photo cell — editorial grid item, original aspect ratio, no cropping ── */
+/** One editorial row. It reports ready when the cover has left (the leading
+ *  rows) or when the reader reaches it, and its frames arrive off that one
+ *  trigger — one observer per row rather than one per photograph. */
+function EditorialRowFrames({ children, spaced, leading, revealReady }: {
+  children: ReactNode;
+  spaced: boolean;
+  leading: boolean;
+  revealReady: boolean;
+}) {
+  const [ref, inView] = useInViewOnce<HTMLDivElement>('0px 0px -12% 0px', 0.08);
+  return (
+    <div
+      ref={ref}
+      className={`grid grid-cols-6 gap-x-2 gap-y-8 md:gap-x-3 md:gap-y-10 items-end ${spaced ? 'pt-12 md:pt-16' : ''}`}
+    >
+      <RowRevealContext.Provider value={revealReady && (leading || inView)}>
+        {children}
+      </RowRevealContext.Provider>
+    </div>
+  );
+}
+
 function PhotoCell({
   photo,
   span,
@@ -229,6 +254,8 @@ function PhotoCell({
   onClick,
   canHover,
   revealReady,
+  posInRow,
+  develops,
   hideOnMobile = false,
   collectionName,
   total,
@@ -239,11 +266,17 @@ function PhotoCell({
   index: number;
   hoveredIndex: number | null;
   setHoveredIndex: (idx: number | null) => void;
-  onClick: () => void;
+  /** Called with the frame's own element, so the viewer can open out of it. */
+  onClick: (element: HTMLElement | null) => void;
   /** When false (touch device), skip hover-driven dim/blur — there's
    *  no way for the user to trigger or escape it cleanly. */
   canHover: boolean;
   revealReady: boolean;
+  /** Position of this frame within its row: the row arrives as one unit and
+   *  its frames follow left to right. */
+  posInRow: number;
+  /** A plate big enough to read a diagonal edge crossing it. */
+  develops: boolean;
   hideOnMobile?: boolean;
   collectionName: string;
   total: number;
@@ -301,7 +334,10 @@ function PhotoCell({
   const interactiveHover = canHover && !reduce;
   const isAnyHovered = interactiveHover && hoveredIndex !== null;
   const isThisHovered = interactiveHover && hoveredIndex === index;
-  const animateEntrance = !reduce && index < 7;
+  // Every frame arrives; the first seven wait for the cover to leave, the
+  // rest for the reader to reach their row.
+  const rowReady = useContext(RowRevealContext);
+  const animateEntrance = !reduce;
 
   return (
     // The figure owns the grid placement and the entrance, so the photograph
@@ -313,19 +349,24 @@ function PhotoCell({
       // The photograph develops: a soft diagonal edge sweeps across it (the
       // mask is three times the figure's width, so the edge crosses at an
       // even pace), with a small rise. Reduced motion: no mask, no motion.
-      style={animateEntrance ? DEVELOP_MASK_STYLE : undefined}
-      initial={animateEntrance ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : false}
-      animate={animateEntrance && !revealReady
-        ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }
-        : { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }}
+      style={animateEntrance && develops ? DEVELOP_MASK_STYLE : undefined}
+      initial={animateEntrance
+        ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
+        : false}
+      animate={animateEntrance && !(revealReady && rowReady)
+        ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
+        : (develops ? { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' } : { opacity: 1, y: 0 })}
       transition={(() => {
-        const delay = animateEntrance && revealReady ? index * 0.06 : 0;
         if (!animateEntrance) return { duration: 0 };
+        // The first seven are the cover hand-off and stagger across the page;
+        // after that a row arrives as a unit and its frames follow in place.
+        const delay = revealReady && rowReady ? (index < 7 ? index * 0.06 : posInRow * 0.07) : 0;
+        const span = index < 7 ? 0.8 : 0.62;
         return {
           opacity: { duration: 0.25, delay, ease: expo },
-          y: { duration: 0.8, delay, ease: popEase },
-          WebkitMaskPosition: { duration: 0.8, delay, ease: developEase },
-          maskPosition: { duration: 0.8, delay, ease: developEase },
+          y: { duration: span, delay, ease: popEase },
+          WebkitMaskPosition: { duration: span, delay, ease: developEase },
+          maskPosition: { duration: span, delay, ease: developEase },
         };
       })()}
     >
@@ -341,7 +382,7 @@ function PhotoCell({
       {...(!interactiveHover && !reduce && {
         whileTap: { opacity: 0.9 },
       })}
-      onClick={onClick}
+      onClick={(event) => onClick(event.currentTarget)}
       aria-label={`Open ${accessibleLabel}`}
       animate={{
         opacity: isAnyHovered && !isThisHovered ? 0.84 : 1,
@@ -429,11 +470,13 @@ function LightboxShell({
   activeIndex,
   onClose,
   collectionName,
+  origin,
 }: {
   photos: Photo[];
   activeIndex: number;
   onClose: () => void;
   collectionName: string;
+  origin: LightboxOrigin | null;
 }) {
   return (
     <Lightbox
@@ -441,6 +484,7 @@ function LightboxShell({
       initialIndex={activeIndex}
       onClose={onClose}
       collectionName={collectionName}
+      origin={origin}
     />
   );
 }
@@ -484,6 +528,13 @@ export default function MagazineLayout({
   const shareAttemptRef = useRef(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // The box of the frame that opened the viewer, read at click time.
+  const [lightboxOrigin, setLightboxOrigin] = useState<LightboxOrigin | null>(null);
+  const openLightbox = (index: number, element: HTMLElement | null) => {
+    const box = element?.getBoundingClientRect();
+    setLightboxOrigin(box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null);
+    setLightboxIndex(index);
+  };
   const [openingFrameError, setOpeningFrameError] = useState(false);
   const [sharedBodyReady, setSharedBodyReady] = useState(!sharedEntry || !!reduce);
   // Touch devices: skip the "dim every other photo when one is hovered"
@@ -559,6 +610,8 @@ export default function MagazineLayout({
     return ordered;
   }, [collection.photos]);
   const editorialRows = useMemo(() => buildEditorialRows(photos), [photos]);
+  // The chapter's end-cap plays when the reader arrives at it.
+  const [endCapRef, endCapShown] = useInViewOnce<HTMLButtonElement>('0px 0px -18% 0px', 0.2);
   const distinctLocation = typeof collection.location === 'string' && !labelsMatch(collection.name, collection.location)
     ? collection.location.trim()
     : '';
@@ -900,7 +953,7 @@ export default function MagazineLayout({
                   {photos[0] && editorialRows[0]?.layout === 'wide' && (
                     <motion.button
                       type="button"
-                      onClick={() => setLightboxIndex(0)}
+                      onClick={(event) => openLightbox(0, event.currentTarget)}
                       initial={reduce ? false : { opacity: 0, y: 18 }}
                       animate={photoRevealReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
                       transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 0.18, ease: expo }}
@@ -1005,16 +1058,20 @@ export default function MagazineLayout({
                     from its own photograph and the next. */}
                 <div className="lg:col-span-8 space-y-8 md:space-y-10">
                   {editorialRows.map((row, rowIdx) => (
-                    <div
+                    <EditorialRowFrames
                       key={row.items.map(({ photo }) => photo._id).join('-')}
-                      className={`grid grid-cols-6 gap-x-2 gap-y-8 md:gap-x-3 md:gap-y-10 items-end ${
-                        rowIdx > 0 && rowIdx % 4 === 0 ? 'pt-12 md:pt-16' : ''
-                      }`}
+                      spaced={rowIdx > 0 && rowIdx % 4 === 0}
+                      /* The first two rows ride the cover hand-off; later rows
+                         wait until the reader reaches them. */
+                      leading={rowIdx < 2}
+                      revealReady={photoRevealReady}
                     >
-                      {row.items.map(({ photo, index }) => (
+                      {row.items.map(({ photo, index }, posInRow) => (
                         <PhotoCell
                           key={photo._id}
                           photo={photo}
+                          posInRow={posInRow}
+                          develops={row.layout === 'wide' || row.layout === 'portrait-solo'}
                           span={
                             row.layout === 'wide'
                               ? 'full'
@@ -1030,34 +1087,44 @@ export default function MagazineLayout({
                           collectionName={collection.name}
                           hoveredIndex={hoveredIndex}
                           setHoveredIndex={setHoveredIndex}
-                          onClick={() => setLightboxIndex(index)}
+                          onClick={(element) => openLightbox(index, element)}
                           canHover={canHover}
                           revealReady={photoRevealReady}
                           hideOnMobile={index === 0 && row.items.length === 1}
                         />
                       ))}
-                    </div>
+                    </EditorialRowFrames>
                   ))}
                   <footer className="pt-24 md:pt-32 pb-12 flex flex-col items-center gap-16 md:gap-24 border-t border-white/5">
                       {/* Next Story */}
                       {nextCollection && (
+                        /* The end of a chapter arrives when the reader reaches
+                           it: label, then the next name masks up, then its
+                           cover develops — rather than all of it having
+                           happened somewhere below the fold. */
                         <button
+                          ref={endCapRef}
                           type="button"
                           className="w-full min-h-11 flex flex-col items-center gap-10 md:gap-12 group cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
                           onClick={() => onSelectCollection(nextCollection)}
                           aria-label={`Read next story: ${nextCollection.name}`}
                         >
-                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56]">
+                          <motion.span
+                            className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56]"
+                            initial={reduce ? false : { opacity: 0 }}
+                            animate={{ opacity: endCapShown ? 0.56 : 0 }}
+                            transition={{ duration: reduce ? 0 : 0.34, ease: expo }}
+                          >
                             Keep Reading
-                          </span>
+                          </motion.span>
                           <span className="flex flex-col items-center gap-8">
                             <Magnetic strength={0.32}>
                               <span className="flex items-center gap-4 text-4xl md:text-6xl font-serif uppercase tracking-tighter overflow-hidden py-1">
                                 <motion.span
                                   className="block"
                                   initial={reduce ? false : { y: '115%' }}
-                                  animate={{ y: '0%' }}
-                                  transition={{ duration: reduce ? 0 : 0.8, ease: expo }}
+                                  animate={{ y: reduce || endCapShown ? '0%' : '115%' }}
+                                  transition={{ duration: reduce ? 0 : 0.8, delay: reduce || !endCapShown ? 0 : 0.12, ease: expo }}
                                 >
                                   {nextCollection.name}
                                 </motion.span>
@@ -1065,15 +1132,28 @@ export default function MagazineLayout({
                               </span>
                             </Magnetic>
                             {nextCollection.coverImageUrl && (
-                              <span className={`block h-[150px] w-60 overflow-hidden opacity-55 transition-opacity duration-500 ${reduce ? '' : 'group-hover:opacity-100'}`}>
+                              <motion.span
+                                className="block h-[150px] w-60 overflow-hidden transition-opacity duration-500 group-hover:opacity-100"
+                                style={reduce ? undefined : DEVELOP_MASK_STYLE}
+                                initial={reduce ? false : { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }}
+                                animate={reduce || endCapShown
+                                  ? { opacity: 0.55, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }
+                                  : { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }}
+                                transition={reduce ? { duration: 0 } : {
+                                  opacity: { duration: 0.3, delay: endCapShown ? 0.28 : 0, ease: expo },
+                                  y: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: popEase },
+                                  WebkitMaskPosition: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: developEase },
+                                  maskPosition: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: developEase },
+                                }}
+                              >
                                 <img
                                   src={`${nextCollection.coverImageUrl}?auto=format&w=600&q=60`}
                                   alt={nextCollection.name}
-                                  className={`w-full h-full object-cover ${reduce ? 'scale-100' : 'scale-110 group-hover:scale-100 transition-transform duration-1000'}`}
+                                  className="w-full h-full object-cover"
                                   loading="lazy"
                                   draggable={false}
                                 />
-                              </span>
+                              </motion.span>
                             )}
                           </span>
                         </button>
@@ -1280,6 +1360,7 @@ export default function MagazineLayout({
             activeIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             collectionName={collection.name}
+            origin={lightboxOrigin}
           />
         )}
       </AnimatePresence>

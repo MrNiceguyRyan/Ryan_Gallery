@@ -1,15 +1,21 @@
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { Photo } from '../../types';
 import { photoAccessibleLabel, photoDescription } from '../../lib/narratives';
 import { lightboxImageSources, prepareLightboxImage } from '../../lib/lightboxImage';
 
+/** The on-screen box of the frame the reader clicked, so the viewer can open
+ *  out of it. */
+export interface LightboxOrigin { x: number; y: number; width: number; height: number }
+
 interface LightboxProps {
   photos: Photo[];
   initialIndex: number;
   onClose: () => void;
   collectionName?: string;
+  /** Where the viewer opens from (the clicked frame's box). */
+  origin?: LightboxOrigin | null;
 }
 
 const photoVariants = {
@@ -30,7 +36,7 @@ const photoVariants = {
  * Shared Lightbox — fullscreen photo viewer
  * Keyboard ← → navigate · Escape close · touch swipe
  */
-export default function Lightbox({ photos, initialIndex, onClose, collectionName }: LightboxProps) {
+export default function Lightbox({ photos, initialIndex, onClose, collectionName, origin }: LightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const [requestedIndex, setRequestedIndex] = useState(initialIndex);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -72,6 +78,35 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const reduce = useReducedMotion();
+  const stageRef = useRef<HTMLDivElement>(null);
+  // The viewer lifts out of the frame the reader clicked. The stage is
+  // measured once, on mount, and placed over that frame before the first
+  // paint; the next frame hands it to the compositor to travel back.
+  useLayoutEffect(() => {
+    const node = stageRef.current;
+    if (!node || !origin || reduce) return;
+    const box = node.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    const scale = Math.max(0.05, origin.width / box.width);
+    const dx = origin.x + origin.width / 2 - (box.x + box.width / 2);
+    const dy = origin.y + origin.height / 2 - (box.y + box.height / 2);
+    node.style.transition = 'none';
+    node.style.transformOrigin = 'center';
+    node.style.transform = `translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0) scale(${scale.toFixed(4)})`;
+    let settle = 0;
+    const frame = requestAnimationFrame(() => {
+      node.style.transition = 'transform 560ms cubic-bezier(0.16, 1, 0.3, 1)';
+      node.style.transform = 'translate3d(0, 0, 0) scale(1)';
+      settle = window.setTimeout(() => {
+        node.style.transition = '';
+        node.style.transform = '';
+      }, 620);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+    };
+  }, [origin, reduce]);
   const isPresent = useIsPresent();
 
   const requestFrame = useCallback((offset: number) => {
@@ -257,8 +292,10 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
         <X size={19} strokeWidth={1.5} aria-hidden="true" />
       </motion.button>
 
-      {/* Photo (+ subtle anti-screenshot watermark overlay) */}
-      <div className={`relative ${imageFailed ? 'flex h-[min(60dvh,32rem)] w-[min(92vw,48rem)] items-center justify-center bg-[#171b15]' : ''}`} onClick={(e) => e.stopPropagation()}>
+      {/* Photo (+ subtle anti-screenshot watermark overlay). The stage opens
+           out of the frame that was clicked: one measurement at mount, then a
+           compositor transform back to its resting box. */}
+      <div ref={stageRef} className={`relative ${imageFailed ? 'flex h-[min(60dvh,32rem)] w-[min(92vw,48rem)] items-center justify-center bg-[#171b15]' : ''}`} onClick={(e) => e.stopPropagation()}>
         {imageFailed && (
           <p className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">
             Frame unavailable
