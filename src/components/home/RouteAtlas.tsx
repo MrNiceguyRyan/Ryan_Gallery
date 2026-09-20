@@ -1691,20 +1691,22 @@ export default function RouteAtlas({
           const share = Math.min(HOP.prerollShare, HOP.prerollMaxPx / legPixels) * amount;
           targetCenter = greatCirclePoint(from, to, share);
           targetZoom = restZoom(committed) - HOP.prerollZoom * amount;
-        } else if (idle) {
+        } else {
+          targetCenter = restCenter(committed);
+          targetZoom = restZoom(committed);
+        }
+        if (idle) {
+          // The sway rides on whatever the resting pose is — the scroll usually
+          // leaves the camera leaning a little toward the next place.
           const phase = (now - idleSince) / HOP.idlePeriodMs;
-          const rest = restCenter(committed);
           const swayDegrees = (HOP.idleSwayPx * 360) / (512 * 2 ** restZoom(committed));
           // Eases in over the first period so the sway begins from stillness.
           const gain = smootherstep(clamp01(phase));
           targetCenter = [
-            rest[0] + gain * swayDegrees * Math.sin(phase * 2 * Math.PI),
-            rest[1] + gain * swayDegrees * 0.55 * Math.sin(phase * 2 * Math.PI * 0.7 + 1.1),
+            targetCenter[0] + gain * swayDegrees * Math.sin(phase * 2 * Math.PI),
+            targetCenter[1] + gain * swayDegrees * 0.55 * Math.sin(phase * 2 * Math.PI * 0.7 + 1.1),
           ];
-          targetZoom = restZoom(committed) - gain * HOP.idleSwayZoom * (0.5 - 0.5 * Math.cos(phase * 2 * Math.PI * 0.5));
-        } else {
-          targetCenter = restCenter(committed);
-          targetZoom = restZoom(committed);
+          targetZoom -= gain * HOP.idleSwayZoom * (0.5 - 0.5 * Math.cos(phase * 2 * Math.PI * 0.5));
         }
       }
       const follow = 1 - Math.exp(-dt / (idle ? HOP.followMs * 4 : HOP.followMs));
