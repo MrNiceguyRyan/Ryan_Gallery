@@ -212,11 +212,26 @@ html.lenis body {
 .af-point__mark.is-current {
   cursor: default;
 }
-.af-point__square {
+ /* An inactive place: a small hollow ring, the same mark the globe uses —
+   no boxes on the photograph. */
+.af-point__dot {
   position: absolute;
-  inset: 0;
-  border: 1px solid rgba(244, 244, 237, 0.72);
-  box-shadow: 0 0 0 1px rgba(12, 15, 10, 0.45), inset 0 0 0 1px rgba(12, 15, 10, 0.3);
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 244, 237, 0.78);
+  box-shadow: 0 0 0 1px rgba(12, 15, 10, 0.4);
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1), border-color 400ms ease;
+}
+.af-point__mark:hover .af-point__dot,
+.af-point__mark:focus-visible .af-point__dot,
+.af-point__mark[data-engaged] .af-point__dot {
+  transform: scale(1.28);
+  border-color: #F4F4ED;
+  transition-duration: 200ms;
 }
  /* The label — number and name — shows only while the point is pointed at,
    focused or its cover is hovered: numbers belong in the index, not on the
@@ -284,7 +299,7 @@ html.lenis body {
 }
 /* Transitions only on the way in: when .is-current comes off, the children
    snap back and af-point-on below drives the blink on its own. */
-.af-point__mark.is-current .af-point__square {
+.af-point__mark.is-current .af-point__dot {
   opacity: 0;
   transform: scale(0.42);
   transition: opacity 160ms ease-in, transform 160ms ease-in;
@@ -309,7 +324,7 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .af-point__mark:not(.is-current) { animation: none; }
   .af-point__ring,
-  .af-point__mark.is-current .af-point__square,
+  .af-point__dot,
   .af-point__label,
   .af-point__mark.is-current .af-point__focus { transition: none; }
 }
@@ -438,61 +453,6 @@ main[data-story-under="true"] [data-archive-column] {
 @media (prefers-reduced-motion: reduce) {
   .atlas-ticks__group i,
   .atlas-ticks__label { transition: none; }
-}
-
-/* The prologue index's cover card, hung off a place on the globe. */
-.prologue-card {
-  position: relative;
-  display: block;
-  width: 132px;
-  aspect-ratio: 4 / 5;
-  pointer-events: none;
-  outline: 1px solid rgba(244, 244, 237, 0.16);
-  box-shadow: 0 24px 50px -18px rgba(0, 0, 0, 0.75);
-  background: #151a12;
-}
-.prologue-card img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: saturate(0.92);
-  animation: prologue-card-sharpen 360ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
-}
-@keyframes prologue-card-sharpen {
-  from { filter: saturate(0.92) blur(1.2px); }
-  to { filter: saturate(0.92) blur(0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prologue-card img { animation: none; }
-}
-.prologue-card__lead {
-  position: absolute;
-  left: -26px;
-  bottom: -22px;
-  width: 26px;
-  height: 22px;
-  background: linear-gradient(
-    to top right,
-    transparent calc(50% - 0.5px),
-    rgba(244, 244, 237, 0.85) calc(50% - 0.5px),
-    rgba(244, 244, 237, 0.85) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
-}
-.prologue-card__caption {
-  position: absolute;
-  left: 10px;
-  bottom: 8px;
-  white-space: nowrap;
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(244, 244, 237, 0.85);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
 }
 
 /* One word of a rising chapter title. Padding gives the glyphs' overshoot room

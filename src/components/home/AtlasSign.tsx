@@ -294,11 +294,12 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     }
     const color = mixColor(lime);
     const arm = 14 * clamp(0.72 + 0.28 * scale, 0.7, 1.4);
-    // Scanning: the four corners grow along the edges until they meet and the
-    // reticle is a whole frame; at the lock it breaks back into corners.
+    // Scanning: the four corners reach along the edges — never far enough to
+    // meet, so the reticle stays four marks and never becomes a box — and
+    // draw back in at the lock.
     const frame = moving ? bell(t, 120, 460, lock - 200, lock - 70) : 0;
-    const armX = lerp(arm, hw, frame);
-    const armY = lerp(arm, hh, frame);
+    const armX = lerp(arm, hw * 0.5, frame);
+    const armY = lerp(arm, hh * 0.5, frame);
     const stroke = huntingNow ? lerp(1.25, 1, bell(t, 120, 300, lock - 190, lock)) : 1.25 + lime;
     const bracketOpacity = huntingNow ? lerp(1, 0.78, bell(t, 120, 300, lock - 190, lock)) : 1;
 
@@ -623,59 +624,11 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
   );
 }
 
-/** The small cover the prologue pins to a place on the globe. */
-export const prologueCardSrc = (base: string) => `${base}?auto=format&w=320&q=75`;
-
-/**
- * PrologueCard — while a name in the prologue index is pointed at, that
- * chapter's cover hangs off its point on the globe by a short leader line,
- * captioned with its number, name and state. It grows from the point and
- * shrinks back into it.
- */
-export function PrologueCard({ number, name, region, imageUrl, reducedMotion, from }: {
-  number: number;
-  name: string;
-  region?: string;
-  imageUrl: string;
-  reducedMotion: boolean;
-  /** Screen offset of the previous point: the card slides over from there
-   *  instead of vanishing and reappearing. */
-  from?: { x: number; y: number } | null;
-}) {
-  const sliding = !!from && (Math.abs(from.x) > 0.5 || Math.abs(from.y) > 0.5);
-  const ease = [0.16, 1, 0.3, 1] as const;
-  return (
-    <motion.span
-      aria-hidden="true"
-      className="prologue-card"
-      style={{ originX: 0, originY: 1 }}
-      initial={sliding ? { opacity: 1, scale: 1, x: from!.x, y: from!.y } : { opacity: 0, scale: 0.94, x: 0, y: 0 }}
-      animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={reducedMotion
-        ? { duration: 0 }
-        : { opacity: { duration: 0.36, ease }, scale: { duration: 0.36, ease }, x: { duration: 0.55, ease }, y: { duration: 0.55, ease } }}
-    >
-      <span className="prologue-card__lead" />
-      {imageUrl && <img src={prologueCardSrc(imageUrl)} alt="" decoding="async" />}
-      {/* The caption arrives a beat after the card — three speeds read as weight. */}
-      <motion.span
-        className="prologue-card__caption"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: reducedMotion ? 0 : 0.3, delay: reducedMotion ? 0 : 0.12, ease }}
-      >
-        {pad2(number)} · {name}{region ? ` · ${region}` : ''}
-      </motion.span>
-    </motion.span>
-  );
-}
-
 /**
  * Every other place on the map carries an inactive AF point: a small hollow
- * square with its chapter number. At the current place the square collapses
- * into a white focus point in the gap of the viewfinder's centre cross; a
- * place the camera leaves lights its square again with one quick blink.
+ * ring, the same mark the globe uses. At the current place it fills into the
+ * white focus point in the gap of the viewfinder's centre cross; a place the
+ * camera leaves lights its ring again with one quick blink.
  */
 export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
   stopId: string;
@@ -713,7 +666,7 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
         onClick={() => onNavigate?.(stopId)}
       >
         <span className="af-point__ring" />
-        <span className="af-point__square" />
+        <span className="af-point__dot" />
         <span className="af-point__focus" />
         <span className="af-point__label" aria-hidden="true">
           {String(number).padStart(2, '0')}&nbsp;·&nbsp;{name}

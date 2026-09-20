@@ -15,7 +15,7 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AfPoint, AtlasTicks, AtlasViewfinder, PrologueCard, prologueCardSrc, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
+import { AfPoint, AtlasTicks, AtlasViewfinder, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -995,14 +995,15 @@ export default function RouteAtlas({
 
   const fullRouteCoordinates = useMemo(() => routeCoordinates(mappedStops), [mappedStops]);
   const fullRoute = useMemo(() => lineFeature(fullRouteCoordinates), [fullRouteCoordinates]);
-  // The index hover: that place's cover, pinned to its point on the globe —
-  // only while the globe is the prologue's (cover hovers in the archive set
-  // the same id, and there the AF point's ring answers instead).
+  // Pointing at an index name lights that place on the globe: only while the
+  // globe is the prologue's (cover hovers in the archive set the same id, and
+  // there the AF point's ring answers instead).
   const [prologueStage, setPrologueStage] = useState(() => prologue && resolvedPrologueProgress.get() < 1);
   useMotionValueEvent(resolvedPrologueProgress, 'change', (progress) => {
     const next = prologue && progress < 1;
     setPrologueStage((current) => (current === next ? current : next));
   });
+  const engagedOnGlobe = prologueStage ? engagedChapterId : null;
   // Each place lights as the prologue's route reaches it (the route is drawn
   // across the globe by scroll, see `prologueRouteDrawn`); outside the
   // prologue every place is lit.
@@ -1011,35 +1012,6 @@ export default function RouteAtlas({
     const next = prologue ? prologueLitCount(chapterRoute, progress) : 99;
     setLitStops((current) => (current === next ? current : next));
   });
-  const engagedEntry = prologueStage && engagedChapterId
-    ? chapterRoute.find((entry) => entry.stop.id === engagedChapterId)
-    : undefined;
-  // When the pointer moves from one index row to the next, the card slides
-  // over from the previous point rather than vanishing and reappearing.
-  const previousCardRef = useRef<{ id: string; coordinates: GeoCoordinate } | null>(null);
-  let cardFrom: { x: number; y: number } | null = null;
-  if (engagedEntry) {
-    const previous = previousCardRef.current;
-    const map = mapRef.current?.getMap();
-    if (previous && previous.id !== engagedEntry.stop.id && map) {
-      const a = map.project(previous.coordinates);
-      const b = map.project(engagedEntry.stop.coordinates);
-      cardFrom = { x: a.x - b.x, y: a.y - b.y };
-    }
-  }
-  useEffect(() => {
-    previousCardRef.current = engagedEntry ? { id: engagedEntry.stop.id, coordinates: engagedEntry.stop.coordinates } : null;
-  });
-  useEffect(() => {
-    if (!prologue || !mapLoaded) return;
-    // Warm the six small covers so the first hover shows a picture, not a load.
-    mappedStops.forEach((stop) => {
-      const base = stop.coverImageUrl || stop.imageUrl;
-      if (!base) return;
-      const image = new Image();
-      image.src = prologueCardSrc(base);
-    });
-  }, [mapLoaded, mappedStops, prologue]);
   const prologueStops = useMemo(() => ({
     type: 'FeatureCollection' as const,
     features: mappedStops.map((stop, index) => ({
@@ -2617,22 +2589,22 @@ export default function RouteAtlas({
               id="prologue-stops-halo"
               type="circle"
               paint={{
-                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 9, 8],
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedOnGlobe ?? ''], 9, 8],
                 'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
                 'circle-color': MAP_BURN,
-                'circle-blur': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 0, 1],
+                'circle-blur': ['case', ['==', ['get', 'id'], engagedOnGlobe ?? ''], 0, 1],
                 'circle-pitch-alignment': 'viewport',
                 'circle-opacity': [
                   'interpolate', ['linear'], ['zoom'],
-                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedChapterId ?? ''], 0.2, 0.24],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedOnGlobe ?? ''], 0.2, 0.24],
                   PROLOGUE_SATELLITE_FADE[1], 0,
                 ],
                 'circle-opacity-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
                 'circle-stroke-color': '#F4F4ED',
-                'circle-stroke-width': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 1, 0],
+                'circle-stroke-width': ['case', ['==', ['get', 'id'], engagedOnGlobe ?? ''], 1, 0],
                 'circle-stroke-opacity': [
                   'interpolate', ['linear'], ['zoom'],
-                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedChapterId ?? ''], 0.95, 0],
+                  PROLOGUE_SATELLITE_FADE[0], ['case', ['>', ['get', 'order'], litStops], 0, ['==', ['get', 'id'], engagedOnGlobe ?? ''], 0.95, 0],
                   PROLOGUE_SATELLITE_FADE[1], 0,
                 ],
               }}
@@ -2641,7 +2613,7 @@ export default function RouteAtlas({
               id="prologue-stops-dot"
               type="circle"
               paint={{
-                'circle-radius': ['case', ['==', ['get', 'id'], engagedChapterId ?? ''], 3.4, 2.6],
+                'circle-radius': ['case', ['==', ['get', 'id'], engagedOnGlobe ?? ''], 3.4, 2.6],
                 'circle-radius-transition': { duration: reducedMotion ? 0 : 420, delay: 0 },
                 'circle-color': MAP_INK,
                 'circle-stroke-color': MAP_BURN,
@@ -2653,28 +2625,6 @@ export default function RouteAtlas({
             />
           </Source>
         )}
-
-        <AnimatePresence>
-          {engagedEntry && (
-            <Marker
-              key="prologue-card"
-              longitude={engagedEntry.stop.coordinates[0]}
-              latitude={engagedEntry.stop.coordinates[1]}
-              anchor="bottom-left"
-              offset={[26, -22]}
-            >
-              <PrologueCard
-                key={engagedEntry.stop.id}
-                number={engagedEntry.chapterIndex + 1}
-                name={engagedEntry.stop.name}
-                region={engagedEntry.stop.region}
-                imageUrl={engagedEntry.stop.coverImageUrl || engagedEntry.stop.imageUrl}
-                reducedMotion={reducedMotion}
-                from={cardFrom}
-              />
-            </Marker>
-          )}
-        </AnimatePresence>
 
         {/* AF points: upright to the camera, centred on each place. The current
             place's square collapses to a white focus point in the viewfinder's

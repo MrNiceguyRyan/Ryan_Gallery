@@ -66,7 +66,10 @@ interface Props {
 /** The one chapter rendered as ArchiveChapter's two-column editorial spread.
  *  Mid-stack on purpose: chapter 0 owns the archive entrance, whose album
  *  unfold is gated on `variant === 'cover'`. */
-const FEATURE_CHAPTER_INDEX = 3;
+/* Every chapter is the same kind of cover. One editorial spread used to break
+   the run (index 3); the owner asked for one treatment throughout. -1 keeps
+   the `feature` variant reachable without any chapter using it. */
+const FEATURE_CHAPTER_INDEX = -1;
 // Desktop globe prologue: the height of the opening laid over the atlas, and
 // how much of the viewport the atlas entrance overlaps it by (the entrance
 // begins when the archive's top edge is 56% down the screen).
