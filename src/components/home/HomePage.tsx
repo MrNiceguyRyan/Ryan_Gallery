@@ -1329,7 +1329,6 @@ export default function HomePage({ collections }: Props) {
                 engagedChapterId={engagedChapterId}
                 paused={atlasPaused}
                 voyage={voyage}
-                onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
               />
             </aside>
 

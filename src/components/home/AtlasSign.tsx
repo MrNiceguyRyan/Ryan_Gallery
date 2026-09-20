@@ -56,6 +56,28 @@ const mixColor = (t: number) =>
   `rgb(${BONE.map((channel, index) => Math.round(lerp(channel, LIME[index], t))).join(',')})`;
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
+
+// Letters of a similar width in Fraunces, so the name barely changes width
+// while its letters are shuffled.
+const SCRAMBLE_GLYPHS = 'ACDEGHKNOPRSTUVXZ';
+const SCRAMBLE_FLIP_MS = 48;
+/** The name `from` shuffled into `to` at `t` ms of a hunt that locks at
+ *  `lock`: letters start flipping from the left, each settles on its new
+ *  letter in turn, the last one just before the lock. */
+function scrambledName(from: string, to: string, t: number, lock: number) {
+  const length = Math.max(from.length, to.length);
+  const flip = Math.floor(t / SCRAMBLE_FLIP_MS);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    const target = to[i];
+    const start = lock * (0.05 + (0.25 * i) / length);
+    const end = target != null ? lock * (0.48 + (0.5 * (i + 1)) / to.length) : start + 160;
+    if (t < start) out += from[i] ?? SCRAMBLE_GLYPHS[(i * 7) % SCRAMBLE_GLYPHS.length];
+    else if (t < end) out += target === ' ' ? ' ' : SCRAMBLE_GLYPHS[(i * 7 + flip * 13 + 3) % SCRAMBLE_GLYPHS.length];
+    else out += target ?? '';
+  }
+  return out;
+}
 const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
 const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
 
@@ -122,6 +144,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     hunting: false,
     frame: 0,
     metaFor: '',
+    dashOffset: 0,
     metaChars: [] as HTMLSpanElement[],
     metaDot: null as HTMLElement | null,
     nameFor: '',
@@ -194,6 +217,11 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     }
     const color = mixColor(lime);
     const arm = 14 * clamp(0.72 + 0.28 * scale, 0.7, 1.4);
+    // Scanning: the four corners grow along the edges until they meet and the
+    // reticle is a whole frame; at the lock it breaks back into corners.
+    const frame = moving ? bell(t, 120, 460, lock - 200, lock - 70) : 0;
+    const armX = lerp(arm, hw, frame);
+    const armY = lerp(arm, hh, frame);
     const stroke = huntingNow ? lerp(1.25, 1, bell(t, 120, 300, lock - 190, lock)) : 1.25 + lime;
     const bracketOpacity = huntingNow ? lerp(1, 0.78, bell(t, 120, 300, lock - 190, lock)) : 1;
 
@@ -207,7 +235,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
         topRightX = x;
         topRightY = y;
       }
-      bracketPath += `M${x.toFixed(2)},${(y - sy * arm).toFixed(2)}L${x.toFixed(2)},${y.toFixed(2)}L${(x - sx * arm).toFixed(2)},${y.toFixed(2)}`;
+      bracketPath += `M${x.toFixed(2)},${(y - sy * armY).toFixed(2)}L${x.toFixed(2)},${y.toFixed(2)}L${(x - sx * armX).toFixed(2)},${y.toFixed(2)}`;
     });
     bracketHaloRef.current?.setAttribute('d', bracketPath);
     bracketHaloRef.current?.setAttribute('stroke-width', (stroke + 2).toFixed(2));
@@ -253,6 +281,14 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (rightEnd - rightInner > 4) levelPath += `M${rightInner.toFixed(2)},${cy}L${rightEnd},${cy}M${rightEnd},${cy - 4.5}L${rightEnd},${cy + 4.5}`;
     levelHaloRef.current?.setAttribute('d', levelPath);
     levelRef.current?.setAttribute('d', levelPath);
+    // The level's dashes run toward the destination while the camera flies
+    // and stand still once it has landed.
+    if (moving && t < lock && from && to) {
+      const direction = Math.sign(to.coordinates[0] - from.coordinates[0]) || 1;
+      s.dashOffset = -direction * t * 0.05;
+    }
+    levelHaloRef.current?.setAttribute('stroke-dashoffset', s.dashOffset.toFixed(1));
+    levelRef.current?.setAttribute('stroke-dashoffset', s.dashOffset.toFixed(1));
     levelGroupRef.current?.setAttribute('transform', `rotate(${tilt.toFixed(3)} ${cx} ${cy})`);
     if (levelRef.current) {
       levelRef.current.style.stroke = color;
@@ -288,38 +324,21 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       yearRef.current.style.opacity = String(yearOpacity);
     }
 
-    // Name: the focus pull.
+    // Name: the letters are shuffled into the next name while the camera
+    // flies (see scrambledName); the last settles as the lock lands.
     const name = nameRef.current;
     if (name) {
       let opacity = 1;
-      let blur = 0;
-      let tracking = -0.01;
-      let nameScale = 1;
-      if (switching && t < 300) {
-        setName(from);
-        const p = easeInCubic(progress(0, 280, t));
-        opacity = 1 - p;
-        blur = 10 * p;
-        tracking = -0.01 + 0.1 * p;
-        nameScale = 1 + 0.03 * p;
+      if (switching && from && to && t < lock) {
+        name.textContent = scrambledName(from.name, to.name, t, lock);
+        s.nameFor = '';
+        opacity = 0.9;
       } else {
         setName(to);
-        if (switching && t < lock) {
-          const focus = clamp((scale - 0.86) / 0.92);
-          opacity = 0.62 * easeOutCubic(progress(Math.min(560, lock - 260), Math.min(820, lock), t));
-          blur = 1.6 + 3.6 * focus;
-          tracking = -0.01 + 0.08 * focus;
-          nameScale = 1 + 0.03 * focus;
-        } else if (switching) {
-          const q = easeOutCubic(progress(lock, lock + 240, t));
-          opacity = lerp(0.62, 1, q);
-          blur = 1.6 * (1 - q);
-        }
+        if (switching) opacity = lerp(0.9, 1, easeOutCubic(progress(lock, lock + 160, t)));
       }
       name.style.opacity = opacity.toFixed(3);
-      name.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : 'none';
-      name.style.letterSpacing = `${tracking.toFixed(4)}em`;
-      name.style.transform = `translate(${cx}px, ${cy + NAME_TOP}px) translateX(-50%) scale(${nameScale.toFixed(4)})`;
+      name.style.transform = `translate(${cx}px, ${cy + NAME_TOP}px) translateX(-50%)`;
     }
 
     // Readout line: blanks right to left on take-off, types back in after the lock.
@@ -425,8 +444,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       <span ref={scrimRef} className="viewfinder__scrim" />
       <svg ref={svgRef} className="viewfinder__svg">
         <g ref={levelGroupRef}>
-          <path ref={levelHaloRef} className="viewfinder__halo" strokeWidth={3} style={{ opacity: 0.6 }} />
-          <path ref={levelRef} className="viewfinder__line" strokeWidth={1} />
+          <path ref={levelHaloRef} className="viewfinder__halo" strokeWidth={3} strokeDasharray="4 4" style={{ opacity: 0.6 }} />
+          <path ref={levelRef} className="viewfinder__line" strokeWidth={1} strokeDasharray="4 4" />
         </g>
         <path ref={bracketHaloRef} className="viewfinder__halo" />
         <path ref={bracketRef} className="viewfinder__line" />

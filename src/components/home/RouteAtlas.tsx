@@ -65,8 +65,6 @@ interface Props {
   mobile?: boolean;
   paused?: boolean;
   presentation?: 'classic' | 'living';
-  /** Select a stop in the classic rail and move focus to its chapter. */
-  onNavigate?: (chapterId: string) => void;
   /** Temporarily links a desktop classic photograph to its map and rail stop
    *  (the globe's point in the prologue, the AF point's ring in the archive). */
   engagedChapterId?: string | null;
@@ -608,44 +606,6 @@ function chapterWeight(sample: ChapterSample | null, stopId: string) {
   return 0;
 }
 
-function stopVisualState(sample: ChapterSample | null, entry: ChapterRouteStop) {
-  const focus = chapterWeight(sample, entry.stop.id);
-  let passed = 0;
-  if (sample) {
-    if (entry.chapterIndex < sample.from.chapterIndex) passed = 1;
-    else if (entry.stop.id === sample.from.stop.id && sample.from !== sample.to) {
-      passed = sample.easedProgress;
-    }
-  }
-  return { focus, accent: Math.max(focus, passed * 0.32) };
-}
-
-function useRouteStopLighting(sample: MotionValue<ChapterSample | null>, entry: ChapterRouteStop) {
-  const state = useTransform(sample, (current) => stopVisualState(current, entry));
-  const focus = useTransform(state, (current) => current.focus);
-  const accent = useTransform(state, (current) => current.accent);
-  return { focus, accent };
-}
-
-function useFocusLockProgress(focusLocked: boolean, reducedMotion: boolean) {
-  const progress = useMotionValue(focusLocked ? 1 : 0);
-
-  useEffect(() => {
-    const target = focusLocked ? 1 : 0;
-    if (reducedMotion) {
-      progress.set(target);
-      return;
-    }
-    const controls = animate(progress, target, {
-      duration: target ? 0.28 : 0.42,
-      ease: [0.16, 1, 0.3, 1],
-    });
-    return () => controls.stop();
-  }, [focusLocked, progress, reducedMotion]);
-
-  return progress;
-}
-
 const projectedPointsMatch = (current: ProjectedPoint[], next: ProjectedPoint[]) =>
   current.length === next.length && current.every((point, index) => {
     const candidate = next[index];
@@ -708,99 +668,6 @@ function ScrubbedPlaceName({
     <motion.span className="absolute inset-0 block whitespace-nowrap" style={{ opacity, y }}>
       {stop.name}
     </motion.span>
-  );
-}
-
-function ScrubbedRouteStop({
-  entry,
-  index,
-  sample,
-  semanticActive,
-  mobile,
-  onNavigate,
-  focusLocked,
-  reducedMotion,
-}: {
-  entry: ChapterRouteStop;
-  index: number;
-  sample: MotionValue<ChapterSample | null>;
-  semanticActive: boolean;
-  mobile: boolean;
-  onNavigate?: (chapterId: string) => void;
-  focusLocked: boolean;
-  reducedMotion: boolean;
-}) {
-  // The rail reads the same lighting state as the scrubbed camera,
-  // including routes that bridge chapters without coordinates. Hysteresis is
-  // retained only for the semantic announcement, never for visual brightness.
-  const { focus, accent } = useRouteStopLighting(sample, entry);
-  const focusLockProgress = useFocusLockProgress(focusLocked, reducedMotion);
-  const visualFocus = useTransform(
-    [focus, focusLockProgress],
-    ([chapterFocus, lock]) => clamp01(chapterFocus + (1 - chapterFocus) * lock * 0.34),
-  );
-  const dotScale = useTransform(focus, [0, 1], [0.92, 1.08]);
-  const dotBorderColor = useTransform(
-    [accent, focusLockProgress],
-    ([strength, lock]) => `rgba(210, 255, 0, ${0.24 + clamp01(strength + lock * 0.2) * 0.76})`,
-  );
-  const dotCoreScale = useTransform(focus, [0, 1], [0.62, 1]);
-  const labelOpacity = useTransform(
-    visualFocus,
-    (strength) => mobile ? strength : 0.5 + strength * 0.5,
-  );
-  const labelX = useTransform(focus, [0, 1], [-2, 0]);
-  const labelColor = useTransform(visualFocus, (strength) => {
-    const red = Math.round(244 + (210 - 244) * strength);
-    const green = Math.round(244 + (255 - 244) * strength);
-    const blue = Math.round(237 + (0 - 237) * strength);
-    return `rgba(${red}, ${green}, ${blue}, ${0.68 + strength * 0.32})`;
-  });
-
-  return (
-    <motion.button
-      type="button"
-      onClick={() => onNavigate?.(entry.stop.id)}
-      disabled={!onNavigate}
-      aria-current={semanticActive ? 'step' : undefined}
-      aria-label={`Go to ${entry.stop.name} story`}
-      data-route-rail-stop={entry.stop.id}
-      data-route-focus-locked={focusLocked ? 'true' : undefined}
-      className={`route-atlas-stop relative flex w-full items-center gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] disabled:cursor-default ${mobile ? 'py-2' : 'py-3.5'}`}
-    >
-      <motion.span
-        aria-hidden="true"
-        className="pointer-events-none absolute -inset-x-2 inset-y-1 bg-[linear-gradient(90deg,rgba(210,255,0,0.075),rgba(210,255,0,0.018)_48%,transparent_88%)]"
-        style={{ opacity: focusLockProgress }}
-      />
-      <motion.span
-        aria-hidden="true"
-        className="relative z-10 h-[15px] w-[15px] shrink-0 rounded-full border bg-[#171a15]"
-        style={{ scale: dotScale, borderColor: dotBorderColor }}
-      >
-        <motion.span
-          className="absolute inset-[4px] rounded-full bg-[#D2FF00]"
-          data-route-accent="true"
-          style={{ opacity: accent, scale: dotCoreScale }}
-        />
-        <motion.span
-          className="absolute inset-[5px] rounded-full bg-[#F0F3DF]"
-          data-route-focus="true"
-          style={{ opacity: focus }}
-        />
-      </motion.span>
-      <motion.span
-        className="min-w-0"
-        style={{ opacity: labelOpacity, x: labelX, color: labelColor }}
-      >
-        <span className="block font-ui text-[10px] uppercase tracking-[0.2em]">
-          {String(index + 1).padStart(2, '0')}
-        </span>
-        <span className="mt-1 block truncate font-ui text-[11px] uppercase tracking-[0.22em]">
-          {entry.stop.name}
-        </span>
-      </motion.span>
-    </motion.button>
   );
 }
 
@@ -975,7 +842,6 @@ export default function RouteAtlas({
   mobile = false,
   paused = false,
   presentation = 'classic',
-  onNavigate,
   engagedChapterId = null,
   voyage = null,
 }: Props) {
@@ -1114,16 +980,6 @@ export default function RouteAtlas({
     chapterSample,
     (sample) => sample?.routeProgress ?? 0,
   );
-  const railCompletion = useTransform(chapterSample, (sample) => {
-    if (!sample || chapterRoute.length < 2) return 0;
-    const fromIndex = chapterRoute.findIndex((entry) => entry.stop.id === sample.from.stop.id);
-    const toIndex = chapterRoute.findIndex((entry) => entry.stop.id === sample.to.stop.id);
-    if (fromIndex < 0 || toIndex < 0) return 0;
-    return clamp01(
-      (fromIndex + (toIndex - fromIndex) * sample.easedProgress) /
-      Math.max(1, chapterRoute.length - 1),
-    );
-  });
   const sampledEntryProgress = useTransform(
     resolvedEntryProgress,
     (progress) => reducedMotion ? (progress < 0.5 ? 0 : 1) : clamp01(progress),
@@ -2680,6 +2536,7 @@ export default function RouteAtlas({
             paint={{
               'line-color': MAP_INK,
               'line-width': 1,
+              'line-dasharray': [3, 4],
               'line-opacity': living ? 0 : atlasEngaged ? 0.5 : 0,
               'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
               'line-trim-offset': [1, 1],
@@ -2704,6 +2561,7 @@ export default function RouteAtlas({
             paint={{
               'line-color': MAP_INK,
               'line-width': 1.5,
+              'line-dasharray': [5, 2.5],
               'line-opacity': living ? 0 : 0.92,
               'line-trim-offset': initialRouteTrim,
             }}
@@ -2716,6 +2574,7 @@ export default function RouteAtlas({
               paint={{
                 'line-color': MAP_INK,
                 'line-width': 1.15,
+                'line-dasharray': [3, 2.5],
                 'line-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.95, PROLOGUE_SATELLITE_FADE[1], 0],
                 'line-trim-offset': [0, 1],
               }}
@@ -2980,51 +2839,6 @@ export default function RouteAtlas({
         />
       </motion.header>}
 
-      {!living && <motion.nav
-        initial={false}
-        animate={entryOwnsClassicInterface
-          ? undefined
-          : interfaceVisible ? { opacity: 1, x: 0 } : { opacity: 0, x: -18 }}
-        style={entryOwnsClassicInterface
-          ? { opacity: classicInterfaceOpacity, y: classicInterfaceY }
-          : undefined}
-        transition={{
-          duration: reducedMotion ? 0 : interfaceVisible ? (playInterfaceIntro ? 0.62 : 0.36) : 0.3,
-          delay: reducedMotion || !playInterfaceIntro ? 0 : 0.18,
-          ease: [0.16, 1, 0.3, 1],
-        }}
-        aria-hidden={!interfaceAccessible}
-        inert={!interfaceAccessible}
-        aria-label="Archive route chapters"
-        className={`route-atlas-nav absolute z-30 ${
-          mobile
-            ? 'left-5 top-[31%] w-[132px]'
-            : 'left-8 top-[170px] w-[190px]'
-        }`}
-      >
-        <div className="route-atlas-rail relative">
-          <div className="absolute bottom-3 left-[7px] top-3 w-px bg-white/12" />
-          <motion.div
-            className="absolute bottom-3 left-[7px] top-3 w-px origin-top bg-[#D2FF00] shadow-[0_0_8px_rgba(210,255,0,0.45)]"
-            style={{ scaleY: railCompletion }}
-          />
-          {chapterRoute.map((entry, index) => {
-            return (
-              <ScrubbedRouteStop
-                key={entry.stop.id}
-                entry={entry}
-                index={index}
-                sample={chapterSample}
-                semanticActive={entry.stopIndex === resolvedIndex}
-                mobile={mobile}
-                onNavigate={onNavigate}
-                focusLocked={!mobile && engagedChapterId === entry.stop.id}
-                reducedMotion={reducedMotion}
-              />
-            );
-          })}
-        </div>
-      </motion.nav>}
 
       {!living && <motion.footer
         initial={false}
