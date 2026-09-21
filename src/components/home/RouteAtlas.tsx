@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../../lib/atlasBasemap';
 import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import {
@@ -2466,19 +2467,19 @@ export default function RouteAtlas({
             }
 
             if (layer.type === 'background') {
-              map.setPaintProperty(layer.id, 'background-color', living ? '#0F130E' : '#1B2319');
+              map.setPaintProperty(layer.id, 'background-color', living ? ATLAS_PAPER.backgroundLiving : ATLAS_PAPER.background);
               return;
             }
 
             if (layer.type === 'fill') {
               if (id.includes('water')) {
-                map.setPaintProperty(layer.id, 'fill-color', '#0B1210');
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
                 map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
               } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
-                map.setPaintProperty(layer.id, 'fill-color', '#263024');
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
                 map.setPaintProperty(layer.id, 'fill-opacity', living ? (mobile ? 0.32 : 0.28) : (mobile ? 0.36 : 0.38));
               } else if (id.includes('building')) {
-                map.setPaintProperty(layer.id, 'fill-color', '#2A3028');
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
                 map.setPaintProperty(layer.id, 'fill-opacity', mobile ? 0.1 : 0.12);
               }
               return;
@@ -2560,6 +2561,12 @@ export default function RouteAtlas({
             map.setPaintProperty(layer.id, 'text-halo-width', 0.7);
             map.setPaintProperty(layer.id, 'text-halo-blur', 0.5);
           });
+
+          // The same rule /travel follows: the basemap does not name the places
+          // this archive is naming. The route already draws each stop's name at
+          // the viewfinder, so a settlement label underneath it is the page
+          // saying the same word twice in two voices.
+          silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
             }}
           >
         <Source key="atlas-graticule" id="atlas-graticule" type="geojson" data={NORTH_AMERICA_GRATICULE}>

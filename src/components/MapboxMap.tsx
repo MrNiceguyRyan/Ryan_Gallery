@@ -7,6 +7,7 @@ import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'fram
 import { ArrowUpRight, RotateCcw } from 'lucide-react';
 import type { Photo } from '../types';
 import Magnetic from './shared/Magnetic';
+import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../lib/atlasBasemap';
 
 // ─── Accent color (unified warm dark tone) ───
 const ACCENT = '#D2FF00';
@@ -29,39 +30,6 @@ const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
  * This map IS the interface here (unlike the homepage's backdrop), so place
  * names stay readable — one clear step below the UI, not hidden.
  */
-/**
- * A place on this map is named ONCE, by the archive.
- *
- * Every marked city is also a city in Mapbox's own settlement labels, and the
- * basemap sets its label on the opposite side of the point from ours — so with
- * the marker's plate removed (a place says its name in ink, not in a box) the
- * two names became legible at the same time, forty pixels apart, in two
- * different type treatments. The plate had been hiding it.
- *
- * So the basemap is asked not to name the places the archive is naming. Every
- * other settlement it draws is context and stays: this map is worth reading
- * precisely because Toronto, Chicago and Atlanta are on it.
- */
-function silenceArchivePlaceLabels(map: any, names: string[]) {
-  if (!names.length) return;
-  const exclude: any = ['!', ['in', ['coalesce', ['get', 'name_en'], ['get', 'name']], ['literal', names]]];
-  map.getStyle()?.layers?.forEach((layer: any) => {
-    if (layer.type !== 'symbol') return;
-    const id = layer.id.toLowerCase();
-    if (!id.includes('settlement') && !id.includes('place')) return;
-    try {
-      // Marked once so a re-apply cannot nest `all` filters on every style load.
-      if (layer.metadata?.archiveSilenced) return;
-      const existing = map.getFilter(layer.id);
-      map.setFilter(layer.id, existing ? ['all', existing, exclude] : exclude);
-      if (layer.metadata) layer.metadata.archiveSilenced = true;
-    } catch {
-      // A style whose filter cannot be composed keeps its own labels; the
-      // doubling is a blemish, a thrown error in the load path is not.
-    }
-  });
-}
-
 function gradeAtlasBasemap(map: any) {
   map.getStyle()?.layers?.forEach((layer: any) => {
     const id = layer.id.toLowerCase();
@@ -72,19 +40,19 @@ function gradeAtlasBasemap(map: any) {
     }
 
     if (layer.type === 'background') {
-      map.setPaintProperty(layer.id, 'background-color', '#1B2319');
+      map.setPaintProperty(layer.id, 'background-color', ATLAS_PAPER.background);
       return;
     }
 
     if (layer.type === 'fill') {
       if (id.includes('water')) {
-        map.setPaintProperty(layer.id, 'fill-color', '#0B1210');
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
         map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
       } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
-        map.setPaintProperty(layer.id, 'fill-color', '#263024');
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
         map.setPaintProperty(layer.id, 'fill-opacity', 0.34);
       } else if (id.includes('building')) {
-        map.setPaintProperty(layer.id, 'fill-color', '#2A3028');
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
         map.setPaintProperty(layer.id, 'fill-opacity', 0.12);
       }
       return;
