@@ -87,6 +87,29 @@ function FlipLine({ text, className = '', hoverClassName = '' }: { text: string;
 // 95% and the lime underline finish drawing entirely out of sight. Two marks are
 // made in the open instead: the portrait, and the underline under the name.
 /**
+ * The page sets itself, top to bottom, once the contributor cover has actually
+ * LEFT. Keyed to `coverExited` rather than to the peel starting: the plane exits
+ * upward, so it uncovers the page from the bottom, and anything keyed to the
+ * peel arrived underneath it — the lede used to reach 95% before a pixel of it
+ * was visible. Each block is one line of the page being set, 70ms apart in
+ * READING order, which on this split hero means the running head, then the
+ * portrait and the name together, then the lede, the prose and the signature.
+ */
+function HeroLine({ order, shown, className, children }: { order: number; shown: boolean; className?: string; children: ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      animate={reduce || shown ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+      transition={{ duration: reduce ? 0 : 0.58, delay: reduce ? 0 : order * 0.07, ease: expo }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
  * Scroll-reveal wrapper — a thin fade-up skin over the shared useInViewOnce
  * trigger (native IO; framer's whileInView is banned — see lib/useInViewOnce).
  * Reduced-motion users get the content immediately, no transform.
@@ -425,13 +448,15 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
       {/* ═══════ HERO — editorial split: portrait left, profile right ═══════ */}
       <section className="safe-inline-page pt-28 md:pt-36 pb-10 md:pb-14 max-w-5xl mx-auto">
         {/* Running head / folio bar */}
-        <motion.div
+        <HeroLine
+          order={0}
+          shown={coverExited}
           className="flex items-baseline justify-between border-b border-white/10 pb-3 mb-10 md:mb-14 font-ui text-[10px] tracking-[0.1em] uppercase text-white/52"
         >
           <span className="text-white/55">The Profile</span>
           <span className="md:hidden">NY · 2023</span>
           <span className="hidden md:inline">New York · Since 2023</span>
-        </motion.div>
+        </HeroLine>
 
         <div className="grid md:grid-cols-12 gap-10 md:gap-12 items-start">
 
@@ -444,9 +469,9 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             <motion.div
               ref={avatarRef}
               className="group relative mx-auto w-48 md:mx-0 md:w-60"
-              initial={reduce ? false : { opacity: 0, y: 22, scale: 0.975 }}
-              animate={coverGone ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 22, scale: 0.975 }}
-              transition={{ duration: reduce ? 0 : 1.15, delay: reduce ? 0 : 0.1, ease: expo }}
+              initial={reduce ? false : { opacity: 0, y: 16, scale: 0.985 }}
+              animate={reduce || coverExited ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 16, scale: 0.985 }}
+              transition={{ duration: reduce ? 0 : 0.72, delay: reduce ? 0 : 0.07, ease: expo }}
             >
               {/* Whole droplet (outline + image) scales as ONE unit on its own
                   GPU layer — a slow, gentle push-in. NOTE: Tailwind v4 sets the
@@ -496,46 +521,44 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             </motion.div>
 
             {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
-            <motion.div
-              className="font-ui text-[11px] leading-relaxed text-white/58 space-y-1.5"
-            >
+            <HeroLine order={3} shown={coverExited} className="font-ui text-[11px] leading-relaxed text-white/58 space-y-1.5">
               <div className="text-white/70">Photographer</div>
               <div>New York, NY</div>
               <div>Fujifilm X-T50 · Nikon Zf</div>
               <div className="pt-2.5 mt-1 border-t border-white/10 tracking-[0.1em] uppercase text-white/52 text-[10px]">
                 Since 2023
               </div>
-            </motion.div>
+            </HeroLine>
           </div>
 
           {/* ── RIGHT: name + lede + bio ── */}
           <div className="md:col-span-7">
             {/* Name — fades up as part of the top-to-bottom entrance cascade */}
-            <motion.h1
-              className="text-6xl md:text-7xl lg:text-8xl font-serif uppercase text-[#F4F4ED] tracking-tighter leading-[1.1] pb-2"
-            >
-              <span className="draw-underline" data-drawn={coverExited ? 'true' : undefined}>{name}</span>
-            </motion.h1>
+            <HeroLine order={1} shown={coverExited}>
+              <h1 className="text-6xl md:text-7xl lg:text-8xl font-serif uppercase text-[#F4F4ED] tracking-tighter leading-[1.1] pb-2">
+                <span className="draw-underline" data-drawn={coverExited ? 'true' : undefined}>{name}</span>
+              </h1>
+            </HeroLine>
 
             {/* Lede — a single serif statement, the page thesis */}
-            <motion.p
-              className="mt-5 font-serif italic text-xl md:text-2xl text-white/75 leading-snug max-w-[24ch]"
-            >
-              Cities and landscapes, one frame at a time.
-            </motion.p>
+            <HeroLine order={2} shown={coverExited}>
+              <p className="mt-5 font-serif italic text-xl md:text-2xl text-white/75 leading-snug max-w-[24ch]">
+                Cities and landscapes, one frame at a time.
+              </p>
+            </HeroLine>
 
             {/* Bio — prose section. Override the fallback by filling
                  `siteSettings.bio` in Sanity Studio. */}
             {bio ? (
-              <motion.div
-                className="mt-7"
-              >
+              <HeroLine order={3} shown={coverExited} className="mt-7">
                 <p className="max-w-[60ch] whitespace-pre-line font-serif text-[15px] leading-[1.65] text-pretty text-white/88">
                   {bio}
                 </p>
-              </motion.div>
+              </HeroLine>
             ) : (
-              <motion.div
+              <HeroLine
+                order={3}
+                shown={coverExited}
                 /* Inter Light at 55% was a third face and a third weight, used
                    for the one passage on this site where the photographer speaks
                    about the work. It is now set the way the stories are set —
@@ -573,7 +596,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
                     <span className="font-serif text-[13.5px] text-white/78">Personal archive, selected frames only.</span>
                   </div>
                 </div>
-              </motion.div>
+              </HeroLine>
             )}
           </div>
         </div>
