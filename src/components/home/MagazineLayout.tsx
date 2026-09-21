@@ -342,34 +342,40 @@ function PhotoCell({
   const rowReady = useContext(RowRevealContext);
   const animateEntrance = !reduce;
 
+  const arrived = revealReady && rowReady;
+  // The first seven are the cover hand-off and stagger across the page; after
+  // that a row arrives as a unit and its frames follow in place.
+  const entranceDelay = arrived ? (index < 7 ? index * 0.06 : posInRow * 0.07) : 0;
+  const developSpan = index < 7 ? 0.8 : 0.62;
+
   return (
-    // The figure owns the grid placement and the entrance, so the photograph
-    // and its caption rise together. The button wraps only the image: a
-    // caption inside the control would be read as part of its name and would
-    // make the whole caption a click target for the lightbox.
-    <motion.figure
-      className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} m-0`}
+    // The figure owns the grid placement only. The photograph and its caption
+    // are two different kinds of thing and no longer arrive as one: the picture
+    // develops, and the caption is printed under it a beat later. The button
+    // wraps only the image — a caption inside the control would be read as part
+    // of its name and would make the whole caption a click target.
+    <figure className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} m-0`}>
+    <motion.div
       // The photograph develops: a soft diagonal edge sweeps across it (the
-      // mask is three times the figure's width, so the edge crosses at an
-      // even pace), with a small rise. Reduced motion: no mask, no motion.
+      // mask is three times the frame's width, so the edge crosses at an even
+      // pace), with a small rise. Reduced motion: no mask, no motion. The mask
+      // stops at the photograph — it used to cover the whole figure, so the
+      // caption came up through the developer with the picture, as though a
+      // line of metadata were part of the print.
       style={animateEntrance && develops ? DEVELOP_MASK_STYLE : undefined}
       initial={animateEntrance
         ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
         : false}
-      animate={animateEntrance && !(revealReady && rowReady)
+      animate={animateEntrance && !arrived
         ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
         : (develops ? { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' } : { opacity: 1, y: 0 })}
       transition={(() => {
         if (!animateEntrance) return { duration: 0 };
-        // The first seven are the cover hand-off and stagger across the page;
-        // after that a row arrives as a unit and its frames follow in place.
-        const delay = revealReady && rowReady ? (index < 7 ? index * 0.06 : posInRow * 0.07) : 0;
-        const span = index < 7 ? 0.8 : 0.62;
         return {
-          opacity: { duration: 0.25, delay, ease: expo },
-          y: { duration: span, delay, ease: popEase },
-          WebkitMaskPosition: { duration: span, delay, ease: developEase },
-          maskPosition: { duration: span, delay, ease: developEase },
+          opacity: { duration: 0.25, delay: entranceDelay, ease: expo },
+          y: { duration: developSpan, delay: entranceDelay, ease: popEase },
+          WebkitMaskPosition: { duration: developSpan, delay: entranceDelay, ease: developEase },
+          maskPosition: { duration: developSpan, delay: entranceDelay, ease: developEase },
         };
       })()}
     >
@@ -444,7 +450,19 @@ function PhotoCell({
     {/* Set in the other family from the text, at ~0.66x of it — the one ratio
         every editorial site sampled agrees on (0.54–0.86x). No rule above or
         below the frame; the caption sits directly under the image. */}
-    <figcaption className="mt-2.5 font-ui text-[12.5px] leading-snug text-white/62">
+    </motion.div>
+    {/* Printed under the frame a beat after it, the way a caption is set after
+        the plate it belongs to — not swept in by the same developer. */}
+    <motion.figcaption
+      className="mt-2.5 font-ui text-[12.5px] leading-snug text-white/62"
+      initial={animateEntrance ? { opacity: 0, y: 6 } : false}
+      animate={animateEntrance && !arrived ? { opacity: 0, y: 6 } : { opacity: 1, y: 0 }}
+      // Keyed to the sweep rather than to a flat delay, so the line settles just
+      // as the print finishes coming up — whatever length that row's develop is.
+      transition={animateEntrance
+        ? { duration: 0.42, delay: entranceDelay + developSpan * 0.62, ease: expo }
+        : { duration: 0 }}
+    >
       <span className="uppercase tracking-[0.06em] tabular-nums">{frameLabel}</span>
       {workTitle && (
         <>
@@ -452,8 +470,8 @@ function PhotoCell({
           <span>{workTitle}</span>
         </>
       )}
-    </figcaption>
-    </motion.figure>
+    </motion.figcaption>
+    </figure>
   );
 }
 
