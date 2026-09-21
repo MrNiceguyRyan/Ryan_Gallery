@@ -29,6 +29,39 @@ const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
  * This map IS the interface here (unlike the homepage's backdrop), so place
  * names stay readable — one clear step below the UI, not hidden.
  */
+/**
+ * A place on this map is named ONCE, by the archive.
+ *
+ * Every marked city is also a city in Mapbox's own settlement labels, and the
+ * basemap sets its label on the opposite side of the point from ours — so with
+ * the marker's plate removed (a place says its name in ink, not in a box) the
+ * two names became legible at the same time, forty pixels apart, in two
+ * different type treatments. The plate had been hiding it.
+ *
+ * So the basemap is asked not to name the places the archive is naming. Every
+ * other settlement it draws is context and stays: this map is worth reading
+ * precisely because Toronto, Chicago and Atlanta are on it.
+ */
+function silenceArchivePlaceLabels(map: any, names: string[]) {
+  if (!names.length) return;
+  const exclude: any = ['!', ['in', ['coalesce', ['get', 'name_en'], ['get', 'name']], ['literal', names]]];
+  map.getStyle()?.layers?.forEach((layer: any) => {
+    if (layer.type !== 'symbol') return;
+    const id = layer.id.toLowerCase();
+    if (!id.includes('settlement') && !id.includes('place')) return;
+    try {
+      // Marked once so a re-apply cannot nest `all` filters on every style load.
+      if (layer.metadata?.archiveSilenced) return;
+      const existing = map.getFilter(layer.id);
+      map.setFilter(layer.id, existing ? ['all', existing, exclude] : exclude);
+      if (layer.metadata) layer.metadata.archiveSilenced = true;
+    } catch {
+      // A style whose filter cannot be composed keeps its own labels; the
+      // doubling is a blemish, a thrown error in the load path is not.
+    }
+  });
+}
+
 function gradeAtlasBasemap(map: any) {
   map.getStyle()?.layers?.forEach((layer: any) => {
     const id = layer.id.toLowerCase();
@@ -411,6 +444,10 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   }, []);
 
   const cityClusters = useMemo(() => clusterByLocation(photos), [photos]);
+  // Read inside the map's load handler, which can run before or after the
+  // archive resolves; a ref means neither order matters.
+  const archiveNamesRef = useRef<string[]>([]);
+  archiveNamesRef.current = useMemo(() => cityClusters.map((entry) => entry.city).filter(Boolean), [cityClusters]);
   const regionGroups = useMemo(() => groupByRegion(cityClusters), [cityClusters]);
   const validPhotos = useMemo(() => photos.filter(p => p.location?.lat != null && p.location?.lng != null), [photos]);
   const archiveBounds = useMemo(() => {
@@ -694,6 +731,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     const finish = () => {
       applyGlobeSettings(map);
       gradeAtlasBasemap(map);
+      silenceArchivePlaceLabels(map, archiveNamesRef.current);
       frameArchiveOverview(0);
       atlasStyleReadyRef.current = true;
       setMapLoadFailed(false);
