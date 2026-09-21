@@ -72,6 +72,10 @@ export interface Photo {
     name: string;
     slug: string;
     region?: string;
+    /** The chapter's place in the archive's reading order, so surfaces other
+     *  than the homepage can present places in that order too. */
+    routeOrder?: number;
+    year?: number | string;
   };
   styleCategory?: string;
   location?: {

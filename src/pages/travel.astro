@@ -19,7 +19,9 @@ const photos = await fetchSanityWithRetry(() => sanityClient.fetch<Photo[]>(`
     collection->{
       name,
       "slug": slug.current,
-      region
+      region,
+      routeOrder,
+      year
     }
   }
 `));

@@ -172,6 +172,12 @@ interface LocationCluster {
   lat: number;
   lng: number;
   photos: Photo[];
+  /** Lowest chapter position among this city's photographs, so the index can
+   *  be ordered the way the archive is read rather than by how much of it
+   *  happens to exist. */
+  routeOrder?: number;
+  /** 1-based position in the archive's reading order, for the index's ordinal. */
+  chapterNumber?: number;
 }
 
 interface RegionGroup {
@@ -193,6 +199,7 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
         lat: p.location.lat,
         lng: p.location.lng,
         photos: [],
+        routeOrder: undefined,
         coordinateCount: 0,
         latTotal: 0,
         lngTotal: 0,
@@ -200,18 +207,46 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
     }
     // Backfill region if the first photo of a city lacked a collection region.
     if (!groups[key].region && p.collection?.region?.trim()) groups[key].region = p.collection.region.trim();
+    const order = p.collection?.routeOrder;
+    if (Number.isFinite(order)) {
+      groups[key].routeOrder = Number.isFinite(groups[key].routeOrder)
+        ? Math.min(groups[key].routeOrder as number, order as number)
+        : (order as number);
+    }
     groups[key].coordinateCount += 1;
     groups[key].latTotal += p.location.lat;
     groups[key].lngTotal += p.location.lng;
     groups[key].photos.push(p);
   }
-  return Object.values(groups)
+  const clusters = Object.values(groups)
     .map(({ coordinateCount, latTotal, lngTotal, ...cluster }) => ({
       ...cluster,
       lat: latTotal / Math.max(1, coordinateCount),
       lng: lngTotal / Math.max(1, coordinateCount),
-    }))
-    .sort((a, b) => b.photos.length - a.photos.length);
+    }));
+  // The index is an edition, not a leaderboard. It used to sort by photo count
+  // descending — a database order, and the one thing on this page that did not
+  // read as part of the archive.
+  //
+  // `routeOrder` is the archive's deterministic reading order and the field
+  // built for inserting a new place BETWEEN two chapters; when every city has
+  // one, the index follows it exactly and its numbers are the front page's
+  // chapter numbers. As of now that field is unset on every collection, so the
+  // fallback is the next most editorial thing available — most recent chapter
+  // first, ties broken by where the archive itself puts them — rather than
+  // "whoever has the most photographs".
+  const fullyOrdered = clusters.length > 0 && clusters.every((c) => Number.isFinite(c.routeOrder));
+  const firstSeen = new Map(clusters.map((c, index) => [c.city, index]));
+  const chapterYear = (c: LocationCluster) => {
+    const raw = c.photos[0]?.collection?.year;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const ordered = fullyOrdered
+    ? [...clusters].sort((a, b) => (a.routeOrder as number) - (b.routeOrder as number))
+    : [...clusters].sort((a, b) => (chapterYear(b) - chapterYear(a))
+      || ((firstSeen.get(a.city) ?? 0) - (firstSeen.get(b.city) ?? 0)));
+  return ordered.map((cluster, index) => ({ ...cluster, chapterNumber: index + 1 }));
 }
 
 function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
@@ -223,9 +258,11 @@ function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
     if (!map[region]) map[region] = [];
     map[region].push(c);
   }
-  return Object.entries(map)
-    .map(([region, cls]) => ({ region, clusters: cls, totalPhotos: cls.reduce((s, c) => s + c.photos.length, 0) }))
-    .sort((a, b) => b.totalPhotos - a.totalPhotos);
+  const groups = Object.entries(map)
+    .map(([region, cls]) => ({ region, clusters: cls, totalPhotos: cls.reduce((s, c) => s + c.photos.length, 0) }));
+  // A region sits where its earliest chapter sits, for the same reason.
+  const first = (g: RegionGroup) => Math.min(...g.clusters.map((c) => c.chapterNumber ?? Number.POSITIVE_INFINITY));
+  return groups.sort((a, b) => first(a) - first(b));
 }
 
 function formatCoord(v: number, pos: string, neg: string) {
@@ -267,6 +304,14 @@ function CityDetail({ cluster, mobile = false }: { cluster: LocationCluster; mob
         <p className="mb-3 font-ui text-[9px] tracking-[0.14em] text-white/56">
           {formatCoord(cluster.lat, 'N', 'S')} · {formatCoord(cluster.lng, 'E', 'W')}
         </p>
+        {/* The cross-reference back to the edition. An index that cannot tell
+            you WHERE in the archive a place sits is a list of coordinates. */}
+        {cluster.chapterNumber != null && (
+          <p className="mb-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/56">
+            Chapter {String(cluster.chapterNumber).padStart(2, '0')}
+            {cluster.photos[0]?.collection?.name ? ` · ${cluster.photos[0].collection.name}` : ''}
+          </p>
+        )}
         <div className="grid grid-cols-3 gap-1.5">
           {cluster.photos.slice(0, 3).map((photo, index) => (
             <div key={photo._id} className="aspect-[4/3] overflow-hidden rounded-[0.45rem]">
@@ -1648,8 +1693,11 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                                       loading="lazy"
                                       draggable={false}
                                     />
+                                    {/* The archive's chapter number where it is
+                                        known, so this index and the front page
+                                        call the same place the same thing. */}
                                     <span className="absolute left-1.5 top-1 font-ui text-[8px] tabular-nums tracking-[0.12em] text-white/82 drop-shadow">
-                                      {String(itemNumber).padStart(2, '0')}
+                                      {String(cluster.chapterNumber ?? itemNumber).padStart(2, '0')}
                                     </span>
                                   </span>
                                   <span className="min-w-0 flex-1">
