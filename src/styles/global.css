@@ -3,12 +3,48 @@
 
 @theme {
   --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Fraunces", ui-serif, Georgia, serif;
+  --font-serif: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, serif;
   /* Display serif — Fraunces (high-contrast, Brier-like): every editorial headline.
      (.font-serif below maps to THIS, not --font-serif.) */
-  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, "Times New Roman", serif;
   /* Geometric grotesque — Space Grotesk: all UI labels / eyebrows / captions. */
-  --font-ui: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Space Grotesk", "Grotesk Fallback", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Metric-matched fallbacks ──
+   Both webfonts arrive with `display=swap`, so the first paint is set in a
+   system face and then re-set when the real one lands. Measured at 100px on
+   the built site, the fallbacks are far wider than what replaces them:
+   Fraunces against Georgia is 0.854 of its width in mixed case and 0.906 in
+   caps; Space Grotesk against Arial is 0.903 for the uppercase labels this
+   site sets nearly all of its Grotesk in. So every cold load painted the page
+   ~13-14% too wide and then snapped narrower — on the /about hero that is a
+   53px jump on one line of a 96px headline.
+
+   `size-adjust` scales the fallback's advance to match, so the swap changes
+   the shapes without moving the text. Vertical metrics are deliberately NOT
+   overridden: this site sets explicit line-heights almost everywhere, so the
+   line box does not depend on the face, and a wrong ascent override would do
+   more harm than the shift it fixes. If `local()` finds nothing (common on
+   Linux and Android) the family simply fails and the stack falls through to
+   what it used before. */
+@font-face {
+  font-family: "Fraunces Fallback";
+  src: local("Georgia"), local("Times New Roman"), local("Times");
+  /* 88% balances the two uses: it leaves caps 2.9% narrow and mixed-case 3.0%
+     wide, where 87% traded a better reading measure for a worse headline. */
+  size-adjust: 88%;
+  ascent-override: normal;
+  descent-override: normal;
+  line-gap-override: normal;
+}
+@font-face {
+  font-family: "Grotesk Fallback";
+  src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+  size-adjust: 90%;
+  ascent-override: normal;
+  descent-override: normal;
+  line-gap-override: normal;
 }
 
 /* ─── Lenis smooth scroll — required rules. Override the native
