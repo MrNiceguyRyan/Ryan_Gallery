@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useTransform, type MotionValue } from 'framer-motion';
 
-/** Everything the viewfinder prints for a place. */
+/** Everything the sign prints for a place. */
 export interface ViewfinderPlace {
   id: string;
   name: string;
@@ -19,9 +19,10 @@ export interface ViewfinderHandle {
   /** Show a place at rest, with no animation (first draw, restores, reduced motion). */
   settle(place: ViewfinderPlace): void;
   /**
-   * The camera has taken off toward `to`: the reticle hunts until `lockAt`
-   * (a performance.now() timestamp — the flight's touchdown), then locks.
-   * Calling it again mid-hunt retargets: same hunt, new subject and lock time.
+   * The camera has taken off toward `to`: the sign reads the flight until
+   * `lockAt` (a performance.now() timestamp — the flight's touchdown), then
+   * locks. Calling it again mid-flight retargets: same flight, new subject and
+   * lock time.
    */
   hunt(to: ViewfinderPlace, lockAt: number): void;
 }
@@ -30,61 +31,31 @@ export interface ViewfinderHandle {
 const HALF_W = 52;
 const HALF_H = 36;
 const ARM = 168;
-const NAME_TOP = 45;
 const META_TOP = 84;
-// The lock settles (spring, readouts typing in, lime cooling) over this long.
 /** Where the archive reads: the line a chapter's cover photograph sits on
  *  (HomePage scrolls a chapter to it), and therefore the line the map's focal
- *  point and the viewfinder must share — otherwise the brackets hold a place
- *  40-odd pixels below the photograph they belong to. */
+ *  point and this sign must share — otherwise the sign reads out a place
+ *  40-odd pixels below the photograph it belongs to. */
 export const ATLAS_READING_LINE = 0.48;
 
+/** The lock settles (readouts typing in, lime cooling) over this long. */
 const SETTLE_MS = 510;
-const SNAP_MS = 110;
 const MIN_HUNT_MS = 600;
 
 const BONE: [number, number, number] = [244, 244, 237];
 const LIME: [number, number, number] = [210, 255, 0];
-const TAU = Math.PI * 2;
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const progress = (a: number, b: number, value: number) => clamp((value - a) / (b - a));
-const easeOutQuad = (t: number) => 1 - (1 - t) * (1 - t);
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
-const easeInQuart = (t: number) => t ** 4;
-const easeInCubic = (t: number) => t ** 3;
 const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
-const bell = (u: number, a: number, b: number, c: number, d: number) =>
-  u <= a || u >= d ? 0 : u < b ? easeInOutSine(progress(a, b, u)) : u > c ? 1 - easeInOutSine(progress(c, d, u)) : 1;
 const mixColor = (t: number) =>
   `rgb(${BONE.map((channel, index) => Math.round(lerp(channel, LIME[index], t))).join(',')})`;
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 
-// Letters of a similar width in Fraunces, so the name barely changes width
-// while its letters are shuffled.
-const SCRAMBLE_GLYPHS = 'ACDEGHKNOPRSTUVXZ';
-const SCRAMBLE_FLIP_MS = 55;
-/** The name `from` shuffled into `to` at `t` ms of a hunt that locks at
- *  `lock`: letters start flipping from the left, each settles on its new
- *  letter in turn, the last one just before the lock. Each entry is the
- *  letter to show and whether it is still an unsettled glyph. */
-function scrambledName(from: string, to: string, t: number, lock: number): Array<[string, boolean]> {
-  const length = Math.max(from.length, to.length);
-  const flip = Math.floor(t / SCRAMBLE_FLIP_MS);
-  const out: Array<[string, boolean]> = [];
-  for (let i = 0; i < length; i += 1) {
-    const target = to[i];
-    const start = lock * (0.05 + (0.25 * i) / length);
-    const end = target != null ? lock * (0.48 + (0.5 * (i + 1)) / to.length) : start + 160;
-    if (t < start) out.push([from[i] ?? SCRAMBLE_GLYPHS[(i * 7) % SCRAMBLE_GLYPHS.length], from[i] == null]);
-    else if (t < end) out.push(target === ' ' ? [' ', false] : [SCRAMBLE_GLYPHS[(i * 7 + flip * 13 + 3) % SCRAMBLE_GLYPHS.length], true]);
-    else if (target != null) out.push([target, false]);
-  }
-  return out;
-}
 const EARTH_RADIUS_KM = 6371;
 function haversineKm(a: [number, number], b: [number, number]) {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180;
@@ -94,40 +65,24 @@ function haversineKm(a: [number, number], b: [number, number]) {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 const formatKm = (km: number) => Math.round(km).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
-const ARRIVAL_RING_MS = 480;
 const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
 const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
 
-/** Reticle scale through a hunt that locks at `lock` ms (u = ms since take-off). */
-function reticleScale(u: number, lock: number): number {
-  const snapStart = Math.max(420, lock - SNAP_MS);
-  const hunting = (t: number) => {
-    if (t < 140) return lerp(1, 0.94, easeOutQuad(t / 140));
-    if (t < 460) return lerp(0.94, 1.72, easeOutCubic(progress(140, 460, t)));
-    // Open, the brackets rack focus once — a slow, decaying in-and-out — and
-    // then hold still until the snap. No sway, no jitter.
-    const w = t - 460;
-    return 1.6 + 0.12 * Math.cos((TAU * w) / 760) * Math.exp(-w / 700);
-  };
-  if (u < snapStart) return hunting(u);
-  if (u < lock) return lerp(hunting(snapStart), 0.9, easeInQuart(progress(snapStart, lock, u)));
-  const k = u - lock;
-  return 1 - 0.1 * Math.exp(-k / 90) * Math.cos((k / 1000) * TAU * 2.6);
-}
-
 /**
- * AtlasViewfinder — the current place, named the way a camera would: four
- * focus brackets locked on the point, an electronic level with the latitude
- * and longitude under its ends, the year on the top-right bracket, the name
- * and one readout line below.
+ * AtlasSign — what the map says about the place it is resting on, set around
+ * the focal point in the plainest instrument type it can: the year above, the
+ * latitude and longitude out at the ends of the reading line, and one line
+ * below carrying the chapter, the region and the frame count.
  *
- * When the atlas flies to the next place the autofocus hunts — the brackets
- * pinch, open wide and rack focus once, the centre "+" turns to an unsure
- * "×", the coordinates count across and the new name shows only as an
- * out-of-focus ghost — then, at touchdown, it snaps tight with a single
- * lime confirmation flash, the name comes into focus and the readouts type
- * back in. All drawing is imperative inside one rAF loop that runs only while
- * something moves; React renders the component once.
+ * It does not mark the place. The place marks itself — every place on this map
+ * wears the same benchmark disc (see AfPoint), and the camera lands the current
+ * one exactly on this focal point, so the sign has nothing left to aim with.
+ *
+ * When the atlas flies to the next place the sign reads the flight rather than
+ * performing it: the coordinates count across, the readout blanks and gives the
+ * leg's distance in kilometres as it goes, and at touchdown everything types
+ * back in behind a single lime confirmation. All drawing is imperative inside
+ * one rAF loop that runs only while something moves; React renders once.
  */
 export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   initial: ViewfinderPlace | null;
@@ -135,18 +90,10 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   reducedMotion: boolean;
 }>(function AtlasViewfinder({ initial, visibility, reducedMotion }, forwardedRef) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const crossHaloRef = useRef<SVGPathElement>(null);
-  const crossRef = useRef<SVGPathElement>(null);
-  const levelGroupRef = useRef<SVGGElement>(null);
-  const levelHaloRef = useRef<SVGPathElement>(null);
-  const levelRef = useRef<SVGPathElement>(null);
   const yearRef = useRef<HTMLSpanElement>(null);
   const latRef = useRef<HTMLSpanElement>(null);
   const lonRef = useRef<HTMLSpanElement>(null);
-  const nameRef = useRef<HTMLSpanElement>(null);
   const metaRef = useRef<HTMLSpanElement>(null);
-  const ringRef = useRef<SVGCircleElement>(null);
   const scrimRef = useRef<HTMLSpanElement>(null);
 
   const state = useRef({
@@ -160,23 +107,12 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     hunting: false,
     frame: 0,
     metaFor: '',
-    dashOffset: 0,
-    nameSpans: [] as HTMLSpanElement[],
     /** The chapter number last shown in the readout, for the roll. */
     ordinalShown: null as number | null,
     legKm: null as HTMLSpanElement | null,
     metaChars: [] as HTMLSpanElement[],
     metaDot: null as HTMLElement | null,
-    nameFor: '',
   });
-
-  const setName = (place: ViewfinderPlace | null) => {
-    const s = state.current;
-    const node = nameRef.current;
-    if (!node || !place || s.nameFor === place.id) return;
-    node.textContent = place.name;
-    s.nameFor = place.id;
-  };
 
   const setMeta = (place: ViewfinderPlace | null) => {
     const s = state.current;
@@ -280,14 +216,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const to = s.to;
     const switching = moving && from?.id !== to?.id;
     const huntingNow = moving && t > 120 && t < lock;
-    const scale = moving ? reticleScale(t, lock) : 1;
-    // The reticle stays centred on the focal point throughout: the camera is
-    // what moves, so the brackets only change size (the rack in reticleScale),
-    // never position.
-    // The frame opens sideways while scanning — a wider field — but only a
-    // little downward, so it never runs into the name set beneath it.
-    const hw = HALF_W * scale;
-    const hh = Math.min(HALF_H * scale, NAME_TOP - 6);
     let lime = 0;
     if (moving && t >= lock - 10) {
       lime = t < lock + 6
@@ -297,64 +225,18 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
           : 1 - easeInOutSine(progress(lock + 160, lock + SETTLE_MS, t));
     }
     const color = mixColor(lime);
-    // The focus frame is not drawn here any more: it is the photograph's own
-    // four corners, over in the chapter column (`.archive-focus`). A frame on
-    // the map and a frame on the plate could only agree at one scroll
-    // position, and the rest of the time read as two rectangles missing each
-    // other. What stays on the map is the sign: the centre mark on the place,
-    // the level with its coordinates, the year, the name and the readout.
-    // `hw`/`hh` still describe the reticle's box, which the level's gap, the
-    // year's anchor and the centre mark are all measured from.
-    const topRightX = cx + hw;
-    const topRightY = cy - hh;
-
-    // Centre mark: "+" at rest, turns to "×" while unsure, snaps back on lock.
-    const rotation = moving && t < lock
-      ? 45 * easeInOutSine(progress(120, 300, t)) * (1 - easeInCubic(progress(lock - 70, lock, t)))
-      : 0;
-    const inner = 11 * (1 + 0.25 * (scale - 1));
-    const outer = inner + 5;
-    let crossPath = '';
-    for (let k = 0; k < 4; k += 1) {
-      const angle = ((k * 90 + rotation) * Math.PI) / 180;
-      const ca = Math.cos(angle);
-      const sa = Math.sin(angle);
-      crossPath += `M${(cx + ca * inner).toFixed(2)},${(cy + sa * inner).toFixed(2)}L${(cx + ca * outer).toFixed(2)},${(cy + sa * outer).toFixed(2)}`;
-    }
-    crossHaloRef.current?.setAttribute('d', crossPath);
-    crossRef.current?.setAttribute('d', crossPath);
-    if (crossRef.current) {
-      crossRef.current.style.stroke = color;
-      crossRef.current.style.opacity = String(huntingNow ? 0.55 : 0.9 + 0.1 * lime);
-    }
-
-    // Electronic level: stays level through the hunt; one small, fast settle
-    // as the lock lands.
-    let tilt = 0;
-    if (moving && t >= lock) tilt = 0.6 * Math.exp(-(t - lock) / 90) * Math.sin((TAU * (t - lock)) / 240);
-    const gap = Math.max(hw, 40) + 12;
+    // Nothing is drawn around the place any more — no brackets, no cross, no
+    // level. The place draws itself: its benchmark disc is the focal mark, and
+    // the camera puts it exactly here.
+    //
+    // So the readouts hang off the focal point on FIXED offsets, which is a
+    // correction, not a tidy-up: they used to be pinned to the reticle's live
+    // scale, and with the reticle gone the year was still swinging 37px
+    // outward on every flight, tracking a bracket nobody could see.
+    const topRightX = cx + HALF_W;
+    const topRightY = cy - HALF_H;
     const leftEnd = cx - ARM;
     const rightEnd = cx + ARM;
-    const leftInner = Math.min(cx - gap, cx - 20);
-    const rightInner = Math.max(cx + gap, cx + 20);
-    let levelPath = '';
-    if (leftInner - leftEnd > 4) levelPath += `M${leftEnd},${cy}L${leftInner.toFixed(2)},${cy}M${leftEnd},${cy - 4.5}L${leftEnd},${cy + 4.5}`;
-    if (rightEnd - rightInner > 4) levelPath += `M${rightInner.toFixed(2)},${cy}L${rightEnd},${cy}M${rightEnd},${cy - 4.5}L${rightEnd},${cy + 4.5}`;
-    levelHaloRef.current?.setAttribute('d', levelPath);
-    levelRef.current?.setAttribute('d', levelPath);
-    // The level's dashes run toward the destination while the camera flies
-    // and stand still once it has landed.
-    if (moving && t < lock && from && to) {
-      const direction = Math.sign(to.coordinates[0] - from.coordinates[0]) || 1;
-      s.dashOffset = -direction * t * 0.05;
-    }
-    levelHaloRef.current?.setAttribute('stroke-dashoffset', s.dashOffset.toFixed(1));
-    levelRef.current?.setAttribute('stroke-dashoffset', s.dashOffset.toFixed(1));
-    levelGroupRef.current?.setAttribute('transform', `rotate(${tilt.toFixed(3)} ${cx} ${cy})`);
-    if (levelRef.current) {
-      levelRef.current.style.stroke = color;
-      levelRef.current.style.opacity = String(huntingNow ? 0.3 : 0.4 + 0.4 * lime);
-    }
 
     // Coordinates count across the flight.
     const travel = moving && from && to ? easeInOutCubic(progress(0, lock, t)) : 1;
@@ -385,46 +267,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       yearRef.current.style.opacity = String(yearOpacity);
     }
 
-    // Name: the letters are shuffled into the next name while the camera
-    // flies (see scrambledName); the last settles as the lock lands.
-    const name = nameRef.current;
-    if (name) {
-      let opacity = 1;
-      if (switching && from && to && t < lock) {
-        // One span per letter, so unsettled glyphs can sit dimmer than the
-        // letters already in place; kerning off, or the word hops as pairs
-        // change.
-        const letters = scrambledName(from.name, to.name, t, lock);
-        if (s.nameFor !== '') {
-          name.textContent = '';
-          s.nameSpans = [];
-          s.nameFor = '';
-          name.style.fontKerning = 'none';
-        }
-        while (s.nameSpans.length < letters.length) {
-          const span = document.createElement('span');
-          name.appendChild(span);
-          s.nameSpans.push(span);
-        }
-        while (s.nameSpans.length > letters.length) s.nameSpans.pop()?.remove();
-        letters.forEach(([letter, dud], index) => {
-          const span = s.nameSpans[index];
-          if (span.textContent !== letter) span.textContent = letter;
-          span.classList.toggle('is-dud', dud);
-        });
-        opacity = 0.94;
-      } else {
-        if (s.nameFor === '') {
-          s.nameSpans = [];
-          name.style.fontKerning = '';
-        }
-        setName(to);
-        if (switching) opacity = lerp(0.94, 1, easeOutCubic(progress(lock, lock + 160, t)));
-      }
-      name.style.opacity = opacity.toFixed(3);
-      name.style.transform = `translate(${cx}px, ${cy + NAME_TOP}px) translateX(-50%)`;
-    }
-
     // Readout line: blanks right to left on take-off, shows the leg and the
     // distance covered while the camera flies, types back in after the lock.
     if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${cy + META_TOP}px) translateX(-50%)`;
@@ -443,14 +285,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       if (switching) on = t < 300 ? (t < 30 + (count - index) * 5 ? 1 : 0) : t >= lock + 30 + index * 10 ? 1 : 0;
       span.style.opacity = String(on);
     });
-    // Arrival: one ring spreads from the focal point as the lock lands.
-    if (ringRef.current) {
-      const p = moving && t >= lock ? clamp((t - lock) / ARRIVAL_RING_MS) : 1;
-      ringRef.current.setAttribute('cx', cx.toFixed(1));
-      ringRef.current.setAttribute('cy', cy.toFixed(1));
-      ringRef.current.setAttribute('r', (6 + 40 * easeOutCubic(p)).toFixed(1));
-      ringRef.current.style.opacity = moving && t >= lock && p < 1 ? (0.85 * (1 - p)).toFixed(3) : '0';
-    }
     if (s.metaDot) {
       if (!switching || t >= lock) {
         s.metaDot.style.opacity = '1';
@@ -536,7 +370,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       // rest of the session. The camera now assumes the stage is pinned; the
       // cross has to assume the same thing, or the two quietly disagree.
       s.focalY = ATLAS_READING_LINE * window.innerHeight;
-      svgRef.current?.setAttribute('viewBox', `0 0 ${root.clientWidth} ${root.clientHeight}`);
       if (!s.hunting) draw(null);
     };
     measure();
@@ -550,20 +383,21 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
 
   return (
     <motion.div ref={rootRef} aria-hidden="true" className="viewfinder" style={{ opacity: visibility }}>
+      {/* The reticle is gone: no cross, no electronic level, no arrival ring,
+          and no place name. A crosshair aims at something, and this map is not
+          aiming — it is showing where a photograph was made. The place's own
+          landmark now marks the point (see AfPoint below), and since the camera
+          centres the current place exactly here, that landmark IS the focal
+          mark. The name went with it because the chapter's cover already sets
+          it three times larger, forty-nine pixels away: the page was saying the
+          same word twice in two voices.
+          What stays is the reading — year, coordinates, chapter, frame count —
+          because that is the documentary register this page is written in, and
+          it is the one thing a crosshair was never needed for. */}
       <span ref={scrimRef} className="viewfinder__scrim" />
-      <svg ref={svgRef} className="viewfinder__svg">
-        <g ref={levelGroupRef}>
-          <path ref={levelHaloRef} className="viewfinder__halo" strokeWidth={3} strokeDasharray="4 4" style={{ opacity: 0.6 }} />
-          <path ref={levelRef} className="viewfinder__line" strokeWidth={1} strokeDasharray="4 4" />
-        </g>
-        <path ref={crossHaloRef} className="viewfinder__halo" strokeWidth={3} />
-        <path ref={crossRef} className="viewfinder__line" strokeWidth={1.25} />
-        <circle ref={ringRef} className="viewfinder__ring" r={6} style={{ opacity: 0 }} />
-      </svg>
       <span ref={yearRef} className="viewfinder__readout" />
       <span ref={latRef} className="viewfinder__readout" />
       <span ref={lonRef} className="viewfinder__readout" />
-      <span ref={nameRef} className="viewfinder__name" />
       <span ref={metaRef} className="viewfinder__readout viewfinder__meta" />
     </motion.div>
   );
@@ -614,10 +448,11 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
 }
 
 /**
- * Every other place on the map carries an inactive AF point: a small hollow
- * ring, the same mark the globe uses. At the current place it fills into the
- * white focus point in the gap of the viewfinder's centre cross; a place the
- * camera leaves lights its ring again with one quick blink.
+ * Every place on the map carries the same landmark: a surveyor's benchmark
+ * disc. It says where it stands by SIZE and INK, not by aiming — far places sit
+ * small and quiet, the place being flown to squares up to full size before the
+ * camera arrives, the place the camera is on is full size and bright, and a
+ * place the camera leaves blinks once on its way back down.
  */
 export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
   stopId: string;
@@ -660,21 +495,31 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
         onClick={() => onNavigate?.(stopId)}
       >
         <span className="af-point__ring" />
-        {/* The place, drawn as the frame it is: the same four corners the
-            photograph at the reading line is held in, at a sixth the size. A
-            place on this route is a frame waiting to be read, and the plate in
-            the column is that frame enlarged with the picture in it — so the
-            map and the column are drawn in one hand. The corners splay when the
-            camera is elsewhere and close as it arrives, which is the focus rack
-            this archive already speaks, miniaturised. */}
-        <svg className="af-point__frame" viewBox="-10 -10 20 20" aria-hidden="true">
-          <g className="af-point__frame-g">
-            <path className="af-point__frame-halo" d="M-5.5,-2.5V-5.5H-2.5 M2.5,-5.5H5.5V-2.5 M5.5,2.5V5.5H2.5 M-2.5,5.5H-5.5V2.5" />
-            <path className="af-point__frame-ink" d="M-5.5,-2.5V-5.5H-2.5 M2.5,-5.5H5.5V-2.5 M5.5,2.5V5.5H2.5 M-2.5,5.5H-5.5V2.5" />
+        {/* The place, drawn as its landmark.
+            A surveyor's benchmark: the brass disc that is physically set into
+            the ground at a point somebody measured, with the station triangle
+            struck on it and the exact coordinate at its centre. It is the one
+            map glyph whose whole meaning is "this point was established" —
+            which is what a place in a photographic archive is.
+            It replaced four focus brackets. Brackets aim; they are the
+            vocabulary of a reticle, and a reticle is about to take a shot at
+            something. This disc does not point anywhere: it IS the point. */}
+        <svg className="af-point__landmark" viewBox="-22 -22 44 44" aria-hidden="true">
+          <g className="af-point__landmark-g">
+            {/* The body. A benchmark disc is a physical object set into the
+                ground, so the route hairline has to pass BEHIND it — without
+                this it ran straight through the ring and out the other side,
+                striking the triangle through like a cancellation mark. */}
+            <circle className="af-point__landmark-body" r="11" />
+            <circle className="af-point__landmark-halo" r="11" />
+            <path className="af-point__landmark-halo" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />
+            <circle className="af-point__landmark-ring" r="11" />
+            <circle className="af-point__landmark-inner" r="8.6" />
+            <path className="af-point__landmark-station" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />
+            <path className="af-point__landmark-ticks" d="M0,-11V-15.4 M11,0H15.4 M0,11V15.4 M-11,0H-15.4" />
+            <circle className="af-point__landmark-pip" r="1.5" />
           </g>
-          <circle className="af-point__frame-pip" r="1" />
         </svg>
-        <span className="af-point__focus" />
         <span className="af-point__label" aria-hidden="true">
           {String(number).padStart(2, '0')}&nbsp;·&nbsp;{name}
         </span>

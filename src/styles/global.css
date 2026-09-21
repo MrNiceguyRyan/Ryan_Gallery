@@ -124,22 +124,6 @@ html.lenis body {
   /* A barely-there local scrim so the hairlines hold on pale ground. */
   background: radial-gradient(closest-side, rgba(16, 20, 13, 0.34), rgba(16, 20, 13, 0.16) 55%, rgba(16, 20, 13, 0) 100%);
 }
-.viewfinder__svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.viewfinder__halo {
-  fill: none;
-  stroke: rgba(12, 15, 10, 0.42);
-  stroke-linecap: square;
-}
-.viewfinder__line {
-  fill: none;
-  stroke-linecap: square;
-}
 .viewfinder__readout {
   position: absolute;
   left: 0;
@@ -164,11 +148,6 @@ html.lenis body {
 }
 .viewfinder__meta .is-dim {
   color: rgba(244, 244, 237, 0.4);
-}
-.viewfinder__ring {
-  fill: none;
-  stroke: #F4F4ED;
-  stroke-width: 1;
 }
 /* The chapter number rolls between two lines inside a one-line window. */
 .viewfinder__ordinal {
@@ -197,27 +176,6 @@ html.lenis body {
   border-radius: 50%;
   background: #D2FF00;
 }
-/* A letter still being shuffled sits dimmer than the ones already in place. */
-.viewfinder__name .is-dud {
-  opacity: 0.58;
-}
-.viewfinder__name {
-  position: absolute;
-  left: 0;
-  top: 0;
-  white-space: nowrap;
-  transform-origin: 0 50%;
-  font-family: var(--font-display);
-  font-size: 32px;
-  font-weight: 560;
-  font-variation-settings: "opsz" 144;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
-  color: #F4F4ED;
-  text-shadow: 0 0 14px rgba(12, 15, 10, 0.45);
-}
-
 .af-point {
   display: block;
 }
@@ -248,70 +206,93 @@ html.lenis body {
 .af-point__mark.is-current {
   cursor: default;
 }
-/* A place on the route: the photograph's own focus corners at a sixth scale,
-   with a pip on the coordinate itself so the mark has a centre. The corners
-   carry the state — splayed while the camera is elsewhere, square when it is
-   coming, closed on the point when it is here — so the map says what the plate
-   says, in the same hand. Geometry is measured from the coordinate: the viewBox
-   is centred on it, so `transform-origin: 0 0` needs no percentages to resolve
-   and the mark can never walk off its point. */
-.af-point__frame {
+/* A place on the route: its landmark.
+   A surveyor's benchmark disc — the thing actually set into the ground where
+   somebody established a point — struck with the station triangle and centred
+   on the coordinate. Geometry is measured from that centre: the viewBox is
+   centred on it, so `transform-origin: 0 0` resolves with no percentages and
+   the mark cannot walk off its point at any scale.
+
+   It carries the state by SIZE and INK rather than by aiming: far places sit
+   small and quiet, the place the camera is flying to squares up to full size
+   before it arrives, and the place the camera is on is full size and bright.
+   Fast in, slow out, on the house curve. */
+.af-point__landmark {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
   overflow: visible;
   fill: none;
   pointer-events: none;
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
 }
-.af-point__frame-halo {
-  stroke: rgba(11, 14, 9, 0.45);
-  stroke-width: 2.5;
+.af-point__landmark-body {
+  fill: rgba(11, 14, 9, 0.46);
+}
+.af-point__landmark-halo {
+  stroke: rgba(11, 14, 9, 0.5);
+  stroke-width: 2.6;
   vector-effect: non-scaling-stroke;
 }
-.af-point__frame-ink {
-  stroke: rgba(244, 244, 237, 0.82);
+.af-point__landmark-ring {
+  stroke: rgba(244, 244, 237, 0.86);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-.af-point__frame-pip {
-  fill: rgba(244, 244, 237, 0.82);
-  transition: opacity 200ms ease;
+.af-point__landmark-inner {
+  stroke: rgba(244, 244, 237, 0.5);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
 }
-/* Fast in, slow out — the archive's hover asymmetry, here as the camera's. */
-.af-point__frame-g {
-  transform: scale(1.22);
+.af-point__landmark-station {
+  stroke: rgba(244, 244, 237, 0.86);
+  stroke-width: 1;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+.af-point__landmark-ticks {
+  stroke: rgba(244, 244, 237, 0.7);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.af-point__landmark-pip {
+  fill: rgba(244, 244, 237, 0.92);
+}
+.af-point__landmark-g {
+  transform: scale(0.52);
   transform-origin: 0 0;
+  opacity: 0.6;
   transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1), opacity 620ms ease;
-  opacity: 0.74;
 }
-/* The camera is on its way here: the frame squares up before it arrives. This
-   state did not exist — for the whole flight the destination was drawn exactly
-   like every place the camera was NOT going to. */
-.af-point__mark.is-inbound .af-point__frame-g {
-  transform: scale(1);
-  opacity: 0.92;
+/* The camera is on its way here: the disc comes up to full size before it
+   lands, so the destination is legible for the whole flight. */
+.af-point__mark.is-inbound .af-point__landmark-g {
+  transform: scale(0.92);
+  opacity: 0.9;
   transition-duration: 380ms;
 }
-.af-point__mark:hover .af-point__frame-g,
-.af-point__mark:focus-visible .af-point__frame-g,
-.af-point__mark[data-engaged] .af-point__frame-g {
+.af-point__mark:hover .af-point__landmark-g,
+.af-point__mark:focus-visible .af-point__landmark-g,
+.af-point__mark[data-engaged] .af-point__landmark-g {
   transform: scale(1);
   opacity: 1;
   transition-duration: 200ms;
 }
-.af-point__mark:hover .af-point__frame-ink,
-.af-point__mark:focus-visible .af-point__frame-ink,
-.af-point__mark[data-engaged] .af-point__frame-ink {
-  stroke: #F4F4ED;
+/* The camera is here. This is also the focal mark now that the cross is gone:
+   the current place's own landmark sits exactly on the focal point. */
+.af-point__mark.is-current .af-point__landmark-g {
+  transform: scale(1);
+  opacity: 1;
+  transition-duration: 200ms;
 }
- /* The label — number and name — shows only while the point is pointed at,
+
+/* The label — number and name — shows only while the point is pointed at,
    focused or its cover is hovered: numbers belong in the index, not on the
-   map. Hover in fast, out slow. */
+   map, and the chapter's cover already names the place in type ten times this
+   size. Hover in fast, out slow. `left` clears the disc's outermost tick
+   (15.4px at full size) with a hair of air. */
 .af-point__label {
   position: absolute;
   left: 19px;
@@ -336,22 +317,11 @@ html.lenis body {
   opacity: 1;
   transition-duration: 200ms;
 }
+/* The place the camera is on is named by its chapter cover, in display type,
+   at the reading line. Naming it again in 9px beside the disc was the same
+   word twice — the thing removing the viewfinder's name was meant to end. */
 .af-point__mark.is-current .af-point__label {
   opacity: 0;
-}
-/* The current place's point: white ink, the one mark the map draws there. */
-.af-point__focus {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 5px;
-  height: 5px;
-  margin: -2.5px 0 0 -2.5px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1px rgba(11, 14, 9, 0.28);
-  opacity: 0;
-  transform: scale(2.2);
 }
 /* A cover photograph pointed at in the archive rings its place. */
 .af-point__ring {
@@ -373,23 +343,6 @@ html.lenis body {
   transform: scale(1);
   transition-duration: 280ms;
 }
-/* Transitions only on the way in: when .is-current comes off, the children
-   snap back and af-point-on below drives the blink on its own. */
-.af-point__mark.is-current .af-point__frame-g {
-  transform: scale(0.78);
-  opacity: 1;
-  transition-duration: 200ms;
-}
-/* The white point is the centre here; two pips on one coordinate is one too many. */
-.af-point__mark.is-current .af-point__frame-pip {
-  opacity: 0;
-}
-
-.af-point__mark.is-current .af-point__focus {
-  opacity: 1;
-  transform: scale(1);
-  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1) 90ms, transform 260ms cubic-bezier(0.16, 1, 0.3, 1) 90ms;
-}
 /* Removing .is-current re-applies this animation: the point lights up with one
    quick bright blink, then settles, like an inactive AF point coming on. */
 .af-point__mark:not(.is-current) {
@@ -404,10 +357,8 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .af-point__mark:not(.is-current) { animation: none; }
   .af-point__ring,
-  .af-point__frame-g,
-  .af-point__frame-pip,
-  .af-point__label,
-  .af-point__mark.is-current .af-point__focus { transition: none; }
+  .af-point__landmark-g,
+  .af-point__label { transition: none; }
 }
 
 /* Under a story the archive recedes: the atlas grows and softens behind the
