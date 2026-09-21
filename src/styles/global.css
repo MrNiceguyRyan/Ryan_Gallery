@@ -248,6 +248,18 @@ html.lenis body {
 .af-point__mark.is-current {
   cursor: default;
 }
+/* The /about portrait is a plate too, a quarter the size of a cover's, so its
+   corners are scaled to match — 30px corners on a 240px picture read as
+   furniture rather than as a frame. Both selectors are (0,2,x) and so beat the
+   base rules cleanly without touching them. */
+.about-portrait .archive-focus {
+  inset: -7px;
+}
+.about-portrait .archive-focus i {
+  width: 18px;
+  height: 18px;
+}
+
 /* A place on the route: the photograph's own focus corners at a sixth scale,
    with a pip on the coordinate itself so the mark has a centre. The corners
    carry the state — splayed while the camera is elsewhere, square when it is
@@ -580,26 +592,6 @@ h1, h2, h3 {
     max-height: 58dvh;
     max-width: 76vw;
   }
-}
-
-/* ─── Blob morph animation ─── */
-@keyframes blob-morph {
-  0%, 100% {
-    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-  }
-  25% {
-    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
-  }
-  50% {
-    border-radius: 50% 60% 30% 60% / 30% 40% 70% 60%;
-  }
-  75% {
-    border-radius: 60% 30% 60% 40% / 70% 50% 40% 60%;
-  }
-}
-
-.animate-blob-morph {
-  animation: blob-morph 8s ease-in-out infinite;
 }
 
 /* ─── Line growth animation ─── */

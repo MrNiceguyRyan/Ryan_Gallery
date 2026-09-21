@@ -262,24 +262,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
   const avatarSrcSet = avatarIsSanity
     ? [480, 720, 960].map((width) => `${avatarSized(width)} ${width}w`).join(', ')
     : undefined;
-  const avatarRef = useRef<HTMLDivElement>(null);
-  const [avatarInView, setAvatarInView] = useState(true);
-
-  useEffect(() => {
-    if (reduce || typeof IntersectionObserver === 'undefined') {
-      setAvatarInView(true);
-      return;
-    }
-    const avatar = avatarRef.current;
-    if (!avatar) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setAvatarInView(Boolean(entry?.isIntersecting)),
-      { rootMargin: '120px 0px' },
-    );
-    observer.observe(avatar);
-    return () => observer.disconnect();
-  }, [reduce]);
-
   // Same weighty inertial smooth-scroll as the homepage, so browsing About
   // feels identical. Torn down on unmount (route change); no-op under reduced-motion.
   useEffect(() => {
@@ -462,62 +444,49 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
 
           {/* ── LEFT: editorial portrait + stacked meta ── */}
           <div className="md:col-span-5 flex flex-col items-start gap-7">
-            {/* Avatar — a living droplet: the photo is masked in an organic
-                water-drop shape that slowly morphs (CSS keyframes, PRM-gated in
-                global.css); a second, offset droplet OUTLINE in lime drifts on a
-                desynced phase behind it — the "border" is water, not a box. */}
+            {/* The photographer, held the way his photographs are held. This was
+                a "living droplet": the portrait masked into an organic blob that
+                morphed on an 8-second loop, with a second lime blob outline
+                drifting behind it on a desynced phase. It was the only thing on
+                the site that never stopped moving, and it was the one picture
+                here that the archive's own vocabulary did not touch. It is now a
+                plate, with the same focus corners the covers are held in —
+                racking shut once as the page is uncovered, in the same direction
+                they rack on the homepage: splayed is unfocused, closed is on
+                the line. */}
             <motion.div
-              ref={avatarRef}
-              className="group relative mx-auto w-48 md:mx-0 md:w-60"
-              initial={reduce ? false : { opacity: 0, y: 16, scale: 0.985 }}
-              animate={reduce || coverExited ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 16, scale: 0.985 }}
+              className="archive-plate about-portrait relative mx-auto w-48 md:mx-0 md:w-60"
+              initial={reduce ? false : { opacity: 0, y: 16 }}
+              animate={reduce || coverExited ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
               transition={{ duration: reduce ? 0 : 0.72, delay: reduce ? 0 : 0.07, ease: expo }}
             >
-              {/* Whole droplet (outline + image) scales as ONE unit on its own
-                  GPU layer — a slow, gentle push-in. NOTE: Tailwind v4 sets the
-                  standalone `scale` property (not `transform`), so the transition
-                  MUST name `scale` — transitioning `transform` leaves it snapping. */}
-              <div
-                className={`relative w-full ${reduce ? '' : 'group-hover:scale-[1.03]'}`}
-                style={{
-                  transition: 'scale 1.1s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transformOrigin: 'center center',
-                  willChange: reduce || !avatarInView ? 'auto' : 'scale',
-                  backfaceVisibility: 'hidden',
-                }}
-              >
-                <span
-                  aria-hidden
-                  className="absolute -inset-2.5 animate-blob-morph border"
-                  style={{
-                    borderColor: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.35)',
-                    borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
-                    animationDelay: '-4s',
-                    animationPlayState: avatarInView ? 'running' : 'paused',
-                  }}
+              <div className="relative aspect-[4/5] w-full overflow-hidden bg-white/5">
+                <img
+                  src={avatarSrc}
+                  srcSet={avatarSrcSet}
+                  sizes="(min-width: 768px) 240px, 192px"
+                  alt={name}
+                  width={720}
+                  height={900}
+                  className="h-full w-full object-cover object-right grayscale-[0.2]"
+                  loading="eager"
+                  decoding="async"
+                  draggable={false}
                 />
-                <div
-                  className="relative aspect-[4/5] w-full overflow-hidden animate-blob-morph bg-white/5"
-                  style={{
-                    borderRadius: '60% 40% 30% 70% / 60% 30% 70% 40%',
-                    animationPlayState: avatarInView ? 'running' : 'paused',
-                  }}
-                >
-                  <img
-                    src={avatarSrc}
-                    srcSet={avatarSrcSet}
-                    sizes="(min-width: 768px) 240px, 192px"
-                    alt={name}
-                    width={720}
-                    height={900}
-                    className="w-full h-full object-cover object-right grayscale-[0.2]"
-                    loading="eager"
-                    decoding="async"
-                    draggable={false}
-                  />
-                  <div aria-hidden className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#282c20]/40 via-transparent to-transparent" />
-                </div>
               </div>
+              {/* A sibling of the image box, never a child: the corners sit at a
+                  negative inset, so anything clipping the picture would clip them. */}
+              <motion.span
+                aria-hidden="true"
+                className="archive-focus"
+                initial={reduce ? false : { ['--focus-splay' as never]: '7px', ['--focus-glow' as never]: 0 }}
+                animate={reduce || coverExited
+                  ? { ['--focus-splay' as never]: '0px', ['--focus-glow' as never]: 0.9 }
+                  : { ['--focus-splay' as never]: '7px', ['--focus-glow' as never]: 0 }}
+                transition={{ duration: reduce ? 0 : 0.82, delay: reduce ? 0 : 0.07, ease: expo }}
+              >
+                <i /><i /><i /><i />
+              </motion.span>
             </motion.div>
 
             {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
