@@ -15,9 +15,10 @@
     },
     {
       "name": "gallery-dist",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "preview", "--", "--port", "4401"],
-      "port": 4401
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && npx astro preview --port ${PORT:-4401}"],
+      "port": 4401,
+      "autoPort": true
     }
   ]
 }

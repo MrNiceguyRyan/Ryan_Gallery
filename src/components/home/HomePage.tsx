@@ -70,6 +70,16 @@ interface Props {
    the run (index 3); the owner asked for one treatment throughout. -1 keeps
    the `feature` variant reachable without any chapter using it. */
 const FEATURE_CHAPTER_INDEX = -1;
+// The homepage is an ISSUE, not the archive. It flies a scripted camera through
+// every chapter it is given at roughly one screen each, so "all collections"
+// grows the page without bound: measured at 1.03 screens per chapter on a
+// 900px viewport, six chapters is 10.9 screens and thirty would be 35. The
+// archive keeps growing; this does not. The map is the complete index — that
+// is the surface built to scale, and it is where everything stays reachable.
+//
+// Six is today's whole archive, so nothing changes until the seventh chapter
+// lands, at which point the oldest leaves the front and stays on /travel.
+const HOME_CHAPTER_LIMIT = 6;
 // Desktop globe prologue: the height of the opening laid over the atlas, and
 // how much of the viewport the atlas entrance overlaps it by (the entrance
 // begins when the archive's top edge is 56% down the screen).
@@ -596,6 +606,16 @@ export default function HomePage({ collections }: Props) {
       : withPhotos;
   }, [collections]);
 
+  // The most recent chapters, put back into the archive's reading order. Recency
+  // chooses WHICH chapters are in the issue; routeOrder still chooses the order
+  // they are read in, so the front page never reads backwards.
+  const issueCollections = useMemo(() => {
+    if (activeCollections.length <= HOME_CHAPTER_LIMIT) return activeCollections;
+    const byRecency = [...activeCollections].sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+    const inIssue = new Set(byRecency.slice(0, HOME_CHAPTER_LIMIT).map((collection) => collection._id));
+    return activeCollections.filter((collection) => inIssue.has(collection._id));
+  }, [activeCollections]);
+
   // Group active cities into ordered region sections. A section shows a
   // divider HEADER only when it has ≥2 cities; single-city regions (and
   // untagged collections) just render their chapter — no redundant header.
@@ -603,7 +623,7 @@ export default function HomePage({ collections }: Props) {
   const sections = useMemo<RegionSection[]>(() => {
     const groups = new Map<string, Collection[]>();
     const order: string[] = [];
-    for (const c of activeCollections) {
+    for (const c of issueCollections) {
       const key = c.region?.trim() ? `r:${c.region.trim()}` : `s:${c._id}`;
       if (!groups.has(key)) {
         groups.set(key, []);
@@ -622,26 +642,28 @@ export default function HomePage({ collections }: Props) {
         cities,
       };
     });
-  }, [activeCollections]);
+  }, [issueCollections]);
 
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
   // Closing-page figures, derived from the archive itself. Some chapters store
   // their year as a string, so parse rather than trust the type.
+  // From the whole archive, deliberately — these figures are a claim about the
+  // archive, not about the chapters that happen to be on the front this month.
   const archiveFrameTotal = useMemo(
-    () => orderedCities.reduce((sum, city) => sum + (city.photoCount ?? city.photos?.length ?? 0), 0),
-    [orderedCities],
+    () => activeCollections.reduce((sum, city) => sum + (city.photoCount ?? city.photos?.length ?? 0), 0),
+    [activeCollections],
   );
   const archiveYearSpan = useMemo(() => {
-    const years = orderedCities
+    const years = activeCollections
       .map((city) => Number(city.year))
       .filter((year) => Number.isFinite(year) && year > 0);
     if (!years.length) return '';
     const first = Math.min(...years);
     const last = Math.max(...years);
     return first === last ? String(first) : `${first}–${last}`;
-  }, [orderedCities]);
+  }, [activeCollections]);
   const orderedChapterIds = useMemo(
     () => orderedCities.map((city) => city._id),
     [orderedCities],
