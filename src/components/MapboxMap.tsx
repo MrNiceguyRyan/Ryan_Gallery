@@ -246,7 +246,23 @@ function clusterByLocation(photos: Photo[]): LocationCluster[] {
     ? [...clusters].sort((a, b) => (a.routeOrder as number) - (b.routeOrder as number))
     : [...clusters].sort((a, b) => (chapterYear(b) - chapterYear(a))
       || ((firstSeen.get(a.city) ?? 0) - (firstSeen.get(b.city) ?? 0)));
-  return ordered.map((cluster, index) => ({ ...cluster, chapterNumber: index + 1 }));
+  // The number is the CHAPTER's, not the row's. A chapter can hold more than
+  // one place — New York's frames are filed under Manhattan and Midtown — and
+  // numbering by row position claimed they were chapters 06 and 07 of a
+  // six-chapter archive. Cities sharing a chapter share its number, which is
+  // also how the index says "this chapter has two places in it".
+  const chapterKey = (c: LocationCluster) => (Number.isFinite(c.routeOrder)
+    ? `r:${c.routeOrder}`
+    : `c:${c.photos[0]?.collection?.slug ?? c.photos[0]?.collection?.name ?? c.city}`);
+  const chapters: string[] = [];
+  ordered.forEach((cluster) => {
+    const key = chapterKey(cluster);
+    if (!chapters.includes(key)) chapters.push(key);
+  });
+  return ordered.map((cluster) => ({
+    ...cluster,
+    chapterNumber: chapters.indexOf(chapterKey(cluster)) + 1,
+  }));
 }
 
 function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
