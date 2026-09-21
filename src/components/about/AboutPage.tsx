@@ -7,6 +7,14 @@ import { useInViewOnce } from '../../lib/useInViewOnce';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
+// The contributor cover is a real opening plane: opaque, aria-hidden, with the
+// shared nav held inert behind it. /travel's twin already worked out what that
+// obliges it to do — play in full ONCE per session, be skippable, and announce
+// itself — and this page did none of it: it played the full two seconds on
+// every arrival, with no way out. Same key shape as ATLAS_SESSION_KEY.
+const ABOUT_SESSION_KEY = 'ryan-gallery:about-entry-seen';
+type EntryMode = 'checking' | 'full' | 'brief';
+
 // One continuous animation mask travels through the complete autograph. The
 // visible mark still comes from the rounded source asset, so the connector
 // curves can bridge blank pixels without changing the finished silhouette.
@@ -269,20 +277,39 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
     return destroy;
   }, [reduce]);
 
-  // Editorial "contributor cover" entrance — plays once on arrival, then
-  // peels away to reveal the page.
+  // Editorial "contributor cover" entrance — plays in full the first time this
+  // session, then gets out of the way on every arrival after it.
+  const [entryMode, setEntryMode] = useState<EntryMode>('checking');
   const [coverGone, setCoverGone] = useState(!!reduce);
   const [coverExited, setCoverExited] = useState(!!reduce);
   useEffect(() => {
     if (reduce) {
+      setEntryMode('brief');
       setCoverGone(true);
       setCoverExited(true);
       return;
     }
+    setEntryMode('checking');
     setCoverExited(false);
     setCoverGone(false);
-    const t = setTimeout(() => setCoverGone(true), 1150);
-    return () => clearTimeout(t);
+
+    let seenThisSession = false;
+    try {
+      seenThisSession = window.sessionStorage.getItem(ABOUT_SESSION_KEY) === 'true';
+      window.sessionStorage.setItem(ABOUT_SESSION_KEY, 'true');
+    } catch {
+      // Private browsing can deny storage; the full pace is the safe default.
+    }
+
+    if (seenThisSession) {
+      setEntryMode('brief');
+      const briefExit = window.setTimeout(() => setCoverGone(true), 24);
+      return () => window.clearTimeout(briefExit);
+    }
+
+    setEntryMode('full');
+    const t = window.setTimeout(() => setCoverGone(true), 1150);
+    return () => window.clearTimeout(t);
   }, [reduce]);
 
   // The contributor cover is a real opening plane. Keep the shared nav and
@@ -329,19 +356,33 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
         {!coverGone && (
           <motion.div
             key="about-cover"
-            aria-hidden="true"
             initial={{ y: 0 }}
             exit={{ y: '-100%' }}
-            transition={{ duration: 0.85, ease: [0.76, 0, 0.24, 1] }}
+            transition={{ duration: entryMode === 'brief' ? 0.3 : 0.85, ease: [0.76, 0, 0.24, 1] }}
             className="fixed inset-0 z-[60] overflow-hidden border-b border-white/10 bg-[#282c20] text-[#F4F4ED]"
           >
+            {/* The plane is aria-hidden and holds the nav inert behind it, so
+                the one thing it must not be is silent. */}
+            <span className="sr-only" role="status">
+              Opening the profile
+            </span>
+            {entryMode === 'full' && (
+              <button
+                type="button"
+                onClick={() => setCoverGone(true)}
+                className="fixed left-4 top-4 z-10 inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+              >
+                Skip entrance
+              </button>
+            )}
             {/* Cool accent wash (grain removed) */}
             <div
+              aria-hidden="true"
               className="absolute inset-0 pointer-events-none"
               style={{ background: 'radial-gradient(52vmax 42vmax at 20% 112%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.10), transparent 68%)' }}
             />
             {/* Newspaper column rules */}
-            <div className="absolute inset-0 grid grid-cols-4 opacity-50 pointer-events-none">
+            <div aria-hidden="true" className="absolute inset-0 grid grid-cols-4 opacity-50 pointer-events-none">
               {[0, 1, 2, 3].map((i) => (
                 <motion.span
                   key={i}
@@ -356,6 +397,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
 
             {/* Masthead */}
             <motion.div
+              aria-hidden="true"
               className="absolute"
               style={{
                 top: 'clamp(1.5rem,4vh,3rem)',
@@ -374,7 +416,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             </motion.div>
 
             {/* Center block */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
+            <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
               <motion.span
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -407,6 +449,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
 
             {/* Folio — camera EXIF line for the photography theme */}
             <motion.div
+              aria-hidden="true"
               className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
               style={{
                 bottom: 'max(clamp(1.5rem,4vh,3rem), env(safe-area-inset-bottom))',
