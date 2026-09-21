@@ -528,7 +528,14 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const measure = () => {
       const s = state.current;
       s.focalX = (root.clientWidth - 264) / 2;
-      s.focalY = ATLAS_READING_LINE * window.innerHeight - root.getBoundingClientRect().top;
+      // DERIVED, not measured — the same correction the camera needed. This
+      // read a live rect whose top is scroll-dependent (the stage sits at 0
+      // only while it is pinned) and then kept the answer until the next
+      // resize. Resizing the window while the stage was released wrote a focal
+      // point a thousand pixels down and split the cross from the marks for the
+      // rest of the session. The camera now assumes the stage is pinned; the
+      // cross has to assume the same thing, or the two quietly disagree.
+      s.focalY = ATLAS_READING_LINE * window.innerHeight;
       svgRef.current?.setAttribute('viewBox', `0 0 ${root.clientWidth} ${root.clientHeight}`);
       if (!s.hunting) draw(null);
     };
