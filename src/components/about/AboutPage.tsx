@@ -69,7 +69,8 @@ function SignatureScrub({ className = '' }: { className?: string }) {
  * the copy rolls in from below. Pure CSS transforms (GPU), inherits text styles
  * from the wrapper. The arriving copy can brighten via `hoverClassName`. */
 function FlipLine({ text, className = '', hoverClassName = '' }: { text: string; className?: string; hoverClassName?: string }) {
-  const move = 'transition-transform duration-[480ms] ease-[cubic-bezier(0.16,1,0.3,1)]';
+  // Fast in, slow out — the asymmetry the rest of the site answers with.
+  const move = 'transition-transform duration-[520ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:duration-[240ms]';
   return (
     <span className={`relative block overflow-hidden ${className}`}>
       <span className={`block truncate ${move} group-hover:-translate-y-full`}>{text}</span>
@@ -614,11 +615,14 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
               <Magnetic strength={0.34}>
                 <a
                   href={`mailto:${email}`}
-                  className="group inline-flex min-h-11 items-center gap-2 px-7 py-3 rounded-full text-[12px] font-bold tracking-[0.1em] uppercase text-[#111112] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#F4F4ED]"
+                  // The pill is already inside a <Magnetic>, which moves it
+                  // towards the pointer: a hover scale on top of that is two
+                  // controls answering one gesture.
+                  className="group inline-flex min-h-11 items-center gap-2 px-7 py-3 rounded-full text-[12px] font-bold tracking-[0.1em] uppercase text-[#111112] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#F4F4ED]"
                   style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                 >
                   <FlipLine text="Get in touch" />
-                  <span aria-hidden="true" className="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>
+                  <span aria-hidden="true" className="transition-transform duration-[520ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:duration-[240ms] group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>
                 </a>
               </Magnetic>
             </Reveal>

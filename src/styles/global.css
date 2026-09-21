@@ -648,10 +648,29 @@ h1, h2, h3 {
 
 
 /* Focus-visible ring for keyboard navigation */
-*:focus-visible {
-  outline: 2px solid rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  outline-offset: 2px;
-  border-radius: 4px;
+/* One ring, and it lets the element it is on decide its own shape and distance.
+   Unlayered, this blanket rule beat all 73 `focus-visible:outline-offset-*`
+   utilities in the app (utilities are layered; an unlayered declaration wins),
+   so every carefully-set offset — 4px on the plates, 6px on the AF points,
+   8px on the tick groups — was silently overruled to 2px, and the
+   `border-radius: 4px` squared off every round mark and pill it landed on
+   while rounding anything with a background. In `@layer base` the utilities
+   win again, and the two components that set their own ring (`.af-point__mark`,
+   `.atlas-ticks__group`) still beat both, being unlayered themselves. */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid rgb(var(--accent-r), var(--accent-g), var(--accent-b));
+    outline-offset: 2px;
+  }
+}
+
+/* Programmatic focus targets are not keyboard destinations: `main` and the
+   shells that take `tabIndex={-1}` are focused by script so a screen reader
+   lands in the right place, and they each ask for `focus:outline-none` — which
+   is layered, and so lost to the rule above. */
+main:focus,
+[tabindex="-1"]:focus-visible {
+  outline: none;
 }
 
 /* ─── Fade-in-up for Astro pages ─── */
