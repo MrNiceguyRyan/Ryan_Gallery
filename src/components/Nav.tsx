@@ -43,7 +43,7 @@ export default function Nav({ currentPath, scrim = false }: Props) {
           href="/"
           data-astro-prefetch="hover"
           aria-label="Ryan Xu — home"
-          className="inline-flex min-h-11 min-w-11 items-center font-serif uppercase text-lg md:text-xl tracking-[0.16em] font-medium leading-none text-[#F4F4ED] mix-blend-difference hover:opacity-60 transition-opacity duration-200 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+          className="inline-flex min-h-11 min-w-11 items-center font-serif uppercase text-lg md:text-[21px] tracking-[0.1em] md:tracking-[0.12em] font-medium leading-none text-[#F4F4ED] mix-blend-difference hover:opacity-60 transition-opacity duration-200 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
         >
           Ryan Xu
         </a>
@@ -58,7 +58,7 @@ export default function Nav({ currentPath, scrim = false }: Props) {
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                 href={link.href}
                 data-astro-prefetch={link.href === '/travel' || link.href === '/' ? 'hover' : undefined}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 {link.label}
               </motion.a>

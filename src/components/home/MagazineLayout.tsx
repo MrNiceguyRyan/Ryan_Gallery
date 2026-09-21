@@ -413,7 +413,7 @@ function PhotoCell({
 
         {hasError && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#292e25] px-5 text-center">
-            <span className="font-ui text-[9px] uppercase tracking-[0.28em] text-white/58">
+            <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/58">
               Frame unavailable
             </span>
           </div>
@@ -994,12 +994,12 @@ export default function MagazineLayout({
               whileHover={reduce ? undefined : { x: -2 }}
               whileTap={reduce ? undefined : { scale: 0.96, x: -4 }}
               transition={{ duration: 0.2, ease: expo }}
-              className="flex min-h-11 items-center gap-3 -ml-1 pl-1 pr-2 text-[10px] uppercase tracking-[0.1em] font-bold hover:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+              className="flex min-h-11 items-center gap-3 -ml-1 pl-1 pr-2 font-ui text-[10px] uppercase tracking-[0.1em] font-medium hover:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
               aria-label={`${standalone ? 'Back from' : 'Close'} ${collection.name} story`}
             >
               <ArrowRight size={16} className="rotate-180" /> Back
             </motion.button>
-            <div className="text-[10px] md:text-[11px] uppercase tracking-[0.1em] md:tracking-[0.1em] font-bold opacity-[0.58] truncate max-w-[55vw] md:max-w-none">
+            <div className="font-ui text-[10px] md:text-[11px] uppercase tracking-[0.1em] font-medium opacity-[0.58] truncate max-w-[55vw] md:max-w-none">
               {collection.name}
             </div>
             <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.04] lg:hidden" aria-hidden="true">
@@ -1023,11 +1023,11 @@ export default function MagazineLayout({
                        and the sticky header (h-16 ≈ 4rem) plus breathing room,
                        so the whole sidebar fits inside the viewport with no
                        outer scrollbar. */}
-                <aside className="lg:col-span-4 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:flex lg:flex-col gap-8 lg:gap-6 xl:gap-8 space-y-8 lg:space-y-0">
+                <aside className="lg:col-span-5 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:flex lg:flex-col gap-8 lg:gap-6 xl:gap-8 space-y-8 lg:space-y-0">
                   {/* TOP — header */}
                   <header className="lg:shrink-0 space-y-4">
                     <div className="flex items-center gap-4">
-                      <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.52]">
+                      <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.52]">
                         Vol. {folio}
                       </span>
                       <div className="h-[1px] flex-1 bg-white/10" />
@@ -1049,14 +1049,14 @@ export default function MagazineLayout({
                     </StoryHeading>
                     <div className="flex items-center gap-4">
                       {distinctLocation && (
-                        <p className="text-[10px] uppercase tracking-[0.1em] font-bold">
+                        <p className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium">
                           {distinctLocation}
                         </p>
                       )}
                       {distinctLocation && collection.year && (
                         <div className="w-1 h-1 rounded-full bg-white/20" />
                       )}
-                      <p className="text-[10px] uppercase tracking-[0.1em] opacity-[0.58] font-ui italic">
+                      <p className="font-ui text-[10px] uppercase tracking-[0.1em] opacity-[0.58]">
                         {collection.year || ''}
                       </p>
                     </div>
@@ -1090,11 +1090,11 @@ export default function MagazineLayout({
                         draggable={false}
                       />
                       {openingFrameError && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-[#292e25] font-ui text-[9px] uppercase tracking-[0.28em] text-white/58">
+                        <span className="absolute inset-0 flex items-center justify-center bg-[#292e25] font-ui text-[9px] uppercase tracking-[0.1em] text-white/58">
                           Frame unavailable
                         </span>
                       )}
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/55 to-transparent px-5 pb-4 pt-14 font-ui text-[9px] uppercase tracking-[0.24em] text-white/78">
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/55 to-transparent px-5 pb-4 pt-14 font-ui text-[9px] uppercase tracking-[0.1em] text-white/78">
                         <span>Opening frame</span>
                         <span>01 / {String(photos.length).padStart(2, '0')}</span>
                       </span>
@@ -1121,11 +1121,12 @@ export default function MagazineLayout({
                         // opacity behind a floated open-quote with no close —
                         // which is how captions and quotations are set, not the
                         // one passage a chapter has. Roman, full contrast, one
-                        // paragraph. The measure is set by the 352px sticky rail,
-                        // not by `max-w`, so the size stays at 15px: roman glyphs
-                        // are wider than italic ones, and measured in that rail
-                        // 16px roman already fell to ~39 characters a line, below
-                        // the 45–90 reading range.
+                        // paragraph. The measure is set by the sticky rail, not
+                        // by `max-w`: at 4/12 the rail was 352px and this ran at
+                        // 37 characters a line, under every measure in the
+                        // 45–90 reading range and under the 55 this site uses
+                        // on /about. The rail is now 5/12 — 452px, 47 characters
+                        // — which the photographs pay for out of one column.
                         className="max-w-[68ch] lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar lg:pr-2 lg:-mr-2 text-[15px] leading-[1.65] text-pretty font-serif text-white/88 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]/60"
                       >
                         {/* One paragraph: the chapter's lead, not its whole text. */}
@@ -1145,7 +1146,7 @@ export default function MagazineLayout({
                         the % label isolates its own state so scrolling a story
                         re-renders one <span>, not the whole overlay tree. */}
                     <div className="space-y-2.5">
-                      <div className="flex justify-between text-[10px] uppercase tracking-widest font-bold opacity-[0.62]">
+                      <div className="flex justify-between font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.62]">
                         <span>Reading Progress</span>
                         <ProgressPercent progress={scrollYProgress} />
                       </div>
@@ -1173,7 +1174,7 @@ export default function MagazineLayout({
                     above it. The old 8–12px spacing was set for bare images; with a
                     caption ~10px under each one, it left the caption equidistant
                     from its own photograph and the next. */}
-                <div className="lg:col-span-8 space-y-8 md:space-y-10">
+                <div className="lg:col-span-7 space-y-8 md:space-y-10">
                   {editorialRows.map((row, rowIdx) => (
                     <EditorialRowFrames
                       key={row.items.map(({ photo }) => photo._id).join('-')}
@@ -1237,7 +1238,7 @@ export default function MagazineLayout({
                           aria-label={`Read next story: ${nextCollection.name}`}
                         >
                           <motion.span
-                            className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56]"
+                            className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56]"
                             initial={reduce ? false : { opacity: 0 }}
                             animate={{ opacity: endCapShown ? 0.56 : 0 }}
                             transition={{ duration: reduce ? 0 : 0.34, ease: expo }}
@@ -1299,7 +1300,7 @@ export default function MagazineLayout({
                           <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                             {isShared ? <Check size={16} /> : <Share2 size={16} />}
                           </div>
-                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
+                          <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
                             {isShared ? 'Link Copied' : 'Share Story'}
                           </span>
                         </motion.button>
@@ -1315,7 +1316,7 @@ export default function MagazineLayout({
                           <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
                             <ArrowRight className="-rotate-90" size={16} />
                           </div>
-                          <span className="text-[10px] uppercase tracking-[0.1em] font-bold opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
+                          <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
                             Back to Top
                           </span>
                         </motion.button>
@@ -1453,7 +1454,7 @@ export default function MagazineLayout({
                   initial={{ opacity: 0, y: 10 }}
                   animate={coverArrived ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
                   transition={{ duration: 0.44, delay: 0.18, ease: expo }}
-                  className="font-ui text-[11px] tracking-[0.5em] uppercase"
+                  className="font-ui text-[11px] tracking-[0.1em] uppercase"
                   style={{ color: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.85)' }}
                 >
                   // dispatch № {coverFolio}
@@ -1495,7 +1496,7 @@ export default function MagazineLayout({
                   right: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-right))',
                 }}
               >
-                <span className="text-[13px] tracking-[0.2em] text-white/55">{coverFolio}</span>
+                <span className="text-[13px] tracking-[0.1em] text-white/55">{coverFolio}</span>
                 <span>The Story Begins</span>
               </motion.div>
             </motion.div>

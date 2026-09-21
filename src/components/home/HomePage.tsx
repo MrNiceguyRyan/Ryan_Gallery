@@ -1189,7 +1189,7 @@ export default function HomePage({ collections }: Props) {
       >
         <a
           href="#main-content"
-          className="fixed left-4 top-4 z-[100] inline-flex min-h-11 translate-y-[-160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.2em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+          className="fixed left-4 top-4 z-[100] inline-flex min-h-11 translate-y-[-160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
         >
           Skip to archive
         </a>
@@ -1229,7 +1229,7 @@ export default function HomePage({ collections }: Props) {
             whileHover={reduce ? undefined : { scale: 1.04 }}
             whileTap={reduce ? undefined : { scale: 0.96 }}
             transition={{ duration: 0.2, ease: expo }}
-            className="flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.16em] text-[#F4F4ED] mix-blend-difference transition-opacity duration-200 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px] md:tracking-[0.12em]"
+            className="flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.1em] text-[#F4F4ED] mix-blend-difference transition-opacity duration-200 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px] md:tracking-[0.12em]"
           >
             {/* Slides down from above once the opening reveals (body.walkin-in,
                  flipped by WalkIn) — the reference's header entrance. */}
@@ -1254,7 +1254,7 @@ export default function HomePage({ collections }: Props) {
                 href={atlasHref}
                 data-astro-prefetch="hover"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 Map
               </motion.a>
@@ -1266,7 +1266,7 @@ export default function HomePage({ collections }: Props) {
                 whileTap={reduce ? undefined : { scale: 0.95 }}
                 href="/about"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 text-[9px] font-bold uppercase tracking-[0.25em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:tracking-[0.1em] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 About
               </motion.a>
@@ -1389,7 +1389,7 @@ export default function HomePage({ collections }: Props) {
                 <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
                 <motion.div
                   style={reduce ? undefined : { opacity: swKickerOpacity, x: swKickerX }}
-                  className="flex items-center gap-4 text-[9px] uppercase tracking-[0.1em] font-bold text-white/52"
+                  className="flex items-center gap-4 font-ui text-[9px] uppercase tracking-[0.1em] font-medium text-white/52"
                 >
                   <motion.div
                     className="h-px origin-left"
@@ -1450,7 +1450,7 @@ export default function HomePage({ collections }: Props) {
                           <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
                             {section.region}
                           </span>
-                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.22em] text-white/52">
+                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.1em] text-white/52">
                             {section.cities.length} places · {section.frameCount} frames
                           </span>
                         </div>

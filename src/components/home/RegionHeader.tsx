@@ -56,7 +56,7 @@ export default function RegionHeader({
             transition={{ duration: 0.95, ease: expo }}
           >
             <span
-              className="flex items-center gap-2 font-ui text-[10px] tracking-[0.5em] uppercase mb-3 md:mb-4"
+              className="flex items-center gap-2 font-ui text-[10px] tracking-[0.1em] uppercase mb-3 md:mb-4"
               style={{ color: accentSoft(0.85) }}
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
@@ -81,7 +81,7 @@ export default function RegionHeader({
              pulse are never sliced at the right edge */
           className="flex items-center gap-4 pb-2 pr-2 md:pr-6 shrink-0"
         >
-          <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.25em] uppercase text-white/58 leading-relaxed">
+          <div className="hidden md:block text-right font-ui text-[11px] tracking-[0.1em] uppercase text-white/58 leading-relaxed">
             {placeCount} places
             <br />
             {frameCount} frames
@@ -92,7 +92,7 @@ export default function RegionHeader({
                   keyframes (compositor) — never a framer repeat:Infinity loop. */}
               {collapsed && (
                 <span
-                  className="hidden sm:inline font-ui text-[10px] tracking-[0.35em] uppercase soft-pulse"
+                  className="hidden sm:inline font-ui text-[10px] tracking-[0.1em] uppercase soft-pulse"
                   style={{ color: ACCENT }}
                 >
                   Tap to expand

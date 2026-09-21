@@ -80,13 +80,11 @@ function FlipLine({ text, className = '', hoverClassName = '' }: { text: string;
   );
 }
 
-// Hero entrance item: fades up. `custom` is the per-element delay so the hero
-// text emerges top-to-bottom once the cover has lifted.
-const makeHeroItem = (reduce: boolean) => ({
-  hidden: { opacity: 0, y: reduce ? 0 : 22 },
-  show: (d: number = 0) => ({ opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.62, delay: d, ease: expo } }),
-});
-
+// NOTE: the hero has no entrance of its own. The contributor cover is an opaque
+// plane that LIFTS, and a page revealed by a lifting plane is already printed —
+// fading five blocks in behind it meant the visitor watched the lede arrive at
+// 95% and the lime underline finish drawing entirely out of sight. Two marks are
+// made in the open instead: the portrait, and the underline under the name.
 /**
  * Scroll-reveal wrapper — a thin fade-up skin over the shared useInViewOnce
  * trigger (native IO; framer's whileInView is banned — see lib/useInViewOnce).
@@ -174,7 +172,7 @@ function ColophonBlock({ rows, footer }: { rows: Array<[string, ReactNode]>; foo
         })}
       </dl>
       <motion.div
-        className="mt-12 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-5 font-ui text-[9px] uppercase tracking-[0.25em] text-white/52 md:flex-row"
+        className="mt-12 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/52 md:flex-row"
         initial={reduce ? false : { opacity: 0, y: 12 }}
         animate={reduce || shown ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
         transition={{ duration: reduce ? 0 : 0.6, delay: reduce ? 0 : 0.16 + lastRow * 0.07, ease: expo }}
@@ -233,7 +231,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
     ]);
   }
   if (updatedOn) colophonRows.push(['Updated', updatedOn]);
-  const heroItem = makeHeroItem(!!reduce);
   const avatarIsSanity = avatarUrl.includes('cdn.sanity.io/images/');
   const avatarBase = avatarUrl.split('?')[0];
   const avatarSized = (width: number) => `${avatarBase}?auto=format&w=${width}&q=82`;
@@ -330,7 +327,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             initial={{ y: 0 }}
             exit={{ y: '-100%' }}
             transition={{ duration: 0.85, ease: [0.76, 0, 0.24, 1] }}
-            className="fixed inset-0 z-[60] bg-[#282c20] text-[#F4F4ED] overflow-hidden"
+            className="fixed inset-0 z-[60] overflow-hidden border-b border-white/10 bg-[#282c20] text-[#F4F4ED]"
           >
             {/* Cool accent wash (grain removed) */}
             <div
@@ -376,7 +373,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.22, ease: expo }}
-                className="font-ui text-[11px] tracking-[0.5em] uppercase"
+                className="font-ui text-[11px] tracking-[0.1em] uppercase"
                 style={{ color: 'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.85)' }}
               >
                 Photographer
@@ -414,7 +411,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
               animate={{ clipPath: 'inset(0 0 0 0%)' }}
               transition={{ duration: 0.65, delay: 0.12, ease: expo }}
             >
-              <span className="text-[13px] tracking-[0.2em] text-white/55">Contributor</span>
+              <span className="text-[13px] tracking-[0.1em] text-white/55">Contributor</span>
               <span className="hidden sm:block">Nikon Zf · Fujifilm X-T50</span>
             </motion.div>
           </motion.div>
@@ -429,10 +426,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
         {/* Running head / folio bar */}
         <motion.div
           className="flex items-baseline justify-between border-b border-white/10 pb-3 mb-10 md:mb-14 font-ui text-[10px] tracking-[0.1em] uppercase text-white/52"
-          variants={heroItem}
-          custom={0}
-          initial="hidden"
-          animate={coverGone ? 'show' : 'hidden'}
         >
           <span className="text-white/55">The Profile</span>
           <span className="md:hidden">NY · 2023</span>
@@ -504,10 +497,6 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             {/* Stacked identity meta — one fact per line (no middle-dot pileup) */}
             <motion.div
               className="font-ui text-[11px] leading-relaxed text-white/58 space-y-1.5"
-              variants={heroItem}
-              custom={0.34}
-              initial="hidden"
-              animate={coverGone ? 'show' : 'hidden'}
             >
               <div className="text-white/70">Photographer</div>
               <div>New York, NY</div>
@@ -523,21 +512,13 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             {/* Name — fades up as part of the top-to-bottom entrance cascade */}
             <motion.h1
               className="text-6xl md:text-7xl lg:text-8xl font-serif uppercase text-[#F4F4ED] tracking-tighter leading-[1.1] pb-2"
-              variants={heroItem}
-              custom={0.1}
-              initial="hidden"
-              animate={coverGone ? 'show' : 'hidden'}
             >
-              <span className="draw-underline heat-glow" style={{ ['--draw-delay' as never]: '1.4s', ['--glow-intensity' as never]: 0.45 }}>{name}</span>
+              <span className="draw-underline" data-drawn={coverExited ? 'true' : undefined}>{name}</span>
             </motion.h1>
 
             {/* Lede — a single serif statement, the page thesis */}
             <motion.p
               className="mt-5 font-serif italic text-xl md:text-2xl text-white/75 leading-snug max-w-[24ch]"
-              variants={heroItem}
-              custom={0.22}
-              initial="hidden"
-              animate={coverGone ? 'show' : 'hidden'}
             >
               Cities and landscapes, one frame at a time.
             </motion.p>
@@ -547,22 +528,20 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
             {bio ? (
               <motion.div
                 className="mt-7"
-                variants={heroItem}
-                custom={0.34}
-                initial="hidden"
-                animate={coverGone ? 'show' : 'hidden'}
               >
-                <p className="text-[15px] text-white/55 font-light leading-relaxed max-w-[60ch] whitespace-pre-line">
+                <p className="max-w-[60ch] whitespace-pre-line font-serif text-[15px] leading-[1.65] text-pretty text-white/88">
                   {bio}
                 </p>
               </motion.div>
             ) : (
               <motion.div
-                className="mt-7 space-y-4 text-[14.5px] md:text-[15px] text-white/55 font-light leading-[1.75] max-w-[60ch]"
-                variants={heroItem}
-                custom={0.34}
-                initial="hidden"
-                animate={coverGone ? 'show' : 'hidden'}
+                /* Inter Light at 55% was a third face and a third weight, used
+                   for the one passage on this site where the photographer speaks
+                   about the work. It is now set the way the stories are set —
+                   the reading face, full contrast — and its paragraphs are one
+                   full line apart, which is the print convention when there is
+                   no indent. */
+                className="mt-7 max-w-[60ch] space-y-[1.65em] font-serif text-[15px] leading-[1.65] text-pretty text-white/88"
               >
                 <p>
                   A photographic record of moving through cities and
@@ -579,18 +558,18 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
                 </p>
 
                 {/* Terse system signature below the prose */}
-                <div className="space-y-2.5 max-w-md font-ui text-[12px] pt-5 mt-1 border-t border-white/5">
+                <div className="mt-1 max-w-md space-y-2.5 border-t border-white/10 pt-5 font-ui text-[12px]">
                   <div className="flex items-baseline gap-4">
-                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Focus</span>
-                    <span className="text-white/60">Light. Geometry. Stillness.</span>
+                    <span className="w-16 shrink-0 uppercase tracking-[0.1em] text-white/52">Focus</span>
+                    <span className="font-serif text-[13.5px] text-white/78">Light. Geometry. Stillness.</span>
                   </div>
                   <div className="flex items-baseline gap-4">
-                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Method</span>
-                    <span className="text-white/60">One frame at a time. Real shutter, real exposure.</span>
+                    <span className="w-16 shrink-0 uppercase tracking-[0.1em] text-white/52">Method</span>
+                    <span className="font-serif text-[13.5px] text-white/78">One frame at a time. Real shutter, real exposure.</span>
                   </div>
                   <div className="flex items-baseline gap-4">
-                    <span className="text-white/52 tracking-[0.3em] uppercase shrink-0 w-16">Log</span>
-                    <span className="text-white/60">Personal archive, selected frames only.</span>
+                    <span className="w-16 shrink-0 uppercase tracking-[0.1em] text-white/52">Log</span>
+                    <span className="font-serif text-[13.5px] text-white/78">Personal archive, selected frames only.</span>
                   </div>
                 </div>
               </motion.div>
@@ -635,7 +614,7 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
               <Magnetic strength={0.34}>
                 <a
                   href={`mailto:${email}`}
-                  className="group inline-flex min-h-11 items-center gap-2 px-7 py-3 rounded-full text-[12px] font-bold tracking-[0.18em] uppercase text-[#111112] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#F4F4ED]"
+                  className="group inline-flex min-h-11 items-center gap-2 px-7 py-3 rounded-full text-[12px] font-bold tracking-[0.1em] uppercase text-[#111112] transition-transform duration-300 hover:scale-[1.03] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#F4F4ED]"
                   style={{ background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}
                 >
                   <FlipLine text="Get in touch" />

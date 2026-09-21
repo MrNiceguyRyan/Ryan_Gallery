@@ -276,7 +276,7 @@ function ScrubbedCoordinateReadout({
 
   const initial = stops[0]?.coordinates ?? [0, 0];
   return (
-    <div className="mt-3 font-ui text-[8px] uppercase tracking-[0.24em] text-[#D2FF00]/70 md:text-[9px]">
+    <div className="mt-3 font-ui text-[8px] uppercase tracking-[0.1em] text-[#D2FF00]/70 md:text-[9px]">
       <span ref={latitudeRef}>{formatCoordinate(initial[1], 'N', 'S')}</span>
       <span aria-hidden="true">&nbsp;&nbsp;/&nbsp;&nbsp;</span>
       <span ref={longitudeRef}>{formatCoordinate(initial[0], 'E', 'W')}</span>
@@ -642,10 +642,10 @@ export default function LivingAtlasStory({
                   >
                     <span className="living-atlas__rail-node relative z-10 h-2.5 w-2.5 shrink-0 rounded-full border border-white/24 bg-[#171b15] transition-colors duration-500" aria-hidden="true" />
                     <span className="min-w-0">
-                      <span className="block font-ui text-[8px] uppercase tracking-[0.24em] text-white/58 transition-colors duration-500 group-hover:text-white/68">
+                      <span className="block font-ui text-[8px] uppercase tracking-[0.1em] text-white/58 transition-colors duration-500 group-hover:text-white/68">
                         {String(index + 1).padStart(2, '0')}
                       </span>
-                      <span className="mt-0.5 block truncate font-ui text-[10px] uppercase tracking-[0.24em] text-white/58 transition-colors duration-500 group-hover:text-white md:text-[11px]">
+                      <span className="mt-0.5 block truncate font-ui text-[10px] uppercase tracking-[0.1em] text-white/58 transition-colors duration-500 group-hover:text-white md:text-[11px]">
                         {stop.name}
                       </span>
                     </span>
@@ -660,7 +660,7 @@ export default function LivingAtlasStory({
             <button
               type="button"
               onClick={() => setRailExpanded((current) => !current)}
-              className="mt-2 min-h-11 pl-[1.35rem] font-ui text-[8px] uppercase tracking-[0.27em] text-white/48 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+              className="mt-2 min-h-11 pl-[1.35rem] font-ui text-[8px] uppercase tracking-[0.1em] text-white/48 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
               aria-controls="living-atlas-chapter-list"
               aria-expanded={railExpanded}
             >

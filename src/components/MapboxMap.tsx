@@ -153,8 +153,8 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
         <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
           <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00] shadow-[0_0_16px_rgba(210,255,0,0.36)]" aria-hidden="true" />
           <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas unavailable</p>
-          <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">The geographic archive could not be drawn.</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Retry atlas</button>
+          <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">The geographic archive could not be drawn.</p>
+          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Retry atlas</button>
         </div>
       );
     }
@@ -257,9 +257,9 @@ function CityDetail({ cluster, mobile = false }: { cluster: LocationCluster; mob
           draggable={false}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#11150f] via-black/15 to-transparent" />
-        <div className="atlas-sheet-safe-inline absolute inset-x-0 bottom-3 flex items-end justify-between gap-4 font-ui text-[9px] uppercase tracking-[0.18em] text-white/64">
+        <div className="atlas-sheet-safe-inline absolute inset-x-0 bottom-3 flex items-end justify-between gap-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/64">
           <p>{cluster.country}</p>
-          <span className="shrink-0 font-ui text-[9px] uppercase tracking-[0.16em] text-white/60">{cluster.photos.length} frames</span>
+          <span className="shrink-0 font-ui text-[9px] uppercase tracking-[0.1em] text-white/60">{cluster.photos.length} frames</span>
         </div>
       </div>
       <div className="atlas-sheet-safe-inline pb-4 pt-3">
@@ -282,7 +282,7 @@ function CityDetail({ cluster, mobile = false }: { cluster: LocationCluster; mob
         {storySlug && (
           <a
             href={`/works/${storySlug}`}
-            className="mt-4 flex min-h-11 w-full items-center justify-center gap-3 rounded-full bg-[#D2FF00] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.22em] text-[#171b15] transition-transform duration-300 hover:scale-[1.015] active:scale-[0.985]"
+            className="mt-4 flex min-h-11 w-full items-center justify-center gap-3 rounded-full bg-[#D2FF00] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-300 hover:scale-[1.015] active:scale-[0.985]"
           >
             Explore story
             <ArrowUpRight size={14} aria-hidden="true" />
@@ -958,16 +958,16 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
       <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00]/70" aria-hidden="true" />
       <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas offline</p>
-      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">Map access is not available in this build.</p>
-      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">Map access is not available in this build.</p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
     </div>
   );
   if (validPhotos.length === 0) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
       <span className="mb-4 h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
       <p className="font-serif text-2xl uppercase text-[#F4F4ED]">No coordinates yet</p>
-      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.2em] text-white/58">New photographic locations will appear here.</p>
-      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.24em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">New photographic locations will appear here.</p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
     </div>
   );
 
@@ -1317,14 +1317,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                   <p className="font-ui text-[8px] uppercase tracking-[0.1em] text-white/48">
                     {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}
                   </p>
-                  <p className="font-ui text-[9px] uppercase tracking-[0.2em] text-white/48">
+                  <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/48">
                     {mapLoadFailed ? 'Map tiles could not be loaded' : `${photos.length} geotagged frames`}
                   </p>
                   {mapLoadFailed && (
                     <button
                       type="button"
                       onClick={() => window.location.reload()}
-                      className="mt-2 min-h-11 rounded-full border border-white/14 px-5 font-ui text-[8px] uppercase tracking-[0.24em] text-white/68 transition-colors hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+                      className="mt-2 min-h-11 rounded-full border border-white/14 px-5 font-ui text-[8px] uppercase tracking-[0.1em] text-white/68 transition-colors hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
                     >
                       Retry map
                     </button>
@@ -1354,7 +1354,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             initial={prefersReduced ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: prefersReduced ? 0 : 0.45, duration: prefersReduced ? 0 : 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pointer-events-none absolute left-1/2 top-5 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-[#11150f]/78 px-4 py-2 font-ui text-[9px] uppercase tracking-[0.18em] text-white/72 shadow-[0_12px_34px_rgba(7,9,6,0.22)] backdrop-blur-xl lg:flex"
+            className="pointer-events-none absolute left-1/2 top-5 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-[#11150f]/78 px-4 py-2 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 shadow-[0_12px_34px_rgba(7,9,6,0.22)] backdrop-blur-xl lg:flex"
             aria-hidden="true"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_10px_rgba(210,255,0,0.45)]" />
@@ -1406,14 +1406,14 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                 {activeCluster ? String(cityClusters.findIndex((cluster) => cluster.city === activeCluster.city) + 1).padStart(2, '0') : String(cityClusters.length).padStart(2, '0')}
               </span>
               <span className="min-w-0 flex-1 overflow-hidden">
-                <span className="block font-ui text-[9px] uppercase tracking-[0.26em] text-white/62">
+                <span className="block font-ui text-[9px] uppercase tracking-[0.1em] text-white/62">
                   {activeCluster ? 'Current location' : 'Interactive atlas'}
                 </span>
                 <span className="mt-1 block truncate font-serif text-xl uppercase leading-none text-[#F4F4ED]">
                   {activeCluster?.city ?? 'Explore locations'}
                 </span>
               </span>
-              <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-semibold uppercase tracking-[0.2em] text-[#D2FF00]/88">
+              <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-[#D2FF00]/88">
                 {mobileSheet === 'peek' ? 'Open' : mobileSheet === 'detail' ? 'Back' : 'Close'}
               </span>
             </button>
@@ -1439,7 +1439,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                 >
                   {regionGroups.map((group) => (
                     <div key={group.region} className="border-t border-white/7 py-4 first:border-t-0">
-                      <div className="mb-2 flex items-center justify-between font-ui text-[9px] uppercase tracking-[0.22em] text-white/60">
+                      <div className="mb-2 flex items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] text-white/60">
                         <span>{group.region}</span>
                         <span>{group.totalPhotos} frames</span>
                       </div>
@@ -1453,7 +1453,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                         >
                           <span className={`h-2.5 w-2.5 shrink-0 rounded-full border ${activeClusterCity === cluster.city ? 'border-[#D2FF00] bg-[#D2FF00] shadow-[0_0_12px_rgba(210,255,0,0.55)]' : 'border-white/35 bg-transparent'}`} />
                           <span className="min-w-0 flex-1 truncate font-serif text-lg uppercase text-[#F4F4ED]">{cluster.city}</span>
-                          <span className="font-ui text-[9px] uppercase tracking-[0.18em] text-white/62">{cluster.photos.length}</span>
+                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/62">{cluster.photos.length}</span>
                         </button>
                       ))}
                     </div>
@@ -1493,7 +1493,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             <header className="shrink-0 border-b border-white/8 px-5 pb-4 pt-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="font-ui text-[10px] font-semibold uppercase tracking-[0.24em] text-[#F4F4ED]/90">Select a location</p>
+                  <p className="font-ui text-[10px] font-semibold uppercase tracking-[0.1em] text-[#F4F4ED]/90">Select a location</p>
                   <p className="mt-2 max-w-[235px] font-ui text-[11px] leading-relaxed tracking-[0.02em] text-white/62">
                     Choose a city to focus the map and open its photographic record.
                   </p>
@@ -1516,7 +1516,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                       aria-expanded={isOpen}
                       aria-controls={isOpen ? `atlas-region-${slugifyPlace(group.region)}` : undefined}
                     >
-                      <span className="min-w-0 flex-1 font-ui text-[9px] font-semibold uppercase tracking-[0.24em] text-white/70 group-hover:text-white/90">
+                      <span className="min-w-0 flex-1 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white/70 group-hover:text-white/90">
                         {group.region}
                       </span>
                       <span className="font-ui text-[9px] tabular-nums tracking-[0.1em] text-white/56">{group.totalPhotos} frames</span>

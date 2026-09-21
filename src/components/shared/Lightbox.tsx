@@ -396,7 +396,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
              of the lightbox include attribution. Mix-blend-difference keeps it
              legible against any image color while staying visually quiet. */}
         <div
-          className="pointer-events-none absolute bottom-2 right-3 text-[9px] font-ui tracking-[0.2em] uppercase opacity-50 select-none"
+          className="pointer-events-none absolute bottom-2 right-3 text-[9px] font-ui tracking-[0.1em] uppercase opacity-50 select-none"
           style={{ mixBlendMode: 'difference', color: 'white' }}
         >
           © ryanxugallery.com
@@ -435,7 +435,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
 
       {/* Mobile swipe hint — shown only when there are more photos */}
       {photos.length > 1 && (
-        <div className="lightbox-chrome absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[10px] font-ui uppercase tracking-widest text-white/48 pointer-events-none md:hidden" style={{ top: 'max(1.1rem, env(safe-area-inset-top))' }}>
+        <div className="lightbox-chrome absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-[10px] font-ui uppercase tracking-[0.1em] text-white/48 pointer-events-none md:hidden" style={{ top: 'max(1.1rem, env(safe-area-inset-top))' }}>
           <ChevronLeft className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
           swipe
           <ChevronRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
@@ -465,14 +465,17 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           ) : loadingFrame ? `Preparing frame ${requestedIndex + 1}…` : null}
         </div>
         <div className="flex items-center gap-3 md:gap-4 max-w-full">
+          {/* Written and measured are two different kinds of line. The one
+              human sentence on this screen is set in the text face; the count,
+              like every other number here, stays in the metadata face. */}
           {displayTitle && (
-            <span className="text-white/60 text-[13px] md:text-sm font-light tracking-wide truncate">{displayTitle}</span>
+            <span className="truncate font-serif text-[15px] leading-snug tracking-normal text-white/72">{displayTitle}</span>
           )}
-          <span className="text-white/58 text-[11px] md:text-xs font-ui tracking-wider shrink-0">
+          <span className="shrink-0 font-ui text-[11px] tracking-[0.11em] tabular-nums text-white/58">
             {index + 1} / {photos.length}
           </span>
         </div>
-        <div className="flex items-center justify-center gap-2 md:gap-4 text-[11px] md:text-[13px] text-white/58 font-ui tracking-wide flex-wrap">
+        <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 font-ui text-[11px] tracking-[0.11em] tabular-nums text-white/58">
           {exposure.map((part, partIndex) => (
             <Fragment key={part}>
               {partIndex > 0 && <span className="text-white/40" aria-hidden="true">|</span>}

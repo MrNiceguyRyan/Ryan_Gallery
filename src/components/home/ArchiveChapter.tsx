@@ -527,7 +527,7 @@ export default function ArchiveChapter({
 
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.24em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
+        className="pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
       >
         View story <ArrowRight size={12} />
       </span>
@@ -665,7 +665,7 @@ export default function ArchiveChapter({
               y: reduce ? 0 : coverTitleY,
               x: reduce ? 0 : titleInteractionX,
             }}
-            className="pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.28em] lg:flex"
+            className="pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] lg:flex"
           >
             <span className="text-white/54">Chapter {String(index + 1).padStart(2, '0')}</span>
             <span className="mr-[1%] text-right text-white/58">

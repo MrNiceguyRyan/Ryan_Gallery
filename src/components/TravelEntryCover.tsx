@@ -144,7 +144,7 @@ export default function TravelEntryCover({ locations, frames }: Props) {
           <button
             type="button"
             onClick={() => setCoverGone(true)}
-            className="fixed left-4 top-4 z-10 inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.2em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+            className="fixed left-4 top-4 z-10 inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           >
             Skip entrance
           </button>
@@ -201,7 +201,7 @@ export default function TravelEntryCover({ locations, frames }: Props) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.22, ease: expo }}
-              className="font-ui text-[11px] uppercase tracking-[0.5em]"
+              className="font-ui text-[11px] uppercase tracking-[0.1em]"
               style={{
                 color:
                   'rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.85)',
@@ -243,7 +243,7 @@ export default function TravelEntryCover({ locations, frames }: Props) {
             animate={{ clipPath: 'inset(0 0 0 0%)' }}
             transition={{ duration: 0.65, delay: 0.12, ease: expo }}
           >
-            <span className="text-[13px] tracking-[0.2em] text-white/55">
+            <span className="text-[13px] tracking-[0.1em] text-white/55">
               Live Atlas
             </span>
             <span>

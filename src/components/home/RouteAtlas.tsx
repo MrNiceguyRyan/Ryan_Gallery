@@ -789,7 +789,7 @@ function LivingMarkerNode({
             x: labelX,
             color: labelColor,
           }}
-          className={`pointer-events-none absolute top-1/2 min-w-max -translate-y-1/2 whitespace-nowrap font-ui text-[10px] uppercase tracking-[0.2em] ${labelOnLeft ? 'right-[2.15rem] text-right' : 'left-[2.15rem]'}`}
+          className={`pointer-events-none absolute top-1/2 min-w-max -translate-y-1/2 whitespace-nowrap font-ui text-[10px] uppercase tracking-[0.1em] ${labelOnLeft ? 'right-[2.15rem] text-right' : 'left-[2.15rem]'}`}
         >
           <motion.span className="mr-[10px] inline-block text-[8px]" style={{ color: indexColor }}>
             {String(index + 1).padStart(2, '0')}
@@ -2876,13 +2876,13 @@ export default function RouteAtlas({
             <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_14px_rgba(210,255,0,0.75)]" />
             <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/72">The Route</p>
           </div>
-          <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.28em] text-white/54">Photographic coordinates</p>
+          <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Photographic coordinates</p>
         </div>
         <ScrubbedRouteOrdinal
           sample={chapterSample}
           route={chapterRoute}
           includeTotal
-          className="font-ui text-[9px] uppercase tracking-[0.26em] text-white/56"
+          className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/56"
         />
       </motion.header>}
 
@@ -2917,10 +2917,10 @@ export default function RouteAtlas({
                 transition={{ duration: reducedMotion ? 0 : 0.58, ease: [0.16, 1, 0.3, 1] }}
               >
                 <p className="route-atlas-overview-title font-serif text-[clamp(38px,13.8vw,54px)] uppercase leading-[0.78] tracking-[-0.055em] text-[#F4F4ED]">The Route</p>
-                <p className="mt-5 font-ui text-[9px] uppercase tracking-[0.22em] text-[#D2FF00]/78">{mappedStops.length} places · photographic atlas</p>
+                <p className="mt-5 font-ui text-[9px] uppercase tracking-[0.1em] text-[#D2FF00]/78">{mappedStops.length} places · photographic atlas</p>
               </motion.div>
             </div>
-            <span className="mb-1 shrink-0 font-ui text-[9px] uppercase tracking-[0.24em] text-white/54">Scroll to follow</span>
+            <span className="mb-1 shrink-0 font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Scroll to follow</span>
           </div>
         ) : (
           <div className="route-atlas-footer pt-5">

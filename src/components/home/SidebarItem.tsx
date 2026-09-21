@@ -101,7 +101,7 @@ export default function SidebarItem({ id, label, coverBase, idx, state, onActiva
 
       {/* Name */}
       <span
-        className={`text-[10px] md:text-[11px] uppercase tracking-[0.32em] font-black leading-none transition-[opacity,color,translate] duration-700 truncate w-full ${
+        className={`text-[10px] md:text-[11px] uppercase tracking-[0.1em] font-black leading-none transition-[opacity,color,translate] duration-700 truncate w-full ${
           isActive
             ? 'opacity-100 text-white'
             : 'opacity-25 group-hover:opacity-100 group-hover:translate-x-0.5'
