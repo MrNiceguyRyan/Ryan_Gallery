@@ -1359,10 +1359,16 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               >
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(231,225,207,0.055),transparent_42%)]" />
                 <div className="relative flex flex-col items-center gap-3 text-center">
-                  <motion.span
-                    className="h-1.5 w-1.5 rounded-full bg-[#D2FF00]"
-                    animate={prefersReduced || mapLoadFailed ? undefined : { opacity: [0.35, 1, 0.35] }}
-                    transition={{ duration: 1.65, repeat: Infinity, ease: 'easeInOut' }}
+                  {/* The house sends perpetual motion to CSS keyframes, where it
+                      runs on the compositor instead of competing with Mapbox for
+                      the main thread — and this was the last framer
+                      `repeat: Infinity` left in the tree, on the one surface
+                      whose whole job is to wait for that same thread. Identical
+                      look; `.soft-pulse` already carries its own reduced-motion
+                      path (global.css:1457). */}
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full bg-[#D2FF00] ${mapLoadFailed ? '' : 'soft-pulse'}`}
+                    style={{ ['--pulse-min' as never]: 0.35, ['--pulse-dur' as never]: '1.65s' }}
                   />
                   <p className="font-ui text-[8px] uppercase tracking-[0.1em] text-white/48">
                     {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}

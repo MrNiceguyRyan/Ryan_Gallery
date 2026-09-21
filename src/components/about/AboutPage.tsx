@@ -40,7 +40,9 @@ function SignatureScrub({ className = '' }: { className?: string }) {
         aria-hidden="true"
         focusable="false"
         className="block h-auto w-full"
-        style={{ overflow: 'visible', filter: 'drop-shadow(0 0 7px rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.24))' }}
+        // No drop-shadow: the pen is the pathLength scrub, and ink on paper
+        // does not bloom. Same argument the name's 44px halo lost.
+        style={{ overflow: 'visible' }}
       >
         {!reduce && (
           <defs>
@@ -622,9 +624,16 @@ export default function AboutPage({ settings, collections = [], builtAt }: Props
           <Reveal className="relative z-10 text-center">
             <SignatureScrub className="mx-auto mb-1 block w-[clamp(260px,31vw,440px)] max-w-full -rotate-[0.75deg] translate-x-[1%] select-none" />
             <h2 className="font-ui font-bold uppercase tracking-[-0.02em] leading-[0.96] text-[#F4F4ED]" style={{ fontSize: 'clamp(40px, 6.4vw, 96px)' }}>
-              Always <span className="font-serif italic font-normal" style={{ color: '#b2c73a' }}>chasing</span>
+              {/* One lime in the sentence. "chasing" carried a second, dimmer
+                  green (#b2c73a) that exists nowhere else on the site, so the
+                  line had two accents and the emphasis fell on neither. The
+                  verb takes page ink; only the light is lit. Italic 500 rather
+                  than 400 because Layout.astro loads `1,9..144,400..600`, so it
+                  is a real instance and one deliberate step against the
+                  Space Grotesk 700 around it. */}
+              Always <span className="font-serif font-medium italic">chasing</span>
               <br />
-              the <span className="font-serif italic font-normal" style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}>light.</span>
+              the <span className="font-serif font-medium italic" style={{ color: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))' }}>light.</span>
             </h2>
           </Reveal>
 
