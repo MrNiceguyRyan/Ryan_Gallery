@@ -901,7 +901,18 @@ export default function RouteAtlas({
   // Toggled on the marker elements directly: a React state change here would
   // re-render the whole atlas in the middle of a flight.
   const currentStopRef = useRef<string | null>(initialViewfinderPlace?.id ?? null);
+  // The place the camera is FLYING to. Until now the map had no way to say it:
+  // `plant(null)` fires 120ms after take-off, so for the whole 0.85–1.85s
+  // flight the destination was drawn exactly like every place the camera was
+  // not going to — the one mark the reader is watching was the one mark that
+  // said nothing.
+  const markInboundStop = (id: string | null) => {
+    routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
+      element.classList.toggle('is-inbound', !!id && element.dataset.afStop === id);
+    });
+  };
   const markCurrentStop = (id: string | null) => {
+    if (id) markInboundStop(null);
     currentStopRef.current = id;
     routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
       element.classList.toggle('is-current', element.dataset.afStop === id);
@@ -1553,6 +1564,7 @@ export default function RouteAtlas({
       // destination's point hides when the viewfinder locks on it.
       clearPlantTimers();
       const destId = chapterRoute[dest]?.stop.id ?? null;
+      markInboundStop(destId);
       if (plantedLocal !== destId) {
         plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
         plantTimers.push(window.setTimeout(() => plant(destId), Math.max(HOP.unplantDelay + 60, duration)));

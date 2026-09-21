@@ -653,7 +653,20 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
         onClick={() => onNavigate?.(stopId)}
       >
         <span className="af-point__ring" />
-        <span className="af-point__dot" />
+        {/* The place, drawn as the frame it is: the same four corners the
+            photograph at the reading line is held in, at a sixth the size. A
+            place on this route is a frame waiting to be read, and the plate in
+            the column is that frame enlarged with the picture in it — so the
+            map and the column are drawn in one hand. The corners splay when the
+            camera is elsewhere and close as it arrives, which is the focus rack
+            this archive already speaks, miniaturised. */}
+        <svg className="af-point__frame" viewBox="-10 -10 20 20" aria-hidden="true">
+          <g className="af-point__frame-g">
+            <path className="af-point__frame-halo" d="M-5.5,-2.5V-5.5H-2.5 M2.5,-5.5H5.5V-2.5 M5.5,2.5V5.5H2.5 M-2.5,5.5H-5.5V2.5" />
+            <path className="af-point__frame-ink" d="M-5.5,-2.5V-5.5H-2.5 M2.5,-5.5H5.5V-2.5 M5.5,2.5V5.5H2.5 M-2.5,5.5H-5.5V2.5" />
+          </g>
+          <circle className="af-point__frame-pip" r="1" />
+        </svg>
         <span className="af-point__focus" />
         <span className="af-point__label" aria-hidden="true">
           {String(number).padStart(2, '0')}&nbsp;·&nbsp;{name}
