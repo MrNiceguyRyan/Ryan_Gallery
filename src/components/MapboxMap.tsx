@@ -1162,7 +1162,22 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                           </motion.span>
                         </AnimatePresence>
                       </div>
-                      <span className={`pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-full border px-2.5 py-1 font-ui text-[10px] font-semibold uppercase tracking-[0.12em] backdrop-blur-md transition-colors duration-300 ${isActiveCluster || isHoveredCluster ? 'border-[#D2FF00]/35 bg-[#171b15]/90 text-[#D2FF00]' : 'border-white/12 bg-[#171b15]/82 text-white/78'}`}>
+                      {/* A cluster names a place too, so it is set the way the
+                          individual marks are: ink on the ground, not a chip.
+                          The COUNT is the interface object here and keeps its
+                          disc — the name beneath it does not need one as well. */}
+                      <span
+                        className="pointer-events-none absolute left-1/2 top-full mt-1.5 block -translate-x-1/2 whitespace-nowrap font-ui font-medium uppercase"
+                        style={{
+                          fontSize: isActiveCluster || isHoveredCluster ? 10 : 9,
+                          letterSpacing: isActiveCluster || isHoveredCluster ? '0.1em' : '0.12em',
+                          color: isActiveCluster || isHoveredCluster ? '#F4F4ED' : 'rgba(244,244,237,0.72)',
+                          textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
+                          transition: isActiveCluster || isHoveredCluster
+                            ? 'color 200ms cubic-bezier(0.16,1,0.3,1), font-size 200ms cubic-bezier(0.16,1,0.3,1), letter-spacing 200ms cubic-bezier(0.16,1,0.3,1)'
+                            : 'color 420ms cubic-bezier(0.16,1,0.3,1), font-size 420ms cubic-bezier(0.16,1,0.3,1), letter-spacing 420ms cubic-bezier(0.16,1,0.3,1)',
+                        }}
+                      >
                         {clusterLabel}
                       </span>
                     </motion.button>
@@ -1182,6 +1197,7 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
               const containerSize = coarsePointer ? Math.max(48, visualContainerSize) : visualContainerSize;
               const markerCoreSize = isActive ? 22 : isHovered ? 19 : 16;
               const labelOnLeft = city.lng > -82;
+              const engagedMark = isActive || isHovered;
 
               return (
                   <Marker
@@ -1274,19 +1290,53 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                           : `0 0 10px rgba(${DOT_RGB},0.2)`,
                       }}
                     />
+                    {/* A place says its name in ink. The name used to sit in a
+                        plate — a bordered, background-filled, backdrop-blurred
+                        chip — which is the vocabulary of a UI tooltip, not of a
+                        map: the homepage atlas sets its place names as bare
+                        type over the ground and reads as cartography for it.
+                        (The blur was also the one backdrop-filter on this page
+                        that MOVES with the map, so unlike the overlay controls
+                        it could never be cached by the compositor.) */}
                     <span
                       aria-hidden="true"
-                      className={`pointer-events-none absolute top-1/2 block max-w-28 -translate-y-1/2 truncate whitespace-nowrap rounded-[0.35rem] border px-2.5 py-1 font-ui text-[10px] font-semibold uppercase backdrop-blur-md transition-colors duration-300 ${isActive || isHovered ? 'border-[#D2FF00]/38 bg-[#171b15]/92 text-[#D2FF00]' : 'border-white/12 bg-[#171b15]/84 text-white/78'}`}
+                      className="pointer-events-none absolute top-1/2 block -translate-y-1/2 truncate whitespace-nowrap font-ui font-medium uppercase"
                       style={{
-                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 6}px)`,
-                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 6}px)` : 'auto',
-                        letterSpacing: coarsePointer ? '0.1em' : '0.14em',
-                        maxWidth: coarsePointer ? 96 : 112,
+                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 16}px)`,
+                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 16}px)` : 'auto',
+                        // Larger type, tighter tracking — the optical grade the
+                        // rest of the site now follows.
+                        fontSize: engagedMark ? 10 : 9,
+                        letterSpacing: engagedMark ? '0.1em' : '0.12em',
+                        color: engagedMark ? '#F4F4ED' : 'rgba(244,244,237,0.72)',
+                        textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
+                        maxWidth: coarsePointer ? 96 : 140,
+                        transition: engagedMark
+                          ? 'color 200ms cubic-bezier(0.16,1,0.3,1), font-size 200ms cubic-bezier(0.16,1,0.3,1), letter-spacing 200ms cubic-bezier(0.16,1,0.3,1)'
+                          : 'color 420ms cubic-bezier(0.16,1,0.3,1), font-size 420ms cubic-bezier(0.16,1,0.3,1), letter-spacing 420ms cubic-bezier(0.16,1,0.3,1)',
                         zIndex: 10,
                       }}
                     >
                       {city.city}
                     </span>
+                    {/* The leader that replaces the chip's edge: one hairline
+                        drawn from the mark towards its name, undrawn at rest. */}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-1/2 block h-px"
+                      style={{
+                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 3}px)`,
+                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 3}px)` : 'auto',
+                        width: 10,
+                        background: 'rgba(244,244,237,0.5)',
+                        transformOrigin: labelOnLeft ? 'right center' : 'left center',
+                        transform: `translateY(-50%) scaleX(${engagedMark ? 1 : 0})`,
+                        transition: engagedMark
+                          ? 'transform 220ms cubic-bezier(0.16,1,0.3,1)'
+                          : 'transform 380ms cubic-bezier(0.16,1,0.3,1)',
+                        zIndex: 10,
+                      }}
+                    />
                   </motion.button>
                   </div>
                 </Marker>
