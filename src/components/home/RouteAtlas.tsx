@@ -1748,8 +1748,36 @@ export default function RouteAtlas({
       lastHopTime = 0;
       hopFrame = requestAnimationFrame(hopStep);
     };
-    // Armed only now that wakeHop exists.
-    if (!reducedMotion) {
+    // Assert the resting pose on entry — which includes every resume after a
+    // story has covered the atlas, since this effect tears down and rebuilds on
+    // `paused`. `hopCenter`/`hopZoom` are re-initialised above to the committed
+    // chapter's exact resting pose, but the MAP is wherever it froze when the
+    // loop last stopped, and the loop stops as soon as its gap falls under
+    // 0.3px. Nothing ever closed that gap: the controller's own reading was
+    // zero while the place sat several pixels off its point, so returning from
+    // a story left it there for good. Measured before this: closing a story
+    // moved the landed place 5.1px and it never came back. A place on this map
+    // is a fixed point — say so, once, at the moment the camera takes over.
+    // Seed the controller from where the map ACTUALLY is, not from where it
+    // assumes it left off — then let it converge and snap as it always does.
+    //
+    // This effect tears down and rebuilds whenever the atlas is paused, which a
+    // story does every time it covers it. On rebuild `hopCenter`/`hopZoom` were
+    // re-initialised to the committed chapter's ideal resting pose while the
+    // MAP stayed wherever the loop froze — and the loop freezes as soon as its
+    // gap falls under 0.3px. So the controller read a gap of zero while the
+    // place sat several pixels off its point, and nothing ever closed it:
+    // measured, closing a story moved the landed place 5.1px and it never came
+    // back. Seeding from the live camera makes the gap real again, and the
+    // existing settle-and-snap at the end of hopStep does the rest.
+    //
+    // (`prologue` is a capability — "this atlas HAS an opening" — and stays true
+    // deep in the archive. Whether the opening has FINISHED is queuedPrologue.)
+    if (chapterMode() && queuedPrologue >= 1 && !voyageState && queuedEntry > 0.98) {
+      const live = map.getCenter();
+      hopCenter = [live.lng, live.lat];
+      hopZoom = map.getZoom();
+      wakeHop();
     }
 
     const draw: Process = () => {
