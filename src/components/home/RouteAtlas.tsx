@@ -169,17 +169,6 @@ const HOP = {
   restartSnapMs: 900,
   // When a voyage is cut short, its time-driven entry eases onto the scroll's.
   voyageBlendMs: 320,
-  // Left alone in the archive for this long, the resting camera begins a slow
-  // sway (the globe's idle drift, brought down to the map); any input ends it.
-  // Long enough that it never interrupts a reading in progress, short enough
-  // that a visitor who stops to look actually sees it.
-  idleMs: 30000,
-  idleLeaveMs: 750,
-  // A pointer must travel this far to count as the reader coming back.
-  idleWakePx: 24,
-  idleSwayPx: 11,
-  idleSwayZoom: 0.01,
-  idlePeriodMs: 11000,
   settleStateMs: 120,
 } as const;
 // Take-off gathers speed over the first third; the landing is firm rather
@@ -1330,13 +1319,26 @@ export default function RouteAtlas({
     // exactly where it was before the canvas grew.
     // The camera's focal point sits on the reading line, where the chapter's
     // photograph is: a bottom padding lifts the centre of the padded box up to
-    // it. Measured once per layout, never per frame.
-    const focusBox = map.getContainer().getBoundingClientRect();
-    const focalTarget = ATLAS_READING_LINE * window.innerHeight - focusBox.top;
+    // it. DERIVED, not measured. This block runs once per layout, and the
+    // container's position in the viewport is scroll-dependent until the atlas
+    // stage pins — so a rect read at the wrong scroll baked a wrong focal point
+    // in for the rest of the session. It did: the bottom padding came out 0
+    // where it should have been 84, and every place therefore landed 42px BELOW
+    // the cross the viewfinder draws, on every chapter, for the whole session.
+    //
+    // Whenever the camera matters the stage IS pinned, and pinned means the
+    // canvas sits at exactly -CANVAS_BLEED with the viewport's height plus one
+    // bleed on each edge. That geometry can be computed, so it is.
+    const focusHeight = window.innerHeight + 2 * CANVAS_BLEED;
+    const focalTarget = ATLAS_READING_LINE * window.innerHeight + CANVAS_BLEED;
+    // Signed: when the focal point sits below the box's centre the correction
+    // belongs on `top` instead. The old `Math.max(0, …)` threw that half away
+    // silently, which is exactly how a focal point can be wrong and never say so.
+    const focalBottom = Math.round(focusHeight + FOCAL_PADDING.top - 2 * focalTarget);
     const activePadding = {
-      top: FOCAL_PADDING.top,
+      top: FOCAL_PADDING.top + Math.max(0, -focalBottom),
       right: FOCAL_PADDING.right + (prologue ? canvasExtension : 0),
-      bottom: Math.max(0, Math.round(focusBox.height + FOCAL_PADDING.top - 2 * focalTarget)),
+      bottom: Math.max(0, focalBottom),
       left: 0,
     };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -1616,44 +1618,18 @@ export default function RouteAtlas({
       else launch(next, now);
     };
 
-    // Idle sway: left alone over a chapter the resting camera breathes. It
-    // eases in over one period and, on the first sign the reader is back,
-    // eases out over `idleLeaveMs` rather than snapping — the sway leaves the
-    // way it arrived. A pointer drifting a few pixels is not a return.
-    let lastInput = performance.now();
-    let idleTimer = 0;
-    let idleSince = 0;
-    let swayGain = 0;
-    // Where the running breath started, kept so it can finish its arc while
-    // the gain eases back to zero.
-    let swayPhaseStart = 0;
-    let pointerMark: [number, number] | null = null;
-    const idleActive = () => !reducedMotion && lastInput + HOP.idleMs <= performance.now() && chapterMode() && !flight && !voyageState;
-    const noteInput = () => {
-      lastInput = performance.now();
-      idleSince = 0;
-      window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(wakeHop, HOP.idleMs + 20);
-      // The sway is still on the camera: keep stepping so it can ease out.
-      if (swayGain > 0) wakeHop();
-    };
-    const notePointer = (event: PointerEvent) => {
-      const previous = pointerMark;
-      pointerMark = [event.clientX, event.clientY];
-      if (previous && Math.hypot(event.clientX - previous[0], event.clientY - previous[1]) < HOP.idleWakePx) return;
-      noteInput();
-    };
+    // There used to be an idle sway here: left alone over a chapter for 30s the
+    // resting camera drifted ±11px on an 11-second sine with a 0.01 zoom
+    // breath. It was deliberate and it was the wrong instinct for this page —
+    // a place on this map is a FIXED point, and a background that wanders while
+    // the reader is reading is the map sliding out from under the photograph
+    // it is supposed to be holding still for. A landed camera now holds.
     const hopStep = (time: number) => {
       hopFrame = 0;
       if (disposed) return;
       const dt = lastHopTime ? Math.min(64, time - lastHopTime) : 16.7;
       lastHopTime = time;
       const now = performance.now();
-      const idle = idleActive();
-      if (idle && !idleSince) idleSince = now;
-      // One persistent gain, eased in over a period and out over idleLeaveMs.
-      const gainStep = dt / (idle ? HOP.idlePeriodMs : HOP.idleLeaveMs);
-      swayGain = clamp01(idle ? swayGain + gainStep : swayGain - gainStep);
       if (flight) {
         const t = clamp01((now - flight.start) / flight.duration);
         const s = flight.ease(t);
@@ -1687,23 +1663,8 @@ export default function RouteAtlas({
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
         }
-        if (swayGain > 0) {
-          // The sway rides on whatever the resting pose is — the scroll usually
-          // leaves the camera leaning a little toward the next place. The
-          // phase keeps running while it eases out, so the breath finishes
-          // its arc instead of being cut.
-          if (idle) swayPhaseStart = idleSince;
-          const phase = (now - swayPhaseStart) / HOP.idlePeriodMs;
-          const swayDegrees = (HOP.idleSwayPx * 360) / (512 * 2 ** restZoom(committed));
-          const gain = smootherstep(swayGain);
-          targetCenter = [
-            targetCenter[0] + gain * swayDegrees * Math.sin(phase * 2 * Math.PI),
-            targetCenter[1] + gain * swayDegrees * 0.55 * Math.sin(phase * 2 * Math.PI * 0.7 + 1.1),
-          ];
-          targetZoom -= gain * HOP.idleSwayZoom * (0.5 - 0.5 * Math.cos(phase * 2 * Math.PI * 0.5));
-        }
       }
-      const follow = 1 - Math.exp(-dt / (swayGain > 0 ? HOP.followMs * 4 : HOP.followMs));
+      const follow = 1 - Math.exp(-dt / HOP.followMs);
       hopCenter = [
         hopCenter[0] + (targetCenter[0] - hopCenter[0]) * follow,
         hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
@@ -1732,7 +1693,7 @@ export default function RouteAtlas({
       const driven = drivenEntry(now);
       if (driven != null) voyageEntry.set(driven);
       schedule(queuedSample);
-      if (flight || settling || idle || swayGain > 0 || (voyageState && voyageState.dive) || entryBlend) hopFrame = requestAnimationFrame(hopStep);
+      if (flight || settling || (voyageState && voyageState.dive) || entryBlend) hopFrame = requestAnimationFrame(hopStep);
       else lastHopTime = 0;
     };
     const endVoyage = () => {
@@ -1777,9 +1738,6 @@ export default function RouteAtlas({
     };
     // Armed only now that wakeHop exists.
     if (!reducedMotion) {
-      ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteInput, { passive: true }));
-      window.addEventListener('pointermove', notePointer, { passive: true });
-      idleTimer = window.setTimeout(wakeHop, HOP.idleMs + 20);
     }
 
     const draw: Process = () => {
@@ -2083,11 +2041,8 @@ export default function RouteAtlas({
     return () => {
       voyageHandlerRef.current = null;
       voyageEntry.set(-1);
-      window.clearTimeout(idleTimer);
       window.clearTimeout(cameraStateTimer);
       if (typeof document !== 'undefined') delete document.documentElement.dataset.atlasCamera;
-      ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteInput));
-      window.removeEventListener('pointermove', notePointer);
       ['wheel', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteReaderDrove));
       disposed = true;
       unsubscribe();
