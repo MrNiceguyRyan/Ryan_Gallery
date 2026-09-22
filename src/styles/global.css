@@ -335,28 +335,6 @@ html.lenis body {
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-/* THE PLATES on /about reuse the map's landmark drawings, so they inherit the
-   map's ink classes — which are bone white with a dark burn under them, correct
-   on a satellite ground and wrong on a flat page. Here the drawing takes the
-   region's colour from `currentColor`, and the burn and the solid body are
-   dropped: there is no route hairline to hide behind on this page, and a dark
-   mass inside a coloured outline reads as a hole. */
-.plate__glyph .af-place__ink { stroke: currentColor; }
-.plate__glyph .af-place__soft { stroke: currentColor; opacity: 0.5; }
-.plate__glyph .af-place__fill { fill: currentColor; }
-.plate__glyph .af-place__burn,
-.plate__glyph .af-place__body { display: none; }
-.plate__disc {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.plate__pip { fill: currentColor; }
-/* Hover brightens the plate's own edge rather than moving anything: this is a
-   wall of collected marks, and marks on a wall do not jump. */
-.group:hover .plate__edge { opacity: 0.55; }
-
 .af-place__fill {
   fill: rgba(244, 244, 237, 0.9);
   stroke: none;

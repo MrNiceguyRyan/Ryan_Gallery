@@ -4,7 +4,6 @@ import type { Collection, SiteSettings } from '../../types';
 import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
 import { useInViewOnce } from '../../lib/useInViewOnce';
-import { landmarkFor, regionInk } from '../../lib/placeLandmarks';
 
 const expo = [0.16, 1, 0.3, 1] as const;
 
@@ -218,11 +217,7 @@ function ColophonBlock({ rows, footer }: { rows: Array<[string, ReactNode]>; foo
   );
 }
 
-type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'> & {
-  slug?: string;
-  region?: string;
-  routeOrder?: number;
-};
+type ArchiveCollection = Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>;
 
 /** Reduced from the frames themselves in about.astro, so it cannot drift. */
 export interface ArchiveFiguresData {
@@ -239,103 +234,6 @@ interface Props {
   figures?: ArchiveFiguresData;
   /** ISO timestamp stamped by about.astro at build time. */
   builtAt?: string;
-}
-
-/**
- * THE PLATES — one per chapter, the archive as a set of collected marks.
- *
- * This is where the place marks get to be read rather than glanced at. On the
- * map a landmark is 30px at its largest and carries no type; here it is 64px
- * with the chapter's number, name, region and frame count around it, which is
- * the whole point of a plate: the map is for finding, the plate is for having.
- *
- * Colour enters HERE and nowhere on the map. That is the site's standing rule
- * — marks on the map are white ink, colour belongs to the interface — and this
- * page is interface. What the colour says is the region (see REGION_INK): the
- * chapter is told apart by its drawing, so colour is free to do the job the
- * drawing cannot, which is to group Miami with Orlando and Zion with Bryce.
- */
-function PlateWall({ chapters }: { chapters: ArchiveCollection[] }) {
-  if (!chapters.length) return null;
-  return (
-    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {chapters.map((chapter, index) => {
-        const landmark = landmarkFor(chapter.slug);
-        const ink = regionInk(chapter.region);
-        const frames = chapter.photoCount ?? 0;
-        const body = (
-          <>
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-[14px] ring-1"
-              style={{ ['--tw-ring-color' as never]: ink, opacity: 0.4 }}
-            />
-            <span
-              aria-hidden="true"
-              className="plate__edge pointer-events-none absolute inset-0 rounded-[14px] ring-1 opacity-0 transition-opacity duration-200"
-              style={{ ['--tw-ring-color' as never]: ink }}
-            />
-            {/* The mark, then its legend. A first pass put the drawing alone in
-                the bottom-right corner with the name in the top-left, which
-                left a void down the middle of every plate and made the mark
-                read as an ornament instead of the subject. The glyph is
-                authored base-on-zero (see placeLandmarks) and is scaled up and
-                set on the cell's baseline — nothing here anchors to a
-                coordinate, so it is not lifted the way the map's marks are. */}
-            <span className="relative z-10 flex items-end gap-4">
-              <svg
-                className="plate__glyph ml-0.5 h-[74px] w-[74px] shrink-0 overflow-visible"
-                viewBox="-22 -22 44 44"
-                aria-hidden="true"
-                style={{ color: ink }}
-              >
-                {landmark ? (
-                  <g
-                    transform="translate(0 15) scale(1.28)"
-                    dangerouslySetInnerHTML={{ __html: landmark.full }}
-                  />
-                ) : (
-                  /* No drawing yet: the benchmark disc, exactly as on the map. */
-                  <g>
-                    <circle className="plate__disc" r="11" />
-                    <circle className="plate__disc" r="8.6" style={{ opacity: 0.55 }} />
-                    <circle className="plate__pip" r="1.5" />
-                  </g>
-                )}
-              </svg>
-              <span className="min-w-0 flex-1">
-                <span className="block font-serif text-[20px] leading-[1.12] tracking-[-0.01em]" style={{ color: ink }}>
-                  {chapter.name}
-                </span>
-                <span className="mt-1.5 block font-ui text-[9.5px] uppercase leading-[1.6] tracking-[0.1em] text-white/45">
-                  {chapter.region || chapter.location || '—'}
-                  <br />
-                  <span className="tabular-nums">
-                    {frames} {frames === 1 ? 'frame' : 'frames'} · {chapter.year ?? '—'}
-                  </span>
-                </span>
-              </span>
-              <span className="self-start font-ui text-[10px] tabular-nums tracking-[0.1em] text-white/35">
-                {String(index + 1).padStart(2, '0')}
-              </span>
-            </span>
-          </>
-        );
-        const shell = 'group relative block rounded-[14px] bg-white/[0.015] px-4 pb-4 pt-5';
-        return (
-          <li key={chapter._id}>
-            {chapter.slug ? (
-              <a href={`/works/${chapter.slug}`} className={`${shell} block hover:bg-white/[0.035]`}>
-                {body}
-              </a>
-            ) : (
-              <div className={shell}>{body}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
 }
 
 /**
@@ -427,17 +325,6 @@ export default function AboutPage({ settings, collections = [], figures, builtAt
   const firstYear = chapterYears.length ? Math.min(...chapterYears) : null;
   const lastYear = chapterYears.length ? Math.max(...chapterYears) : null;
   const yearSpan = firstYear == null ? '' : firstYear === lastYear ? String(firstYear) : `${firstYear}–${lastYear}`;
-  // The plates read in the archive's own route order, which is the order the
-  // homepage and /travel both read in. The query sorts by year desc, so without
-  // this the wall would run backwards against every other index on the site.
-  const plateChapters = [...publishedChapters].sort((a, b) => {
-    const ao = a.routeOrder;
-    const bo = b.routeOrder;
-    if (Number.isFinite(ao) && Number.isFinite(bo)) return (ao as number) - (bo as number);
-    if (Number.isFinite(ao)) return -1;
-    if (Number.isFinite(bo)) return 1;
-    return (b.year ?? 0) - (a.year ?? 0);
-  });
   const archiveSpan = yearSpan || null;
   const updatedOn = builtAt
     ? new Date(builtAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' })
@@ -840,33 +727,24 @@ export default function AboutPage({ settings, collections = [], figures, builtAt
         </div>
       </section>
 
-      {/* ═══════ THE ARCHIVE — the page's missing middle.
+      {/* ═══════ THE LOG — the page's missing middle.
            This page went hero → sign-off in 2.1 screens, which read as a
-           profile with nothing to be about. What belongs between them is the
-           thing the profile keeps referring to: the archive itself, as a set
-           of plates and as a set of numbers. Both are derived — the plates
-           from the collections, the figures from the frames — so the middle
-           grows on its own every time a chapter lands. ═══════ */}
+           profile with nothing to be about, while the profile block itself
+           carried a line — "LOG · Personal archive, selected frames only" —
+           making a claim the page never showed. Every figure is reduced from
+           the frames at build time in about.astro, so the middle grows on its
+           own each time a chapter lands and none of it can be wrong by hand.
+           A wall of per-chapter plates stood here too; it was pulled for now.
+           ═══════ */}
       <section className="safe-inline-page mx-auto mt-16 max-w-5xl md:mt-24">
         <Reveal>
           <div className="flex items-baseline justify-between gap-6 border-b border-white/[0.1] pb-3">
-            <h2 className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/52">The archive</h2>
-            <span className="font-ui text-[10px] uppercase tabular-nums tracking-[0.1em] text-white/35">
-              {plateChapters.length} chapters · {frameTotal} frames
-            </span>
+            <h2 className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/52">The log</h2>
+            <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/35">Counted, not claimed</span>
           </div>
         </Reveal>
         <Reveal delay={0.06} className="mt-7">
-          <PlateWall chapters={plateChapters} />
-        </Reveal>
-        <Reveal delay={0.12} className="mt-14 md:mt-16">
-          <div className="flex items-baseline justify-between gap-6 border-b border-white/[0.1] pb-3">
-            <h3 className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/52">The log</h3>
-            <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/35">Counted, not claimed</span>
-          </div>
-          <div className="mt-7">
-            <ArchiveFigures figures={figures} chapters={plateChapters.length} span={archiveSpan} />
-          </div>
+          <ArchiveFigures figures={figures} chapters={publishedChapters.length} span={archiveSpan} />
         </Reveal>
       </section>
 
