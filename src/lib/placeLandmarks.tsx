@@ -28,6 +28,24 @@
  *   far (scale 0.52, 16px)  the benchmark disc. Every place, identical, calm.
  *   near (scale 0.92 / 1)   the place's own landmark, drawn.
  *
+ * EVERY SUBJECT IS TRACED FROM THE ARCHIVE'S OWN FRAMES.
+ *
+ * This is a rule, not a preference, and it was learned the hard way: the first
+ * set was drawn from memory of what these places are famous for, and four of
+ * six subjects turned out to appear in NONE of the photographs. Miami got a
+ * lifeguard tower that is in no frame. Page got Horseshoe Bend, while all
+ * eleven Page frames are inside Antelope Canyon. New York got the Empire State
+ * Building, and the New York chapter is two frames of a street corner. Orlando
+ * got a castle — which is both absent from the archive's own position ("Away
+ * from the spectacle", EDITORIAL_FALLBACKS in narratives.tsx) and somebody
+ * else's trademarked silhouette on a public site.
+ *
+ * So: open the chapter's frames, count what is actually in them, and draw
+ * that. The count is recorded in each `subject` so the next person can check
+ * the claim instead of trusting it. Where the archive's prose names a thing
+ * (`narratives.tsx`), the drawing agrees with the prose — the photographs and
+ * the writing are the same archive and should not disagree about what is here.
+ *
  * DRAWING CONVENTION. Landmarks are authored STANDING: the object's base sits
  * on y = 0 and it rises into negative y, which is how you draw a thing that
  * stands somewhere. But the Mapbox Marker anchors `center`, so a glyph left
@@ -40,7 +58,7 @@
 export const LANDMARK_VIEWBOX = '-22 -22 44 44';
 
 export interface PlaceLandmark {
-  /** What is drawn, and why it is the right subject for this place. */
+  /** What is drawn, and the count of frames in this chapter that support it. */
   subject: string;
   /**
    * The drawing's standing height. The component lifts by half of it, which is
@@ -63,73 +81,78 @@ export interface PlaceLandmark {
   silhouette: string;
 }
 
-/**
- * Keyed by collection slug. The subjects are the landmark a reader already
- * recognises, which is a deliberate choice: these marks have to be legible to
- * someone who has not seen the photographs yet, since the mark is how they
- * decide whether to go and look.
- */
+/** Keyed by collection slug. */
 export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
   miami: {
-    body: 'M-8.8,-11.4L0,-16.4L8.8,-11.4Z M-6.4,-11.4H6.4V-5.2H-6.4Z M-6,-5.2H-5.2V0H-6Z M5.2,-5.2H6V0H5.2Z',
-    height: 20.2,
-    subject: 'An Art Deco lifeguard tower — the silhouette that means Miami Beach and nothing else.',
-    full: `<path class="af-place__burn" d="M-6.4,-5.2V-11.4H6.4V-5.2 M-8.8,-11.4L0,-16.4L8.8,-11.4"/>
-      <path class="af-place__ink" d="M-5.6,0V-5.2 M5.6,0V-5.2"/>
-      <path class="af-place__ink" d="M-7.8,-5.2H7.8"/>
-      <path class="af-place__ink" d="M-6.4,-5.2V-11.4H6.4V-5.2"/>
-      <path class="af-place__ink" d="M-8.8,-11.4L0,-16.4L8.8,-11.4Z"/>
-      <path class="af-place__ink" d="M0,-16.4V-20.2"/>
-      <path class="af-place__ink" d="M0,-20.2L4.2,-18.9L0,-17.6"/>
-      <path class="af-place__soft" d="M-2.4,-9.6H2.4"/>`,
-    silhouette: `<path class="af-place__burn" d="M-6.4,-5.2V-11.4H6.4V-5.2 M-8.8,-11.4L0,-16.4L8.8,-11.4"/>
-      <path class="af-place__ink" d="M-5.6,0V-5.2 M5.6,0V-5.2 M-7.8,-5.2H7.8 M-6.4,-5.2V-11.4H6.4V-5.2"/>
-      <path class="af-place__ink" d="M-8.8,-11.4L0,-16.4L8.8,-11.4Z"/>
-      <path class="af-place__ink" d="M0,-16.4V-20.2"/>`,
+    subject:
+      'An Art Deco hotel facade: stepped ziggurat parapet, eyebrow bands, and the vertical sign lit. Frame 5 of 15 is exactly this building; the archive\'s own prose names it — "the pastel geometry of Art Deco facades… and the neon beginning its slow assertion".',
+    height: 16.6,
+    body: 'M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0Z M-12.4,-4.4H-9.6V-16.6H-12.4Z',
+    full: `<path class="af-place__burn" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0 M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>
+      <path class="af-place__ink" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0"/>
+      <path class="af-place__ink" d="M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>
+      <circle class="af-place__fill" cx="-11" cy="-14.4" r="0.75"/>
+      <circle class="af-place__fill" cx="-11" cy="-11.8" r="0.75"/>
+      <circle class="af-place__fill" cx="-11" cy="-9.2" r="0.75"/>
+      <circle class="af-place__fill" cx="-11" cy="-6.6" r="0.75"/>
+      <path class="af-place__soft" d="M-7,-8H7 M-7,-4.4H7"/>`,
+    silhouette: `<path class="af-place__burn" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0 M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>
+      <path class="af-place__ink" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0"/>
+      <path class="af-place__ink" d="M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>`,
   },
   orlando: {
-    body: 'M-3.2,0V-10.6L0,-17L3.2,-10.6V0Z M-8.4,0V-7.6L-5.8,-12.2L-3.2,-7.6V0Z M8.4,0V-7.6L5.8,-12.2L3.2,-7.6V0Z',
-    height: 20.4,
-    subject: 'The castle — three spires. Orlando is a city that exists to be gone to, and this is the shape of the going.',
-    full: `<path class="af-place__burn" d="M-3.2,0V-10.6L0,-17L3.2,-10.6V0 M-8.4,0V-7.6L-5.8,-12.2L-3.2,-7.6 M8.4,0V-7.6L5.8,-12.2L3.2,-7.6"/>
-      <path class="af-place__ink" d="M-3.2,0V-10.6L0,-17L3.2,-10.6V0"/>
-      <path class="af-place__ink" d="M-8.4,0V-7.6L-5.8,-12.2L-3.2,-7.6"/>
-      <path class="af-place__ink" d="M8.4,0V-7.6L5.8,-12.2L3.2,-7.6"/>
-      <path class="af-place__ink" d="M0,-17V-20.4L3.4,-19.2L0,-18"/>
-      <path class="af-place__ink" d="M-1.7,0V-3.8A1.7,1.7 0 0 1 1.7,-3.8V0"/>
-      <path class="af-place__soft" d="M-5.8,-12.2V-14.6 M5.8,-12.2V-14.6 M-8.4,-7.6H-3.2 M3.2,-7.6H8.4"/>`,
-    silhouette: `<path class="af-place__burn" d="M-3.2,0V-10.6L0,-17L3.2,-10.6V0 M-8.4,0V-7.6L-5.8,-12.2L-3.2,-7.6 M8.4,0V-7.6L5.8,-12.2L3.2,-7.6"/>
-      <path class="af-place__ink" d="M-3.2,0V-10.6L0,-17L3.2,-10.6V0"/>
-      <path class="af-place__ink" d="M-8.4,0V-7.6L-5.8,-12.2L-3.2,-7.6"/>
-      <path class="af-place__ink" d="M8.4,0V-7.6L5.8,-12.2L3.2,-7.6"/>
-      <path class="af-place__ink" d="M0,-17V-20.4L3.4,-19.2L0,-18"/>`,
+    subject:
+      'A roller coaster: the vertical loop with its track and stanchions. Six of the seventeen Orlando frames are coasters — the single dominant subject in the largest chapter in the archive. A loop is a form, not a trademark, which the castle it replaced was.',
+    height: 15,
+    body: '',
+    full: `<path class="af-place__burn" d="M-12.6,-1.8H12.6"/>
+      <circle class="af-place__burn" cx="1.6" cy="-8.6" r="6.4"/>
+      <path class="af-place__ink" d="M-12.6,-1.8H12.6"/>
+      <circle class="af-place__ink" cx="1.6" cy="-8.6" r="6.4"/>
+      <path class="af-place__soft" d="M-8.4,-1.8V0 M-3.6,-1.8V0 M6.6,-1.8V0 M11,-1.8V0 M1.6,-2.2V0"/>
+      <path class="af-place__soft" d="M-4.8,-8.6H-3 M8,-8.6H9.8"/>`,
+    silhouette: `<path class="af-place__burn" d="M-12.6,-1.8H12.6"/>
+      <circle class="af-place__burn" cx="1.6" cy="-8.6" r="6.4"/>
+      <path class="af-place__ink" d="M-12.6,-1.8H12.6"/>
+      <circle class="af-place__ink" cx="1.6" cy="-8.6" r="6.4"/>`,
   },
   page: {
-    body: 'M-11,-15.2C-11,-4 -6.4,0 0,0C6.4,0 11,-4 11,-15.2L8.2,-15.2C8.2,-5.4 4.8,-2.8 0,-2.8C-4.8,-2.8 -8.2,-5.4 -8.2,-15.2Z',
-    height: 19,
-    subject: 'Horseshoe Bend — the river drawn as the channel it cut, wrapping a rock left empty.',
-    full: `<path class="af-place__burn" d="M-11,-15.2C-11,-4 -6.4,0 0,0C6.4,0 11,-4 11,-15.2 M-8.2,-15.2C-8.2,-5.4 -4.8,-2.8 0,-2.8C4.8,-2.8 8.2,-5.4 8.2,-15.2"/>
-      <path class="af-place__ink" d="M-11,-15.2C-11,-4 -6.4,0 0,0C6.4,0 11,-4 11,-15.2"/>
-      <path class="af-place__ink" d="M-8.2,-15.2C-8.2,-5.4 -4.8,-2.8 0,-2.8C4.8,-2.8 8.2,-5.4 8.2,-15.2"/>
-      <path class="af-place__soft" d="M-11,-15.2V-19 M-8.2,-15.2V-19 M11,-15.2V-19 M8.2,-15.2V-19"/>`,
-    silhouette: `<path class="af-place__burn" d="M-11,-15.2C-11,-4 -6.4,0 0,0C6.4,0 11,-4 11,-15.2 M-8.2,-15.2C-8.2,-5.4 -4.8,-2.8 0,-2.8C4.8,-2.8 8.2,-5.4 8.2,-15.2"/>
-      <path class="af-place__ink" d="M-11,-15.2C-11,-4 -6.4,0 0,0C6.4,0 11,-4 11,-15.2"/>
-      <path class="af-place__ink" d="M-8.2,-15.2C-8.2,-5.4 -4.8,-2.8 0,-2.8C4.8,-2.8 8.2,-5.4 8.2,-15.2"/>`,
+    subject:
+      'The Antelope Canyon slot: two sinuous layered walls closing toward a sliver of sky. All eleven Page frames are inside this canyon, and the prose names it outright — "Inside Antelope Canyon the sandstone narrows until sound itself seems muffled."',
+    height: 18.4,
+    body: 'M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4L-13.6,-18.4V0Z M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4L11.6,-18.4V0Z',
+    full: `<path class="af-place__burn" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4 M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>
+      <path class="af-place__ink" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4"/>
+      <path class="af-place__ink" d="M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>
+      <path class="af-place__soft" d="M-8,0C-6.4,-4.4 -8.6,-8 -4.8,-11.4C-3.2,-12.8 -2.8,-15.6 -3.4,-18.4 M5,0C3.6,-5 6,-8.6 1.4,-12.2C0,-13.4 -0.2,-16 0.2,-18.4"/>`,
+    silhouette: `<path class="af-place__burn" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4 M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>
+      <path class="af-place__ink" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4"/>
+      <path class="af-place__ink" d="M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>`,
   },
   'zion-national-park': {
-    body: 'M-12.5,0L-5.5,-9.4L-1,-17.2L4,-9L12.5,0Z',
-    height: 17.2,
-    subject: 'The Watchman — the peak that stands over the south entrance, layered.',
-    full: `<path class="af-place__burn" d="M-12.5,0L-5.5,-9.4L-1,-17.2L4,-9L12.5,0"/>
-      <path class="af-place__ink" d="M-12.5,0L-5.5,-9.4L-1,-17.2L4,-9L12.5,0"/>
-      <path class="af-place__soft" d="M-7.2,-6.6H6.4 M-9.6,-3.4H9.8 M-1,-17.2L-3.4,-9"/>`,
-    silhouette: `<path class="af-place__burn" d="M-12.5,0L-5.5,-9.4L-1,-17.2L4,-9L12.5,0"/>
-      <path class="af-place__ink" d="M-12.5,0L-5.5,-9.4L-1,-17.2L4,-9L12.5,0"/>`,
+    subject:
+      'The stone entrance monument: a masonry pillar with the beam and hanging sign board. Two of the eight Zion frames are this marker, and it is chosen over another red summit because Bryce already owns rock — a second sandstone peak would make the two Utah chapters indistinguishable at 30px. The emblem on the board is left blank: the arrowhead is a National Park Service mark.',
+    height: 14.6,
+    body: 'M-4.6,0V-14.6H4.6V0Z M-12,-12.2H-7V-8.4H-12Z',
+    full: `<path class="af-place__burn" d="M-4.6,0V-14.6H4.6V0 M-5.8,-14.6H5.8 M-5.8,-13H-12.6 M-12,-12.2H-7V-8.4H-12Z"/>
+      <path class="af-place__ink" d="M-4.6,0V-14.6H4.6V0"/>
+      <path class="af-place__ink" d="M-5.8,-14.6H5.8"/>
+      <path class="af-place__ink" d="M-5.8,-13H-12.6"/>
+      <path class="af-place__ink" d="M-11.2,-13V-12.2 M-7.8,-13V-12.2"/>
+      <path class="af-place__ink" d="M-12,-12.2H-7V-8.4H-12Z"/>
+      <path class="af-place__soft" d="M-4.6,-11H4.6 M-4.6,-7.4H4.6 M-4.6,-3.8H4.6"/>
+      <path class="af-place__soft" d="M-2.2,-11.4H2.2V-6.8H-2.2Z"/>`,
+    silhouette: `<path class="af-place__burn" d="M-4.6,0V-14.6H4.6V0 M-5.8,-14.6H5.8 M-5.8,-13H-12.6 M-12,-12.2H-7V-8.4H-12Z"/>
+      <path class="af-place__ink" d="M-4.6,0V-14.6H4.6V0"/>
+      <path class="af-place__ink" d="M-5.8,-14.6H5.8"/>
+      <path class="af-place__ink" d="M-5.8,-13H-12.6"/>
+      <path class="af-place__ink" d="M-12,-12.2H-7V-8.4H-12Z"/>`,
   },
   'bryce-canyon-national-park': {
-    body: 'M-9.4,0L-8.7,-9L-8,0Z M-5.4,0L-4.6,-13L-3.8,0Z M-1.2,0L-0.6,-7.4L0,0Z M3,0L3.8,-15L4.6,0Z M7.4,0L8.1,-6.6L8.8,0Z',
+    subject:
+      'The hoodoos: tapered spires under their cap rocks. The cap is what makes a hoodoo a hoodoo, and the prose says so — "the tallest capped with harder dolomite that protected them while everything around eroded away". The only subject in the first set that the frames already supported.',
     height: 15,
-    subject: 'The hoodoos — tapered spires under their cap rocks. The cap is what makes a hoodoo a hoodoo.',
+    body: 'M-9.4,0L-8.7,-9L-8,0Z M-5.4,0L-4.6,-13L-3.8,0Z M-1.2,0L-0.6,-7.4L0,0Z M3,0L3.8,-15L4.6,0Z M7.4,0L8.1,-6.6L8.8,0Z',
     full: `<path class="af-place__burn" d="M-9.4,0L-8.7,-9L-8,0 M-5.4,0L-4.6,-13L-3.8,0 M-1.2,0L-0.6,-7.4L0,0 M3,0L3.8,-15L4.6,0 M7.4,0L8.1,-6.6L8.8,0"/>
       <path class="af-place__ink" d="M-9.4,0L-8.7,-9L-8,0 M-5.4,0L-4.6,-13L-3.8,0 M-1.2,0L-0.6,-7.4L0,0 M3,0L3.8,-15L4.6,0 M7.4,0L8.1,-6.6L8.8,0"/>
       <path class="af-place__ink" d="M-9.7,-9H-7.7 M-5.7,-13H-3.5 M-1.5,-7.4H0.3 M2.6,-15H5 M7.1,-6.6H9.1"/>
@@ -139,16 +162,23 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <path class="af-place__ink" d="M-9.7,-9H-7.7 M-5.7,-13H-3.5 M2.6,-15H5"/>`,
   },
   'new-york-stories': {
-    body: 'M-7.4,0V-7.6H-4.6V-13.4H-2.6V-17.6H2.6V-13.4H4.6V-7.6H7.4V0Z',
-    height: 21,
-    subject: 'The Empire State Building — the setbacks and the mast, the one New York silhouette that needs no skyline around it.',
-    full: `<path class="af-place__burn" d="M-7.4,0V-7.6H-4.6V-13.4H-2.6V-17.6H2.6V-13.4H4.6V-7.6H7.4V0"/>
-      <path class="af-place__ink" d="M-7.4,0V-7.6H-4.6V-13.4H-2.6V-17.6H2.6V-13.4H4.6V-7.6H7.4V0"/>
-      <path class="af-place__ink" d="M0,-17.6V-21"/>
-      <path class="af-place__soft" d="M-1.4,-15.4H1.4 M-1.4,-12.4H1.4 M-3.4,-9.6H3.4 M-3.4,-6.4H3.4 M-3.4,-3.2H3.4"/>`,
-    silhouette: `<path class="af-place__burn" d="M-7.4,0V-7.6H-4.6V-13.4H-2.6V-17.6H2.6V-13.4H4.6V-7.6H7.4V0"/>
-      <path class="af-place__ink" d="M-7.4,0V-7.6H-4.6V-13.4H-2.6V-17.6H2.6V-13.4H4.6V-7.6H7.4V0"/>
-      <path class="af-place__ink" d="M0,-17.6V-21"/>`,
+    subject:
+      'The street cart under its umbrella. The New York chapter is two frames — a graffitied corner and a Sabrett cart in Times Square — and there is no skyline in either. Drawing the Empire State Building here would have been the archive claiming a picture it does not hold.',
+    height: 14.3,
+    body: 'M-7,-6.3H7V-2.7H-7Z',
+    full: `<path class="af-place__burn" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7 M-7,-6.3H7V-2.7H-7Z"/>
+      <path class="af-place__ink" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7"/>
+      <path class="af-place__soft" d="M-9.6,-10.7Q-7.2,-8.7 -4.8,-10.5Q-2.4,-8.5 0,-10.7Q2.4,-8.5 4.8,-10.5Q7.2,-8.7 9.6,-10.7"/>
+      <path class="af-place__ink" d="M0,-10.7V-6.3"/>
+      <path class="af-place__ink" d="M-7,-6.3H7V-2.7H-7Z"/>
+      <circle class="af-place__ink" cx="-4.2" cy="-1.3" r="1.3"/>
+      <circle class="af-place__ink" cx="4.2" cy="-1.3" r="1.3"/>`,
+    silhouette: `<path class="af-place__burn" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7 M-7,-6.3H7V-2.7H-7Z"/>
+      <path class="af-place__ink" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7"/>
+      <path class="af-place__ink" d="M0,-10.7V-6.3"/>
+      <path class="af-place__ink" d="M-7,-6.3H7V-2.7H-7Z"/>
+      <circle class="af-place__ink" cx="-4.2" cy="-1.3" r="1.3"/>
+      <circle class="af-place__ink" cx="4.2" cy="-1.3" r="1.3"/>`,
   },
 };
 

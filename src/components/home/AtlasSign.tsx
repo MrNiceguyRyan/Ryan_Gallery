@@ -548,7 +548,7 @@ export function AfPoint({ stopId, slug, number, name, initiallyCurrent, engaged,
                 its own coordinate. */}
             {landmark && (
               <g className="af-place" transform={`translate(0 ${landmarkLift(landmark)})`}>
-                <path className="af-place__body" d={landmark.body} />
+                {landmark.body && <path className="af-place__body" d={landmark.body} />}
                 <g className="af-place__silhouette" dangerouslySetInnerHTML={{ __html: landmark.silhouette }} />
                 <g className="af-place__full" dangerouslySetInnerHTML={{ __html: landmark.full }} />
               </g>

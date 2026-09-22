@@ -335,6 +335,10 @@ html.lenis body {
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
+.af-place__fill {
+  fill: rgba(244, 244, 237, 0.9);
+  stroke: none;
+}
 .af-place__soft {
   fill: none;
   stroke: rgba(244, 244, 237, 0.5);
