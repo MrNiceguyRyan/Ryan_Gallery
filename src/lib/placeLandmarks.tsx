@@ -182,6 +182,46 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
   },
 };
 
+/**
+ * Colour says WHERE, not WHICH — and that is a finding, not a preference.
+ *
+ * The plan was one colour per chapter, sampled from that chapter's own frames.
+ * So I sampled them, and the archive answered: a hue histogram over all 58
+ * photographs puts FOUR of the six chapters on the same sky blue (Miami 195°,
+ * Orlando 195°, Bryce 210°, New York 210°). Only Page and Zion own a hue. This
+ * archive has two colours — red rock and blue sky — because it is shot in the
+ * Southwest and Florida, under sky. Six chapter colours would have been four
+ * near-identical blues pretending to be a palette.
+ *
+ * Colour therefore does the job it can actually do: it names the region, the
+ * way a map legend does. The chapter is told apart by its landmark, which the
+ * drawings already do at 30px. Four regions, four colours, each the strongest
+ * hue in that region's own frames:
+ *
+ *   Arizona   0°, 53% of Page's ink — the canyon, the reddest thing here
+ *   Utah     10-20°, 43% — sandstone, pushed to 30° to part from Arizona's red
+ *   Florida  200°, 42% — ocean and sky, which is what those 32 frames are
+ *   New York 220°, its SECOND peak — because its first (210°) sits 10° from
+ *              Florida's and the two would not have been telling anyone apart.
+ *              220° leans violet against Florida's cyan, and it is the colour
+ *              the chapter's own prose reaches for: "Dusk compresses the
+ *              borough into silhouette: water towers against violet sky."
+ *              A first pass gave it a desaturated grey, honestly sampled — and
+ *              on a wall of four colours the quiet one just read as disabled.
+ *
+ * All four clear 4.5:1 on the /about ground (#12160F): 5.6, 8.0, 6.0, 6.0.
+ */
+export const REGION_INK: Record<string, string> = {
+  Arizona: '#E8654F',
+  Utah: '#D9A05C',
+  Florida: '#489CC7',
+  'New York': '#7295DB',
+};
+
+/** Regions with no sampled ink fall back to the page's own bone. */
+export const regionInk = (region?: string | null) =>
+  (region && REGION_INK[region]) || 'rgba(244,244,237,0.82)';
+
 export const landmarkFor = (slug?: string | null): PlaceLandmark | null =>
   (slug && PLACE_LANDMARKS[slug]) || null;
 

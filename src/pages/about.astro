@@ -12,7 +12,7 @@ const currentPath = Astro.url.pathname;
  * Fetch the single siteSettings document from Sanity.
  * Falls back gracefully if no document exists yet.
  */
-const [rawSettings, archiveCollections] = await Promise.all([
+const [rawSettings, archiveCollections, archiveFrames] = await Promise.all([
   fetchSanityWithRetry(() => sanityClient.fetch<SiteSettings | null>(`
     *[_type == "siteSettings"][0] {
       name,
@@ -22,18 +22,68 @@ const [rawSettings, archiveCollections] = await Promise.all([
       instagram
     }
   `)),
-  fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'>>>(`
+  fetchSanityWithRetry(() => sanityClient.fetch<Array<Pick<Collection, '_id' | 'name' | 'location' | 'year' | 'photoCount'> & { slug?: string; region?: string; routeOrder?: number }>>(`
     *[_type == "collection" && defined(year)] | order(year desc, name asc) {
       _id,
       name,
       location,
       year,
+      "slug": slug.current,
+      region,
+      routeOrder,
       "photoCount": count(*[_type == "photo" && references(^._id)])
+    }
+  `)),
+  // The figures band is computed from the frames themselves, so it cannot be
+  // wrong by hand. Only the three fields the band actually reads are fetched;
+  // `defined(collection)` excludes the one orphaned photo that would otherwise
+  // make the totals disagree with the 58 the rest of the site counts.
+  fetchSanityWithRetry(() => sanityClient.fetch<Array<{ camera?: string; focalLength?: string; styleCategory?: string }>>(`
+    *[_type == "photo" && defined(collection)] {
+      camera,
+      focalLength,
+      styleCategory
     }
   `)),
 ]);
 
 const settings: SiteSettings = rawSettings ?? {};
+
+/**
+ * The figures band, reduced at build time.
+ *
+ * Camera names arrive as the EXIF maker string, so the same body appears under
+ * two spellings — "NIKON CORPORATION NIKON Z f" on 24 frames and "Nikon Zf" on
+ * 3 — and counting raw would report three bodies for two cameras. Focal length
+ * is a formatted string ("27mm"), so it sorts lexically unless parsed.
+ */
+const frames = archiveFrames ?? [];
+const tidyCamera = (raw?: string) => {
+  if (!raw) return null;
+  const value = raw.replace(/NIKON CORPORATION\s+/i, '').replace(/\s+/g, ' ').trim();
+  return /nikon z\s*f/i.test(value) ? 'Nikon Zf' : value.replace(/^FUJIFILM\s+/i, 'Fujifilm ');
+};
+const countBy = <T,>(items: T[], key: (item: T) => string | null) => {
+  const out = new Map<string, number>();
+  items.forEach((item) => {
+    const k = key(item);
+    if (k) out.set(k, (out.get(k) ?? 0) + 1);
+  });
+  return [...out.entries()].sort((a, b) => b[1] - a[1]);
+};
+const bodies = countBy(frames, (f) => tidyCamera(f.camera));
+const focals = countBy(frames, (f) => f.focalLength ?? null);
+const focalMm = focals
+  .map(([label]) => Number.parseInt(label, 10))
+  .filter((mm) => Number.isFinite(mm));
+const kinds = countBy(frames, (f) => f.styleCategory ?? null);
+const figures = {
+  frames: frames.length,
+  bodies,
+  topFocal: focals[0] ?? null,
+  focalRange: focalMm.length ? ([Math.min(...focalMm), Math.max(...focalMm)] as [number, number]) : null,
+  kinds,
+};
 // Stamped when the page is built — the colophon's "Updated" line. The site is
 // static, so the build is the last moment its content changed.
 const builtAt = new Date().toISOString();
@@ -46,5 +96,5 @@ const builtAt = new Date().toISOString();
   dark={true}
 >
   <Nav client:load currentPath={currentPath} />
-  <AboutPage client:load settings={settings} collections={archiveCollections} builtAt={builtAt} />
+  <AboutPage client:load settings={settings} collections={archiveCollections} figures={figures} builtAt={builtAt} />
 </Layout>
