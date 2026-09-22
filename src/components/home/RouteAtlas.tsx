@@ -2709,6 +2709,7 @@ export default function RouteAtlas({
           >
             <AfPoint
               stopId={entry.stop.id}
+              slug={entry.stop.slug}
               number={entry.chapterIndex + 1}
               name={entry.stop.name}
               initiallyCurrent={entry.stop.id === currentStopRef.current}

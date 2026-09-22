@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useTransform, type MotionValue } from 'framer-motion';
+import { LANDMARK_VIEWBOX, landmarkFor, landmarkLift } from '../../lib/placeLandmarks';
 
 /** Everything the sign prints for a place. */
 export interface ViewfinderPlace {
@@ -454,8 +455,10 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
  * camera arrives, the place the camera is on is full size and bright, and a
  * place the camera leaves blinks once on its way back down.
  */
-export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
+export function AfPoint({ stopId, slug, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
   stopId: string;
+  /** The collection slug, which is how a place finds its own landmark. */
+  slug?: string;
   number: number;
   name: string;
   /** Its chapter's cover photograph is hovered or focused in the archive. */
@@ -469,7 +472,14 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
   /** A click: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
 }) {
-  const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
+  const landmark = landmarkFor(slug);
+  // `has-landmark` gates every rule that hands the point over to the drawing.
+  // Without it the disc hid on arrival at a place that has no drawing yet and
+  // the mark vanished off the map entirely — the undrawn city, which is the
+  // one case this whole fallback exists to serve.
+  const [initialClass] = useState(
+    () => `af-point__mark${landmark ? ' has-landmark' : ''}${initiallyCurrent ? ' is-current' : ''}`,
+  );
   // Invisible points (the prologue, the entrance) must not be hit targets —
   // and `pointer-events: none` alone leaves the button in the tab order and
   // in the accessibility tree, so a keyboard visitor tabs through six
@@ -494,7 +504,12 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
         onBlur={() => onEngage?.(null)}
         onClick={() => onNavigate?.(stopId)}
       >
-        <span className="af-point__ring" />
+        {/* Pointing at a chapter's cover photograph rings its place. With a
+            landmark inside it, that ring stops being a ring around a dot and
+            becomes the place's medal — which is the whole brief, arrived at on
+            the map without a drop of colour. It has to be wide enough to clear
+            the drawing, or the peak poked out through the rim. */}
+        <span className={`af-point__ring${landmark ? ' af-point__ring--medal' : ''}`} />
         {/* The place, drawn as its landmark.
             A surveyor's benchmark: the brass disc that is physically set into
             the ground at a point somebody measured, with the station triangle
@@ -504,20 +519,40 @@ export function AfPoint({ stopId, number, name, initiallyCurrent, engaged, visib
             It replaced four focus brackets. Brackets aim; they are the
             vocabulary of a reticle, and a reticle is about to take a shot at
             something. This disc does not point anywhere: it IS the point. */}
-        <svg className="af-point__landmark" viewBox="-22 -22 44 44" aria-hidden="true">
+        <svg className="af-point__landmark" viewBox={LANDMARK_VIEWBOX} aria-hidden="true">
           <g className="af-point__landmark-g">
-            {/* The body. A benchmark disc is a physical object set into the
-                ground, so the route hairline has to pass BEHIND it — without
-                this it ran straight through the ring and out the other side,
-                striking the triangle through like a cancellation mark. */}
-            <circle className="af-point__landmark-body" r="11" />
-            <circle className="af-point__landmark-halo" r="11" />
-            <path className="af-point__landmark-halo" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />
-            <circle className="af-point__landmark-ring" r="11" />
-            <circle className="af-point__landmark-inner" r="8.6" />
-            <path className="af-point__landmark-station" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />
-            <path className="af-point__landmark-ticks" d="M0,-11V-15.4 M11,0H15.4 M0,11V15.4 M-11,0H-15.4" />
-            <circle className="af-point__landmark-pip" r="1.5" />
+            {/* THE DISC — what a place wears by default, and keeps for good if
+                nobody ever draws it. At rest a mark is 16px across, and six
+                hairline drawings at 16px are six identical grey smudges, so the
+                far state is deliberately the same for every place: calm,
+                legible, and honest about being a surveyed point.
+                The body is opaque enough that the route hairline passes BEHIND
+                the disc rather than through the ring and out the other side.
+                The station triangle is dropped where a real landmark exists —
+                it is the generic stand-in, and two landmarks on one point is
+                one too many. */}
+            <g className="af-point__disc">
+              <circle className="af-point__landmark-body" r="11" />
+              <circle className="af-point__landmark-halo" r="11" />
+              {!landmark && <path className="af-point__landmark-halo" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />}
+              <circle className="af-point__landmark-ring" r="11" />
+              <circle className="af-point__landmark-inner" r="8.6" />
+              {!landmark && <path className="af-point__landmark-station" d="M0,-5.6 4.85,2.8 -4.85,2.8Z" />}
+              <path className="af-point__landmark-ticks" d="M0,-11V-15.4 M11,0H15.4 M0,11V15.4 M-11,0H-15.4" />
+              <circle className="af-point__landmark-pip" r="1.5" />
+            </g>
+            {/* THE LANDMARK — drawn only once the camera is on its way here, so
+                the detail arrives with the attention that can read it. Authored
+                standing on y=0 and lifted, because the Marker anchors `center`:
+                a glyph left standing on the origin would hang entirely above
+                its own coordinate. */}
+            {landmark && (
+              <g className="af-place" transform={`translate(0 ${landmarkLift(landmark)})`}>
+                <path className="af-place__body" d={landmark.body} />
+                <g className="af-place__silhouette" dangerouslySetInnerHTML={{ __html: landmark.silhouette }} />
+                <g className="af-place__full" dangerouslySetInnerHTML={{ __html: landmark.full }} />
+              </g>
+            )}
           </g>
         </svg>
         <span className="af-point__label" aria-hidden="true">
