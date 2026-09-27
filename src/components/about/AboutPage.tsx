@@ -5,8 +5,8 @@ import { startLenis } from '../../lib/smoothScroll';
 // ── /about: the darkroom biography ──
 // The monograph's end matter: the contributor cover lifts off a page that is
 // already set; the photographer's page (a silver-print portrait and the
-// name); the signature, drawn by the scroll over one sentence; a
-// correspondence ticket and the colophon.
+// name); the notes' teaser, once a note is published; the signature, drawn by
+// the scroll over one sentence; a correspondence ticket and the colophon.
 //
 // Everything here renders at its final values, on the server and on the
 // client alike: the page paints finished without JavaScript. How it arrives
@@ -45,6 +45,22 @@ export interface AboutPortrait {
   silver?: [number[], number[], number[]];
 }
 
+/** The note the middle quotes (about.astro: the featured note, else the
+ *  newest), formatted at build time. */
+export interface AboutNote {
+  title: string;
+  dek: string | null;
+  href: string;
+  /** "01" — the column's own number. */
+  number: string;
+  /** "Sep 27, 2026", in New York. */
+  date: string;
+  titleLang: string | null;
+  dekLang: string | null;
+  /** The page links the Chinese serif (Noto Serif SC) for it. */
+  cjkSerif: boolean;
+}
+
 interface Props {
   name: string;
   bio?: string | null;
@@ -55,6 +71,8 @@ interface Props {
   /** The build's date and year in New York, formatted at build time. */
   updatedOn: string;
   year: string;
+  /** The notes' teaser; null (nothing printed) until a note is published. */
+  note?: AboutNote | null;
 }
 
 const vars = (values: Record<string, string | number>) => values as CSSProperties;
@@ -264,6 +282,49 @@ function Profile({ name, bio, portrait }: Pick<Props, 'name' | 'bio' | 'portrait
   );
 }
 
+/** The written middle: the notes' teaser, where the log was. The running
+ *  head's device (THE NOTES … the note's number and date over a hairline),
+ *  then one quiet statement — the note's own dek (its title when it has
+ *  none), a link to that note — and the way to the notes. Bone throughout:
+ *  the view's one lime is the name's underline above and "light." below, a
+ *  screen apart. */
+function NotesTeaser({ note }: { note: AboutNote }) {
+  const statement = note.dek ?? note.title;
+  const lang = note.dek ? note.dekLang : note.titleLang;
+  return (
+    <section
+      className="about-notes about-wrap"
+      data-about-reveal="notes"
+      data-cjk-serif={note.cjkSerif ? '' : undefined}
+      aria-label="The Notes"
+    >
+      <header className="about-runhead about-notes__block" style={vars({ '--i': 0 })}>
+        <span className="about-label">The Notes</span>
+        <span className="about-label">
+          No. {note.number} · {note.date}
+        </span>
+        <span className="about-runhead__rule" aria-hidden="true" />
+      </header>
+      <div className="about-notes__grid">
+        <div className="about-notes__text">
+          <p className="about-notes__statement about-notes__block" lang={lang ?? undefined} style={vars({ '--i': 1 })}>
+            <a href={note.href} aria-label={note.dek ? `${note.title}: ${note.dek}` : undefined}>
+              {statement}
+            </a>
+          </p>
+          <a className="about-notes__more about-label about-notes__block" href="/notes" style={vars({ '--i': 2 })}>
+            Read the notes
+            {/* Space Grotesk has no arrow: drawn, in the label's ink. */}
+            <svg className="about-notes__arrow" viewBox="0 0 16 10" width="16" height="10" aria-hidden="true" focusable="false">
+              <path d="M1 5h13.5M10.5 1l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
+            </svg>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** The sign-off: the autograph over the one sentence. It is drawn as the page
  *  is scrolled down past it and un-drawn as it is scrolled back up
  *  (about.astro moves the pen); fully drawn by default. */
@@ -419,7 +480,7 @@ function EndMatter({ name, email, instagram, totals, updatedOn, year }: Pick<Pro
   );
 }
 
-export default function AboutPage({ name, bio, email, instagram, portrait, totals, updatedOn, year }: Props) {
+export default function AboutPage({ name, bio, email, instagram, portrait, totals, updatedOn, year, note = null }: Props) {
   const [coverGone, setCoverGone] = useState(false);
   const onCoverGone = useCallback(() => setCoverGone(true), []);
 
@@ -436,12 +497,12 @@ export default function AboutPage({ name, bio, email, instagram, portrait, total
       {!coverGone && <ContributorCover name={name} onGone={onCoverGone} />}
       <div className="about-page">
         <Profile name={name} bio={bio} portrait={portrait} />
-        {/* The middle, kept open for a written section (an essay): its own
-            <section className="about-wrap"> here, between the profile and
-            the sign-off, set in the bio's reading type. Below the fold it
-            takes a data-about-reveal name and an entrance in global.css
-            ("Below the fold"), as the end matter does. The signature's
-            scrub derives its range from the layout, so it needs nothing. */}
+        {/* The middle: the notes' teaser (his writing lives at /notes). Below
+            the fold it is armed and played once (data-about-reveal "notes",
+            global.css "Below the fold"); the signature's scrub derives its
+            range from the layout, so it needs nothing. With no note
+            published there is nothing here, not an empty box. */}
+        {note && <NotesTeaser note={note} />}
         <SignOff />
         <EndMatter name={name} email={email} instagram={instagram} totals={totals} updatedOn={updatedOn} year={year} />
       </div>

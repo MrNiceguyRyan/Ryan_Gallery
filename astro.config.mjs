@@ -28,6 +28,50 @@ function stablePreview() {
   };
 }
 
+// ── NOTES in the nav: decided once per build ──
+// The nav (Nav.tsx and the homepage's own copy) shows NOTES only when at least
+// one note is published in Sanity — or, for a PREVIEW build only, when
+// NOTES_SAMPLE=1 prints the sample note (src/lib/notesData.ts). The answer is
+// defined as __NOTES_LIVE__ for the server and client bundles alike
+// (src/lib/notesNav.ts), so server HTML and hydrated islands agree. If Sanity
+// cannot be reached the nav simply goes without NOTES for that build.
+const NOTES_SAMPLE = process.env.NOTES_SAMPLE === '1';
+
+async function countPublishedNotes() {
+  const query = 'count(*[_type == "note" && defined(slug.current) && !(_id in path("drafts.**"))])';
+  const url = `https://z610fooo.apicdn.sanity.io/v2025-04-01/data/query/production?query=${encodeURIComponent(query)}`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const { result } = await response.json();
+        return Number(result) || 0;
+      }
+    } catch {
+      // Retried below; a persistent failure leaves NOTES out of this build.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return null;
+}
+
+let notesLive = false;
+
+function notesNav() {
+  return {
+    name: 'gallery:notes-nav',
+    hooks: {
+      'astro:config:setup': async ({ updateConfig, logger }) => {
+        const count = await countPublishedNotes();
+        if (count === null) logger.warn('Could not count notes in Sanity; the nav will not show NOTES in this build.');
+        notesLive = (count ?? 0) > 0 || NOTES_SAMPLE;
+        if (NOTES_SAMPLE && !count) logger.info('NOTES_SAMPLE=1: the preview sample note is printed and linked.');
+        updateConfig({ vite: { define: { __NOTES_LIVE__: JSON.stringify(notesLive) } } });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   // Required by @astrojs/sitemap to generate absolute URLs
   site: 'https://ryanxugallery.com',
@@ -49,6 +93,7 @@ export default defineConfig({
   },
   integrations: [
     stablePreview(),
+    notesNav(),
     react(),
     sanity({
       projectId: 'z610fooo',
@@ -58,8 +103,12 @@ export default defineConfig({
       apiVersion: '2025-04-01',
     }),
     sitemap({
-      // Exclude Sanity Studio route if ever served under the same domain
-      filter: (page) => !page.includes('/studio'),
+      // Exclude Sanity Studio route if ever served under the same domain, the
+      // preview-only sample note, and /notes itself while nothing is published.
+      filter: (page) =>
+        !page.includes('/studio') &&
+        !(NOTES_SAMPLE && page.includes('/notes/sample/')) &&
+        (notesLive || !/\/notes\/?$/.test(page)),
       // Customise per-page priority and changefreq
       customPages: [],
       serialize(item) {

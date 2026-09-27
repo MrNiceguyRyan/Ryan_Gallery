@@ -1,0 +1,1084 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   NOTES — the owner's column pages (/notes, /notes/<slug>)
+   The same magazine as the Story's weekly feature: its type ladder
+   (173 · 60 · 26 · 20 · 15 · 12 · 11 · 10), its devices (kicker, dek,
+   credits, crossheads, hung pull quote, numbered captions, end mark, the
+   Next turn) and its 12-column grid, set on the site's olive page field in
+   bone ink. The ground is a token: data-ground="paper" on .notes-page prints
+   the pages on the Story's interior paper instead.
+   Faces: every text node carries .font-serif (Fraunces) or .font-ui (Space
+   Grotesk); their stacks in global.css fall back to a Chinese serif / sans
+   per glyph, and a block that is mostly Chinese carries lang="zh-Hans".
+   Motion: one entrance (the Story's type set) on an arrival from inside the
+   site (data-notes-entry, stamped once by the page's inline script); none on
+   the document's first load (a shared link paints the page set, as a cold
+   /works does), none when a push or a fall already carried the page in, none
+   under reduced motion. No scroll-driven or scripted motion.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.notes-page {
+  --n-ground: #282c20;
+  --n-ink: #f4f4ed;
+  --n-ink-2: rgba(244, 244, 237, 0.74);
+  --n-ink-3: rgba(244, 244, 237, 0.58);
+  --n-rule: rgba(244, 244, 237, 0.16);
+  --n-focus: #f4f4ed;
+  /* The nav's own inset, so the rail lines up under "Ryan Xu". */
+  --nM: clamp(1.5rem, 3.35vw, 3rem);
+  --nG: clamp(12px, 1.39vw, 24px);
+  /* The tallest a picture may be: the screen under the nav, with room for
+     its caption, so every photograph is seen whole. */
+  --n-hmax: calc(100svh - 150px);
+  --n-title-feature: clamp(72px, 10vw, 190px);
+  --n-title: clamp(46px, 6.25vw, 120px);
+  --n-quote: clamp(38px, 3.36vw, 60px);
+  --n-dek: clamp(20px, 1.5vw, 26px);
+  --n-body: clamp(18px, 1.16vw, 20px);
+  /* ~53 characters (47–56 measured at 1728 and 1280): one measure from the
+     lede to the last line, beside the hung cover and below it. */
+  --n-measure: 25.5em;
+  position: relative;
+  min-height: 100svh;
+  padding-top: calc(clamp(7.5rem, 15vh, 11rem) + env(safe-area-inset-top));
+  padding-bottom: clamp(64px, 10vh, 112px);
+  background: var(--n-ground);
+  color: var(--n-ink);
+  /* Chinese has no italic: Latin keeps Fraunces' real italic, a Chinese
+     glyph in the same line stays upright instead of being slanted. */
+  font-synthesis-style: none;
+  overflow-x: clip;
+}
+.notes-page[data-ground='paper'] {
+  --n-ground: #f3ede4;
+  --n-ink: #1c1b17;
+  --n-ink-2: rgba(28, 27, 23, 0.72);
+  --n-ink-3: rgba(28, 27, 23, 0.56);
+  --n-rule: rgba(28, 27, 23, 0.16);
+  --n-focus: #1c1b17;
+}
+.notes-page:focus {
+  outline: none;
+}
+
+/* ── The grid: 12 columns between the nav's insets ── */
+.n-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--nG);
+  padding-left: max(var(--nM), env(safe-area-inset-left));
+  padding-right: max(var(--nM), env(safe-area-inset-right));
+}
+.n-grid > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* ── Labels (kicker, dates, credit terms, links): Space Grotesk 11 / 500 ── */
+.n-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--n-ink-3);
+}
+.n-label--ink {
+  color: var(--n-ink);
+}
+/* Links take the ink of what they sit in; the paper objects (tags, place
+   cards) set their own bone ink on stock. */
+.notes-page a {
+  color: inherit;
+}
+.notes-page a:focus-visible {
+  outline: 2px solid var(--n-focus);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+.n-textlink {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--n-rule);
+  text-underline-offset: 5px;
+  transition: text-decoration-color var(--dur-out) var(--ease-arrive), color var(--dur-out) var(--ease-arrive);
+}
+.n-textlink:hover,
+.n-textlink:focus-visible {
+  color: var(--n-ink);
+  text-decoration-color: currentColor;
+  transition-duration: var(--dur-in);
+}
+
+/* ── Place tags: tickets on the chapter's stock ── */
+.note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.note-tags--raised {
+  position: relative;
+  z-index: 1;
+}
+.notes-page .note-tag {
+  --notch: 4px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 14px;
+  background: var(--stub-paper, #30352a);
+  color: var(--stub-ink);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  /* A ticket's two punched notches, left and right. */
+  -webkit-mask: radial-gradient(circle at 0 50%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 50%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) right / 51% 100% no-repeat;
+  mask: radial-gradient(circle at 0 50%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 50%, transparent var(--notch), #000 calc(var(--notch) + 0.5px)) right / 51% 100% no-repeat;
+  transition: color var(--dur-out) var(--ease-arrive);
+}
+.notes-page .note-tag:hover {
+  color: var(--stub-muted);
+  transition-duration: var(--dur-in);
+}
+.notes-page .note-tag:focus-visible {
+  -webkit-mask: none;
+  mask: none;
+  outline-color: var(--n-focus);
+}
+
+/* ═══ /notes — the list ═══════════════════════════════════════════════════ */
+
+.notes-mast {
+  row-gap: 0;
+  align-items: start;
+  padding-bottom: clamp(48px, 8vh, 96px);
+}
+/* /about's running head: the section left, the count right, a hairline. */
+.notes-runhead {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: clamp(36px, 5.6vh, 56px);
+}
+.notes-runhead__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--n-rule);
+}
+.notes-mast__title {
+  margin: -0.06em 0 -0.14em -0.04em;
+  padding: 0.06em 0 0.14em;
+  overflow: hidden;
+  font-size: var(--n-title-feature);
+  line-height: 0.88;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 0;
+  letter-spacing: -0.035em;
+  color: var(--n-ink);
+}
+.notes-mast__dek {
+  margin: clamp(20px, 3.2vh, 32px) 0 0;
+  max-width: 18em;
+  font-size: var(--n-dek);
+  line-height: 1.28;
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 36;
+  color: var(--n-ink);
+  text-wrap: balance;
+}
+.notes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes-item {
+  position: relative;
+  align-items: start;
+  row-gap: 18px;
+}
+.notes-item__inner {
+  display: contents;
+}
+.notes-item__rule {
+  height: 2px;
+  background: var(--n-ink);
+  margin-bottom: clamp(24px, 3.4vh, 36px);
+}
+.notes-item + .notes-item .notes-item__rule {
+  height: 1px;
+  background: var(--n-rule);
+}
+.notes-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.notes-item__title {
+  margin: 0 0 0 -0.02em;
+  font-size: var(--n-quote);
+  line-height: 1.04;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 0;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.notes-item__link {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.12em;
+  transition: text-decoration-color var(--dur-out) var(--ease-arrive);
+}
+.notes-item__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.notes-item:hover .notes-item__link,
+.notes-item__link:focus-visible {
+  text-decoration-color: var(--n-ink-3);
+  transition-duration: var(--dur-in);
+}
+.notes-page .notes-item__link:focus-visible {
+  outline: none;
+}
+.notes-page .notes-item:has(.notes-item__link:focus-visible) {
+  outline: 2px solid var(--n-focus);
+  outline-offset: 4px;
+}
+.notes-item__dek {
+  margin: 16px 0 0;
+  max-width: 30em;
+  font-size: var(--n-body);
+  line-height: 1.45;
+  font-style: italic;
+  font-variation-settings: 'opsz' 24;
+  color: var(--n-ink-2);
+  text-wrap: balance;
+}
+.notes-item .note-tags {
+  margin-top: 22px;
+}
+.notes-item__cover {
+  justify-self: end;
+  margin: 0;
+  width: min(100%, calc(var(--n-thumb) * var(--r)));
+}
+.notes-item__cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0.94;
+  transition: opacity var(--dur-out) var(--ease-arrive);
+}
+.notes-item:hover .notes-item__cover img {
+  opacity: 1;
+  transition-duration: var(--dur-in);
+}
+.notes-item__body {
+  padding-bottom: clamp(36px, 6vh, 64px);
+}
+/* The cover beside an entry: a third of the screen high at its own ratio,
+   never wider than its three columns (a landscape caps there). */
+.notes-list {
+  --n-thumb: clamp(240px, 32svh, 340px);
+}
+
+/* From four notes on, every note after the lead is a contents row: number
+   and date in the rail, the title on the dek's step, the places at the
+   right; a year line (the year over a 2px rule) where the year changes. */
+.notes-row {
+  position: relative;
+  align-items: baseline;
+  row-gap: 12px;
+}
+.notes-row__rule {
+  height: 1px;
+  background: var(--n-rule);
+  margin-bottom: 20px;
+}
+.notes-row--year .notes-row__rule {
+  height: 2px;
+  background: var(--n-ink);
+}
+.notes-row__year {
+  display: block;
+  margin: clamp(28px, 4.4vh, 44px) 0 10px;
+}
+.notes-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.notes-row__title {
+  margin: 0;
+  font-size: var(--n-dek);
+  line-height: 1.2;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 36;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.notes-row .note-tags {
+  padding-bottom: 20px;
+}
+
+.notes-empty {
+  padding-top: clamp(24px, 4vh, 40px);
+  border-top: 2px solid var(--n-ink);
+}
+.notes-empty__line {
+  margin: 0;
+  font-size: var(--n-dek);
+  line-height: 1.4;
+  font-style: italic;
+  font-variation-settings: 'opsz' 36;
+  color: var(--n-ink-2);
+}
+.notes-empty .n-textlink {
+  display: inline-flex;
+  margin-top: 24px;
+  color: var(--n-ink-2);
+}
+
+@media (min-width: 1024px) {
+  .notes-runhead { grid-column: 1 / 13; }
+  .notes-mast__title { grid-column: 4 / 13; }
+  .notes-mast__dek { grid-column: 4 / 10; }
+  .notes-item__rule { grid-column: 1 / 13; }
+  .notes-item__meta { grid-column: 1 / 4; flex-direction: column; gap: 10px; padding-top: 0.55em; }
+  .notes-item__body { grid-column: 4 / 10; }
+  .notes-item__cover { grid-column: 10 / 13; }
+  .notes-row__year,
+  .notes-row__rule { grid-column: 1 / 13; }
+  .notes-row__meta { grid-column: 1 / 4; }
+  .notes-row__title { grid-column: 4 / 10; }
+  .notes-row .note-tags { grid-column: 10 / 13; justify-content: flex-end; }
+  .notes-empty { grid-column: 4 / 13; }
+}
+@media (max-width: 1023px) {
+  .notes-mast__title { font-size: 15vw; }
+  /* A phone's entry is a contents row: the words on the left, the cover a
+     96px thumbnail at its own ratio on the right, top-aligned to the meta
+     line; the dek and the places run the full width under both. */
+  .notes-item {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    column-gap: 16px;
+    row-gap: 12px;
+  }
+  .notes-item__rule { grid-column: 1 / -1; margin-bottom: 8px; }
+  .notes-item__meta { grid-column: 1; grid-row: 2; gap: 6px 12px; }
+  .notes-item__body { display: contents; }
+  .notes-item__title { grid-column: 1; grid-row: 3; }
+  .notes-item__dek { grid-column: 1 / -1; margin-top: 4px; }
+  .notes-item .note-tags { grid-column: 1 / -1; margin-top: 6px; }
+  .notes-item { padding-bottom: clamp(32px, 5vh, 48px); }
+  .notes-item__cover { grid-column: 2; grid-row: 2 / span 2; align-self: start; justify-self: end; }
+  .notes-item:not(:has(.notes-item__cover)) .notes-item__title { grid-column: 1 / -1; }
+  .notes-list { --n-thumb: 144px; }
+  .notes-row { grid-template-columns: minmax(0, 1fr); row-gap: 8px; }
+  .notes-row__rule { margin-bottom: 12px; }
+  .notes-row .note-tags { padding-bottom: 16px; }
+}
+
+/* ═══ /notes/<slug> — the column page ═════════════════════════════════════ */
+
+.note-head {
+  row-gap: 0;
+  align-items: start;
+  padding-bottom: clamp(48px, 7vh, 72px);
+}
+.note-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+}
+.note-kicker a {
+  color: var(--n-ink);
+  text-decoration: none;
+}
+.note-kicker a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.note-title {
+  margin: 0 0 0 -0.04em;
+  font-size: var(--n-title);
+  line-height: 0.94;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 0;
+  letter-spacing: -0.03em;
+  color: var(--n-ink);
+  text-wrap: balance;
+  max-width: 13em;
+  /* The mask the title rises through (the Story's type set). */
+  overflow: hidden;
+  padding: 0.06em 0 0.14em;
+  margin-top: -0.06em;
+  margin-bottom: -0.14em;
+}
+.note-title__line {
+  display: inline-block;
+}
+.note-dek {
+  margin: clamp(22px, 3.4vh, 34px) 0 0;
+  max-width: 20em;
+  font-size: var(--n-dek);
+  line-height: 1.28;
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 36;
+  letter-spacing: -0.005em;
+  color: var(--n-ink);
+  text-wrap: pretty;
+}
+.note-credits {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 20px;
+  row-gap: 10px;
+  align-items: baseline;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--n-rule);
+}
+.note-credits > div {
+  display: contents;
+}
+.note-credits dt {
+  font-size: 10px;
+}
+.note-credits dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  font-variation-settings: 'opsz' 14;
+  color: var(--n-ink);
+}
+.note-credits dd.n-label {
+  font-size: 11px;
+  color: var(--n-ink);
+}
+.note-credits .note-tags {
+  align-self: center;
+}
+
+/* The cover: a landscape leads the text across the field, whole on screen. */
+.note-cover {
+  padding-bottom: clamp(48px, 8vh, 96px);
+}
+
+/* ── The text column ── */
+.note-flow {
+  align-items: start;
+}
+.note-body {
+  font-size: var(--n-body);
+  line-height: 1.55;
+  color: var(--n-ink);
+}
+.note-body::after {
+  content: '';
+  display: block;
+  clear: both;
+}
+.note-p {
+  max-width: var(--n-measure);
+  margin: 0;
+  font-variation-settings: 'opsz' 18;
+  text-wrap: pretty;
+  hanging-punctuation: first;
+}
+/* Magazine paragraphs: no gap, an indent on every paragraph that follows
+   another. The opening one is the lede, a step up the ladder. */
+.note-p + .note-p {
+  text-indent: 1.5em;
+}
+.note-lede {
+  font-size: var(--n-dek);
+  line-height: 1.5;
+  font-variation-settings: 'opsz' 24;
+  /* Inside the body's measure at both steps (572px at 26px, 440 at 20),
+     so it never reaches the hung cover and never re-wraps against it. */
+  max-width: 22em;
+  margin-bottom: 1.1em;
+}
+.note-lede + .note-p {
+  text-indent: 0;
+}
+.note-h2 {
+  max-width: var(--n-measure);
+  margin: 2.4em 0 0.7em;
+  font-size: var(--n-dek);
+  line-height: 1.25;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 36;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.note-h3 {
+  max-width: var(--n-measure);
+  margin: 2em 0 0.9em;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--n-ink-2);
+}
+.note-body > :first-child,
+.note-float-wrap + * {
+  margin-top: 0;
+}
+.note-passage {
+  max-width: calc(var(--n-measure) - 1.5em);
+  margin: 1.1em 0 1.1em 1.5em;
+  padding: 0;
+  font-style: italic;
+  font-variation-settings: 'opsz' 18;
+  color: var(--n-ink-2);
+}
+.note-passage p {
+  margin: 0;
+}
+.note-link {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--n-ink-3);
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color var(--dur-out) var(--ease-arrive);
+}
+.note-link:hover {
+  text-decoration-color: currentColor;
+  transition-duration: var(--dur-in);
+}
+.note-body strong {
+  font-weight: 600;
+}
+
+/* The end mark: a square the size of the x-height, one thin space after
+   the last word. */
+.note-endmark {
+  display: inline-block;
+  width: 0.46em;
+  height: 0.46em;
+  margin-left: 0.2em;
+  background: currentColor;
+  vertical-align: 0.02em;
+}
+
+/* The pull quote: italic on the 60 step, small curly quotes hung into the
+   margin, no giant glyph. On desktop it hangs two columns out into the rail
+   (below). */
+.note-quote {
+  clear: both;
+  margin: clamp(48px, 8vh, 88px) 0;
+}
+.note-quote__text {
+  margin: 0;
+  font-size: var(--n-quote);
+  line-height: 1.12;
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 72;
+  letter-spacing: -0.012em;
+  color: var(--n-ink);
+  max-width: 15em;
+  text-wrap: balance;
+}
+.note-quote__text p {
+  margin: 0;
+  text-indent: -0.42em;
+}
+.note-quote__by {
+  display: block;
+  margin-top: 24px;
+}
+
+/* ── Photographs: their own ratio, whole on one screen, numbered ── */
+.note-figure {
+  margin: clamp(40px, 7vh, 72px) 0;
+  width: min(100%, calc(var(--n-hmax) * var(--r)));
+}
+.note-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: rgba(244, 244, 237, 0.04);
+}
+.note-body .note-figure {
+  clear: both;
+}
+.note-cap {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--n-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.note-cap b {
+  font-weight: 500;
+  color: var(--n-ink);
+}
+.note-figure--cover {
+  margin: 0;
+}
+/* Two photographs never read as a pair: the Story's slot gap between two
+   in a row, and the hung cover keeps its own distance from the next one
+   (a figure's clearance would otherwise swallow its top margin). */
+.note-body .note-figure + .note-figure {
+  margin-top: max(96px, 14vh);
+}
+
+/* ── The end page ── */
+.note-end {
+  row-gap: 0;
+  margin-top: clamp(72px, 12vh, 140px);
+}
+/* The chapters the note is about: the Story's end-page row — a 2px bone
+   rule, the kicker, then each chapter on its own stock, its cover at its
+   own ratio and its name on the 60 step. */
+.note-chapters {
+  padding-top: 22px;
+  border-top: 2px solid var(--n-ink);
+}
+.note-chapters__label {
+  display: block;
+  margin: 0 0 22px;
+}
+.note-chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nG);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes-page .note-chapter {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(2 * var(--nG));
+  padding: clamp(16px, 1.9vw, 28px);
+  background: var(--stub-paper, #30352a);
+  color: var(--stub-ink);
+  text-decoration: none;
+}
+.note-chapter__cover {
+  display: block;
+  flex: none;
+}
+/* A quarter of the screen high at the cover's own ratio (a fixed height:
+   the width follows the file). */
+.note-chapter__cover img {
+  display: block;
+  height: clamp(200px, 26svh, 280px);
+  width: auto;
+  max-width: 100%;
+}
+.note-chapter__text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.note-chapter .n-label {
+  color: var(--stub-muted);
+}
+.note-chapter__name {
+  font-size: var(--n-quote);
+  line-height: 1;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 0;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.notes-page .note-chapter__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--stub-strong);
+  transition: color var(--dur-out) var(--ease-arrive);
+}
+.note-chapter:hover .note-chapter__go {
+  color: var(--stub-ink);
+  transition-duration: var(--dur-in);
+}
+.notes-page .note-chapter:focus-visible {
+  outline-offset: 3px;
+}
+/* The drawn arrow (Arrow.astro), in the ink of its words; the page's one
+   lime is the way on — Next, or the chapter when there is no newer note. */
+.note-arrow {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 10px;
+  transition: transform var(--dur-out) var(--ease-arrive);
+}
+.note-arrow--lime {
+  color: #d2ff00;
+}
+.note-chapter:hover .note-arrow,
+.note-turn a:hover .note-arrow {
+  transform: translateX(4px);
+  transition-duration: var(--dur-in);
+}
+
+/* The turn: the note before and the note after (the Story's "Next" row). */
+.note-turn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px var(--nG);
+  margin-top: clamp(48px, 8vh, 88px);
+  padding-top: 22px;
+  border-top: 2px solid var(--n-ink);
+}
+.note-turn a {
+  display: block;
+  text-decoration: none;
+}
+.note-turn__next {
+  grid-column: 2;
+  text-align: right;
+}
+.note-turn__title {
+  display: block;
+  margin-top: 14px;
+  font-size: var(--n-dek);
+  line-height: 1.2;
+  font-weight: 380;
+  font-variation-settings: 'opsz' 72;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.14em;
+  transition: text-decoration-color var(--dur-out) var(--ease-arrive);
+}
+.note-turn a:hover .note-turn__title {
+  text-decoration-color: var(--n-ink-3);
+  transition-duration: var(--dur-in);
+}
+/* Next's arrow, on the title's baseline, sized to its words. */
+.notes-page .note-turn__arrow {
+  width: 0.62em;
+  height: 0.4em;
+  margin-left: 0.28em;
+  vertical-align: 0.08em;
+}
+/* On paper the turn is printed on the light page, where lime does not read;
+   the chapter card keeps it (it is on its stock). */
+.notes-page[data-ground='paper'] .note-turn .note-arrow--lime {
+  color: var(--n-ink);
+}
+.note-end__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  margin: 36px 0 0;
+}
+.note-end__links a {
+  color: var(--n-ink-2);
+}
+
+@media (min-width: 1024px) {
+  /* The rail: the kicker, and the credits straight under it (they share
+     the title's and the dek's rows, 52px down: the kicker's line and a
+     gap), so the rail reads as one block and the credits never set the
+     distance from the dek to the text. */
+  .note-kicker { grid-column: 1 / 4; grid-row: 1; padding-top: 0.9em; }
+  .note-title { grid-column: 4 / 13; grid-row: 1; }
+  .note-dek { grid-column: 4 / 10; grid-row: 2; }
+  .note-credits {
+    grid-column: 1 / 4;
+    grid-row: 1 / span 2;
+    align-self: start;
+    margin-top: 52px;
+    margin-right: calc(var(--nG) * 0.5);
+  }
+  .note-cover > .note-figure { grid-column: 4 / 13; }
+  .note-body { grid-column: 4 / 13; }
+  /* A portrait cover hangs at the right edge beside the opening of the text
+     (the Story's lede), four columns wide, never taller than the screen, and
+     a clear distance above whatever follows it. */
+  .note-figure--float {
+    float: right;
+    width: min(calc((100% - 8 * var(--nG)) * 4 / 9 + 3 * var(--nG)), calc(var(--n-hmax) * var(--r)));
+    margin: 0.4em 0 clamp(72px, 12vh, 120px) calc(2 * var(--nG));
+  }
+  .note-body .note-figure--portrait:not(.note-figure--float),
+  .note-body .note-figure--square {
+    width: min(calc((100% - 8 * var(--nG)) * 5 / 9 + 4 * var(--nG)), calc(var(--n-hmax) * var(--r)));
+  }
+  /* The pull quote hangs two columns out into the rail — from column 2 to
+     column 9 — so it reads as a break in the column, not as more of it.
+     The percentages are the text block's (nine columns). */
+  .note-quote {
+    width: calc((100% - 8 * var(--nG)) * 8 / 9 + 7 * var(--nG));
+    margin-left: calc(-2 * ((100% - 8 * var(--nG)) / 9 + var(--nG)));
+  }
+  .note-chapters,
+  .note-turn,
+  .note-end__links { grid-column: 4 / 13; }
+  /* One chapter card is six columns wide (4–9); the card grows with a long
+     name rather than cutting it. */
+  .notes-page .note-chapter { width: fit-content; min-width: calc((100% - 8 * var(--nG)) * 6 / 9 + 5 * var(--nG)); max-width: 100%; box-sizing: border-box; }
+}
+
+@media (max-width: 1023px) {
+  .notes-page {
+    --n-body: 17px;
+    --n-quote: 30px;
+    --n-title: clamp(38px, 10.5vw, 64px);
+    --n-hmax: calc(100svh - 120px);
+  }
+  .note-kicker { padding-bottom: 16px; }
+  /* The credits fold into one line (Ryan Xu · September 27, 2026 · 1 min),
+     the place tickets on the next, so the text starts a screen sooner. The
+     terms stay for screen readers. */
+  .note-credits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0;
+    row-gap: 12px;
+    margin-top: 24px;
+    padding-top: 12px;
+  }
+  .note-credits > div { display: flex; align-items: baseline; }
+  .note-credits dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .note-credits dd {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-variation-settings: normal;
+    font-variant-numeric: tabular-nums;
+    color: var(--n-ink-2);
+  }
+  .note-credits > div + div:not(.note-credits__line) > dd::before {
+    content: '·';
+    margin: 0 0.7em;
+    color: var(--n-ink-3);
+  }
+  .note-credits__line { flex-basis: 100%; }
+  .note-cover { padding-left: 0; padding-right: 0; }
+  .note-cover .note-figure--landscape .note-cap,
+  .note-body .note-figure--landscape .note-cap {
+    padding-left: max(var(--nM), env(safe-area-inset-left));
+  }
+  .note-body .note-figure--landscape {
+    width: auto;
+    margin-left: calc(-1 * max(var(--nM), env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(var(--nM), env(safe-area-inset-right)));
+  }
+  .note-cover .note-figure--portrait,
+  .note-cover .note-figure--square {
+    margin-left: max(var(--nM), env(safe-area-inset-left));
+    width: min(calc(100% - 2 * var(--nM)), calc(var(--n-hmax) * var(--r)));
+  }
+  /* The portrait cover runs to the screen's edges, as a landscape does (the
+     Story's phone opener), whole at its own ratio. */
+  .note-figure--float {
+    width: min(
+      calc(100% + max(var(--nM), env(safe-area-inset-left)) + max(var(--nM), env(safe-area-inset-right))),
+      calc(var(--n-hmax) * var(--r))
+    );
+    margin: 0 0 40px calc(-1 * max(var(--nM), env(safe-area-inset-left)));
+  }
+  .note-body .note-figure--portrait:not(.note-figure--float) {
+    width: min(83%, calc(var(--n-hmax) * var(--r)));
+  }
+  .note-lede { max-width: none; }
+  .note-turn { grid-template-columns: minmax(0, 1fr); }
+  .note-turn__next { grid-column: 1; text-align: left; }
+  .notes-page .note-chapter { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .note-chapter__cover img { height: auto; max-height: 240px; }
+}
+
+/* ── Chinese ── */
+/* The Chinese serif. A page with Chinese on it links Noto Serif SC
+   (CJK_SERIF_CSS, src/lib/notes.ts) and marks itself data-cjk-serif; the
+   webfont then comes straight after the Latin faces, so every device sets
+   Chinese in the same Song face, iOS included (it has no Songti SC for the
+   web and would fall to PingFang, a sans). Without the link the global
+   stacks' system Song faces are the fallback. */
+.notes-page[data-cjk-serif] .font-serif {
+  font-family: "Fraunces", "Fraunces Fallback", "Noto Serif SC", var(--font-display);
+}
+/* Chinese dashes and ellipses are a Song face's own (the joined ——, the
+   centred …): Fraunces has its Latin ones, which would otherwise win for
+   those few code points inside Chinese text. Where a Song face is installed
+   they come from it. (Its quotes are proportional, like Fraunces'; nothing
+   here makes them full width.) local() needs the face's full or PostScript
+   name. */
+@font-face {
+  font-family: 'Notes CJK Punctuation';
+  src: local('Songti SC Regular'), local('STSongti-SC-Regular'), local('Noto Serif SC Regular'),
+    local('NotoSerifSC-Regular'), local('Noto Serif CJK SC Regular'), local('NotoSerifCJKsc-Regular'),
+    local('Source Han Serif SC Regular'), local('SourceHanSerifSC-Regular'), local('SimSun');
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+.notes-page .font-serif:lang(zh) {
+  font-family: 'Notes CJK Punctuation', var(--font-display);
+}
+.notes-page[data-cjk-serif] .font-serif:lang(zh) {
+  font-family: 'Notes CJK Punctuation', "Fraunces", "Fraunces Fallback", "Noto Serif SC", var(--font-display);
+}
+/* No negative tracking, and the eighth-em between Chinese and a Latin word
+   or a figure (我用 Nikon Z f 拍了 58 张): Chrome 140+ and Safari 18.4+ set it,
+   others leave the text as typed. */
+.notes-page :lang(zh) {
+  letter-spacing: 0;
+  text-autospace: normal;
+}
+/* 11px is too small for a Chinese label; 12 is the floor. */
+.notes-page .n-label:lang(zh),
+.note-h3:lang(zh),
+.note-cap span:lang(zh) {
+  font-size: 12px;
+}
+/* A Chinese character fills its em square, a Latin letter does not: the
+   Chinese titles are set a step smaller so they carry the same weight. */
+.notes-mast__title:lang(zh),
+.note-title:lang(zh),
+.notes-item__title:lang(zh) {
+  line-height: 1.16;
+  font-weight: 500;
+}
+.note-title:lang(zh) {
+  font-size: calc(var(--n-title) * 0.72);
+  max-width: 16em;
+}
+.notes-item__title:lang(zh) {
+  font-size: calc(var(--n-quote) * 0.8);
+}
+/* Chinese has no italic, so a Chinese dek set like the English one (italic,
+   full ink, the lede's size) would be the lede. It is set upright in the
+   Song face's light weight and the second ink instead — its own level —
+   and a Latin word inside it stays upright with it. */
+.note-dek:lang(zh),
+.notes-mast__dek:lang(zh),
+.notes-item__dek:lang(zh) {
+  font-style: normal;
+  font-weight: 300;
+  color: var(--n-ink-2);
+  line-height: 1.6;
+}
+.note-dek:lang(zh),
+.notes-item__dek:lang(zh) {
+  max-width: 24em;
+}
+.note-quote:lang(zh) .note-quote__text,
+.note-passage:lang(zh) {
+  font-style: normal;
+}
+.note-p:lang(zh),
+.note-passage:lang(zh) {
+  line-height: 1.85;
+  text-align: justify;
+  hanging-punctuation: allow-end;
+}
+/* Fraunces' text sizes are darker than Song's hairlines: in a Chinese
+   paragraph its Latin words and figures take the display cut, Song's
+   colour. */
+.note-p:lang(zh),
+.note-lede:lang(zh),
+.note-passage:lang(zh) {
+  font-variation-settings: 'opsz' 60;
+}
+.note-lede:lang(zh) {
+  line-height: 1.7;
+}
+/* Chinese paragraphs are indented two characters, the first one too. */
+.note-p:lang(zh):not(.note-lede) {
+  text-indent: 2em;
+}
+/* After 。 the full-width stop already leaves the space. */
+.note-p:lang(zh) .note-endmark,
+.note-passage:lang(zh) .note-endmark {
+  margin-left: 0;
+}
+.note-quote__text:lang(zh),
+.note-quote:lang(zh) .note-quote__text {
+  line-height: 1.34;
+}
+.note-quote:lang(zh) .note-quote__text p {
+  text-indent: 0;
+}
+.note-h2:lang(zh) {
+  line-height: 1.45;
+}
+/* Emphasis in Chinese: the dots under the characters (着重号), not a slant
+   Chinese does not have. renderInline marks the Han runs of an <em>; its
+   Latin keeps Fraunces' italic. */
+.note-dot {
+  font-style: normal;
+  -webkit-text-emphasis: filled dot;
+  text-emphasis: filled dot;
+  -webkit-text-emphasis-position: under right;
+  text-emphasis-position: under right;
+}
+@media (max-width: 1023px) {
+  /* Line length, not weight, is what limits a phone's Chinese title. */
+  .note-title:lang(zh) { font-size: calc(var(--n-title) * 0.8); }
+}
+
+/* ── Entrance: the Story's type set, on a direct or deeper arrival only ── */
+@keyframes note-rise {
+  from { transform: translateY(112%); }
+  to { transform: none; }
+}
+@keyframes note-set {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes note-develop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* The Story's rhythm (one line every 90ms on the arrive curve), started at
+   once: nothing else is landing on this page. The text below the head sets
+   with the credits, so nothing reads before the title. */
+@media (prefers-reduced-motion: no-preference) {
+  .notes-page[data-notes-entry='play'] [data-enter='kicker'] { animation: note-set var(--dur-out) var(--ease-arrive) 60ms both; }
+  .notes-page[data-notes-entry='play'] [data-enter='title'] { animation: note-rise var(--dur-plane) var(--ease-arrive) 150ms both; }
+  .notes-page[data-notes-entry='play'] [data-enter='dek'] { animation: note-set var(--dur-out) var(--ease-arrive) 240ms both; }
+  .notes-page[data-notes-entry='play'] [data-enter='credits'] { animation: note-set var(--dur-out) var(--ease-arrive) 330ms both; }
+  .notes-page[data-notes-entry='play'] [data-enter='body'] { animation: note-develop var(--dur-out) var(--ease-arrive) 330ms both; }
+  .notes-page[data-notes-entry='play'] [data-enter='plate'] { animation: note-develop var(--dur-scene) var(--ease-arrive) 330ms both; }
+}

@@ -1,0 +1,154 @@
+---
+// /notes — the owner's column: every published note, newest first. Up to
+// three, each is a full entry (number, date, title, dek, the places it is
+// about as tickets on each chapter's stock, the cover at its own ratio); from
+// four on, the newest leads and the rest are contents rows (planList). With
+// nothing published it is a quiet page that nothing links to (the nav's NOTES
+// appears with the first note).
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav';
+import PlaceTags from '../../components/notes/PlaceTags.astro';
+import NotesScroll from '../../components/notes/NotesScroll.astro';
+import '../../styles/notes.css';
+import { loadNotes } from '../../lib/notesData';
+import {
+  CJK_SERIF_CSS,
+  formatNoteDateShort,
+  hasHan,
+  imageSrcSet,
+  imageSize,
+  imageUrl,
+  isoDay,
+  langOf,
+  noteNumbers,
+  pad2,
+  planList,
+  readingMinutes,
+  shareCardUrl,
+} from '../../lib/notes';
+
+const currentPath = Astro.url.pathname;
+const { notes, sample } = await loadNotes();
+const numbers = noteNumbers(notes);
+const count = notes.length;
+const rows = planList(notes);
+const firstCover = notes.find((note) => note.cover)?.cover;
+const ogImage = firstCover ? shareCardUrl(firstCover) : undefined;
+const hasChinese = notes.some((note) => hasHan(note.title) || hasHan(note.dek));
+const DEK = 'Reflections on the work and the journey behind it.';
+const numberOf = (slug: string) => pad2(numbers.get(slug) ?? 0);
+---
+
+<Layout
+  title="Notes | Ryan"
+  description={count ? `Notes by Ryan Xu — ${DEK}` : 'Notes by Ryan Xu.'}
+  ogImage={ogImage || undefined}
+  dark={true}
+>
+  <Fragment slot="head">
+    {(count === 0 || sample) && <meta name="robots" content="noindex, follow" />}
+    {hasChinese && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
+  </Fragment>
+  <Nav client:load currentPath={currentPath} scrim />
+  <main
+    id="main-content"
+    tabindex="-1"
+    class="notes-page"
+    data-notes-page
+    data-notes-list
+    data-cjk-serif={hasChinese ? '' : undefined}
+  >
+    {/* The entrance is for an arrival from inside the site, decided once,
+        here, before the page paints: never on the document's own first load
+        (it runs then while the document is still parsing), never when a push
+        or a fall already carried the page in (html[data-axis]). Without JS
+        there is no attribute and the page is simply set. */}
+    <script is:inline data-astro-rerun>
+      (function () {
+        var page = document.querySelector('[data-notes-page]');
+        if (!page || document.readyState === 'loading' || document.documentElement.hasAttribute('data-axis')) return;
+        page.setAttribute('data-notes-entry', 'play');
+      })();
+    </script>
+    <header class="notes-mast n-grid">
+      {/* /about's running head: the section on the left, the count on the
+          right once there is more than one, a hairline under both. */}
+      <div class="notes-runhead" data-enter="kicker">
+        <span class="n-label n-label--ink font-ui">The Notes</span>
+        {count > 1 && <span class="n-label font-ui">{pad2(count)} notes</span>}
+        <span class="notes-runhead__rule" aria-hidden="true"></span>
+      </div>
+      <h1 class="notes-mast__title font-serif">
+        <span class="note-title__line" data-enter="title">Notes</span>
+      </h1>
+      <p class="notes-mast__dek font-serif" data-enter="dek">{DEK}</p>
+    </header>
+
+    {count > 0 ? (
+      <ol class="notes-list" aria-label="Notes, newest first" data-enter="credits">
+        {rows.map((row, index) => {
+          const note = row.note;
+          if (row.kind === 'row') {
+            return (
+              <li class:list={['notes-row n-grid', row.yearBefore && 'notes-row--year']}>
+                {row.yearBefore && <span class="notes-row__year n-label n-label--ink font-ui">{row.yearBefore}</span>}
+                <div class="notes-row__rule" aria-hidden="true"></div>
+                <div class="notes-row__meta">
+                  <span class="n-label n-label--ink font-ui">No. {numberOf(note.slug)}</span>
+                  <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}>{formatNoteDateShort(note.publishedAt)}</time>
+                </div>
+                <h2 class="notes-row__title font-serif" lang={langOf(note.title)}>
+                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch>{note.title}</a>
+                </h2>
+                <PlaceTags places={note.places} raised />
+              </li>
+            );
+          }
+          const size = note.cover ? imageSize(note.cover) : null;
+          const minutes = readingMinutes(note);
+          return (
+            <li class:list={['notes-item n-grid', row.kind === 'lead' && 'notes-item--lead']}>
+              <div class="notes-item__rule" aria-hidden="true"></div>
+              <div class="notes-item__meta">
+                <span class="n-label n-label--ink font-ui">No. {numberOf(note.slug)}</span>
+                <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}>{formatNoteDateShort(note.publishedAt)}</time>
+                <span class="n-label font-ui">{minutes} min read</span>
+                {note.sample && <span class="n-label n-label--ink font-ui">示例 · Sample</span>}
+              </div>
+              <div class="notes-item__body">
+                <h2 class="notes-item__title font-serif" lang={langOf(note.title)}>
+                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch>{note.title}</a>
+                </h2>
+                {note.dek && <p class="notes-item__dek font-serif" lang={langOf(note.dek)}>{note.dek}</p>}
+                <PlaceTags places={note.places} raised />
+              </div>
+              {note.cover && size && (
+                <figure class="notes-item__cover" style={`--r: ${(size.width / size.height).toFixed(5)}`}>
+                  <img
+                    src={imageUrl(note.cover, 640)}
+                    srcset={imageSrcSet(note.cover, [240, 320, 480, 640, 960])}
+                    sizes="(min-width: 1024px) 24vw, 96px"
+                    width={size.width}
+                    height={size.height}
+                    alt=""
+                    loading={index < 2 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable="false"
+                  />
+                </figure>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    ) : (
+      <section class="n-grid" aria-label="No notes yet">
+        <div class="notes-empty" data-enter="credits">
+          <p class="notes-empty__line font-serif">Nothing has been filed here yet.</p>
+          <a class="n-textlink n-label font-ui" href="/">Back to the archive</a>
+        </div>
+      </section>
+    )}
+  </main>
+  <NotesScroll />
+</Layout>

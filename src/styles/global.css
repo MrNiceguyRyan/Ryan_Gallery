@@ -3,12 +3,16 @@
 
 @theme {
   --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, serif;
+  --font-serif: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, "Songti SC", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", STSong, SimSun, serif;
   /* Display serif — Fraunces (high-contrast, Brier-like): every editorial headline.
-     (.font-serif below maps to THIS, not --font-serif.) */
-  --font-display: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, "Times New Roman", serif;
+     (.font-serif below maps to THIS, not --font-serif.)
+     Neither webface has Chinese glyphs. The Chinese faces sit after every Latin
+     family, so they are only ever reached for a glyph the Latin faces lack
+     (a Chinese character or punctuation in a note, a title, a caption): a
+     Chinese serif under Fraunces, a Chinese sans under Space Grotesk. */
+  --font-display: "Fraunces", "Fraunces Fallback", ui-serif, Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", STSong, SimSun, serif;
   /* Geometric grotesque — Space Grotesk: all UI labels / eyebrows / captions. */
-  --font-ui: "Space Grotesk", "Grotesk Fallback", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Space Grotesk", "Grotesk Fallback", "Inter", ui-sans-serif, system-ui, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
   /* Every transition-* utility runs on the house curve (--ease-arrive in the
      Motion block below), not Tailwind's Material default (0.4, 0, 0.2, 1). */
   --default-transition-timing-function: var(--ease-arrive);
@@ -6598,6 +6602,82 @@ html[data-axis] .about-cover {
 .about-particulars dt { margin-bottom: 5px; }
 .about-particulars dd { margin: 0; font-size: var(--about-read); line-height: 1.45; color: var(--about-strong); }
 
+/* ── The notes: the written middle ── */
+/* Where the log was, once a note is published (AboutPage NotesTeaser): the
+   running head's device (THE NOTES … the note's number and date over a
+   hairline), then one quiet statement — the note's own dek, in the lede's
+   italic a step up, linked to the note — and the way to the notes, all on
+   the hero text's axis (columns 6–12). It stands in the sign-off's gap and
+   splits it — half a screen less 260px above it and below it — so the
+   name's lime and "light." are at least as far apart as without it, plus
+   its own height. Bone only: it adds no lime. */
+.about-notes { margin-top: max(120px, calc(50lvh - 260px)); }
+.about-notes + .about-signoff { margin-top: max(120px, calc(50lvh - 260px)); }
+.about-notes__grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--about-gap);
+  margin-top: 40px;
+}
+.about-notes__text { grid-column: 6 / span 7; min-width: 0; }
+.about-notes__statement {
+  margin: 0;
+  max-width: 24em;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 1.75vw, 30px);
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: 'opsz' 36;
+  line-height: 1.34;
+  letter-spacing: -0.005em;
+  color: var(--about-ink);
+  text-wrap: balance;
+}
+.about .about-notes__statement a {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.16em;
+  transition: text-decoration-color var(--dur-out) var(--ease-arrive);
+}
+.about .about-notes__statement a:hover {
+  text-decoration-color: var(--about-rule);
+  transition-duration: var(--dur-in);
+}
+.about-notes__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 18px;
+  color: var(--about-strong);
+  text-decoration: none;
+  transition: color var(--dur-out) var(--ease-arrive);
+}
+.about-notes__more:hover { color: var(--about-ink); transition-duration: var(--dur-in); }
+.about-notes__arrow {
+  display: block;
+  flex: none;
+  transition: transform var(--dur-out) var(--ease-arrive);
+}
+.about-notes__more:hover .about-notes__arrow { transform: translateX(4px); transition-duration: var(--dur-in); }
+/* Chinese: no italic (the Song face has none, and the page never fakes
+   one) and no negative tracking; the statement upright in the Song face's
+   light weight, with Chinese leading; the eighth-em beside Latin and
+   figures. With Chinese in it the page links Noto Serif SC (about.astro),
+   first after the Latin. */
+.about-notes :lang(zh) { letter-spacing: 0; text-autospace: normal; }
+.about-notes[data-cjk-serif] .about-notes__statement {
+  font-family: "Fraunces", "Fraunces Fallback", "Noto Serif SC", var(--font-display);
+}
+.about-notes__statement:lang(zh) {
+  max-width: 22em;
+  font-style: normal;
+  font-weight: 300;
+  line-height: 1.7;
+}
+
 /* ── The sign-off ── */
 /* Straight after the profile, now that the log is gone. The name's
    underline and "light." must stand a screen apart, or one view holds both
@@ -6772,6 +6852,7 @@ html[data-axis] .about-cover {
   .about-bio p { max-width: 62ch; }
   .about-end__contact,
   .about-end__colophon { grid-column: 1 / -1; }
+  .about-notes__text { grid-column: 1 / -1; }
 }
 @media (max-width: 639px) {
   .about { --about-gap: 12px; }
@@ -6781,6 +6862,9 @@ html[data-axis] .about-cover {
   .about-runhead__short { display: inline; }
   /* The phone's lower half is longer (650 to 860px probed). */
   .about-signoff { margin-top: max(120px, calc(100lvh - 620px)); }
+  .about-notes,
+  .about-notes + .about-signoff { margin-top: max(96px, calc(50lvh - 310px)); }
+  .about-notes__grid { margin-top: 28px; }
   .about-signature { width: 64vw; }
   .about-sentence { font-size: 52px; }
   .about-end { margin-top: 110px; }
@@ -6889,6 +6973,17 @@ html[data-about-armed~='signoff']:not([data-about-in~='signoff']) .about-sentenc
 html[data-about-in~='signoff'] .about-sentence__line {
   animation: about-rise-deep 950ms var(--ease-arrive) calc(160ms + var(--i, 0) * 90ms) backwards;
 }
+/* The notes' teaser: the hairline draws and the head, the title, the dek
+   and the link set in turn. */
+html[data-about-armed~='notes']:not([data-about-in~='notes']) .about-notes__block {
+  opacity: 0;
+  animation: none;
+}
+html[data-about-armed~='notes']:not([data-about-in~='notes']) .about-notes .about-runhead__rule { transform: scaleX(0); }
+html[data-about-in~='notes'] .about-notes .about-runhead__rule { animation: about-draw 900ms var(--ease-arrive) 60ms backwards; }
+html[data-about-in~='notes'] .about-notes__block {
+  animation: about-lift-s 700ms var(--ease-arrive) calc(120ms + var(--i, 0) * 80ms) backwards;
+}
 
 /* The signature follows the scroll, both ways: written as the page goes
    down past it, un-written as it comes back up. about.astro writes
@@ -6913,6 +7008,8 @@ html[data-about-in~='end'] .about-end__block {
   .about,
   .about * { animation: none !important; }
   html[data-about-armed] .about .about-end__block { opacity: 1 !important; }
+  html[data-about-armed] .about .about-notes__block { opacity: 1 !important; }
+  html[data-about-armed] .about .about-notes .about-runhead__rule { transform: none !important; }
   html[data-about-armed] .about .about-sentence__line { transform: none !important; }
   html[data-about-pen] .about .about-pen { stroke-dasharray: none !important; opacity: 1 !important; }
 }

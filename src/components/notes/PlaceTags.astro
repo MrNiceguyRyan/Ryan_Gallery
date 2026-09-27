@@ -1,0 +1,25 @@
+---
+// The chapters a note is about, as small tickets printed on each chapter's
+// own stock (src/lib/ticketStock.ts), each a link to that chapter's story.
+import { placeStockStyle, type NotePlace } from '../../lib/notes';
+
+interface Props {
+  places: NotePlace[];
+  /** Raised above a card's stretched link (the /notes list). */
+  raised?: boolean;
+}
+
+const { places, raised = false } = Astro.props;
+---
+
+{places.length > 0 && (
+  <ul class:list={['note-tags', raised && 'note-tags--raised']} aria-label="Places in this note">
+    {places.map((place) => (
+      <li>
+        <a class="note-tag font-ui" href={`/works/${place.slug}`} style={placeStockStyle(place.slug)}>
+          {place.name}
+        </a>
+      </li>
+    ))}
+  </ul>
+)}
