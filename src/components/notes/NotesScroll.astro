@@ -1,0 +1,22 @@
+---
+// The notes pages browse like the rest of the site: the shared Lenis glide
+// (src/lib/smoothScroll.ts — a no-op on touch and under reduced motion),
+// started on every arrival at a notes page and stopped when the page leaves.
+// This is the pages' only script besides the nav's.
+---
+
+<script>
+  import { startLenis } from '../../lib/smoothScroll';
+
+  let stop: (() => void) | null = null;
+
+  document.addEventListener('astro:page-load', () => {
+    stop?.();
+    stop = null;
+    if (document.querySelector('[data-notes-page]')) stop = startLenis().destroy;
+  });
+  document.addEventListener('astro:before-swap', () => {
+    stop?.();
+    stop = null;
+  });
+</script>

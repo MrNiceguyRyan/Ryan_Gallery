@@ -26,6 +26,7 @@ import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
 import { activeChapters, chapterSections, issueChapters } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
 import { DUR, DUR_MS, EASE, voyageEase, voyageSeconds } from '../../lib/motion';
+import { NOTES_LIVE } from '../../lib/notesNav';
 import type Lenis from 'lenis';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
@@ -1572,7 +1573,7 @@ export default function HomePage({ collections }: Props) {
             // every other page (.nav-wordmark). A press gives 3%.
             whileTap={reduce ? undefined : { scale: 0.97 }}
             transition={{ duration: DUR.flick, ease: EASE.arrive }}
-            className="nav-wordmark flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.1em] text-[#F4F4ED] mix-blend-difference hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px]"
+            className="nav-wordmark flex min-h-11 min-w-11 shrink-0 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.1em] text-[#F4F4ED] mix-blend-difference hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px]"
           >
             {/* Slides down from above once the opening reveals (body.walkin-in,
                  flipped by WalkIn) — the reference's header entrance. */}
@@ -1582,7 +1583,7 @@ export default function HomePage({ collections }: Props) {
           </motion.button>
 
           <div
-            className="flex items-center gap-2 transition-opacity duration-500 md:gap-3"
+            className="flex shrink-0 items-center gap-2 transition-opacity duration-500 max-[379px]:gap-1.5 md:gap-3"
             aria-hidden={!navPillsVisible}
             inert={!navPillsVisible}
             style={{
@@ -1598,17 +1599,32 @@ export default function HomePage({ collections }: Props) {
                 href={atlasHref}
                 data-astro-prefetch="hover"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 max-[379px]:min-w-[3.25rem] max-[379px]:px-2.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 Map
               </motion.a>
+
+              {/* MAP · NOTES · ABOUT — NOTES once a note is published
+                  (src/lib/notesNav, decided at build time). */}
+              {NOTES_LIVE && (
+                <motion.a
+                  whileTap={reduce ? undefined : { scale: 0.97 }}
+                  transition={{ duration: DUR.flick, ease: EASE.arrive }}
+                  href="/notes"
+                  data-astro-prefetch="hover"
+                  tabIndex={navPillsVisible ? 0 : -1}
+                  className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 max-[379px]:min-w-[3.25rem] max-[379px]:px-2.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                >
+                  Notes
+                </motion.a>
+              )}
 
               <motion.a
                 whileTap={reduce ? undefined : { scale: 0.97 }}
                 transition={{ duration: DUR.flick, ease: EASE.arrive }}
                 href="/about"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 max-[379px]:min-w-[3.25rem] max-[379px]:px-2.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 About
               </motion.a>

@@ -434,8 +434,8 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         }
         function depth(path) { return path.split('/').filter(Boolean).length; }
 
-        // Route order for lateral sibling nav (Map ↔ About).
-        var LATERAL = { '/travel': 1, '/about': 2 };
+        // Route order for lateral sibling nav (Map · Notes · About).
+        var LATERAL = { '/travel': 1, '/notes': 1.5, '/about': 2 };
         var pendingAxis = null; // 'forward' | 'back' | 'fall'
 
         document.addEventListener('astro:before-preparation', function(e) {

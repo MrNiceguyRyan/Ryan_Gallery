@@ -1,0 +1,241 @@
+---
+// /notes/<slug> — one note as a column page in the Story's weekly-feature
+// language: the kicker and credits in the rail, the big Fraunces title, the
+// dek, the cover at its own ratio, the measured text with its crossheads,
+// pull quotes hung into the rail and numbered photographs, the end mark, then
+// the end page: the chapters it is about (on their own stock, the Story's end
+// page) and the notes before and after it.
+import Layout from '../../layouts/Layout.astro';
+import Nav from '../../components/Nav';
+import Arrow from '../../components/notes/Arrow.astro';
+import NoteBody from '../../components/notes/NoteBody.astro';
+import NoteFigure from '../../components/notes/NoteFigure.astro';
+import PlaceTags from '../../components/notes/PlaceTags.astro';
+import NotesScroll from '../../components/notes/NotesScroll.astro';
+import '../../styles/notes.css';
+import { loadNotes } from '../../lib/notesData';
+import {
+  CJK_SERIF_CSS,
+  formatNoteDate,
+  imageSize,
+  isoDay,
+  langOf,
+  noteDescription,
+  noteHasHan,
+  noteNeighbours,
+  noteNumbers,
+  orientation,
+  pad2,
+  placeStockStyle,
+  readingMinutes,
+  shareCardUrl,
+  type Note,
+} from '../../lib/notes';
+
+export async function getStaticPaths() {
+  const { notes } = await loadNotes();
+  return notes.map((note) => ({ params: { slug: note.slug } }));
+}
+
+const { slug } = Astro.params;
+const currentPath = Astro.url.pathname;
+const { notes } = await loadNotes();
+const note = notes.find((item) => item.slug === slug) as Note;
+if (!note) throw new Error(`Note not found: ${slug}`);
+
+const numbers = noteNumbers(notes);
+const number = numbers.get(note.slug) ?? 1;
+const { previous, next } = noteNeighbours(notes, note.slug);
+const cover = note.cover ?? null;
+const coverSize = cover ? imageSize(cover) : null;
+const coverShape = coverSize ? orientation(coverSize.width, coverSize.height) : null;
+const coverLeads = coverShape === 'landscape';
+const minutes = readingMinutes(note);
+const description = noteDescription(note);
+const titleLang = langOf(note.title);
+const shareCard = cover ? shareCardUrl(cover) : '';
+const hasChinese = noteHasHan(note);
+// The page's one lime is the way on (the Story's forward arrow): the Next
+// note when a newer one exists, else the first chapter's "Read the story".
+const limeOnChapter = !next;
+const where = (place: Note['places'][number]) => [place.region, place.year].filter(Boolean).join(', ');
+
+const siteUrl = (Astro.site ?? new URL('https://ryanxugallery.com')).toString().replace(/\/$/, '');
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: note.title,
+  description,
+  datePublished: note.publishedAt,
+  url: `${siteUrl}/notes/${note.slug}`,
+  mainEntityOfPage: `${siteUrl}/notes/${note.slug}`,
+  inLanguage: titleLang ?? 'en-US',
+  author: { '@type': 'Person', name: 'Ryan Xu', url: siteUrl },
+  ...(shareCard ? { image: shareCard } : {}),
+  ...(note.places.length ? { about: note.places.map((place) => ({ '@type': 'Place', name: place.name })) } : {}),
+};
+---
+
+<Layout
+  title={`${note.title} | Ryan`}
+  description={description || 'A note by Ryan Xu.'}
+  ogImage={shareCard || undefined}
+  ogType="article"
+  dark={true}
+  jsonLd={articleSchema}
+>
+  <Fragment slot="head">
+    {note.sample && <meta name="robots" content="noindex, follow" />}
+    {hasChinese && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
+  </Fragment>
+  <Nav client:load currentPath={currentPath} scrim />
+  <main
+    id="main-content"
+    tabindex="-1"
+    class="notes-page"
+    data-notes-page
+    data-note={note.slug}
+    data-cjk-serif={hasChinese ? '' : undefined}
+  >
+    {/* The entrance is for an arrival from inside the site (the home page,
+        the list, another note), decided once, here, before the page paints.
+        Never on the document's own first load — a shared link, a typed URL or
+        a reload paints the page set, as a cold /works does — which runs this
+        while the document is still parsing; a ClientRouter arrival re-runs it
+        into a parsed one. Never when a push or a fall already carried the
+        page in (html[data-axis]). Without JS there is no attribute. */}
+    <script is:inline data-astro-rerun>
+      (function () {
+        var page = document.querySelector('[data-notes-page]');
+        if (!page || document.readyState === 'loading' || document.documentElement.hasAttribute('data-axis')) return;
+        page.setAttribute('data-notes-entry', 'play');
+      })();
+    </script>
+    <article class="note" aria-labelledby="note-title">
+      <header class="note-head n-grid">
+        <p class="note-kicker" data-enter="kicker">
+          <a class="n-label font-ui" href="/notes">Notes</a>
+          <span class="n-label font-ui">No. {pad2(number)}</span>
+        </p>
+        <h1 class="note-title font-serif" id="note-title" lang={titleLang}>
+          <span class="note-title__line" data-enter="title">{note.title}</span>
+        </h1>
+        {note.dek && <p class="note-dek font-serif" lang={langOf(note.dek)} data-enter="dek">{note.dek}</p>}
+        <dl class="note-credits" data-enter="credits">
+          <div>
+            <dt class="n-label font-ui">Words</dt>
+            <dd class="font-serif">Ryan Xu</dd>
+          </div>
+          <div>
+            <dt class="n-label font-ui">Filed</dt>
+            <dd class="font-serif"><time datetime={isoDay(note.publishedAt)}>{formatNoteDate(note.publishedAt)}</time></dd>
+          </div>
+          <div>
+            <dt class="n-label font-ui">Reading</dt>
+            <dd class="font-serif">{minutes} min</dd>
+          </div>
+          {note.sample && (
+            <div class="note-credits__line">
+              <dt class="n-label font-ui">Status</dt>
+              <dd class="n-label font-ui">示例 · Sample</dd>
+            </div>
+          )}
+          {note.places.length > 0 && (
+            <div class="note-credits__line">
+              <dt class="n-label font-ui">Places</dt>
+              <dd><PlaceTags places={note.places} /></dd>
+            </div>
+          )}
+        </dl>
+      </header>
+
+      {cover && coverSize && coverLeads && (
+        <div class="note-cover n-grid" data-enter="plate">
+          <NoteFigure image={cover} width={coverSize.width} height={coverSize.height} placement="cover" eager />
+        </div>
+      )}
+
+      <div class="note-flow n-grid">
+        <div class="note-body" data-enter="body">
+          <NoteBody body={note.body} slug={note.slug}>
+            {cover && coverSize && !coverLeads && (
+              <div class="note-float-wrap">
+                <NoteFigure image={cover} width={coverSize.width} height={coverSize.height} placement="float" eager />
+              </div>
+            )}
+          </NoteBody>
+        </div>
+      </div>
+
+      {/* The end page: the chapters the note is about, each on its own stock
+          (the Story's end page: a 2px bone rule, the kicker, the cover at its
+          own ratio and the name on the 60 step), then the turn. */}
+      <footer class="note-end n-grid">
+        {note.places.length > 0 && (
+          <section class="note-chapters" aria-labelledby="note-chapters-label">
+            <h2 class="note-chapters__label n-label font-ui" id="note-chapters-label">
+              {note.places.length === 1
+                ? ['The chapter', where(note.places[0])].filter(Boolean).join(' · ')
+                : 'The chapters'}
+            </h2>
+            <ul class="note-chapter-list">
+              {note.places.map((place, index) => (
+                <li>
+                  <a class="note-chapter" href={`/works/${place.slug}`} style={placeStockStyle(place.slug)}>
+                    {place.coverImageUrl && place.coverWidth && place.coverHeight && (
+                      <span class="note-chapter__cover" style={`--r: ${(place.coverWidth / place.coverHeight).toFixed(5)}`}>
+                        <img
+                          src={`${place.coverImageUrl}?w=640&q=80&auto=format`}
+                          srcset={`${place.coverImageUrl}?w=320&q=80&auto=format 320w, ${place.coverImageUrl}?w=640&q=80&auto=format 640w, ${place.coverImageUrl}?w=960&q=80&auto=format 960w`}
+                          sizes="(min-width: 1024px) 26vw, 60vw"
+                          width={place.coverWidth}
+                          height={place.coverHeight}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          draggable="false"
+                        />
+                      </span>
+                    )}
+                    <span class="note-chapter__text">
+                      {note.places.length > 1 && where(place) && <span class="n-label font-ui">{where(place)}</span>}
+                      <span class="note-chapter__name font-serif">{place.name}</span>
+                      <span class="note-chapter__go n-label font-ui">
+                        Read the story<Arrow class:list={['note-arrow', limeOnChapter && index === 0 && 'note-arrow--lime']} />
+                      </span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {(previous || next) && (
+          <nav class="note-turn" aria-label="More notes">
+            {previous && (
+              <a class="note-turn__prev" href={`/notes/${previous.slug}`} data-astro-prefetch>
+                <span class="n-label font-ui">Previous · No. {pad2(numbers.get(previous.slug) ?? 0)}</span>
+                <span class="note-turn__title font-serif" lang={langOf(previous.title)}>{previous.title}</span>
+              </a>
+            )}
+            {next && (
+              <a class="note-turn__next" href={`/notes/${next.slug}`} data-astro-prefetch>
+                <span class="n-label font-ui">Next · No. {pad2(numbers.get(next.slug) ?? 0)}</span>
+                <span class="note-turn__title font-serif" lang={langOf(next.title)}>
+                  {next.title}<Arrow class="note-arrow note-arrow--lime note-turn__arrow" />
+                </span>
+              </a>
+            )}
+          </nav>
+        )}
+
+        <p class="note-end__links">
+          <a class="n-textlink n-label font-ui" href="/notes">All notes</a>
+          <a class="n-textlink n-label font-ui" href="/">Back to the archive</a>
+        </p>
+      </footer>
+    </article>
+  </main>
+  <NotesScroll />
+</Layout>

@@ -1,0 +1,50 @@
+---
+// A note's Portable Text, printed without a library and without hydration:
+// paragraphs (the first one the lede when it opens the note), H2 / H3
+// crossheads, quoted passages, photographs at their own ratio and pull
+// quotes. The inline HTML comes from renderInline (src/lib/notes.ts), which
+// escapes every span and writes only <strong>, <em>, <br> and safe links.
+import NoteFigure from './NoteFigure.astro';
+import type { NoteBodyBlock } from '../../lib/notes';
+import { endmarkMissing, planBody } from '../../lib/notes';
+
+interface Props {
+  body: NoteBodyBlock[];
+  /** For the build's warning only. */
+  slug?: string;
+}
+
+const pieces = planBody(Astro.props.body);
+const endmark = '<span class="note-endmark" aria-hidden="true"></span>';
+if (endmarkMissing(pieces)) {
+  console.warn(`[notes] "${Astro.props.slug ?? 'a note'}" ends on a crosshead or a pull quote, so it prints no end mark (■). End it on a paragraph to close it.`);
+}
+---
+
+<slot />
+{pieces.map((piece) => {
+  if (piece.kind === 'figure') {
+    return <NoteFigure image={piece.image} width={piece.width} height={piece.height} number={piece.number} />;
+  }
+  if (piece.kind === 'quote') {
+    return (
+      <figure class="note-quote" lang={piece.lang}>
+        <blockquote class="note-quote__text font-serif">
+          <p>{`“${piece.text}”`}</p>
+        </blockquote>
+        {piece.attribution && <figcaption class="note-quote__by n-label font-ui">{piece.attribution}</figcaption>}
+      </figure>
+    );
+  }
+  const html = piece.endmark ? `${piece.html}${endmark}` : piece.html;
+  if (piece.style === 'h2') return <h2 class="note-h2 font-serif" lang={piece.lang} set:html={html} />;
+  if (piece.style === 'h3') return <h3 class="note-h3 font-ui" lang={piece.lang} set:html={html} />;
+  if (piece.style === 'blockquote') {
+    return (
+      <blockquote class="note-passage font-serif" lang={piece.lang}>
+        <p set:html={html} />
+      </blockquote>
+    );
+  }
+  return <p class:list={['note-p font-serif', piece.lede && 'note-lede']} lang={piece.lang} set:html={html} />;
+})}
