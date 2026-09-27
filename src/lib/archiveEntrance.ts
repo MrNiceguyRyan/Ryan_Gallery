@@ -13,9 +13,14 @@ export function entrancePhase(progress: number, start: number, end: number) {
   return value * value * value * (value * (value * 6 - 15) + 10);
 }
 
+/** How far into the viewport the archive's top edge is when its entrance
+ *  begins (it begins with the archive's top 56% of the way down the screen),
+ *  and so where the desktop prologue's clock ends. */
+export const ARCHIVE_ENTRY_LEAD = 0.56;
+
 export function archiveEntryProgress(scrollY: number, sectionY: number, viewportHeight: number) {
   const height = Math.max(1, viewportHeight);
   // Begin once the archive occupies almost half the viewport, and finish when
   // the first photograph is fully on stage. No spacer or scroll lock is added.
-  return Math.max(0, Math.min(1, (scrollY - sectionY + height * 0.56) / (height * 1.08)));
+  return Math.max(0, Math.min(1, (scrollY - sectionY + height * ARCHIVE_ENTRY_LEAD) / (height * 1.08)));
 }

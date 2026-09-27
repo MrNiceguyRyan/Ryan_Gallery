@@ -1,32 +1,22 @@
 /**
- * The landmark each place wears on the atlas.
+ * The landmark each place stands up on the map.
  *
- * Every place used to wear the same surveyor's benchmark disc. A disc says
- * "this point was measured", which is true of all of them and therefore tells
- * you nothing about any of them: six identical marks are a uniform, not a set
- * of landmarks.
+ * Every place on both maps is printed the same way — a dot of white ink keyed
+ * by its chapter number (AtlasSign's AfPoint, /travel's TravelMark). The
+ * landmark is the one thing a place gets of its own, and it gets it only when
+ * it is looked at properly: the homepage atlas stands the current place's
+ * landmark just above its dot, /travel the chosen place's beside its mark.
+ * Nothing is drawn round it — no disc, no medal ring (owner, 2026-09-27:
+ * 地图上对应的小标志太丑了; the landmarks themselves he asked for on 09-21).
  *
- * So the disc stays, but only as the DEFAULT — the mark a place wears until
- * somebody draws it. When the camera comes to a place, the disc gives way to
- * that place's own landmark, drawn in the same white hairline as everything
- * else on this map.
+ * A place with no drawing yet is simply its dot and number. The archive is
+ * going to keep growing: a new city ships the day its photographs do, and
+ * earns its landmark later. Nothing is ever blocked on illustration.
  *
- * WHY THE DISC SURVIVES AS THE FALLBACK. It answers the two questions a
- * per-place mark system usually cannot. A place with no drawing yet is not a
- * hole in the map, it is a surveyed point — which is honest, and which is what
- * a place in this archive is before it has been looked at properly. And the
- * archive is going to keep growing: a new city ships the day its photographs
- * do, wearing the disc, and earns its landmark later. Nothing is ever blocked
- * on illustration.
- *
- * TWO LEVELS OF DETAIL, BECAUSE ONE DOES NOT SURVIVE. Measured on the live
- * page: at rest a mark is 16px across, and six hairline drawings at 16px on a
- * graded satellite ground are six identical grey smudges — the drawing is
- * unreadable AND the places stop being distinguishable, which is worse than
- * the uniform it replaced. So detail arrives with attention:
- *
- *   far (scale 0.52, 16px)  the benchmark disc. Every place, identical, calm.
- *   near (scale 0.92 / 1)   the place's own landmark, drawn.
+ * WHY ONLY AT CLOSE RANGE. Measured on the live page: six hairline drawings at
+ * 16px on a graded satellite ground are six identical grey smudges — the
+ * drawing is unreadable AND the places stop being distinguishable. Detail
+ * arrives with the attention that can read it.
  *
  * EVERY SUBJECT IS TRACED FROM THE ARCHIVE'S OWN FRAMES.
  *
@@ -48,11 +38,8 @@
  *
  * DRAWING CONVENTION. Landmarks are authored STANDING: the object's base sits
  * on y = 0 and it rises into negative y, which is how you draw a thing that
- * stands somewhere. But the Mapbox Marker anchors `center`, so a glyph left
- * standing on the origin would hang entirely above its own coordinate. The
- * component lifts each landmark by half its own `height` so the object's middle
- * lands on the point. Author standing and declare the height; the lift is
- * applied for you.
+ * stands somewhere — and how both maps stand it, its ground line set just
+ * clear of the place's dot. Author standing and declare the height.
  */
 
 export const LANDMARK_VIEWBOX = '-22 -22 44 44';
@@ -61,24 +48,19 @@ export interface PlaceLandmark {
   /** What is drawn, and the count of frames in this chapter that support it. */
   subject: string;
   /**
-   * The drawing's standing height. The component lifts by half of it, which is
-   * what actually centres the object on its coordinate — a single shared lift
-   * left the shorter landmarks sitting 2px high of their own point, and 2px is
-   * visible when the thing beside it is a 1px hairline.
+   * The drawing's standing height (/travel sizes and places its drawing, and
+   * keeps names off it, by this).
    */
   height: number;
   /**
-   * The object's solid mass, closed, drawn first and filled with the same dark
-   * burn the disc uses. A benchmark disc is a physical object and the route
-   * hairline passes behind it; a landmark is no less physical, and without this
-   * the route ran straight through the Watchman and out the other side.
+   * The object's solid mass, closed, filled with a dark burn under the lines
+   * where the drawing may stand over the route (/travel feathers it). The
+   * homepage atlas leaves it out: standing clear of its dot, it printed as a
+   * box.
    */
   body: string;
   /** The full drawing, authored standing on y = 0. */
   full: string;
-  /** The same object with its interior detail dropped — used while the camera
-   *  is still flying, when the detail would only shimmer. */
-  silhouette: string;
 }
 
 /** Keyed by collection slug. */
@@ -96,9 +78,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <circle class="af-place__fill" cx="-11" cy="-9.2" r="0.75"/>
       <circle class="af-place__fill" cx="-11" cy="-6.6" r="0.75"/>
       <path class="af-place__soft" d="M-7,-8H7 M-7,-4.4H7"/>`,
-    silhouette: `<path class="af-place__burn" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0 M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>
-      <path class="af-place__ink" d="M-8.4,0V-11.4H-5.6V-13.6H-2.4V-16H2.4V-13.6H5.6V-11.4H8.4V0"/>
-      <path class="af-place__ink" d="M-12.4,-4.4H-9.6V-16.6H-12.4Z"/>`,
   },
   orlando: {
     subject:
@@ -111,10 +90,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <circle class="af-place__ink" cx="1.6" cy="-8.6" r="6.4"/>
       <path class="af-place__soft" d="M-8.4,-1.8V0 M-3.6,-1.8V0 M6.6,-1.8V0 M11,-1.8V0 M1.6,-2.2V0"/>
       <path class="af-place__soft" d="M-4.8,-8.6H-3 M8,-8.6H9.8"/>`,
-    silhouette: `<path class="af-place__burn" d="M-12.6,-1.8H12.6"/>
-      <circle class="af-place__burn" cx="1.6" cy="-8.6" r="6.4"/>
-      <path class="af-place__ink" d="M-12.6,-1.8H12.6"/>
-      <circle class="af-place__ink" cx="1.6" cy="-8.6" r="6.4"/>`,
   },
   page: {
     subject:
@@ -125,9 +100,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <path class="af-place__ink" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4"/>
       <path class="af-place__ink" d="M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>
       <path class="af-place__soft" d="M-8,0C-6.4,-4.4 -8.6,-8 -4.8,-11.4C-3.2,-12.8 -2.8,-15.6 -3.4,-18.4 M5,0C3.6,-5 6,-8.6 1.4,-12.2C0,-13.4 -0.2,-16 0.2,-18.4"/>`,
-    silhouette: `<path class="af-place__burn" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4 M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>
-      <path class="af-place__ink" d="M-10.6,0C-8.6,-4.6 -11.4,-8.6 -6.6,-12.2C-4.6,-13.8 -4.2,-16 -5,-18.4"/>
-      <path class="af-place__ink" d="M7.6,0C5.6,-5.4 8.8,-9.4 3.6,-13.2C1.8,-14.6 1.4,-16.6 2,-18.4"/>`,
   },
   'zion-national-park': {
     subject:
@@ -142,11 +114,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <path class="af-place__ink" d="M-12,-12.2H-7V-8.4H-12Z"/>
       <path class="af-place__soft" d="M-4.6,-11H4.6 M-4.6,-7.4H4.6 M-4.6,-3.8H4.6"/>
       <path class="af-place__soft" d="M-2.2,-11.4H2.2V-6.8H-2.2Z"/>`,
-    silhouette: `<path class="af-place__burn" d="M-4.6,0V-14.6H4.6V0 M-5.8,-14.6H5.8 M-5.8,-13H-12.6 M-12,-12.2H-7V-8.4H-12Z"/>
-      <path class="af-place__ink" d="M-4.6,0V-14.6H4.6V0"/>
-      <path class="af-place__ink" d="M-5.8,-14.6H5.8"/>
-      <path class="af-place__ink" d="M-5.8,-13H-12.6"/>
-      <path class="af-place__ink" d="M-12,-12.2H-7V-8.4H-12Z"/>`,
   },
   'bryce-canyon-national-park': {
     subject:
@@ -157,9 +124,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
       <path class="af-place__ink" d="M-9.4,0L-8.7,-9L-8,0 M-5.4,0L-4.6,-13L-3.8,0 M-1.2,0L-0.6,-7.4L0,0 M3,0L3.8,-15L4.6,0 M7.4,0L8.1,-6.6L8.8,0"/>
       <path class="af-place__ink" d="M-9.7,-9H-7.7 M-5.7,-13H-3.5 M-1.5,-7.4H0.3 M2.6,-15H5 M7.1,-6.6H9.1"/>
       <path class="af-place__soft" d="M-12.2,0L-11.7,-5.4L-11.2,0 M11,0L11.5,-4.6L12,0"/>`,
-    silhouette: `<path class="af-place__burn" d="M-9.4,0L-8.7,-9L-8,0 M-5.4,0L-4.6,-13L-3.8,0 M-1.2,0L-0.6,-7.4L0,0 M3,0L3.8,-15L4.6,0 M7.4,0L8.1,-6.6L8.8,0"/>
-      <path class="af-place__ink" d="M-9.4,0L-8.7,-9L-8,0 M-5.4,0L-4.6,-13L-3.8,0 M-1.2,0L-0.6,-7.4L0,0 M3,0L3.8,-15L4.6,0 M7.4,0L8.1,-6.6L8.8,0"/>
-      <path class="af-place__ink" d="M-9.7,-9H-7.7 M-5.7,-13H-3.5 M2.6,-15H5"/>`,
   },
   'new-york-stories': {
     subject:
@@ -169,12 +133,6 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
     full: `<path class="af-place__burn" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7 M-7,-6.3H7V-2.7H-7Z"/>
       <path class="af-place__ink" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7"/>
       <path class="af-place__soft" d="M-9.6,-10.7Q-7.2,-8.7 -4.8,-10.5Q-2.4,-8.5 0,-10.7Q2.4,-8.5 4.8,-10.5Q7.2,-8.7 9.6,-10.7"/>
-      <path class="af-place__ink" d="M0,-10.7V-6.3"/>
-      <path class="af-place__ink" d="M-7,-6.3H7V-2.7H-7Z"/>
-      <circle class="af-place__ink" cx="-4.2" cy="-1.3" r="1.3"/>
-      <circle class="af-place__ink" cx="4.2" cy="-1.3" r="1.3"/>`,
-    silhouette: `<path class="af-place__burn" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7 M-7,-6.3H7V-2.7H-7Z"/>
-      <path class="af-place__ink" d="M-9.6,-10.7Q0,-17.9 9.6,-10.7"/>
       <path class="af-place__ink" d="M0,-10.7V-6.3"/>
       <path class="af-place__ink" d="M-7,-6.3H7V-2.7H-7Z"/>
       <circle class="af-place__ink" cx="-4.2" cy="-1.3" r="1.3"/>
@@ -205,6 +163,3 @@ export const PLACE_LANDMARKS: Record<string, PlaceLandmark> = {
 
 export const landmarkFor = (slug?: string | null): PlaceLandmark | null =>
   (slug && PLACE_LANDMARKS[slug]) || null;
-
-/** What centres a standing glyph on its coordinate. */
-export const landmarkLift = (landmark: PlaceLandmark) => landmark.height / 2;

@@ -1,3 +1,16 @@
+/** Sanity writes the file's pixel size into its name (`…-3000x2000.jpg`): the
+ *  same rule as the proof sheet's (lib/proofSheet, FILE_DIMS). It lets the
+ *  viewer know a frame's shape before a byte of the frame has arrived. */
+const FILE_DIMS = /-(\d+)x(\d+)\.[a-z]+/i;
+
+export function fileDims(url: string): { width: number; height: number } | null {
+  const match = FILE_DIMS.exec(url);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
 /** Keep responsive selection identical for the visible image and its decode gate. */
 export function lightboxImageSources(imageUrl: string) {
   return {

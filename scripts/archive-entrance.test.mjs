@@ -57,7 +57,13 @@ test('map overscan covers its plane throughout the settling movement', () => {
 test('first film only uses formal entry and becomes interactive after it is visible', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  assert.match(home, /handoffProgress=\{index === 0 \? atlasEntryProgress : undefined\}/);
+  const prologue = readFileSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url), 'utf8');
+  // Chapter 1's plate is carried in by the bridge's roll since 2026-09-27
+  // (GlobePrologue holds it until its select lands in it), so the homepage
+  // no longer gives chapter 1 the album unfold; ArchiveChapter keeps it for
+  // any caller that does.
+  assert.doesNotMatch(home, /handoffProgress=/);
+  assert.match(prologue, /html\.dataset\.bridge = bridge/);
   assert.match(chapter, /if \(reduce \|\| !handoffProgress\) return 1/);
   assert.match(chapter, /if \(!entryInteractive\) return/);
   assert.match(chapter, /inert: !entryInteractive/);

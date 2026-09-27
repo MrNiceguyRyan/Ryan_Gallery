@@ -5,6 +5,13 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 
+// When this build was made, in the build machine's local time. Printed ONLY on
+// the preview worker (the inline script before </body> checks the hostname),
+// never on ryanxugallery.com: the owner has twice been looking at a stale tab
+// or at production while believing it was the latest preview, and the two are
+// identical above the fold. The stamp makes "which build is this?" a glance.
+const buildStamp = new Date().toLocaleString('sv-SE', { hour12: false }).slice(0, 16);
+
 interface Props {
   title?: string;
   description?: string;
@@ -157,11 +164,14 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         -o-user-drag: none;
       }
 
-      /* Mobile-only: prevent rubber-band bounce on the body so atmospheric
-         fixed elements (video, sunbeam, grid) don't drift on iOS, and stop
-         double-tap zoom which fights the cinematic transitions. */
+      /* No rubber-band bounce and no overscroll gesture on the page, in either
+         axis: fixed layers (the atlas, the grain, the nav) don't drift on iOS,
+         and a sideways swipe on a Mac trackpad doesn't bounce the page or slide
+         it toward the previous page — the page holds still under the hand.
+         (The trade: the two-finger back-swipe doesn't navigate on this site;
+         the browser's back button and keys still do.) */
       html, body {
-        overscroll-behavior-y: none;
+        overscroll-behavior: none;
       }
       /* Touch devices don't get hover, so they shouldn't pay for cursor:none */
       @media (hover: none) {
@@ -184,19 +194,23 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
 
       /* ═══════════════════════════════════════════════════════
        *  Directional Page Transition — "Card Stack" model
-       *  — Forward (click into a page): NEW page slides UP from below
-       *    (pops up on top of the current card)
-       *  — Back (leave / return):        OLD page slides DOWN off screen
-       *    (the top card falls, revealing the card behind)
+       *  — Forward (click into a section): the destination's own cover is
+       *    the handoff (TravelEntryCover / AboutPage / Story cover); the
+       *    root swap itself is instant.
+       *  — Back (browser Back / back-direction link): OLD page falls 12vh
+       *    and fades over the destination, which is already in place beneath
+       *    it (the top card drops off the stack). Button-Back and link-Back
+       *    share the same numbers, so they read as one gesture.
+       *  — Map ↔ About: shared-axis push between two peer sections.
        *  Compositor-only transforms; no blur/box-shadow → smooth even
        *  while leaving heavy pages (e.g. /travel with Mapbox).
        * ═══════════════════════════════════════════════════════ */
 
       /* ─────────────────────────────────────────────────
        *  Default root swap — no animation. Directional motion is opted into
-       *  per-navigation via html[data-axis] (below): "enter" depth-zoom for
-       *  standard sections and "forward"/"back" for lateral siblings.
-       *  Everything else (e.g. →Home via the DIY slide-down) swaps instantly.
+       *  per-navigation via html[data-axis] (below): "forward"/"back" for
+       *  lateral siblings and "fall" for every back-direction change, browser
+       *  Back or link. Everything else (going deeper) swaps instantly.
        *  ───────────────────────────────────────────────── */
       ::view-transition-old(root),
       ::view-transition-new(root) {
@@ -218,17 +232,20 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
       html[data-axis]::view-transition-old(root) { z-index: 1; }
       html[data-axis]::view-transition-new(root) { z-index: 2; }
 
+      /* The house arrive curve (it absorbed the push's own near-identical
+         (0.22, 1, 0.36, 1)). The pseudo-elements inherit the tokens from
+         <html>, where the Motion block defines them. */
       html[data-axis="forward"]::view-transition-old(root) {
-        animation: sa-old-fwd 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: sa-old-fwd 0.48s var(--ease-arrive) both;
       }
       html[data-axis="forward"]::view-transition-new(root) {
-        animation: sa-new-fwd 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: sa-new-fwd 0.48s var(--ease-arrive) both;
       }
       html[data-axis="back"]::view-transition-old(root) {
-        animation: sa-old-back 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: sa-old-back 0.48s var(--ease-arrive) both;
       }
       html[data-axis="back"]::view-transition-new(root) {
-        animation: sa-new-back 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: sa-new-back 0.48s var(--ease-arrive) both;
       }
       /* Quiet shared-axis movement. Keep it compositor-only: the earlier
          20px blur + 60% travel looked flashy and made Mapbox exits expensive. */
@@ -250,29 +267,51 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
       }
 
       /* ───────────────────────────────────────────────
-       *  Enter a section from Home (Home → Map / About) — Apple depth zoom.
+       *  Back — the top card falls.
        *
-       *  A strong, intuitive "push forward into the destination": the new
-       *  page grows gently from smaller to full while fading in; the Home
-       *  page recedes by a few percent. Reads as moving into the content,
-       *  not sliding next
-       *  to it. (Map↔About stays lateral; this is descent into depth.)
+       *  Only the OLD page moves: it drops 12vh and goes, revealing the
+       *  destination already sitting still underneath. Browser Back and a
+       *  back-direction link (the Home pill, a page's own Back) both come
+       *  here, so they are one gesture. The z-index override is required:
+       *  the generic rule above stacks old UNDER new, and a falling card has
+       *  to be on top. `animation: none` on the new snapshot also means
+       *  /travel's live Mapbox canvas is never transformed on the way home.
+       *
+       *  A fall eases IN (the site rule). On the house expo the card was at
+       *  29% ink by 100ms and nobody saw it drop; it read as a cut. Now it
+       *  holds at full ink for the first quarter, accelerates down 12vh, and
+       *  fades on the ink companion of the leave curve — (0.55, 0, 1, 0.45)
+       *  on opacity has a near-vertical end and popped 0.33 → 0 in its last
+       *  two frames.
+       *
+       *  The fade's curve is written out: it is --ease-fade, but a var()
+       *  inside a @keyframes rule is not resolved here (measured: the fade
+       *  ran linear after the hold), while the shorthand's var(--ease-leave)
+       *  is. Keep the two in step with the Motion block in global.css.
        *  ─────────────────────────────────────────────── */
-      html[data-axis="enter"]::view-transition-old(root) {
-        animation: enter-old 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-        transform-origin: 50% 46%;
+      html[data-axis="fall"]::view-transition-old(root) {
+        animation: fall-move 0.5s var(--ease-leave) both, fall-fade 0.5s linear both;
+        z-index: 2;
       }
-      html[data-axis="enter"]::view-transition-new(root) {
-        animation: enter-new 0.54s cubic-bezier(0.16, 1, 0.3, 1) both;
-        transform-origin: 50% 46%;
+      html[data-axis="fall"]::view-transition-new(root) {
+        animation: none;
+        z-index: 1;
       }
-      @keyframes enter-old {
-        0%   { opacity: 1; transform: scale(1); }
-        100% { opacity: 0; transform: scale(1.045); }
+      @keyframes fall-move {
+        0%   { transform: translateY(0); }
+        100% { transform: translateY(12vh); }
       }
-      @keyframes enter-new {
-        0%   { opacity: 0; transform: scale(0.975); }
-        100% { opacity: 1; transform: scale(1); }
+      @keyframes fall-fade {
+        0%   { opacity: 1; }
+        25%  { opacity: 1; animation-timing-function: cubic-bezier(0.42, 0, 1, 1); /* --ease-fade */ }
+        100% { opacity: 0; }
+      }
+
+      /* A repeat arrival by view transition has no entry cover (see the
+         after-swap guard below); hide the server-painted plane until its
+         island has hydrated and removed it. */
+      html[data-entry-skip] [data-entry-cover] {
+        visibility: hidden;
       }
 
       /* Reduced-motion: disable the directional view transitions. */
@@ -281,15 +320,6 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         html[data-axis]::view-transition-new(root) {
           animation: none !important;
         }
-      }
-
-      /* Back-nav slide-down: applied to <body> via JS. Uses compositor-only
-         `transform` so it stays smooth even with heavy pages (Mapbox etc.). */
-      body.vt-back-exit {
-        transition: transform 0.46s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.34s ease;
-        transform: translateY(12vh);
-        opacity: 0;
-        will-change: transform, opacity;
       }
 
       /* Reduce motion: instant transition for accessibility */
@@ -303,13 +333,6 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
 
     {/* Custom cursor removed — the native cursor is the cursor. Interactive
         elements use standard `cursor: pointer` affordance. */}
-
-    <script>
-      import { navigate } from 'astro:transitions/client';
-      // The exit layer below is inline so it can intercept links in capture
-      // phase. Hand the actual route change back to Astro once it has finished.
-      (window as Window & { __galleryNavigate?: typeof navigate }).__galleryNavigate = navigate;
-    </script>
 
     <script is:inline>
       // ── Image protection ──
@@ -336,127 +359,6 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
           e.preventDefault();
         }
       }, true);
-
-      // ── Back-nav slide-down (DIY, Framer-Motion exit={{y:"100%"}} pattern) ──
-      // Why DIY: browsers' CSS View Transitions API proved unreliable for the
-      // "old-page slides down while new-page holds" pattern across Astro's
-      // ClientRouter swap. Instead, we cancel the ClientRouter navigation for
-      // back-direction clicks, animate <body> down with a CSS transform, and
-      // then do a normal navigation to the destination. The page beneath the
-      // sliding body is the browser background — set to match the destination
-      // (dark for home, light for light pages) so no jarring flash appears.
-      //
-      // This exit layer owns back-direction LINK CLICKS only. Browser history
-      // remains owned by Astro, with its animation selected below by data-axis.
-      (function() {
-        var DUR = 460; // ms — must match CSS `body.vt-back-exit` transition
-        var EXITING = false;
-        var exitFrame = 0;
-        var exitTimer = 0;
-
-        function resetExit() {
-          if (exitFrame) cancelAnimationFrame(exitFrame);
-          if (exitTimer) clearTimeout(exitTimer);
-          exitFrame = 0;
-          exitTimer = 0;
-          EXITING = false;
-          document.body.classList.remove('vt-back-exit');
-          document.documentElement.style.removeProperty('background-color');
-        }
-
-        function depth(path) { return path.split('/').filter(Boolean).length; }
-
-        function pathOf(u) {
-          if (!u) return '';
-          if (typeof u === 'string') {
-            try { return new URL(u, window.location.origin).pathname; }
-            catch (e) { return u; }
-          }
-          return u.pathname || '';
-        }
-
-        function isBackTo(toPath) {
-          if (!toPath) return false;
-          if (toPath === '/') return true;
-          // Link clicks are checked before Astro changes the current URL.
-          return depth(toPath) < depth(window.location.pathname);
-        }
-
-        // Pick the canvas color revealed beneath the sliding body. This must
-        // match the global page field exactly; using the slightly lighter
-        // story surface here creates a visible horizontal band during return.
-        function bgFor(toPath) {
-          return '#282c20';
-        }
-
-        function navigateAfterExit(href, replace) {
-          var clientNavigate = window.__galleryNavigate;
-          if (typeof clientNavigate === 'function') {
-            clientNavigate(href, { history: replace ? 'replace' : 'push' });
-          } else {
-            window.location.href = href;
-          }
-        }
-
-        function runExit(href, bg, replace) {
-          if (EXITING) return;
-          // Reduced-motion: plain navigation. The CSS neutralizer collapses the
-          // 0.55s slide to 0.001ms, which would otherwise park the body
-          // off-screen (blank page) for the full DUR timeout.
-          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-            navigateAfterExit(href, replace);
-            return;
-          }
-          EXITING = true;
-          // Paint the background the destination page will use, so the strip
-          // exposed beneath the sliding body is the right color.
-          document.documentElement.style.backgroundColor = bg;
-          document.body.style.backgroundColor = getComputedStyle(document.body).backgroundColor || '';
-          // Kick the animation on the next frame so the transition has a
-          // clean starting state (transform:none → the short exit offset)
-          exitFrame = requestAnimationFrame(function() {
-            exitFrame = 0;
-            document.body.classList.add('vt-back-exit');
-          });
-          exitTimer = setTimeout(function() {
-            exitTimer = 0;
-            navigateAfterExit(href, replace);
-          }, DUR + 20);
-        }
-
-        // 1) Intercept "back"-direction link clicks BEFORE Astro's ClientRouter
-        //    handler fires. Listener added on `document` in capture phase runs
-        //    earlier than ClientRouter's delegated click handler.
-        document.addEventListener('click', function(e) {
-          if (EXITING) { e.preventDefault(); return; }
-          if (e.defaultPrevented) return;
-          if (e.button !== 0) return;                 // only primary click
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-          if (!a) return;
-          if (a.target && a.target !== '' && a.target !== '_self') return;
-          if (a.hasAttribute('download')) return;
-          var href = a.getAttribute('href');
-          if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-          var url;
-          try { url = new URL(href, window.location.origin); } catch (err) { return; }
-          if (url.origin !== window.location.origin) return;
-          var toPath = url.pathname;
-          if (toPath === window.location.pathname) return;
-          if (!isBackTo(toPath)) return;
-
-          e.preventDefault();
-          e.stopPropagation();
-          runExit(url.pathname + url.search + url.hash, bgFor(toPath), false);
-        }, true); // capture phase — run before ClientRouter
-
-        // Astro already handles this same popstate. Rewriting its URL and
-        // issuing a second navigate after a timeout races the real traversal.
-        // Only cancel a pending click exit, so it cannot hide the incoming body
-        // or redirect a subsequent Map -> About navigation back to Map.
-        window.addEventListener('popstate', resetExit);
-        document.addEventListener('astro:page-load', resetExit);
-      })();
 
       // ── Filmstrip scroll restoration ──
       // Save scroll position when leaving Homepage. A direct Home link restores
@@ -519,21 +421,22 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
       // Sets html[data-axis] from the route relationship so the global
       // ::view-transition(root) rules animate the right way:
       //   Home → Map      : Atlas editorial cover (TravelEntryCover)
-      //   Map → Home      : the same downward return used by About
       //   Home → About    : contributor cover (AboutPage)
       //   Map ↔ About      : shared-axis push ("forward" / "back")
-      // (Other back routes retain the DIY body slide-down; opening a story is
-      // the React MagazineLayout cover.)
+      //   back direction  : the top card falls ("fall") — browser Back, the
+      //                     Home pill, a story's Back, /works → Map
+      // (Opening a story is the React MagazineLayout cover.)
       (function() {
         function normalize(path) {
           if (!path) return '/';
           if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1);
           return path;
         }
+        function depth(path) { return path.split('/').filter(Boolean).length; }
 
         // Route order for lateral sibling nav (Map ↔ About).
         var LATERAL = { '/travel': 1, '/about': 2 };
-        var pendingAxis = null; // 'forward' | 'back'
+        var pendingAxis = null; // 'forward' | 'back' | 'fall'
 
         document.addEventListener('astro:before-preparation', function(e) {
           if (!(e && e.to)) return;
@@ -557,11 +460,25 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
             return;
           }
 
-          // Browser Back keeps Astro's original target, history state and
-          // single navigation. Reuse the existing back animation without the
-          // link-click exit layer starting another route change.
-          if (e.navigationType === 'traverse' && e.direction === 'back') {
-            pendingAxis = 'back';
+          // Back falls, whether it came from history or from a link. A link is
+          // back-direction when it goes Home or to a shallower page — checked
+          // on the paths, before Astro changes the current URL. It used to be
+          // a separate body exit that faded the page to an empty olive screen
+          // for ~300ms and only then asked for the destination; now it is the
+          // same view transition as browser Back, with the destination (the
+          // Home the visitor left, restored to their chapter in after-swap)
+          // already in place beneath the falling card.
+          var backLink = e.navigationType !== 'traverse' && (nt === '/' || depth(nt) < depth(nf));
+          if ((e.navigationType === 'traverse' && e.direction === 'back') || backLink) {
+            // The destination sits still at z-index 1 with no animation; if
+            // it paints late, the falling card exposes the html canvas. A
+            // Story leaves that canvas at its lighter #30352a (WorkStory.tsx),
+            // which would read as a colour band under the fall. Set it to the
+            // page field before the transition starts (every page is dark).
+            // Astro's swap replaces <html>'s attributes with the new page's,
+            // which drops this inline style again.
+            document.documentElement.style.backgroundColor = '#282c20';
+            pendingAxis = 'fall';
             document.documentElement.setAttribute('data-axis', pendingAxis);
             return;
           }
@@ -573,6 +490,26 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
 
         });
 
+        // A repeat arrival by view transition gets no entry cover: the
+        // destination's island decides that at mount (TravelEntryCover,
+        // AboutPage: seen this session — or deep-linked, where the page
+        // counts that — with html[data-axis] set). The plane is server-
+        // painted, though, and on a slow line the island hydrated a few
+        // frames into the push, so the plane rode in and then cut (measured
+        // at 4× CPU: 5–14 frames). The same rule, applied here before the new
+        // snapshot is taken, hides it from the first frame. The attribute
+        // leaves with the next swap, as data-axis does.
+        function hideSkippedEntryCover() {
+          var cover = document.querySelector('[data-entry-cover]');
+          if (!cover) return;
+          var seen = false;
+          try { seen = sessionStorage.getItem(cover.getAttribute('data-entry-cover')) === 'true'; }
+          catch (err) {}
+          var deepLinked = cover.hasAttribute('data-entry-deeplink')
+            && (window.location.search.length > 1 || window.location.hash.length > 1);
+          if (seen || deepLinked) document.documentElement.setAttribute('data-entry-skip', '');
+        }
+
         // Astro wipes <html> attributes during the DOM swap, so the axis set
         // in before-preparation is gone by the time the browser computes the
         // ::view-transition animation. astro:after-swap runs synchronously
@@ -581,8 +518,33 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         document.addEventListener('astro:after-swap', function() {
           if (pendingAxis) {
             document.documentElement.setAttribute('data-axis', pendingAxis);
+            hideSkippedEntryCover();
           }
         });
+      })();
+    </script>
+    <script is:inline define:vars={{ buildStamp }}>
+      (function () {
+        if (location.hostname.indexOf('preview.') !== 0) return;
+        if (document.getElementById('preview-build-stamp')) return;
+        var stamp = document.createElement('div');
+        stamp.id = 'preview-build-stamp';
+        stamp.className = 'font-ui';
+        stamp.setAttribute('aria-hidden', 'true');
+        stamp.textContent = 'Preview · build ' + buildStamp;
+        // Legible on purpose. The first 9px / 62% version was not seen: the
+        // audit found every "old version" report was a view of the NEW build
+        // judged from a first screen that is identical to production.
+        // A bone rim, not lime: lime is the page's one interface mark, and the
+        // stamp is on every view the owner reviews.
+        // Its own view-transition name: as a child of <html> it was inside
+        // both root snapshots, so it doubled and slid with every push and
+        // dropped with every fall. Named, it is one identical old/new pair
+        // and holds still while the pages move around it.
+        stamp.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:130;padding:8px 12px;border-radius:999px;border:1px solid rgba(244,244,237,.4);background:rgba(11,14,9,.9);color:#F4F4ED;font-size:11px;line-height:1;letter-spacing:.1em;text-transform:uppercase;pointer-events:none;view-transition-name:preview-stamp';
+        // On <html>, not <body>: ClientRouter swaps the body's children on
+        // every in-site navigation and would take the stamp with them.
+        document.documentElement.appendChild(stamp);
       })();
     </script>
   </body>

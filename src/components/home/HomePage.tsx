@@ -10,18 +10,22 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import { AnimatePresence, motion, useMotionValue, useReducedMotion, useScroll, useTransform, type MotionValue } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
 import type { Collection } from '../../types';
 import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
-import ArchiveClosing from './ArchiveClosing';
+import ArchiveClosing, { type ClosingStoryRequest } from './ArchiveClosing';
 import GlobePrologue from './GlobePrologue';
-import MagazineLayout from './MagazineLayout';
+import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin } from './MagazineLayout';
 import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
-import Magnetic from '../shared/Magnetic';
 import { startLenis } from '../../lib/smoothScroll';
-import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES } from '../../lib/archiveEntrance';
+import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES, ARCHIVE_ENTRY_LEAD } from '../../lib/archiveEntrance';
+import { rollFrames } from '../../lib/bridgeRoll';
+import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
+import { activeChapters, chapterSections, issueChapters } from '../../lib/chapterOrder';
+import { chapterPoint } from '../../lib/geo';
+import { DUR, DUR_MS, EASE, voyageEase, voyageSeconds } from '../../lib/motion';
 import type Lenis from 'lenis';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
@@ -30,7 +34,6 @@ import type Lenis from 'lenis';
 const loadRouteAtlas = () => import('./RouteAtlas');
 const RouteAtlas = lazy(loadRouteAtlas);
 
-const expo = [0.16, 1, 0.3, 1] as const;
 // Keep the more experimental Living Atlas composition on compact screens for
 // now, but restore the established desktop archive: persistent route rail,
 // real Mapbox geography and the active photograph sharing one editorial field.
@@ -64,27 +67,24 @@ interface Props {
 // itself stayed hidden until 1024px, leaving an entire breakpoint without a
 // map.
 /** The one chapter rendered as ArchiveChapter's two-column editorial spread.
- *  Mid-stack on purpose: chapter 0 owns the archive entrance, whose album
- *  unfold is gated on `variant === 'cover'`. */
+ *  Mid-stack on purpose: chapter 0's cover plate is where the bridge's roll
+ *  lands (GlobePrologue). */
 /* Every chapter is the same kind of cover. One editorial spread used to break
    the run (index 3); the owner asked for one treatment throughout. -1 keeps
    the `feature` variant reachable without any chapter using it. */
 const FEATURE_CHAPTER_INDEX = -1;
-// The homepage is an ISSUE, not the archive. It flies a scripted camera through
-// every chapter it is given at roughly one screen each, so "all collections"
-// grows the page without bound: measured at 1.03 screens per chapter on a
-// 900px viewport, six chapters is 10.9 screens and thirty would be 35. The
-// archive keeps growing; this does not. The map is the complete index — that
-// is the surface built to scale, and it is where everything stays reachable.
-//
-// Six is today's whole archive, so nothing changes until the seventh chapter
-// lands, at which point the oldest leaves the front and stays on /travel.
-const HOME_CHAPTER_LIMIT = 6;
-// Desktop globe prologue: the height of the opening laid over the atlas, and
-// how much of the viewport the atlas entrance overlaps it by (the entrance
-// begins when the archive's top edge is 56% down the screen).
+// The homepage is an ISSUE, not the archive: which chapters it carries
+// (HOME_CHAPTER_LIMIT) and the order it reads them in live in
+// src/lib/chapterOrder.ts, which /about reads too.
+// Desktop globe prologue: the height of the opening laid over the atlas. The
+// atlas entrance overlaps it by ARCHIVE_ENTRY_LEAD of the viewport (the
+// entrance begins when the archive's top edge is 56% down the screen).
 const PROLOGUE_HEIGHT = '300svh';
-const ARCHIVE_ENTRY_LEAD = 0.56;
+// A voyage's passing (global.css, "A voyage's passing"): while a click carries
+// the page to a place, what it streams past steps back so only the destination
+// reads. The page comes back up over DUR.out, started that long before the
+// landing, so it is whole on the frame the trip ends.
+const PASSING_RESTORE_MS = DUR_MS.out;
 
 function prologueProgressAt(scrollY: number, prologueTop: number, archiveTop: number, viewportHeight: number) {
   const span = Math.max(1, archiveTop - prologueTop - viewportHeight * ARCHIVE_ENTRY_LEAD);
@@ -138,6 +138,8 @@ function useDesktopLayout() {
 }
 
 interface DeferredRouteAtlasProps {
+  /** The bridge's gate crossings (see RouteAtlas's `rollGates`). */
+  rollGates?: number[] | null;
   stops: RouteStop[];
   activeIndex: number;
   engagedChapterId?: string | null;
@@ -152,14 +154,16 @@ interface DeferredRouteAtlasProps {
   onNavigate?: (chapterId: string) => void;
 }
 
-function RouteAtlasFallback({ mobile = false, entryProgress, reducedMotion = false }: {
+function RouteAtlasFallback({ mobile = false, entryProgress }: {
   mobile?: boolean;
   entryProgress?: MotionValue<number>;
-  reducedMotion?: boolean;
 }) {
   const stableProgress = useMotionValue(1);
+  // Reduced motion needs no case of its own: its entry progress is already a
+  // step (0 above the archive, 1 in it), so the stand-in stays out of the
+  // prologue there too and the first screen is the globe's, as with motion.
   const opacity = useTransform(entryProgress ?? stableProgress, (p) =>
-    reducedMotion ? 1 : entrancePhase(p, ...ARCHIVE_ENTRANCE_PHASES.mapVisibility),
+    entrancePhase(p, ...ARCHIVE_ENTRANCE_PHASES.mapVisibility),
   );
   return (
     <motion.div
@@ -223,11 +227,11 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
       className="h-full w-full"
     >
       {nearViewport ? (
-        <Suspense fallback={<RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} reducedMotion={props.reducedMotion} />}>
+        <Suspense fallback={<RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} />}>
           <RouteAtlas {...props} />
         </Suspense>
       ) : (
-        <RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} reducedMotion={props.reducedMotion} />
+        <RouteAtlasFallback mobile={mobile} entryProgress={props.entryProgress} />
       )}
     </div>
   );
@@ -267,8 +271,11 @@ export default function HomePage({ collections }: Props) {
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
   // The trip a click on the index or the rail set in motion (desktop).
   const [voyage, setVoyage] = useState<AtlasVoyage | null>(null);
-  // Where the prologue's planet sits on screen: the index bends around it.
-  const [planet, setPlanet] = useState<{ x: number; y: number; r: number } | null>(null);
+  // The bridge's roll (GlobePrologue): where each chapter's select crosses
+  // the gate, for the globe to light its place (RouteAtlas).
+  const [rollGates, setRollGates] = useState<number[] | null>(null);
+  // The page's Lenis, as state: the roll writes itself from its scroll event.
+  const [lenisInstance, setLenisInstance] = useState<Lenis | null>(null);
   const voyageTimerRef = useRef(0);
   // Semantic city changes belong to React, but the optical timeline does not.
   // Keeping the current ID in a ref prevents every scroll frame from entering
@@ -286,7 +293,13 @@ export default function HomePage({ collections }: Props) {
   const storyReturnFocusRef = useRef<HTMLElement | null>(null);
   const storySourceChapterIdRef = useRef<string | null>(null);
   const bodyPaddingRightRef = useRef('');
+  // The scrollbar's width while a story is open (0 when there is none): the
+  // page keeps it as padding so nothing under the overlay reflows when the
+  // stopped Lenis takes the scrollbar away.
+  const storyGutterRef = useRef(0);
   const storySharedImageUrlRef = useRef('');
+  // The plate the open story grew out of, as it was at the click.
+  const plateOriginRef = useRef<PlateOrigin | null>(null);
   // The most opaque of the living atlas's stacked photographic layers — the one
   // the visitor is actually looking at mid-scrub.
   const liveAtlasFrame = () => {
@@ -304,6 +317,25 @@ export default function HomePage({ collections }: Props) {
     });
     return (best as HTMLElement | null)?.querySelector<HTMLImageElement>('img') ?? null;
   };
+  // The scrollbar's width, held as the body's padding (and the fixed nav's,
+  // through --story-gutter) from the frame Lenis stops until the frame it
+  // starts again. Measured only while the scrollbar is still there; once held,
+  // a second call keeps what it has.
+  const holdStoryGutter = useCallback(() => {
+    if (storyGutterRef.current > 0) return;
+    const gutter = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+    if (gutter <= 0) return;
+    storyGutterRef.current = gutter;
+    bodyPaddingRightRef.current = document.body.style.paddingRight;
+    document.body.style.paddingRight = `${gutter}px`;
+    document.documentElement.style.setProperty('--story-gutter', `${gutter}px`);
+  }, []);
+  const releaseStoryGutter = useCallback(() => {
+    if (storyGutterRef.current <= 0) return;
+    storyGutterRef.current = 0;
+    document.body.style.paddingRight = bodyPaddingRightRef.current;
+    document.documentElement.style.removeProperty('--story-gutter');
+  }, []);
   const openCollection = useCallback((collection: Collection) => {
     // Two trees, two anchor prefixes: the living (mobile) tree publishes its
     // chapters as `mobile-archive-item-…`, so looking one up under the desktop
@@ -327,6 +359,87 @@ export default function HomePage({ collections }: Props) {
     const chapterImage = chapter?.querySelector<HTMLImageElement>('.archive-photo-frame img')
       ?? liveAtlasFrame();
     storySharedImageUrlRef.current = chapterImage?.currentSrc || chapterImage?.src || '';
+    // The plate the story will grow out of, measured once, here, in the click
+    // — before Lenis is stopped and before the body lock lands (both follow
+    // below): a rect read after either is a rect of a page that has already
+    // moved. Two boxes in the one pass: the frame (the window) and the
+    // photograph inside it (hover zoom and parallax included), so the plane's
+    // first frame is the frame the reader saw. The living tree has no plate,
+    // so its stories keep the cover they have.
+    const plateFrame = chapter?.querySelector<HTMLElement>('.archive-photo-frame');
+    // A torn ticket (its stub, or the keyboard) opens from where the
+    // photograph LAY, not from the face torn off: that face is rotated,
+    // laid aside and transparent, and a rect of it is the axis-aligned bound of
+    // a box nobody can see. The tear box never moves and the frame sits at
+    // its top-left, so its corner plus the frame's own size is the frame at
+    // rest; the photograph fills it as the plane's first frame.
+    const tornTear = chapter?.querySelector<HTMLElement>('.archive-plate.is-torn .archive-plate__tear');
+    const tearBox = tornTear && plateFrame ? tornTear.getBoundingClientRect() : null;
+    const frameBox = tearBox && plateFrame
+      ? new DOMRect(tearBox.x, tearBox.y, plateFrame.offsetWidth, plateFrame.offsetHeight)
+      : plateFrame?.getBoundingClientRect();
+    const imageBox = tearBox
+      ? frameBox ?? null
+      : chapterImage && plateFrame?.contains(chapterImage)
+        ? chapterImage.getBoundingClientRect()
+        : null;
+    const plateMatte = chapter?.querySelector<HTMLElement>('.archive-photo-matte');
+    plateOriginRef.current = chapterImage && frameBox && imageBox
+      && frameBox.width > 0 && frameBox.height > 0 && imageBox.width > 0 && imageBox.height > 0
+      && storySharedImageUrlRef.current
+      ? {
+          frame: { x: frameBox.x, y: frameBox.y, width: frameBox.width, height: frameBox.height },
+          image: { x: imageBox.x, y: imageBox.y, width: imageBox.width, height: imageBox.height },
+          ratio: chapterImage.naturalWidth > 0 && chapterImage.naturalHeight > 0
+            ? chapterImage.naturalWidth / chapterImage.naturalHeight
+            : imageBox.width / imageBox.height,
+          // framer writes the matte's MotionValue inline, so this is current.
+          matte: Number.parseFloat(plateMatte?.style.opacity ?? '') || 0,
+          imageUrl: storySharedImageUrlRef.current,
+        }
+      : null;
+    // The ticket's stub goes with the story: the half the reader keeps is
+    // handed into the foot of the story's rail once the story has loaded,
+    // and flies back onto the ticket at the close (MagazineLayout, KeptStub
+    // / flyStubHome). Read in the same pass as the plate — its box and where
+    // its ordinal, "/ TT · admission" and place are printed. It stays on the
+    // ticket while the plate grows over it: MagazineLayout hides it
+    // (`data-kept-away`) only once its kept half is in the rail, under the
+    // opaque story. A torn ticket has already given its stub up; under
+    // reduced motion nothing travels.
+    const stubNode = plateOriginRef.current && !tornTear
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? chapter?.querySelector<HTMLElement>('.archive-ticket-stub')
+      : null;
+    const stubBox = stubNode?.getBoundingClientRect();
+    const stubMarks = stubNode && stubBox && stubBox.width > 0 && stubBox.height > 0
+      && stubBox.bottom > 0 && stubBox.top < window.innerHeight
+      ? readStubMarks(stubNode, 'archive-ticket-stub')
+      : null;
+    if (plateOriginRef.current && stubNode && stubBox && stubMarks) {
+      // What this ticket prints — its place in the homepage's run — so the
+      // half the reader keeps carries the same number into the story.
+      const ordinal = stubNode.querySelector('.archive-ticket-stub__no')?.textContent?.trim();
+      const total = stubNode.querySelector('.archive-ticket-stub__of')?.textContent?.match(/\d+/)?.[0];
+      plateOriginRef.current.stub = {
+        box: { x: stubBox.x, y: stubBox.y, width: stubBox.width, height: stubBox.height },
+        marks: stubMarks,
+        node: stubNode,
+        // The window, not the client width: the site's scrollbar comes and
+        // goes with Lenis, and the close compared 1724 with 1728 and never
+        // flew the stub home.
+        view: { width: window.innerWidth, height: window.innerHeight },
+        print: ordinal && total ? { ordinal, total } : undefined,
+      };
+    }
+    // The plate's title, corners and cue hang past its edges; they go with the
+    // plate in the same paint the plane arrives in (global.css,
+    // `[data-story-source]`). An attribute set here rather than React state,
+    // so it is on the node before the commit that mounts the story.
+    document.querySelectorAll<HTMLElement>('[data-story-source]').forEach((node) => {
+      delete node.dataset.storySource;
+    });
+    if (chapter && plateOriginRef.current) chapter.dataset.storySource = 'true';
     // Freeze the page in the same event frame as the story selection. Waiting
     // for the state effect left one residual smooth-scroll frame moving behind
     // the full-screen cover on quick trackpad clicks.
@@ -335,9 +448,13 @@ export default function HomePage({ collections }: Props) {
     setStoryClosing(false);
     storyScrollYRef.current = window.scrollY;
     commitActiveArchiveId(`archive-item-${collection._id}`);
+    // Stopping Lenis clips <html> and takes the scrollbar with it: hold its
+    // width as padding in the same frame, or the whole page reflows under the
+    // growing plate (and the stub's box above stops being where it is).
+    holdStoryGutter();
     lenisRef.current?.stop();
     setSelectedCollection(collection);
-  }, [commitActiveArchiveId]);
+  }, [commitActiveArchiveId, holdStoryGutter]);
   const closeCollection = useCallback(() => {
     // Keep the homepage frozen until the editorial Story cover and panel have
     // completed their exit. The map timeline resumes only after AnimatePresence.
@@ -350,6 +467,15 @@ export default function HomePage({ collections }: Props) {
   const finishStoryClose = useCallback(() => {
     storyOpenRef.current = false;
     setStoryClosing(false);
+    // The plate that grew into the story gets its title and corners back.
+    document.querySelectorAll<HTMLElement>('[data-story-source]').forEach((node) => {
+      delete node.dataset.storySource;
+    });
+    // …and its stub, if the story's own close did not already give it back
+    // (one flying home seats itself, and is left alone here).
+    document.querySelectorAll<HTMLElement>('[data-kept-away]:not([data-kept-returning])').forEach((node) => {
+      delete node.dataset.keptAway;
+    });
     // Focusing into a subtree that is still `inert` silently no-ops, and the
     // page root only drops `inert` once the state above has painted. Two
     // frames covered the editorial-cover exit, but the shared-photograph exit
@@ -515,9 +641,11 @@ export default function HomePage({ collections }: Props) {
   useEffect(() => {
     const { lenis, destroy } = startLenis();
     lenisRef.current = lenis;
+    setLenisInstance(lenis);
     return () => {
       destroy();
       lenisRef.current = null;
+      setLenisInstance(null);
     };
   }, [reduce]);
 
@@ -553,10 +681,6 @@ export default function HomePage({ collections }: Props) {
     };
   }, [reduce]);
 
-  // "Selected Works" is part of the handoff, not a second entrance. Its layers
-  // resolve directly from the same page scroll so fast and slow scrolling keep
-  // the same visual order and reversing the gesture reverses the transition.
-  const selectedWorksRef = useRef<HTMLDivElement>(null);
   const desktopAtlasSectionRef = useRef<HTMLDivElement>(null);
   const desktopStageRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -574,79 +698,110 @@ export default function HomePage({ collections }: Props) {
       ));
     }
   }, [desktopLayout, atlasEntryProgress, prologueProgress, reduce]);
-  // Reverse parallax — the heading block counter-drifts (down) against the
-  // covers' upward drift, so the text plane reads as nearer than the photos.
-  // useScroll measures the static outer wrapper; the drift is applied to an
-  // inner layer (no measure/transform feedback loop). Off when reduced.
-  const { scrollYProgress: swScrollProgress } = useScroll({
-    target: selectedWorksRef,
-    offset: ['start end', 'end start'],
-  });
-  const headingReverseY = useTransform(swScrollProgress, [0, 1], reduce ? [0, 0] : [36, -36]);
-  // The section heading announces the archive before its first frame opens;
-  // photo titles and geographic controls resolve in the later score phases.
-  const swKickerOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.04, 0.3));
-  const swKickerX = useTransform(swKickerOpacity, [0, 1], [-16, 0]);
-  const swRuleScale = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.02, 0.26));
-  const swTitleOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.1, 0.5));
-  const swTitleY = useTransform(swTitleOpacity, [0, 1], [42, 0]);
-  const swCountOpacity = useTransform(atlasEntryProgress, (p) => entrancePhase(p, 0.26, 0.62));
-  const swCountX = useTransform(swCountOpacity, [0, 1], [12, 0]);
-  // Filter to collections that have photos
-  const activeCollections = useMemo(() => {
-    const withPhotos = collections.filter((collection) => (collection.photos?.length || 0) > 0);
-    // A partial route-order rollout must not reshuffle the published archive.
-    // Once every active collection has a value, routeOrder becomes the single
-    // deterministic source for inserting future locations between chapters.
-    const hasCompleteRouteOrder = withPhotos.length > 0 && withPhotos.every(
-      (collection) => Number.isFinite(collection.routeOrder),
-    );
-    return hasCompleteRouteOrder
-      ? [...withPhotos].sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0))
-      : withPhotos;
-  }, [collections]);
-
-  // The most recent chapters, put back into the archive's reading order. Recency
-  // chooses WHICH chapters are in the issue; routeOrder still chooses the order
-  // they are read in, so the front page never reads backwards.
-  const issueCollections = useMemo(() => {
-    if (activeCollections.length <= HOME_CHAPTER_LIMIT) return activeCollections;
-    const byRecency = [...activeCollections].sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
-    const inIssue = new Set(byRecency.slice(0, HOME_CHAPTER_LIMIT).map((collection) => collection._id));
-    return activeCollections.filter((collection) => inIssue.has(collection._id));
-  }, [activeCollections]);
-
-  // Group active cities into ordered region sections. A section shows a
-  // divider HEADER only when it has ≥2 cities; single-city regions (and
-  // untagged collections) just render their chapter — no redundant header.
-  // Cities remain the unit everywhere (observer, rail, accent, story).
-  const sections = useMemo<RegionSection[]>(() => {
-    const groups = new Map<string, Collection[]>();
-    const order: string[] = [];
-    for (const c of issueCollections) {
-      const key = c.region?.trim() ? `r:${c.region.trim()}` : `s:${c._id}`;
-      if (!groups.has(key)) {
-        groups.set(key, []);
-        order.push(key);
-      }
-      groups.get(key)!.push(c);
-    }
-    return order.map((key) => {
-      const cities = groups.get(key)!;
-      const isRegion = key.startsWith('r:') && cities.length >= 2;
-      return {
-        key,
-        region: isRegion ? cities[0].region!.trim() : null,
-        showHeader: isRegion,
-        frameCount: cities.reduce((n, c) => n + (c.photoCount ?? c.photos?.length ?? 0), 0),
-        cities,
-      };
-    });
-  }, [issueCollections]);
+  // Filter to collections that have photos, in route order; then the issue
+  // (the most recent HOME_CHAPTER_LIMIT, read in route order); then the
+  // region sections. The rules are src/lib/chapterOrder.ts, shared with /about.
+  const activeCollections = useMemo(() => activeChapters(collections), [collections]);
+  const issueCollections = useMemo(() => issueChapters(activeCollections), [activeCollections]);
+  const sections = useMemo<RegionSection[]>(() => chapterSections(issueCollections), [issueCollections]);
 
   // Flat city list in on-screen order (region members grouped adjacent) — the
   // route rail + observer index against this.
   const orderedCities = useMemo(() => sections.flatMap((s) => s.cities), [sections]);
+
+  // ── Stories opened from the closing's proof sheet ──
+  // A frame on the sheet opens its chapter's story and then that frame in the
+  // viewer; a kept stub opens the story. The sheet lies a page or more below
+  // the chapter's plate, so the story does not grow out of that plate (its
+  // rect is off-screen). A chosen frame is on screen, though, and the story
+  // grows out of it by the plate's own path (`photoOrigin`): the picture the
+  // reader picked becomes the cover, and its place's terrain comes up over
+  // it. That replaces a 0.7s crossfade of the whole panel over the sheet,
+  // which read as a muddy double exposure. A stub opens the story on its own
+  // front page, as before. No chapter is made active behind the cover — the
+  // reader is still at the closing — and focus comes back to where the sheet
+  // says (the stub, if it was pressed from the keyboard; the closing section,
+  // if a pointer chose).
+  const storyFrameRef = useRef<{ id: string; hash: string } | null>(null);
+  const openStoryFromClosing = useCallback((collectionId: string, request: ClosingStoryRequest) => {
+    const collection = orderedCities.find((city) => city._id === collectionId);
+    if (!collection) return;
+    const activeBefore = activeArchiveIdRef.current;
+    // The chosen frame, read before openCollection stops Lenis and holds the
+    // scrollbar's gutter, as the plate is read in openCollection itself.
+    const grownFrom = request.source ? photoOrigin(request.source, request.source.querySelector('img')) : null;
+    openCollection(collection);
+    // Undo what openCollection read off the chapter's plate, in the same
+    // event: the story mounts on the next render and reads these refs there.
+    // (The chapter's stub stays on its ticket: it is hidden only by a story
+    // that grew out of that ticket, and this one grows from the frame.)
+    plateOriginRef.current = grownFrom;
+    document.querySelectorAll<HTMLElement>('[data-story-source]').forEach((node) => {
+      delete node.dataset.storySource;
+    });
+    if (request.returnFocus) storyReturnFocusRef.current = request.returnFocus;
+    commitActiveArchiveId(activeBefore);
+    const hash = request.frameUrl ? /[0-9a-f]{40}/.exec(request.frameUrl)?.[0] : undefined;
+    storyFrameRef.current = hash ? { id: collection._id, hash } : null;
+  }, [orderedCities, openCollection, commitActiveArchiveId]);
+  // …then the frame. MagazineLayout takes no starting frame, so the page does
+  // what a reader would: while the story's front page still covers it, the
+  // story is held at that frame's row (so the peel uncovers the frame, not
+  // the story's top), and once the story is live (its body no longer inert)
+  // the frame's own cell is clicked — the viewer flies out of it exactly as it
+  // does from a click there. Found by asset hash, so the story's own order
+  // (it promotes a landscape to the front) never matters. Gives up quietly.
+  useEffect(() => {
+    const pending = storyFrameRef.current;
+    if (!pending) return;
+    // Closed, or turned to another story before the frame was reached.
+    if (!selectedCollection || pending.id !== selectedCollection._id) {
+      storyFrameRef.current = null;
+      return;
+    }
+    let frame = 0;
+    const started = performance.now();
+    const findCell = () => Array.from(document.querySelectorAll<HTMLElement>('[data-frame-index]')).find((cell) => {
+      if (cell.offsetParent === null) return false;
+      const image = cell.querySelector('img');
+      return !!image && `${image.getAttribute('srcset') ?? ''} ${image.getAttribute('src') ?? ''}`.includes(pending.hash);
+    }) ?? null;
+    const step = () => {
+      frame = 0;
+      if (storyFrameRef.current !== pending) return;
+      if (performance.now() - started > 8000) {
+        storyFrameRef.current = null;
+        return;
+      }
+      const cell = findCell();
+      const scroller = cell?.closest<HTMLElement>('[data-lenis-prevent]') ?? null;
+      if (cell && scroller) {
+        let top = 0;
+        let node: HTMLElement | null = cell;
+        while (node && node !== scroller) {
+          top += node.offsetTop;
+          node = node.offsetParent instanceof HTMLElement ? node.offsetParent : null;
+        }
+        if (node === scroller) {
+          const target = Math.max(0, Math.round(top - (scroller.clientHeight - cell.offsetHeight) / 2));
+          if (Math.abs(scroller.scrollTop - target) > 1) {
+            const behavior = scroller.style.scrollBehavior;
+            scroller.style.scrollBehavior = 'auto';
+            scroller.scrollTop = target;
+            scroller.style.scrollBehavior = behavior;
+          }
+        }
+        if (!cell.closest('[inert]')) {
+          storyFrameRef.current = null;
+          cell.click();
+          return;
+        }
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [selectedCollection]);
   // Closing-page figures, derived from the archive itself. Some chapters store
   // their year as a string, so parse rather than trust the type.
   // From the whole archive, deliberately — these figures are a claim about the
@@ -674,6 +829,14 @@ export default function HomePage({ collections }: Props) {
     );
     return covers.map((_, index) => [covers[index - 1], covers[index + 1]].filter(Boolean));
   }, [orderedCities]);
+  // The pad under each ticket: the card stock of the (up to three) tickets
+  // still bound under it, nearest first.
+  const chapterPadStocks = useMemo(
+    () => orderedCities.map((_, index) =>
+      orderedCities.slice(index + 1, index + 4).map((city) => stockPaper(city.slug)),
+    ),
+    [orderedCities],
+  );
   const walkInCollections = useMemo(
     () => orderedCities.map((city) => ({
       name: city.name.trim(),
@@ -689,33 +852,15 @@ export default function HomePage({ collections }: Props) {
   const routeStops = useMemo<RouteStop[]>(
     () =>
       orderedCities.flatMap((city) => {
-        const points = (city.photos ?? [])
-          .map((photo) => photo.location)
-          .filter((location): location is NonNullable<typeof location> =>
-            location?.lat != null && location?.lng != null,
-          );
         const fallbackKey = [city.name, city.location, city.region]
           .filter(Boolean)
           .map((value) => value!.trim().toLowerCase())
           .find((value) => ROUTE_FALLBACKS[value]);
-        const canonicalMapLocation = city.mapLocation;
-        const hasCanonicalMapLocation =
-          Number.isFinite(canonicalMapLocation?.lng) &&
-          Number.isFinite(canonicalMapLocation?.lat) &&
-          canonicalMapLocation!.lng >= -180 &&
-          canonicalMapLocation!.lng <= 180 &&
-          canonicalMapLocation!.lat >= -90 &&
-          canonicalMapLocation!.lat <= 90;
-        const coordinates: [number, number] | undefined = hasCanonicalMapLocation
-          ? [canonicalMapLocation!.lng, canonicalMapLocation!.lat]
-          : points.length
-            ? [
-                points.reduce((sum, point) => sum + point.lng, 0) / points.length,
-                points.reduce((sum, point) => sum + point.lat, 0) / points.length,
-              ]
-            : fallbackKey
-              ? ROUTE_FALLBACKS[fallbackKey]
-              : undefined;
+        // The canonical map point, else the mean of the geotagged frames
+        // (src/lib/geo.ts, the rule /about's route figure reads too), else a
+        // named place.
+        const coordinates: [number, number] | undefined = chapterPoint(city)
+          ?? (fallbackKey ? ROUTE_FALLBACKS[fallbackKey] : undefined);
 
         const landscapePreview = (city.photos ?? []).find((photo) =>
           !!photo.imageUrl &&
@@ -765,12 +910,21 @@ export default function HomePage({ collections }: Props) {
         `[Living Atlas] Missing canonical coordinates: ${missing.map((city) => city.name).join(', ')}`,
       );
     }
+    // A new chapter prints on the olive fallback until it is given its own
+    // card stock (and one from STOCK_RESERVE) in src/lib/ticketStock.ts.
+    const unstocked = activeCollections.filter((collection) => !TICKET_STOCK[collection.slug]);
+    if (unstocked.length) {
+      console.warn(
+        `[Ticket stock] No card stock for: ${unstocked.map((collection) => collection.slug).join(', ')} — printing on the olive fallback.`,
+      );
+    }
   }, [activeCollections, orderedCities, routeStops]);
 
 
-  // The desktop prologue's index mirrors the real chapter order exactly and
-  // previews no place without a story. Each entry carries its chapter anchor
-  // plus the collection id the globe uses to light the stop.
+  // The desktop prologue's roll mirrors the real chapter order exactly and
+  // previews no place without a story. Each entry carries its chapter anchor,
+  // the collection id the globe uses to light the stop, and its piece of the
+  // roll (its select and the frame either side of it).
   const prologueCities = useMemo(
     () => orderedCities.map((city) => {
       const name = city.name.trim();
@@ -783,6 +937,7 @@ export default function HomePage({ collections }: Props) {
         region: region && region.toLowerCase() !== name.toLowerCase() ? region : undefined,
         frames: city.photoCount ?? city.photos?.length ?? 0,
         year: city.year ?? undefined,
+        roll: rollFrames(city.photos ?? [], city.coverImageUrl),
       };
     }),
     [orderedCities],
@@ -803,7 +958,46 @@ export default function HomePage({ collections }: Props) {
     : '/travel';
 
   const voyageActiveRef = useRef(false);
-  const navigateLivingChapter = useCallback((anchorId: string) => {
+
+  // ── A voyage's passing ──
+  // Set on the archive column for the trip (and on the destination chapter,
+  // which never steps back); cleared by a timer PASSING_RESTORE_MS before the
+  // landing, and again by the trip's own settle in case it ends early.
+  // Attributes outside React's tree of props: a render in between never
+  // touches them. <html> carries it too, with the destination's group in the
+  // atlas's tick strip, so the strip's caption names only where the trip is
+  // going, not each chapter it streams past.
+  const passingRef = useRef<{ column: HTMLElement; destination: HTMLElement | null; tick: HTMLElement | null; timer: number } | null>(null);
+  const endPassing = useCallback(() => {
+    const passing = passingRef.current;
+    if (!passing) return;
+    passingRef.current = null;
+    window.clearTimeout(passing.timer);
+    delete passing.column.dataset.voyage;
+    delete document.documentElement.dataset.voyage;
+    if (passing.destination) delete passing.destination.dataset.voyageDest;
+    if (passing.tick) delete passing.tick.dataset.voyageDest;
+  }, []);
+  const startPassing = useCallback((destination: HTMLElement | null, durationMs: number) => {
+    endPassing();
+    const column = document.querySelector<HTMLElement>('[data-archive-column]');
+    if (!column) return;
+    const destinationId = destination?.id.startsWith('archive-item-') ? destination.id.slice('archive-item-'.length) : null;
+    const tick = destinationId
+      ? document.querySelector<HTMLElement>(`[data-tick-group="${CSS.escape(destinationId)}"]`)
+      : null;
+    if (destination) destination.dataset.voyageDest = '';
+    if (tick) tick.dataset.voyageDest = '';
+    column.dataset.voyage = 'passing';
+    document.documentElement.dataset.voyage = 'passing';
+    const timer = window.setTimeout(endPassing, Math.max(0, durationMs - PASSING_RESTORE_MS));
+    passingRef.current = { column, destination, tick, timer };
+  }, [endPassing]);
+  useEffect(() => endPassing, [endPassing]);
+
+  // `passing` false: the trip does not step the page back (pull to tear,
+  // whose torn face is still being laid aside when the page sets off).
+  const navigateLivingChapter = useCallback((anchorId: string, passing = true) => {
     // One trip at a time: a second click mid-voyage would retarget the dive.
     if (voyageActiveRef.current) return;
     const target = document.getElementById(anchorId);
@@ -833,19 +1027,21 @@ export default function HomePage({ collections }: Props) {
         // goes, eases in and out so the camera can take off and land with it,
         // and the atlas is told where it is heading so it goes straight there.
         const distance = Math.abs(targetY - window.scrollY);
-        const duration = Math.min(2.6, Math.max(1.5, 1.3 + distance / 2400));
+        const duration = voyageSeconds(distance);
         const token = Date.now();
         const settle = () => {
           voyageActiveRef.current = false;
           setVoyage((current) => (current?.token === token ? null : current));
+          endPassing();
         };
         voyageActiveRef.current = true;
         setVoyage({ chapterId, duration: duration * 1000, token });
+        if (passing) startPassing(target, duration * 1000);
         window.clearTimeout(voyageTimerRef.current);
         voyageTimerRef.current = window.setTimeout(settle, duration * 1000 + 500);
         lenis.scrollTo(targetY, {
           duration,
-          easing: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
+          easing: voyageEase,
           lock: true,
           onComplete: settle,
         });
@@ -862,7 +1058,81 @@ export default function HomePage({ collections }: Props) {
       top: targetY,
       behavior: reduce ? 'auto' : 'smooth',
     });
-  }, [desktopLayout, reduce]);
+  }, [desktopLayout, reduce, startPassing, endPassing]);
+
+  // Pull to tear (desktop tickets, ArchiveChapter): a cover torn away by hand
+  // goes on to the next place — the very voyage the index takes, asked for
+  // only once the face is free. The last ticket goes on to the closing, the
+  // page it tears on when scrolled (its top on the viewport's top is where
+  // the closing counts as arrived).
+  const tearAwayFrom = useCallback((index: number) => {
+    const next = orderedCities[index + 1];
+    if (next) {
+      navigateLivingChapter(`archive-item-${next._id}`, false);
+      return;
+    }
+    const closing = document.querySelector<HTMLElement>('[data-archive-closing]');
+    if (!closing) return;
+    const targetY = documentTop(closing);
+    const lenis = lenisRef.current;
+    if (lenis && !reduce) {
+      const distance = Math.abs(targetY - window.scrollY);
+      lenis.scrollTo(targetY, {
+        duration: voyageSeconds(distance),
+        easing: voyageEase,
+        lock: true,
+      });
+      return;
+    }
+    window.scrollTo({ top: targetY, behavior: 'auto' });
+  }, [navigateLivingChapter, orderedCities, reduce]);
+
+  // Back to index: a voyage up the page, the same trip the index takes down
+  // it (a beat longer the further it goes, sine in and out, the wheel held
+  // off), not the browser's smooth scroll, which whipped seven thousand
+  // pixels past in 1.4 s, up to 366 px a frame. Every chapter on the way is
+  // passed. Focus goes to the index at once, without a scroll of its own.
+  // Without Lenis (reduced motion, a touch screen) it is a jump.
+  const backToIndex = useCallback(() => {
+    const index = document.getElementById('archive-index');
+    if (!index) return;
+    const lenis = lenisRef.current;
+    if (!lenis || reduce) {
+      index.scrollIntoView({ behavior: 'auto' });
+      index.focus({ preventScroll: true });
+      return;
+    }
+    if (voyageActiveRef.current) return;
+    index.focus({ preventScroll: true });
+    const targetY = documentTop(index);
+    const duration = voyageSeconds(Math.abs(targetY - window.scrollY));
+    const token = Date.now();
+    const settle = () => {
+      voyageActiveRef.current = false;
+      setVoyage((current) => (current?.token === token ? null : current));
+      endPassing();
+    };
+    voyageActiveRef.current = true;
+    // The atlas flies out of the archive in one zoom-out on the trip's own
+    // clock (RouteAtlas, `beginOutbound`), ending where the prologue holds
+    // the planet on the index — its progress there, from the same offsets
+    // the scroll sampler uses.
+    const stage = desktopStageRef.current;
+    const atlasSection = desktopAtlasSectionRef.current;
+    if (stage && atlasSection) {
+      const prologueAt = prologueProgressAt(targetY, documentTop(stage), documentTop(atlasSection), window.innerHeight);
+      setVoyage({ chapterId: '', duration: duration * 1000, token, outbound: { prologue: prologueAt } });
+    }
+    startPassing(null, duration * 1000);
+    window.clearTimeout(voyageTimerRef.current);
+    voyageTimerRef.current = window.setTimeout(settle, duration * 1000 + 500);
+    lenis.scrollTo(targetY, {
+      duration,
+      easing: voyageEase,
+      lock: true,
+      onComplete: settle,
+    });
+  }, [reduce, startPassing, endPassing]);
 
   // Keep the active city tied to the chapter nearest the visual reading line.
   // IntersectionObserver only fires when thresholds are crossed; during a
@@ -891,6 +1161,15 @@ export default function HomePage({ collections }: Props) {
         return [{ element, chapterIndex }];
       });
     let anchors: { id: string; documentY: number; chapterIndex: number }[] = [];
+    // Where the reader was on the chapter timeline at the last sample, when
+    // they were inside it (between the first chapter's centre and the
+    // last's); null anywhere else. A window resize keeps the raw scrollY,
+    // which after the relayout is somewhere else in the story — on a shorter
+    // window, chapters past where the reader was (their tickets torn, the map
+    // flown on). `heldPosition` carries this across the resize so the page
+    // is put back at the same point of the story (see measureAnchors).
+    let readingAt: number | null = null;
+    let heldPosition: number | null = null;
     let atlasEntryDocumentY: number | null = null;
     let prologueDocumentY: number | null = null;
     const writeProgress = (value: MotionValue<number>, next: number) => {
@@ -958,6 +1237,9 @@ export default function HomePage({ collections }: Props) {
         }
       }
       writeProgress(archiveProgress, reduce ? Math.round(fractionalChapter) : fractionalChapter);
+      readingAt = timelineY >= anchors[0].documentY - 1 && timelineY <= anchors.at(-1)!.documentY + 1
+        ? fractionalChapter
+        : null;
 
       if (useLivingAtlas) {
         const activeAnchor = anchors.reduce((nearestAnchor, candidate) =>
@@ -1097,6 +1379,27 @@ export default function HomePage({ collections }: Props) {
             documentY: archiveChapterAnchorY(element, desktopLayout),
           }];
         });
+        // A resized window puts the reader back where they were in the
+        // story, before anything samples the new layout: straight there, on
+        // the new anchors, never played. The chapter clock then reads what
+        // it read before, so no ticket tears and the map stays put.
+        const held = heldPosition;
+        heldPosition = null;
+        const lenisNow = lenisRef.current;
+        if (held != null && desktopLayout && lenisNow && !storyOpenRef.current && anchors.length) {
+          let from = 0;
+          anchors.forEach((anchor, index) => {
+            if (anchor.chapterIndex <= held) from = index;
+          });
+          const start = anchors[from];
+          const end = anchors[Math.min(anchors.length - 1, from + 1)];
+          const local = end.chapterIndex > start.chapterIndex
+            ? (held - start.chapterIndex) / (end.chapterIndex - start.chapterIndex)
+            : 0;
+          const targetY = start.documentY + (end.documentY - start.documentY) * Math.max(0, Math.min(1, local)) -
+            window.innerHeight * 0.48;
+          if (Math.abs(targetY - window.scrollY) > 1) lenisNow.scrollTo(targetY, { immediate: true, force: true });
+        }
         if (scrollFrame) cancelAnimationFrame(scrollFrame);
         scrollFrame = 0;
         applyActiveChapter();
@@ -1114,6 +1417,8 @@ export default function HomePage({ collections }: Props) {
       // tick would move the chapter timeline under the user's finger.
       if (useLivingAtlas && !desktopLayout && Math.abs(nextWidth - measuredViewportWidth) < 1) return;
       measuredViewportWidth = nextWidth;
+      // Kept for the re-measure: a burst of resize events keeps the first.
+      if (heldPosition == null) heldPosition = readingAt;
       measureAnchors();
     };
     queryTracked().forEach(({ element }) => resizeObserver?.observe(element));
@@ -1145,17 +1450,17 @@ export default function HomePage({ collections }: Props) {
     if (isOverlayOpen) {
       const lockedScrollY = storyScrollYRef.current || window.scrollY;
       storyScrollYRef.current = lockedScrollY;
+      // Measured before the stop (openCollection usually has already).
+      holdStoryGutter();
       lenisRef.current?.stop();
-      bodyPaddingRightRef.current = document.body.style.paddingRight;
-      const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
-      if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
       if (desktopLayout) {
         // Desktop: the page stays exactly where it is under the overlay —
         // sticky atlas, scroll-driven covers and all — so the close simply
         // uncovers it. Lenis, stopped, already puts `overflow: clip` on
-        // <html>; that stops the body's `auto` propagating to the viewport
-        // and would make the body its own scroll container, dropping the
-        // sticky atlas out of view. `clip` on the body never creates a
+        // <html>; that stops the body's own overflow (the site's
+        // `overflow-x: hidden`, which computes y to `auto`) propagating to the
+        // viewport and would make the body its own scroll container, dropping
+        // the sticky atlas out of view. `clip` on the body never creates a
         // scroll container, so the sticky holds. (A fixed body sat the page
         // at the top, blanked the archive and replayed the scroll on close.)
         document.body.style.overflow = 'clip';
@@ -1169,10 +1474,17 @@ export default function HomePage({ collections }: Props) {
       document.body.style.position = '';
       document.body.style.inset = '';
       document.body.style.width = '';
-      document.body.style.overflow = 'auto';
-      document.body.style.paddingRight = bodyPaddingRightRef.current;
+      // Back to the site's own `overflow-x: hidden` (Layout.astro), never an
+      // inline `auto`: `auto` in x hands the viewport a sideways scroll, and a
+      // trackpad swipe or a drag to the edge slid the whole page with it.
+      document.body.style.overflow = '';
+      releaseStoryGutter();
       if (storyScrollYRef.current > 0 && Math.abs(window.scrollY - storyScrollYRef.current) > 1) {
-        window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        // 'instant', never left to the stylesheet: when html carried
+        // `scroll-behavior: smooth`, the phone layout (fixed body) showed the
+        // top of the page, then smooth-scrolled 600ms back down. The page
+        // must land where the reader left it, in one frame.
+        window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
         // The body lock moves the native window to the top while Lenis is
         // stopped. Reconcile Lenis' internal target before restarting it, or
         // a keyboard-opened Story can resume toward that stale top position.
@@ -1189,13 +1501,13 @@ export default function HomePage({ collections }: Props) {
         document.body.style.inset = '';
         document.body.style.width = '';
         document.body.style.overflow = '';
-        document.body.style.paddingRight = bodyPaddingRightRef.current;
-        if (Math.abs(window.scrollY - storyScrollYRef.current) > 1) window.scrollTo({ top: storyScrollYRef.current, behavior: 'auto' });
+        releaseStoryGutter();
+        if (Math.abs(window.scrollY - storyScrollYRef.current) > 1) window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
       }
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
     };
-  }, [desktopLayout, storyActive]);
+  }, [desktopLayout, storyActive, holdStoryGutter, releaseStoryGutter]);
 
   // Site accent is a single fixed electric lime, defined once via the
   // @property initial values in global.css (--accent-r/g/b = 210/255/0);
@@ -1204,8 +1516,14 @@ export default function HomePage({ collections }: Props) {
 
   return (
     <>
+      {/* `overflow-x-clip`: the atlas canvas and its page-ground strip bleed
+          past the right edge on purpose (their geometry is derived, see
+          RouteAtlas), and unclipped that bleed made the page 40px wider than
+          the window — a sideways swipe or a drag to the edge slid everything
+          left. `clip`, unlike `hidden`, is not a scroll container, so the
+          sticky atlas still pins to the viewport. */}
       <div
-        className="min-h-screen font-sans relative bg-[#282c20] text-[#F4F4ED]"
+        className="min-h-screen font-sans relative overflow-x-clip bg-[#282c20] text-[#F4F4ED]"
         inert={storyActive}
         aria-hidden={storyActive}
       >
@@ -1227,6 +1545,8 @@ export default function HomePage({ collections }: Props) {
           data-site-nav
           className="fixed top-0 left-0 w-full z-50 px-6 py-5 md:py-8 md:px-12 flex justify-between items-center bg-transparent"
           style={{
+            // Keeps its width while a story holds the scrollbar's gutter.
+            width: 'calc(100% - var(--story-gutter, 0px))',
             paddingTop: 'max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top))',
             paddingLeft: 'max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left))',
             paddingRight: 'max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right))',
@@ -1248,10 +1568,11 @@ export default function HomePage({ collections }: Props) {
               setSelectedCollection(null);
               window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
             }}
-            whileHover={reduce ? undefined : { scale: 1.04 }}
-            whileTap={reduce ? undefined : { scale: 0.96 }}
-            transition={{ duration: 0.2, ease: expo }}
-            className="flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.1em] text-[#F4F4ED] mix-blend-difference transition-opacity duration-200 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px] md:tracking-[0.12em]"
+            // No hover scale: the wordmark only fades to 0.6, as it does on
+            // every other page (.nav-wordmark). A press gives 3%.
+            whileTap={reduce ? undefined : { scale: 0.97 }}
+            transition={{ duration: DUR.flick, ease: EASE.arrive }}
+            className="nav-wordmark flex min-h-11 min-w-11 items-center gap-3 py-2 font-serif text-lg font-medium uppercase leading-none tracking-[0.1em] text-[#F4F4ED] mix-blend-difference hover:opacity-60 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00] md:text-[21px]"
           >
             {/* Slides down from above once the opening reveals (body.walkin-in,
                  flipped by WalkIn) — the reference's header entrance. */}
@@ -1269,30 +1590,28 @@ export default function HomePage({ collections }: Props) {
               pointerEvents: navPillsVisible ? 'auto' : 'none',
             }}
           >
-            <Magnetic strength={0.32}>
+              {/* The same pills as Nav.tsx: background only on hover
+                  (.nav-pill), no scale, a 3% press. */}
               <motion.a
-                whileHover={reduce ? undefined : { scale: 1.05 }}
-                whileTap={reduce ? undefined : { scale: 0.95 }}
+                whileTap={reduce ? undefined : { scale: 0.97 }}
+                transition={{ duration: DUR.flick, ease: EASE.arrive }}
                 href={atlasHref}
                 data-astro-prefetch="hover"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 Map
               </motion.a>
-            </Magnetic>
 
-            <Magnetic strength={0.32}>
               <motion.a
-                whileHover={reduce ? undefined : { scale: 1.05 }}
-                whileTap={reduce ? undefined : { scale: 0.95 }}
+                whileTap={reduce ? undefined : { scale: 0.97 }}
+                transition={{ duration: DUR.flick, ease: EASE.arrive }}
                 href="/about"
                 tabIndex={navPillsVisible ? 0 : -1}
-                className="inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] transition-colors duration-300 hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
+                className="nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75"
               >
                 About
               </motion.a>
-            </Magnetic>
           </div>
         </nav>
 
@@ -1359,14 +1678,16 @@ export default function HomePage({ collections }: Props) {
             cities={prologueCities}
             onSelect={navigateLivingChapter}
             onHighlight={setEngagedChapterId}
-            planet={planet}
             progress={prologueProgress}
+            lenis={lenisInstance}
+            onRollGates={setRollGates}
           />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the
               prologue was laid over the atlas. */}
           <div
             ref={desktopAtlasSectionRef}
+            data-archive-start
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 h-px"
             style={{ top: 'var(--prologue-h)' }}
@@ -1392,7 +1713,7 @@ export default function HomePage({ collections }: Props) {
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
                 onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
-                onPlanet={setPlanet}
+                rollGates={rollGates}
               />
             </aside>
 
@@ -1407,53 +1728,31 @@ export default function HomePage({ collections }: Props) {
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
             <div data-archive-column className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
-              <div ref={selectedWorksRef} className="relative max-w-2xl lg:ml-[12%]">
-                <motion.div style={reduce ? undefined : { y: headingReverseY }} className="space-y-5">
-                <motion.div
-                  style={reduce ? undefined : { opacity: swKickerOpacity, x: swKickerX }}
-                  className="flex items-center gap-4 font-ui text-[9px] uppercase tracking-[0.1em] font-medium text-white/52"
-                >
-                  <motion.div
-                    className="h-px origin-left"
-                    style={{
-                      width: 32,
-                      background: 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))',
-                      scaleX: reduce ? 1 : swRuleScale,
-                    }}
-                  />
-                  <span>Selected Works</span>
-                </motion.div>
-                <motion.h2
-                  className="max-w-[12ch] font-serif uppercase leading-[0.86] tracking-[-0.055em]"
-                  style={{
-                    fontSize: 'clamp(44px, 5.6vw, 84px)',
-                    ...(reduce ? {} : { opacity: swTitleOpacity, y: swTitleY }),
-                  }}
-                >
-                  Curating the world through a distilled{' '}
-                  <span className="text-[#D2FF00]">lens.</span>
-                </motion.h2>
-                {/* This line instructed but did not act: a breathing lime cue
-                    inside a 44px row that was not a control. It keeps the
-                    orientation copy and now enters the archive. */}
-                <motion.button
-                  type="button"
-                  onClick={() => {
-                    const first = orderedCities[0];
-                    if (first) navigateLivingChapter(cityDomId(first));
-                  }}
-                  aria-label="Enter the archive at the first chapter"
-                  data-cursor="Enter the archive"
-                  className="flex min-h-11 items-center gap-3 self-start font-ui text-[9px] uppercase tracking-[0.1em] text-white/62 transition-colors duration-300 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-                  style={reduce ? undefined : { opacity: swCountOpacity, x: swCountX }}
-                >
-                  <span className="relative flex h-1.5 w-1.5 shrink-0">
-                    <span className="marker-breathe absolute inset-0 rounded-full bg-[#D2FF00]" />
-                    <span className="relative h-1.5 w-1.5 rounded-full bg-[#D2FF00]" />
-                  </span>
-                  <span>Select any frame to enter its story</span>
-                </motion.button>
-                </motion.div>
+              {/* Where "Selected Works" stood. The bridge's statements now say
+                  what the archive is, so the heading is gone from sight (it
+                  landed on the planet and repeated "enter"); its box stays,
+                  invisible and out of the accessibility tree, because chapter
+                  1's plate is where the roll's select lands and where the dive
+                  ends, and it must keep its place on the page. The heading
+                  itself stays for screen readers. */}
+              <h2 className="sr-only">Selected Works</h2>
+              <div aria-hidden="true" className="invisible relative max-w-2xl select-none lg:ml-[12%]">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4 font-ui text-[9px] font-medium uppercase tracking-[0.1em]">
+                    <div className="h-px w-8" />
+                    <span>Selected Works</span>
+                  </div>
+                  <p
+                    className="max-w-[12ch] font-serif uppercase leading-[0.86] tracking-[-0.055em]"
+                    style={{ fontSize: 'clamp(44px, 5.6vw, 84px)' }}
+                  >
+                    Curating the world through a distilled lens.
+                  </p>
+                  <div className="flex min-h-11 w-fit items-center gap-3 font-ui text-[9px] uppercase tracking-[0.1em]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" />
+                    <span>Select any frame to enter its story</span>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-14 md:space-y-20 lg:pl-[2%]">
@@ -1465,9 +1764,10 @@ export default function HomePage({ collections }: Props) {
                     >
                       {section.showHeader && section.region && (
                         <div
+                          data-voyage-pass
                           className="relative flex w-full items-center gap-4 py-5"
                         >
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#D2FF00]" />
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F4F4ED]" />
                           <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Region</span>
                           <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
                             {section.region}
@@ -1490,8 +1790,9 @@ export default function HomePage({ collections }: Props) {
                                   onClick={() => openCollection(city)}
                                   index={index}
                                   chapterIndex={index}
+                                  chapterTotal={orderedCities.length}
+                                  padStocks={chapterPadStocks[index]}
                                   chapterProgress={archiveProgress}
-                                  handoffProgress={index === 0 ? atlasEntryProgress : undefined}
                                   preloadImageUrls={chapterPreloadUrls[index]}
                                   prioritizeImage={
                                     activeRouteIndex < 0
@@ -1505,10 +1806,13 @@ export default function HomePage({ collections }: Props) {
                                   }
                                   /* One editorial spread breaks the run of
                                      look-alike covers. Never chapter 0 — the
-                                     album unfold that carries the archive
-                                     entrance only applies to `cover`. */
+                                     bridge's select lands in its cover plate. */
                                   variant={index === FEATURE_CHAPTER_INDEX ? 'feature' : 'cover'}
                                   desktopMotion
+                                  /* Pull to tear: never while a voyage is
+                                     already under way — the cover is then
+                                     only a click. */
+                                  onTearAway={voyage ? undefined : () => tearAwayFrom(index)}
                                 />
                               );
                             })}
@@ -1576,27 +1880,28 @@ export default function HomePage({ collections }: Props) {
         </main>
 
         {/* ── Archive end-cap — the page's closing punctuation. Desktop: the
-             last chapter lifts off a closing page; compact screens keep the
+             last ticket tears and the ending pulls back from its face to the
+             proof sheet of the whole issue (the same chapters, in the same
+             order, the stubs were printed from); compact screens keep the
              quiet line. ── */}
         {desktopLayout ? (
           <ArchiveClosing
-            chapters={orderedCities.length}
-            frames={archiveFrameTotal}
-            years={archiveYearSpan}
-            onBackToIndex={() => document.getElementById('archive-index')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })}
+            collections={orderedCities}
+            onBackToIndex={backToIndex}
+            onOpenStory={openStoryFromClosing}
           />
         ) : (
         <div className="flex flex-col items-center gap-4 pb-16 pt-8 text-center opacity-70">
           <div
             className="h-1 w-1 rounded-full"
-            style={{ background: 'rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.72)' }}
+            style={{ background: 'rgba(244, 244, 237, 0.72)' }}
           />
           <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/72">
             {String(orderedCities.length).padStart(2, '0')} / {String(orderedCities.length).padStart(2, '0')} · Archive complete
           </span>
           <button
             type="button"
-            onClick={() => document.getElementById('archive-index')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })}
+            onClick={backToIndex}
             className="min-h-11 font-ui text-[9px] uppercase tracking-[0.1em] text-[#D2FF00]/82 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           >
             Back to index ↑
@@ -1620,6 +1925,10 @@ export default function HomePage({ collections }: Props) {
             sharedLayoutId={storySharedLayoutId}
             sharedImageUrl={storySharedLayoutId ? storySharedImageUrlRef.current : undefined}
             onEntryReady={storySharedLayoutId ? focusStoryEntry : undefined}
+            /* Desktop only: the mobile composition has no plate to grow from
+               and locks the body differently; its route cards keep the cover
+               they have. */
+            entryOrigin={desktopLayout ? plateOriginRef.current ?? undefined : undefined}
           />
         )}
       </AnimatePresence>

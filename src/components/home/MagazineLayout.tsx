@@ -1,27 +1,45 @@
-import React, { createContext, useCallback, useContext, useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
-import { motion, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
-import { ArrowRight, Share2, Check } from 'lucide-react';
+import React, { useCallback, useRef, useState, useEffect, useLayoutEffect, useMemo, type CSSProperties, type FocusEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { motion, animate, motionValue, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import Lightbox, { type LightboxOrigin, type LightboxTarget } from '../shared/Lightbox';
 import {
   EDITORIAL_FALLBACKS,
-  photoAccessibleLabel,
+  MAP_CREDIT,
   photoDescription,
-  renderPortableText,
-  renderFallback,
+  pullQuote,
+  storyDek,
 } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
+import { usePressGive } from '../../lib/usePressGive';
 import { useInViewOnce } from '../../lib/useInViewOnce';
-import Magnetic from '../shared/Magnetic';
+import { stockPaper, stockStyle } from '../../lib/ticketStock';
+import { fileDims } from '../../lib/lightboxImage';
+import { CSS_EASE, DUR, DUR_MS, EASE, STAGGER } from '../../lib/motion';
+import { travelPlateLeft } from '../../lib/travelPlate';
+import { chapterOrdinal } from '../../lib/chapterOrder';
+import {
+  css,
+  formatPosition,
+  frameRatio,
+  isLandscape,
+  openerRect,
+  planStory,
+  slotCaption,
+  slotRows,
+  storyBoxes,
+  storyCamera,
+  storyFrames,
+  type Slot,
+  type SlotBoxes,
+  type SlotKind,
+} from '../../lib/storyPlan';
 
-const expo = [0.16, 1, 0.3, 1] as const;
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
+// Named exception - see src/lib/motion.ts.
 const overlayEase = [0.32, 0, 0.07, 1] as const;
-/** True once this row's frames should arrive (see EditorialRowFrames). */
-const RowRevealContext = createContext(true);
-// The developing-print reveal (after Adovasio's .appear-mask).
-const developEase = [0.455, 0.03, 0.515, 0.955] as const;
+// The developing-print reveal (after Adovasio's .appear-mask), swept on
+// EASE.develop.
 const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
 const DEVELOP_MASK_STYLE = {
   WebkitMaskImage: DEVELOP_MASK,
@@ -36,11 +54,141 @@ const DEVELOP_MASK_STYLE = {
 // "springs out" instead of sliding in. The 1.56 overshoots and settles, so the
 // frames lift just past rest and land. It drives transform only: opacity keeps
 // expo, because an overshooting opacity has nothing to overshoot into.
+// Named exception - see src/lib/motion.ts.
 const popEase = [0.34, 1.56, 0.64, 1] as const;
-// The card grows into the cover. Long enough to read as one object arriving,
-// short enough that expand + hold + peel stays inside a a single page turn.
+// The Next card grows into the next story's opening spread. Long enough to
+// read as one object arriving, short enough to stay a single page turn.
 const COVER_EXPAND_MS = 500;
+// The Homepage plate grows into the opening spread. A photograph the reader
+// was just looking at travels further than the Next card (it starts at over
+// half the viewport) and should be watched doing it, so it takes a little
+// longer than the card; the plane keeps its own in-out curve (EASE.plane).
+const PLATE_GROW_MS = 560;
+// How long the spread takes to set once the photograph has landed: the type
+// sets over it (the title's rise ends at 270 + 720ms, its last ~130ms
+// sub-pixel) and only then is the kept stub handed in. Counted from the
+// landing (or, on a cold /works page, from hydration). It was the front
+// page's hold (PLATE_COVER_HOLD_MS) when a front page was peeled off the
+// story; the value is kept.
+const SPREAD_SET_MS = 860;
+// The photo viewer's exit (Lightbox: the field and the flight home, 0.46s).
+// A kept stub held back by a viewer opened as the story went live arrives
+// once it has gone.
+const VIEWER_EXIT_MS = 460;
+// How long a landed spread waits for its terrain to decode. The fetch starts
+// at the click, so the grow has normally finished it; this only bounds a
+// slow network (a late map still develops, under type that has set).
+const TERRAIN_GRACE_MS = 320;
+// The overlay's panel slide (a story opened without a plate: the phone, a
+// kept stub on the closing's proof sheet), for the stub's clock.
+const PANEL_SLIDE_MS = 680;
+// The type on the opening spread sets in reading order from the landing —
+// kicker, title, dek, credits, caption at 180 + k × 90ms (STAGGER.line) — in
+// CSS (global.css, Story block: `.story[data-set]`), so the story body
+// mounting in the same frame cannot stall it.
 const SHARED_OPEN_DURATION = 0.78;
+// The line the story is read on: the homepage's reading line (AtlasSign's
+// ATLAS_READING_LINE, 0.48 of the viewport). Mirrored, not imported, as
+// ArchiveChapter does: AtlasSign lives in RouteAtlas's lazy chunk, and this
+// module is in the homepage's eager bundle and in every /works page — an
+// import would pull the atlas sign and its landmark drawings into both.
+// Change them together.
+const STORY_READING_LINE = 0.48;
+/** The kept stub's ink follows the reading line continuously. What is shown
+ *  chases what has been read with this time constant (ms), so a mouse-wheel
+ *  notch glides instead of stepping; a trackpad is already continuous and
+ *  simply passes through. The same chase is the stub's arrival: as it is
+ *  handed in the ink counts up from nothing to where the reader stands. */
+const STUB_INK_TAU = 90;
+/** The frame number rolls after the ink, turning as the tick it names fills. */
+const STUB_ROLL_TAU = 70;
+/** The stub's flight from the rail back onto its homepage ticket at the
+ *  close (`flyStubHome`). Slower out of the blocks than the plate's own
+ *  in-out curve (which peaks at 167px a frame over this distance and reads
+ *  as a jump): moving by +50ms, 90% there by +434ms, never more than ~105px
+ *  a frame. Named exception - see src/lib/motion.ts. */
+const STUB_TRAVEL_MS = 680;
+const stubTravelEase = [0.5, 0, 0.18, 1] as const;
+/** The card tips as it is carried, and lands square. */
+const STUB_TRAVEL_TILT = -1.6;
+/** Where the rail's kept stub waits while the story loads, and where it is
+ *  set down once it has (KeptStub). It waits below the fold, tipped as it is
+ *  when carried: the rail's foot rests the story's margin M (at most 48px)
+ *  above the fold, and 145% of the card's own height (138px, so 200px) puts
+ *  even its raised corner (~5px at 1.6° on the 390px rail) under the edge,
+ *  where the story's scroller clips it. A share of its own height, so it is
+ *  derived, never measured. */
+const STUB_WAITING = { y: '145%', rotate: STUB_TRAVEL_TILT } as const;
+const STUB_SEATED = { y: '0%', rotate: 0 } as const;
+
+/** The map page of each story's opening spread: the terrain of its place,
+ *  printed in white ink on the chapter's ticket stock (global.css,
+ *  .story-terrain-ink). Miami, Orlando and New York are the original
+ *  terraink posters; Page, Zion and Bryce were drawn to match them (contours
+ *  carry the land where there are no streets). New York's poster is white
+ *  roads on black (DARK_TERRAIN) and prints without the invert. A place
+ *  without a map has its stock page and its type alone. */
+const COVER_TERRAIN: Record<string, string> = {
+  miami: '/textures/optimized/miami-map-2000.webp',
+  orlando: '/textures/optimized/orlando-map-2000.webp',
+  page: '/textures/optimized/page-map-2000.webp',
+  'zion-national-park': '/textures/optimized/zion-national-park-map-2000.webp',
+  'bryce-canyon-national-park': '/textures/optimized/bryce-canyon-national-park-map-2000.webp',
+  'new-york-stories': '/textures/optimized/new-york-map-2000.webp',
+};
+
+/** Posters drawn white on black: printed as they are, not inverted. */
+const DARK_TERRAIN: ReadonlySet<string> = new Set(['new-york-stories']);
+
+/** A hand-set sequence for a story, when the planner's is not the one wanted
+ *  (src/lib/storyPlan.ts planStory). Used only while it still places every
+ *  frame once, in order; otherwise the planner's stands. None today. */
+const STORY_SEQUENCE: Partial<Record<string, Slot[]>> = {};
+
+function storySlots(slug: string | undefined, ratios: readonly number[], hasQuote: boolean): Slot[] {
+  const set = slug ? STORY_SEQUENCE[slug] : undefined;
+  if (set) {
+    const placed = set.flatMap((slot) => slot.frames);
+    const whole = placed.length === ratios.length && placed.every((frame, index) => frame === index);
+    if (whole && set[0]?.kind === 'OPEN' && set[set.length - 1]?.kind === 'END') return set;
+  }
+  return planStory(ratios, { hasQuote });
+}
+
+function terrainFor(story: Pick<Collection, 'slug'> | null | undefined): string {
+  return (story?.slug && COVER_TERRAIN[story.slug]) || '';
+}
+
+/** One fetch-and-decode per terrain per page life. The Image is kept so its
+ *  decoded bitmap stays warm for the <img> that later draws the same URL. */
+const terrainWarm = new Map<string, { image: HTMLImageElement; decoded: boolean; ready: Promise<boolean> }>();
+
+function warmTerrain(url: string): Promise<boolean> {
+  if (!url || typeof window === 'undefined') return Promise.resolve(false);
+  const known = terrainWarm.get(url);
+  if (known) return known.ready;
+  const image = new Image();
+  image.decoding = 'async';
+  image.setAttribute('fetchpriority', 'high');
+  image.src = url;
+  const entry = { image, decoded: false, ready: Promise.resolve(false) };
+  const loaded = () => image.complete && image.naturalWidth > 0;
+  entry.ready = (typeof image.decode === 'function'
+    ? image.decode()
+    : new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = reject; }))
+    .then(() => true, () => loaded())
+    .then((ok) => {
+      entry.decoded = ok;
+      // A failed fetch is forgotten, so a later turn to this story can retry.
+      if (!ok) terrainWarm.delete(url);
+      return ok;
+    });
+  terrainWarm.set(url, entry);
+  return entry.ready;
+}
+
+const terrainDecoded = (url: string) => !!url && terrainWarm.get(url)?.decoded === true;
+
 const SHARED_CLOSE_DURATION = 0.62;
 const SHARED_CONTENT_DELAY = SHARED_OPEN_DURATION * 0.55;
 
@@ -68,148 +216,236 @@ export interface MagazineLayoutProps {
   /** Called after the shared photograph has completed its 780ms handoff. The
    *  parent owns keyboard/focus orchestration in shared-photo mode. */
   onEntryReady?: (focusTarget: HTMLButtonElement | null) => void;
+  /** Homepage desktop only: the chapter plate the reader clicked, measured
+   *  once at the click. The story opens as a window cut at that rectangle
+   *  and grows to the whole screen, while the plate's own decoded photograph
+   *  — under the plate's own grade — flies to its place on the opening
+   *  spread as frame 01 (`GrowPlane`). */
+  entryOrigin?: PlateOrigin;
 }
 
-/** Optional per-collection background for the story cover transition.
- *  Mapped archive textures take priority; other stories reuse existing
- *  collection imagery beneath the same quiet grade rather than going blank. */
-const COVER_BG: Record<string, string> = {
-  miami: '/textures/optimized/miami-map-2000.webp',
-  'new-york-stories': '/textures/optimized/new-york-map-2000.webp',
-  orlando: '/textures/optimized/orlando-map-2000.webp',
-};
+/** What the Homepage read off the plate in the click, before any scroll lock. */
+export interface PlateOrigin {
+  /** The plate's frame: the window the photograph was seen through. */
+  frame: LightboxOrigin;
+  /** The photograph's own box inside that window, hover zoom and parallax
+   *  included, so the first frame of the grow is the frame the reader saw. */
+  image: LightboxOrigin;
+  /** The file's width / height. */
+  ratio: number;
+  /** The plate's olive matte at the moment of the click (0–1). */
+  matte: number;
+  /** The exact decoded candidate the plate was showing. */
+  imageUrl: string;
+  /** The ticket's stub, when it still had one (an untorn ticket, on screen,
+   *  motion allowed): the half the reader keeps. It is handed into the foot
+   *  of the story's rail once the story has loaded, and flies back onto the
+   *  ticket at the close. */
+  stub?: PlateStub;
+  /** A photograph that is not a ticket's (the Next card, a frame on
+   *  the closing's proof sheet; see `photoOrigin`): it wears none of the
+   *  ticket's shades, and its matte is its own window's ground. */
+  bare?: { ground: string };
+}
 
-type IndexedPhoto = { photo: Photo; index: number };
-type EditorialRow = {
-  layout: 'wide' | 'pair' | 'trio' | 'portrait-solo';
-  items: IndexedPhoto[];
-};
+/** The three marks both stubs print — ordinal, "/ TT · admission", place —
+ *  as text boxes relative to their stub's corner. */
+export type StubMarks = Record<'no' | 'of' | 'place', { x: number; y: number }>;
 
-const isPortrait = (photo: Photo) =>
-  photo.width != null && photo.height != null && photo.height > photo.width;
+export interface PlateStub {
+  /** The homepage stub's box at the click. */
+  box: LightboxOrigin;
+  marks: StubMarks;
+  /** The homepage stub itself: hidden while its half is away
+   *  (`data-kept-away`), and copied for the rows only it prints. */
+  node: HTMLElement;
+  /** The window the box was read in (innerWidth × innerHeight, which the
+   *  scrollbar never changes): a return to a resized page is not flown, since
+   *  the box would no longer be where the ticket is. */
+  view: { width: number; height: number };
+  /** The ticket's own ordinal and total as the homepage printed them: the
+   *  kept half carries the number it was torn from, not the story's folio
+   *  (allCollections order is not the homepage's chapter order). */
+  print?: { ordinal: string; total: string };
+}
 
-/** Length of the run of consecutive portraits starting at `from`. */
-function portraitRunLength(entries: IndexedPhoto[], from: number): number {
-  let end = from;
-  while (end < entries.length && isPortrait(entries[end].photo)) end += 1;
-  return end - from;
+const STUB_MARKS = ['no', 'of', 'place'] as const;
+
+/**
+ * Where a stub's three shared marks are printed: text boxes (a Range over
+ * each mark's text, so ascent to descent), not element boxes. The homepage
+ * stub sets its labels on the body's 1.5 leading and the rail's on 1, so the
+ * element boxes of one word sit a few pixels apart while its letters
+ * coincide. `prefix` is the stub's block class.
+ */
+export function readStubMarks(root: HTMLElement, prefix: string): StubMarks | null {
+  const corner = root.getBoundingClientRect();
+  const marks = {} as StubMarks;
+  for (const mark of STUB_MARKS) {
+    const node = root.querySelector(`.${prefix}__${mark}`);
+    if (!node) return null;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const box = range.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    marks[mark] = { x: box.left - corner.left, y: box.top - corner.top };
+  }
+  return marks;
+}
+
+/** Where `object-fit: cover` draws a photograph of `ratio` inside `box`. */
+function coverRect(ratio: number, box: LightboxOrigin): LightboxOrigin {
+  const wider = box.width / box.height < ratio;
+  const width = wider ? box.height * ratio : box.width;
+  const height = wider ? box.height : box.width / ratio;
+  return {
+    x: box.x + (box.width - width) / 2,
+    y: box.y + (box.height - height) / 2,
+    width,
+    height,
+  };
 }
 
 /**
- * A run of three or more portraits alternates a three-up row with a single
- * portrait given the width. Pairing them two by two turned Orlando — one
- * landscape and sixteen portraits — into eight identical side-by-side rows in
- * a row; this changes the rhythm on every row and never lays two portraits
- * side by side unless exactly two are left over.
+ * A story can grow out of any photograph on screen — the Next card on an end
+ * page (its own ratio), a frame on the closing's proof sheet — exactly as it
+ * grows out of a homepage plate: this reads that
+ * picture as a PlateOrigin, once, in the click. The window is the frame, the
+ * shape comes from the file's name (the decoded candidate's own size if the
+ * name has none), and the matte is the window's ground showing through
+ * wherever the picture was drawn at less than full strength (the card rests
+ * at 0.55, an unchosen proof frame at 0.7), so the plane's first frame is the
+ * frame the reader saw. Null when the picture is not decoded yet or its
+ * window has no box: the caller keeps the way in it had.
  */
-function pushPortraitRun(rows: EditorialRow[], run: IndexedPhoto[]) {
-  let index = 0;
-  let wantTrio = rows[rows.length - 1]?.layout !== 'trio';
-  while (index < run.length) {
-    const left = run.length - index;
-    if (wantTrio && left >= 3) {
-      rows.push({ layout: 'trio', items: run.slice(index, index + 3) });
-      index += 3;
-    } else if (wantTrio && left === 2) {
-      rows.push({ layout: 'pair', items: run.slice(index, index + 2) });
-      index += 2;
-    } else if (wantTrio && left === 1) {
-      // A lone leftover after a single portrait joins it rather than stacking
-      // two single-portrait rows back to back.
-      const previous = rows[rows.length - 1];
-      if (previous?.layout === 'portrait-solo') {
-        rows[rows.length - 1] = { layout: 'pair', items: [...previous.items, run[index]] };
-      } else {
-        rows.push({ layout: 'portrait-solo', items: [run[index]] });
-      }
-      index += 1;
-    } else {
-      rows.push({ layout: 'portrait-solo', items: [run[index]] });
-      index += 1;
-    }
-    wantTrio = !wantTrio;
+export function photoOrigin(frame: HTMLElement, image: HTMLImageElement | null): PlateOrigin | null {
+  if (!image || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return null;
+  const imageUrl = image.currentSrc || image.src;
+  const box = frame.getBoundingClientRect();
+  if (!imageUrl || box.width <= 0 || box.height <= 0) return null;
+  const dims = fileDims(imageUrl);
+  const ratio = dims ? dims.width / dims.height : image.naturalWidth / image.naturalHeight;
+  let ink = 1;
+  for (let node: Element | null = image; node && node !== document.body; node = node.parentElement) {
+    const opacity = Number.parseFloat(getComputedStyle(node).opacity);
+    if (Number.isFinite(opacity)) ink *= opacity;
   }
+  // The colour under the picture: its window's own, or the page's it sits
+  // straight on (the Next card, on its end page's stock).
+  const clearColour = (colour: string) => !colour || colour === 'transparent' || /,\s*0\)$/.test(colour);
+  let ground = '';
+  for (let node: Element | null = frame; node && node !== document.body && clearColour(ground); node = node.parentElement) {
+    ground = getComputedStyle(node).backgroundColor;
+  }
+  const clear = clearColour(ground);
+  const rect = { x: box.x, y: box.y, width: box.width, height: box.height };
+  return {
+    frame: rect,
+    image: rect,
+    ratio,
+    matte: Math.min(1, Math.max(0, 1 - ink)),
+    imageUrl,
+    bare: { ground: clear ? '#30352a' : ground },
+  };
 }
 
+/** The story's frames in reading order, their shapes, and its plan. One
+ *  source for the grid, the lightbox, the kept stub and the grow's aim. */
+function storyPlanFor(story: Collection) {
+  const frames = storyFrames(story.photos ?? [], story.coverImageUrl);
+  const ratios = frames.map(frameRatio);
+  return { frames, ratios, slots: storySlots(story.slug, ratios, !!pullQuote(story.slug)) };
+}
+
+/** The shape of a story's frame 01 without its photographs (a lightweight
+ *  index entry): its cover, by the size in the file's name. */
+function openerRatio(story: Collection): number {
+  const frames = storyFrames(story.photos ?? [], story.coverImageUrl);
+  if (frames[0]) return frameRatio(frames[0]);
+  const dims = story.coverImageUrl ? fileDims(story.coverImageUrl) : null;
+  return dims ? dims.width / dims.height : 1.5;
+}
+
+const ASSET_HASH = /[0-9a-f]{40}/;
+
 /**
- * A small orientation-aware editorial grammar. Landscapes may breathe at full
- * width; a portrait or two sits beside its neighbours; longer runs of
- * portraits alternate three-up rows with a single portrait (see
- * `pushPortraitRun`). A one-photo portrait archive gets a restrained centered
- * column rather than a viewport-filling treatment.
+ * A story opens by growing out of the picture the reader chose — a homepage
+ * plate, the Next card on an end page, a frame on the closing's proof sheet.
+ * Two things move at once, both in window pixels read once in the click:
+ *
+ * - the window: a plane already the size of the screen, cut to the chosen
+ *   picture's frame (`clip-path: inset`) and opened to the whole screen. It
+ *   is printed with the grounds of the spread it becomes — the chapter's
+ *   stock where the map page will be, paper under the photograph — so when it
+ *   lands, the spread under it is the same picture and it simply goes;
+ * - the photograph: when it IS the story's frame 01 (a plate, the Next card),
+ *   it flies from where the reader saw it to where frame 01 sits on the
+ *   spread (`openerRect`), a pure translate and uniform scale. Both boxes are
+ *   the file's own shape, so the picture never re-crops: a portrait plate
+ *   stands up into the full-height right page, a landscape slides to the top
+ *   right. It stays over frame 01 until frame 01's own file has decoded.
+ *
+ * A proof-sheet frame that is not frame 01 opens the story on paper instead:
+ * the story goes live scrolled so that frame sits in the middle of the screen
+ * and the viewer takes it from there (HomePage), so the picture flies to that
+ * place on the page — its box from the plan, at the height the page will be
+ * scrolled to — and the viewer opens out of it.
  */
-function buildEditorialRows(photos: Photo[]): EditorialRow[] {
-  const entries = photos.map((photo, index) => ({ photo, index }));
-  const rows: EditorialRow[] = [];
-  let cursor = 0;
+interface GrowPlane {
+  key: number;
+  kind: 'plate' | 'turn';
+  /** The story the window opens onto. */
+  story: Collection;
+  origin: PlateOrigin | null;
+  /** The chosen picture's frame, if there is no origin (not decoded). */
+  box: LightboxOrigin;
+  ms: number;
+  /** 'spread': the window prints the spread's grounds and hands over to it at
+   *  the landing; 'page': it opens on paper and fades after it. */
+  onto: 'spread' | 'page';
+  /** Where the stock page ends (px), or null for a full stock page (phone). */
+  split: number | null;
+  /** Where the photograph lands: frame 01's place on the spread, or (onto
+   *  paper) the chosen frame's place, centred as the page will show it. */
+  target: { x: number; y: number; width: number; height: number } | null;
+  phase: 'grow' | 'hold';
+}
 
-  if (entries[0]) {
-    const openingRun = portraitRunLength(entries, 0);
-    if (openingRun >= 3) {
-      pushPortraitRun(rows, entries.slice(0, openingRun));
-      cursor = openingRun;
-    } else if (isPortrait(entries[0].photo)) {
-      if (entries[1]) {
-        rows.push({ layout: 'pair', items: entries.slice(0, 2) });
-        cursor = 2;
-      } else {
-        rows.push({ layout: 'portrait-solo', items: [entries[0]] });
-        cursor = 1;
-      }
-    } else {
-      rows.push({ layout: 'wide', items: [entries[0]] });
-      cursor = 1;
-    }
+let growKey = 0;
+
+function growPlane(kind: GrowPlane['kind'], story: Collection, origin: PlateOrigin | null, box: LightboxOrigin, ms: number): GrowPlane {
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const desktop = W >= 1024;
+  const frame01 = storyFrames(story.photos ?? [], story.coverImageUrl)[0]?.imageUrl ?? story.coverImageUrl ?? '';
+  const isFrame01 = !!origin && (!origin.bare || ASSET_HASH.exec(origin.imageUrl)?.[0] === ASSET_HASH.exec(frame01)?.[0]);
+  const onto = !origin || isFrame01 ? 'spread' : 'page';
+  const ratio = openerRatio(story);
+  const rect = openerRect(W, H, ratio);
+  let target: GrowPlane['target'] = null;
+  if (desktop && origin && onto === 'spread') target = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  if (desktop && origin && onto === 'page') {
+    const plan = storyPlanFor(story);
+    const hash = ASSET_HASH.exec(origin.imageUrl)?.[0];
+    const index = hash ? plan.frames.findIndex((photo) => ASSET_HASH.exec(photo.imageUrl)?.[0] === hash) : -1;
+    const box = index > 0
+      ? storyBoxes(plan.slots, plan.ratios, W, H).flatMap((slot) => slot.frames).find((frame) => frame.frame === index)
+      : null;
+    if (box) target = { x: box.x.v, y: Math.max(0, (H - box.h.v) / 2), width: box.w.v, height: box.h.v };
   }
-
-  while (cursor < entries.length) {
-    const current = entries[cursor];
-    const next = entries[cursor + 1];
-
-    if (isPortrait(current.photo)) {
-      const run = portraitRunLength(entries, cursor);
-      if (run >= 3) {
-        pushPortraitRun(rows, entries.slice(cursor, cursor + run));
-        cursor += run;
-        continue;
-      }
-      if (next) {
-        rows.push({ layout: 'pair', items: [current, next] });
-        cursor += 2;
-        continue;
-      }
-
-      const previous = rows[rows.length - 1];
-      if (previous?.layout === 'wide') {
-        rows[rows.length - 1] = { layout: 'pair', items: [...previous.items, current] };
-      } else if (previous?.layout === 'pair') {
-        rows[rows.length - 1] = { layout: 'trio', items: [...previous.items, current] };
-      } else {
-        rows.push({ layout: 'portrait-solo', items: [current] });
-      }
-      cursor += 1;
-      continue;
-    }
-
-    if (next && isPortrait(next.photo)) {
-      rows.push({ layout: 'pair', items: [current, next] });
-      cursor += 2;
-      continue;
-    }
-
-    // Alternate a full landscape with a paired landscape spread. The rhythm
-    // responds to actual orientation instead of restarting every seven frames.
-    if (next && rows[rows.length - 1]?.layout === 'wide') {
-      rows.push({ layout: 'pair', items: [current, next] });
-      cursor += 2;
-      continue;
-    }
-
-    rows.push({ layout: 'wide', items: [current] });
-    cursor += 1;
-  }
-
-  return rows;
+  growKey += 1;
+  return {
+    key: growKey,
+    kind,
+    story,
+    origin,
+    box,
+    ms,
+    onto,
+    split: desktop ? rect.mapW : null,
+    target,
+    phase: 'grow',
+  };
 }
 
 function labelsMatch(a?: string, b?: string): boolean {
@@ -225,265 +461,1319 @@ function labelsMatch(a?: string, b?: string): boolean {
   return !!left && (left === right || left === rightPrimary);
 }
 
-/* ── Photo cell — editorial grid item, original aspect ratio, no cropping ── */
-/** One editorial row. It reports ready when the cover has left (the leading
- *  rows) or when the reader reaches it, and its frames arrive off that one
- *  trigger — one observer per row rather than one per photograph. */
-function EditorialRowFrames({ children, spaced, leading, revealReady }: {
-  children: ReactNode;
-  spaced: boolean;
-  leading: boolean;
-  revealReady: boolean;
-}) {
-  const [ref, inView] = useInViewOnce<HTMLDivElement>('0px 0px -12% 0px', 0.08);
+/* ── The frames on the page — their own ratio, never cropped ── */
+
+/** How a slot's frames arrive. 'rest': as sent — a /works page's server
+ *  HTML, and any slot already on screen (or above it) when the page arms;
+ *  'waiting': below the fold, not developed yet; 'shown': the reader has
+ *  reached it and it develops. */
+type Reach = 'rest' | 'waiting' | 'shown';
+
+/** One native observer per slot, on the slot's own box (never whileInView). */
+function useSlotReach<T extends Element>(armed: boolean, reduce: boolean) {
+  const ref = useRef<T>(null);
+  const [reach, setReach] = useState<Reach>('rest');
+  useEffect(() => {
+    if (!armed || reduce) return;
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    let first = true;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (first) {
+          first = false;
+          // On screen or above it when the page arms: it stays as it is,
+          // rather than vanishing to develop again in front of the reader.
+          if (entry.isIntersecting || entry.boundingClientRect.top < window.innerHeight) {
+            observer.disconnect();
+            return;
+          }
+          setReach('waiting');
+        } else if (entry.isIntersecting) {
+          setReach('shown');
+          observer.disconnect();
+        }
+      }
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.08 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [armed, reduce]);
+  return [ref, reach] as const;
+}
+
+/** Frames big enough to read a diagonal edge crossing them: they develop.
+ *  The rest rise and fade in. */
+const DEVELOPS: ReadonlySet<SlotKind> = new Set(['SCREEN', 'FEATURE', 'PAGE', 'DIPTYCH', 'PAIR']);
+
+interface FrameShared {
+  collectionName: string;
+  total: number;
+  canHover: boolean;
+  /** Marks the hovered frame on the DOM. The dim and the inner zoom are CSS
+   *  off that attribute: a pointer move must not re-render forty cells on the
+   *  thread Lenis and Mapbox are already on. */
+  onHover: (element: HTMLElement | null) => void;
+  /** Called with the frame's own element, so the viewer can open out of it. */
+  onOpen: (index: number, element: HTMLElement | null) => void;
+}
+
+/** A slot's caption, printed under its frames: the numbers in full ink, a
+ *  frame's own place after its number where it is not the story's. */
+function CaptionText({ frames, places }: { frames: readonly number[]; places: readonly string[] }) {
   return (
-    <div
-      ref={ref}
-      className={`grid grid-cols-6 gap-x-2 gap-y-8 md:gap-x-3 md:gap-y-10 items-end ${spaced ? 'pt-12 md:pt-16' : ''}`}
-    >
-      <RowRevealContext.Provider value={revealReady && (leading || inView)}>
-        {children}
-      </RowRevealContext.Provider>
-    </div>
+    <>
+      {slotCaption(frames, places).map((part, index) => (
+        <span key={part.no} className="story-cap__part">
+          {index > 0 && <span aria-hidden="true" className="story-cap__sep">·</span>}
+          <b>{part.no}</b>
+          {part.place && <span>{part.place}</span>}
+        </span>
+      ))}
+    </>
   );
 }
 
-function PhotoCell({
+function StoryFrame({
   photo,
-  span,
   index,
-  hoveredIndex,
-  setHoveredIndex,
-  onClick,
-  canHover,
-  revealReady,
-  posInRow,
-  develops,
-  hideOnMobile = false,
-  collectionName,
-  total,
-  frameNumber,
+  kind,
+  style,
+  reach,
+  order,
+  caption,
+  sizes,
+  wide,
+  eager,
+  place,
+  shared,
 }: {
   photo: Photo;
-  span: 'full' | 'half' | 'third' | 'portrait';
+  /** 0-based position in the story's frames. */
   index: number;
-  hoveredIndex: number | null;
-  setHoveredIndex: (idx: number | null) => void;
-  /** Called with the frame's own element, so the viewer can open out of it. */
-  onClick: (element: HTMLElement | null) => void;
-  /** When false (touch device), skip hover-driven dim/blur — there's
-   *  no way for the user to trigger or escape it cleanly. */
-  canHover: boolean;
-  revealReady: boolean;
-  /** Position of this frame within its row: the row arrives as one unit and
-   *  its frames follow left to right. */
-  posInRow: number;
-  /** A plate big enough to read a diagonal edge crossing it. */
-  develops: boolean;
-  hideOnMobile?: boolean;
-  collectionName: string;
-  total: number;
-  /** 1-based position within this chapter. Numbered per chapter rather than
-   *  across the archive: the homepage shows chapters grouped by region while
-   *  `allCollections` arrives in data order, so an archive-wide count would
-   *  give the same photograph a different number on each surface. */
-  frameNumber: number;
+  kind: SlotKind;
+  /** The box as CSS custom properties (global.css, Story block). */
+  style: CSSProperties;
+  reach: Reach;
+  /** Position within its slot: a slot arrives as one unit and its frames
+   *  follow in reading order. */
+  order: number;
+  caption: ReactNode;
+  sizes: string;
+  /** The frame can be the width of a large window (a screen-high landscape,
+   *  frame 01): its candidates run to 3600px. */
+  wide: boolean;
+  eager: boolean;
+  /** The frame's own place, for its accessible name. */
+  place: string;
+  shared: FrameShared;
 }) {
-  const colSpan =
-    span === 'full' ? 'col-span-6'
-    : span === 'half' ? 'col-span-3'
-    : span === 'portrait' ? 'col-span-4 col-start-2'
-    : 'col-span-6 sm:col-span-2';
-
-  // Width brackets per span — Retina-aware. The browser picks based on `sizes`.
-  const widthLadder =
-    span === 'full' ? [900, 1400, 1800] :
-    span === 'half' || span === 'portrait' ? [500, 800, 1200] :
-                      [300, 500, 800];
-  const fallbackWidth = widthLadder[1];
-  const srcSet = widthLadder
-    .map((w) => `${photo.imageUrl}?auto=format&w=${w}&q=82 ${w}w`)
-    .join(', ');
-  const sizesAttr =
-    span === 'full' ? '(min-width: 1024px) 60vw, 100vw' :
-    span === 'half' || span === 'portrait' ? '(min-width: 1024px) 30vw, 66vw' :
-                      '(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 100vw';
-
   const reduce = useReducedMotion();
   const imageRef = useRef<HTMLImageElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   useEffect(() => {
     const image = imageRef.current;
-    setIsLoaded(!!image?.complete && image.naturalWidth > 0);
     setHasError(!!image?.complete && image.naturalWidth === 0);
   }, [photo.imageUrl]);
-  // Caption: "Frame 01 · <title of the work>". Place and year are not
-  // repeated per frame — the chapter header already states them once. The
-  // title is the Sanity title only when it is a real one; every current title
-  // is machine-made ("Miami #24"), so until titles are written the caption is
-  // the frame number alone rather than a filename.
-  const frameLabel = `Frame ${String(frameNumber).padStart(2, '0')}`;
+  const ladder = wide ? [480, 800, 1200, 1600, 2200, 2800, 3600] : [480, 800, 1200, 1600, 2200, 2800];
+  const srcSet = ladder.map((w) => `${photo.imageUrl}?auto=format&w=${w}&q=82 ${w}w`).join(', ');
+  // What is announced: the frame's number, its written title if it has one
+  // (every Sanity title today is machine-made, so none do) and its place.
   const workTitle = photoDescription(photo);
-  // What is shown is what is announced — plus the place, which the visible
-  // caption leaves to the chapter header but a screen-reader user landing on
-  // one frame would otherwise not hear.
-  const place = photo.location?.city?.trim() || collectionName;
-  const accessibleLabel = [frameLabel, workTitle, place].filter(Boolean).join(', ');
-  // On touch devices we treat the grid as if no one is hovered: every
-  // photo stays at full clarity, no blur/scale-down ever fires. We also
-  // skip the hover handlers entirely so a tap → onHoverStart → flash of
-  // dim doesn't happen before the lightbox opens.
-  const interactiveHover = canHover && !reduce;
-  const isAnyHovered = interactiveHover && hoveredIndex !== null;
-  const isThisHovered = interactiveHover && hoveredIndex === index;
-  // Every frame arrives; the first seven wait for the cover to leave, the
-  // rest for the reader to reach their row.
-  const rowReady = useContext(RowRevealContext);
-  const animateEntrance = !reduce;
-
-  const arrived = revealReady && rowReady;
-  // The first seven are the cover hand-off and stagger across the page; after
-  // that a row arrives as a unit and its frames follow in place.
-  const entranceDelay = arrived ? (index < 7 ? index * 0.06 : posInRow * 0.07) : 0;
-  const developSpan = index < 7 ? 0.8 : 0.62;
+  const accessibleLabel = [`Frame ${pad2(index + 1)}`, workTitle, place || shared.collectionName].filter(Boolean).join(', ');
+  // On touch devices the grid is never dimmed: a tap would flash the dim
+  // before the viewer opened.
+  const interactiveHover = shared.canHover && !reduce;
+  // A still press gives the frame a hair; a press that travels (a swipe, a
+  // selection) lets it straight back, on a tween (see usePressGive).
+  const pressGive = usePressGive(interactiveHover);
+  const develops = DEVELOPS.has(kind);
+  const waiting = develops
+    ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }
+    : { opacity: 0, y: 10 };
+  const rest = develops
+    ? { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }
+    : { opacity: 1, y: 0 };
+  const arriving = reach === 'shown' && !reduce;
+  const delay = order * STAGGER.set;
+  const span = kind === 'SCREEN' || kind === 'PAGE' || kind === 'DIPTYCH' ? 0.8 : 0.62;
 
   return (
-    // The figure owns the grid placement only. The photograph and its caption
-    // are two different kinds of thing and no longer arrive as one: the picture
+    // The figure owns the placement only. The photograph and its caption are
+    // two different kinds of thing and do not arrive as one: the picture
     // develops, and the caption is printed under it a beat later. The button
-    // wraps only the image — a caption inside the control would be read as part
-    // of its name and would make the whole caption a click target.
-    <figure className={`${colSpan} ${hideOnMobile ? 'hidden lg:block' : 'block'} m-0`}>
-    <motion.div
-      // The photograph develops: a soft diagonal edge sweeps across it (the
-      // mask is three times the frame's width, so the edge crosses at an even
-      // pace), with a small rise. Reduced motion: no mask, no motion. The mask
-      // stops at the photograph — it used to cover the whole figure, so the
-      // caption came up through the developer with the picture, as though a
-      // line of metadata were part of the print.
-      style={animateEntrance && develops ? DEVELOP_MASK_STYLE : undefined}
-      initial={animateEntrance
-        ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
-        : false}
-      animate={animateEntrance && !arrived
-        ? (develops ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' } : { opacity: 0, y: 10 })
-        : (develops ? { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' } : { opacity: 1, y: 0 })}
-      transition={(() => {
-        if (!animateEntrance) return { duration: 0 };
-        return {
-          opacity: { duration: 0.25, delay: entranceDelay, ease: expo },
-          y: { duration: developSpan, delay: entranceDelay, ease: popEase },
-          WebkitMaskPosition: { duration: developSpan, delay: entranceDelay, ease: developEase },
-          maskPosition: { duration: developSpan, delay: entranceDelay, ease: developEase },
-        };
-      })()}
-    >
-    <motion.button
-      type="button"
-      {...(interactiveHover && {
-        onHoverStart: () => setHoveredIndex(index),
-        onHoverEnd: () => setHoveredIndex(null),
-        onFocus: () => setHoveredIndex(index),
-        onBlur: () => setHoveredIndex(null),
-        whileTap: { scale: 0.996 },
-      })}
-      {...(!interactiveHover && !reduce && {
-        whileTap: { opacity: 0.9 },
-      })}
-      onClick={(event) => onClick(event.currentTarget)}
-      data-frame-index={index}
-      aria-label={`Open ${accessibleLabel}`}
-      animate={{
-        opacity: isAnyHovered && !isThisHovered ? 0.84 : 1,
-      }}
-      transition={{ duration: 0.32, ease: expo }}
-      className="group relative block w-full cursor-pointer overflow-hidden bg-[#30352a] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
-    >
-      {/* The opening row follows the cover's departure, not mount time.
-          Images load underneath it; opacity never depends on image loading
-          or an intersection observer. Keep the reveal compositor-only. */}
-      <div className="relative">
-        {/* Loading placeholder */}
-        <motion.div
-          animate={{ opacity: isLoaded || hasError ? 0 : 1 }}
-          transition={{ duration: 0.6 }}
-          className="absolute inset-0 bg-white/5 z-10 pointer-events-none"
-        />
-
-        {hasError && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#292e25] px-5 text-center">
-            <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/58">
-              Frame unavailable
-            </span>
-          </div>
-        )}
-
-        {/* Image — original aspect ratio, no cropping. Inner zoom on hover
-             only applies when the device actually supports hover. */}
-        <motion.img
-          ref={imageRef}
-          onLoad={() => setIsLoaded(true)}
-          onError={() => { setHasError(true); setIsLoaded(true); }}
-          animate={{ scale: isThisHovered ? 1.018 : 1 }}
-          transition={{ duration: reduce ? 0 : 0.7, ease: expo }}
-          src={`${photo.imageUrl}?auto=format&w=${fallbackWidth}&q=82`}
-          srcSet={srcSet}
-          sizes={sizesAttr}
-          alt={accessibleLabel}
-          width={photo.width}
-          height={photo.height}
-          className={`w-full h-auto block transition-opacity duration-500 ${hasError ? 'opacity-0' : ''}`}
-          loading={index === 0 ? 'eager' : 'lazy'}
-          fetchPriority={index === 0 ? 'high' : undefined}
-          decoding="async"
-          draggable={false}
-        />
-        {/* NOTE: the image is no longer opacity-gated on `isLoaded` — the old
-            opacity gate (combined with lazy loading) once left below-fold photos
-            invisible inside the story's inner scroll container. With the gate
-            gone, the first rows load eagerly and the rest lazy-load as the
-            story scrolls — an opened 40-photo story no longer fires 40
-            full-size requests up front. */}
-      </div>
-    </motion.button>
-    {/* Set in the other family from the text, at ~0.66x of it — the one ratio
-        every editorial site sampled agrees on (0.54–0.86x). No rule above or
-        below the frame; the caption sits directly under the image. */}
-    </motion.div>
-    {/* Printed under the frame a beat after it, the way a caption is set after
-        the plate it belongs to — not swept in by the same developer. */}
-    <motion.figcaption
-      className="mt-2.5 font-ui text-[12.5px] leading-snug text-white/62"
-      initial={animateEntrance ? { opacity: 0, y: 6 } : false}
-      animate={animateEntrance && !arrived ? { opacity: 0, y: 6 } : { opacity: 1, y: 0 }}
-      // Keyed to the sweep rather than to a flat delay, so the line settles just
-      // as the print finishes coming up — whatever length that row's develop is.
-      transition={animateEntrance
-        ? { duration: 0.42, delay: entranceDelay + developSpan * 0.62, ease: expo }
-        : { duration: 0 }}
-    >
-      <span className="uppercase tracking-[0.06em] tabular-nums">{frameLabel}</span>
-      {workTitle && (
-        <>
-          <span aria-hidden="true" className="text-white/40">&nbsp;·&nbsp;</span>
-          <span>{workTitle}</span>
-        </>
+    // wraps only the image — a caption inside the control would be read as
+    // part of its name.
+    <figure className={`story-fig story-fig--${kind.toLowerCase()}`} style={style}>
+      <motion.div
+        className="story-fig__plate"
+        // The photograph develops: a soft diagonal edge sweeps across it (the
+        // mask is three times the frame's width, so the edge crosses at an
+        // even pace), with a small rise. Only a frame that will arrive wears
+        // the mask; one sent at rest never does.
+        style={develops && reach !== 'rest' && !reduce ? DEVELOP_MASK_STYLE : undefined}
+        initial={false}
+        animate={reach === 'waiting' ? waiting : rest}
+        transition={arriving
+          ? {
+              opacity: { duration: 0.25, delay, ease: EASE.arrive },
+              y: { duration: span, delay, ease: popEase },
+              WebkitMaskPosition: { duration: span, delay, ease: EASE.develop },
+              maskPosition: { duration: span, delay, ease: EASE.develop },
+            }
+          // Waiting is a place, not a move: it is taken below the fold.
+          : { duration: 0 }}
+      >
+        <motion.button
+          type="button"
+          {...(interactiveHover && {
+            onPointerEnter: (event: ReactPointerEvent<HTMLButtonElement>) => shared.onHover(event.currentTarget),
+            onPointerLeave: () => shared.onHover(null),
+            onFocus: (event: FocusEvent<HTMLButtonElement>) => shared.onHover(event.currentTarget),
+            onBlur: () => shared.onHover(null),
+            onPointerDown: pressGive.onPointerDown,
+            style: { scale: pressGive.scale },
+          })}
+          {...(!interactiveHover && !reduce && {
+            whileTap: { opacity: 0.9 },
+          })}
+          onClick={(event) => shared.onOpen(index, event.currentTarget)}
+          data-frame-index={index}
+          aria-label={`Open ${accessibleLabel}`}
+          className="story-frame story-focus group relative block w-full cursor-pointer overflow-hidden text-left"
+        >
+          {hasError && (
+            <span className="story-frame__error font-ui">Frame unavailable</span>
+          )}
+          {/* The file's own shape from its width and height: the box is
+              right before a byte of the picture has arrived. */}
+          <img
+            ref={imageRef}
+            onError={() => setHasError(true)}
+            src={`${photo.imageUrl}?auto=format&w=1200&q=82`}
+            srcSet={srcSet}
+            sizes={sizes}
+            alt={accessibleLabel}
+            width={photo.width}
+            height={photo.height}
+            className={`block h-auto w-full transition-opacity duration-500 ${hasError ? 'opacity-0' : ''}`}
+            loading={eager ? 'eager' : 'lazy'}
+            fetchPriority={eager ? 'high' : undefined}
+            decoding="async"
+            draggable={false}
+          />
+        </motion.button>
+      </motion.div>
+      {caption && (
+        // Printed under the frame a beat after it, keyed to the sweep, so the
+        // line settles just as the print finishes coming up.
+        <motion.figcaption
+          className="story-cap font-ui"
+          initial={false}
+          animate={reach === 'waiting' ? { opacity: 0, y: 6 } : { opacity: 1, y: 0 }}
+          transition={arriving ? { duration: 0.42, delay: delay + span * 0.62, ease: EASE.arrive } : { duration: 0 }}
+        >
+          {caption}
+        </motion.figcaption>
       )}
-    </motion.figcaption>
     </figure>
   );
 }
 
-/* Reading-progress % label — holds the ONLY state driven by story scroll, so
-   each scroll tick re-renders this one span instead of the whole overlay. */
-function ProgressPercent({ progress }: { progress: MotionValue<number> }) {
-  const [pct, setPct] = useState(0);
-  useMotionValueEvent(progress, 'change', (latest) => {
-    const next = Math.round(latest * 100);
-    setPct((prev) => (prev === next ? prev : next));
-  });
-  return <span className="font-ui tabular-nums min-w-[4ch] text-right">{pct}%</span>;
+/** The story's words, as plain paragraphs: Sanity's introduction when it has
+ *  one, else the owner-approved narrative (EDITORIAL_FALLBACKS), else the
+ *  description. Paragraph 1 is the lede, paragraph 2 is Part II. */
+function storyParagraphs(collection: Collection): string[] {
+  const written = (collection.introduction ?? [])
+    .map((block) => (block.children ?? []).map((span) => span.text).join('').trim())
+    .filter(Boolean);
+  if (written.length) return written;
+  const fallback = collection.slug ? EDITORIAL_FALLBACKS[collection.slug] : null;
+  if (fallback?.length) return fallback;
+  return collection.description ? [collection.description] : [];
+}
+
+/** A paragraph that ends a section: a small square of ink after its last word. */
+const EndMarked = ({ text }: { text: string }) => (
+  <p>
+    {text}
+    <span className="story-endmark" aria-hidden="true" />
+  </p>
+);
+
+/** The phone's width for a frame (below 1024px the slots stack). */
+function phoneWidth(kind: SlotKind, ratios: readonly number[], frames: readonly number[], at: number): string {
+  if (kind === 'DIPTYCH') {
+    // Touching at one height: the window's width shared out by ratio, or
+    // (a window wider than it is tall) the screen's height under the head.
+    const sum = frames.reduce((total, frame) => total + ratios[frame], 0);
+    const r = ratios[frames[at]];
+    return `min(calc(100vw * ${(r / sum).toFixed(6)}), calc((100svh - var(--story-head) - 40px) * ${r.toFixed(6)}))`;
+  }
+  return '';
+}
+
+/** `sizes` for a frame: its box at the design window as a share of the
+ *  width, and the phone's share. */
+function frameSizes(kind: SlotKind, desktopShare: number, ratios: readonly number[], frames: readonly number[], at: number): string {
+  let phone = 100;
+  if (kind === 'DIPTYCH') phone = (ratios[frames[at]] / frames.reduce((total, frame) => total + ratios[frame], 0)) * 100;
+  else if (kind === 'SMALL' || kind === 'LEDE') phone = 58;
+  else if (kind === 'COLUMN' || kind === 'PART' || kind === 'LEDE2') phone = 83;
+  else if (kind === 'PAIR') phone = at === 0 ? 100 : 80;
+  return `(min-width: 1024px) ${Math.max(10, Math.round(desktopShare * 100))}vw, ${Math.round(phone)}vw`;
+}
+
+/** One slot of the story: its frames and its words, placed by its boxes. */
+function SlotView({
+  box,
+  photos,
+  ratios,
+  places,
+  paragraphs,
+  quote,
+  armed,
+  reduce,
+  shared,
+}: {
+  box: SlotBoxes;
+  photos: readonly Photo[];
+  ratios: readonly number[];
+  places: readonly string[];
+  paragraphs: readonly string[];
+  quote: string;
+  armed: boolean;
+  reduce: boolean;
+  shared: FrameShared;
+}) {
+  const [ref, reach] = useSlotReach<HTMLElement>(armed, reduce);
+  const { slot } = box;
+  const { kind } = slot;
+  const portraits = slot.frames.length === 2 && slot.frames.every((frame) => !isLandscape(ratios[frame]));
+  const textStyle = (at: number) => {
+    const text = box.text[at];
+    return text ? ({ '--tx': css(text.x), '--tw': css(text.w), '--ty': css(text.y) } as CSSProperties) : undefined;
+  };
+  const figure = (at: number) => {
+    const frame = box.frames[at];
+    const photo = photos[frame.frame];
+    if (!photo) return null;
+    const style = {
+      '--fx': css(frame.x),
+      '--fw': css(frame.w),
+      '--fy': css(frame.y),
+      '--r': ratios[frame.frame].toFixed(6),
+      '--pw': phoneWidth(kind, ratios, slot.frames, at) || undefined,
+    } as CSSProperties;
+    // One keyed caption for a pair or a diptych, under the first frame.
+    const captionFrames = PAIRED_KINDS.has(kind) ? (at === 0 ? slot.frames : null) : [frame.frame];
+    return (
+      <StoryFrame
+        key={photo._id}
+        photo={photo}
+        index={frame.frame}
+        kind={kind === 'LEDE' ? 'SMALL' : kind === 'LEDE2' || kind === 'PART' ? 'COLUMN' : kind}
+        style={style}
+        reach={reach}
+        order={at}
+        caption={captionFrames ? <CaptionText frames={captionFrames} places={places} /> : null}
+        sizes={frameSizes(kind, frame.w.v / 1728, ratios, slot.frames, at)}
+        wide={kind === 'SCREEN'}
+        eager={false}
+        place={places[frame.frame] ?? ''}
+        shared={shared}
+      />
+    );
+  };
+  const frames = box.frames.map((_, at) => figure(at));
+  const [lede, part2] = paragraphs;
+  return (
+    <section
+      ref={ref}
+      className="story-slot"
+      data-kind={kind}
+      data-side={slot.side}
+      data-pp={portraits ? 'true' : undefined}
+      style={{ '--slot-top': css(box.top) } as CSSProperties}
+    >
+      {kind === 'LEDE' && lede && (
+        <div className="story-text story-lede font-serif" style={textStyle(0)}><p>{lede}</p></div>
+      )}
+      {kind === 'LEDE2' && (
+        <>
+          {lede && <div className="story-text story-lede font-serif" style={textStyle(0)}><p>{lede}</p></div>}
+          {part2 && (
+            <div className="story-text story-prose font-serif" style={textStyle(1)}>
+              <span className="story-part-no font-serif" aria-hidden="true">II</span>
+              <EndMarked text={part2} />
+            </div>
+          )}
+        </>
+      )}
+      {kind === 'PART' && part2 && (
+        <div className="story-text story-prose font-serif" style={textStyle(0)}>
+          <span className="story-part-no font-serif" aria-hidden="true">II</span>
+          <EndMarked text={part2} />
+        </div>
+      )}
+      {kind === 'QUOTE' && quote && (
+        <blockquote className="story-text story-quote font-serif" style={textStyle(0)}>
+          <p>{`\u201C${quote}\u201D`}</p>
+        </blockquote>
+      )}
+      {frames}
+    </section>
+  );
+}
+
+const PAIRED_KINDS: ReadonlySet<SlotKind> = new Set(['PAIR', 'DIPTYCH']);
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/** How far the reader is through the story, held once for the whole shell
+ *  and printed by the rail's kept stub: frames read (fractional — the ink
+ *  in the ticks), the frame number as it rolls (fractional while it turns),
+ *  and the whole frame it is turning to (whose city is printed). 0 is the
+ *  stub before the story is uncovered: no ink, "Frame 00". */
+interface StubReading {
+  ink: MotionValue<number>;
+  shown: MotionValue<number>;
+  frame: MotionValue<number>;
+}
+
+const cityLabel = (city: string | undefined) => (city ? `${city}\u00a0·\u00a0` : '');
+
+/* The frame's own city is reprinted, not swapped: the old name lifts off
+   (120ms, easing in — it is leaving; global.css `.is-lifting`) and the new
+   one is inked in behind it (200ms, house expo). The text changes only while
+   nothing is printed, so the line's width moves unseen. A flick through
+   several frames prints only the last. */
+const cityPrints = new WeakMap<HTMLElement, { text: string; want: string; timer: number }>();
+function printCity(element: HTMLElement | null, label: string, reduce: boolean) {
+  if (!element) return;
+  let print = cityPrints.get(element);
+  if (!print) {
+    print = { text: element.textContent ?? '', want: '', timer: 0 };
+    cityPrints.set(element, print);
+  }
+  print.want = label;
+  if (reduce) {
+    window.clearTimeout(print.timer);
+    print.timer = 0;
+    element.classList.remove('is-lifting');
+    element.textContent = label;
+    print.text = label;
+    return;
+  }
+  // Lifting already: it prints whatever is wanted when it is off.
+  if (print.timer || label === print.text) return;
+  element.classList.add('is-lifting');
+  const lifting = print;
+  lifting.timer = window.setTimeout(() => {
+    lifting.timer = 0;
+    element.textContent = lifting.want;
+    lifting.text = lifting.want;
+    element.classList.remove('is-lifting');
+  }, 120);
+}
+
+/* ── The kept stub's print ──
+   What the stub prints, from props alone: the rail's stub prints it, and
+   the copy that flies home at the close is cloned from that print. The same
+   card as the homepage stub (global.css: .story-stub, just above
+   .archive-ticket-stub): the chapter's ordinal in Fraunces, then place,
+   region and year — only fields the archive holds. Under them, one tick per
+   frame of this story, inked as the reader passes it, and the frame the
+   reader is on.
+   What moves on it — the ink in the ticks (`--p` against each tick's `--k`),
+   the frame number (a strip of every value in a one-line window, global.css
+   `.rolling-figure`), the frame's own city — is written from the shared
+   reading straight onto the DOM, never through a render: React prints the
+   first values once and never writes them again, so a re-render can never
+   put back a value the reading has moved on from. */
+function StubFace({
+  chapter,
+  ordinal,
+  total,
+  frames,
+  cities,
+  reading,
+  reduce,
+}: {
+  chapter: Pick<Collection, 'name' | 'location' | 'region' | 'year'>;
+  ordinal: string;
+  total: string;
+  frames: number;
+  /** The frame's own place per frame number (0 is the arrival's "00",
+   *  printed with the first frame's), '' where it is the chapter's. */
+  cities: string[];
+  reading: StubReading;
+  reduce: boolean;
+}) {
+  const ticksRef = useRef<HTMLSpanElement>(null);
+  const stripRef = useRef<HTMLSpanElement>(null);
+  const cityRef = useRef<HTMLSpanElement>(null);
+  const [first] = useState(() => ({
+    ink: reading.ink.get(),
+    shown: reading.shown.get(),
+    frame: reading.frame.get(),
+  }));
+  const paintInk = (ink: number) => ticksRef.current?.style.setProperty('--p', ink.toFixed(4));
+  const paintShown = (shown: number) => {
+    if (stripRef.current) stripRef.current.style.transform = `translateY(${(-shown).toFixed(4)}em)`;
+  };
+  useMotionValueEvent(reading.ink, 'change', paintInk);
+  useMotionValueEvent(reading.shown, 'change', paintShown);
+  useMotionValueEvent(reading.frame, 'change', (frame) => printCity(cityRef.current, cityLabel(cities[frame]), reduce));
+  // A print whose reading moved between its render and its commit catches
+  // up before it is painted.
+  useLayoutEffect(() => {
+    paintInk(reading.ink.get());
+    paintShown(reading.shown.get());
+    const city = cityRef.current;
+    const label = cityLabel(cities[reading.frame.get()]);
+    if (city && city.textContent !== label) city.textContent = label;
+    // Once, at mount: afterwards the subscriptions above keep it current.
+  }, []);
+
+  // Guarded as the rest of this file guards it: not every record's
+  // `location` is a string.
+  const location = typeof chapter.location === 'string' ? chapter.location.trim() : '';
+  // What the homepage stub prints under REGION: the region, else the place.
+  const region = (typeof chapter.region === 'string' && chapter.region.trim()) || location;
+  const stubRows: Array<[string, string]> = [];
+  if (region) stubRows.push(['Region', region]);
+  if (chapter.year) stubRows.push(['Year', String(chapter.year)]);
+
+  return (
+    <>
+      <div className="story-stub__head">
+        <div className="story-stub__admission">
+          <span className="story-stub__no font-serif">{ordinal}</span>
+          <span className="story-stub__of">/ {total} · admission</span>
+        </div>
+        {stubRows.length > 0 && (
+          <dl className="story-stub__rows">
+            {stubRows.map(([label, value]) => (
+              <div key={label} className="story-stub__row">
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+      <span className="story-stub__rule" />
+      <div className="story-stub__line">
+        <span className="story-stub__place">{chapter.name}</span>
+        <span className="story-stub__frame">
+          {/* The frame's own place, printed only when it is not the
+              chapter's (New York's frames are Midtown and Manhattan; Miami's
+              are all Miami). Always in the line, empty when there is none,
+              so it can be reprinted without a render. */}
+          <span ref={cityRef} className="story-stub__city">{cityLabel(cities[first.frame])}</span>
+          <span className="story-stub__label">Frame&nbsp;</span>
+          <span className="story-stub__count rolling-figure">
+            <span className="rolling-figure__sizer">{pad2(frames)}</span>
+            <span className="rolling-figure__window">
+              <span
+                ref={stripRef}
+                className="rolling-figure__strip"
+                style={{ transform: `translateY(${(-first.shown).toFixed(4)}em)` }}
+              >
+                {Array.from({ length: frames + 1 }, (_, value) => (
+                  <span key={value}>{pad2(value)}</span>
+                ))}
+              </span>
+            </span>
+          </span>
+          <span className="story-stub__total">&nbsp;/ {pad2(frames)}</span>
+        </span>
+      </div>
+      <span
+        ref={ticksRef}
+        className="story-stub__ticks"
+        style={{ '--p': first.ink.toFixed(4) } as CSSProperties}
+      >
+        {Array.from({ length: frames }, (_, index) => (
+          <i key={index} style={{ '--k': index } as CSSProperties} />
+        ))}
+      </span>
+    </>
+  );
+}
+
+/* ── The kept stub ──
+   The homepage cover is a ticket; opening the story tears it, and this is
+   the half the reader keeps, at the foot of the rail (columns 1–3, bottom
+   left, from the opening spread to the end page), where a blog widget used
+   to print "Reading Progress 62%". Printed on the chapter's own card stock,
+   keyed by its slug, holes down its torn edge; its number is the ticket's
+   (the homepage's chapter order).
+   Read continuously and derived: each row's top is an offsetTop chain inside
+   the story's own scroller, measured on mount and on resize only; a scroll
+   reads one number (the scroller's scrollY, already tracked for the phone's
+   header bar) against those lines. The reading line's travel from a row's
+   top to the next row's top is shared out over the row's frames in order —
+   a row is the unit because its frames are bottom-aligned (a portrait
+   beside a landscape starts higher up the page, and lighting frames by
+   their own tops would light them out of order), and sharing it out means a
+   two-frame row fills its two ticks one after the other, never as a pair.
+   The ink shown chases that value (STUB_INK_TAU) in a frame loop the scroll
+   starts and that stops at rest; the number rolls after it (STUB_ROLL_TAU).
+   It used to commit whole rows: frozen for most of the scroll, then two or
+   three ticks lit together, and the number jumped 01 → 03.
+   It arrives only once the story has loaded — the opening spread set, the
+   type on it and the map developing. Until then the card waits below the
+   fold (STUB_WAITING), so nothing stub-like is on the plate as it grows or
+   on the spread as it sets; the owner found the slip resting at the foot of
+   the loading screen wrong (2026-09-27). Then it is handed in: it rises
+   into its place from under the fold, tipped as it is carried and set down
+   square (DUR.settle, house expo), printed as the ticket printed it, and its
+   ink counts up from nothing to where the reader stands. It used to fly in
+   from the homepage ticket in the click. */
+function KeptStub({
+  stubRef,
+  containerRef,
+  gridRef,
+  scrollY,
+  rows,
+  frames,
+  chapter,
+  ordinal,
+  total,
+  cities,
+  reading,
+  armed,
+  released,
+  reduce,
+}: {
+  stubRef: RefObject<HTMLDivElement | null>;
+  containerRef: RefObject<HTMLDivElement | null>;
+  gridRef: RefObject<HTMLDivElement | null>;
+  /** The story scroller's scrollTop (useScroll's `scrollY` on the container). */
+  scrollY: MotionValue<number>;
+  /** Frame indices per slot, in reading order (`slotRows`). */
+  rows: number[][];
+  frames: number;
+  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year'>;
+  ordinal: string;
+  total: string;
+  cities: string[];
+  reading: StubReading;
+  /** False only while a standalone /works page is still its server HTML: the
+   *  stub is sent waiting below the fold, and is handed in from hydration
+   *  on, like every other way in. */
+  armed: boolean;
+  /** The story has loaded: until then the stub waits below the fold at
+   *  nothing read. */
+  released: boolean;
+  reduce: boolean;
+}) {
+  /** Per row: its top edge in the scroller's content, where it ends (the
+   *  next row's top; the last row's own foot), and its number of frames. */
+  const linesRef = useRef<Array<{ top: number; end: number; len: number }> | null>(null);
+  const viewRef = useRef(0);
+  const armedRef = useRef(armed);
+  armedRef.current = armed;
+  const releasedRef = useRef(released);
+  releasedRef.current = released;
+  const kickRef = useRef<() => void>(() => {});
+
+  // Frames read, fractional, from the scroll offset alone.
+  const readAt = useCallback((scrollTop: number) => {
+    const lines = linesRef.current;
+    if (!lines) return 0;
+    const line = scrollTop + viewRef.current * STORY_READING_LINE;
+    let read = 0;
+    for (const row of lines) {
+      const share = Math.min(1, Math.max(0, (line - row.top) / Math.max(1, row.end - row.top)));
+      read += share * row.len;
+      if (share < 1) break;
+    }
+    return Math.min(frames, read);
+  }, [frames]);
+
+  const measure = useCallback(() => {
+    const root = containerRef.current;
+    const stub = stubRef.current;
+    // Below lg the stub is not drawn and nothing is measured or compared.
+    if (!root || !stub || stub.offsetParent === null) {
+      linesRef.current = null;
+      return;
+    }
+    viewRef.current = root.clientHeight;
+    // One frame per index on the page (the end page's Plates carry their own
+    // attribute); take the laid-out one, in case a layout ever hides one.
+    const boxes = new Map<number, { top: number; bottom: number }>();
+    root.querySelectorAll<HTMLElement>('[data-frame-index]').forEach((node) => {
+      if (node.offsetParent === null) return;
+      const index = Number(node.dataset.frameIndex);
+      if (!Number.isFinite(index) || boxes.has(index)) return;
+      let top = 0;
+      let step: HTMLElement | null = node;
+      while (step && step !== root) {
+        top += step.offsetTop;
+        step = step.offsetParent instanceof HTMLElement ? step.offsetParent : null;
+      }
+      if (step !== root) return;
+      boxes.set(index, { top, bottom: top + node.offsetHeight });
+    });
+    const spans = rows.map((row) => {
+      let top = Infinity;
+      let bottom = -Infinity;
+      for (const index of row) {
+        const box = boxes.get(index);
+        if (!box) continue;
+        top = Math.min(top, box.top);
+        bottom = Math.max(bottom, box.bottom);
+      }
+      return { top, bottom, len: row.length };
+    });
+    // A row that is not laid out ends the reading there (its top is
+    // Infinity, so nothing past it is ever read).
+    linesRef.current = spans.map((span, index) => ({
+      top: span.top,
+      end: index + 1 < spans.length && Number.isFinite(spans[index + 1].top) ? spans[index + 1].top : span.bottom,
+      len: span.len,
+    }));
+    kickRef.current();
+  }, [containerRef, rows, stubRef]);
+
+  // A passive effect, not a layout one: on a /works page the scroller and the
+  // grid mount in the same commit as the stub, and a child's layout effect
+  // runs before its ancestors' refs are attached — the scroller would still
+  // be null.
+  useEffect(() => {
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    // The grid's height moves when a caption's face arrives or the window
+    // changes width; the scroller's when the window changes height.
+    const observer = new ResizeObserver(() => measure());
+    if (gridRef.current) observer.observe(gridRef.current);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [containerRef, gridRef, measure]);
+
+  // The frame loop: started by a scroll (or a measure, or the release), it
+  // runs while what is shown is still catching up and stops at rest.
+  useEffect(() => {
+    let raf = 0;
+    let last = 0;
+    const step = (now: number) => {
+      raf = 0;
+      if (!armedRef.current) return;
+      const dt = Math.min(64, now - last);
+      last = now;
+      const goal = releasedRef.current ? readAt(scrollY.get()) : 0;
+      let ink = reading.ink.get();
+      if (reduce) ink = goal;
+      else {
+        ink += (goal - ink) * (1 - Math.exp(-dt / STUB_INK_TAU));
+        if (Math.abs(goal - ink) < 0.002) ink = goal;
+      }
+      // The number names the frame being read — the tick that is filling —
+      // and turns from the ink SHOWN, so it turns exactly as its tick fills.
+      const want = ink <= 0 ? 0 : Math.min(frames, Math.floor(ink) + 1);
+      let shown = reading.shown.get();
+      if (reduce) shown = want;
+      else {
+        shown += (want - shown) * (1 - Math.exp(-dt / STUB_ROLL_TAU));
+        if (Math.abs(want - shown) < 0.004) shown = want;
+      }
+      reading.ink.set(ink);
+      reading.shown.set(shown);
+      if (reading.frame.get() !== want) reading.frame.set(want);
+      if (ink !== goal || shown !== want) raf = requestAnimationFrame(step);
+    };
+    kickRef.current = () => {
+      if (raf) return;
+      last = performance.now();
+      raf = requestAnimationFrame(step);
+    };
+    return () => {
+      cancelAnimationFrame(raf);
+      kickRef.current = () => {};
+    };
+  }, [frames, readAt, reading, reduce, scrollY]);
+
+  // Until the story has loaded the stub has read nothing; arming a hydrated
+  // /works page drops its print there at once, below the fold.
+  useEffect(() => {
+    if (!armed) return;
+    if (!released && !reduce) {
+      reading.ink.set(0);
+      reading.shown.set(0);
+      reading.frame.set(0);
+    }
+    kickRef.current();
+  }, [armed, released, reduce, reading]);
+
+  useMotionValueEvent(scrollY, 'change', () => kickRef.current());
+
+  // Waiting below the fold from the first paint — a /works page's server
+  // HTML included, where it is a decorative card out of sight, not page
+  // content held back — and handed in once the story has loaded. Reduced
+  // motion seats it at once, from hydration on (the server cannot know, and
+  // the hydrating render must match what it sent).
+  const waiting = !released && !reduce;
+  return (
+    <motion.div
+      ref={stubRef}
+      className="story-stub font-ui"
+      aria-hidden="true"
+      style={stockStyle(chapter.slug)}
+      initial={armed && reduce ? false : STUB_WAITING}
+      animate={waiting ? STUB_WAITING : STUB_SEATED}
+      transition={waiting || reduce ? { duration: 0 } : { duration: DUR.settle, ease: EASE.arrive }}
+    >
+      <div className="story-stub__print">
+        <StubFace
+          chapter={chapter}
+          ordinal={ordinal}
+          total={total}
+          frames={frames}
+          cities={cities}
+          reading={reading}
+          reduce={reduce}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+/** Moves the three shared marks of a travelling print from where the rail
+ *  prints them to where the homepage stub printed them, by `--travel-home`
+ *  (0 = the rail's place, 1 = the homepage's), so a single print carries
+ *  them the whole way and nothing is ever printed twice. */
+function aimSharedMarks(print: HTMLElement, home: StubMarks) {
+  const kept = readStubMarks(print, 'story-stub');
+  if (!kept) return;
+  for (const mark of STUB_MARKS) {
+    const node = print.querySelector<HTMLElement>(`.story-stub__${mark}`);
+    if (!node) continue;
+    const dx = home[mark].x - kept[mark].x;
+    const dy = home[mark].y - kept[mark].y;
+    node.style.translate = `calc(var(--travel-home, 0) * ${dx.toFixed(2)}px) calc(var(--travel-home, 0) * ${dy.toFixed(2)}px)`;
+  }
+}
+
+/** The homepage stub, copied for the rows only it prints. Its framer
+ *  styles (the tear's counter-pull and dimming) and the attribute that hides
+ *  the original are not part of the print. */
+function copyHomeStub(stub: PlateStub) {
+  const copy = stub.node.cloneNode(true) as HTMLElement;
+  copy.removeAttribute('style');
+  copy.removeAttribute('data-kept-away');
+  copy.removeAttribute('data-kept-returning');
+  return copy;
+}
+
+/* ── The stub goes home ──
+   Closing a story that grew out of its homepage ticket flies the kept half
+   back onto it while the panel drops: the rail's card, as the reader left it
+   (ink, frame, city), travels to the ticket (stubTravelEase), tipping the
+   other way to the way it was handed in. The rail's own parts leave late
+   (160ms from +380ms, easing in) and the homepage's rows arrive late (240ms
+   from +440ms, expo), so the card is never blank in flight; the shared marks
+   slide back. Seated, the ticket gets its real stub back under the copy —
+   the same print, in the same place — so the copy only has to get out of the
+   way: a flick of a fade (DUR.flick, EASE.fade), cut to nothing by the
+   reader's first wheel, key or touch. It used to dissolve over 420ms easing
+   in, near full strength for most of it, and a reader who scrolled straight
+   on watched two stubs part. Built on the page rather than in the story: the
+   story is leaving, and this outlives it. The rail's rect is read once, here,
+   where the stub is. */
+function flyStubHome(rail: HTMLElement, home: PlateStub, slug: string | undefined) {
+  const from = rail.getBoundingClientRect();
+  const to = home.box;
+  const face = rail.querySelector('.story-stub__print');
+  if (!face || !from.width || !from.height) return false;
+  const paper = document.createElement('div');
+  paper.className = 'story-stub story-stub-travel story-stub-travel--returning font-ui';
+  paper.setAttribute('aria-hidden', 'true');
+  paper.style.setProperty('--stub-paper', stockPaper(slug));
+  const printOf = (part: 'is-shared' | 'is-kept') => {
+    const print = document.createElement('div');
+    print.className = `story-stub story-stub--print ${part}`;
+    print.style.width = `${from.width}px`;
+    print.appendChild(face.cloneNode(true));
+    return print;
+  };
+  const homePrint = document.createElement('div');
+  homePrint.className = 'story-stub-travel__home';
+  homePrint.style.width = `${to.width}px`;
+  homePrint.style.height = `${to.height}px`;
+  homePrint.style.opacity = '0';
+  homePrint.appendChild(copyHomeStub(home));
+  const kept = printOf('is-kept');
+  const shared = printOf('is-shared');
+  paper.append(homePrint, kept, shared);
+  const place = (t: number) => {
+    const lerp = (a: number, b: number) => a + (b - a) * t;
+    paper.style.width = `${lerp(from.width, to.width)}px`;
+    paper.style.height = `${lerp(from.height, to.height)}px`;
+    const tilt = t >= 1 ? 0 : -STUB_TRAVEL_TILT * Math.sin(Math.PI * t);
+    paper.style.transform = `translate(${lerp(from.x, to.x)}px, ${lerp(from.y, to.y)}px) rotate(${tilt.toFixed(3)}deg)`;
+    paper.style.setProperty('--travel-home', t.toFixed(4));
+    paper.style.setProperty('--travel-kept', (1 - t).toFixed(4));
+  };
+  place(0);
+  document.body.appendChild(paper);
+  // The copy is fixed, but the ticket it lands on is on the page: once Lenis
+  // starts again (+~690ms, just before the copy seats) a scroll moves the
+  // ticket away. The copy follows the page by the scroll offset (no layout
+  // read) until it is gone, and a copy the page moved under is cut at once —
+  // the ticket's own scroll-linked drift is not in that offset.
+  const scrollAtStart = window.scrollY;
+  let fade: Animation | null = null;
+  let scrolled = false;
+  let seated = false;
+  const cut = () => {
+    fade?.cancel();
+    paper.remove();
+    window.removeEventListener('wheel', cut, true);
+    window.removeEventListener('keydown', cut, true);
+    window.removeEventListener('touchstart', cut, true);
+  };
+  const follow = () => {
+    if (!paper.isConnected) return;
+    const offset = scrollAtStart - window.scrollY;
+    paper.style.translate = `0 ${offset.toFixed(1)}px`;
+    if (!scrolled && Math.abs(offset) > 1) {
+      scrolled = true;
+      if (seated) cut();
+    }
+    requestAnimationFrame(follow);
+  };
+  requestAnimationFrame(follow);
+  aimSharedMarks(shared, home.marks);
+  // Normally away since the kept half was handed into the rail; set here
+  // too, so the ticket can never show its stub under the copy on its way.
+  home.node.dataset.keptAway = 'true';
+  home.node.dataset.keptReturning = 'true';
+  rail.style.visibility = 'hidden';
+  kept.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, delay: 380, easing: CSS_EASE.leave, fill: 'forwards' });
+  homePrint.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: 440, easing: CSS_EASE.arrive, fill: 'forwards' });
+  const seat = () => {
+    if (seated) return;
+    seated = true;
+    delete home.node.dataset.keptAway;
+    delete home.node.dataset.keptReturning;
+    // The real stub shows in this same frame, so whichever way the copy goes
+    // there is never a frame with neither.
+    if (scrolled) {
+      cut();
+      return;
+    }
+    fade = paper.animate([{ opacity: 1 }, { opacity: 0 }], { duration: DUR_MS.flick, easing: CSS_EASE.fade, fill: 'forwards' });
+    fade.finished.then(cut, cut);
+    window.addEventListener('wheel', cut, { capture: true, passive: true });
+    window.addEventListener('keydown', cut, true);
+    window.addEventListener('touchstart', cut, { capture: true, passive: true });
+  };
+  animate(0, 1, { duration: STUB_TRAVEL_MS / 1000, ease: stubTravelEase, onUpdate: place, onComplete: seat });
+  // However the flight ends, the ticket gets its stub back.
+  window.setTimeout(seat, STUB_TRAVEL_MS + 200);
+  window.setTimeout(cut, STUB_TRAVEL_MS + 1200);
+  return true;
+}
+
+/** A small drawn arrow: the running head's Back and the Next line's. Drawn,
+ *  not typed, so it never falls back to another face. */
+function Arrow({ left = false, className }: { left?: boolean; className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 10" width="16" height="10" aria-hidden="true" focusable="false">
+      <path
+        d={left ? 'M15 5H1.5M5.5 1 1.5 5l4 4' : 'M1 5h13.5M10.5 1l4 4-4 4'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="square"
+      />
+    </svg>
+  );
+}
+
+/** Photographs · Camera · Map: the opening spread's credits. The map credit
+ *  is the posters' own, reprinted because the map page crops past it. */
+function Credits({ camera, map }: { camera: string; map: boolean }) {
+  const [site, notice] = MAP_CREDIT.split(' · ');
+  return (
+    <dl className="story-credits">
+      <div>
+        <dt className="font-ui">Photographs</dt>
+        <dd className="font-serif">Ryan Xu</dd>
+      </div>
+      {camera && (
+        <div>
+          <dt className="font-ui">Camera</dt>
+          <dd className="font-serif">{camera}</dd>
+        </div>
+      )}
+      {map && (
+        <div>
+          <dt className="font-ui">Map</dt>
+          <dd className="font-serif">
+            {site}
+            <small className="font-ui">{notice}</small>
+          </dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+/* ── The opening spread's map page ──
+   The left page of the spread, printed on the chapter's ticket stock: the
+   place's terrain in white ink, the story's number, its title, and (for a
+   portrait frame 01, and on the phone) the dek and the credits. On desktop
+   it is pinned (position: sticky, global.css .story-spread) and the story's
+   paper rises over it as the reader scrolls — the curtain, pure CSS. On a
+   story that arrives by a grow, it is sent `waiting` (map undeveloped, type
+   unset) and sets once the photograph has landed (`data-set` on the story,
+   global.css); every other way in paints it set. */
+function OpeningSpread({
+  name,
+  heading,
+  ordinal,
+  total,
+  dek,
+  camera,
+  terrain,
+  entering,
+  waiting,
+}: {
+  name: string;
+  heading: 'h1' | 'h2';
+  ordinal: string;
+  total: string;
+  dek: string;
+  camera: string;
+  terrain: string;
+  /** Arrived by a grow: the map develops once it has landed and decoded. */
+  entering: boolean;
+  waiting: boolean;
+}) {
+  const Heading = heading;
+  const terrainRef = useRef<HTMLImageElement>(null);
+  // Whether the map is still on its way. Read once at mount on a grown
+  // arrival (warmTerrain has normally decoded it during the grow); never on
+  // any other way in, which paints the map as sent.
+  const [decoding, setDecoding] = useState(entering && !!terrain);
+  useLayoutEffect(() => {
+    const image = terrainRef.current;
+    if (image?.complete && image.naturalWidth > 0) setDecoding(false);
+  }, []);
+  return (
+    <section className="story-spread" aria-label={`${name}, opening`}>
+      {/* Pending: the map and the gradient that sets the type on it
+          develop together once the photograph has landed, so the grow's
+          flat stock hands over to a flat stock. */}
+      <div className="story-spread__map" data-pending={waiting || decoding ? 'true' : undefined}>
+        {terrain && (
+          <img
+            ref={terrainRef}
+            className="story-terrain-ink story-spread__terrain"
+            src={terrain}
+            alt=""
+            width={2000}
+            height={1126}
+            decoding="async"
+            fetchPriority="high"
+            draggable={false}
+            onLoad={() => setDecoding(false)}
+          />
+        )}
+      </div>
+      <div className="story-spread__type">
+        <p className="story-kicker font-ui">{ordinal} / {total}</p>
+        <Heading className="story-title font-serif">
+          <span className="story-title__line">{name}</span>
+        </Heading>
+        <div className="story-spread__meta">
+          {dek && <p className="story-dek font-serif">{dek}</p>}
+          <Credits camera={camera} map={!!terrain} />
+        </div>
+      </div>
+      {/* The running head takes paper once this passes under it (phone:
+          the stock page is in the flow there). */}
+      <span className="story-sentinel story-sentinel--phone" data-head-sentinel aria-hidden="true" />
+    </section>
+  );
+}
+
+/* ── The end page ──
+   Printed on the chapter's stock, as the map page is: the Plates (every
+   frame at its own ratio, numbered, each opening the viewer), the terrain
+   plate whole with its credit, the facts, the next story — its cover at its
+   own ratio, its number, "Next, Orlando" and the one lime mark in the story,
+   the arrow, which arrives with the name — and two text links. Its own
+   component so the in-view trigger is armed on ITS mount (the story body
+   mounts only once a grow has landed). */
+function EndPage({
+  collection,
+  photos,
+  terrain,
+  camera,
+  position,
+  frameCount,
+  nextCollection,
+  nextOrdinal,
+  total,
+  reduce,
+  armed,
+  onTurn,
+  onOpenPlate,
+  onShare,
+  onTop,
+  isShared,
+  shareStatus,
+  shareFallbackUrl,
+}: {
+  collection: Collection;
+  photos: readonly Photo[];
+  terrain: string;
+  camera: string;
+  position: string;
+  frameCount: number;
+  nextCollection: Collection | null;
+  nextOrdinal: string;
+  total: string;
+  reduce: boolean;
+  /** False only while a standalone /works page is still its server HTML:
+   *  the end paints at rest and waits for the reader from hydration on. */
+  armed: boolean;
+  /** The card that becomes the next story's frame 01. */
+  onTurn: (card: HTMLElement) => void;
+  onOpenPlate: (index: number, element: HTMLElement) => void;
+  onShare: () => void;
+  onTop: () => void;
+  isShared: boolean;
+  shareStatus: string;
+  shareFallbackUrl: string;
+}) {
+  const [nextRef, inView] = useInViewOnce<HTMLButtonElement>('0px 0px -18% 0px', 0.2);
+  // Until the page is armed the end is simply there. Arming hides the Next
+  // line at once (every "not yet" transition is instant), below the fold.
+  const shown = inView || !armed;
+  // The next story's map page is printed on its terrain. Fetch it while the
+  // reader is still here, so the turn never waits on the network — on the
+  // reader arriving, not on a /works page's server HTML.
+  useEffect(() => {
+    if (inView && nextCollection) void warmTerrain(terrainFor(nextCollection));
+  }, [inView, nextCollection]);
+  const region = typeof collection.region === 'string' ? collection.region.trim() : '';
+  const facts: Array<[string, string]> = [
+    ['Place', region && !labelsMatch(collection.name, region) ? `${collection.name}, ${region}` : collection.name],
+  ];
+  if (position) facts.push(['Position', position]);
+  if (collection.year) facts.push(['Year', String(collection.year)]);
+  facts.push(['Frames', String(frameCount)]);
+  if (camera) facts.push(['Camera', camera]);
+  facts.push(['Photographs', 'Ryan Xu']);
+  const nextDims = nextCollection?.coverImageUrl ? fileDims(nextCollection.coverImageUrl) : null;
+  const coverWaiting = { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' };
+  const coverRest = { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' };
+  return (
+    <footer className="story-end" style={stockStyle(collection.slug)}>
+      <div className="story-end__plates">
+        <p className="story-label font-ui">Plates</p>
+        <ol className="story-plates">
+          {photos.map((photo, index) => (
+            <li key={photo._id}>
+              <button
+                type="button"
+                className="story-plate story-focus"
+                data-plate-index={index}
+                aria-label={`Open frame ${pad2(index + 1)}`}
+                onClick={(event) => onOpenPlate(index, event.currentTarget)}
+              >
+                <img
+                  src={`${photo.imageUrl}?auto=format&h=160&q=70`}
+                  alt=""
+                  width={photo.width}
+                  height={photo.height}
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                />
+                <span className="story-plate__no font-ui">{pad2(index + 1)}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {terrain && (
+        <div className="story-end__map">
+          <div className="story-end__terrain">
+            <img
+              className="story-terrain-ink"
+              src={terrain}
+              alt={`Map of ${collection.name}`}
+              width={2000}
+              height={1126}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+            />
+          </div>
+          <p className="story-end__credit font-ui">{MAP_CREDIT}</p>
+        </div>
+      )}
+      <dl className="story-end__facts">
+        {facts.map(([label, value]) => (
+          <div key={label}>
+            <dt className="font-ui">{label}</dt>
+            <dd className="font-serif">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {nextCollection && (
+        <div className="story-end__next">
+          <button
+            ref={nextRef}
+            type="button"
+            className="story-next story-focus"
+            onClick={(event) => {
+              const card = event.currentTarget.querySelector<HTMLElement>('[data-next-cover]');
+              onTurn(card ?? event.currentTarget);
+            }}
+            aria-label={`Read next story: ${nextCollection.name}`}
+          >
+            {nextCollection.coverImageUrl && (
+              // The next story's frame 01 at its own ratio (it used to be
+              // cropped to 1.6:1). It is the picture the turn grows from.
+              <motion.span
+                data-next-cover
+                className="story-next__cover"
+                style={reduce ? undefined : DEVELOP_MASK_STYLE}
+                initial={reduce || !armed ? false : coverWaiting}
+                animate={reduce || shown ? coverRest : coverWaiting}
+                transition={reduce || !shown ? { duration: 0 } : {
+                  opacity: { duration: 0.3, delay: 0.28, ease: EASE.arrive },
+                  y: { duration: 0.8, delay: 0.28, ease: popEase },
+                  WebkitMaskPosition: { duration: 0.8, delay: 0.28, ease: EASE.develop },
+                  maskPosition: { duration: 0.8, delay: 0.28, ease: EASE.develop },
+                }}
+              >
+                <img
+                  src={`${nextCollection.coverImageUrl}?auto=format&w=900&q=80`}
+                  alt=""
+                  width={nextDims?.width}
+                  height={nextDims?.height}
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                />
+              </motion.span>
+            )}
+            <span className="story-next__text">
+              <span className="story-next__kicker font-ui">{nextOrdinal} / {total}</span>
+              {/* The name and the arrow rise together through one mask, so
+                  the arrow is never on the page without its name. */}
+              <span className="story-next__name font-serif">
+                <motion.span
+                  className="story-next__line"
+                  initial={reduce || !armed ? false : { y: '112%' }}
+                  animate={{ y: reduce || shown ? '0%' : '112%' }}
+                  transition={{ duration: reduce || !shown ? 0 : DUR.plane, delay: reduce || !shown ? 0 : 0.12, ease: EASE.arrive }}
+                >
+                  <i>Next,</i> {nextCollection.name}
+                  <Arrow className="story-next__arrow" />
+                </motion.span>
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
+      <div className="story-end__links">
+        <button type="button" className="story-link font-ui story-focus" onClick={onShare}>
+          {isShared ? 'Link copied' : 'Share this story'}
+        </button>
+        <button type="button" className="story-link font-ui story-focus" onClick={onTop}>
+          Back to the opening
+        </button>
+      </div>
+      <div className={shareFallbackUrl ? 'story-end__share' : 'sr-only'}>
+        <p role="status" aria-live="polite" aria-atomic="true" className="font-ui">
+          {shareStatus}
+        </p>
+        {shareFallbackUrl && (
+          <input
+            type="text"
+            tabIndex={0}
+            readOnly
+            value={shareFallbackUrl}
+            aria-label="Story link — select and copy"
+            onFocus={(event) => event.currentTarget.select()}
+            onClick={(event) => event.currentTarget.select()}
+            className="story-end__share-input font-ui story-focus"
+          />
+        )}
+      </div>
+    </footer>
+  );
+}
+
+/* ── The grow ── (see GrowPlane) */
+function GrowPlaneView({ plane, reduce }: { plane: GrowPlane; reduce: boolean }) {
+  const [view] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const { origin } = plane;
+  const frame = origin?.frame ?? plane.box;
+  const clipStart = `inset(${frame.y}px ${view.width - frame.x - frame.width}px ${view.height - frame.y - frame.height}px ${frame.x}px)`;
+  // The picture as the reader saw it: the whole photograph drawn in its
+  // box (hover zoom and parallax included), which the window then crops.
+  const shown = origin ? coverRect(origin.ratio, origin.image) : null;
+  const at = plane.target ?? shown;
+  const from = plane.target && shown
+    ? { x: shown.x - plane.target.x, y: shown.y - plane.target.y, scale: shown.width / plane.target.width }
+    : null;
+  const transition = { duration: reduce ? 0 : plane.ms / 1000, ease: EASE.plane };
+  const stock = stockPaper(plane.story.slug);
+  const ground = plane.onto === 'page'
+    ? 'var(--story-paper)'
+    : plane.split == null
+      ? stock
+      : `linear-gradient(90deg, ${stock} 0 ${plane.split}px, var(--story-paper) ${plane.split}px)`;
+  return (
+    <motion.div
+      className="story-grow"
+      aria-hidden="true"
+      initial={{ clipPath: clipStart }}
+      animate={{ clipPath: 'inset(0px 0px 0px 0px)' }}
+      transition={transition}
+    >
+      <div className="story-grow__ground" data-phase={plane.phase} data-onto={plane.onto} style={{ background: ground }} />
+      {origin && at && (
+        <motion.div
+          className="story-grow__photo"
+          style={{ left: at.x, top: at.y, width: at.width, height: at.height, transformOrigin: '0 0' }}
+          initial={from ? { x: from.x, y: from.y, scale: from.scale, opacity: 1 } : { opacity: 1 }}
+          animate={from ? { x: 0, y: 0, scale: 1, opacity: 1 } : { opacity: 0 }}
+          transition={transition}
+        >
+          <img src={origin.imageUrl} alt="" decoding="async" draggable={false} />
+          {/* The plate's own grade — its matte and shades — leaves as the
+              picture lands, so its tone never cuts. A bare picture (the Next
+              card, a proof frame) has only its own ground showing through. */}
+          <motion.div
+            className="story-grow__grade"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            transition={transition}
+          >
+            <div style={{ opacity: origin.matte, background: origin.bare?.ground ?? '#30352a' }} />
+            {!origin.bare && (
+              <>
+                <div className="story-grow__shade story-grow__shade--top" />
+                <div className="story-grow__shade story-grow__shade--foot" />
+              </>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
 }
 
 /* ── Full-screen lightbox using existing shared component ── */
@@ -531,38 +1821,115 @@ export default function MagazineLayout({
   sharedSourcePresent,
   sharedImageUrl,
   onEntryReady,
+  entryOrigin,
 }: MagazineLayoutProps) {
   const reduce = useReducedMotion();
   const isPresent = useIsPresent();
+  // A standalone /works page is server-rendered, and framer writes `initial`
+  // into the HTML it sends: every hidden starting state was a blank the
+  // visitor looked at until hydration. So until it hydrates, the page paints
+  // at rest — the opening spread set, every frame at rest. Hydration arms the
+  // arrivals below the fold (the frames' develop, the end's Next line), each
+  // jumping instantly to its waiting state where nobody is looking. The
+  // overlay is never server-rendered and is armed from its first render.
+  const [revealArmed, setRevealArmed] = useState(!standalone);
+  useEffect(() => { setRevealArmed(true); }, []);
   const sharedEntry = entryMode === 'shared-photo';
   // A Keep Reading selection stays inside the same Story shell. Only the
   // collection actually opened from Homepage may morph back to that source.
   const sharedEntryCollectionRef = useRef(collection._id);
   const isSharedEntryCollection = sharedEntry && collection._id === sharedEntryCollectionRef.current;
+  // Whether this shell was opened from a Homepage plate, and whether the story
+  // on screen is still the one that grew out of it: a Next turn inside the
+  // same shell grows from its card. Under reduced motion nothing grows. The
+  // origin is read once, at mount: Homepage hands it over only while the
+  // desktop layout holds, and a viewport crossing 1024px mid-grow must not
+  // take the plate away from a plane that is halfway through becoming it.
+  const entryOriginRef = useRef(entryOrigin);
+  const plateEntry = !!entryOriginRef.current && !sharedEntry && !standalone && !reduce;
+  const plateEntryCollectionRef = useRef(collection._id);
+  // Spent the first time the shell turns away from that story. The archive
+  // wraps, so the chapter this shell opened from comes round again after a
+  // full lap of Next, and that arrival is an ordinary turn.
+  const plateSpentRef = useRef(false);
+  const plateOrigin = plateEntry && !plateSpentRef.current && collection._id === plateEntryCollectionRef.current
+    ? entryOriginRef.current ?? null
+    : null;
+  // ── The grow (see GrowPlane) ──
+  // A plate at mount, or the Next card during a turn.
+  const [plane, setPlane] = useState<GrowPlane | null>(() => (
+    plateOrigin ? growPlane('plate', collection, plateOrigin, plateOrigin.frame, PLATE_GROW_MS) : null
+  ));
+  // True once the plane has landed full-screen. Starts true on every path that
+  // has nothing to grow from.
+  const [entryLanded, setEntryLanded] = useState(() => !plateOrigin);
+  // The story a grow has landed onto: its spread is sent waiting and sets
+  // itself (`printedId` records that it has).
+  const [enteringId, setEnteringId] = useState<string | null>(null);
+  const [printedId, setPrintedId] = useState<string | null>(null);
+  // The landing is on a timer rather than on the plane's animation callback:
+  // a landing that depends on a callback is a landing that can simply not
+  // happen. The story body mounts in the same commit (it is kept unmounted
+  // until then), and the plane's grounds go in that commit too: the spread
+  // under them is the same picture.
+  useEffect(() => {
+    if (entryLanded) return;
+    if (!plane || plane.kind !== 'plate') {
+      setEntryLanded(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setEntryLanded(true);
+      setEnteringId(plane.story._id);
+      setPlane((current) => (current && current.key === plane.key ? { ...current, phase: 'hold' } : current));
+    }, plane.ms);
+    return () => window.clearTimeout(timer);
+  }, [plane, entryLanded]);
+  // Spent after the commit that changes the story, not in the turn's click
+  // handler, so the render that is still showing it keeps its origin.
+  useEffect(() => {
+    if (collection._id !== plateEntryCollectionRef.current) plateSpentRef.current = true;
+  }, [collection._id]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onEntryReadyRef = useRef(onEntryReady);
   onEntryReadyRef.current = onEntryReady;
-  const { scrollYProgress } = useScroll({ container: containerRef });
+  // One scroll source for the story: the rail's kept stub and the phone's
+  // frame folio read the offset.
+  const { scrollY } = useScroll({ container: containerRef });
   const [isShared, setIsShared] = useState(false);
   const [shareStatus, setShareStatus] = useState('');
   const [shareFallbackUrl, setShareFallbackUrl] = useState('');
   const shareResetTimerRef = useRef<number | null>(null);
   const shareAttemptRef = useRef(0);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  // The hovered frame is held on the DOM, not in state (see FrameShared.onHover).
+  const frameGridRef = useRef<HTMLDivElement>(null);
+  const hoveredFrameRef = useRef<HTMLElement | null>(null);
+  const markHoveredFrame = useCallback((element: HTMLElement | null) => {
+    const previous = hoveredFrameRef.current;
+    if (previous && previous !== element) previous.removeAttribute('data-hovered');
+    if (element) element.setAttribute('data-hovered', '');
+    hoveredFrameRef.current = element;
+    const grid = frameGridRef.current;
+    if (!grid) return;
+    if (element) grid.setAttribute('data-hovered', '');
+    else grid.removeAttribute('data-hovered');
+  }, []);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // The box of the frame that opened the viewer, read at click time.
   const [lightboxOrigin, setLightboxOrigin] = useState<LightboxOrigin | null>(null);
+  // A viewer opened from the end page's Plates goes back to its plate, which
+  // is on screen, not to the frame's place further up the story.
+  const plateReturnRef = useRef(false);
   // Where a frame IS, asked for at the moment the viewer closes rather than
-  // remembered from when it opened. Two elements can carry the same index (the
-  // grid cell and the phone's opening frame, one of which is display:none at
-  // any width), so take the first one actually laid out.
+  // remembered from when it opened. Take the first node actually laid out.
   const resolveFrameTarget = useCallback((index: number) => {
     const root = containerRef.current;
     if (!root) return null;
-    const nodes = Array.from(root.querySelectorAll<HTMLElement>(`[data-frame-index="${index}"]`));
+    const attribute = plateReturnRef.current ? 'data-plate-index' : 'data-frame-index';
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(`[${attribute}="${index}"]`));
     const node = nodes.find((candidate) => candidate.offsetParent !== null);
     if (!node) return null;
     let box = node.getBoundingClientRect();
@@ -584,45 +1951,27 @@ export default function MagazineLayout({
     }
     return { box: { x: box.x, y: box.y, width: box.width, height: box.height }, node };
   }, []);
-  const openLightbox = (index: number, element: HTMLElement | null) => {
+  const openLightbox = (index: number, element: HTMLElement | null, fromPlates = false) => {
+    plateReturnRef.current = fromPlates;
     const box = element?.getBoundingClientRect();
-    setLightboxOrigin(box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null);
+    // The picture the frame is showing, if it has already been decoded: the
+    // viewer wears it until its own file arrives, so the flight out of this
+    // frame carries this frame's pixels even when that file is still on its
+    // way. A frame still loading lends nothing.
+    const image = element?.querySelector('img');
+    const src = image?.complete && image.naturalWidth > 0 ? image.currentSrc || image.src : '';
+    setLightboxOrigin(box ? { x: box.x, y: box.y, width: box.width, height: box.height, src: src || undefined } : null);
     setLightboxIndex(index);
   };
-  const [openingFrameError, setOpeningFrameError] = useState(false);
   const [sharedBodyReady, setSharedBodyReady] = useState(!sharedEntry || !!reduce);
   // Touch devices: skip the "dim every other photo when one is hovered"
   // effect — the user can't trigger or escape it cleanly, and the hover
   // handler firing on tap causes a flash of dim before the lightbox opens.
   const canHover = useHoverCapable();
-  // Editorial cover intro — a printed "front page" that holds the screen as
-  // the story opens (collection name as masthead headline + column rules +
-  // folio + newsprint halftone), then peels up to reveal the grid. Replays
-  // whenever the collection changes (e.g. "Keep Reading" → next story).
-  const [coverGone, setCoverGone] = useState(sharedEntry || !!reduce);
-  const [coverExited, setCoverExited] = useState(sharedEntry || !!reduce);
   useEffect(() => {
-    setOpeningFrameError(false);
-    setHoveredIndex(null);
+    markHoveredFrame(null);
     setLightboxIndex(null);
-    // The turn is over the moment this story is the current one. Cleared HERE
-    // rather than when the plane finishes growing: clearing it earlier would
-    // unmount the plane for the one frame before this effect re-arms the cover,
-    // and that frame is the whole story swapping in plain sight. Cleared ABOVE
-    // the two early returns, because under reduced motion (and on the shared
-    // path) they take the cover away themselves — and a pending turn left set
-    // there keeps the plane mounted over the story for good.
-    setPendingStory(null);
-    if (sharedEntry) { setCoverGone(true); setCoverExited(true); return; }
-    if (reduce) { setCoverGone(true); setCoverExited(true); return; }
-    setCoverExited(false);
-    setCoverGone(false);
-    // Let the headline finish writing before the cover leaves. The previous
-    // 780ms cutoff sent the page upward while the title was still arriving,
-    // making the two motions compete instead of reading as one handoff.
-    const t = setTimeout(() => setCoverGone(true), 980);
-    return () => clearTimeout(t);
-  }, [collection._id, reduce, sharedEntry]);
+  }, [collection._id, markHoveredFrame]);
 
   // Treat the story as a real modal: focus the close control on entry, keep
   // keyboard focus inside, and return focus to the card that opened it.
@@ -639,44 +1988,76 @@ export default function MagazineLayout({
     };
   }, [returnFocusElement, sharedEntry, standalone]);
 
-  // Both the editorial cover and the shared-photo handoff hold the story body
-  // inert for their opening beat. Focus the dialog shell immediately so
-  // keyboard users never sit inside the now-inert Homepage during that time.
+  // Both the grow and the shared-photo handoff hold the story body inert for
+  // their opening beat. Focus the dialog shell immediately so keyboard users
+  // never sit inside the now-inert Homepage during that time.
   useEffect(() => {
     if (standalone || !isPresent) return;
     dialogRef.current?.focus({ preventScroll: true });
   }, [collection._id, sharedEntry, standalone, isPresent]);
 
-  useEffect(() => {
-    // Standalone work pages are documents, not dialogs. Do not steal focus
-    // from the browser/skip-link flow when their decorative cover clears.
-    if (standalone || sharedEntry || !coverExited || !isPresent) return;
-    const frame = requestAnimationFrame(() => closeButtonRef.current?.focus({ preventScroll: true }));
-    return () => cancelAnimationFrame(frame);
-  }, [collection._id, coverExited, sharedEntry, standalone, isPresent]);
+  // ── The story on the page ──
+  // Its frames (frame 01 is the cover the reader clicked), their shapes and
+  // its plan. The boxes' CSS does not depend on the window; the pixel values
+  // at the design window (1728×1000) only feed `sizes`.
+  const { frames: photos, ratios, slots } = useMemo(() => storyPlanFor(collection), [collection]);
+  const boxes = useMemo(() => storyBoxes(slots, ratios, 1728, 1000), [slots, ratios]);
+  // The slots as the kept stub reads them: frame indices, in reading order.
+  const frameRows = useMemo(() => slotRows(slots), [slots]);
+  // Where the reader is, for the kept stub. A /works page's server HTML
+  // prints the first frame read ("Frame 01", its tick inked) and drops to
+  // nothing once armed, below the fold; the overlay starts at nothing.
+  // Either way the ink counts up as the stub is handed in (KeptStub).
+  const [stubReading] = useState<StubReading>(() => {
+    const sent = standalone ? Math.min(photos.length, frameRows[0]?.length ?? 0) : 0;
+    const frame = sent > 0 ? 1 : 0;
+    return { ink: motionValue(sent), shown: motionValue(frame), frame: motionValue(frame) };
+  });
+  // The frame's own place, per frame, printed only where it is not the
+  // chapter's (New York's frames are Midtown and Manhattan).
+  const places = useMemo(() => {
+    const location = typeof collection.location === 'string' ? collection.location.trim() : '';
+    return photos.map((photo) => {
+      const city = typeof photo?.location?.city === 'string' ? photo.location.city.trim() : '';
+      return city && !labelsMatch(collection.name, city) && !labelsMatch(location, city) ? city : '';
+    });
+  }, [collection.location, collection.name, photos]);
+  // The stub's per frame number; 0 (the arrival's "00") carries the first
+  // frame's.
+  const stubCities = useMemo(() => [places[0] ?? '', ...places], [places]);
+  const paragraphs = useMemo(() => storyParagraphs(collection), [collection]);
+  const quote = pullQuote(collection.slug);
+  const dek = storyDek(collection.slug) || collection.subtitle || '';
+  const camera = useMemo(() => storyCamera(photos.map((photo) => photo.camera)), [photos]);
+  const position = formatPosition(photos[0]?.location?.lat, photos[0]?.location?.lng);
+  const terrain = terrainFor(collection);
+  const darkMap = !!collection.slug && DARK_TERRAIN.has(collection.slug);
+  const region = typeof collection.region === 'string' ? collection.region.trim() : '';
+  const location = typeof collection.location === 'string' ? collection.location.trim() : '';
+  const dateline = [region || location, collection.year ? String(collection.year) : ''].filter(Boolean).join(', ');
+  // The story's number is its ticket's: the homepage's chapter order, not the
+  // data's (chapterOrdinal). A chapter the issue does not carry falls back to
+  // its place in the list it was given.
+  const chapter = useMemo(() => chapterOrdinal(allCollections, collection._id), [allCollections, collection._id]);
+  const listIndex = allCollections.findIndex((entry) => entry._id === collection._id);
+  const ordinal = pad2(chapter.index >= 0 ? chapter.index + 1 : Math.max(0, listIndex) + 1);
+  const total = pad2(chapter.index >= 0 ? chapter.total : allCollections.length);
+  const nextCollection = chapter.next ?? allCollections[(listIndex + 1) % Math.max(1, allCollections.length)] ?? null;
+  const nextOrdinal = nextCollection ? pad2(chapterOrdinal(allCollections, nextCollection._id).index + 1) : '';
+  // Frame 01's box on the spread; the map page is everything to its left.
+  const opener = boxes[0]?.slot.kind === 'OPEN' ? boxes[0].frames[0] : null;
+  const openLandscape = isLandscape(ratios[0] ?? 1.5);
+  const storyStyle = {
+    ...stockStyle(collection.slug),
+    '--open-x': opener ? css(opener.x) : '0px',
+    '--open-w': opener ? css(opener.w) : '0px',
+    '--open-h': opener ? css(opener.h) : '0px',
+  } as CSSProperties;
 
-  // Open every story with a real horizontal frame. This restores the original
-  // collection-story rule: promote the first landscape photograph, then keep
-  // every remaining frame in its existing order. The same array drives the
-  // grid, mobile opener and lightbox so their indices stay aligned.
-  const photos = useMemo(() => {
-    const source = collection.photos || [];
-    if (source.length < 2) return source;
-    const landscapeIndex = source.findIndex((photo) =>
-      photo.width != null && photo.height != null && photo.width > photo.height,
-    );
-    if (landscapeIndex <= 0) return source;
-    const ordered = [...source];
-    const [landscape] = ordered.splice(landscapeIndex, 1);
-    ordered.unshift(landscape);
-    return ordered;
-  }, [collection.photos]);
-  const editorialRows = useMemo(() => buildEditorialRows(photos), [photos]);
-  // The chapter's end-cap plays when the reader arrives at it.
-  const [endCapRef, endCapShown] = useInViewOnce<HTMLButtonElement>('0px 0px -18% 0px', 0.2);
-  const distinctLocation = typeof collection.location === 'string' && !labelsMatch(collection.name, collection.location)
-    ? collection.location.trim()
-    : '';
+  const keptStubRef = useRef<HTMLDivElement>(null);
+  // The homepage ticket's stub, while the story on screen is the one its
+  // plate grew into: the rail's stub is its kept half, carrying its number.
+  const plateStub = plateOrigin?.stub ?? null;
   const sharedPhotoBase = collection.coverImageUrl || photos[0]?.imageUrl || '';
   const sharedPhotoUrl = sharedImageUrl || (sharedPhotoBase
     ? `${sharedPhotoBase}${sharedPhotoBase.includes('?') ? '&' : '?'}auto=format&w=2200&q=86`
@@ -685,59 +2066,97 @@ export default function MagazineLayout({
   const canMorphSharedPhoto = isSharedEntryCollection && !!sharedLayoutId && !!sharedPhotoUrl && hasSharedSource;
 
   // ── The page turn ──
-  // "Keep Reading" used to swap the collection in the same frame the reader
-  // clicked: the next story's full-screen cover simply existed, whole, while an
-  // effect scrolled the page back to the top underneath it — the cut hidden by
-  // the thing doing the cutting. Now the card the reader clicked BECOMES the
-  // cover: its box is measured once, at click, and the plane grows out of it.
-  // The story underneath is swapped only once that plane is opaque and
-  // full-screen, so the swap is never seen, and the cover's own choreography
-  // holds until it has landed rather than playing while it travels.
-  const [pendingStory, setPendingStory] = useState<{ collection: Collection; box: LightboxOrigin } | null>(null);
+  // The Next card the reader clicked grows into the next story's opening
+  // spread: its box is read once, at click, and the plane grows out of it,
+  // carrying the card's picture to where frame 01 sits on the next spread
+  // (the card IS the next story's frame 01, at its own ratio). The story
+  // underneath is swapped only once the plane is full-screen, so the swap is
+  // never seen; the next spread then sets itself as a plate's does. On a
+  // /works page a turn is a navigation (the whole document is replaced).
   const onSelectCollectionRef = useRef(onSelectCollection);
   onSelectCollectionRef.current = onSelectCollection;
-  // The cover announces the story it is opening, which during the turn is not
-  // yet the story this component is rendering.
-  const coverStory = pendingStory?.collection ?? collection;
-  const coverArrived = !pendingStory;
-  const coverIndex = allCollections.findIndex((entry) => entry._id === coverStory._id);
-  const coverFolio = String((coverIndex >= 0 ? coverIndex : 0) + 1).padStart(2, '0');
-  const coverFrameCount = pendingStory
-    ? (pendingStory.collection.photos?.length ?? pendingStory.collection.photoCount ?? 0)
-    : photos.length;
-  const coverLocation = typeof coverStory.location === 'string' && !labelsMatch(coverStory.name, coverStory.location)
-    ? coverStory.location.trim()
-    : '';
-  const coverBackdropBase = (coverStory.slug && COVER_BG[coverStory.slug])
-    || coverStory.coverImageUrl
-    || (pendingStory ? '' : photos[0]?.imageUrl)
-    || '';
-  const coverBackdrop = coverBackdropBase.includes('cdn.sanity.io/images/')
-    ? `${coverBackdropBase.split('?')[0]}?auto=format&w=2000&q=78`
-    : coverBackdropBase;
+  const turning = !!plane && plane.kind === 'turn' && plane.phase === 'grow';
   const beginPageTurn = (next: Collection, card: HTMLElement | null) => {
-    if (pendingStory) return;
+    if (plane) return;
+    // Normally already warm from the end page arriving; the grow is the last
+    // chance before the map is drawn.
+    void warmTerrain(terrainFor(next));
     const box = card?.getBoundingClientRect();
+    // Read in the click, before anything moves: the card's picture as a
+    // plate. Not under reduced motion, where the turn has no grow at all.
+    const origin = card && !reduce ? photoOrigin(card, card.querySelector('img')) : null;
     // Focus the shell before the story body goes inert underneath the plane.
     dialogRef.current?.focus({ preventScroll: true });
-    if (!box || !box.width || !box.height) {
+    if (reduce || !box || !box.width || !box.height) {
       onSelectCollection(next);
       return;
     }
-    setPendingStory({ collection: next, box: { x: box.x, y: box.y, width: box.width, height: box.height } });
+    setPlane(growPlane('turn', next, origin, { x: box.x, y: box.y, width: box.width, height: box.height }, COVER_EXPAND_MS));
   };
-  // The swap is on a timer rather than on the plane's own animation callback:
-  // under reduced motion the plane arrives in zero seconds, and a page turn
-  // that depends on a callback firing for a zero-length animation is a page
-  // turn that can simply not happen.
+  // The swap is on a timer rather than on the plane's own animation callback,
+  // for the reason the landing is. The next story, its spread's waiting state
+  // and the plane's hand-over land in one commit.
   useEffect(() => {
-    if (!pendingStory) return;
-    const timer = window.setTimeout(
-      () => onSelectCollectionRef.current(pendingStory.collection),
-      reduce ? 0 : COVER_EXPAND_MS,
-    );
+    if (!plane || plane.kind !== 'turn' || plane.phase !== 'grow') return;
+    const timer = window.setTimeout(() => {
+      setEnteringId(plane.story._id);
+      setPlane((current) => (current && current.key === plane.key ? { ...current, phase: 'hold' } : current));
+      onSelectCollectionRef.current(plane.story);
+    }, plane.ms);
     return () => window.clearTimeout(timer);
-  }, [pendingStory, reduce]);
+  }, [plane]);
+  // Landed: the grounds have gone. The photograph stays over frame 01 until
+  // frame 01's own file has decoded (a bigger candidate than the plate's),
+  // then the plane goes — the two are the same pixels in the same box. A
+  // plane that opened on paper fades.
+  useEffect(() => {
+    if (!plane || plane.phase !== 'hold' || plane.story._id !== collection._id) return;
+    let live = true;
+    let frame = 0;
+    const done = () => {
+      if (!live) return;
+      setPlane((current) => (current && current.key === plane.key ? null : current));
+    };
+    if (plane.onto === 'page') {
+      const timer = window.setTimeout(done, DUR_MS.swap);
+      return () => { live = false; window.clearTimeout(timer); };
+    }
+    const image = plane.target ? containerRef.current?.querySelector<HTMLImageElement>('[data-frame-index="0"] img') : null;
+    if (!image) {
+      frame = requestAnimationFrame(done);
+      return () => { live = false; cancelAnimationFrame(frame); };
+    }
+    // However the file fares, the plane never outstays this.
+    const cap = window.setTimeout(done, 2400);
+    const loaded = image.complete && image.naturalWidth > 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          image.addEventListener('load', () => resolve(), { once: true });
+          image.addEventListener('error', () => resolve(), { once: true });
+        });
+    void loaded
+      .then(() => (typeof image.decode === 'function' ? image.decode().catch(() => {}) : undefined))
+      .then(() => { frame = requestAnimationFrame(done); });
+    return () => {
+      live = false;
+      window.clearTimeout(cap);
+      cancelAnimationFrame(frame);
+    };
+  }, [plane, collection._id]);
+  // The story is live — interactive, its body no longer inert — once it has
+  // landed and while no turn is growing over it.
+  const live = entryLanded && !turning;
+  // A grown arrival's spread is sent waiting (map undeveloped, type unset)
+  // and set two frames after it is on screen, so the set is a transition the
+  // reader sees. Every other way in paints it set.
+  const spreadWaiting = !reduce && enteringId === collection._id && printedId !== collection._id;
+  useEffect(() => {
+    if (!spreadWaiting || !entryLanded) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setPrintedId(collection._id));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [spreadWaiting, entryLanded, collection._id]);
 
   // The photograph owns the first 55% of the Homepage handoff. Navigation and
   // story content become interactive only once that expansion has established
@@ -770,21 +2189,112 @@ export default function MagazineLayout({
     };
   }, [canMorphSharedPhoto, isPresent, isSharedEntryCollection, reduce, sharedEntry]);
 
-  // Reset internal scroll position whenever the user switches to a new
-  // collection (e.g. clicks "Keep Reading"). Without this the next story
-  // opens at the bottom — wherever the user clicked from.
-  useEffect(() => {
+  // A new story opens at its top: before its first paint (a layout effect),
+  // or a turn would show the next story for a frame at the old one's scroll.
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    el.scrollTo({ top: 0, behavior: 'auto' });
+    const behavior = el.style.scrollBehavior;
+    el.style.scrollBehavior = 'auto';
+    el.scrollTop = 0;
+    el.style.scrollBehavior = behavior;
+  }, [collection._id, entryLanded]);
+
+  useEffect(() => {
+    // Standalone work pages are documents, not dialogs. Do not steal focus
+    // from the browser/skip-link flow.
+    if (standalone || sharedEntry || !live || !isPresent) return;
+    const frame = requestAnimationFrame(() => closeButtonRef.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [collection._id, live, sharedEntry, standalone, isPresent]);
+
+  // ── The running head ──
+  // Transparent over the spread, Back in bone on the stock. It takes paper (a
+  // 97% sheet and a rule) and shows the story's name once a sentinel at the
+  // foot of the spread (100svh − 44 on desktop; the stock page's foot on the
+  // phone) has passed under it: an IntersectionObserver writes the attribute
+  // straight on the head, never a scroll listener, never a render.
+  const headRef = useRef<HTMLDivElement>(null);
+  // A turn lands the next story at its top: the head is back on the stock
+  // in the same paint, not fading off the last story's paper.
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head || !head.dataset.paper) return;
+    head.dataset.instant = 'true';
+    delete head.dataset.paper;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => { delete head.dataset.instant; });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [collection._id]);
-
-  // Next story
-  const currentIndex = allCollections.findIndex((c) => c._id === collection._id);
-  const nextCollection = allCollections[(currentIndex + 1) % allCollections.length];
-  // Folio / dispatch number for the editorial cover (1-based, zero-padded)
-  const folio = String((currentIndex >= 0 ? currentIndex : 0) + 1).padStart(2, '0');
-
+  useEffect(() => {
+    const root = containerRef.current;
+    const head = headRef.current;
+    if (!entryLanded || !root || !head || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        // One sentinel per layout; the other is not laid out at this width.
+        if ((entry.target as HTMLElement).offsetParent === null) continue;
+        const passed = !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0);
+        if (passed) head.dataset.paper = 'true';
+        else delete head.dataset.paper;
+      }
+    }, { root });
+    root.querySelectorAll('[data-head-sentinel]').forEach((node) => observer.observe(node));
+    return () => {
+      observer.disconnect();
+      delete head.dataset.paper;
+    };
+  }, [entryLanded, collection._id]);
+  // The phone has no stub: the running head's folio names the frame being
+  // read ("07 / 15") — the last frame whose top has crossed the reading line.
+  // Tops are an offsetTop chain measured on mount and on resize; a scroll
+  // compares one number against them and writes the folio's text straight
+  // onto the DOM.
+  const folioRef = useRef<HTMLSpanElement>(null);
+  const folioLinesRef = useRef<{ tops: number[]; view: number } | null>(null);
+  const paintFolio = useCallback((scrollTop: number) => {
+    const lines = folioLinesRef.current;
+    const folio = folioRef.current;
+    if (!lines || !folio) return;
+    const line = scrollTop + lines.view * STORY_READING_LINE;
+    let no = 1;
+    lines.tops.forEach((top, index) => { if (top <= line) no = Math.max(no, index + 1); });
+    const text = `${pad2(no)} / ${pad2(photos.length)}`;
+    if (folio.textContent !== text) folio.textContent = text;
+  }, [photos.length]);
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!entryLanded || !root) return;
+    const measure = () => {
+      const folio = folioRef.current;
+      if (!folio || folio.offsetParent === null) {
+        folioLinesRef.current = null;
+        return;
+      }
+      const tops: number[] = [];
+      root.querySelectorAll<HTMLElement>('[data-frame-index]').forEach((node) => {
+        const index = Number(node.dataset.frameIndex);
+        if (!Number.isFinite(index) || node.offsetParent === null || tops[index] !== undefined) return;
+        let top = 0;
+        let step: HTMLElement | null = node;
+        while (step && step !== root) {
+          top += step.offsetTop;
+          step = step.offsetParent instanceof HTMLElement ? step.offsetParent : null;
+        }
+        if (step === root) tops[index] = top;
+      });
+      folioLinesRef.current = { tops, view: root.clientHeight };
+      paintFolio(root.scrollTop);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    if (frameGridRef.current) observer.observe(frameGridRef.current);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [entryLanded, collection._id, paintFolio]);
+  useMotionValueEvent(scrollY, 'change', paintFolio);
 
   useEffect(() => {
     setIsShared(false);
@@ -878,10 +2388,110 @@ export default function MagazineLayout({
     return () => window.removeEventListener('keydown', fn);
   }, [onClose, lightboxIndex, sharedEntry, standalone, isPresent]);
 
+  // ── The kept stub's clock ──
+  // The spread has set: the landing (a grow's), the panel's arrival (an
+  // overlay opened without one), or hydration (a /works page; from the
+  // /travel ticket's photograph giving way, when it opened under one), plus
+  // SPREAD_SET_MS, by when the map has decoded or its short wait
+  // (TERRAIN_GRACE_MS) is over. Keyed to the story, so a turn's first render
+  // of the next story never counts the last one's.
+  const slideInRef = useRef(!standalone && !plateOrigin && !sharedEntry);
+  const [spreadSetId, setSpreadSetId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!live) return;
+    if (reduce) {
+      setSpreadSetId(collection._id);
+      return;
+    }
+    const lead = enteringId === collection._id
+      ? 0
+      : standalone
+        ? travelPlateLeft()
+        : slideInRef.current
+          ? PANEL_SLIDE_MS
+          : 0;
+    slideInRef.current = false;
+    const map = terrainFor(collection);
+    const wait = lead + Math.max(SPREAD_SET_MS, !map || terrainDecoded(map) ? 0 : TERRAIN_GRACE_MS);
+    const timer = window.setTimeout(() => setSpreadSetId(collection._id), wait);
+    return () => window.clearTimeout(timer);
+    // `enteringId` changes in the same commit as the story it names.
+  }, [live, collection._id, reduce]);
+  const spreadSet = spreadSetId === collection._id;
+  // The story has loaded and the kept stub is handed into the rail (KeptStub).
+  // Nothing stub-like is on screen before this: the ticket keeps its stub
+  // while the plate grows over it, and gives it up only here, under the
+  // opaque story, so the half the reader keeps is never in two places at once.
+  // A turn growing over the story leaves its stub where it is: the next
+  // story's own stub waits for its own spread.
+  const stubReady = spreadSet && entryLanded;
+  // It is handed in two frames after that, and only when no viewer is open:
+  // a story opened onto one of its frames (the closing proof sheet) flies
+  // that frame out of the page the moment the story goes live, and the stub
+  // rising under the flight was two motions at once. Then it waits under the
+  // fold until the viewer has closed and gone (VIEWER_EXIT_MS), and arrives
+  // over the story the reader comes back to. Once in, it stays in.
+  const [stubHandedIn, setStubHandedIn] = useState(false);
+  const viewerOpenRef = useRef(false);
+  viewerOpenRef.current = lightboxIndex !== null;
+  const stubHeldRef = useRef(false);
+  useEffect(() => {
+    if (!stubReady) {
+      stubHeldRef.current = false;
+      setStubHandedIn(false);
+      return;
+    }
+    if (stubHandedIn) return;
+    if (lightboxIndex !== null) {
+      stubHeldRef.current = true;
+      return;
+    }
+    let frame = 0;
+    const arrive = () => { if (!viewerOpenRef.current) setStubHandedIn(true); };
+    const timer = window.setTimeout(() => {
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(arrive); });
+    }, stubHeldRef.current && !reduce ? VIEWER_EXIT_MS : 0);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(frame);
+    };
+  }, [stubReady, stubHandedIn, lightboxIndex, reduce]);
+  // Read with `stubReady` in the same render, so a turn's stale render
+  // never counts the last story's hand-in for the new stub.
+  const stubArrived = stubReady && stubHandedIn;
+  useLayoutEffect(() => {
+    if (plateStub && stubArrived && isPresent) plateStub.node.dataset.keptAway = 'true';
+  }, [plateStub, stubArrived, isPresent]);
+  // At the close the kept half flies back onto its ticket (`flyStubHome`) —
+  // from the story that grew out of that ticket, once the stub has reached
+  // the rail. Every other close (a turned story, a close during the entry,
+  // reduced motion, a resized window) keeps the close it had, and the ticket
+  // simply has its stub again under the leaving story. A layout effect, so
+  // the rail's stub and its copy swap in the exit's first paint.
+  useLayoutEffect(() => {
+    if (isPresent) return;
+    const home = entryOriginRef.current?.stub;
+    if (!home) return;
+    const rail = keptStubRef.current;
+    const flown = !!plateStub && stubArrived && !reduce && !!rail && rail.offsetParent !== null
+      && home.node.isConnected
+      && home.view.width === window.innerWidth
+      && home.view.height === window.innerHeight
+      && flyStubHome(rail, home, collection.slug);
+    if (!flown) delete home.node.dataset.keptAway;
+  }, [isPresent]);
+
   const StoryShell = standalone ? motion.main : motion.div;
-  const StoryHeading = standalone ? 'h1' : 'h2';
+  const heading = standalone ? 'h1' : 'h2';
   const sharedPanelDelay = canMorphSharedPhoto ? SHARED_CONTENT_DELAY : 0;
-  const photoRevealReady = !!reduce || (sharedEntry ? sharedBodyReady : coverGone);
+  const frameShared: FrameShared = {
+    collectionName: collection.name,
+    total: photos.length,
+    canHover,
+    onHover: markHoveredFrame,
+    onOpen: (index, element) => openLightbox(index, element),
+  };
+  const openerPhoto = photos[0];
 
   return (
     <>
@@ -893,13 +2503,18 @@ export default function MagazineLayout({
         tabIndex={-1}
         // A standalone /works page is server-rendered, and framer writes
         // `initial` into the SSR style attribute — so this shell shipped its
-        // whole front page at `opacity: 0`. With /travel → /works getting no
-        // `data-axis` (the root view-transition rule is `animation: none`) the
-        // visitor got a hard cut to a blank screen that lasted until hydration,
-        // then a 700ms fade. The document must paint what it was sent.
-        initial={standalone || (sharedEntry && canMorphSharedPhoto) ? false : { opacity: 0 }}
+        // whole page at `opacity: 0`. The document must paint what it was
+        // sent. A plate entry paints its shell whole as well: the growing
+        // plate is this shell's child, and a shell fading in over 0.7s would
+        // have put it on the Homepage at 40% for the first half of its travel.
+        initial={standalone || (sharedEntry && canMorphSharedPhoto) || plateEntry ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: sharedEntry && canMorphSharedPhoto ? 1 : 0 }}
+        // A story leaves as a fade that eases IN. On the house expo the whole
+        // story went 1 → 0.23 in 117ms, so the panel's 680ms drop below was
+        // never seen — the story simply vanished.
+        exit={sharedEntry
+          ? { opacity: canMorphSharedPhoto ? 1 : 0 }
+          : { opacity: 0, transition: { duration: reduce ? 0 : 0.62, ease: EASE.leave } }}
         transition={{
           duration: reduce
             ? 0
@@ -908,9 +2523,9 @@ export default function MagazineLayout({
                 ? canMorphSharedPhoto ? 0 : 0.35
                 : SHARED_CLOSE_DURATION
               : 0.7,
-          ease: expo,
+          ease: EASE.arrive,
         }}
-        className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry ? 'bg-transparent' : 'bg-black/40'}`}
+        className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry || plateEntry ? 'bg-transparent' : 'bg-black/40'}`}
         role={standalone ? undefined : 'dialog'}
         aria-modal={standalone ? undefined : true}
         aria-label={`Story: ${collection.name}`}
@@ -930,9 +2545,22 @@ export default function MagazineLayout({
                   ? SHARED_OPEN_DURATION * 0.4
                   : SHARED_CLOSE_DURATION * 0.4,
               delay: reduce || isPresent ? 0 : SHARED_CLOSE_DURATION * 0.6,
-              ease: expo,
+              ease: EASE.arrive,
             }}
             className="pointer-events-none absolute inset-0 z-0 bg-[#171b15]"
+          />
+        )}
+        {plateEntry && (
+          /* The scrim the shell would have faded in, on its own and under the
+             plane: the page dims behind the growing plate rather than the
+             plate dimming over the page. It stays for the shell's life, so
+             the close is the one it always was. */
+          <motion.div
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.7, ease: EASE.arrive }}
+            className="pointer-events-none absolute inset-0 z-0 bg-black/40"
           />
         )}
         {canMorphSharedPhoto && (
@@ -946,9 +2574,9 @@ export default function MagazineLayout({
             transition={{
               layout: {
                 duration: reduce ? 0 : isPresent ? SHARED_OPEN_DURATION : SHARED_CLOSE_DURATION,
-                ease: expo,
+                ease: EASE.arrive,
               },
-              borderRadius: { duration: reduce ? 0 : isPresent ? SHARED_OPEN_DURATION : SHARED_CLOSE_DURATION, ease: expo },
+              borderRadius: { duration: reduce ? 0 : isPresent ? SHARED_OPEN_DURATION : SHARED_CLOSE_DURATION, ease: EASE.arrive },
             }}
             className="pointer-events-none absolute inset-0 z-[1] overflow-hidden bg-[#20241a]"
           >
@@ -967,541 +2595,195 @@ export default function MagazineLayout({
         <motion.div
           id={standalone ? undefined : mainId}
           tabIndex={!standalone && mainId ? -1 : undefined}
-          inert={sharedEntry ? !sharedBodyReady : !coverExited}
-          initial={sharedEntry ? { opacity: 0 } : reduce ? { opacity: 0 } : { y: '100%' }}
-          animate={sharedEntry ? { opacity: 1 } : reduce ? { opacity: 1 } : { y: 0 }}
+          inert={sharedEntry ? !sharedBodyReady : !live}
+          /* Behind a plate entry the panel does not slide up. The plane is
+             cut to the plate's window while it grows, and a page-coloured
+             panel rising outside that window would be the story arriving
+             beside the plate instead of inside it. The panel is simply there,
+             unseen, once the plane is full-screen. Its exit keeps the slide.
+             A standalone /works page does not slide it up either: framer
+             writes `initial` into the server HTML, and the body sat at
+             translateY(100%) until hydration. It paints where it rests.
+             Behind a plate its opacity is a plain style, not an animated
+             value: it turns opaque in the very commit that mounts the story
+             and takes the grow's grounds away (framer would apply it a frame
+             later, and the Homepage showed through for that frame). */
+          initial={standalone ? false : sharedEntry ? { opacity: 0 } : reduce ? { opacity: 0 } : plateEntry ? { y: 0 } : { y: '100%' }}
+          animate={sharedEntry ? { opacity: 1 } : reduce ? { opacity: 1 } : plateEntry ? { y: 0 } : { y: 0 }}
           exit={sharedEntry ? { opacity: 0 } : reduce ? { opacity: 0 } : { y: '100%' }}
           transition={sharedEntry
             ? {
                 duration: reduce ? 0 : isPresent ? 0.35 : 0.22,
                 delay: reduce || !isPresent ? 0 : sharedPanelDelay,
-                ease: expo,
+                ease: EASE.arrive,
               }
-            : { duration: reduce ? 0 : 0.68, ease: overlayEase }}
+            : plateEntry
+              ? { y: { duration: reduce ? 0 : 0.68, ease: overlayEase } }
+              : { duration: reduce ? 0 : 0.68, ease: overlayEase }}
           ref={containerRef}
           data-lenis-prevent
-          className="z-10 w-full h-[100dvh] overflow-y-auto overscroll-contain no-scrollbar relative bg-[#30352a] text-[#F4F4ED] focus:outline-none"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          // The story's page: paper. Its geometry (global.css, Story block)
+          // reads the grid tokens and frame 01's box from here.
+          className="story z-10 w-full h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-contain no-scrollbar relative focus:outline-none"
+          data-open={openLandscape ? 'landscape' : 'portrait'}
+          data-map={darkMap ? 'dark' : undefined}
+          data-set={spreadWaiting ? 'false' : 'true'}
+          style={{
+            ...storyStyle,
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            ...(plateEntry ? { opacity: entryLanded ? 1 : 0 } : null),
+          }}
         >
-          {/* Sticky header — top padding honors iOS notch safe-area */}
-          <div
-              className="safe-inline-story-header sticky top-0 left-0 w-full z-[90] isolate py-4 md:py-6 flex justify-between items-center bg-[#20241a]/92 border-b border-white/[0.055] shadow-[0_10px_28px_rgba(8,10,7,0.12)]"
-            style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
-          >
+          {/* The running head: ← Back, the story's name, the dateline (the
+              phone's frame folio). */}
+          <div ref={headRef} className="story-head">
             <motion.button
               ref={closeButtonRef}
               onClick={onClose}
               whileHover={reduce ? undefined : { x: -2 }}
               whileTap={reduce ? undefined : { scale: 0.96, x: -4 }}
-              transition={{ duration: 0.2, ease: expo }}
-              className="flex min-h-11 items-center gap-3 -ml-1 pl-1 pr-2 font-ui text-[10px] uppercase tracking-[0.1em] font-medium hover:opacity-60 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+              transition={{ duration: 0.2, ease: EASE.arrive }}
+              className="story-head__back story-focus font-ui"
               aria-label={`${standalone ? 'Back from' : 'Close'} ${collection.name} story`}
             >
-              <ArrowRight size={16} className="rotate-180" /> Back
+              <Arrow left className="story-head__arrow" />
+              Back
             </motion.button>
-            <div className="font-ui text-[10px] md:text-[11px] uppercase tracking-[0.1em] font-medium opacity-[0.58] truncate max-w-[55vw] md:max-w-none">
-              {collection.name}
-            </div>
-            <div className="absolute inset-x-0 bottom-0 h-px bg-white/[0.04] lg:hidden" aria-hidden="true">
-              <motion.div
-                className="h-full origin-left bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
-                style={{ scaleX: scrollYProgress }}
-              />
-            </div>
+            <p className="story-head__name font-ui" aria-hidden="true">{collection.name}</p>
+            <p className="story-head__folio font-ui" aria-hidden="true">
+              <span className="story-head__dateline">{dateline}</span>
+              <span key={collection._id} ref={folioRef} className="story-head__frame" />
+            </p>
           </div>
 
-          {/* Content */}
-          <div className="safe-inline-story-content relative z-0">
-            <div className="mx-auto max-w-6xl py-12 md:py-16 relative">
-              <div className="grid lg:grid-cols-12 gap-8 md:gap-12 relative z-10">
-                {/* ── Sidebar — fixed to viewport on desktop, three vertical regions:
-                       TOP: compact header (Vol/name/meta) — never scrolls
-                       MIDDLE: editorial introduction — scrolls internally if long
-                       BOTTOM: scroll progress + frame count + mini-map — always pinned
-
-                       Total height computed from the sticky offset (top-24 = 6rem)
-                       and the sticky header (h-16 ≈ 4rem) plus breathing room,
-                       so the whole sidebar fits inside the viewport with no
-                       outer scrollbar. */}
-                <aside className="lg:col-span-5 lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:flex lg:flex-col gap-8 lg:gap-6 xl:gap-8 space-y-8 lg:space-y-0">
-                  {/* TOP — header */}
-                  <header className="lg:shrink-0 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.52]">
-                        Vol. {folio}
-                      </span>
-                      <div className="h-[1px] flex-1 bg-white/10" />
-                    </div>
-                    <StoryHeading className={`${sharedEntry ? 'text-2xl md:text-3xl lg:text-4xl' : 'text-3xl md:text-4xl lg:text-5xl'} overflow-hidden py-1 font-serif uppercase leading-[0.85] tracking-tighter`}>
-                      <motion.span
-                        key={collection._id}
-                        className="block"
-                        initial={reduce ? false : { y: '110%' }}
-                        animate={{ y: photoRevealReady ? '0%' : '110%' }}
-                        transition={{
-                          duration: reduce ? 0 : sharedEntry ? 0.35 : 0.85,
-                          delay: reduce ? 0 : sharedEntry ? sharedPanelDelay : 0.1,
-                          ease: expo,
-                        }}
-                      >
-                        {collection.name}
-                      </motion.span>
-                    </StoryHeading>
-                    <div className="flex items-center gap-4">
-                      {distinctLocation && (
-                        <p className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium">
-                          {distinctLocation}
-                        </p>
-                      )}
-                      {distinctLocation && collection.year && (
-                        <div className="w-1 h-1 rounded-full bg-white/20" />
-                      )}
-                      <p className="font-ui text-[10px] uppercase tracking-[0.1em] opacity-[0.58]">
-                        {collection.year || ''}
-                      </p>
-                    </div>
-                  </header>
-
-                  {/* A horizontal opening frame gets a dedicated mobile plate.
-                      All-portrait stories begin with their paired grid instead,
-                      preserving the rule that a portrait never becomes a lone
-                      viewport-sized wall. */}
-                  {photos[0] && editorialRows[0]?.layout === 'wide' && (
-                    <motion.button
-                      type="button"
-                      onClick={(event) => openLightbox(0, event.currentTarget)}
-                      data-frame-index={0}
-                      initial={reduce ? false : { opacity: 0, y: 18 }}
-                      animate={photoRevealReady ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
-                      transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 0.18, ease: expo }}
-                      className="group relative -mx-6 block w-[calc(100%+3rem)] overflow-hidden bg-black/20 text-left lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#D2FF00]"
-                      aria-label={`Open opening frame, ${photoAccessibleLabel(photos[0], 0, photos.length, collection.name)}`}
-                    >
-                      <img
-                        src={`${photos[0].imageUrl}?auto=format&w=900&q=82`}
-                        alt={photoAccessibleLabel(photos[0], 0, photos.length, collection.name)}
-                        width={photos[0].width}
-                        height={photos[0].height}
-                        loading="eager"
-                        decoding="async"
-                        fetchPriority="high"
-                        onError={() => setOpeningFrameError(true)}
-                        className={`block h-auto w-full ${openingFrameError ? 'invisible' : ''}`}
-                        draggable={false}
-                      />
-                      {openingFrameError && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-[#292e25] font-ui text-[9px] uppercase tracking-[0.1em] text-white/58">
-                          Frame unavailable
-                        </span>
-                      )}
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/55 to-transparent px-5 pb-4 pt-14 font-ui text-[9px] uppercase tracking-[0.1em] text-white/78">
-                        <span>Opening frame</span>
-                        <span>01 / {String(photos.length).padStart(2, '0')}</span>
-                      </span>
-                    </motion.button>
+          {/* The story — kept unmounted, not merely inert, until a plate
+              entry has landed: a plane that is still a plate-sized window is
+              no cover for mounting forty frames. */}
+          {entryLanded && (
+            <div key={collection._id} className="story-body">
+              <OpeningSpread
+                name={collection.name}
+                heading={heading}
+                ordinal={ordinal}
+                total={total}
+                dek={dek}
+                camera={camera}
+                terrain={terrain}
+                entering={enteringId === collection._id && !reduce}
+                waiting={spreadWaiting}
+              />
+              <div ref={frameGridRef} data-frame-grid className="story-sheet">
+                {/* The spread's right page: frame 01, at its own ratio. On
+                    desktop this row is the screen's height and scrolls away
+                    while the map page stays pinned under the paper. */}
+                <div className="story-open">
+                  <span className="story-sentinel story-sentinel--desk" data-head-sentinel aria-hidden="true" />
+                  {openerPhoto && opener && (
+                    <StoryFrame
+                      photo={openerPhoto}
+                      index={0}
+                      kind="OPEN"
+                      style={{ '--fx': css(opener.x), '--fw': css(opener.w), '--r': (ratios[0] ?? 1.5).toFixed(6) } as CSSProperties}
+                      reach="rest"
+                      order={0}
+                      caption={null}
+                      sizes={`(min-width: 1024px) ${Math.round((opener.w.v / 1728) * 100)}vw, 100vw`}
+                      wide
+                      eager
+                      place={places[0] ?? ''}
+                      shared={frameShared}
+                    />
                   )}
-
-                  {/* MIDDLE — editorial introduction. Scrolls inside its own
-                       box if the narrative is long, so the bottom region
-                       (progress + map) stays pinned. */}
-                  {(() => {
-                    const hasIntro = collection.introduction && collection.introduction.length > 0;
-                    const fallbackParas = collection.slug ? EDITORIAL_FALLBACKS[collection.slug] : null;
-                    const showDescriptionFallback = !hasIntro && !fallbackParas && collection.description;
-                    if (!hasIntro && !fallbackParas && !showDescriptionFallback) {
-                      return <div className="flex-1 min-h-0" />;
-                    }
-                    return (
-                      <div
-                        role="region"
-                        aria-label={`${collection.name} introduction`}
-                        tabIndex={0}
-                        // Set as reading text rather than as an epigraph. It was
-                        // styled as a pull quote — whole-block italic at 80%
-                        // opacity behind a floated open-quote with no close —
-                        // which is how captions and quotations are set, not the
-                        // one passage a chapter has. Roman, full contrast, one
-                        // paragraph. The measure is set by the sticky rail, not
-                        // by `max-w`: at 4/12 the rail was 352px and this ran at
-                        // 37 characters a line, under every measure in the
-                        // 45–90 reading range and under the 55 this site uses
-                        // on /about. The rail is now 5/12 — 452px, 47 characters
-                        // — which the photographs pay for out of one column.
-                        className="max-w-[68ch] lg:flex-1 lg:min-h-0 lg:overflow-y-auto no-scrollbar lg:pr-2 lg:-mr-2 text-[15px] leading-[1.65] text-pretty font-serif text-white/88 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]/60"
-                      >
-                        {/* One paragraph: the chapter's lead, not its whole text. */}
-                        {hasIntro
-                          ? renderPortableText(collection.introduction!.slice(0, 1), 'border-white/15')
-                          : fallbackParas
-                            ? renderFallback(fallbackParas.slice(0, 1))
-                            : <p>{collection.description}</p>}
-                      </div>
-                    );
-                  })()}
-
-                  {/* BOTTOM — pinned: scroll progress + frame count + mini-map */}
-                  <footer className="lg:shrink-0 space-y-5">
-                    {/* Scroll progress — the bar binds scaleX straight to the
-                        scroll MotionValue (compositor-only, zero re-renders);
-                        the % label isolates its own state so scrolling a story
-                        re-renders one <span>, not the whole overlay tree. */}
-                    <div className="space-y-2.5">
-                      <div className="flex justify-between font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.62]">
-                        <span>Reading Progress</span>
-                        <ProgressPercent progress={scrollYProgress} />
-                      </div>
-                      <div className="h-[1px] w-full bg-white/[0.09] relative overflow-hidden">
-                        <motion.div
-                          className="absolute top-0 left-0 h-full w-full origin-left bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))]"
-                          style={{ scaleX: scrollYProgress }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Frame count — compact line */}
-                    <div className="hidden lg:flex items-center gap-3 text-[10px] uppercase tracking-[0.1em] font-ui opacity-[0.62]">
-                      <div className="w-8 h-[1px] bg-white opacity-30" />
-                      <span>{photos.length} Captured Frames</span>
-                    </div>
-
-                  </footer>
-                </aside>
-
-                {/* Orientation-aware photo sequence. Landscapes may open into
-                    a wide plate; portraits share the line so no vertical frame
-                    becomes an accidental full-screen wall. */}
-                {/* Rows sit 32–40px apart so each caption reads as belonging to the frame
-                    above it. The old 8–12px spacing was set for bare images; with a
-                    caption ~10px under each one, it left the caption equidistant
-                    from its own photograph and the next. */}
-                <div className="lg:col-span-7 space-y-8 md:space-y-10">
-                  {editorialRows.map((row, rowIdx) => (
-                    <EditorialRowFrames
-                      key={row.items.map(({ photo }) => photo._id).join('-')}
-                      spaced={rowIdx > 0 && rowIdx % 4 === 0}
-                      /* The first two rows ride the cover hand-off; later rows
-                         wait until the reader reaches them. */
-                      leading={rowIdx < 2}
-                      revealReady={photoRevealReady}
-                    >
-                      {row.items.map(({ photo, index }, posInRow) => (
-                        <PhotoCell
-                          key={photo._id}
-                          photo={photo}
-                          posInRow={posInRow}
-                          develops={row.layout === 'wide' || row.layout === 'portrait-solo'}
-                          span={
-                            row.layout === 'wide'
-                              ? 'full'
-                              : row.layout === 'trio'
-                                ? 'third'
-                                : row.layout === 'portrait-solo'
-                                  ? 'portrait'
-                                  : 'half'
-                          }
-                          index={index}
-                          total={photos.length}
-                          frameNumber={index + 1}
-                          collectionName={collection.name}
-                          hoveredIndex={hoveredIndex}
-                          setHoveredIndex={setHoveredIndex}
-                          onClick={(element) => openLightbox(index, element)}
-                          canHover={canHover}
-                          revealReady={photoRevealReady}
-                          hideOnMobile={index === 0 && row.items.length === 1}
-                        />
-                      ))}
-                    </EditorialRowFrames>
-                  ))}
-                  <footer className="pt-24 md:pt-32 pb-12 flex flex-col items-center gap-16 md:gap-24 border-t border-white/5">
-                      {/* Next Story */}
-                      {nextCollection && (
-                        /* The end of a chapter arrives when the reader reaches
-                           it: label, then the next name masks up, then its
-                           cover develops — rather than all of it having
-                           happened somewhere below the fold. */
-                        <button
-                          ref={endCapRef}
-                          type="button"
-                          className="w-full min-h-11 flex flex-col items-center gap-10 md:gap-12 group cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-                          onClick={(event) => {
-                            // A standalone /works page turns by navigating, and
-                            // the whole document is replaced; there is nothing
-                            // here for a plane to grow into.
-                            if (standalone) {
-                              onSelectCollection(nextCollection);
-                              return;
-                            }
-                            const card = event.currentTarget.querySelector<HTMLElement>('[data-next-cover]');
-                            beginPageTurn(nextCollection, card ?? event.currentTarget);
-                          }}
-                          aria-label={`Read next story: ${nextCollection.name}`}
-                        >
-                          <motion.span
-                            className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56]"
-                            initial={reduce ? false : { opacity: 0 }}
-                            animate={{ opacity: endCapShown ? 0.56 : 0 }}
-                            transition={{ duration: reduce ? 0 : 0.34, ease: expo }}
-                          >
-                            Keep Reading
-                          </motion.span>
-                          <span className="flex flex-col items-center gap-8">
-                            <Magnetic strength={0.32}>
-                              <span className="flex items-center gap-4 text-4xl md:text-6xl font-serif uppercase tracking-tighter overflow-hidden py-1">
-                                <motion.span
-                                  className="block"
-                                  initial={reduce ? false : { y: '115%' }}
-                                  animate={{ y: reduce || endCapShown ? '0%' : '115%' }}
-                                  transition={{ duration: reduce ? 0 : 0.8, delay: reduce || !endCapShown ? 0 : 0.12, ease: expo }}
-                                >
-                                  {nextCollection.name}
-                                </motion.span>
-                                <ArrowRight size={22} className="shrink-0 text-[#D2FF00] transition-transform duration-500 group-hover:translate-x-1.5" />
-                              </span>
-                            </Magnetic>
-                            {nextCollection.coverImageUrl && (
-                              <motion.span
-                                data-next-cover
-                                className="block h-[150px] w-60 overflow-hidden transition-opacity duration-500 group-hover:opacity-100"
-                                style={reduce ? undefined : DEVELOP_MASK_STYLE}
-                                initial={reduce ? false : { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }}
-                                animate={reduce || endCapShown
-                                  ? { opacity: 0.55, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }
-                                  : { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }}
-                                transition={reduce ? { duration: 0 } : {
-                                  opacity: { duration: 0.3, delay: endCapShown ? 0.28 : 0, ease: expo },
-                                  y: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: popEase },
-                                  WebkitMaskPosition: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: developEase },
-                                  maskPosition: { duration: 0.8, delay: endCapShown ? 0.28 : 0, ease: developEase },
-                                }}
-                              >
-                                <img
-                                  src={`${nextCollection.coverImageUrl}?auto=format&w=600&q=60`}
-                                  alt={nextCollection.name}
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                  draggable={false}
-                                />
-                              </motion.span>
-                            )}
-                          </span>
-                        </button>
-                      )}
-
-                      <div className="flex flex-col md:flex-row items-center justify-center gap-12 w-full">
-                        <motion.button
-                          onClick={handleShare}
-                          whileHover={reduce ? undefined : { y: -2 }}
-                          whileTap={reduce ? undefined : { scale: 0.94 }}
-                          transition={{ duration: 0.2, ease: expo }}
-                          className="group flex min-h-11 min-w-11 flex-col items-center gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-                          aria-label="Share this story"
-                        >
-                          <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
-                            {isShared ? <Check size={16} /> : <Share2 size={16} />}
-                          </div>
-                          <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
-                            {isShared ? 'Link Copied' : 'Share Story'}
-                          </span>
-                        </motion.button>
-
-                        <motion.button
-                          onClick={backToStoryTop}
-                          whileHover={reduce ? undefined : { y: -2 }}
-                          whileTap={reduce ? undefined : { scale: 0.94 }}
-                          transition={{ duration: 0.2, ease: expo }}
-                          className="group flex min-h-11 min-w-11 flex-col items-center gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-                          aria-label="Back to the top of this story"
-                        >
-                          <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] group-hover:text-[#282c20] group-hover:border-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] transition-colors duration-300">
-                            <ArrowRight className="-rotate-90" size={16} />
-                          </div>
-                          <span className="font-ui text-[10px] uppercase tracking-[0.1em] font-medium opacity-[0.56] group-hover:opacity-100 transition-opacity duration-300">
-                            Back to Top
-                          </span>
-                        </motion.button>
-                      </div>
-                      <div className={shareFallbackUrl ? 'w-full max-w-lg -mt-8 space-y-3' : 'sr-only'}>
-                        <p role="status" aria-live="polite" aria-atomic="true" className="text-center font-ui text-[11px] leading-relaxed text-white/68">
-                          {shareStatus}
-                        </p>
-                        {shareFallbackUrl && (
-                          <input
-                            type="text"
-                            tabIndex={0}
-                            readOnly
-                            value={shareFallbackUrl}
-                            aria-label="Story link — select and copy"
-                            onFocus={(event) => event.currentTarget.select()}
-                            onClick={(event) => event.currentTarget.select()}
-                            className="min-h-11 w-full rounded-sm border border-white/20 bg-white/[0.035] px-3 font-ui text-[12px] text-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
-                          />
-                        )}
-                      </div>
-                  </footer>
+                  {/* A landscape frame 01 has paper under it: its caption,
+                      the dek and the credits are set there. */}
+                  <div className="story-open__under">
+                    <p className="story-cap story-open__cap font-ui"><CaptionText frames={[0]} places={places} /></p>
+                    {dek && <p className="story-dek font-serif">{dek}</p>}
+                    <Credits camera={camera} map={!!terrain} />
+                  </div>
+                  {/* A portrait frame 01 fills the right page: its caption
+                      stands on the map page beside it (the phone: under it). */}
+                  <p className="story-cap story-open__cap story-open__cap--side font-ui"><CaptionText frames={[0]} places={places} /></p>
+                </div>
+                <div className="story-paper">
+                  {boxes.slice(1).map((box, index) => (box.slot.kind === 'END' ? null : (
+                    <SlotView
+                      key={`${box.slot.kind}-${index}-${box.slot.frames.join('.')}`}
+                      box={box}
+                      photos={photos}
+                      ratios={ratios}
+                      places={places}
+                      paragraphs={paragraphs}
+                      quote={quote}
+                      armed={revealArmed}
+                      reduce={!!reduce}
+                      shared={frameShared}
+                    />
+                  )))}
+                  <EndPage
+                    collection={collection}
+                    photos={photos}
+                    terrain={terrain}
+                    camera={camera}
+                    position={position}
+                    frameCount={photos.length}
+                    nextCollection={nextCollection}
+                    nextOrdinal={nextOrdinal}
+                    total={total}
+                    reduce={!!reduce}
+                    armed={revealArmed}
+                    onTurn={(card) => {
+                      if (!nextCollection) return;
+                      // A standalone /works page turns by navigating, and the
+                      // whole document is replaced; there is nothing here for
+                      // a plane to grow into.
+                      if (standalone) {
+                        onSelectCollection(nextCollection);
+                        return;
+                      }
+                      beginPageTurn(nextCollection, card);
+                    }}
+                    onOpenPlate={(index, element) => openLightbox(index, element, true)}
+                    onShare={handleShare}
+                    onTop={backToStoryTop}
+                    isShared={isShared}
+                    shareStatus={shareStatus}
+                    shareFallbackUrl={shareFallbackUrl}
+                  />
                 </div>
               </div>
+              {/* The rail: columns 1–3, holding only the kept stub, pinned at
+                  the foot of the screen from the spread to the end page.
+                  Desktop only; the phone's folio is in the running head. It
+                  replaced a blog widget ("Reading Progress 62%", a lime
+                  hairline and "15 Captured Frames"). */}
+              <aside className="story-rail">
+                <div className="story-rail__foot">
+                  <p className="sr-only">{photos.length} frames</p>
+                  <KeptStub
+                    key={collection._id}
+                    stubRef={keptStubRef}
+                    containerRef={containerRef}
+                    gridRef={frameGridRef}
+                    scrollY={scrollY}
+                    rows={frameRows}
+                    frames={photos.length}
+                    chapter={collection}
+                    ordinal={plateStub?.print?.ordinal ?? ordinal}
+                    total={plateStub?.print?.total ?? total}
+                    cities={stubCities}
+                    reading={stubReading}
+                    armed={revealArmed}
+                    released={stubArrived}
+                    reduce={!!reduce}
+                  />
+                </div>
+              </aside>
             </div>
-          </div>
+          )}
         </motion.div>
 
-        {/* ── Editorial cover intro — printed "front page" that holds the
-             screen as the story opens, then peels up to reveal the grid.
-             Strong newspaper character: masthead + double rule + column
-             rules + halftone screen + folio. ── */}
-        <AnimatePresence onExitComplete={() => setCoverExited(true)}>
-          {(!coverGone || !!pendingStory) && (
-            <motion.div
-              /* Keyed on the story the cover ANNOUNCES. During a page turn that
-                 is the pending one, so when `collection` catches up a moment
-                 later the key does not change and the plane is never remounted
-                 mid-turn. */
-              key={`cover-${coverStory._id}`}
-              aria-hidden="true"
-              /* The plane starts as the card the reader clicked and grows to
-                 fill the shell. `transformOrigin: 0 0` makes that two numbers
-                 and a translate, on the compositor, with no layout. */
-              initial={pendingStory
-                ? {
-                    y: pendingStory.box.y,
-                    x: pendingStory.box.x,
-                    scaleX: pendingStory.box.width / window.innerWidth,
-                    scaleY: pendingStory.box.height / window.innerHeight,
-                  }
-                : { y: 0 }}
-              animate={{ x: 0, y: 0, scaleX: 1, scaleY: 1 }}
-              exit={{ y: '-100%' }}
-              /* The cover arrives on the same curve it leaves on. House expo is
-                 so front-loaded that the plane was 84% of the way across in its
-                 first 117ms — a pop, not a travel; the cover's own peel curve
-                 spends the time in the middle of the move, where the growing
-                 card is actually legible as the page it is becoming. */
-              transition={pendingStory
-                ? { duration: reduce ? 0 : COVER_EXPAND_MS / 1000, ease: [0.76, 0, 0.24, 1] }
-                : { duration: reduce ? 0 : 0.72, ease: [0.76, 0, 0.24, 1] }}
-              style={{ transformOrigin: '0 0' }}
-              className="pointer-events-none absolute inset-0 z-[75] overflow-hidden bg-[#30352a] text-[#F4F4ED]"
-            >
-              {/* Every collection enters through the same quiet image field.
-                  Where an archive map exists it remains the preferred layer;
-                  otherwise the collection cover supplies a calm, factual
-                  fallback instead of dropping to an unrelated blank state. */}
-              {coverBackdrop && (
-                <motion.div
-                  className="absolute inset-0 pointer-events-none"
-                  initial={{ scale: 1.12, opacity: 0 }}
-                  animate={coverArrived ? { scale: 1, opacity: 1 } : { scale: 1.12, opacity: 0 }}
-                  transition={{ duration: 1.3, ease: expo }}
-                >
-                  <img
-                    src={coverBackdrop}
-                    alt=""
-                    width={2000}
-                    height={1126}
-                    className="w-full h-full object-cover"
-                    decoding="async"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-[#30352a]/64" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#30352a] via-[#30352a]/24 to-[#30352a]/62" />
-                </motion.div>
-              )}
-
-              {/* Newsprint halftone screen */}
-              <div className="newsprint-screen pointer-events-none absolute inset-0 opacity-[0.06]" />
-              {/* Accent wash bottom-left */}
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{ background: 'radial-gradient(50vmax 40vmax at 18% 110%, rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.10), transparent 68%)' }}
-              />
-
-              {/* Newspaper column rules */}
-              <div className="pointer-events-none absolute inset-0 grid grid-cols-4 opacity-50">
-                {[0, 1, 2, 3].map((i) => (
-                  <motion.span
-                    key={i}
-                    initial={{ scaleY: 0 }}
-                    animate={{ scaleY: coverArrived ? 1 : 0 }}
-                    transition={{ duration: 0.7, delay: 0.06 + i * 0.06, ease: expo }}
-                    className="origin-top"
-                    style={{ borderRight: i === 3 ? '0' : '1px solid rgba(255,255,255,0.05)' }}
-                  />
-                ))}
-              </div>
-
-              {/* Masthead / running head + double rule */}
-              <motion.div
-                initial={{ clipPath: 'inset(0 100% 0 0)' }}
-                animate={{ clipPath: coverArrived ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)' }}
-                transition={{ duration: 0.65, delay: 0.1, ease: expo }}
-                className="absolute"
-                style={{
-                  top: 'clamp(1.5rem,4vh,3rem)',
-                  left: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-left))',
-                  right: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-right))',
-                }}
-              >
-                <div className="flex items-baseline justify-between gap-4 pb-2 border-b border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase">
-                  <span className="font-medium text-white/60">The Journal Gallery</span>
-                  <span className="text-white/58">Vol. 01 · {coverStory.year || 'Archive'}</span>
-                </div>
-                <div className="mt-[3px] border-b border-white/10" />
-              </motion.div>
-
-              {/* Center editorial block */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center" style={{ paddingLeft: '6vw', paddingRight: '6vw' }}>
-                <motion.span
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={coverArrived ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-                  transition={{ duration: 0.44, delay: 0.18, ease: expo }}
-                  className="font-ui text-[11px] tracking-[0.1em] uppercase"
-                  style={{ color: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.85)' }}
-                >
-                  // dispatch № {coverFolio}
-                </motion.span>
-                <h2 className="m-0 overflow-hidden" style={{ padding: '0.04em 0.02em' }}>
-                  <motion.span
-                    initial={{ y: '110%' }}
-                    animate={{ y: coverArrived ? '0%' : '110%' }}
-                    transition={{ duration: 0.68, delay: 0.24, ease: expo }}
-                    className="inline-block font-serif uppercase font-normal leading-[0.92] tracking-tight text-white/[0.98]"
-                    style={{ fontSize: 'clamp(42px,7.5vw,112px)' }}
-                  >
-                    {coverStory.name}
-                  </motion.span>
-                </h2>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={coverArrived ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-                  transition={{ duration: 0.46, delay: 0.34, ease: expo }}
-                  className="flex items-center gap-3 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
-                >
-                  {coverLocation && <span>{coverLocation}</span>}
-                  {coverLocation && (
-                    <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'rgba(var(--accent-r,255),var(--accent-g,255),var(--accent-b,255),0.7)' }} />
-                  )}
-                  <span>{coverFrameCount} Frames</span>
-                </motion.div>
-              </div>
-
-              {/* Folio / page number */}
-              <motion.div
-                initial={{ clipPath: 'inset(0 0 0 100%)' }}
-                animate={{ clipPath: coverArrived ? 'inset(0 0 0 0%)' : 'inset(0 0 0 100%)' }}
-                transition={{ duration: 0.65, delay: 0.12, ease: expo }}
-                className="absolute flex items-baseline justify-between gap-4 pt-2 border-t border-white/20 font-ui text-[10px] tracking-[0.1em] uppercase text-white/58"
-                style={{
-                  bottom: 'max(clamp(1.5rem,4vh,3rem), env(safe-area-inset-bottom))',
-                  left: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-left))',
-                  right: 'max(clamp(1.5rem,5vw,4rem), env(safe-area-inset-right))',
-                }}
-              >
-                <span className="text-[13px] tracking-[0.1em] text-white/55">{coverFolio}</span>
-                <span>The Story Begins</span>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {plane && <GrowPlaneView key={plane.key} plane={plane} reduce={!!reduce} />}
       </StoryShell>
 
       {/* Lightbox */}

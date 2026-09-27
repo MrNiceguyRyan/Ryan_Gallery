@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { CSS_EASE, EASE } from '../../lib/motion';
 
 /**
  * WalkIn — the site's OPENING.
@@ -25,7 +26,6 @@ const PAPER = '#EDEAE3'; // opening light field (before the dark sunburst blooms
 const PAPER_WORD = '#E3DED5'; // tone-on-tone giant word on the paper field
 const LIME = 'rgb(var(--accent-r), var(--accent-g), var(--accent-b))';
 const LIME_A = (a: number) => `rgba(var(--accent-r), var(--accent-g), var(--accent-b), ${a})`;
-const EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)'; // house expo-out — the "liquid reach" curve for the beams
 const SILK = 'cubic-bezier(0.19, 1, 0.22, 1)'; // card's pure long-tail glide, no bounce
 const CARD_IN = 0.4;
 const PAGE_SURFACE = 'radial-gradient(125% 125% at 50% 48%, transparent 56%, rgba(9, 11, 6, 0.34) 100%), #282c20';
@@ -300,7 +300,7 @@ export default function WalkIn({
         className="block w-full"
         style={{
           transform: reduce || revealed ? 'translateY(0%)' : 'translateY(112%)',
-          transition: instantReveal ? 'none' : `transform 0.80s ${EXPO} ${delay}s`,
+          transition: instantReveal ? 'none' : `transform 0.80s ${CSS_EASE.arrive} ${delay}s`,
         }}
       >
         {content}
@@ -316,7 +316,7 @@ export default function WalkIn({
       {/* L1 — the field: PAPER during intro, darkens to olive in the bloom */}
       <div
         className="absolute inset-0"
-        style={{ backgroundColor: reduce || revealed ? GROUND : PAPER, transition: instantReveal ? 'none' : `background-color 1.05s ${EXPO}` }}
+        style={{ backgroundColor: reduce || revealed ? GROUND : PAPER, transition: instantReveal ? 'none' : `background-color 1.05s ${CSS_EASE.arrive}` }}
       />
 
       {/* A quiet, page-wide echo of the card's light. It softens the initial
@@ -334,7 +334,7 @@ export default function WalkIn({
             radial-gradient(72% 82% at 28% 61%, ${LIME_A(0.105)} 0%, ${LIME_A(0.032)} 43%, transparent 73%),
             radial-gradient(76% 68% at 68% 24%, rgba(244, 244, 237, 0.055) 0%, rgba(244, 244, 237, 0.012) 48%, transparent 76%)
           `,
-          transition: instantReveal ? 'none' : `opacity 0.35s ${EXPO}`,
+          transition: instantReveal ? 'none' : `opacity 0.35s ${CSS_EASE.arrive}`,
         }}
       />
 
@@ -356,7 +356,7 @@ export default function WalkIn({
               color: reduce || revealed ? WORD_GHOST : PAPER_WORD,
               opacity: reduce || raised ? 1 : 0,
               transform: reduce || raised ? 'translateY(0)' : 'translateY(4%)',
-              transition: instantReveal ? 'none' : `opacity 0.86s ${EXPO}, transform 0.95s ${EXPO}, color 0.78s ${EXPO}`,
+              transition: instantReveal ? 'none' : `opacity 0.86s ${CSS_EASE.arrive}, transform 0.95s ${CSS_EASE.arrive}, color 0.78s ${CSS_EASE.arrive}`,
             }}
           >
             <span className="block">Visual</span>
@@ -374,7 +374,7 @@ export default function WalkIn({
           opacity: reduce || revealed ? 1 : 0,
           filter: reduce || revealed ? 'blur(0px)' : `blur(${mobileViewport ? 3 : 4}px)`,
           transformOrigin: 'center center',
-          transition: instantReveal ? 'none' : `transform 1.55s ${SILK} 0.78s, opacity 0.92s ${EXPO} 0.78s, filter 1.25s ${EXPO} 0.78s`,
+          transition: instantReveal ? 'none' : `transform 1.55s ${SILK} 0.78s, opacity 0.92s ${CSS_EASE.arrive} 0.78s, filter 1.25s ${CSS_EASE.arrive} 0.78s`,
           willChange: entranceSettled ? 'auto' : 'transform, opacity, filter',
         }}
       >
@@ -473,7 +473,7 @@ export default function WalkIn({
                     duration: 1.26,
                     delay: 0.46,
                     times: [0, 0.44, 1],
-                    ease: [0.16, 1, 0.3, 1],
+                    ease: EASE.arrive,
                   }}
                   className="pointer-events-none absolute -inset-[12%] z-[2]"
                   style={{

@@ -2,42 +2,52 @@
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
 import { sanityClient } from 'sanity:client';
-import type { Photo } from '../types';
+import type { Collection } from '../types';
 import MapboxMap from '../components/MapboxMap';
 import TravelEntryCover from '../components/TravelEntryCover';
 import { getMapboxToken } from '../config/mapbox';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
+import { travelChapters } from '../lib/travelSilver';
+import { pad2 } from '../lib/proofSheet';
 
 const currentPath = Astro.url.pathname;
 
-const photos = await fetchSanityWithRetry(() => sanityClient.fetch<Photo[]>(`
-  *[_type == "photo" && defined(location.lat) && defined(location.lng)] | order(_createdAt desc) {
+// The same archive the homepage reads, in the same order and numbering: the
+// chapters (routeOrder), each chapter's cover (the photograph its ticket
+// prints) and every frame at its own size and place.
+const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Collection[]>(`
+  *[_type == "collection"] | order(year desc) {
     _id,
-    title,
-    "imageUrl": image.asset->url,
+    name,
+    "slug": slug.current,
+    "coverImageUrl": coverImage.asset->url,
     location,
-    collection->{
-      name,
-      "slug": slug.current,
-      region,
-      routeOrder,
-      year
+    region,
+    year,
+    routeOrder,
+    mapLocation,
+    "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
+      _id,
+      "imageUrl": image.asset->url,
+      "width": image.asset->metadata.dimensions.width,
+      "height": image.asset->metadata.dimensions.height,
+      location
     }
   }
 `));
 
+const chapters = travelChapters(collections);
 const mapboxToken = getMapboxToken();
 
-// ── Live atlas stats (derived from the same fetch, no extra query) ──
-const frames = photos.length;
-const locations = new Set(
-  photos
-    .filter((p) => p.location?.lat != null && p.location?.lng != null)
-    .map((p) => `${p.location!.lat.toFixed(2)},${p.location!.lng.toFixed(2)}`)
-).size;
+// ── The edition's figures (the homepage prologue's own: chapters, frames,
+// years) — "07 locations" counted New York's two corners as two chapters. ──
+const frames = chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0);
+const yearValues = [...new Set(chapters.map((chapter) => chapter.year).filter(Boolean))].sort();
+const years = yearValues.length > 1 ? `${yearValues[0]}–${yearValues[yearValues.length - 1]}` : (yearValues[0] ?? '');
+const ogPhoto = chapters[0]?.coverUrl;
 ---
 
-<Layout title="Map | Ryan" description="Geo-tagged photographic archive. Every frame placed on the map across the United States." dark={true} ogImage={photos[0]?.imageUrl ? `${photos[0].imageUrl}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}>
+<Layout title="Map | Ryan" description="Geo-tagged photographic archive. Every frame placed on the map across the United States." dark={true} ogImage={ogPhoto ? `${ogPhoto}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}>
   {/* Mapbox-only connection hints. Its CSS ships with the island so ClientRouter
        navigation cannot start the map before its styles are available. */}
   <Fragment slot="head">
@@ -45,7 +55,7 @@ const locations = new Set(
     <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
   </Fragment>
 
-  <TravelEntryCover client:load locations={locations} frames={frames} />
+  <TravelEntryCover client:load chapters={chapters.length} frames={frames} />
   <Nav client:load currentPath={currentPath} scrim />
 
   <!-- The standalone Atlas is a fixed exploration workspace. The masthead and
@@ -66,11 +76,7 @@ const locations = new Set(
       data-travel-hero
       style="padding-top: calc(4.7rem + env(safe-area-inset-top));"
     >
-      <div
-        class="pointer-events-none absolute inset-0 opacity-70"
-        style="background: radial-gradient(64rem 20rem at 70% 105%, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.065), transparent 70%);"
-        aria-hidden="true"
-      ></div>
+      <!-- No lime wash behind the masthead: its one lime is "Archive." -->
       <div class="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-b from-[#282c20]/88 to-transparent" aria-hidden="true"></div>
 
       <div class="travel-workspace__masthead-inner relative flex h-full items-end justify-between gap-8 pb-3 md:pb-4">
@@ -80,7 +86,7 @@ const locations = new Set(
                became visible once the masthead cleared the nav. -->
           <p class="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/56 md:tracking-[0.1em]">
             <span class="whitespace-nowrap">The Territory · Geographic Index</span>
-            <span class="whitespace-nowrap xl:hidden">· {locations} locations · {frames} frames</span>
+            <span class="whitespace-nowrap xl:hidden">· {pad2(chapters.length)} chapters · {frames} frames</span>
           </p>
           <h1 class="travel-workspace__title font-serif text-[clamp(1.85rem,8.3vw,2.45rem)] uppercase leading-[0.86] tracking-tight text-[#F4F4ED] md:text-[clamp(2.6rem,4.8vw,4.15rem)]">
             Mapping the <span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
@@ -89,8 +95,11 @@ const locations = new Set(
 
         <div class="mb-0.5 hidden shrink-0 items-center gap-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/58 xl:flex">
           <span class="flex items-center gap-2.5">
-            <span class="h-1.5 w-1.5 rounded-full bg-[rgb(var(--accent-r),var(--accent-g),var(--accent-b))] shadow-[0_0_12px_rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.45)]"></span>
-            {String(locations).padStart(2, '0')} locations · {String(frames).padStart(2, '0')} frames
+            {/* A legend for the map's marks, drawn in their ink: the printed
+                 dot every chapter stands on. The page's one lime mark is
+                 "Archive." above; everything the map says is ink and bone. */}
+            <span class="travel-legend-dot" aria-hidden="true"></span>
+            {pad2(chapters.length)} chapters · {pad2(frames)} frames{years ? ` · ${years}` : ''}
           </span>
         </div>
       </div>
@@ -104,7 +113,7 @@ const locations = new Set(
       {/* This region owns every remaining pixel in the viewport. Map gestures
            stay fully enabled; list and detail surfaces isolate their scrolling. */}
       <div class="min-h-0 flex-1" data-lenis-prevent>
-        <MapboxMap client:load photos={photos} mapboxToken={mapboxToken} />
+        <MapboxMap client:load chapters={chapters} mapboxToken={mapboxToken} />
       </div>
     </section>
   </main>

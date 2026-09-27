@@ -2,20 +2,26 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import {
   animate,
+  AnimatePresence,
   motion,
   type MotionValue,
+  useIsPresent,
   useMotionValue,
+  usePresenceData,
   useMotionValueEvent,
   useSpring,
   useTransform,
 } from 'framer-motion';
 import type { RouteStop } from './RouteAtlas';
+import { stockStyle } from '../../lib/ticketStock';
+import { EASE } from '../../lib/motion';
 
 interface Props {
   stops: RouteStop[];
@@ -29,11 +35,9 @@ interface Props {
   chapterProgress?: MotionValue<number>;
 }
 
-const expo = [0.16, 1, 0.3, 1] as const;
 // Photographic paper coming up in the developer: the same 115° sweep the story
-// pages use for their frames, so a chapter committed from the rail arrives the
-// way a story's photographs arrive.
-const developEase = [0.455, 0.03, 0.515, 0.955] as const;
+// pages use for their frames (on EASE.develop), so a chapter committed from the
+// rail arrives the way a story's photographs arrive.
 const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
 const DEVELOP_MASK_STYLE = {
   WebkitMaskImage: DEVELOP_MASK,
@@ -49,8 +53,8 @@ const DEVELOP_MS = 620;
 // screen. Past this the commit is abandoned and the scrubbed crossfade resumes.
 const COMMIT_LIMIT_MS = 2400;
 // Close enough to the destination anchor to call it an arrival. `visualIndex`
-// flips at ±0.5 — the midpoint of the last gap — which is far too early to
-// start developing the photograph the flight is still travelling towards.
+// flips as the arriving photograph passes half up — still too early to start
+// developing the photograph the flight is travelling towards.
 const COMMIT_ARRIVAL_EPSILON = 0.18;
 
 function imageUrl(url: string, width: number) {
@@ -140,15 +144,25 @@ function clampChapter(value: number, total: number) {
 // The roll is not linear with the scroll, though. Each chapter owns ~92svh, so
 // a column dragged straight off `progress` would be sliding at every scroll
 // position and settled at almost none. It instead holds each name still and
-// rolls across the one band where the chapter itself changes — the midpoint —
-// spending the same scroll budget the old opacity ramp spent (0.08 either side).
+// rolls across the one band where the chapter itself changes, spending the
+// same scroll budget the old opacity ramp spent (0.08 either side).
+//
+// Where the chapter changes is where its PHOTOGRAPH takes over: the arriving
+// frame half up, at 1 − PHOTO_ARRIVAL_BAND / 2 (0.825) of the gap, the same
+// point the stub tears and `photoLeadIndex` flips. The band used to sit on the
+// gap's midpoint, so one change ran on three clocks: the name had already
+// rolled to ORLANDO while Miami's photograph and stub stayed on for another
+// ~170px of scroll, and going back the order reversed. Now name, photograph
+// and stub commit together.
 const CAPTION_ROLL_BAND = 0.16;
 
 function captionRoll(progress: number, total: number) {
   const clamped = clampChapter(progress, total);
   const index = Math.floor(clamped);
   const local = clamped - index;
-  const ramp = Math.max(0, Math.min(1, (local - (0.5 - CAPTION_ROLL_BAND / 2)) / CAPTION_ROLL_BAND));
+  // (PHOTO_ARRIVAL_BAND is declared below; read at call time.)
+  const start = 1 - PHOTO_ARRIVAL_BAND / 2 - CAPTION_ROLL_BAND / 2;
+  const ramp = Math.max(0, Math.min(1, (local - start) / CAPTION_ROLL_BAND));
   return index + ramp * ramp * (3 - 2 * ramp);
 }
 
@@ -171,6 +185,29 @@ function photoChapterWeight(progress: number, index: number) {
   if (delta <= 0) return 1;
   const ramp = Math.max(0, Math.min(1, (PHOTO_ARRIVAL_BAND - delta) / PHOTO_ARRIVAL_BAND));
   return ramp * ramp * (3 - 2 * ramp);
+}
+
+// The chapter whose photograph the window mostly shows: the arriving frame
+// takes over once it is more than half up, halfway through its arrival band.
+// This is the chapter's one commit point: `visualIndex` (the rail's highlight,
+// the aria-live line, the caption's resting name) flips here too. It used to
+// flip at the midpoint of the whole gap (±0.5), a good 0.15 of a chapter
+// before the arriving frame had even begun to rise.
+function photoLeadIndex(progress: number, total: number) {
+  return Math.min(total - 1, Math.floor(clampChapter(progress, total) + PHOTO_ARRIVAL_BAND / 2));
+}
+
+// The chapter the phone's stub prints. Forward it follows the photograph
+// (the arriving frame half up); back, it holds its chapter until that frame
+// is mostly gone (a tenth of a chapter past the seam — the frame at ~10%),
+// so a thumb resting on the seam cannot tear a stub and re-seat it over and
+// over. Pure arithmetic on the progress; nothing is measured.
+const STUB_BACK_SLACK = 0.1;
+function stubLeadIndex(progress: number, total: number, current: number) {
+  const forward = photoLeadIndex(progress, total);
+  if (forward >= current) return forward;
+  const back = Math.min(total - 1, Math.floor(clampChapter(progress, total) + PHOTO_ARRIVAL_BAND / 2 + STUB_BACK_SLACK));
+  return Math.min(current, back);
 }
 
 function formatCoordinate(value: number, positive: string, negative: string) {
@@ -302,6 +339,158 @@ function yearRange(stops: RouteStop[]) {
   return first === last ? String(first) : `${first}—${last}`;
 }
 
+// ── The ticket stub (phone) ──────────────────────────────────────────────
+// The phone's photograph is one window that crossfades between chapters as
+// the reader scrolls; it is not a card that can be torn. So the ticket here is
+// the STUB: it hangs from the photograph's bottom edge on a perforation and
+// prints the chapter's admission line, and every time the chapter commits the
+// old stub is torn off and falls away with the new one already under it — a
+// book of tickets being worked through, one per place. Time-based on the
+// commit, never scrubbed. Going back, the stub simply re-seats.
+const STUB_EXIT = [0.4, 0.14, 1, 1] as const;
+// A press on a chapter title or a rail stop that travels this far (css px)
+// before its click is a drag, not a click (ArchiveChapter's PULL_CLICK_SLOP).
+const PRESS_CLICK_SLOP = 6;
+// What a leaving stub hears from its AnimatePresence (framer resolves `exit`
+// with this, not with the stub's own `custom`): the way it left, and how many
+// forward tears the book has had so far.
+type StubPresence = { direction: number; tears: number };
+const stubVariants = {
+  enter: (direction: number) => (direction > 0
+    ? { y: 0, opacity: 1, rotate: 0 }
+    : { y: 18, opacity: 0, rotate: 0 }),
+  rest: { y: 0, opacity: 1, rotate: 0, transition: { duration: 0.42, ease: EASE.arrive } },
+  // Forward: the pull (a hair up, under tension), then it gives and drops,
+  // pivoting on its last attached corner. Back: it just steps aside.
+  exit: (custom: StubPresence | number) => ((typeof custom === 'number' ? custom : custom.direction) > 0
+    ? {
+        y: [0, -1.5, 52],
+        rotate: [0, 0.6, -6],
+        opacity: [1, 1, 0],
+        transition: {
+          // The pull eases out (it gives); the drop eases in (it falls).
+          // Gravity: a torn stub FALLS, it accelerates. The house expo
+          // decelerates (84% of its travel in the first sixth of the time),
+          // which on a fall and a fade-out meant the stub was gone before
+          // anyone saw it drop: measured frame by frame, opacity 1.0 → 0.26
+          // in 130ms. Falls and exits ease IN, on EASE.leave.
+          y: { duration: 0.78, times: [0, 0.15, 1], ease: [EASE.arrive, EASE.leave] },
+          rotate: { duration: 0.78, times: [0, 0.15, 1], ease: [EASE.arrive, EASE.leave] },
+          // Whole for the first ~60% so the fall is SEEN, then it goes.
+          opacity: { duration: 0.78, times: [0, 0.6, 1], ease: ['linear', EASE.leave] },
+        },
+      }
+    : { y: 16, opacity: 0, transition: { duration: 0.26, ease: STUB_EXIT } }),
+};
+
+function StubFace({ stop, ordinal, total, direction, printIn }: { stop: RouteStop; ordinal: number; total: number; direction: number; printIn: boolean }) {
+  const present = useIsPresent();
+  // One stub falls at a time. A fling commits three chapters in ~450ms, and
+  // three torn stubs used to fall at once, each for 780ms, rotating their own
+  // ways over the perforation — a cascade of paper, not a tear. So when a
+  // newer forward tear starts while this one is still falling, it is
+  // overtaken: it steps aside on the back-exit's own numbers (16px, 0.26s,
+  // eased in) from wherever its fall has got to. That is played on the `hold`
+  // around it, not on the stub: framer never re-resolves a running exit (a
+  // restarted one can strand the element), and the hold's fade multiplies
+  // with the fall's. `tornAt` is the tear count at the render this stub
+  // stopped being present, so its own tear never overtakes it.
+  const presence = usePresenceData() as StubPresence | undefined;
+  const tornAt = useRef<number | null>(null);
+  if (present) tornAt.current = null;
+  else if (tornAt.current === null) tornAt.current = presence?.tears ?? 0;
+  const overtaken = !present && !!presence && tornAt.current !== null && presence.tears > tornAt.current;
+  const holdRef = useRef<HTMLDivElement>(null);
+  const stepped = useRef(false);
+  // A layout effect, so the step aside starts in the same commit as the tear
+  // that overtook it, not a painted frame later.
+  useLayoutEffect(() => {
+    const hold = holdRef.current;
+    if (!hold) return undefined;
+    if (overtaken) {
+      stepped.current = true;
+      const controls = animate(hold, { opacity: 0, y: 16 }, { duration: 0.26, ease: STUB_EXIT });
+      return () => controls.stop();
+    }
+    // Present again (the reader came back to its chapter): whole at once, the
+    // stub's own re-entry does the moving.
+    if (present && stepped.current) {
+      stepped.current = false;
+      animate(hold, { opacity: 1, y: 0 }, { duration: 0 });
+    }
+    return undefined;
+  }, [overtaken, present]);
+  // Year first, frames last: on a narrow phone the line is cut with an
+  // ellipsis, and it used to cut the year ("17 FRAMES · 20…").
+  const facts = [
+    stop.year != null ? String(stop.year) : null,
+    stop.region,
+    `${String(stop.frameCount).padStart(2, '0')} frames`,
+  ].filter(Boolean).join(' · ');
+  return (
+    <div ref={holdRef} className="absolute inset-0">
+    <motion.div
+      /* A stub that arrives in place of a torn one is printed as it
+         arrives (global.css `.is-printing`): fully printed from its first
+         frame, "02 ORLANDO" read as overprint above the falling
+         "01 MIAMI". The first stub on the page is simply there. */
+      className={`living-ticket__stub${present ? '' : ' is-torn'}${printIn ? ' is-printing' : ''}`}
+      /* Its own chapter's card: a torn stub keeps its stop, so it falls in
+         its own colour while the next chapter's stock arrives under it. */
+      style={{ zIndex: present ? 1 : 2, ...stockStyle(stop.slug) }}
+      custom={direction}
+      variants={stubVariants}
+      initial="enter"
+      animate="rest"
+      exit="exit"
+    >
+      <span className="living-ticket__no font-serif">{String(ordinal).padStart(2, '0')}</span>
+      <span className="living-ticket__text font-ui">
+        <span className="living-ticket__place">{stop.name}</span>
+        <span className="living-ticket__facts">
+          / {String(total).padStart(2, '0')} · {facts}
+        </span>
+      </span>
+    </motion.div>
+    </div>
+  );
+}
+
+function LivingTicketStub({ stops, index, reducedMotion }: {
+  stops: RouteStop[];
+  index: number;
+  reducedMotion: boolean;
+}) {
+  const previous = useRef(index);
+  const direction = index >= previous.current ? 1 : -1;
+  useEffect(() => { previous.current = index; }, [index]);
+  // Only stubs that replace another print themselves in.
+  const firstIndex = useRef(index);
+  const replaced = useRef(false);
+  if (index !== firstIndex.current) replaced.current = true;
+  // Forward tears so far, counted once per change of chapter. Leaving stubs
+  // read it through AnimatePresence's `custom` (StubFace's `overtaken`).
+  const tears = useRef(0);
+  const counted = useRef(index);
+  if (index !== counted.current) {
+    if (index > counted.current) tears.current += 1;
+    counted.current = index;
+  }
+  const stop = stops[index];
+  if (!stop) return null;
+  return (
+    <div className="living-ticket pointer-events-none absolute z-[12]" aria-hidden="true">
+      {reducedMotion ? (
+        <StubFace stop={stop} ordinal={index + 1} total={stops.length} direction={1} printIn={false} />
+      ) : (
+        <AnimatePresence initial={false} custom={{ direction, tears: tears.current }}>
+          <StubFace key={stop.id} stop={stop} ordinal={index + 1} total={stops.length} direction={direction} printIn={replaced.current} />
+        </AnimatePresence>
+      )}
+    </div>
+  );
+}
+
 export default function LivingAtlasStory({
   stops,
   activeIndex,
@@ -319,7 +508,14 @@ export default function LivingAtlasStory({
   const fallbackProgress = useMotionValue(resolvedIndex);
   const progress = chapterProgress ?? fallbackProgress;
   const [visualIndex, setVisualIndex] = useState(() =>
-    Math.round(clampChapter(chapterProgress?.get() ?? resolvedIndex, stops.length)),
+    photoLeadIndex(chapterProgress?.get() ?? resolvedIndex, stops.length),
+  );
+  // The phone stub hangs from the photograph, so it changes with the
+  // photograph, not with the chapter's type: each stub is printed on its own
+  // chapter's colour, and one switched early put Orlando's blue under Miami's
+  // frame for a few hundred pixels of scroll.
+  const [photoIndex, setPhotoIndex] = useState(() =>
+    photoLeadIndex(chapterProgress?.get() ?? resolvedIndex, stops.length),
   );
   const activeStop = stops[visualIndex];
   // Keep the small published archive mounted as one stable optical stack.
@@ -355,6 +551,20 @@ export default function LivingAtlasStory({
   const [commit, setCommit] = useState<{ from: number; to: number; token: number; arrived: boolean } | null>(null);
   const commitTokenRef = useRef(0);
   const develop = useMotionValue(1);
+  // Where a pointer pressed the chapter title or a rail stop: a press that
+  // has travelled PRESS_CLICK_SLOP by its click is a drag (a long sideways
+  // drag across the title opened the story), the same rule as the desktop
+  // cover's click. A keyboard click (detail 0) never travelled.
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
+  const notePress = (event: { clientX: number; clientY: number }) => {
+    pressRef.current = { x: event.clientX, y: event.clientY };
+  };
+  const wasDrag = (event: { clientX: number; clientY: number; detail: number }) => {
+    const press = pressRef.current;
+    pressRef.current = null;
+    return event.detail > 0 && !!press &&
+      Math.hypot(event.clientX - press.x, event.clientY - press.y) >= PRESS_CLICK_SLOP;
+  };
 
   const captionColumn = useTransform(progress, (value) =>
     captionOffset(captionRoll(value, stops.length), stops.length),
@@ -362,14 +572,20 @@ export default function LivingAtlasStory({
   const captionSettled = captionOffset(visualIndex, stops.length);
 
   useMotionValueEvent(progress, 'change', (value) => {
-    const next = Math.round(clampChapter(value, stops.length));
+    // The chapter commits where its photograph takes over (see photoLeadIndex).
+    const next = photoLeadIndex(value, stops.length);
     setVisualIndex((current) => current === next ? current : next);
+    setPhotoIndex((current) => {
+      const lead = stubLeadIndex(value, stops.length, current);
+      return current === lead ? current : lead;
+    });
   });
 
   useEffect(() => {
     if (chapterProgress) return;
     fallbackProgress.set(resolvedIndex);
     setVisualIndex(resolvedIndex);
+    setPhotoIndex(resolvedIndex);
   }, [chapterProgress, fallbackProgress, resolvedIndex]);
 
   // The normal path is completely scroll-scrubbed, so likely destinations must
@@ -424,7 +640,7 @@ export default function LivingAtlasStory({
     const src = imageUrl(stops[to]?.imageUrl ?? '', sourceWidth);
     void decodeImage(src, 'high').then(() => {
       if (cancelled) return;
-      animate(develop, 1, { duration: DEVELOP_MS / 1000, ease: developEase });
+      animate(develop, 1, { duration: DEVELOP_MS / 1000, ease: EASE.develop });
       timer = window.setTimeout(clear, DEVELOP_MS + 90);
     });
     return () => {
@@ -467,6 +683,15 @@ export default function LivingAtlasStory({
   // leave it unused.)
   const photoSide = 'right';
   const idPrefix = mobile ? 'mobile-archive-item-' : 'archive-item-';
+  // The stub follows the frame on screen: under reduced motion the frame is
+  // `visualIndex`'s; during a rail flight the departure frame holds until the
+  // destination develops; otherwise it is the scrubbed dissolve's lead frame
+  // (held a little longer on the way back, `stubLeadIndex`).
+  const stubIndex = reducedMotion
+    ? visualIndex
+    : commit
+      ? (commit.arrived ? commit.to : commit.from)
+      : photoIndex;
 
   const scrollToChapter = (index: number) => {
     const stop = stops[index];
@@ -499,6 +724,9 @@ export default function LivingAtlasStory({
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     if (mobile || reducedMotion || paused || event.pointerType === 'touch') return;
+    // A pressed hand dragging across the window is not a hover: the photograph
+    // holds still under it.
+    if (event.buttons !== 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width - 0.5;
     const y = (event.clientY - rect.top) / rect.height - 0.5;
@@ -521,9 +749,11 @@ export default function LivingAtlasStory({
         </div>
         <button
           type="button"
-          onClick={() => onOpen(chapter.stop)}
+          onPointerDown={notePress}
+          onClick={(event) => {
+            if (!wasDrag(event)) onOpen(chapter.stop);
+          }}
           tabIndex={interactive ? undefined : -1}
-          data-cursor="Enter Story"
           className="group max-w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           aria-label={`Open ${chapter.stop.name} story`}
         >
@@ -592,6 +822,8 @@ export default function LivingAtlasStory({
           ))}
         </div>
 
+        {mobile && <LivingTicketStub stops={stops} index={stubIndex} reducedMotion={reducedMotion} />}
+
         <div className="living-atlas__map-overprint pointer-events-none absolute inset-0 z-[11]" aria-hidden="true">
           <img
             src="/assets/maps/walkin-us-atlas.webp"
@@ -634,7 +866,10 @@ export default function LivingAtlasStory({
                 >
                   <button
                     type="button"
-                    onClick={() => scrollToChapter(index)}
+                    onPointerDown={notePress}
+                    onClick={(event) => {
+                      if (!wasDrag(event)) scrollToChapter(index);
+                    }}
                     tabIndex={!railExpanded && !inCompactWindow ? -1 : undefined}
                     aria-current={active ? 'step' : undefined}
                     aria-label={active ? `Open ${stop.name} story` : `Go to chapter ${index + 1}, ${stop.name}`}

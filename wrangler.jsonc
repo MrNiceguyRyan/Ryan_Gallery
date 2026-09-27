@@ -10,6 +10,13 @@
 	"env": {
 		"preview": {
 			"name": "ryan-gallery-preview",
+			// A Custom Domain on the preview worker. `*.workers.dev` is blocked in
+			// mainland China and the owner cannot open the preview there at all; a
+			// Cloudflare-proxied subdomain of the real zone is reachable. Wrangler
+			// creates the DNS record and certificate on deploy. Keep this here:
+			// deploying `--env preview` from a branch that omits it hands out a
+			// workers.dev URL the owner cannot reach, which has happened twice.
+			"routes": [{ "pattern": "preview.ryanxugallery.com", "custom_domain": true }],
 			"assets": {
 				"directory": "./dist"
 			}

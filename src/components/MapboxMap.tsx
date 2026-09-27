@@ -1,146 +1,118 @@
 import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
-import type { ReactNode, ErrorInfo } from 'react';
+import type { ReactNode, ErrorInfo, MouseEvent as ReactMouseEvent } from 'react';
 import MapGL, { Marker, NavigationControl, AttributionControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
-import Supercluster from 'supercluster';
 import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'framer-motion';
-import { ArrowUpRight, RotateCcw } from 'lucide-react';
-import type { Photo } from '../types';
-import Magnetic from './shared/Magnetic';
-import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../lib/atlasBasemap';
+import { RotateCcw, X } from 'lucide-react';
+import { silenceArchivePlaceLabels } from '../lib/atlasBasemap';
+import { greatCircle } from '../lib/routeGeometry';
+import { CSS_EASE, DUR_MS, EASE, bezierFn } from '../lib/motion';
+import { TRAVEL_PLATE_HOLD_MS, TRAVEL_PLATE_RELEASE_MS, clearTravelPlate, markTravelPlate } from '../lib/travelPlate';
+import { MAP_BURN, MAP_INK, MAP_INK_DIM } from '../lib/mapInk';
+import { landmarkFor } from '../lib/placeLandmarks';
+import {
+  HAIRLINES,
+  LABEL,
+  LABEL_MINZOOM,
+  LABEL_OPACITY,
+  LABEL_PAINT,
+  LABEL_SIZE,
+  TRAVEL_FOG,
+  TRAVEL_GROUND,
+  TRAVEL_SATELLITE,
+  calloutGroups,
+  flightMs,
+  greatCircleKm,
+  groundRole,
+  landingCamera,
+  leadOf,
+  metresPerPixel,
+  niceScale,
+  placeGrade,
+  placeLabels,
+  projectAround,
+  routeKm,
+  scaleLabel,
+  sheetHeight,
+  travelSatellitePaint,
+} from '../lib/travelSilver';
+import type { LabelPlacement, ScreenPoint, SheetMode, TravelChapter, TravelViewport } from '../lib/travelSilver';
+import TravelIndex, { TravelRows } from './travel/TravelIndex';
+import type { TravelFlight } from './travel/TravelIndex';
+import TravelTicket, { warmPlate } from './travel/TravelTicket';
+import TravelMark, { LANDMARK_CLEARANCE, chooseLandmarkSide, landmarkBox } from './travel/TravelMark';
+import type { LandmarkSide } from './travel/TravelMark';
 
-// ─── Accent color (unified warm dark tone) ───
-const ACCENT = '#D2FF00';
-const ACCENT_RGB = '210, 255, 0';
-// Map markers use a calm warm ivory instead of the loud lime — dots read as
-// map pins, not neon. (Lime stays for UI accents: tooltips, sidebar, etc.)
-const DOT = '#E7E1CF';
-const DOT_RGB = '231, 225, 207';
+// ─── The atlas in silver ───
+// /travel is the homepage's silver planet laid flat as a working atlas: the
+// same satellite photograph printed through an olive-to-bone ramp, marks in
+// the homepage's white ink (src/lib/mapInk.ts), the index numbered the way
+// the homepage numbers its chapters, and a chosen chapter's ticket printed in
+// its own stock. The values live in src/lib/travelSilver.ts; this file owns
+// the map instance and every write.
 
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
 /**
- * Grade dark-v11 into the same olive emulsion the homepage atlas uses.
- * Two reasons, both visible side by side before this existed: the atlas read
- * neutral grey while every other surface on the site is olive, so the same
- * geography looked like it came from a different product; and the basemap's own
- * type sat at roughly the luminance of the page's labels, so the location rail
- * competed with whatever city name happened to be underneath it.
- *
- * This map IS the interface here (unlike the homepage's backdrop), so place
- * names stay readable — one clear step below the UI, not hidden.
+ * Print dark-v11 in silver. Everything the vector style drew on land
+ * (landcover, parks, roads, buildings) is the photograph's job now, and the
+ * map's own type says less than the archive: nothing below z5, towns and
+ * states as context once the camera is down on a place. The vector ground
+ * stays under the photograph as a dark print, so loading tiles never show a
+ * wireframe.
  */
-function gradeAtlasBasemap(map: any) {
-  map.getStyle()?.layers?.forEach((layer: any) => {
-    const id = layer.id.toLowerCase();
-
-    if (layer.type === 'fill-extrusion') {
-      map.setLayoutProperty(layer.id, 'visibility', 'none');
-      return;
-    }
-
-    if (layer.type === 'background') {
-      map.setPaintProperty(layer.id, 'background-color', ATLAS_PAPER.background);
-      return;
-    }
-
-    if (layer.type === 'fill') {
-      if (id.includes('water')) {
-        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
-        map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
-      } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
-        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
-        map.setPaintProperty(layer.id, 'fill-opacity', 0.34);
-      } else if (id.includes('building')) {
-        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
-        map.setPaintProperty(layer.id, 'fill-opacity', 0.12);
+function applySilverGround(map: any) {
+  const layers: Array<{ id: string; type: string }> = map.getStyle()?.layers ?? [];
+  layers.forEach((layer) => {
+    const role = groundRole(layer);
+    if (role === 'hide') map.setLayoutProperty(layer.id, 'visibility', 'none');
+    else if (role === 'ground') map.setPaintProperty(layer.id, 'background-color', TRAVEL_GROUND);
+    else if (role === 'water') {
+      map.setPaintProperty(layer.id, 'fill-color', TRAVEL_GROUND);
+      map.setPaintProperty(layer.id, 'fill-opacity', 1);
+    } else if (role === 'hairline') {
+      Object.entries(HAIRLINES[layer.id] ?? HAIRLINES['admin-1-boundary']).forEach(([key, value]) => map.setPaintProperty(layer.id, key, value));
+    } else if (role === 'label') {
+      Object.entries(LABEL_PAINT).forEach(([key, value]) => map.setPaintProperty(layer.id, key, value));
+      map.setPaintProperty(layer.id, 'text-opacity', LABEL_OPACITY[layer.id]);
+      const own = map.getLayer(layer.id) as { minzoom?: number; maxzoom?: number } | undefined;
+      if (LABEL_MINZOOM[layer.id] != null) {
+        map.setLayerZoomRange(layer.id, Math.max(own?.minzoom ?? 0, LABEL_MINZOOM[layer.id]), own?.maxzoom ?? 24);
       }
-      return;
-    }
-
-    if (layer.type === 'line') {
-      if (id.includes('admin') || id.includes('boundary')) {
-        map.setPaintProperty(layer.id, 'line-color', '#AEB6A9');
-        map.setPaintProperty(layer.id, 'line-width', 0.74);
-        map.setPaintProperty(layer.id, 'line-opacity', 0.42);
-      } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
-        map.setPaintProperty(layer.id, 'line-color', '#8C9588');
-        map.setPaintProperty(layer.id, 'line-opacity', 0.4);
-      } else if (id.includes('secondary') || id.includes('tertiary')) {
-        map.setPaintProperty(layer.id, 'line-color', '#737D6D');
-        map.setPaintProperty(layer.id, 'line-opacity', 0.26);
-      } else if (id.includes('road') || id.includes('street')) {
-        map.setPaintProperty(layer.id, 'line-color', '#667064');
-        map.setPaintProperty(layer.id, 'line-opacity', 0.15);
-      } else if (id.includes('waterway')) {
-        map.setPaintProperty(layer.id, 'line-color', '#657168');
-        map.setPaintProperty(layer.id, 'line-opacity', 0.3);
+      if (LABEL_SIZE[layer.id]) {
+        try {
+          map.setLayoutProperty(layer.id, 'text-size', LABEL_SIZE[layer.id]);
+        } catch {
+          // A style whose labels cannot take the size keeps its own.
+        }
       }
-      return;
+      // Uppercase tracking is capped at 0.1em site-wide, the basemap's too.
+      const tracking = map.getLayoutProperty(layer.id, 'text-letter-spacing');
+      if (typeof tracking === 'number' ? tracking > 0.1 : Array.isArray(tracking)) {
+        try {
+          map.setLayoutProperty(layer.id, 'text-letter-spacing', typeof tracking === 'number' ? 0.1 : ['min', 0.1, tracking]);
+        } catch {
+          // A style whose tracking cannot be composed keeps its own.
+        }
+      }
     }
-
-    if (layer.type !== 'symbol' || !layer.layout?.['text-field']) return;
-
-    if (
-      id.includes('poi')
-      || id.includes('transit')
-      || id.includes('airport')
-      || id.includes('building-number')
-    ) {
-      map.setLayoutProperty(layer.id, 'visibility', 'none');
-      return;
-    }
-
-    const isPlaceLabel =
-      id.includes('settlement')
-      || id.includes('place')
-      || id.includes('city')
-      || id.includes('town')
-      || id.includes('village');
-    const isAtlasLabel = id.includes('state-label') || id.includes('country-label');
-    const isRoadLabel = id.includes('road') || id.includes('street');
-
-    map.setPaintProperty(
-      layer.id,
-      'text-opacity',
-      isPlaceLabel ? 0.6 : isAtlasLabel ? 0.38 : isRoadLabel ? 0.2 : 0.24,
-    );
-    map.setPaintProperty(layer.id, 'text-color', '#C2C8B8');
-    map.setPaintProperty(layer.id, 'text-halo-color', '#11150F');
-    map.setPaintProperty(layer.id, 'text-halo-width', 0.7);
-    map.setPaintProperty(layer.id, 'text-halo-blur', 0.5);
   });
+  if (!map.getSource(TRAVEL_SATELLITE.source)) {
+    map.addSource(TRAVEL_SATELLITE.source, { type: 'raster', url: TRAVEL_SATELLITE.url, tileSize: 256 });
+  }
+  if (!map.getLayer(TRAVEL_SATELLITE.layer)) {
+    // Above every fill, below the boundaries, the route, the rings and the type.
+    const before = map.getLayer('admin-1-boundary')
+      ? 'admin-1-boundary'
+      : layers.find((layer) => layer.type === 'symbol')?.id;
+    map.addLayer({ id: TRAVEL_SATELLITE.layer, type: 'raster', source: TRAVEL_SATELLITE.source, paint: travelSatellitePaint() }, before);
+  }
+  map.setFog(TRAVEL_FOG);
 }
 
-// ─── Region grouping (countries → region label) ───
-const REGION_MAP: Record<string, string> = {
-  'United States': 'North America',
-  'Canada': 'North America',
-  'Mexico': 'North America',
-  'Brazil': 'South America',
-  'Argentina': 'South America',
-  'Colombia': 'South America',
-  'United Kingdom': 'Europe',
-  'France': 'Europe',
-  'Germany': 'Europe',
-  'Italy': 'Europe',
-  'Spain': 'Europe',
-  'Netherlands': 'Europe',
-  'Switzerland': 'Europe',
-  'Japan': 'Asia',
-  'China': 'Asia',
-  'South Korea': 'Asia',
-  'Thailand': 'Asia',
-  'Vietnam': 'Asia',
-  'Singapore': 'Asia',
-  'India': 'Asia',
-  'Australia': 'Oceania',
-  'New Zealand': 'Oceania',
-};
+/** A transparent image as big as a mark, its name and its landmark. */
+const KEEP_OUT = { id: 'travel-keepout', width: 200, height: 112, offsetY: -39 } as const;
 
-function getRegion(country: string): string {
-  return REGION_MAP[country] || country || 'Other';
-}
 
 // ─── Error Boundary ───
 interface ErrorBoundaryState { hasError: boolean; error: Error | null }
@@ -152,7 +124,7 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
     if (this.state.hasError) {
       return (
         <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
-          <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00] shadow-[0_0_16px_rgba(210,255,0,0.36)]" aria-hidden="true" />
+          <span className="mb-4 h-2 w-2 rounded-full bg-[#F4F4ED]/80" aria-hidden="true" />
           <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas unavailable</p>
           <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">The geographic archive could not be drawn.</p>
           <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Retry atlas</button>
@@ -163,340 +135,161 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 }
 
-// ─── Sidebar location cluster ───
-interface LocationCluster {
-  city: string;
-  country: string;
-  /** Fine-grained region from the collection (e.g. "Florida", "Arizona"). */
-  region: string;
-  lat: number;
-  lng: number;
-  photos: Photo[];
-  /** Lowest chapter position among this city's photographs, so the index can
-   *  be ordered the way the archive is read rather than by how much of it
-   *  happens to exist. */
-  routeOrder?: number;
-  /** 1-based position in the archive's reading order, for the index's ordinal. */
-  chapterNumber?: number;
-}
+// ─── Camera ───
+// The map opens settled on the archive — no dive from space (dropped in
+// 2026-07: the whole-globe zoom was heavy and the owner chose to lose it).
+const FINAL_VIEW = { latitude: 38.8, longitude: -97.5, zoom: 3.5, pitch: 0, bearing: 0 };
+// Every trip rides the house travel curve (src/lib/motion.ts), a beat longer
+// the further it goes (travelSilver.flightMs); the reset takes the long way.
+const TRAVEL_EASE = bezierFn(EASE.travel);
+const ARRIVE_EASE = bezierFn(EASE.arrive);
+const FLIGHT_CURVE = 1.42;
+const OVERVIEW_MS = 1400;
+const SHEET_REFRAME_MS = 620;
+// A flight whose moveend comes within a frame of its own full clock landed;
+// an earlier one was stopped (a drag, a wheel zoom, a resize).
+const FLIGHT_LANDED_SLACK_MS = 17;
+/** A place's landmark is detail for a close look: below this zoom the whole
+ *  archive is on screen and a drawing would crowd its neighbours. */
+const LANDMARK_MIN_ZOOM = 5;
+/** The ticket-to-story hand-off waiting for its page change (its listeners'
+ *  remover), so a second click replaces it rather than adding another. It
+ *  outlives this component: the hand-off runs as the page is swapped. */
+let pendingPlateHandoff: (() => void) | null = null;
 
-interface RegionGroup {
-  region: string;
-  clusters: LocationCluster[];
-  totalPhotos: number;
+const REST_PLACEMENT: LabelPlacement = { mode: 'right', dx: LABEL.gap, dy: 0, leader: null, group: null };
+interface LabelState {
+  placements: LabelPlacement[];
+  hidden: boolean[];
 }
-
-function clusterByLocation(photos: Photo[]): LocationCluster[] {
-  const groups: Record<string, LocationCluster & { coordinateCount: number; latTotal: number; lngTotal: number }> = {};
-  for (const p of photos) {
-    if (p.location?.lat == null || p.location?.lng == null) continue;
-    const key = `${p.location.city || ''}|${p.location.country || ''}`;
-    if (!groups[key]) {
-      groups[key] = {
-        city: p.location.city || 'Unknown',
-        country: p.location.country || '',
-        region: p.collection?.region?.trim() || '',
-        lat: p.location.lat,
-        lng: p.location.lng,
-        photos: [],
-        routeOrder: undefined,
-        coordinateCount: 0,
-        latTotal: 0,
-        lngTotal: 0,
-      };
-    }
-    // Backfill region if the first photo of a city lacked a collection region.
-    if (!groups[key].region && p.collection?.region?.trim()) groups[key].region = p.collection.region.trim();
-    const order = p.collection?.routeOrder;
-    if (Number.isFinite(order)) {
-      groups[key].routeOrder = Number.isFinite(groups[key].routeOrder)
-        ? Math.min(groups[key].routeOrder as number, order as number)
-        : (order as number);
-    }
-    groups[key].coordinateCount += 1;
-    groups[key].latTotal += p.location.lat;
-    groups[key].lngTotal += p.location.lng;
-    groups[key].photos.push(p);
-  }
-  const clusters = Object.values(groups)
-    .map(({ coordinateCount, latTotal, lngTotal, ...cluster }) => ({
-      ...cluster,
-      lat: latTotal / Math.max(1, coordinateCount),
-      lng: lngTotal / Math.max(1, coordinateCount),
-    }));
-  // The index is an edition, not a leaderboard. It used to sort by photo count
-  // descending — a database order, and the one thing on this page that did not
-  // read as part of the archive.
-  //
-  // `routeOrder` is the archive's deterministic reading order and the field
-  // built for inserting a new place BETWEEN two chapters; when every city has
-  // one, the index follows it exactly and its numbers are the front page's
-  // chapter numbers. As of now that field is unset on every collection, so the
-  // fallback is the next most editorial thing available — most recent chapter
-  // first, ties broken by where the archive itself puts them — rather than
-  // "whoever has the most photographs".
-  const fullyOrdered = clusters.length > 0 && clusters.every((c) => Number.isFinite(c.routeOrder));
-  const firstSeen = new Map(clusters.map((c, index) => [c.city, index]));
-  const chapterYear = (c: LocationCluster) => {
-    const raw = c.photos[0]?.collection?.year;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  const ordered = fullyOrdered
-    ? [...clusters].sort((a, b) => (a.routeOrder as number) - (b.routeOrder as number))
-    : [...clusters].sort((a, b) => (chapterYear(b) - chapterYear(a))
-      || ((firstSeen.get(a.city) ?? 0) - (firstSeen.get(b.city) ?? 0)));
-  // The number is the CHAPTER's, not the row's. A chapter can hold more than
-  // one place — New York's frames are filed under Manhattan and Midtown — and
-  // numbering by row position claimed they were chapters 06 and 07 of a
-  // six-chapter archive. Cities sharing a chapter share its number, which is
-  // also how the index says "this chapter has two places in it".
-  const chapterKey = (c: LocationCluster) => (Number.isFinite(c.routeOrder)
-    ? `r:${c.routeOrder}`
-    : `c:${c.photos[0]?.collection?.slug ?? c.photos[0]?.collection?.name ?? c.city}`);
-  const chapters: string[] = [];
-  ordered.forEach((cluster) => {
-    const key = chapterKey(cluster);
-    if (!chapters.includes(key)) chapters.push(key);
-  });
-  return ordered.map((cluster) => ({
-    ...cluster,
-    chapterNumber: chapters.indexOf(chapterKey(cluster)) + 1,
-  }));
-}
-
-function groupByRegion(clusters: LocationCluster[]): RegionGroup[] {
-  const map: Record<string, LocationCluster[]> = {};
-  for (const c of clusters) {
-    // Prefer the collection's fine-grained region (Florida, Arizona, DMV…);
-    // fall back to the country→continent map for anything untagged.
-    const region = c.region || getRegion(c.country);
-    if (!map[region]) map[region] = [];
-    map[region].push(c);
-  }
-  const groups = Object.entries(map)
-    .map(([region, cls]) => ({ region, clusters: cls, totalPhotos: cls.reduce((s, c) => s + c.photos.length, 0) }));
-  // A region sits where its earliest chapter sits, for the same reason.
-  const first = (g: RegionGroup) => Math.min(...g.clusters.map((c) => c.chapterNumber ?? Number.POSITIVE_INFINITY));
-  return groups.sort((a, b) => first(a) - first(b));
-}
-
-function formatCoord(v: number, pos: string, neg: string) {
-  return `${Math.abs(v).toFixed(4)}°${v >= 0 ? pos : neg}`;
-}
+const sameLabels = (a: LabelState, placements: LabelPlacement[], hidden: boolean[]) =>
+  a.placements.length === placements.length
+  && a.placements.every((p, i) => {
+    const q = placements[i];
+    return p.mode === q.mode && p.dx === q.dx && p.dy === q.dy && p.group === q.group
+      && JSON.stringify(p.leader) === JSON.stringify(q.leader);
+  })
+  && a.hidden.every((value, i) => value === hidden[i]);
+const groupKeyOf = (groups: readonly number[][] | null, index: number) =>
+  groups?.find((group) => group.includes(index))?.join('-') ?? String(index);
 
 function slugifyPlace(value: string) {
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
 
-function clusterMatchesPlace(cluster: LocationCluster, place: string) {
-  if (slugifyPlace(cluster.city) === place) return true;
-  return cluster.photos.some((photo) => photo.collection?.slug === place);
-}
-
-function CityDetail({ cluster, mobile = false }: { cluster: LocationCluster; mobile?: boolean }) {
-  const storySlug = cluster.photos[0]?.collection?.slug;
-  return (
-    <div className={mobile ? 'pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}>
-      <div className={`relative overflow-hidden ${mobile ? 'h-40' : 'h-36'}`}>
-        <img
-          src={`${cluster.photos[0].imageUrl}?auto=format&w=800&q=82`}
-          alt={cluster.city}
-          className="h-full w-full object-cover"
-          draggable={false}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#11150f] via-black/15 to-transparent" />
-        <div className="atlas-sheet-safe-inline absolute inset-x-0 bottom-3 flex items-end justify-between gap-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/64">
-          <p>{cluster.country}</p>
-          <span className="shrink-0 font-ui text-[9px] uppercase tracking-[0.1em] text-white/60">{cluster.photos.length} frames</span>
-        </div>
-      </div>
-      <div className="atlas-sheet-safe-inline pb-4 pt-3">
-        <p className="mb-3 font-ui text-[9px] tracking-[0.14em] text-white/56">
-          {formatCoord(cluster.lat, 'N', 'S')} · {formatCoord(cluster.lng, 'E', 'W')}
-        </p>
-        {/* The cross-reference back to the edition. An index that cannot tell
-            you WHERE in the archive a place sits is a list of coordinates. */}
-        {cluster.chapterNumber != null && (
-          <p className="mb-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/56">
-            Chapter {String(cluster.chapterNumber).padStart(2, '0')}
-            {cluster.photos[0]?.collection?.name ? ` · ${cluster.photos[0].collection.name}` : ''}
-          </p>
-        )}
-        <div className="grid grid-cols-3 gap-1.5">
-          {cluster.photos.slice(0, 3).map((photo, index) => (
-            <div key={photo._id} className="aspect-[4/3] overflow-hidden rounded-[0.45rem]">
-              <img
-                src={`${photo.imageUrl}?auto=format&w=220&q=76`}
-                alt={typeof photo.title === 'string' && !photo.title.includes('[object Object]') ? photo.title : `${cluster.city} photograph ${index + 1}`}
-                className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
-                loading="lazy"
-                draggable={false}
-              />
-            </div>
-          ))}
-        </div>
-        {storySlug && (
-          <a
-            href={`/works/${storySlug}`}
-            className="mt-4 flex min-h-11 w-full items-center justify-center gap-3 rounded-full bg-[#D2FF00] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-300 hover:scale-[1.015] active:scale-[0.985]"
-          >
-            Explore story
-            <ArrowUpRight size={14} aria-hidden="true" />
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Camera framing — the map settles face-on over the continental US ───
-// No dive-from-space intro: the "from space" globe zoom was inherently heavy
-// (rendering the whole globe/atmosphere while a 60fps onMove re-render storm
-const FINAL_VIEW = { latitude: 38.8, longitude: -97.5, zoom: 3.5, pitch: 0, bearing: 0 };
-type MobileSheetMode = 'peek' | 'browse' | 'detail';
-
-type AtlasClusterFeature = {
-  id?: number | string;
-  properties: {
-    cluster?: boolean;
-    cluster_id?: number;
-    point_count?: number;
-    cityIndex?: number;
-  };
-  geometry: { type: 'Point'; coordinates: number[] };
-};
-
-type ClusterMorphRole = 'stable' | 'parent' | 'child';
-
-type ClusterMorphTopologyNode = {
-  key: string;
-  feature: AtlasClusterFeature;
-  role: ClusterMorphRole;
-  from: [number, number];
-  to: [number, number];
-  siblingCount: number;
-};
-
-type ClusterRenderNode = ClusterMorphTopologyNode & {
-  coordinates: [number, number];
-  opacity: number;
-  scale: number;
-  interactive: boolean;
-};
-
-const CLUSTER_WORLD_BOUNDS: [number, number, number, number] = [-180, -85, 180, 85];
-
-function clampUnit(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
-
-function smoothZoomMorph(value: number) {
-  const t = clampUnit(value);
-  return t * t * (3 - 2 * t);
-}
-
-function atlasFeatureKey(feature: AtlasClusterFeature) {
-  return feature.properties.cluster
-    ? `cluster-${String(feature.id ?? feature.properties.cluster_id)}`
-    : `city-${String(feature.properties.cityIndex)}`;
-}
-
 // ─── Main Inner Component ───
-function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken: string }) {
+function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const collarRef = useRef<HTMLDivElement>(null);
   const atlasStyleReadyRef = useRef(false);
   const atlasReadySignaledRef = useRef(false);
+  const initialPlaceAppliedRef = useRef(false);
   const sheetDragControls = useDragControls();
   const mobileSheetHeaderRef = useRef<HTMLButtonElement>(null);
-  const activeClusterRef = useRef<LocationCluster | null>(null);
-  const initialPlaceAppliedRef = useRef(false);
-  const markerBloomPlayedRef = useRef(false);
-  const clusterZoomFrameRef = useRef(0);
-  const pendingClusterZoomRef = useRef(FINAL_VIEW.zoom);
-  const playInitialMarkerBloom = !markerBloomPlayedRef.current;
   const prefersReduced = !!useReducedMotion();
-  const coarsePointer = useMemo(
-    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
-    [],
-  );
+  const reduceRef = useRef(prefersReduced);
+  reduceRef.current = prefersReduced;
+
   const [mobileLayout, setMobileLayout] = useState(false);
-  const [viewState, setViewState] = useState(FINAL_VIEW);
-  const [clusterZoom, setClusterZoom] = useState(FINAL_VIEW.zoom);
-  const [clusterMorphing, setClusterMorphing] = useState(false);
-  // No dive intro any more — the map opens settled on the US, so markers may
-  // bloom in immediately (they still stagger-animate on mount for a little life).
-  const [activeCluster, setActiveCluster] = useState<LocationCluster | null>(null);
-  const [activeClusterCity, setActiveClusterCity] = useState<string | null>(null);
-  const [hoveredCity, setHoveredCity] = useState<string | null>(null);
-  // Arrival. The homepage atlas confirms the end of a flight with one thin ring
-  // at the focal point; this map flew for 1150ms and then simply stopped. The
-  // ring is keyed to the FLIGHT, not to `moveend` — a drag, a wheel zoom or a
-  // second selection cancels the promise, so a move the visitor made themselves
-  // never gets an arrival it didn't earn.
-  const flightCityRef = useRef<string | null>(null);
-  const [arrivedCity, setArrivedCity] = useState<string | null>(null);
-  const beginFlight = useCallback((city: string | null) => {
-    flightCityRef.current = city;
-    setArrivedCity(null);
-  }, []);
-  useEffect(() => {
-    if (!arrivedCity) return;
-    const timer = window.setTimeout(() => setArrivedCity(null), 760);
-    return () => window.clearTimeout(timer);
-  }, [arrivedCity]);
+  // The chapter chosen (the index row, the ticket, the URL) and the chapter
+  // the camera has come to rest on. They differ for the length of a flight.
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [landedSlug, setLandedSlug] = useState<string | null>(null);
+  const [hoveredSlug, setHoveredSlug] = useState<string | null>(null);
+  // Arrival: one thin ring at the focal point, only when a flight ran its
+  // full clock. It plays once on mount and ends invisible (animation fill),
+  // so it is left in place until the next choice rather than costing the
+  // landing a second render to take away. Every flight carries a token in its eventData and only the
+  // newest flight's own moveend can land — a second selection interrupts the
+  // first with stop(), which fires the FIRST flight's moveend while the
+  // second is already in the air.
+  const [arrivedSlug, setArrivedSlug] = useState<string | null>(null);
+  const [landmarkSlug, setLandmarkSlug] = useState<string | null>(null);
+  const [flight, setFlight] = useState<TravelFlight | null>(null);
+  const [labels, setLabels] = useState<LabelState>(() => ({
+    placements: chapters.map(() => REST_PLACEMENT),
+    hidden: chapters.map(() => false),
+  }));
+  const [layersReady, setLayersReady] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
-  const [mobileSheet, setMobileSheet] = useState<MobileSheetMode>('peek');
-  const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
-  const seededRegion = useRef(false);
+  const [mobileSheet, setMobileSheet] = useState<SheetMode>('peek');
 
-  // Only the markers present for the first rendered atlas field bloom. Any
-  // markers introduced by later pans or zoom-level clustering appear without
-  // a fresh stagger, so navigation never feels delayed.
-  useEffect(() => {
-    markerBloomPlayedRef.current = true;
-  }, []);
+  // Mirrors for the map's own event handlers, which outlive any one render.
+  const selectedRef = useRef<string | null>(null);
+  const landedRef = useRef<string | null>(null);
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
+  const mobileSheetRef = useRef<SheetMode>('peek');
+  mobileSheetRef.current = mobileSheet;
+  // The sheet height the camera last framed for, so a sheet change the
+  // camera already flew for (a selection) is not framed twice.
+  const sheetFramedRef = useRef<SheetMode>('peek');
+  const flightTokenRef = useRef(0);
+  const flightStartRef = useRef(0);
+  const flightDurationRef = useRef(0);
+  const flightSlugRef = useRef<string | null>(null);
+  // The callouts: the groups as they stand, and as they stood the last time
+  // the camera framed the whole archive (where a reset is going back to).
+  const groupsRef = useRef<number[][] | null>(null);
+  const overviewGroupsRef = useRef<number[][] | null>(null);
+  const atOverviewRef = useRef(true);
+  const landmarkSideRef = useRef<Record<string, LandmarkSide>>({});
+  const litRef = useRef<{ chapters: [number, number]; live: 0 | 1 }>({ chapters: [-1, -1], live: 0 });
 
-  useEffect(() => {
-    activeClusterRef.current = activeCluster;
-  }, [activeCluster]);
-
-  useEffect(() => () => {
-    if (clusterZoomFrameRef.current) window.cancelAnimationFrame(clusterZoomFrameRef.current);
-    delete document.documentElement.dataset.atlasReady;
-  }, []);
-
-  const cityClusters = useMemo(() => clusterByLocation(photos), [photos]);
-  // Read inside the map's load handler, which can run before or after the
-  // archive resolves; a ref means neither order matters.
-  const archiveNamesRef = useRef<string[]>([]);
-  archiveNamesRef.current = useMemo(() => cityClusters.map((entry) => entry.city).filter(Boolean), [cityClusters]);
-  const regionGroups = useMemo(() => groupByRegion(cityClusters), [cityClusters]);
-  const validPhotos = useMemo(() => photos.filter(p => p.location?.lat != null && p.location?.lng != null), [photos]);
+  const bySlug = useMemo(() => new Map(chapters.map((chapter) => [chapter.slug, chapter])), [chapters]);
+  const leads = useMemo(() => chapters.map(leadOf), [chapters]);
+  const totalKm = useMemo(() => routeKm(leads), [leads]);
+  const frameCount = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
   const archiveBounds = useMemo(() => {
-    if (cityClusters.length === 0) return null;
-    const lngs = cityClusters.map((cluster) => cluster.lng);
-    const lats = cityClusters.map((cluster) => cluster.lat);
+    const places = chapters.flatMap((chapter) => chapter.places);
+    if (!places.length) return null;
+    const lngs = places.map((place) => place.lng);
+    const lats = places.map((place) => place.lat);
     return [
       [Math.min(...lngs), Math.min(...lats)],
       [Math.max(...lngs), Math.max(...lats)],
     ] as [[number, number], [number, number]];
-  }, [cityClusters]);
+  }, [chapters]);
+  // A place on this map is named once, by the archive: the basemap is asked
+  // not to set its own label for a place (or a chapter) the archive names.
+  const archiveNames = useMemo(
+    () => [...new Set([...chapters.flatMap((chapter) => chapter.places.map((place) => place.city)), ...chapters.map((chapter) => chapter.name)])],
+    [chapters],
+  );
+  // Every place, for the rings and the keep-out. A chapter's mark stands on
+  // its lead place; its other places (New York's second corner) are rings.
+  const placesGeo = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: chapters.flatMap((chapter, index) => chapter.places.map((place, placeIndex) => ({
+      type: 'Feature' as const,
+      id: index * 100 + placeIndex + 1,
+      properties: { chapter: index + 1, lead: placeIndex === chapter.lead },
+      geometry: { type: 'Point' as const, coordinates: [place.lng, place.lat] },
+    }))),
+  }), [chapters]);
+  // THE ROUTE — one great-circle leg per consecutive CHAPTER, lead to lead,
+  // tagged with the chapter at each end so a chosen chapter lights its own.
+  const routeGeo = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: leads.slice(1).map((to, index) => ({
+      type: 'Feature' as const,
+      properties: { from: index + 1, to: index + 2 },
+      geometry: { type: 'LineString' as const, coordinates: greatCircle(leads[index], to) },
+    })),
+  }), [leads]);
 
-  useEffect(() => {
-    if (seededRegion.current || regionGroups.length === 0) return;
-    seededRegion.current = true;
-    setExpandedRegion(regionGroups[0].region);
-  }, [regionGroups]);
+  useEffect(() => () => {
+    delete document.documentElement.dataset.atlasReady;
+  }, []);
 
-  // Keep interaction behavior aligned with the CSS breakpoint when a tablet
-  // rotates or a desktop window crosses into the compact layout.
+  // Keep interaction behaviour aligned with the CSS breakpoint.
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1023px)');
     const sync = () => setMobileLayout(media.matches);
@@ -505,269 +298,580 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     return () => media.removeEventListener('change', sync);
   }, []);
 
-  useEffect(() => {
-    if (mobileSheet !== 'detail' || !activeCluster) return;
-    requestAnimationFrame(() => mobileSheetHeaderRef.current?.focus({ preventScroll: true }));
-  }, [activeCluster, mobileSheet]);
-
   // Never leave the visitor staring at an endless loading state if Mapbox is
-  // unreachable. A slow connection still gets a generous window, then the
-  // atlas becomes an explicit, retryable state instead of an apparent blank.
+  // unreachable: after a generous window the atlas says so and offers a retry.
   useEffect(() => {
     if (mapReady || mapLoadFailed) return;
     const timeout = window.setTimeout(() => setMapLoadFailed(true), 12000);
     return () => window.clearTimeout(timeout);
   }, [mapLoadFailed, mapReady]);
 
-  // Supercluster operates at the same semantic level as the atlas index: one
-  // point per city. Photos from one city may share the exact GPS coordinate;
-  // clustering every frame made that city a large badge that could never split
-  // before max zoom, even though there was only one actual destination.
-  const points = useMemo(() =>
-    cityClusters.map((cluster, cityIndex) => ({
-      type: 'Feature' as const,
-      properties: { cluster: false, cityIndex },
-      geometry: { type: 'Point' as const, coordinates: [cluster.lng, cluster.lat] },
-    })),
-    [cityClusters],
-  );
+  useEffect(() => {
+    if (mobileSheet !== 'detail' || !selectedSlug) return;
+    requestAnimationFrame(() => mobileSheetHeaderRef.current?.focus({ preventScroll: true }));
+  }, [selectedSlug, mobileSheet]);
 
-  const clusterIndex = useMemo(() => {
-    const idx = new Supercluster({ radius: 50, maxZoom: 16 });
-    idx.load(points as any);
-    return idx;
-  }, [points]);
+  // What the camera is framing for: which layout, and on the phone how much
+  // of the map the sheet leaves.
+  const viewportFor = useCallback((sheet: SheetMode): TravelViewport => {
+    const compact = window.matchMedia('(max-width: 1023px)').matches;
+    const mapHeight = mapRef.current?.getMap().getContainer().clientHeight || window.innerHeight;
+    return { compact, feather: window.innerWidth >= 1280 ? 80 : 48, sheet: sheetHeight(sheet, window.innerHeight, mapHeight) };
+  }, []);
 
-  const settledClusterZoom = Math.round(clusterZoom);
-  const lowerClusterZoom = Math.max(0, Math.min(16,
-    prefersReduced || !clusterMorphing ? settledClusterZoom : Math.floor(clusterZoom),
-  ));
-  const upperClusterZoom = prefersReduced || !clusterMorphing
-    ? lowerClusterZoom
-    : Math.min(16, lowerClusterZoom + 1);
+  // The basemap's context type (towns, states) sits out a flight and comes
+  // back as the camera settles, with Mapbox's own symbol fade. Placing it on
+  // every frame of a flight was, with the photograph, the flights' whole cost
+  // on a slow machine (4× CPU: 16 frames over 20ms per flight with it, 4
+  // without); and a town name streaming past is not something anyone reads.
+  const contextTypeRef = useRef(true);
+  const setContextType = useCallback((visible: boolean) => {
+    const map = mapRef.current?.getMap();
+    if (!map || contextTypeRef.current === visible) return;
+    contextTypeRef.current = visible;
+    Object.keys(LABEL_OPACITY).forEach((id) => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    });
+  }, []);
 
-  // Build the cluster family only when an integer zoom boundary changes. The
-  // far cheaper render pass below then morphs that stable topology on every
-  // zoom frame. This gives children a real path out of their parent instead of
-  // replacing one DOM tree with another after the camera has already stopped.
-  const clusterMorphTopology = useMemo<ClusterMorphTopologyNode[]>(() => {
-    const lower = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, lowerClusterZoom) as AtlasClusterFeature[];
-    if (lowerClusterZoom === upperClusterZoom) {
-      return lower.map((feature) => {
-        const coordinates = feature.geometry.coordinates as [number, number];
-        return {
-          key: atlasFeatureKey(feature),
-          feature,
-          role: 'stable' as const,
-          from: coordinates,
-          to: coordinates,
-          siblingCount: 1,
-        };
+  const beginFlight = useCallback((slug: string | null, duration: number) => {
+    flightTokenRef.current += 1;
+    flightStartRef.current = performance.now();
+    flightDurationRef.current = duration;
+    flightSlugRef.current = slug;
+    if (duration > 0) setContextType(false);
+    return flightTokenRef.current;
+  }, [setContextType]);
+
+  // ── The names on the map ──
+  // Laid out when the camera is at rest (never per frame): each name beside
+  // its mark, or stacked in a callout with the marks it stands among.
+  const labelWidths = useCallback((container: HTMLElement) => chapters.map((chapter) => {
+    const label = container.querySelector<HTMLElement>(`[data-travel-label="${CSS.escape(chapter.slug)}"]`);
+    return label?.offsetWidth || 80;
+  }), [chapters]);
+
+  const layoutLabels = useCallback((map: any) => {
+    const container: HTMLElement = map.getContainer();
+    const points: ScreenPoint[] = leads.map((lngLat) => {
+      const point = map.project(lngLat);
+      return { x: point.x, y: point.y };
+    });
+    const groups = calloutGroups(points, groupsRef.current);
+    groupsRef.current = groups;
+    if (atOverviewRef.current) overviewGroupsRef.current = groups;
+    const widths = labelWidths(container);
+    const legs = routeGeo.features.map((leg) => leg.geometry.coordinates.map((coordinate) => {
+      const point = map.project(coordinate as [number, number]);
+      return { x: point.x, y: point.y };
+    }));
+    // The landed place's landmark is an obstacle every single name keeps off
+    // — its own name included, which sits by the dot now and, moved a line
+    // up to clear a leg, ran into the drawing.
+    const landed = landedRef.current;
+    const landedIndex = landed ? chapters.findIndex((chapter) => chapter.slug === landed) : -1;
+    const drawing = landedIndex >= 0 && map.getZoom() >= LANDMARK_MIN_ZOOM
+      ? landmarkBox(landed, landmarkSideRef.current[landed as string] ?? 'above')
+      : null;
+    const obstacles = drawing
+      ? [{
+        x0: points[landedIndex].x + drawing.x0,
+        x1: points[landedIndex].x + drawing.x1,
+        y0: points[landedIndex].y + drawing.y0,
+        y1: points[landedIndex].y + drawing.y1,
+      }]
+      : [];
+    const placements = placeLabels(points, groups, widths, container.clientWidth, legs, obstacles);
+    // A dimmed name that would lie across the landed place's landmark waits
+    // until the camera leaves (Zion's name under Page's canyon on the phone).
+    const hidden = chapters.map(() => false);
+    if (drawing) {
+      const origin = points[landedIndex];
+      chapters.forEach((_, j) => {
+        if (j === landedIndex) return;
+        const x0 = points[j].x + placements[j].dx - origin.x;
+        const x1 = x0 + widths[j];
+        const y0 = points[j].y + placements[j].dy - 8 - origin.y;
+        const y1 = y0 + 16;
+        if (x1 > drawing.x0 && x0 < drawing.x1 && y1 > drawing.y0 && y0 < drawing.y1) hidden[j] = true;
       });
     }
+    setLabels((current) => (sameLabels(current, placements, hidden) ? current : { placements, hidden }));
+  }, [chapters, labelWidths, leads, routeGeo]);
 
-    const upper = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, upperClusterZoom) as AtlasClusterFeature[];
-    const lowerByKey = new Map(lower.map((feature) => [atlasFeatureKey(feature), feature]));
-    const upperKeys = new Set(upper.map(atlasFeatureKey));
-    const cityParent = new Map<number, AtlasClusterFeature>();
-
-    lower.forEach((feature) => {
-      if (feature.properties.cluster) {
-        try {
-          clusterIndex.getLeaves(feature.id as number, Infinity).forEach((leaf: any) => {
-            const cityIndex = leaf.properties.cityIndex;
-            if (Number.isInteger(cityIndex)) cityParent.set(cityIndex, feature);
-          });
-        } catch {
-          // A malformed cluster should degrade to the upper node's own position.
-        }
-      } else if (Number.isInteger(feature.properties.cityIndex)) {
-        cityParent.set(feature.properties.cityIndex as number, feature);
-      }
-    });
-
-    const parentForUpper = new Map<string, AtlasClusterFeature>();
-    const siblingCountByParent = new Map<string, number>();
-    upper.forEach((feature) => {
-      const key = atlasFeatureKey(feature);
-      if (lowerByKey.has(key)) return;
-      let representativeCity: number | undefined;
-      if (feature.properties.cluster) {
-        try {
-          representativeCity = clusterIndex.getLeaves(feature.id as number, 1)[0]?.properties?.cityIndex;
-        } catch {
-          representativeCity = undefined;
-        }
-      } else {
-        representativeCity = feature.properties.cityIndex;
-      }
-      if (!Number.isInteger(representativeCity)) return;
-      const parent = cityParent.get(representativeCity as number);
-      if (!parent) return;
-      const parentKey = atlasFeatureKey(parent);
-      parentForUpper.set(key, parent);
-      siblingCountByParent.set(parentKey, (siblingCountByParent.get(parentKey) ?? 0) + 1);
-    });
-
-    const outgoing = lower
-      .filter((feature) => !upperKeys.has(atlasFeatureKey(feature)))
-      .map((feature) => {
-        const coordinates = feature.geometry.coordinates as [number, number];
-        return {
-          key: atlasFeatureKey(feature),
-          feature,
-          role: 'parent' as const,
-          from: coordinates,
-          to: coordinates,
-          siblingCount: siblingCountByParent.get(atlasFeatureKey(feature)) ?? 1,
-        };
-      });
-
-    const incoming = upper.map((feature) => {
-      const key = atlasFeatureKey(feature);
-      const coordinates = feature.geometry.coordinates as [number, number];
-      const stable = lowerByKey.has(key);
-      const parent = parentForUpper.get(key);
-      const parentCoordinates = parent?.geometry.coordinates as [number, number] | undefined;
-      return {
-        key,
-        feature,
-        role: stable ? 'stable' as const : 'child' as const,
-        from: stable ? coordinates : parentCoordinates ?? coordinates,
-        to: coordinates,
-        siblingCount: parent ? siblingCountByParent.get(atlasFeatureKey(parent)) ?? 1 : 1,
-      };
-    });
-
-    return [...outgoing, ...incoming];
-  }, [clusterIndex, lowerClusterZoom, upperClusterZoom]);
-
-  const clusters = useMemo<ClusterRenderNode[]>(() => {
-    const rawFraction = prefersReduced || lowerClusterZoom === upperClusterZoom
-      ? 1
-      : clusterZoom - lowerClusterZoom;
-    // Leave a tiny quiet zone at each integer boundary to absorb trackpad
-    // micro-jitter, while preserving a reversible continuous curve in between.
-    const progress = smoothZoomMorph((rawFraction - 0.035) / 0.93);
+  /** Where a flight is going, decided as it takes off. Names that will
+   *  gather into a callout there, or leave one, wait unseen until the camera
+   *  lands and they can be set where they will stand — except the name of
+   *  the chapter being flown to, which is set beside its mark at once (the
+   *  trio's three names side by side collided for the first half-second). */
+  const prepareLabels = useCallback((destination: { points: ScreenPoint[] | null; groups: number[][] | null; focus?: number; legs?: ScreenPoint[][] }) => {
     const map = mapRef.current?.getMap();
-
-    return clusterMorphTopology.map((node) => {
-      let coordinates = node.to;
-      if (node.role === 'child' && progress < 1) {
-        if (map) {
-          const fromPoint = map.project(node.from);
-          const toPoint = map.project(node.to);
-          const point = map.unproject([
-            fromPoint.x + (toPoint.x - fromPoint.x) * progress,
-            fromPoint.y + (toPoint.y - fromPoint.y) * progress,
-          ]);
-          coordinates = [point.lng, point.lat];
-        } else {
-          coordinates = [
-            node.from[0] + (node.to[0] - node.from[0]) * progress,
-            node.from[1] + (node.to[1] - node.from[1]) * progress,
-          ];
+    const destGroups = destination.groups;
+    if (!map || !destGroups) return;
+    const current = groupsRef.current;
+    const container: HTMLElement = map.getContainer();
+    // The place flown to will stand its landmark (over its mark, as a rule):
+    // its name is set clear of it from take-off, so it does not jump a line
+    // when the drawing arrives.
+    const focusPoint = destination.focus != null && destination.focus >= 0 ? destination.points?.[destination.focus] : null;
+    const focusDrawing = focusPoint ? landmarkBox(chapters[destination.focus as number]?.slug, 'above') : null;
+    const destObstacles = focusPoint && focusDrawing
+      ? [{ x0: focusPoint.x + focusDrawing.x0, x1: focusPoint.x + focusDrawing.x1, y0: focusPoint.y + focusDrawing.y0, y1: focusPoint.y + focusDrawing.y1 }]
+      : [];
+    const destPlacements = destination.points
+      ? placeLabels(destination.points, destGroups, labelWidths(container), container.clientWidth, destination.legs, destObstacles)
+      : null;
+    setLabels((state) => {
+      const placements = [...state.placements];
+      const hidden = [...state.hidden];
+      let changed = false;
+      chapters.forEach((_, i) => {
+        if (groupKeyOf(current, i) === groupKeyOf(destGroups, i)) return;
+        const joining = (destGroups.find((group) => group.includes(i))?.length ?? 1) > 1;
+        if (joining || i !== destination.focus) {
+          if (!hidden[i]) { hidden[i] = true; changed = true; }
+          return;
         }
-      }
-
-      if (node.role === 'parent') {
-        return {
-          ...node,
-          coordinates,
-          opacity: Math.pow(1 - progress, 1.35),
-          scale: 1 - progress * 0.2,
-          interactive: progress < 0.46,
-        };
-      }
-      if (node.role === 'child') {
-        const energyFloor = 1 / Math.sqrt(Math.max(1, node.siblingCount));
-        return {
-          ...node,
-          coordinates,
-          opacity: progress * (energyFloor + (1 - energyFloor) * progress),
-          scale: 0.64 + progress * 0.36,
-          interactive: progress > 0.54,
-        };
-      }
-      return { ...node, coordinates, opacity: 1, scale: 1, interactive: true };
+        placements[i] = destPlacements?.[i] ?? REST_PLACEMENT;
+        hidden[i] = false;
+        changed = true;
+      });
+      return changed ? { placements, hidden } : state;
     });
-  }, [clusterMorphTopology, clusterZoom, lowerClusterZoom, prefersReduced, upperClusterZoom]);
+    groupsRef.current = destGroups;
+  }, [chapters, labelWidths]);
 
-  const handleMapZoom = useCallback((event: { viewState: { zoom: number } }) => {
-    setClusterMorphing(true);
-    pendingClusterZoomRef.current = event.viewState.zoom;
-    if (clusterZoomFrameRef.current) return;
-    clusterZoomFrameRef.current = window.requestAnimationFrame(() => {
-      clusterZoomFrameRef.current = 0;
-      const next = pendingClusterZoomRef.current;
-      setClusterZoom((current) => Math.abs(current - next) < 0.0001 ? current : next);
-    });
+  // ── The scale collar ──
+  // Measured on the map itself at the bar's own height — the globe is not
+  // Mercator below z5 — from two points 100px apart, after every move.
+  const updateCollar = useCallback((map: any) => {
+    const collar = collarRef.current;
+    if (!collar || !window.matchMedia('(min-width: 1024px)').matches) return;
+    const container: HTMLElement = map.getContainer();
+    const y = container.clientHeight - 67;
+    let mpp = Number.NaN;
+    try {
+      const a = map.unproject([22, y]);
+      const b = map.unproject([122, y]);
+      const back = map.project(b);
+      if (Math.hypot(back.x - 122, back.y - y) < 1) mpp = (greatCircleKm([a.lng, a.lat], [b.lng, b.lat]) * 1000) / 100;
+    } catch {
+      mpp = Number.NaN;
+    }
+    if (!(mpp > 0) || !Number.isFinite(mpp)) mpp = metresPerPixel(map.getZoom(), map.getCenter().lat);
+    const metres = niceScale(110 * mpp);
+    collar.style.setProperty('--collar-w', `${Math.round(metres / mpp)}px`);
+    const label = collar.querySelector('.travel-collar__label');
+    const text = scaleLabel(metres);
+    if (label && label.textContent !== text) label.textContent = text;
   }, []);
 
-  // Keep the Atlas in the same olive-black cartographic language as Home.
-  const applyGlobeSettings = useCallback((map: any) => {
-    map.setProjection('globe');
-    map.setFog({
-      color: 'rgb(30, 36, 28)',
-      'high-color': 'rgb(49, 58, 45)',
-      'horizon-blend': 0.08,
-      'space-color': 'rgb(9, 12, 9)',
-      'star-intensity': 0.18,
-    });
-    // NOTE: 3D terrain (raster-DEM) intentionally removed. The atlas is framed
-    // face-on at pitch:0, so terrain relief is never visible — it added real
-    // per-frame GPU render cost + streamed DEM tiles that repaint on load,
-    // hurting scroll smoothness on constrained compositors for zero visual gain.
-    if (coarsePointer) map.touchZoomRotate.disableRotation();
-  }, [coarsePointer]);
+  // ── The landmark ──
+  // Which side of its mark a chapter's landmark stands on: over it by
+  // default, else level with it on the side its name does not take, else
+  // under it — the first no leg of the route runs through, read from the
+  // camera it is about to be shown under, once per landing.
+  const landmarkSideFor = useCallback((map: any, index: number): LandmarkSide => {
+    const chapter = chapters[index];
+    const landmark = landmarkFor(chapter.slug);
+    if (!landmark) return 'above';
+    const origin = map.project(leads[index]);
+    const paths: Array<Array<{ x: number; y: number }>> = [];
+    const trace = (coordinates: number[][]) => {
+      const path: Array<{ x: number; y: number }> = [];
+      let travelled = 0;
+      for (const coordinate of coordinates) {
+        const projected = map.project(coordinate as [number, number]);
+        const point = { x: projected.x - origin.x, y: projected.y - origin.y };
+        const last = path[path.length - 1];
+        if (last) travelled += Math.hypot(point.x - last.x, point.y - last.y);
+        path.push(point);
+        if (travelled > 320) break;
+      }
+      paths.push(path);
+    };
+    const outgoing = routeGeo.features[index];
+    const incoming = routeGeo.features[index - 1];
+    if (outgoing) trace(outgoing.geometry.coordinates);
+    if (incoming) trace([...incoming.geometry.coordinates].reverse());
+    const nameSide = labelsRef.current.placements[index]?.mode;
+    return chooseLandmarkSide(paths, landmark.height, LANDMARK_CLEARANCE, [
+      'above',
+      nameSide === 'left' ? 'right' : 'left',
+      'below',
+    ]);
+  }, [chapters, leads, routeGeo]);
 
-  const frameArchiveOverview = useCallback((duration = 0) => {
+  // ── Framing ──
+  const frameArchiveOverview = useCallback((duration = 0, token?: number, sheet: SheetMode = 'peek') => {
     const map = mapRef.current?.getMap();
     if (!map || !archiveBounds) return;
-    const compact = window.matchMedia('(max-width: 1023px)').matches;
+    const viewport = viewportFor(sheet);
+    atOverviewRef.current = true;
     map.fitBounds(archiveBounds, {
-      padding: compact
-        ? { top: 42, right: 46, bottom: 118, left: 46 }
-        : { top: 58, right: 68, bottom: 58, left: 68 },
-      maxZoom: compact ? 4.15 : 3.7,
-      duration: prefersReduced ? 0 : duration,
-      essential: !prefersReduced,
+      padding: viewport.compact
+        ? { top: 56, right: 40, bottom: (viewport.sheet ?? 78) + 44, left: 48 }
+        : { top: 58, right: 108, bottom: 58, left: 68 },
+      maxZoom: viewport.compact ? 3.6 : 3.7,
+      duration: reduceRef.current ? 0 : duration,
+      easing: TRAVEL_EASE,
+      essential: true,
       retainPadding: false,
-    });
-  }, [archiveBounds, prefersReduced]);
+    }, token ? { travelFlight: token } : undefined);
+  }, [archiveBounds, viewportFor]);
 
-  // City details occupy the lower part of the mobile map. Frame the selected
-  // coordinates inside the remaining visible map, including very short
-  // landscape screens, instead of centering them behind the sheet.
-  const mobileFocusCamera = useCallback(() => {
-    if (!window.matchMedia('(max-width: 1023px)').matches) return {};
-    const mapHeight = mapRef.current?.getMap().getContainer().clientHeight || window.innerHeight;
-    // Match the 62svh detail-sheet ceiling while preserving a useful map
-    // horizon even on short landscape screens.
-    const visibleMap = 72;
-    const sheetHeight = Math.min(window.innerHeight * 0.62, Math.max(78, mapHeight - visibleMap));
-    const top = mapHeight <= 280 ? 12 : 24;
-    const bottom = Math.min(mapHeight - top - 28, Math.round(sheetHeight + 12));
-    return {
-      padding: { top, right: 24, bottom: Math.max(78, bottom), left: 24 },
-      retainPadding: false,
-    };
+  // The one landing every path uses (travelSilver.landingCamera).
+  const flyToChapter = useCallback((chapter: TravelChapter, jump = false) => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const viewport = viewportFor('detail');
+    const camera = landingCamera(chapter, viewport);
+    const centre = map.getCenter();
+    const duration = jump || reduceRef.current ? 0 : flightMs(greatCircleKm([centre.lng, centre.lat], camera.center));
+    atOverviewRef.current = false;
+    const container: HTMLElement = map.getContainer();
+    const size = { width: container.clientWidth, height: container.clientHeight };
+    const points = leads.map((lngLat) => projectAround(lngLat, camera, size));
+    const legs = routeGeo.features.map((leg) => leg.geometry.coordinates.map((coordinate) => projectAround(coordinate as [number, number], camera, size)));
+    prepareLabels({ points, groups: calloutGroups(points, groupsRef.current), focus: chapters.indexOf(chapter), legs });
+    const token = beginFlight(chapter.slug, duration);
+    if (duration === 0) map.jumpTo({ ...camera, retainPadding: false }, { travelFlight: token });
+    else map.flyTo({ ...camera, duration, curve: FLIGHT_CURVE, easing: TRAVEL_EASE, essential: true, retainPadding: false }, { travelFlight: token });
+  }, [beginFlight, chapters, leads, prepareLabels, routeGeo, viewportFor]);
+
+  const updatePlaceUrl = useCallback((chapter: TravelChapter | null) => {
+    const url = new URL(window.location.href);
+    if (chapter) url.searchParams.set('place', chapter.slug);
+    else url.searchParams.delete('place');
+    url.hash = 'atlas-map';
+    // Keep Astro's history index and scroll metadata while updating the map URL.
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }, []);
+
+  const selectChapter = useCallback((slug: string, jump = false) => {
+    const chapter = bySlug.get(slug);
+    if (!chapter) return;
+    const from = landedRef.current && landedRef.current !== slug ? landedRef.current : null;
+    selectedRef.current = slug;
+    landedRef.current = null;
+    setSelectedSlug(slug);
+    setLandedSlug(null);
+    setArrivedSlug(null);
+    setLandmarkSlug(null);
+    setFlight(jump || reduceRef.current ? null : { from, to: slug });
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      sheetFramedRef.current = 'detail';
+      setMobileSheet('detail');
+    }
+    updatePlaceUrl(chapter);
+    flyToChapter(chapter, jump);
+  }, [bySlug, flyToChapter, updatePlaceUrl]);
+
+  const deselect = useCallback((focusMap = false) => {
+    if (!selectedRef.current) return;
+    selectedRef.current = null;
+    landedRef.current = null;
+    setSelectedSlug(null);
+    setLandedSlug(null);
+    setArrivedSlug(null);
+    setLandmarkSlug(null);
+    setFlight(null);
+    sheetFramedRef.current = 'peek';
+    setMobileSheet('peek');
+    updatePlaceUrl(null);
+    prepareLabels({ points: null, groups: overviewGroupsRef.current });
+    frameArchiveOverview(OVERVIEW_MS, beginFlight(null, OVERVIEW_MS));
+    // A lime focus ring never lingers on a row that is no longer chosen.
+    if (focusMap) workspaceRef.current?.focus({ preventScroll: true });
+  }, [beginFlight, frameArchiveOverview, prepareLabels, updatePlaceUrl]);
+
+  // A chapter chosen again from the index is put back (on the phone, its
+  // ticket comes back up instead).
+  const handleRowSelect = useCallback((slug: string) => {
+    if (selectedRef.current !== slug) selectChapter(slug);
+    else if (window.matchMedia('(max-width: 1023px)').matches) setMobileSheet('detail');
+    else deselect();
+  }, [deselect, selectChapter]);
+
+  /** Marks standing together in a callout open as a group, in one click:
+   *  the camera fits them so the next view shows them apart. */
+  const fitGroup = useCallback((members: number[]) => {
+    const map = mapRef.current?.getMap();
+    if (!map || members.length < 2) return;
+    const points = members.map((index) => leads[index]);
+    const bounds: [[number, number], [number, number]] = [
+      [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1]))],
+      [Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))],
+    ];
+    const compact = window.matchMedia('(max-width: 1023px)').matches;
+    const centre = map.getCenter();
+    const mid: [number, number] = [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2];
+    const duration = reduceRef.current ? 0 : flightMs(greatCircleKm([centre.lng, centre.lat], mid));
+    atOverviewRef.current = false;
+    const token = beginFlight(null, duration);
+    map.fitBounds(bounds, {
+      padding: compact ? { top: 90, right: 70, bottom: 150, left: 70 } : { top: 150, right: 200, bottom: 150, left: 160 },
+      maxZoom: 7.4,
+      duration,
+      easing: TRAVEL_EASE,
+      essential: true,
+      retainPadding: false,
+    }, { travelFlight: token });
+  }, [beginFlight, leads]);
+
+  const handleMark = useCallback((slug: string) => {
+    const index = chapters.findIndex((chapter) => chapter.slug === slug);
+    const group = groupsRef.current?.find((members) => members.includes(index));
+    if (group && group.length > 1 && selectedRef.current !== slug) fitGroup(group);
+    else selectChapter(slug);
+  }, [chapters, fitGroup, selectChapter]);
+  const handleName = useCallback((slug: string) => selectChapter(slug), [selectChapter]);
+  const handleHover = useCallback((slug: string | null) => setHoveredSlug(slug), []);
+
+  // ── Into the story ──
+  // The ticket's photograph grows into the story across the page change (a
+  // view transition), over the map it was chosen on, to full bleed; holds
+  // there a beat; and gives way to the story's front page, which holds from
+  // then (travelPlate.ts) — a homepage plate's landing, from a ticket. The
+  // growing plate is the full-size cover (warmed from the ticket's hover,
+  // focus or press), in a box of the photograph's own ratio that covers the
+  // viewport: the ticket's print and the plate are the same picture at the
+  // same ratio, so the grow is one uniform scale and the sharp plate comes
+  // up over the ticket's print pixel for pixel in the first part of it. It
+  // used to carry the ticket's 171px print alone, blown up ten times to the
+  // screen with its perforation, fading out before it got there, over a
+  // page that had already cut to the story. When the full-size cover is not
+  // in yet, the stand-in plane is transparent and the ticket's print gives
+  // way to the story as before (html[data-travel-plate-blank]). The stub is
+  // not carried: a story's kept stub arrives only once the story has loaded
+  // (owner, 2026-09-27).
+  const handleOpenTicket = useCallback((photo: HTMLElement, event: ReactMouseEvent<HTMLAnchorElement>, chapter: TravelChapter) => {
+    if (reduceRef.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    photo.style.viewTransitionName = 'travel-plate';
+    const print = warmPlate(chapter.coverUrl);
+    const story = `/works/${chapter.slug}`;
+    let transition: { ready: Promise<void>; finished: Promise<void> } | null = null;
+    // One hand-off at a time: a second click on the ticket while its story
+    // loads (a double click) would otherwise add a second stand-in plane of
+    // the same name, and a view transition with two is abandoned.
+    pendingPlateHandoff?.();
+    const stop = () => {
+      document.removeEventListener('astro:before-swap', onBeforeSwap);
+      document.removeEventListener('astro:after-swap', onAfterSwap);
+      if (pendingPlateHandoff === stop) pendingPlateHandoff = null;
+    };
+    pendingPlateHandoff = stop;
+    const onBeforeSwap = (swap: Event) => {
+      const to = (swap as Event & { to?: URL }).to;
+      // Another page change than this story's (the click was overtaken).
+      if (!to || to.pathname.replace(/\/$/, '') !== story) {
+        stop();
+        return;
+      }
+      transition = (swap as Event & { viewTransition?: typeof transition }).viewTransition ?? null;
+    };
+    const onAfterSwap = () => {
+      stop();
+      const root = document.documentElement;
+      const plane = document.createElement('div');
+      plane.setAttribute('data-travel-plate', '');
+      plane.setAttribute('aria-hidden', 'true');
+      const ready = !!print && print.complete && print.naturalWidth > 0;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const ratio = chapter.coverRatio > 0 ? chapter.coverRatio : width / height;
+      const w = ratio < width / height ? width : height * ratio;
+      const h = w / ratio;
+      plane.style.cssText = ready
+        ? `position:fixed;left:${(width - w) / 2}px;top:${(height - h) / 2}px;width:${w}px;height:${h}px;z-index:120;pointer-events:none;view-transition-name:travel-plate`
+        : 'position:fixed;inset:0;pointer-events:none;view-transition-name:travel-plate';
+      if (ready && print) {
+        print.alt = '';
+        print.draggable = false;
+        // Drawn in the frame it is inserted in: the new page's snapshot is
+        // taken right after this.
+        print.decoding = 'sync';
+        print.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover';
+        plane.appendChild(print);
+      }
+      document.body.appendChild(plane);
+      const grown = DUR_MS.grow + TRAVEL_PLATE_HOLD_MS;
+      if (ready) markTravelPlate(performance.now() + grown + 32);
+      else root.setAttribute('data-travel-plate-blank', '');
+      const release = () => {
+        root.removeAttribute('data-travel-plate-blank');
+        if (!ready) {
+          plane.remove();
+          return;
+        }
+        markTravelPlate(performance.now() + TRAVEL_PLATE_HOLD_MS);
+        const fade = plane.animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: TRAVEL_PLATE_RELEASE_MS,
+          delay: TRAVEL_PLATE_HOLD_MS,
+          easing: CSS_EASE.fade,
+          fill: 'forwards',
+        });
+        fade.finished.catch(() => undefined).then(() => {
+          plane.remove();
+          clearTravelPlate();
+        });
+      };
+      if (!transition) {
+        release();
+        return;
+      }
+      transition.ready.then(() => { if (ready) markTravelPlate(performance.now() + grown); }, () => undefined);
+      transition.finished.then(release, release);
+    };
+    document.addEventListener('astro:before-swap', onBeforeSwap);
+    document.addEventListener('astro:after-swap', onAfterSwap);
+  }, []);
+
+  // ── The map's own events ──
+  const handleMoveEnd = useCallback((event: any) => {
+    const map = event.target;
+    setContextType(true);
+    updateCollar(map);
+    const tagged = event.travelFlight;
+    let landedNow: string | null = null;
+    if (tagged !== undefined && tagged === flightTokenRef.current) {
+      setFlight(null);
+      const slug = flightSlugRef.current;
+      flightSlugRef.current = null;
+      if (slug && slug === selectedRef.current) {
+        landedNow = slug;
+        const elapsed = performance.now() - flightStartRef.current;
+        const duration = flightDurationRef.current;
+        if (!reduceRef.current && duration > 0 && elapsed >= duration - FLIGHT_LANDED_SLACK_MS) setArrivedSlug(slug);
+      }
+    }
+    if (landedNow) {
+      landedRef.current = landedNow;
+      setLandedSlug(landedNow);
+      const index = chapters.findIndex((chapter) => chapter.slug === landedNow);
+      if (index >= 0) landmarkSideRef.current[landedNow] = landmarkSideFor(map, index);
+    }
+    const landed = landedRef.current && landedRef.current === selectedRef.current ? landedRef.current : null;
+    const shown = landed && map.getZoom() >= LANDMARK_MIN_ZOOM ? landed : null;
+    setLandmarkSlug((current) => (current === shown ? current : shown));
+    layoutLabels(map);
+  }, [chapters, landmarkSideFor, layoutLabels, setContextType, updateCollar]);
+  const moveEndRef = useRef(handleMoveEnd);
+  moveEndRef.current = handleMoveEnd;
+
+  // The archive's own layers: the route under the rings, the rings, and the
+  // keep-out that stops the basemap setting a word on a mark.
+  const addArchiveLayers = useCallback((map: any) => {
+    const firstSymbol = map.getStyle()?.layers?.find((layer: any) => layer.type === 'symbol' && layer.layout?.visibility !== 'none')?.id;
+    const fade = { duration: reduceRef.current ? 0 : 520, delay: 0 };
+    if (!map.getSource('travel-route')) map.addSource('travel-route', { type: 'geojson', data: routeGeo });
+    if (!map.getSource('travel-places')) map.addSource('travel-places', { type: 'geojson', data: placesGeo });
+    // The route: the homepage atlas's dashed white leg, [3, 4], on a burn
+    // casing so it reads over bright rock as well as water. A chosen
+    // chapter's legs are overdrawn at full ink on two layers that take turns
+    // (a constant opacity transitions; a data-driven one would snap).
+    const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
+    const add = (layer: any) => { if (!map.getLayer(layer.id)) map.addLayer(layer, firstSymbol); };
+    add({ id: 'travel-route-casing', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_BURN, 'line-width': 4, 'line-blur': 3, 'line-opacity': 0.34 } });
+    ([0, 1] as const).forEach((slot) => add({
+      id: `travel-route-lit-casing-${slot}`,
+      type: 'line',
+      source: 'travel-route',
+      filter: ['==', ['get', 'from'], -1],
+      layout: lineLayout,
+      paint: { 'line-color': MAP_BURN, 'line-width': 4.5, 'line-blur': 3, 'line-opacity': 0, 'line-opacity-transition': fade },
+    }));
+    add({ id: 'travel-route-line', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0.62, 'line-opacity-transition': fade } });
+    ([0, 1] as const).forEach((slot) => add({
+      id: `travel-route-lit-${slot}`,
+      type: 'line',
+      source: 'travel-route',
+      filter: ['==', ['get', 'from'], -1],
+      layout: lineLayout,
+      paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0, 'line-opacity-transition': fade },
+    }));
+    // The places: every place printed as the homepage atlas prints one — a
+    // dot of white ink with a hard knockout of burn round it (no blur, no
+    // ring), upright to the viewer. The chosen chapter's lead place hands its
+    // dot to the DOM mark (where it can be struck); its other places keep
+    // theirs at full ink while the rest of the field dims. Dimmed by COLOUR,
+    // never by alpha, so the route's dashes do not show through a dot, and on
+    // constant values, which transition (data-driven paint would snap). The
+    // ids keep their old name, `travel-rings`.
+    const dot = {
+      'circle-radius': 3,
+      'circle-color': MAP_INK,
+      'circle-color-transition': { duration: reduceRef.current ? 0 : 320, delay: 0 },
+      'circle-stroke-color': MAP_BURN,
+      'circle-stroke-width': 1.5,
+      'circle-stroke-opacity': 0.88,
+      'circle-pitch-alignment': 'viewport',
+      'circle-emissive-strength': 1,
+    };
+    add({ id: 'travel-rings', type: 'circle', source: 'travel-places', paint: dot });
+    add({ id: 'travel-rings-own', type: 'circle', source: 'travel-places', filter: ['==', ['get', 'chapter'], -1], paint: dot });
+    // Keep-out: an invisible icon as big as a mark, its name and its
+    // landmark, placed first (the topmost symbol layer), so the basemap can
+    // no longer set "Hialeah" under Miami's name or "Kayenta" on Page.
+    if (!map.hasImage(KEEP_OUT.id)) {
+      map.addImage(KEEP_OUT.id, { width: KEEP_OUT.width, height: KEEP_OUT.height, data: new Uint8Array(KEEP_OUT.width * KEEP_OUT.height * 4) });
+    }
+    if (!map.getLayer(KEEP_OUT.id)) {
+      map.addLayer({
+        id: KEEP_OUT.id,
+        type: 'symbol',
+        source: 'travel-places',
+        layout: { 'icon-image': KEEP_OUT.id, 'icon-allow-overlap': true, 'icon-ignore-placement': false, 'icon-offset': [0, KEEP_OUT.offsetY] },
+        paint: { 'icon-opacity': 0 },
+      });
+    }
+  }, [placesGeo, routeGeo]);
 
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
     const finish = () => {
-      applyGlobeSettings(map);
-      gradeAtlasBasemap(map);
-      silenceArchivePlaceLabels(map, archiveNamesRef.current);
+      map.setProjection('globe');
+      if (window.matchMedia('(pointer: coarse)').matches) map.touchZoomRotate.disableRotation();
+      applySilverGround(map);
+      silenceArchivePlaceLabels(map, archiveNames);
+      addArchiveLayers(map);
+      // The key light: the print lit from the upper left, like the globe —
+      // over the canvas, under every DOM mark, at no GPU cost.
+      const canvas = map.getCanvas();
+      if (!canvas.parentElement?.querySelector('.travel-key-light')) {
+        const light = document.createElement('div');
+        light.className = 'travel-key-light';
+        light.setAttribute('aria-hidden', 'true');
+        canvas.after(light);
+      }
+      // The place grade, written as plain numbers when they change.
+      let lastBrightness = -1;
+      const grade = () => {
+        const { brightness, contrast } = placeGrade(map.getZoom());
+        if (brightness === lastBrightness) return;
+        lastBrightness = brightness;
+        map.setPaintProperty(TRAVEL_SATELLITE.layer, 'raster-brightness-max', brightness);
+        map.setPaintProperty(TRAVEL_SATELLITE.layer, 'raster-contrast', contrast);
+      };
+      grade();
+      map.on('zoom', grade);
+      map.on('moveend', (event: any) => moveEndRef.current(event));
+      // A hand on the map takes the camera: the flight it stopped lands nowhere.
+      map.on('dragstart', () => { flightSlugRef.current = null; atOverviewRef.current = false; });
+      map.on('zoomstart', (event: any) => {
+        if (!event.originalEvent) return;
+        flightSlugRef.current = null;
+        atOverviewRef.current = false;
+      });
       frameArchiveOverview(0);
       atlasStyleReadyRef.current = true;
+      setLayersReady(true);
       setMapLoadFailed(false);
     };
     if (map.isStyleLoaded()) finish();
     else map.once('style.load', finish);
-  }, [applyGlobeSettings, frameArchiveOverview]);
+  }, [addArchiveLayers, archiveNames, frameArchiveOverview]);
 
   const handleMapIdle = useCallback(() => {
     if (!atlasStyleReadyRef.current || atlasReadySignaledRef.current) return;
@@ -776,42 +880,75 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
     setMapReady(true);
     document.documentElement.dataset.atlasReady = 'true';
     window.dispatchEvent(new CustomEvent('gallery:atlas-ready'));
-  }, []);
+    const map = mapRef.current?.getMap();
+    if (map) {
+      layoutLabels(map);
+      updateCollar(map);
+    }
+  }, [layoutLabels, updateCollar]);
 
-  // Mapbox does not automatically recompute its canvas or camera padding when
-  // a phone rotates while staying inside the mobile breakpoint. Coalesce the
-  // resize/orientation burst into one frame, resize the canvas, then reframe
-  // the current selection (or the archive overview when nothing is selected).
+  // The names are measured in their own faces: once the webfonts are in,
+  // lay them out again.
+  useEffect(() => {
+    if (!mapReady || !document.fonts) return;
+    let live = true;
+    document.fonts.ready.then(() => {
+      const map = mapRef.current?.getMap();
+      if (live && map && !map.isMoving()) layoutLabels(map);
+    });
+    return () => { live = false; };
+  }, [layoutLabels, mapReady]);
+
+  // The chosen chapter on the canvas: its lead dot handed to the DOM mark,
+  // its other places at full ink, the rest of the field dimmed, and its legs
+  // of the route lit.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !layersReady) return;
+    const index = chapters.findIndex((chapter) => chapter.slug === selectedSlug);
+    const chapterNo = index >= 0 ? index + 1 : -1;
+    map.setFilter('travel-rings', chapterNo > 0 ? ['!=', ['get', 'chapter'], chapterNo] : null);
+    map.setFilter('travel-rings-own', ['all', ['==', ['get', 'chapter'], chapterNo], ['!', ['get', 'lead']]]);
+    map.setPaintProperty('travel-rings', 'circle-color', chapterNo > 0 ? MAP_INK_DIM : MAP_INK);
+    map.setPaintProperty('travel-route-line', 'line-opacity', chapterNo > 0 ? 0.4 : 0.62);
+    const lit = litRef.current;
+    if (lit.chapters[lit.live] === chapterNo) return;
+    const next: 0 | 1 = lit.live === 0 ? 1 : 0;
+    const legs = ['any', ['==', ['get', 'from'], chapterNo], ['==', ['get', 'to'], chapterNo]];
+    map.setFilter(`travel-route-lit-${next}`, legs);
+    map.setFilter(`travel-route-lit-casing-${next}`, legs);
+    map.setPaintProperty(`travel-route-lit-${next}`, 'line-opacity', chapterNo > 0 ? 0.94 : 0);
+    map.setPaintProperty(`travel-route-lit-casing-${next}`, 'line-opacity', chapterNo > 0 ? 0.3 : 0);
+    map.setPaintProperty(`travel-route-lit-${lit.live}`, 'line-opacity', 0);
+    map.setPaintProperty(`travel-route-lit-casing-${lit.live}`, 'line-opacity', 0);
+    lit.chapters[next] = chapterNo;
+    lit.live = next;
+  }, [chapters, layersReady, selectedSlug]);
+
+  // Mapbox does not recompute its canvas or camera padding when a phone
+  // rotates inside the mobile breakpoint. Coalesce the burst into one frame,
+  // resize, then reframe the chosen chapter (or the archive).
   useEffect(() => {
     if (!mapReady) return;
-
     let resizeFrame = 0;
     const reframe = () => {
       resizeFrame = 0;
       const map = mapRef.current?.getMap();
       if (!map) return;
-
       map.stop();
       map.resize();
-
-      const selected = activeClusterRef.current;
+      const selected = selectedRef.current ? bySlug.get(selectedRef.current) : null;
       if (selected) {
-        map.easeTo({
-          center: [selected.lng, selected.lat],
-          zoom: map.getZoom(),
-          duration: 0,
-          essential: false,
-          ...mobileFocusCamera(),
-        });
+        const camera = landingCamera(selected, viewportFor(mobileSheetRef.current));
+        map.jumpTo({ center: camera.center, zoom: map.getZoom(), padding: camera.padding, retainPadding: false });
       } else {
-        frameArchiveOverview(0);
+        frameArchiveOverview(0, undefined, mobileSheetRef.current);
       }
     };
     const scheduleReframe = () => {
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
       resizeFrame = window.requestAnimationFrame(reframe);
     };
-
     window.addEventListener('resize', scheduleReframe, { passive: true });
     window.addEventListener('orientationchange', scheduleReframe, { passive: true });
     return () => {
@@ -819,154 +956,65 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       window.removeEventListener('resize', scheduleReframe);
       window.removeEventListener('orientationchange', scheduleReframe);
     };
-  }, [frameArchiveOverview, mapReady, mobileFocusCamera]);
+  }, [bySlug, frameArchiveOverview, mapReady, viewportFor]);
 
-  const updatePlaceUrl = useCallback((cluster: LocationCluster | null) => {
-    const url = new URL(window.location.href);
-    if (cluster) url.searchParams.set('place', cluster.photos[0]?.collection?.slug || slugifyPlace(cluster.city));
-    else url.searchParams.delete('place');
-    url.hash = 'atlas-map';
-    // Keep Astro's history index and scroll metadata while updating the map URL.
-    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }, []);
-
-  // Cluster click. The index now contains one point per city, so every cluster
-  // is geographic rather than a stack of frames at one GPS coordinate.
-  const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
-    // A cluster has no single destination marker, so nothing here earns an
-    // arrival ring — and it must not inherit one from an earlier selection.
-    beginFlight(null);
-    let leaves: any[] = [];
-    try { leaves = clusterIndex.getLeaves(clusterId, Infinity); } catch { leaves = []; }
-    const citiesInCluster = Array.from(new Set(
-      leaves.map((leaf) => cityClusters[leaf.properties.cityIndex]?.city).filter(Boolean),
-    ));
-
-    if (citiesInCluster.length === 1) {
-      const cluster = cityClusters.find((c) => c.city === citiesInCluster[0]) || null;
-      if (cluster) {
-        mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: Math.max(viewState.zoom, 7), duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, curve: 1.42, ...mobileFocusCamera() });
-        setActiveCluster(cluster);
-        setActiveClusterCity(cluster.city);
-        setExpandedRegion(cluster.region || getRegion(cluster.country));
-        if (mobileLayout) setMobileSheet('detail');
-        updatePlaceUrl(cluster);
-        return;
-      }
-    }
-
-    // Multi-city (or unresolved) cluster → expand toward its break-apart zoom.
-    try {
-      const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
-      const targetZoom = Math.min(expansionZoom, viewState.zoom + 3.5, 16);
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: targetZoom, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, curve: 1.42, speed: 0.8 });
-    } catch {
-      mapRef.current?.flyTo({ center: [lng, lat], zoom: viewState.zoom + 2, duration: prefersReduced ? 0 : 1000, essential: !prefersReduced });
-    }
-    setActiveCluster(null);
-    setActiveClusterCity(null);
-    if (mobileLayout) setMobileSheet('peek');
-    updatePlaceUrl(null);
-  }, [beginFlight, clusterIndex, viewState.zoom, cityClusters, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
-
-  // A direct map point always represents a city, matching the sidebar and URL.
-  const handleMapCityClick = useCallback((cluster: LocationCluster) => {
-    const city = cluster.city;
-    setActiveCluster(cluster);
-    setActiveClusterCity(city);
-    setExpandedRegion(cluster.region || getRegion(cluster.country));
-    if (mobileLayout) setMobileSheet('detail');
-    updatePlaceUrl(cluster);
-    // Gentle centre, using the same averaged coordinate as the marker itself.
-    const targetZoom = Math.max(viewState.zoom, 6);
-    beginFlight(prefersReduced ? null : city);
-    mapRef.current?.flyTo({
-      center: [cluster.lng, cluster.lat],
-      zoom: targetZoom,
-      duration: prefersReduced ? 0 : 1000,
-      essential: !prefersReduced,
-      ...mobileFocusCamera(),
-    });
-    // Wait for AnimatePresence region expand (300ms) before scrolling
-    setTimeout(() => {
-      const el = document.getElementById(`sidebar-city-${city.replace(/\s+/g, '-')}`);
-      el?.scrollIntoView({ behavior: prefersReduced ? 'auto' : 'smooth', block: 'nearest' });
-    }, 400);
-  }, [beginFlight, viewState.zoom, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
-
-  // Sidebar city click
-  const handleCityClick = useCallback((cluster: LocationCluster) => {
-    if (mobileLayout) {
-      setActiveClusterCity(cluster.city);
-      setActiveCluster(cluster);
-      setExpandedRegion(cluster.region || getRegion(cluster.country));
-      setMobileSheet('detail');
-      updatePlaceUrl(cluster);
-      beginFlight(prefersReduced ? null : cluster.city);
-      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced, ...mobileFocusCamera() });
+  // Phone: every change of the sheet frames what it leaves of the map — the
+  // chosen chapter over the sheet's edge, or the whole archive above it. The
+  // camera used to stay put, and closing the detail sheet left the place
+  // pinned under the masthead over an empty map.
+  useEffect(() => {
+    if (!mapReady || !mobileLayout) return;
+    if (sheetFramedRef.current === mobileSheet) return;
+    sheetFramedRef.current = mobileSheet;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const selected = selectedRef.current ? bySlug.get(selectedRef.current) : null;
+    if (!selected) {
+      frameArchiveOverview(SHEET_REFRAME_MS, beginFlight(null, SHEET_REFRAME_MS), mobileSheet);
       return;
     }
-    const isSame = activeClusterCity === cluster.city;
-    setActiveClusterCity(isSame ? null : cluster.city);
-    setActiveCluster(isSame ? null : cluster);
-    if (!isSame) setExpandedRegion(cluster.region || getRegion(cluster.country));
-    if (!isSame) {
-      beginFlight(prefersReduced ? null : cluster.city);
-      mapRef.current?.flyTo({ center: [cluster.lng, cluster.lat], zoom: 7, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced });
-    } else {
-      beginFlight(null);
-    }
-    updatePlaceUrl(isSame ? null : cluster);
-  }, [activeClusterCity, beginFlight, mobileLayout, mobileFocusCamera, prefersReduced, updatePlaceUrl]);
+    const camera = landingCamera(selected, viewportFor(mobileSheet));
+    map.easeTo({
+      center: camera.center,
+      padding: camera.padding,
+      duration: reduceRef.current ? 0 : SHEET_REFRAME_MS,
+      easing: ARRIVE_EASE,
+      essential: true,
+      retainPadding: false,
+    });
+  }, [beginFlight, bySlug, frameArchiveOverview, mapReady, mobileLayout, mobileSheet, viewportFor]);
 
-  // Accept stable place deep links from Home, while retaining the earlier
-  // coordinate hash used by story mini-maps.
+  // Accept stable place deep links from Home (`?place=`), and the older
+  // coordinate hash story mini-maps used (`#loc=lat,lng,zoom`).
   useEffect(() => {
     if (!mapReady) return;
     const goToRequestedPlace = () => {
       const place = new URLSearchParams(window.location.search).get('place');
       if (place) {
-        const match = cityClusters.find((cluster) => clusterMatchesPlace(cluster, slugifyPlace(place)));
+        const wanted = slugifyPlace(place);
+        const match = chapters.find((chapter) => chapter.slug === wanted
+          || chapter.places.some((entry) => slugifyPlace(entry.city) === wanted));
         if (!match) return;
-        setActiveClusterCity(match.city);
-        setActiveCluster(match);
-        setExpandedRegion(match.region || getRegion(match.country));
-        if (mobileLayout) setMobileSheet('detail');
-        const initialPlace = !initialPlaceAppliedRef.current;
+        const initial = !initialPlaceAppliedRef.current;
         initialPlaceAppliedRef.current = true;
-        const camera = { center: [match.lng, match.lat] as [number, number], zoom: 7, ...mobileFocusCamera() };
-        if (initialPlace) mapRef.current?.jumpTo(camera);
-        else mapRef.current?.flyTo({ ...camera, duration: prefersReduced ? 0 : 1150, essential: !prefersReduced });
+        if (!initial && selectedRef.current === match.slug) return;
+        // Opened already on the place: nothing flies, so nothing rings, but
+        // the camera is there.
+        selectChapter(match.slug, initial);
         return;
       }
-
+      initialPlaceAppliedRef.current = true;
       const hash = window.location.hash;
       if (!hash.startsWith('#loc=')) return;
-      const parts = hash.replace('#loc=', '').split(',');
-      if (parts.length < 2) return;
-      const lat = parseFloat(parts[0]);
-      const lng = parseFloat(parts[1]);
-      const zoom = parts[2] ? parseFloat(parts[2]) : 8;
-      if (isNaN(lat) || isNaN(lng)) return;
-      let closest: LocationCluster | null = null;
+      const [lat, lng] = hash.replace('#loc=', '').split(',').map(parseFloat);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+      let closest = -1;
       let minDist = Infinity;
-      for (const cluster of cityClusters) {
-        const distance = Math.abs(cluster.lat - lat) + Math.abs(cluster.lng - lng);
-        if (distance < minDist) { minDist = distance; closest = cluster; }
-      }
-      if (closest && minDist < 2) {
-        setActiveClusterCity(closest.city);
-        setActiveCluster(closest);
-        setExpandedRegion(closest.region || getRegion(closest.country));
-        if (mobileLayout) setMobileSheet('detail');
-        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: prefersReduced ? 0 : 1350, essential: !prefersReduced, ...mobileFocusCamera() });
-        const url = new URL(window.location.href);
-        url.searchParams.set('place', closest.photos[0]?.collection?.slug || slugifyPlace(closest.city));
-        url.hash = 'atlas-map';
-        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-      } else {
-        mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: prefersReduced ? 0 : 1350, essential: !prefersReduced });
-      }
+      leads.forEach(([placeLng, placeLat], index) => {
+        const distance = Math.abs(placeLat - lat) + Math.abs(placeLng - lng);
+        if (distance < minDist) { minDist = distance; closest = index; }
+      });
+      if (closest >= 0 && minDist < 2) selectChapter(chapters[closest].slug);
     };
     goToRequestedPlace();
     window.addEventListener('hashchange', goToRequestedPlace);
@@ -975,61 +1023,79 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
       window.removeEventListener('hashchange', goToRequestedPlace);
       window.removeEventListener('popstate', goToRequestedPlace);
     };
-  }, [cityClusters, mapReady, mobileLayout, mobileFocusCamera, prefersReduced]);
+  }, [chapters, leads, mapReady, selectChapter]);
 
   const resetView = useCallback(() => {
-    frameArchiveOverview(1100);
-    setActiveCluster(null);
-    setActiveClusterCity(null);
-    setMobileSheet('peek');
-    updatePlaceUrl(null);
-  }, [frameArchiveOverview, updatePlaceUrl]);
+    if (selectedRef.current) deselect();
+    else {
+      frameArchiveOverview(OVERVIEW_MS, beginFlight(null, OVERVIEW_MS), mobileSheetRef.current);
+    }
+  }, [beginFlight, deselect, frameArchiveOverview]);
 
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setActiveCluster(null);
-      setActiveClusterCity(null);
-      setMobileSheet('peek');
-      updatePlaceUrl(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !selectedRef.current) return;
+      deselect(true);
     };
-    window.addEventListener('keydown', fn);
-    return () => window.removeEventListener('keydown', fn);
-  }, [updatePlaceUrl]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deselect]);
 
-  const isMarkerAvailable = useCallback((lng: number, lat: number) => {
-    const map = mapRef.current?.getMap();
-    if (!mapReady || !map) return false;
+  // The marks, rendered only when something they show changes — never per
+  // frame: Mapbox moves the marker elements itself.
+  const markers = useMemo(() => chapters.map((chapter, index) => {
+    const [lng, lat] = leads[index];
+    const selected = selectedSlug === chapter.slug;
+    const hovered = hoveredSlug === chapter.slug;
+    const placement = labels.placements[index] ?? REST_PLACEMENT;
+    const members = placement.group ? placement.group.split('-').map(Number) : null;
+    const groupLabel = members && !selected
+      ? `Show ${members.map((member) => chapters[member]?.name).filter(Boolean).join(', ')}`
+      : null;
+    return (
+      <Marker
+        key={chapter.slug}
+        longitude={lng}
+        latitude={lat}
+        anchor="center"
+        style={{ zIndex: selected ? 3 : hovered ? 2 : 1 }}
+      >
+        <TravelMark
+          chapter={chapter}
+          total={chapters.length}
+          selected={selected}
+          hovered={hovered}
+          dimmed={!!selectedSlug && !selected && !hovered}
+          arrived={arrivedSlug === chapter.slug}
+          landmarkShown={landmarkSlug === chapter.slug}
+          landmarkSide={landmarkSideRef.current[chapter.slug] ?? 'above'}
+          placement={placement}
+          labelHidden={labels.hidden[index] ?? false}
+          groupLabel={groupLabel}
+          reduce={prefersReduced}
+          onMark={handleMark}
+          onName={handleName}
+          onHover={handleHover}
+        />
+      </Marker>
+    );
+  }), [arrivedSlug, chapters, handleHover, handleMark, handleName, hoveredSlug, labels, landmarkSlug, leads, prefersReduced, selectedSlug]);
 
-    const container = map.getContainer();
-    const point = map.project([lng, lat]);
-    const insideViewport = map.getBounds().contains([lng, lat])
-      && point.x >= 0
-      && point.x <= container.clientWidth
-      && point.y >= 0
-      && point.y <= container.clientHeight;
-    if (!insideViewport) return false;
-    if (!mobileLayout) return true;
-
-    const sheetHeight = mobileSheet === 'peek'
-      ? 78
-      : Math.min(
-          window.innerHeight * (mobileSheet === 'detail' ? 0.62 : 0.48),
-          Math.max(78, container.clientHeight - 72),
-        );
-
-    return point.y < container.clientHeight - sheetHeight - 8;
-  }, [clusterZoom, mapReady, mobileLayout, mobileSheet, viewState]);
+  const selectedChapter = selectedSlug ? bySlug.get(selectedSlug) ?? null : null;
+  const years = useMemo(() => {
+    const values = [...new Set(chapters.map((chapter) => chapter.year).filter(Boolean))].sort();
+    return values.length > 1 ? `${values[0]}–${values[values.length - 1]}` : values[0] ?? '';
+  }, [chapters]);
 
   if (!mapboxToken) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
-      <span className="mb-4 h-2 w-2 rounded-full bg-[#D2FF00]/70" aria-hidden="true" />
+      <span className="mb-4 h-2 w-2 rounded-full bg-[#F4F4ED]/70" aria-hidden="true" />
       <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas offline</p>
       <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">Map access is not available in this build.</p>
       <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
     </div>
   );
-  if (validPhotos.length === 0) return (
+  if (chapters.length === 0) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
       <span className="mb-4 h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
       <p className="font-serif text-2xl uppercase text-[#F4F4ED]">No coordinates yet</p>
@@ -1040,39 +1106,21 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
 
   return (
     <div className="h-full min-h-0" aria-busy={!mapReady}>
-      {/* translateZ(0) promotes the ENTIRE card (shadow + map + sidebar) to one
-          cached compositor layer, so scrolling the page just translates that
-          layer instead of re-compositing the heavy WebGL region every frame —
-          the key win for constrained compositors (mobile / embedded webviews).
-          Shadow blur trimmed 100px→64px (indistinguishable at 0.45 alpha) to
-          shrink the layer's rasterised bounds. */}
+      {/* translateZ(0) promotes the whole card (map + index) to one cached
+          compositor layer, so a page scroll translates that layer instead of
+          re-compositing the WebGL region every frame. */}
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#151913] shadow-[0_26px_70px_-54px_rgba(7,9,6,0.4)] lg:flex-row lg:rounded-[1.35rem]" style={{ transform: 'translateZ(0)' }}>
         {/* ── Map ── */}
-        {/* translateZ(0) promotes this map region to its own compositor layer.
-            Two payoffs during page scroll: (1) the overlay controls' backdrop-blur
-            samples a LOCAL, static backdrop (the canvas scrolls with them) so the
-            browser caches the filter instead of re-rasterising it every frame, and
-            (2) the whole map region translates as one cached layer. It's an ancestor
-            of the Mapbox canvas — never the canvas itself — so map/marker geometry
-            is untouched. This is a big win for smooth-scrolling back up past the map. */}
-        <div className="atlas-map-workspace relative h-full min-h-0 w-full lg:flex-1" data-mobile-sheet={mobileSheet} style={{ transform: 'translateZ(0)' }}>
+        <div
+          ref={workspaceRef}
+          tabIndex={-1}
+          className="atlas-map-workspace relative h-full min-h-0 w-full lg:flex-1"
+          data-mobile-sheet={mobileSheet}
+          style={{ transform: 'translateZ(0)' }}
+        >
           <MapGL
             initialViewState={FINAL_VIEW}
             ref={mapRef}
-            onZoom={handleMapZoom}
-            onMoveEnd={(event) => {
-              setViewState(event.viewState);
-              pendingClusterZoomRef.current = event.viewState.zoom;
-              setClusterZoom(event.viewState.zoom);
-              setClusterMorphing(false);
-              const landed = flightCityRef.current;
-              if (landed) {
-                flightCityRef.current = null;
-                setArrivedCity(landed);
-              }
-            }}
-            onDragStart={() => { flightCityRef.current = null; }}
-            onZoomStart={(event) => { if (!event.originalEvent) return; flightCityRef.current = null; }}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLE}
             style={{ width: '100%', height: '100%' }}
@@ -1084,364 +1132,41 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             }}
             maxZoom={16}
             minZoom={1.5}
-            onClick={() => {
-              setActiveCluster(null);
-              setActiveClusterCity(null);
-              setMobileSheet('peek');
-              updatePlaceUrl(null);
+            onClick={(event) => {
+              // A click on the ground (not on a mark) puts the chapter back.
+              const target = (event.originalEvent?.target as HTMLElement | null) ?? null;
+              if (target && target.tagName !== 'CANVAS') return;
+              deselect();
             }}
             cooperativeGestures={false}
           >
             <NavigationControl position="bottom-right" showCompass={false} />
             <AttributionControl position="bottom-left" compact />
-
-            {clusters.map((clusterNode) => {
-              const feature = clusterNode.feature;
-              const [lng, lat] = clusterNode.coordinates;
-              const [featureLng, featureLat] = feature.geometry.coordinates;
-              const props = feature.properties;
-              const markerAvailable = isMarkerAvailable(lng, lat);
-              const markerInteractive = clusterNode.interactive && markerAvailable;
-
-              // Bloom outward from the framed centre on the first atlas field
-              // only. Subsequent cluster sets enter immediately while panning
-              // or zooming, so the map always responds without a new stagger.
-              const dx = lng - viewState.longitude;
-              const dy = lat - viewState.latitude;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              // Stable per-marker jitter (0..0.08) hashed from the feature/photo id
-              // so it doesn't change on every render — a fresh Math.random() here
-              // would re-stagger whileHover/exit and cause hover lag + ghosting.
-              const bloomSeed = String(
-                props.cluster ? feature.id : (cityClusters[props.cityIndex ?? -1]?.city ?? feature.id),
-              );
-              let bloomHash = 0;
-              for (let i = 0; i < bloomSeed.length; i++) bloomHash = (bloomHash * 31 + bloomSeed.charCodeAt(i)) & 0xffff;
-              const bloomJitter = (bloomHash % 81) / 1000; // 0..0.08
-              const bloomDelay = playInitialMarkerBloom
-                ? Math.min(dist * 0.006, 0.5) + bloomJitter
-                : 0;
-
-              // ── Cluster ──
-              if (props.cluster) {
-                const count = props.point_count ?? 0;
-                const baseSize = count < 3 ? 38 : count < 6 ? 42 : 46;
-                const size = baseSize + (coarsePointer ? 4 : 0);
-                let clusterCities: string[] = [];
-                let clusterRegions: string[] = [];
-                try {
-                  clusterCities = Array.from(new Set(
-                    clusterIndex
-                      .getLeaves(feature.id as number, Infinity)
-                      .map((leaf: any) => cityClusters[leaf.properties.cityIndex]?.city)
-                      .filter(Boolean),
-                  )) as string[];
-                  clusterRegions = Array.from(new Set(
-                    clusterCities
-                      .map((city) => cityClusters.find((item) => item.city === city))
-                      .filter(Boolean)
-                      .map((item) => item!.region || getRegion(item!.country)),
-                  ));
-                } catch {
-                  clusterCities = [];
-                  clusterRegions = [];
-                }
-                const clusterLabel = clusterRegions.length === 1
-                  ? clusterRegions[0]
-                  : clusterRegions.length > 0 && clusterRegions.every((region) => region === 'Utah' || region === 'Arizona')
-                    ? 'Southwest'
-                    : 'Locations';
-                const isHoveredCluster = hoveredCity != null && clusterCities.includes(hoveredCity);
-                const isActiveCluster = Boolean(
-                  activeCluster
-                  && Math.abs(activeCluster.lng - featureLng) < 0.3
-                  && Math.abs(activeCluster.lat - featureLat) < 0.3,
-                );
-                return (
-                  <Marker
-                    key={clusterNode.key}
-                    longitude={lng}
-                    latitude={lat}
-                    anchor="center"
-                    style={{ zIndex: clusterNode.role === 'child' ? 3 : 2 }}
-                  >
-                    <div
-                      data-atlas-marker-morph={clusterNode.role}
-                      aria-hidden={!markerInteractive}
-                      style={{
-                        opacity: clusterNode.opacity,
-                        transform: `scale(${clusterNode.scale})`,
-                        transformOrigin: 'center',
-                        pointerEvents: markerInteractive ? 'auto' : 'none',
-                        willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
-                      }}
-                    >
-                    <motion.button
-                      type="button"
-                      aria-label={`Explore ${clusterLabel} cluster, ${count} locations`}
-                      tabIndex={markerInteractive ? 0 : -1}
-                      onClick={(event) => { event.stopPropagation(); handleClusterClick(feature.id as number, featureLng, featureLat); }}
-                      className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
-                      style={{ width: size + 18, height: size + 18 }}
-                      initial={prefersReduced || !playInitialMarkerBloom ? false : { opacity: 0, scale: 0.4 }}
-                      animate={{ opacity: activeCluster && !isActiveCluster ? 0.32 : 1, scale: isHoveredCluster ? 1.07 : 1 }}
-                      exit={prefersReduced
-                        ? { opacity: 0, scale: 1, transition: { duration: 0 } }
-                        : { opacity: 0, scale: 0.4, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
-                      transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 22, delay: bloomDelay }}
-                      whileHover={prefersReduced ? undefined : { scale: 1.08, transition: { type: 'spring', stiffness: 320, damping: 22 } }}
-                      whileTap={prefersReduced ? undefined : { scale: 0.94 }}
-                    >
-                      {/* The cluster halo stays still while its geometry morphs.
-                          Breathing is reserved for intentional hover/focus so it
-                          never fights the split trajectory. */}
-                      <div
-                        className={`absolute rounded-full ${isActiveCluster || isHoveredCluster ? 'marker-breathe' : ''}`}
-                        style={{ width: size + 14, height: size + 14, backgroundColor: `rgba(${isActiveCluster || isHoveredCluster ? ACCENT_RGB : DOT_RGB},${isActiveCluster || isHoveredCluster ? 0.2 : 0.12})` }}
-                      />
-                      {/* Inner halo */}
-                      <div
-                        className="absolute rounded-full"
-                        style={{ width: size + 6, height: size + 6, backgroundColor: `rgba(${isActiveCluster || isHoveredCluster ? ACCENT_RGB : DOT_RGB},${isActiveCluster || isHoveredCluster ? 0.24 : 0.18})` }}
-                      />
-                      {/* Core badge */}
-                      <div
-                        className="relative rounded-full flex items-center justify-center font-bold shadow-lg border-[2.5px] border-black/15"
-                        style={{
-                          width: size, height: size,
-                          fontSize: count < 10 ? 12 : 13,
-                          background: isActiveCluster || isHoveredCluster ? ACCENT : DOT,
-                          color: '#20241a',
-                          boxShadow: isActiveCluster || isHoveredCluster
-                            ? `0 0 24px rgba(${ACCENT_RGB},0.38)`
-                            : '0 4px 16px rgba(0,0,0,0.35)',
-                        }}
-                      >
-                        <AnimatePresence mode="wait">
-                          <motion.span
-                            key={count}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: prefersReduced ? 0 : 0.2 }}
-                          >
-                            {count}
-                          </motion.span>
-                        </AnimatePresence>
-                      </div>
-                      {/* A cluster names a place too, so it is set the way the
-                          individual marks are: ink on the ground, not a chip.
-                          The COUNT is the interface object here and keeps its
-                          disc — the name beneath it does not need one as well. */}
-                      <span
-                        className="pointer-events-none absolute left-1/2 top-full mt-1.5 block -translate-x-1/2 whitespace-nowrap font-ui font-medium uppercase"
-                        style={{
-                          fontSize: isActiveCluster || isHoveredCluster ? 10 : 9,
-                          letterSpacing: isActiveCluster || isHoveredCluster ? '0.1em' : '0.12em',
-                          color: isActiveCluster || isHoveredCluster ? '#F4F4ED' : 'rgba(244,244,237,0.72)',
-                          textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
-                          transition: isActiveCluster || isHoveredCluster
-                            ? 'color 200ms cubic-bezier(0.16,1,0.3,1), font-size 200ms cubic-bezier(0.16,1,0.3,1), letter-spacing 200ms cubic-bezier(0.16,1,0.3,1)'
-                            : 'color 420ms cubic-bezier(0.16,1,0.3,1), font-size 420ms cubic-bezier(0.16,1,0.3,1), letter-spacing 420ms cubic-bezier(0.16,1,0.3,1)',
-                        }}
-                      >
-                        {clusterLabel}
-                      </span>
-                    </motion.button>
-                    </div>
-                  </Marker>
-                );
-              }
-
-              // ── Individual city marker ──
-              const city = cityClusters[props.cityIndex ?? -1];
-              if (!city) return null;
-              const isActive = activeCluster?.city === city.city;
-              const isHovered = hoveredCity === city.city;
-              // Active markers sit above map labels; idle markers sit below
-              const markerZ = isActive ? 3 : isHovered ? 2 : 1;
-              const visualContainerSize = isActive ? 52 : isHovered ? 48 : 44;
-              const containerSize = coarsePointer ? Math.max(48, visualContainerSize) : visualContainerSize;
-              const markerCoreSize = isActive ? 22 : isHovered ? 19 : 16;
-              const labelOnLeft = city.lng > -82;
-              const engagedMark = isActive || isHovered;
-
-              return (
-                  <Marker
-                    key={clusterNode.key}
-                    longitude={lng}
-                    latitude={lat}
-                    anchor="center"
-                    style={{ zIndex: markerZ }}
-                  >
-                  <div
-                    data-atlas-marker-morph={clusterNode.role}
-                    aria-hidden={!markerInteractive}
-                    style={{
-                      opacity: clusterNode.opacity,
-                      transform: `scale(${clusterNode.scale})`,
-                      transformOrigin: 'center',
-                      pointerEvents: markerInteractive ? 'auto' : 'none',
-                      willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
-                    }}
-                  >
-                  <motion.button
-                    type="button"
-                    aria-label={`Explore ${city.city}, ${city.photos.length} frames`}
-                    tabIndex={markerInteractive ? 0 : -1}
-                    onClick={(event) => { event.stopPropagation(); handleMapCityClick(city); }}
-                    className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
-                    style={{ width: containerSize, height: containerSize }}
-                    initial={prefersReduced || !playInitialMarkerBloom ? false : { opacity: 0, scale: 0.3 }}
-                    animate={{
-                      // Dim the rest of the field when a city is selected, so
-                      // the active one (and any hovered one) reads as focus.
-                      opacity: activeCluster && !isActive && !isHovered ? 0.35 : 1,
-                      scale: 1,
-                    }}
-                    exit={prefersReduced
-                      ? { opacity: 0, scale: 1, transition: { duration: 0 } }
-                      : { opacity: 0, scale: 0.3, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
-                    transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 24, delay: bloomDelay, opacity: { duration: 0.5 } }}
-                    onMouseEnter={() => setHoveredCity(city.city)}
-                    onMouseLeave={() => setHoveredCity(null)}
-                    onFocus={() => setHoveredCity(city.city)}
-                    onBlur={() => setHoveredCity(null)}
-                  >
-                    {/* Arrival — one thin ring, snapped in and eased out, the
-                        same confirm the homepage atlas gives a landed flight. */}
-                    {!prefersReduced && arrivedCity === city.city && (
-                      <span aria-hidden="true" className="atlas-arrival-ring" />
-                    )}
-
-                    {/* The atlas uses cartographic points; photography is reserved
-                        for the single detail surface. */}
-                    {(isActive || isHovered) && (
-                      <div
-                        className="absolute inset-0 rounded-full transition-colors duration-500"
-                        style={{ backgroundColor: `rgba(${DOT_RGB},${isActive ? 0.18 : 0.1})` }}
-                      />
-                    )}
-
-                    {/* Pulse ring — pings outward while the city is hovered (incl.
-                        from the list), reinforcing the list ↔ map linkage. CSS
-                        keyframes (compositor), not a framer repeat loop; PRM
-                        users get a static ring instead. */}
-                    {isHovered && !isActive && (
-                      prefersReduced ? (
-                        <span
-                          className="absolute inset-0 rounded-full"
-                          style={{ border: `1.5px solid rgba(${DOT_RGB},0.5)` }}
-                        />
-                      ) : (
-                        <span
-                          className="absolute inset-0 rounded-full ping-out"
-                          style={{
-                            border: `1.5px solid rgba(${DOT_RGB},0.65)`,
-                            ['--ping-from' as never]: 0.7,
-                            ['--ping-to' as never]: 1.9,
-                            ['--ping-dur' as never]: '1.3s',
-                          }}
-                        />
-                      )
-                    )}
-                    <div
-                      className="relative rounded-full transition-[width,height,box-shadow,background-color,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                      style={{
-                        width: markerCoreSize,
-                        height: markerCoreSize,
-                        background: isActive ? ACCENT : DOT,
-                        border: `1px solid ${isActive ? 'rgba(210,255,0,0.95)' : 'rgba(231,225,207,0.72)'}`,
-                        boxShadow: isActive
-                          ? `0 0 22px rgba(${ACCENT_RGB},0.66)`
-                          : `0 0 10px rgba(${DOT_RGB},0.2)`,
-                      }}
-                    />
-                    {/* A place says its name in ink. The name used to sit in a
-                        plate — a bordered, background-filled, backdrop-blurred
-                        chip — which is the vocabulary of a UI tooltip, not of a
-                        map: the homepage atlas sets its place names as bare
-                        type over the ground and reads as cartography for it.
-                        (The blur was also the one backdrop-filter on this page
-                        that MOVES with the map, so unlike the overlay controls
-                        it could never be cached by the compositor.) */}
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute top-1/2 block -translate-y-1/2 truncate whitespace-nowrap font-ui font-medium uppercase"
-                      style={{
-                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 16}px)`,
-                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 16}px)` : 'auto',
-                        // Larger type, tighter tracking — the optical grade the
-                        // rest of the site now follows.
-                        fontSize: engagedMark ? 10 : 9,
-                        letterSpacing: engagedMark ? '0.1em' : '0.12em',
-                        color: engagedMark ? '#F4F4ED' : 'rgba(244,244,237,0.72)',
-                        textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
-                        maxWidth: coarsePointer ? 96 : 140,
-                        transition: engagedMark
-                          ? 'color 200ms cubic-bezier(0.16,1,0.3,1), font-size 200ms cubic-bezier(0.16,1,0.3,1), letter-spacing 200ms cubic-bezier(0.16,1,0.3,1)'
-                          : 'color 420ms cubic-bezier(0.16,1,0.3,1), font-size 420ms cubic-bezier(0.16,1,0.3,1), letter-spacing 420ms cubic-bezier(0.16,1,0.3,1)',
-                        zIndex: 10,
-                      }}
-                    >
-                      {city.city}
-                    </span>
-                    {/* The leader that replaces the chip's edge: one hairline
-                        drawn from the mark towards its name, undrawn at rest. */}
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute top-1/2 block h-px"
-                      style={{
-                        left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 3}px)`,
-                        right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 3}px)` : 'auto',
-                        width: 10,
-                        background: 'rgba(244,244,237,0.5)',
-                        transformOrigin: labelOnLeft ? 'right center' : 'left center',
-                        transform: `translateY(-50%) scaleX(${engagedMark ? 1 : 0})`,
-                        transition: engagedMark
-                          ? 'transform 220ms cubic-bezier(0.16,1,0.3,1)'
-                          : 'transform 380ms cubic-bezier(0.16,1,0.3,1)',
-                        zIndex: 10,
-                      }}
-                    />
-                  </motion.button>
-                  </div>
-                </Marker>
-              );
-            })}
-
+            {markers}
           </MapGL>
 
           <AnimatePresence initial={false}>
             {!mapReady && (
               <motion.div
                 key="atlas-loading"
-                className={`absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#151913] ${mapLoadFailed ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                className={`absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#1d2117] ${mapLoadFailed ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 initial={false}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: prefersReduced ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+                // A fade-out eases in (the site rule for anything leaving).
+                exit={{ opacity: 0, transition: { duration: prefersReduced ? 0 : 0.28, ease: EASE.fade } }}
                 role={mapLoadFailed ? 'alert' : 'status'}
                 aria-live="polite"
               >
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_46%,rgba(231,225,207,0.055),transparent_42%)]" />
                 <div className="relative flex flex-col items-center gap-3 text-center">
-                  {/* The house sends perpetual motion to CSS keyframes, where it
-                      runs on the compositor instead of competing with Mapbox for
-                      the main thread — and this was the last framer
-                      `repeat: Infinity` left in the tree, on the one surface
-                      whose whole job is to wait for that same thread. Identical
-                      look; `.soft-pulse` already carries its own reduced-motion
-                      path (global.css:1457). */}
                   <span
-                    className={`h-1.5 w-1.5 rounded-full bg-[#D2FF00] ${mapLoadFailed ? '' : 'soft-pulse'}`}
+                    className={`h-1.5 w-1.5 rounded-full bg-[#F4F4ED] ${mapLoadFailed ? '' : 'soft-pulse'}`}
                     style={{ ['--pulse-min' as never]: 0.35, ['--pulse-dur' as never]: '1.65s' }}
                   />
                   <p className="font-ui text-[8px] uppercase tracking-[0.1em] text-white/48">
                     {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}
                   </p>
                   <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/48">
-                    {mapLoadFailed ? 'Map tiles could not be loaded' : `${photos.length} geotagged frames`}
+                    {mapLoadFailed ? 'Map tiles could not be loaded' : `${frameCount} geotagged frames`}
                   </p>
                   {mapLoadFailed && (
                     <button
@@ -1457,45 +1182,40 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             )}
           </AnimatePresence>
 
-          {/* ── Quiet reset control, separated from the native zoom rail ── */}
+          {/* ── Reset. Chrome never scales on hover; a press gives 3%. ── */}
           <div
             className="absolute left-4 top-4 z-10 flex flex-col md:left-5 md:top-5"
             style={{ left: 'max(1rem, env(safe-area-inset-left))' }}
           >
-            <Magnetic strength={0.3}>
-              <motion.button initial={prefersReduced ? false : { opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: prefersReduced ? 0 : 0.35, duration: prefersReduced ? 0 : 0.3 }} whileHover={prefersReduced ? undefined : { scale: 1.06 }} whileTap={prefersReduced ? undefined : { scale: 0.94 }} onClick={resetView} className="atlas-reset-control flex h-11 w-11 items-center justify-center rounded-full text-white/55 transition-colors duration-300 hover:text-white" title="Reset view" aria-label="Reset view">
-                <RotateCcw size={16} aria-hidden="true" />
-              </motion.button>
-            </Magnetic>
-
+            <button
+              type="button"
+              onClick={resetView}
+              className="atlas-reset-control flex h-11 w-11 items-center justify-center rounded-full text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+              title="Reset view"
+              aria-label="Reset view"
+            >
+              <RotateCcw size={16} aria-hidden="true" />
+            </button>
           </div>
 
-          {/* A legible first-use cue. The map is intentionally immersive, but
-              it should never look like a passive background or make visitors
-              guess whether the geographic index is interactive. */}
-          <motion.div
-            initial={prefersReduced ? false : { opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: prefersReduced ? 0 : 0.45, duration: prefersReduced ? 0 : 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="pointer-events-none absolute left-1/2 top-5 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-[#11150f]/78 px-4 py-2 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 shadow-[0_12px_34px_rgba(7,9,6,0.22)] backdrop-blur-xl lg:flex"
-            aria-hidden="true"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-[#D2FF00] shadow-[0_0_10px_rgba(210,255,0,0.45)]" />
-            <span>{activeCluster ? `Viewing ${activeCluster.city}` : 'Select a city or marker'}</span>
-            <span className="h-3 w-px bg-white/14" />
-            <span className="text-white/54">Drag to move · Scroll to zoom</span>
-          </motion.div>
+          {/* The scale collar, as a surveyor prints it (updated after every
+              move, from the map itself). */}
+          <div ref={collarRef} className="travel-collar font-ui" aria-hidden="true">
+            <span className="travel-collar__bar" />
+            <span className="travel-collar__label" />
+          </div>
 
-          {/* Mobile keeps the full explorer: the map owns the viewport while
-              browse and detail become one draggable, scroll-isolated sheet. */}
+          {/* Phone: the map owns the viewport and the index becomes one
+              draggable, scroll-isolated sheet — peek (the edition's figures),
+              browse (the index's rows) and detail (the chapter's ticket). */}
           <motion.section
-            className="atlas-mobile-sheet absolute inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden rounded-t-[1.75rem] bg-[#20251d] shadow-[0_-24px_70px_rgba(7,9,6,0.42)] lg:hidden"
+            className="atlas-mobile-sheet absolute inset-x-0 bottom-0 z-20 flex flex-col overflow-hidden rounded-t-[1.75rem] bg-[#262b21] shadow-[0_-24px_70px_rgba(7,9,6,0.42)] lg:hidden"
             style={{ maxHeight: 'min(62svh, calc(100% - 4.5rem))' }}
             initial={false}
             animate={{
               height: mobileSheet === 'peek' ? 78 : mobileSheet === 'browse' ? '48svh' : '62svh',
             }}
-            transition={prefersReduced ? { duration: 0 } : { duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
+            transition={prefersReduced ? { duration: 0 } : { duration: 0.46, ease: EASE.arrive }}
             drag={prefersReduced ? false : 'y'}
             dragControls={sheetDragControls}
             dragListener={false}
@@ -1504,48 +1224,65 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
             onDragEnd={(_, info) => {
               if (info.offset.y < -44) {
                 if (mobileSheet === 'peek') setMobileSheet('browse');
-                else if (mobileSheet === 'browse' && activeCluster) setMobileSheet('detail');
+                else if (mobileSheet === 'browse' && selectedSlug) setMobileSheet('detail');
               } else if (info.offset.y > 44) {
                 if (mobileSheet === 'detail') setMobileSheet('browse');
                 else if (mobileSheet === 'browse') setMobileSheet('peek');
               }
             }}
             data-lenis-prevent
-            aria-label="Atlas locations"
+            aria-label="Atlas index"
           >
-            <button
-              ref={mobileSheetHeaderRef}
-              type="button"
-              onPointerDown={(event) => {
-                if (!prefersReduced) sheetDragControls.start(event);
-              }}
-              onClick={() => setMobileSheet((current) => current === 'peek' ? 'browse' : current === 'browse' ? 'peek' : 'browse')}
-              className="atlas-mobile-sheet__header atlas-sheet-safe-inline flex min-h-[78px] min-w-0 shrink-0 touch-none items-center gap-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#D2FF00]"
-              aria-expanded={mobileSheet !== 'peek'}
-              aria-controls={mobileSheet === 'peek' ? undefined : 'atlas-sheet-content'}
-            >
-              <span className={`absolute left-1/2 top-3 h-[3px] w-10 -translate-x-1/2 rounded-full bg-white/24 ${prefersReduced ? 'hidden' : ''}`} aria-hidden="true" />
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D2FF00] font-ui text-[9px] font-bold text-[#171b15]">
-                {activeCluster ? String(cityClusters.findIndex((cluster) => cluster.city === activeCluster.city) + 1).padStart(2, '0') : String(cityClusters.length).padStart(2, '0')}
-              </span>
-              <span className="min-w-0 flex-1 overflow-hidden">
-                <span className="block font-ui text-[9px] uppercase tracking-[0.1em] text-white/62">
-                  {activeCluster ? 'Current location' : 'Interactive atlas'}
+            <div className="atlas-mobile-sheet__header relative flex min-h-[78px] shrink-0 items-stretch">
+              <button
+                ref={mobileSheetHeaderRef}
+                type="button"
+                onPointerDown={(event) => {
+                  if (!prefersReduced) sheetDragControls.start(event);
+                }}
+                onClick={() => setMobileSheet((current) => (current === 'peek' ? 'browse' : current === 'browse' ? 'peek' : 'browse'))}
+                className="atlas-sheet-safe-inline flex min-w-0 flex-1 touch-none items-center gap-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#D2FF00]"
+                aria-expanded={mobileSheet !== 'peek'}
+                aria-controls={mobileSheet === 'peek' ? undefined : 'atlas-sheet-content'}
+              >
+                {/* Drag is off under reduced motion, so the grabber goes
+                    with it — decided in CSS, which the server can agree with. */}
+                <span className="absolute left-1/2 top-3 h-[3px] w-10 -translate-x-1/2 rounded-full bg-white/24 motion-reduce:hidden" aria-hidden="true" />
+                {mobileSheet === 'detail' && selectedChapter ? (
+                  <span className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
+                    <span className="travel-sheet__no font-serif">{selectedChapter.ordinal}</span>
+                    <span className="min-w-0 truncate font-serif text-[20px] uppercase leading-none text-[#F4F4ED]">{selectedChapter.name}</span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 overflow-hidden">
+                    <span className="block font-ui text-[9px] font-medium uppercase tracking-[0.1em] text-[#F4F4ED]/90">Index</span>
+                    <span className="mt-1.5 block truncate font-ui text-[9px] uppercase tracking-[0.1em] text-[#F4F4ED]/56">
+                      {String(chapters.length).padStart(2, '0')} chapters · {frameCount} frames{years ? ` · ${years}` : ''}
+                    </span>
+                  </span>
+                )}
+                <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-medium uppercase tracking-[0.1em] text-white/72">
+                  {mobileSheet === 'peek' ? 'Open' : mobileSheet === 'detail' ? 'Index' : 'Close'}
                 </span>
-                <span className="mt-1 block truncate font-serif text-xl uppercase leading-none text-[#F4F4ED]">
-                  {activeCluster?.city ?? 'Explore locations'}
-                </span>
-              </span>
-              <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-[#D2FF00]/88">
-                {mobileSheet === 'peek' ? 'Open' : mobileSheet === 'detail' ? 'Back' : 'Close'}
-              </span>
-            </button>
-            <span className="sr-only" aria-live="polite">
-              {mobileSheet === 'detail' && activeCluster
-                ? `${activeCluster.city} details open`
+              </button>
+              {mobileSheet === 'detail' && selectedChapter && (
+                <button
+                  type="button"
+                  onClick={() => deselect()}
+                  className="flex w-12 shrink-0 items-center justify-center text-white/62 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#D2FF00]"
+                  style={{ marginRight: 'max(0.5rem, env(safe-area-inset-right))' }}
+                  aria-label={`Close ${selectedChapter.name}`}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <span className="sr-only font-ui" aria-live="polite">
+              {mobileSheet === 'detail' && selectedChapter
+                ? `${selectedChapter.name} open`
                 : mobileSheet === 'browse'
-                  ? 'Location index open'
-                  : 'Location index collapsed'}
+                  ? 'Index open'
+                  : 'Index collapsed'}
             </span>
 
             <AnimatePresence mode="wait" initial={false}>
@@ -1554,207 +1291,62 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
                   key="browse"
                   initial={prefersReduced ? false : { opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 12 }}
-                  transition={{ duration: prefersReduced ? 0 : 0.4, ease: [0.16, 1, 0.3, 1] }}
-                  className="atlas-sheet-safe-inline min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+                  exit={{ opacity: 0, transition: { duration: prefersReduced ? 0 : 0.2, ease: EASE.fade } }}
+                  transition={{ duration: prefersReduced ? 0 : 0.4, ease: EASE.arrive }}
+                  className="travel-sheet__rows min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]"
                   data-lenis-prevent
                   id="atlas-sheet-content"
                 >
-                  {regionGroups.map((group) => (
-                    <div key={group.region} className="border-t border-white/7 py-4 first:border-t-0">
-                      <div className="mb-2 flex items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] text-white/60">
-                        <span>{group.region}</span>
-                        <span>{group.totalPhotos} frames</span>
-                      </div>
-                      {group.clusters.map((cluster) => (
-                        <button
-                          key={cluster.city}
-                          type="button"
-                          onClick={() => handleCityClick(cluster)}
-                          aria-pressed={activeClusterCity === cluster.city}
-                          className="flex min-h-12 w-full items-center gap-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
-                        >
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full border ${activeClusterCity === cluster.city ? 'border-[#D2FF00] bg-[#D2FF00] shadow-[0_0_12px_rgba(210,255,0,0.55)]' : 'border-white/35 bg-transparent'}`} />
-                          <span className="min-w-0 flex-1 truncate font-serif text-lg uppercase text-[#F4F4ED]">{cluster.city}</span>
-                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/62">{cluster.photos.length}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
+                  <TravelRows
+                    chapters={chapters}
+                    selected={selectedSlug}
+                    hovered={hoveredSlug}
+                    tickets={false}
+                    reduce={prefersReduced}
+                    onSelect={handleRowSelect}
+                    onHover={handleHover}
+                  />
                 </motion.div>
               )}
 
-              {mobileSheet === 'detail' && activeCluster && (
+              {mobileSheet === 'detail' && selectedChapter && (
                 <motion.div
-                  key={`detail-${activeCluster.city}`}
+                  key={`detail-${selectedChapter.slug}`}
                   initial={prefersReduced ? false : { opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 12 }}
-                  transition={{ duration: prefersReduced ? 0 : 0.42, ease: [0.16, 1, 0.3, 1] }}
-                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                  exit={{ opacity: 0, transition: { duration: prefersReduced ? 0 : 0.2, ease: EASE.fade } }}
+                  transition={{ duration: prefersReduced ? 0 : 0.42, ease: EASE.arrive }}
+                  className="travel-sheet__ticket min-h-0 flex-1 overflow-y-auto overscroll-contain"
                   data-lenis-prevent
                   id="atlas-sheet-content"
                 >
-                  <CityDetail cluster={activeCluster} mobile />
+                  <TravelTicket chapter={selectedChapter} total={chapters.length} reduce={prefersReduced} onOpen={handleOpenTicket} />
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.section>
-
         </div>
 
-        {/* ── Desktop destination index. The feather is a separate visual layer;
-            copy and controls sit on a stable opaque surface so the basemap never
-            changes their contrast. Region disclosure restores the clearer,
-            explicitly interactive hierarchy of the earlier Atlas. ── */}
+        {/* ── The index. The feather is its own layer over the map's edge;
+            the rows sit on an opaque surface so the ground never changes
+            their contrast. ── */}
         <aside
           className="relative z-10 -ml-12 hidden h-full min-h-0 w-[340px] flex-col pl-12 lg:flex xl:-ml-20 xl:w-[420px] xl:pl-20"
-          aria-label="Photographic locations"
+          aria-label="Index of chapters"
         >
           <div className="pointer-events-none absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-transparent via-[#30352a]/52 to-[#30352a]" aria-hidden="true" />
-          <div className="relative flex h-full min-h-0 flex-col bg-[#30352a]">
-            <header className="shrink-0 border-b border-white/8 px-5 pb-4 pt-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-ui text-[10px] font-semibold uppercase tracking-[0.1em] text-[#F4F4ED]/90">Select a location</p>
-                  <p className="mt-2 max-w-[235px] font-ui text-[11px] leading-relaxed tracking-[0.02em] text-white/62">
-                    Choose a city to focus the map and open its photographic record.
-                  </p>
-                </div>
-                <span className="font-serif text-[28px] leading-none text-[#F4F4ED]/78 tabular-nums">
-                  {String(cityClusters.length).padStart(2, '0')}
-                </span>
-              </div>
-            </header>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar" data-lenis-prevent>
-              {regionGroups.map((group, regionIndex) => {
-                const isOpen = expandedRegion === group.region;
-                return (
-                  <section key={group.region} className="border-b border-white/7 last:border-b-0">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedRegion(isOpen ? null : group.region)}
-                      className="group flex min-h-12 w-full cursor-pointer items-center gap-3 px-5 text-left hover:bg-white/[0.035] focus-visible:outline-none focus-visible:shadow-[inset_2px_0_0_#D2FF00]"
-                      aria-expanded={isOpen}
-                      aria-controls={isOpen ? `atlas-region-${slugifyPlace(group.region)}` : undefined}
-                    >
-                      <span className="min-w-0 flex-1 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white/70 group-hover:text-white/90">
-                        {group.region}
-                      </span>
-                      <span className="font-ui text-[9px] tabular-nums tracking-[0.1em] text-white/56">{group.totalPhotos} frames</span>
-                      <motion.span
-                        aria-hidden="true"
-                        animate={{ rotate: isOpen ? 180 : 0 }}
-                        transition={{ duration: prefersReduced ? 0 : 0.35, ease: [0.16, 1, 0.3, 1] }}
-                        className="flex h-6 w-6 items-center justify-center text-[13px] text-white/58"
-                      >
-                        ↓
-                      </motion.span>
-                    </button>
-
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          id={`atlas-region-${slugifyPlace(group.region)}`}
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ height: { duration: prefersReduced ? 0 : 0.42, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: prefersReduced ? 0 : 0.24 } }}
-                          className="overflow-hidden bg-[#292e25]"
-                        >
-                          {group.clusters.map((cluster, cityIndex) => {
-                            const isSelected = activeClusterCity === cluster.city;
-                            const isHoveredFromMap = hoveredCity === cluster.city && !isSelected;
-                            const itemNumber = regionGroups
-                              .slice(0, regionIndex)
-                              .reduce((total, item) => total + item.clusters.length, 0) + cityIndex + 1;
-                            return (
-                              <motion.div
-                                key={cluster.city}
-                                id={`sidebar-city-${cluster.city.replace(/\s+/g, '-')}`}
-                                initial={prefersReduced ? false : { opacity: 0, x: -8 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: prefersReduced ? 0 : cityIndex * 0.045, duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => handleCityClick(cluster)}
-                                  onMouseEnter={() => setHoveredCity(cluster.city)}
-                                  onMouseLeave={() => setHoveredCity(null)}
-                                  onFocus={() => setHoveredCity(cluster.city)}
-                                  onBlur={() => setHoveredCity(null)}
-                                  aria-pressed={isSelected}
-                                  aria-expanded={isSelected}
-                                  aria-controls={isSelected ? `atlas-city-detail-${slugifyPlace(cluster.city)}` : undefined}
-                                  className={`group relative flex min-h-[66px] w-full cursor-pointer items-center gap-3 border-t border-white/6 px-5 text-left transition-[background-color,transform] duration-300 focus-visible:outline-none focus-visible:shadow-[inset_2px_0_0_#D2FF00] ${
-                                    isSelected
-                                      ? 'bg-[#D2FF00]/[0.075]'
-                                      : isHoveredFromMap
-                                        ? 'bg-white/[0.055]'
-                                        : 'hover:bg-white/[0.04]'
-                                  }`}
-                                >
-                                  <motion.span
-                                    className="absolute inset-y-3 left-0 w-[2px] rounded-full bg-[#D2FF00]"
-                                    initial={false}
-                                    animate={{ opacity: isSelected || isHoveredFromMap ? 1 : 0, scaleY: isSelected || isHoveredFromMap ? 1 : 0.3 }}
-                                    transition={{ duration: prefersReduced ? 0 : 0.3, ease: [0.16, 1, 0.3, 1] }}
-                                  />
-                                  <span className="relative h-10 w-12 shrink-0 overflow-hidden rounded-[0.35rem] bg-black/20">
-                                    <img
-                                      src={`${cluster.photos[0].imageUrl}?auto=format&w=160&h=120&fit=crop&q=76`}
-                                      alt=""
-                                      className="h-full w-full object-cover opacity-80 transition-[transform,opacity] duration-500 group-hover:scale-105 group-hover:opacity-100"
-                                      loading="lazy"
-                                      draggable={false}
-                                    />
-                                    {/* The archive's chapter number where it is
-                                        known, so this index and the front page
-                                        call the same place the same thing. */}
-                                    <span className="absolute left-1.5 top-1 font-ui text-[8px] tabular-nums tracking-[0.12em] text-white/82 drop-shadow">
-                                      {String(cluster.chapterNumber ?? itemNumber).padStart(2, '0')}
-                                    </span>
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className={`block truncate font-serif text-[19px] uppercase leading-none tracking-[-0.01em] ${isSelected ? 'text-[#F4F4ED]' : 'text-[#F4F4ED]/88 group-hover:text-white'}`}>
-                                      {cluster.city}
-                                    </span>
-                                    <span className="mt-1.5 block font-ui text-[10px] uppercase tracking-[0.1em] text-white/62">
-                                      {cluster.country || group.region} · {cluster.photos.length} frames
-                                    </span>
-                                  </span>
-                                  <span className={`shrink-0 font-ui text-[10px] font-semibold uppercase tracking-[0.1em] ${isSelected ? 'text-[#D2FF00]' : 'text-white/62 group-hover:text-white/86'}`}>
-                                    {isSelected ? 'Viewing' : 'Focus'}
-                                  </span>
-                                </button>
-
-                                <AnimatePresence initial={false}>
-                                  {isSelected && (
-                                    <motion.div
-                                      key="detail"
-                                      id={`atlas-city-detail-${slugifyPlace(cluster.city)}`}
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ height: { duration: prefersReduced ? 0 : 0.46, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: prefersReduced ? 0 : 0.26 } }}
-                                      className="overflow-hidden border-t border-white/6 bg-[#171b15]/94"
-                                    >
-                                      <CityDetail cluster={cluster} />
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </motion.div>
-                            );
-                          })}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </section>
-                );
-              })}
-            </div>
-
+          <div className="relative flex h-full min-h-0 flex-col bg-[#30352a]" data-lenis-prevent>
+            <TravelIndex
+              chapters={chapters}
+              selected={selectedSlug}
+              hovered={hoveredSlug}
+              reduce={prefersReduced}
+              onSelect={handleRowSelect}
+              onHover={handleHover}
+              onOpenTicket={handleOpenTicket}
+              flight={flight}
+              routeKm={totalKm}
+            />
           </div>
         </aside>
       </div>
@@ -1762,6 +1354,6 @@ function MapboxMapInner({ photos, mapboxToken }: { photos: Photo[]; mapboxToken:
   );
 }
 
-export default function MapboxMap(props: { photos: Photo[]; mapboxToken: string }) {
-  return <MapErrorBoundary><MapboxMapInner photos={props.photos} mapboxToken={props.mapboxToken} /></MapErrorBoundary>;
+export default function MapboxMap(props: { chapters: TravelChapter[]; mapboxToken: string }) {
+  return <MapErrorBoundary><MapboxMapInner chapters={props.chapters} mapboxToken={props.mapboxToken} /></MapErrorBoundary>;
 }

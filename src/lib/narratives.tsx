@@ -129,6 +129,31 @@ export function homepageCaption(slug: string | undefined): string {
   return (slug && HOMEPAGE_CAPTIONS[slug]) || '';
 }
 
+/** A story's dek — the standfirst under its title on the opening spread. The
+ *  homepage's one-line caption of the place, set as the story's own. */
+export const storyDek = homepageCaption;
+
+/**
+ * One sentence per story, lifted from its own narrative (EDITORIAL_FALLBACKS)
+ * for the pull quote's page, trimmed at a dash and printed without its final
+ * period. Existing text only. Bryce Canyon and New York have none: their
+ * stories are too short for a quote page.
+ */
+export const PULL_QUOTES: Record<string, string> = {
+  miami: 'South Beach operates on a logic of surfaces',
+  orlando: 'The transition between the engineered and the accidental happens fast here',
+  page: 'That light lasts minutes',
+  'zion-national-park': 'What Zion enforces is a reckoning with scale',
+};
+
+export function pullQuote(slug: string | undefined): string {
+  return (slug && PULL_QUOTES[slug]) || '';
+}
+
+/** The credit the terrain maps carry: the story reprints it wherever a map is
+ *  cropped past its own corner notice. */
+export const MAP_CREDIT = 'terraink.app · © OpenStreetMap contributors';
+
 /**
  * Render Sanity Portable Text into React nodes.
  *

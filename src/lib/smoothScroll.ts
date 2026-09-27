@@ -1,4 +1,29 @@
-import Lenis from 'lenis';
+import Lenis, { type VirtualScrollData } from 'lenis';
+
+/**
+ * A sideways wheel — a two-finger swipe left or right on a trackpad, a Magic
+ * Mouse swipe, shift+wheel — moves nothing. These pages only scroll down, and
+ * a swipe's small vertical jitter was reaching Lenis as a few pixels of real
+ * scroll, which the scroll-driven atlas camera then re-aimed by: the page
+ * wobbled under a gesture that was never a scroll. The swipe is swallowed
+ * whole (preventDefault, so the browser does not scroll or history-swipe it
+ * either). Pinch zoom (ctrl+wheel) and anything Lenis is told to leave alone
+ * pass through untouched. Lenis calls this first, from its non-passive wheel
+ * listener, so preventDefault is honoured here.
+ */
+function holdStillOnSidewaysWheel({ deltaX, deltaY, event }: VirtualScrollData): boolean {
+  if (event.type !== 'wheel' || (event as WheelEvent).ctrlKey) return true;
+  if (Math.abs(deltaX) <= Math.abs(deltaY)) return true;
+  const target = event.target;
+  if (
+    target instanceof Element &&
+    target.closest('[data-lenis-prevent],[data-lenis-prevent-wheel],[data-lenis-prevent-horizontal]')
+  ) {
+    return true;
+  }
+  if (event.cancelable) event.preventDefault();
+  return false;
+}
 
 /**
  * startLenis — the homepage's weighty inertial smooth-scroll, packaged so every
@@ -27,6 +52,7 @@ export function startLenis(): { lenis: Lenis | null; destroy: () => void } {
     smoothWheel: true,
     wheelMultiplier: 1,
     touchMultiplier: 1.6,
+    virtualScroll: holdStillOnSidewaysWheel,
   });
 
   let destroyed = false;

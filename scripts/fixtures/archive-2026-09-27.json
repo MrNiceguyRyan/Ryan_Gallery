@@ -1,0 +1,959 @@
+{
+ "_note": "The archive as Sanity served it on 2026-09-27 (the collections query in src/pages/about.astro, published order). Fixture for scripts/chapter-order.test.mjs and scripts/exposure-record.test.mjs.",
+ "collections": [
+  {
+   "_id": "PzEfpaLkt8k6GZZDOijJrW",
+   "name": "Miami",
+   "slug": "miami",
+   "region": "Florida",
+   "location": "Miami",
+   "year": "2026",
+   "routeOrder": 10,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg",
+   "photoCount": 15,
+   "photos": [
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/6.4",
+     "shutterSpeed": "1/640s",
+     "iso": "160",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/a3d8f40802881f085f913030bfcff742dd2db367-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/7.1",
+     "shutterSpeed": "1/500s",
+     "iso": "160",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/34dadf4ed45fa3e6ad0d041fd8c9d1be17909a5f-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "19mm",
+     "aperture": "f/9",
+     "shutterSpeed": "1/640s",
+     "iso": "250",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/cd956a42630e5af0ebf7df3809a69a536b4fa8c8-5472x3648.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "17mm",
+     "aperture": "f/9",
+     "shutterSpeed": "1/640s",
+     "iso": "250",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/ff16f1d7b03a6f37189984ec1458bf7bbdfc8c50-2546x1697.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "21mm",
+     "aperture": "f/10",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/b6ffe51af0c9a39aef84570caf774810a40a8288-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "18mm",
+     "aperture": "f/5.6",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/ae1123f7fd43bd759457c862fb7fd6f22d17476a-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "18mm",
+     "aperture": "f/9",
+     "shutterSpeed": "1/400s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/a3e05fa22dfad74016fba279a5bdc60089182a4a-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/7.1",
+     "shutterSpeed": "1/640s",
+     "iso": "160",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e64e9b389ed355384232658f258b19aea734da84-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/5.6",
+     "shutterSpeed": "1/500s",
+     "iso": "160",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/7807bf535df5e21c0a64f557c82a5f64e8221ff3-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/1.2",
+     "shutterSpeed": "1/200s",
+     "iso": "640",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/9a814184c2307d2e42efc59ba17357f63ed27953-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "21mm",
+     "aperture": "f/4.5",
+     "shutterSpeed": "1/320s",
+     "iso": "400",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/f48098bfe8a7bfa3d148b936b8031f61fa4e78bc-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "31mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/250s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/98134c5a806211d5c65d422e5d9ef6d4a41d8744-3888x2592.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "26mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/250s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/973128b863b7069f28a6c513e75c7f26975e3b6a-2592x3888.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "50mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/500s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/d654b77d836e070a7e473c389ced56b91812acbd-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "16mm",
+     "aperture": "f/6.4",
+     "shutterSpeed": "1/400s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.7617,
+      "lng": -80.1918
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e646f086d5e58c6366aeff17923edc87756919e5-7728x5152.jpg"
+    }
+   ]
+  },
+  {
+   "_id": "4356CayLMjUUkSc3XXA3BY",
+   "name": "Page",
+   "slug": "page",
+   "region": "Arizona",
+   "location": "Page",
+   "year": 2026,
+   "routeOrder": 30,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/cc2f2f6cc0ff09b877a498e189319319e53c0365-4032x6048.jpg",
+   "photoCount": 11,
+   "photos": [
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "55mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/50s",
+     "iso": "400",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/d446e9f2029af368695c976c7ed8de8055f89a94-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/40s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e7c5cc1048d631931f9f55d6be07007c30f0635b-5794x3863.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/125s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/d1a9f8a6bb99e390eb613fda5b50a8555bbdcc18-3737x5605.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "46mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/100s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/f0cf679c0bf914589d3401d391a0f2ecf2f22e05-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "40mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/100s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/84816559af75156579f281a21d0288b155067921-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "35mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/100s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/6bb52a59e60148bb8dbe21c8e19474256afc6234-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/50s",
+     "iso": "500",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/cedc2d5b3c1846cac957f1751dc3d961ccd0d09f-3191x4786.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/25s",
+     "iso": "400",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/6cbf14218fd005a509bd673fd8c0d19f82495103-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "32mm",
+     "aperture": "f/5.6",
+     "shutterSpeed": "1/20s",
+     "iso": "640",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e8f903aa2105c3d9aa029a2633c2f0a7ca95f3f8-3762x5643.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/20s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/cc2f2f6cc0ff09b877a498e189319319e53c0365-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "35mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/60s",
+     "iso": "250",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Page",
+      "country": "United States",
+      "lat": 36.9147,
+      "lng": -111.4558
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/eb074a6dc3471567effd3846aed8a9aa307e5a23-6048x4032.jpg"
+    }
+   ]
+  },
+  {
+   "_id": "4356CayLMjUUkSc3XXKoGG",
+   "name": "Zion",
+   "slug": "zion-national-park",
+   "region": "Utah",
+   "location": "Zion",
+   "year": 2026,
+   "routeOrder": 40,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/81bde829d1929e90ee18f75370164dd04da405b7-6048x4032.jpg",
+   "photoCount": 8,
+   "photos": [
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4.5",
+     "shutterSpeed": "1/50s",
+     "iso": "6400",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/4219302f55688eb70d1e80fd9ad8a9394f828614-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "37mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/400s",
+     "iso": "160",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/b7f1332cbdb06a3476eeab9f52fe79d1e021fc61-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/250s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/7fe984fbbc0b74e9421a84f29912bf17426b1974-4032x6048.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "37mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/250s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/97e95eb87346728001eb84da8fe5ad5735bee308-3993x5989.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/200s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/81bde829d1929e90ee18f75370164dd04da405b7-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/320s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/10b3b5b2846b43b178a1f56ba0566ad54283dc6c-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/320s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/758368af2f304fd38f8422ccf1079d3c55de4607-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "62mm",
+     "aperture": "f/7.1",
+     "shutterSpeed": "1/320s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Zion",
+      "country": "United States",
+      "lat": 37.2982,
+      "lng": -113.0263
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/89444312097d51f9a86fc1c16eb44e402dbf000f-6048x4032.jpg"
+    }
+   ]
+  },
+  {
+   "_id": "681VAOQyjkPHlJkPl2qrF6",
+   "name": "Orlando",
+   "slug": "orlando",
+   "region": "Florida",
+   "location": "Orlando",
+   "year": 2026,
+   "routeOrder": 20,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/25124048b8bb1b3309abfd3e3378aad5c37d3333-5152x7728.jpg",
+   "photoCount": 17,
+   "photos": [
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/6.4",
+     "shutterSpeed": "1/400s",
+     "iso": "160",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/48a2b512d7303229b308a08194250928ecedd3b4-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/5.6",
+     "shutterSpeed": "1/200s",
+     "iso": "500",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/abc88e1b50c1c2b0f0c890f53943e10d325c2149-2592x3888.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/2.5",
+     "shutterSpeed": "1/640s",
+     "iso": "500",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/69c45a77b0464fdc0f17c14ab3c249b0055350cb-4117x6175.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/3.2",
+     "shutterSpeed": "1/640s",
+     "iso": "500",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/66975025873cbaffa9176a74747c8419775b3d79-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/800s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/234c21bafa837f4cb82c8479418ed1ef004faf80-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/800s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/2875a877e914550ca80815aae2f602df761e0028-7728x5152.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/800s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/3a91de0f4373b1da0cfa79914e14f904ca1cc802-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/4.5",
+     "shutterSpeed": "1/1250s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/47e71b1567c14430516393b61159260a542639bc-3648x5472.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/1250s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/419ff7cbe29d0fb7c8ea303c19853b6577122384-3648x5472.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/7.1",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e72916faa92b2206ae401c626a4a748d8508a5ea-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/0abc8d17a56f76cce941e21d68f464ff9d459739-3648x5472.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/10",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/073a0f7527265c31b63e664aad0692a5772ad47c-3160x4740.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/6.4",
+     "shutterSpeed": "1/640s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/4d73432dd804f8935ef37042a3cacd9bff4bb1a6-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/5",
+     "shutterSpeed": "1/250s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/aa5ace8140b35e6a4f81d9a7c009ba56eb9ac402-2592x3888.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/800s",
+     "iso": "320",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/ccbf6e922980bcc281776018d254c507e14a6453-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/6.4",
+     "shutterSpeed": "1/320s",
+     "iso": "64",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/25124048b8bb1b3309abfd3e3378aad5c37d3333-5152x7728.jpg"
+    },
+    {
+     "camera": "FUJIFILM X-T50",
+     "focalLength": "27mm",
+     "aperture": "f/7.1",
+     "shutterSpeed": "1/640s",
+     "iso": "160",
+     "styleCategory": "street",
+     "location": {
+      "city": "Orlando",
+      "country": "United States",
+      "lat": 28.5383,
+      "lng": -81.3792
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/4c4e2f0ff4e4b3319ed4da7502e4c792a2a9ac74-5152x7728.jpg"
+    }
+   ]
+  },
+  {
+   "_id": "681VAOQyjkPHlJkPl2sa9Q",
+   "name": "Bryce Canyon",
+   "slug": "bryce-canyon-national-park",
+   "region": "Utah",
+   "location": "Bryce Canyon",
+   "year": 2026,
+   "routeOrder": 50,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/a554d891b7d5a2283f23f5f8beaf9a4a42dc7e5c-6048x4032.jpg",
+   "photoCount": 5,
+   "photos": [
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "24mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/50s",
+     "iso": "2000",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Bryce Canyon",
+      "country": "United States",
+      "lat": 37.593,
+      "lng": -112.1871
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/f98b440b240b0c857ffa0240474fcc234f7817c4-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/200s",
+     "iso": "200",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Bryce Canyon",
+      "country": "United States",
+      "lat": 37.593,
+      "lng": -112.1871
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/fe2b3f1c421893d248caffb1ca9fd77f48b832fd-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "70mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/400s",
+     "iso": "200",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Bryce Canyon",
+      "country": "United States",
+      "lat": 37.593,
+      "lng": -112.1871
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/6849a145629aba842228cc32ace4944ab9c6d09f-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "43mm",
+     "aperture": "f/4",
+     "shutterSpeed": "1/500s",
+     "iso": "200",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Bryce Canyon",
+      "country": "United States",
+      "lat": 37.593,
+      "lng": -112.1871
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/0ee18a02993aa09391799a1786735e6585fdc816-6048x4032.jpg"
+    },
+    {
+     "camera": "NIKON CORPORATION NIKON Z f",
+     "focalLength": "47mm",
+     "aperture": "f/8",
+     "shutterSpeed": "1/250s",
+     "iso": "100",
+     "styleCategory": "landscape",
+     "location": {
+      "city": "Bryce Canyon",
+      "country": "United States",
+      "lat": 37.593,
+      "lng": -112.1871
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/a554d891b7d5a2283f23f5f8beaf9a4a42dc7e5c-6048x4032.jpg"
+    }
+   ]
+  },
+  {
+   "_id": "0f6ee6e3-429b-4711-a40d-f1fc0c478edc",
+   "name": "New York",
+   "slug": "new-york-stories",
+   "region": "New York",
+   "location": "New York, USA",
+   "year": 2025,
+   "routeOrder": 60,
+   "mapLocation": null,
+   "coverImageUrl": "https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg",
+   "photoCount": 2,
+   "photos": [
+    {
+     "camera": "Nikon Zf",
+     "focalLength": "40mm",
+     "aperture": "f/2.8",
+     "shutterSpeed": "1/250s",
+     "iso": "ISO 400",
+     "styleCategory": "street",
+     "location": {
+      "city": "Manhattan",
+      "country": "United States",
+      "lat": 40.758,
+      "lng": -73.9855
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/77211003bec86aad4a5fcd1f758ad5f3d5bce6e6-4032x6048.jpg"
+    },
+    {
+     "camera": "Nikon Zf",
+     "focalLength": "24mm",
+     "aperture": "f/5.6",
+     "shutterSpeed": "1/500s",
+     "iso": "ISO 100",
+     "styleCategory": "architecture",
+     "location": {
+      "city": "Midtown",
+      "country": "United States",
+      "lat": 40.7484,
+      "lng": -73.9857
+     },
+     "imageUrl": "https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg"
+    }
+   ]
+  }
+ ]
+}
