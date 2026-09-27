@@ -541,6 +541,14 @@ const FOCAL_PADDING = { top: 48, right: 264 } as const;
 // key would land within SIDE_CLEARANCE of that edge sets it on its left.
 const ARCHIVE_COLUMN_LEFT = 42 / 78;
 const SIDE_CLEARANCE = 28;
+// A place whose dot itself lands in the covers' column (its knockout's 5px
+// inside the edge) is under the plates and their chapter headers: printed
+// there, New York's "06" read into "01 / 06 · REGION FLORIDA" and its dot
+// sat on the plate's corner like a rivet. It is not printed (unless the
+// camera is on it or flying to it).
+const UNDER_CLEARANCE = 5;
+// How long the camera must have been still before the sides are taken.
+const SIDES_REST_MS = 180;
 // A transparent image round each place that the basemap's names keep out of:
 // the dot, its key on either side, and the current place's landmark standing
 // over it (64 × 38 css px, its centre 12px above the dot).
@@ -1095,7 +1103,8 @@ export default function RouteAtlas({
   };
   // Which side of its dot each place's key is set on: the left for a place in
   // reach of the covers' column, so its number never prints half under a
-  // plate (New York's "06" from chapter one). Written when the camera comes
+  // plate; and whether its dot is inside that column (`data-under`: not
+  // printed, see UNDER_CLEARANCE). Written when the camera comes
   // down and when a place is committed, never per frame, and derived — the
   // camera's own projection against the layout's constant — not read off the
   // page.
@@ -1110,6 +1119,11 @@ export default function RouteAtlas({
       const x = map.project(entry.stop.coordinates).x - CANVAS_BLEED;
       const side = x > plateLeft - SIDE_CLEARANCE ? 'left' : 'right';
       if (element.dataset.side !== side) element.dataset.side = side;
+      const under = x > plateLeft - UNDER_CLEARANCE;
+      if (under !== (element.dataset.under != null)) {
+        if (under) element.dataset.under = '';
+        else delete element.dataset.under;
+      }
     });
   };
   const markInboundStop = (id: string | null) => {
@@ -1238,20 +1252,31 @@ export default function RouteAtlas({
     setPrologueStage((current) => (current === next ? current : next));
   });
   const engagedOnGlobe = prologueStage ? engagedChapterId : null;
-  // The place pointed at in the index is printed over its dot on the globe
-  // (the prologue mark, in the JSX): a DOM mark, because GL paint keyed on
-  // the pointer cannot ease. It stays on the last place pointed at, so it
-  // fades out where it was instead of vanishing.
-  const [globeMarkStop, setGlobeMarkStop] = useState<string | null>(null);
-  useEffect(() => {
-    if (engagedOnGlobe) setGlobeMarkStop(engagedOnGlobe);
-  }, [engagedOnGlobe]);
-  const globeMarkRef = useRef<HTMLSpanElement>(null);
   // How many places are lit on the prologue globe, in the roll's order (the
   // last chapter first): written by the camera ("The roll's places"), on a
-  // change only, for the pointed-at place's mark below. The dots themselves
-  // are painted by the camera. Outside the prologue every place is lit.
+  // change only, for the prologue marks below. The dots themselves are
+  // painted by the camera. Outside the prologue every place is lit.
   const [litStops, setLitStops] = useState(() => (prologue ? 0 : 99));
+  // The places in the roll's order, as the camera lights them.
+  const rollOrderIds = useMemo(
+    () => [...chapterRoute].sort((a, b) => b.chapterIndex - a.chapterIndex).map((entry) => entry.stop.id),
+    [chapterRoute],
+  );
+  // The prologue marks (in the JSX): the atlas's own print mark, a 7px dot
+  // keyed by the chapter number, printed over a lit place's dot on the globe.
+  // A DOM mark, because GL paint keyed on the pointer cannot ease. One is on
+  // at a time, so the canyon places never print their numbers into each
+  // other: the place pointed at on the roll, else the place lit last — the
+  // chapter whose frames just passed the gate, so the one link between the
+  // roll and the planet reads without a pointer. Each place keeps its own
+  // mark, so the one going off fades where it stood as the next prints in.
+  // Reduced motion lights every place at once on the still planet, while its
+  // roll cuts between windows: there is no "last lit", so only a pointer
+  // prints a mark there.
+  const rollMarkId = prologueStage && litStops > 0 && !reducedMotion
+    ? rollOrderIds[Math.min(litStops, rollOrderIds.length) - 1] ?? null
+    : null;
+  const globeMarkOn = engagedOnGlobe ?? rollMarkId;
   const rollGatesRef = useRef<number[] | null>(rollGates ?? null);
   rollGatesRef.current = rollGates ?? null;
   const prologueStops = useMemo(() => ({
@@ -1262,30 +1287,23 @@ export default function RouteAtlas({
       geometry: { type: 'Point' as const, coordinates: stop.coordinates },
     })),
   }), [mappedStops]);
-  // The prologue mark's place: where it stands, the order it lights in along
-  // the prologue's route, and the chapter number it prints (the index's).
-  const globeMark = useMemo(() => {
-    if (!prologue || !globeMarkStop) return null;
-    const order = mappedStops.findIndex((stop) => stop.id === globeMarkStop) + 1;
-    const entry = chapterRoute.find((candidate) => candidate.stop.id === globeMarkStop);
-    if (!order || !entry) return null;
-    return { id: globeMarkStop, order, number: entry.chapterIndex + 1, coordinates: entry.stop.coordinates };
-  }, [chapterRoute, globeMarkStop, mappedStops, prologue]);
-  // It fades on the dive with the dots it is printed over (the same zoom keys
-  // as their circle-opacity), written on the map's own zoom events.
+  // The marks fade on the dive with the dots they are printed over (the same
+  // zoom keys as their circle-opacity), written once per zoom on the map's
+  // own element, which every marker inherits it from.
   useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!globeMark || !map) return;
+    if (!prologue || !map) return;
+    const container = map.getContainer();
     const apply = () => {
       const fade = 1 - clamp01((map.getZoom() - PROLOGUE_SATELLITE_FADE[0]) / (PROLOGUE_SATELLITE_FADE[1] - PROLOGUE_SATELLITE_FADE[0]));
-      globeMarkRef.current?.style.setProperty('--prologue-mark-fade', fade.toFixed(3));
+      container.style.setProperty('--prologue-mark-fade', fade.toFixed(3));
     };
     apply();
     map.on('zoom', apply);
     return () => {
       map.off('zoom', apply);
     };
-  }, [globeMark, mapLoaded]);
+  }, [prologue, mapLoaded]);
   const staticMapUrl = useMemo(
     () => living ? '' : staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, living, mapboxToken, mobile],
@@ -2081,6 +2099,7 @@ export default function RouteAtlas({
     const noteReaderDrove = () => { readerDrove = true; };
     ['wheel', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteReaderDrove, { passive: true }));
     let settleTimer = 0;
+    let sidesTimer = 0;
     const settleSignOn = (index: number) => {
       setCameraState('rest');
       const place = viewfinderPlace(index);
@@ -2856,6 +2875,15 @@ export default function RouteAtlas({
           lastPitch = entryPitch;
           lastBearing = entryBearing;
           lastOverview = false;
+          // The places' sides (and which sit under the covers) once this
+          // camera has come to rest: the entrance's settle onto chapter 1
+          // never locks, and the map's own idle did not always come after
+          // it, so New York kept a side taken mid-dive over chapter 1's
+          // header. Once, SIDES_REST_MS after the last camera write.
+          window.clearTimeout(sidesTimer);
+          sidesTimer = window.setTimeout(() => {
+            if (!disposed) markSides();
+          }, SIDES_REST_MS);
         }
       } else {
         if (!lastOverview) {
@@ -3070,6 +3098,7 @@ export default function RouteAtlas({
       if (lit.frame) cancelAnimationFrame(lit.frame);
       lookWrites.fadeZoom = Number.NaN;
       window.clearTimeout(settleTimer);
+      window.clearTimeout(sidesTimer);
       // A held commit dies with this run; the restart re-derives the place
       // from committedPlaceRef (still the camera's) and snaps, never flies.
       dropHeldHop();
@@ -3823,29 +3852,29 @@ export default function RouteAtlas({
             />
           </Source>
         )}
-        {/* The place pointed at on the bridge's roll, printed over its dot:
-            the atlas's own mark (a 7px dot with its knockout, keyed by its
-            chapter number), upright to the viewer. Keyed on the place, so each
-            new one prints in; hidden until its place is lit. */}
-        {globeMark && (
-          <Marker
-            key={`prologue-mark-${globeMark.id}`}
-            longitude={globeMark.coordinates[0]}
-            latitude={globeMark.coordinates[1]}
-            anchor="center"
-            pitchAlignment="viewport"
-            rotationAlignment="viewport"
-          >
-            <span
-              ref={globeMarkRef}
-              aria-hidden="true"
-              className={`prologue-mark${engagedOnGlobe === globeMark.id && globeMark.order > mappedStops.length - litStops ? ' is-on' : ''}`}
+        {/* The prologue marks (see `globeMarkOn`): the atlas's own mark (a
+            7px dot with its knockout, keyed by its chapter number), upright
+            to the viewer, over each place's dot; one prints at a time, and
+            only on a place that is lit. */}
+        {prologue && chapterRoute.map((entry) => {
+          const rollIndex = rollOrderIds.indexOf(entry.stop.id);
+          const on = globeMarkOn === entry.stop.id && rollIndex >= 0 && rollIndex < litStops;
+          return (
+            <Marker
+              key={`prologue-mark-${entry.stop.id}`}
+              longitude={entry.stop.coordinates[0]}
+              latitude={entry.stop.coordinates[1]}
+              anchor="center"
+              pitchAlignment="viewport"
+              rotationAlignment="viewport"
             >
-              <i className="prologue-mark__dot" />
-              <span className="prologue-mark__num font-ui">{String(globeMark.number).padStart(2, '0')}</span>
-            </span>
-          </Marker>
-        )}
+              <span aria-hidden="true" className={`prologue-mark${on ? ' is-on' : ''}`}>
+                <i className="prologue-mark__dot" />
+                <span className="prologue-mark__num font-ui">{String(entry.chapterIndex + 1).padStart(2, '0')}</span>
+              </span>
+            </Marker>
+          );
+        })}
 
         {/* The places: printed marks, upright to the camera and centred on
             each place (AfPoint). The current place's dot is the focal mark —

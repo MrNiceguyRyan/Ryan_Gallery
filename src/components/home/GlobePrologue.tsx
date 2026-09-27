@@ -318,6 +318,11 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
       wrote.select = selectAway;
       const select = band.querySelector<HTMLElement>('.bridge-cut:last-child .bridge-frame.is-select');
       if (select) select.style.visibility = selectAway ? 'hidden' : '';
+      // Lifted out of the roll: the whole layer steps down under the lander
+      // (still over the atlas), so the frames it leaves behind never draw
+      // over the select as it grows across them (global.css, "The bridge").
+      if (selectAway) root.dataset.bridgeLanding = '';
+      else delete root.dataset.bridgeLanding;
     }
     if (!lander) landerOn = false;
     if (lander && landerOn && L !== wrote.L) {
@@ -461,6 +466,7 @@ export default function GlobePrologue({ chapters, frames, years, cities, onSelec
       window.removeEventListener('resize', remeasure);
       delete root.dataset.rollLive;
       delete root.dataset.bridgeS1;
+      delete root.dataset.bridgeLanding;
       const html = document.documentElement;
       delete html.dataset.bridge;
       delete html.dataset.bridgePrint;

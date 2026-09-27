@@ -195,7 +195,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
     { slot: 'focal', value: varies.focalLength ? photo.focalLength : undefined },
     { slot: 'aperture', value: photo.aperture },
     { slot: 'shutter', value: photo.shutterSpeed },
-    { slot: 'iso', value: photo.iso ? `ISO ${photo.iso}` : undefined },
+    { slot: 'iso', value: photo.iso ? `ISO ${String(photo.iso).replace(/^ISO\s*/i, '')}` : undefined },
   ].filter((entry): entry is { slot: string; value: string } => Boolean(entry.value?.trim()));
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);

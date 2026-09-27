@@ -141,6 +141,25 @@ test('the landing arrives moving 1:1 with the plate, rising all the way', () => 
     // Its scale at rest is the select's own size: it starts as the frame.
     assert.ok(Math.abs(from.scale * viewport.plate.h - frameH) < 2);
   }
+  // A wide window (2560×1440, span/drop ≈ 1.74): the drop is long for the
+  // scroll that carries it, and the curve bends the other way (b < 0) rather
+  // than arriving 1.15× faster than the plate.
+  {
+    const H = 1440;
+    const from = { x: 1100, y: ROLL.bandBottom * H - Math.round(ROLL.frameH * H), scale: 0.4 };
+    const slot = { x: 1100, y: 280 };
+    const span = 1.74 * (from.y - slot.y);
+    const h = 1e-5;
+    const speed = (landingPose(1, from, slot, span).y - landingPose(1 - h, from, slot, span).y) / h;
+    assert.ok(Math.abs(-speed - span) / span < 1e-3, `wide: ${-speed} vs ${span}`);
+    let previous = Infinity;
+    for (let step = 0; step <= 200; step += 1) {
+      const y = landingPose(step / 200, from, slot, span).y;
+      assert.ok(y <= previous + 1e-9, 'wide: the select only ever rises');
+      previous = y;
+    }
+    assert.ok(Math.abs(landingPose(1, from, slot, span).y - slot.y) < 1e-9);
+  }
   // The band steps back, then drops away: whole before, gone by the end.
   assert.deepEqual(bandRecede(0), { opacity: 1, dropY: 0 });
   assert.ok(Math.abs(bandRecede(ROLL.dimEnd).opacity - ROLL.dimTo) < 1e-9);

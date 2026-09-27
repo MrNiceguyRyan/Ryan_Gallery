@@ -65,7 +65,7 @@ export function storyFrames<T extends StoryPhotoLike>(photos: readonly T[] | nul
 export type SlotKind =
   | 'OPEN' // frame 01 on the opening spread
   | 'LEDE' // paragraph 1, a small frame hung at the right edge
-  | 'LEDE2' // a short story: paragraphs 1 and 2 side by side, a column frame under them
+  | 'LEDE2' // a short story: paragraphs 1 and 2 side by side, a column frame under them (none in a story of two)
   | 'SCREEN' // a landscape the height of the screen, flush left over the rail
   | 'FEATURE' // a landscape across eight columns
   | 'PAIR' // two frames at one height
@@ -108,7 +108,12 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
   const slots: Slot[] = [];
   if (n > 0) slots.push({ kind: 'OPEN', frames: [0] });
   // The text always runs: a one-frame story still has its band, frameless.
-  if (n >= 2) slots.push({ kind: n >= 4 ? 'LEDE' : 'LEDE2', frames: [1] });
+  // A two-frame story's band goes frameless too, and its one inside frame
+  // closes the story as a page of its own, centred and the height of the
+  // screen: hung as a column under the band, it sat at the far edge with a
+  // page of empty paper beside it and nothing else on screen (New York).
+  if (n === 2) slots.push({ kind: 'LEDE2', frames: [] }, { kind: 'PAGE', frames: [1] });
+  else if (n >= 2) slots.push({ kind: n >= 4 ? 'LEDE' : 'LEDE2', frames: [1] });
   else slots.push({ kind: 'LEDE2', frames: [] });
   // Frame numbers here are 1-based, as the reader counts them.
   const quoteAt = n >= 6 && hasQuote ? Math.round(0.4 * n) : null;

@@ -22,6 +22,7 @@ import LivingAtlasStory from './LivingAtlasStory';
 import { startLenis } from '../../lib/smoothScroll';
 import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES, ARCHIVE_ENTRY_LEAD } from '../../lib/archiveEntrance';
 import { rollFrames } from '../../lib/bridgeRoll';
+import { storyFrames } from '../../lib/storyPlan';
 import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
 import { activeChapters, chapterSections, issueChapters } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
@@ -266,6 +267,14 @@ export default function HomePage({ collections }: Props) {
   const atlasEntryProgress = useMotionValue(0);
   const prologueProgress = useMotionValue(0);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const selectedCollectionRef = useRef<Collection | null>(null);
+  selectedCollectionRef.current = selectedCollection;
+  // The story the overlay opened on, and whether it opened from its chapter
+  // (a plate, a cover) rather than from the closing's proof sheet: a reader
+  // who turns on with Next and then goes Back comes back to the chapter of
+  // the story they are on, not the one they opened.
+  const storyOpenedIdRef = useRef<string | null>(null);
+  const storyAtChapterRef = useRef(false);
   const [storyClosing, setStoryClosing] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
@@ -444,6 +453,8 @@ export default function HomePage({ collections }: Props) {
     // for the state effect left one residual smooth-scroll frame moving behind
     // the full-screen cover on quick trackpad clicks.
     storyOpenRef.current = true;
+    storyOpenedIdRef.current = collection._id;
+    storyAtChapterRef.current = !!chapter;
     storySourceChapterIdRef.current = chapter?.id ?? chapterId;
     setStoryClosing(false);
     storyScrollYRef.current = window.scrollY;
@@ -456,11 +467,34 @@ export default function HomePage({ collections }: Props) {
     setSelectedCollection(collection);
   }, [commitActiveArchiveId, holdStoryGutter]);
   const closeCollection = useCallback(() => {
+    // A story turned (Next) away from the chapter it opened on closes onto
+    // the chapter of the story on screen: the page is set at that chapter's
+    // anchor (derived from the offset chain, as a voyage aims) under the
+    // story while it still covers the whole screen, so the exit uncovers the
+    // chapter the reader is actually on. Its focus returns there too. The
+    // page is held (Lenis stopped, the body locked); the lock's release lands
+    // on the same position (`storyScrollYRef`).
+    const current = selectedCollectionRef.current;
+    if (current && storyAtChapterRef.current && current._id !== storyOpenedIdRef.current) {
+      const chapterId = `archive-item-${current._id}`;
+      const desktopTarget = document.getElementById(chapterId);
+      const target = desktopTarget ?? document.getElementById(`mobile-${chapterId}`);
+      if (target) {
+        const desktop = !!desktopTarget;
+        const y = Math.max(0, Math.round(archiveChapterAnchorY(target, desktop) - window.innerHeight * (desktop ? 0.48 : 0.56)));
+        storyScrollYRef.current = y;
+        if (desktop) window.scrollTo({ top: y, behavior: 'instant' });
+        else document.body.style.inset = `-${y}px 0 auto`;
+        storySourceChapterIdRef.current = target.id;
+        storyReturnFocusRef.current = target.querySelector<HTMLElement>('[role="button"], button');
+        commitActiveArchiveId(chapterId);
+      }
+    }
     // Keep the homepage frozen until the editorial Story cover and panel have
     // completed their exit. The map timeline resumes only after AnimatePresence.
     setStoryClosing(true);
     setSelectedCollection(null);
-  }, []);
+  }, [commitActiveArchiveId]);
   const selectCollectionWithinStory = useCallback((collection: Collection) => {
     setSelectedCollection(collection);
   }, []);
@@ -683,6 +717,9 @@ export default function HomePage({ collections }: Props) {
 
   const desktopAtlasSectionRef = useRef<HTMLDivElement>(null);
   const desktopStageRef = useRef<HTMLDivElement>(null);
+  // The page's own root: gone from the document once a navigation (the
+  // browser's Back with a story open) has swapped the page out.
+  const pageRootRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!desktopLayout || !desktopAtlasSectionRef.current) return;
     // Restored/deep-linked pages enter at their current position, never replay
@@ -731,6 +768,9 @@ export default function HomePage({ collections }: Props) {
     // scrollbar's gutter, as the plate is read in openCollection itself.
     const grownFrom = request.source ? photoOrigin(request.source, request.source.querySelector('img')) : null;
     openCollection(collection);
+    // The reader is at the closing, and comes back to it whatever story they
+    // turn on to.
+    storyAtChapterRef.current = false;
     // Undo what openCollection read off the chapter's plate, in the same
     // event: the story mounts on the next render and reads these refs there.
     // (The chapter's stub stays on its ticket: it is hidden only by a story
@@ -741,8 +781,12 @@ export default function HomePage({ collections }: Props) {
     });
     if (request.returnFocus) storyReturnFocusRef.current = request.returnFocus;
     commitActiveArchiveId(activeBefore);
+    // The story's frame 01 (its cover) IS the spread the grow lands on: a
+    // proof-sheet cover opens the story, not the viewer over it.
     const hash = request.frameUrl ? /[0-9a-f]{40}/.exec(request.frameUrl)?.[0] : undefined;
-    storyFrameRef.current = hash ? { id: collection._id, hash } : null;
+    const frame01 = storyFrames(collection.photos ?? [], collection.coverImageUrl)[0]?.imageUrl ?? collection.coverImageUrl ?? '';
+    const isFrame01 = !!hash && /[0-9a-f]{40}/.exec(frame01)?.[0] === hash;
+    storyFrameRef.current = hash && !isFrame01 ? { id: collection._id, hash } : null;
   }, [orderedCities, openCollection, commitActiveArchiveId]);
   // …then the frame. MagazineLayout takes no starting frame, so the page does
   // what a reader would: while the story's front page still covers it, the
@@ -1502,7 +1546,13 @@ export default function HomePage({ collections }: Props) {
         document.body.style.width = '';
         document.body.style.overflow = '';
         releaseStoryGutter();
-        if (Math.abs(window.scrollY - storyScrollYRef.current) > 1) window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
+        // Only while this page is still the document: unmounted by a
+        // navigation (Back with a story open), this scroll landed on the NEXT
+        // page, which the router then recorded as its own position (/about
+        // came back at its foot).
+        if (pageRootRef.current?.isConnected && Math.abs(window.scrollY - storyScrollYRef.current) > 1) {
+          window.scrollTo({ top: storyScrollYRef.current, behavior: 'instant' });
+        }
       }
       document.body.style.overflow = '';
       document.body.style.backgroundColor = '';
@@ -1523,6 +1573,7 @@ export default function HomePage({ collections }: Props) {
           left. `clip`, unlike `hidden`, is not a scroll container, so the
           sticky atlas still pins to the viewport. */}
       <div
+        ref={pageRootRef}
         className="min-h-screen font-sans relative overflow-x-clip bg-[#282c20] text-[#F4F4ED]"
         inert={storyActive}
         aria-hidden={storyActive}
@@ -1735,7 +1786,7 @@ export default function HomePage({ collections }: Props) {
                   1's plate is where the roll's select lands and where the dive
                   ends, and it must keep its place on the page. The heading
                   itself stays for screen readers. */}
-              <h2 className="sr-only">Selected Works</h2>
+              <h2 className="sr-only font-ui">Selected Works</h2>
               <div aria-hidden="true" className="invisible relative max-w-2xl select-none lg:ml-[12%]">
                 <div className="space-y-5">
                   <div className="flex items-center gap-4 font-ui text-[9px] font-medium uppercase tracking-[0.1em]">
@@ -1827,7 +1878,7 @@ export default function HomePage({ collections }: Props) {
           ) : (
           /* ── Mobile Main — the same route narrative, recomposed vertically ── */
           <div className="mobile-route-story relative isolate bg-[#282c20]">
-            <h2 className="sr-only">Selected Works</h2>
+            <h2 className="sr-only font-ui">Selected Works</h2>
             <div className="sticky top-0 z-0 h-[100dvh] min-h-[100svh]">
               <DeferredRouteAtlas
                 stops={routeStops}

@@ -142,6 +142,8 @@ html.lenis body {
   font-size: clamp(30px, 2.9vw, 52px);
   line-height: 1.08;
   letter-spacing: -0.02em;
+  /* Three even lines, never "dated." alone on the last. */
+  text-wrap: balance;
 }
 .bridge-say__foot {
   margin-top: 26px;
@@ -163,14 +165,18 @@ html.lenis body {
   left: 6vw;
   top: 19vh;
 }
-/* Beside the planet as it glides to the focal point, clear of its limb. */
+/* Beside the planet as it glides to the focal point, clear of its limb, and
+   inside the page's 48px right margin (the nav's edge): at 1728 its 13.5em
+   measure ran to 23px from the window's edge. */
 .globe-prologue[data-roll-live] .bridge-say--two {
   left: 58vw;
   top: 15vh;
+  max-width: calc(42vw - 48px);
 }
 @media (min-width: 1600px) {
   .globe-prologue[data-roll-live] .bridge-say--two {
     left: 60vw;
+    max-width: calc(40vw - 48px);
   }
 }
 .globe-prologue[data-roll-live] .bridge-say.is-on {
@@ -213,6 +219,13 @@ html.lenis body {
 html:is([data-voyage], [data-globe-voyage]) .globe-prologue[data-roll-live] .bridge-roll {
   opacity: 0;
   transition: opacity var(--dur-in) var(--ease-leave);
+}
+/* The landing: once the select is lifted out of the roll, the prologue's
+   layer steps down under the lander (z 17), still over the atlas (10) and
+   its release veil (15). The frames it leaves are left behind UNDER it, so
+   the select never slides under a translucent neighbour as it grows. */
+.globe-prologue[data-bridge-landing] {
+  z-index: 16;
 }
 /* Shown once every frame has decoded. */
 .globe-prologue[data-roll-live] .bridge-stage {
@@ -1185,6 +1198,14 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   margin-left: 0;
   margin-right: 0.55em;
 }
+/* A place whose dot lands inside the covers' column (`data-under`, written
+   with `data-side`) is under the plates and their headers: it is not printed
+   there — its number read into the chapter header and its dot sat on the
+   plate's corner — unless the camera is on it or on its way to it. */
+.af-point__mark[data-under]:not(.is-current):not(.is-inbound) :is(.af-point__dot, .af-point__type) {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
 /* Visited: a little fuller than the places still ahead. */
 .af-point__mark.is-past .af-point__dot {
   transform: scale(0.72);
@@ -1350,13 +1371,14 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   .af-point__name,
   .af-point__landmark { transition: none !important; animation: none !important; }
 }
-/* The index globe's mark for the place pointed at in the index (RouteAtlas's
-   prologue mark): the atlas's own print mark at full size, the numeral a size
-   up (at 10px it was nearly lost on the whole planet). It prints in (scale
-   .64 to 1; keyed per place, so it starts from @starting-style) and fades out
-   where it stood — transitions both ways, because an animation on opacity
-   stops it fading out when it ends. On the dive it fades with the dots under
-   it. */
+/* The index globe's marks (RouteAtlas's prologue marks): the atlas's own
+   print mark at full size, the numeral a size up (at 10px it was nearly lost
+   on the whole planet). One is on at a time — the place pointed at on the
+   roll, else the place its frames lit last — so the roll's current chapter
+   is named on the planet without a pointer. It prints in (scale .64 to 1,
+   the numeral a beat after the dot) and fades out where it stood as the next
+   one prints — transitions both ways, because an animation on opacity stops
+   it fading out when it ends. On the dive it fades with the dots under it. */
 .prologue-mark {
   position: relative;
   display: block;
@@ -1408,6 +1430,7 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   opacity: 1;
   transition-duration: var(--dur-in);
   transition-timing-function: var(--ease-arrive);
+  transition-delay: 120ms;
 }
 @starting-style {
   .prologue-mark.is-on .prologue-mark__dot { opacity: 0; transform: scale(0.64); }
@@ -1499,7 +1522,9 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   --story-lead: clamp(20px, 1.5vw, 26px);
   --story-quote: clamp(38px, 3.36vw, 60px);
   --story-text: clamp(18px, 1.16vw, 20px);
-  --story-plate-h: clamp(40px, calc(24px + 1.86vw), 64px);
+  /* The Plates on the end page: a contact sheet, not a ribbon (84px in the
+     art-book mock it came from; at 56 it read as a thin dim strip). */
+  --story-plate-h: clamp(72px, 5.6vw, 96px);
   background: var(--story-paper);
   color: var(--story-ink);
 }
@@ -1594,7 +1619,9 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   opacity: 0;
-  transition: opacity var(--dur-swap) var(--ease-arrive);
+  /* Going (the reader back up over the spread): out on the fade, which
+     eases in. The arrive curve is only for coming in, below. */
+  transition: opacity var(--dur-out) var(--ease-fade);
 }
 .story-head__name {
   position: absolute;
@@ -1605,6 +1632,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .story-head[data-paper] .story-head__name,
 .story-head[data-paper] .story-head__folio {
   opacity: 0.72;
+  transition: opacity var(--dur-swap) var(--ease-arrive);
 }
 .story-head__frame { display: none; }
 @media (max-width: 1023.98px) {
@@ -1648,15 +1676,26 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   inset: 0;
   pointer-events: none;
   transition: opacity var(--dur-atmos) var(--ease-arrive);
-  /* The type's ground: the map fades under the title and the foot. */
+  /* The type's ground: the map fades under the title and the dek (the
+     place's standfirst, set on the map page whichever way frame 01 turns),
+     and under the foot. */
   background:
-    linear-gradient(180deg, rgba(10, 10, 9, 0.38) 0%, rgba(10, 10, 9, 0) 34%),
+    linear-gradient(180deg, rgba(10, 10, 9, 0.4) 0%, rgba(10, 10, 9, 0.3) 30%, rgba(10, 10, 9, 0) 50%),
     linear-gradient(0deg, rgba(10, 10, 9, 0.5) 0%, rgba(10, 10, 9, 0) 40%);
 }
 .story[data-open="portrait"] .story-spread__map::after {
   background:
-    linear-gradient(180deg, rgba(10, 10, 9, 0.38) 0%, rgba(10, 10, 9, 0) 34%),
+    linear-gradient(180deg, rgba(10, 10, 9, 0.4) 0%, rgba(10, 10, 9, 0.3) 30%, rgba(10, 10, 9, 0) 50%),
     linear-gradient(0deg, rgba(10, 10, 9, 0.6) 0%, rgba(10, 10, 9, 0) 50%);
+}
+/* New York's poster is white line on black, far brighter under the type
+   than the inverted pale posters: a deeper ground under the dek. */
+@media (min-width: 1024px) {
+  .story[data-map="dark"] .story-spread__map::after {
+    background:
+      linear-gradient(180deg, rgba(10, 10, 9, 0.52) 0%, rgba(10, 10, 9, 0.5) 38%, rgba(10, 10, 9, 0) 58%),
+      linear-gradient(0deg, rgba(10, 10, 9, 0.5) 0%, rgba(10, 10, 9, 0) 40%);
+  }
 }
 .story-terrain-ink {
   display: block;
@@ -1958,8 +1997,9 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     z-index: 1;
     width: var(--fw);
   }
-  /* A landscape frame 01 leaves paper under it: its caption, the dek and the
-     credits. The map page then carries only the number and the title. */
+  /* A landscape frame 01 leaves paper under it: its caption, and the
+     credits in the rail's column. The map page carries the number, the title
+     and the dek (the place's standfirst, never set under the picture). */
   .story-open__under {
     position: absolute;
     top: calc(var(--open-h) + 12px);
@@ -1975,9 +2015,9 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     grid-column: 1 / -1;
     margin: 0 0 22px;
   }
-  .story-open__under .story-dek { max-width: 17em; }
+  .story-open__under .story-credits { grid-column: 2; }
   .story[data-open="portrait"] .story-open__under,
-  .story[data-open="landscape"] .story-spread__meta,
+  .story[data-open="landscape"] .story-spread__meta .story-credits,
   .story[data-open="landscape"] .story-open__cap--side {
     display: none;
   }
@@ -2243,7 +2283,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   color: inherit;
   text-align: left;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 0.9;
   transition: opacity var(--dur-out) var(--ease-arrive);
 }
 .story-plate:hover,
@@ -2262,13 +2302,34 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   font-variant-numeric: tabular-nums;
   color: var(--stub-muted);
 }
+/* The terrain plate, whole, printed as lines only. On the spread the poster
+   is full-bleed, so its ground lifting the stock a shade reads as tone; here,
+   as a plate, it read as a pale box with a hard edge where the sea runs off
+   the poster. So the ground is pressed out (more contrast: the land and sea
+   tints go under black and screen to nothing, the lines stay), the four
+   edges feather into the stock, and the poster's own corner notices are
+   cropped off (MAP_CREDIT is set under the plate). */
 .story-end__terrain {
   isolation: isolate;
+  overflow: hidden;
+  aspect-ratio: 2000 / 1060;
   background: var(--stub-paper, #30352a);
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%),
+    linear-gradient(180deg, transparent 0, #000 9%, #000 88%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%),
+    linear-gradient(180deg, transparent 0, #000 9%, #000 88%, transparent 100%);
+  mask-composite: intersect;
 }
 .story-end__terrain img {
+  display: block;
   width: 100%;
   height: auto;
+}
+.story-end__terrain .story-terrain-ink {
+  filter: grayscale(1) invert(1) contrast(2.1) brightness(0.86);
 }
 .story-end__credit {
   margin: 10px 0 0;
@@ -2429,9 +2490,10 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     min-height: 100svh;
     padding: 10svh 0 max(7svh, calc(var(--story-stub-h) + var(--sM) + 40px));
   }
-  .story-end__plates { display: contents; }
-  .story-end__plates .story-label { grid-area: 1 / 2 / 2 / 5; }
-  .story-plates { grid-area: 1 / 5 / 2 / 14; }
+  /* The label stands over the plates, in their column: in the rail's
+     columns it passed under the kept stub pinned there. */
+  .story-end__plates { grid-area: 1 / 5 / 2 / 14; }
+  .story-end__plates .story-plates { margin-top: 16px; }
   .story-end__map {
     grid-area: 2 / 5 / 3 / 10;
     margin-top: clamp(64px, 10vh, 120px);

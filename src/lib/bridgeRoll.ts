@@ -286,7 +286,10 @@ export function landingPose(
   const t = clamp01(L);
   const k = smootherstep(t);
   const drop = from.y - slot.y;
-  const b = drop > 0 ? clamp01(span / drop - 2) : 0;
+  // b may go below 0 (a wide window, where the drop is long for the scroll
+  // that carries it): f stays monotonic for b ≥ −2 (f′ = t(2 − 2b + 3bt)),
+  // and above 1 it would first run backwards, so it is held to [−1, 1].
+  const b = drop > 0 ? Math.max(-1, Math.min(1, span / drop - 2)) : 0;
   const f = (1 - b) * t * t + b * t * t * t;
   return {
     x: from.x + (slot.x - from.x) * k,

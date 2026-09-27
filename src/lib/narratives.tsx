@@ -1,4 +1,4 @@
-import type { Photo, PortableTextBlock } from '../types';
+import type { Photo } from '../types';
 
 /**
  * Sanity photo titles have historically arrived as both strings and portable
@@ -42,7 +42,7 @@ export function photoDisplayTitle(photo: Pick<Photo, 'title'>): string {
  *
  * There is no separate caption field: the Sanity `title` doubles as the
  * description, and today every one of them is machine-made — `Miami #24`,
- * `Bryce Canyon #05`, a filename-like `NY_2`, and on the Page chapter a
+ * `Bryce Canyon #05`, a filename-like `NY` or `NY_2`, and on the Page chapter a
  * serialized `Page #[object Object],…101` (which `readableText` already
  * reduces to ''). Those read as filenames, not captions, so they are treated
  * as "not written yet". Replace a title in Sanity with real words and it
@@ -53,6 +53,9 @@ export function photoDescription(photo: Pick<Photo, 'title'>): string {
   if (!title) return '';
   if (/#\s*\S*\d+\s*$/.test(title)) return '';
   if (/^[A-Za-z]{1,6}[_-]\d+$/.test(title)) return '';
+  // A bare abbreviation is a file's stem too (New York's first frame is "NY",
+  // its second "NY_2"): nobody writes a caption in two capitals.
+  if (/^[A-Z]{1,3}$/.test(title)) return '';
   return title;
 }
 
@@ -154,17 +157,6 @@ export function pullQuote(slug: string | undefined): string {
  *  cropped past its own corner notice. */
 export const MAP_CREDIT = 'terraink.app · © OpenStreetMap contributors';
 
-/**
- * Render Sanity Portable Text into React nodes.
- *
- * Supports plain paragraphs, blockquote, `em` and `strong` inline marks.
- * Caller controls outer container styling — this just emits <p> / <blockquote>.
- *
- * @param blockquoteBorderColor Tailwind class fragment to color the blockquote
- *        accent line. Defaults to a neutral white/10 so it works on dark
- *        backgrounds. Pass `"border-black/10"` on light pages.
- */
-
 /** First-paragraph excerpt of a collection's editorial fallback, truncated to
  *  ~n chars at a word boundary with an ellipsis. Empty when there's no fallback.
  *  The canonical source of homepage editorial copy (Sanity `introduction` is
@@ -175,40 +167,4 @@ export function excerpt(slug: string | undefined, n = 170): string {
   const cut = full.slice(0, n);
   const lastSpace = cut.lastIndexOf(' ');
   return cut.slice(0, lastSpace > 0 ? lastSpace : n).trimEnd() + '…';
-}
-
-export function renderPortableText(
-  blocks: PortableTextBlock[],
-  blockquoteBorderColor = 'border-white/10',
-): React.ReactNode {
-  return blocks.map((block) => {
-    const text = block.children.map((span) => {
-      let node: React.ReactNode = span.text;
-      if (span.marks?.includes('em')) node = <em key={span._key}>{node}</em>;
-      if (span.marks?.includes('strong')) node = <strong key={span._key}>{node}</strong>;
-      return node;
-    });
-    if (block.style === 'blockquote') {
-      return (
-        <blockquote
-          key={block._key}
-          className={`border-l-2 ${blockquoteBorderColor} pl-4 my-4 italic opacity-60`}
-        >
-          {text}
-        </blockquote>
-      );
-    }
-    return (
-      <p key={block._key} className="mb-4 last:mb-0">
-        {text}
-      </p>
-    );
-  });
-}
-
-/** Render the fallback plain-string paragraphs (no inline marks). */
-export function renderFallback(paragraphs: string[]): React.ReactNode {
-  return paragraphs.map((p, i) => (
-    <p key={i} className="mb-4 last:mb-0">{p}</p>
-  ));
 }

@@ -411,6 +411,18 @@ interface GrowPlane {
   phase: 'grow' | 'hold';
 }
 
+/** Resolves once a story frame's own file has loaded and decoded, or has
+ *  failed: the moment the page can show it instead of a stand-in. */
+function frameDecoded(image: HTMLImageElement): Promise<void> {
+  const loaded = image.complete
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => {
+        image.addEventListener('load', () => resolve(), { once: true });
+        image.addEventListener('error', () => resolve(), { once: true });
+      });
+  return loaded.then(() => (image.naturalWidth > 0 && typeof image.decode === 'function' ? image.decode().catch(() => {}) : undefined));
+}
+
 let growKey = 0;
 
 function growPlane(kind: GrowPlane['kind'], story: Collection, origin: PlateOrigin | null, box: LightboxOrigin, ms: number): GrowPlane {
@@ -1321,20 +1333,15 @@ function flyStubHome(rail: HTMLElement, home: PlateStub, slug: string | undefine
   document.body.appendChild(paper);
   // The copy is fixed, but the ticket it lands on is on the page: once Lenis
   // starts again (+~690ms, just before the copy seats) a scroll moves the
-  // ticket away. The copy follows the page by the scroll offset (no layout
-  // read) until it is gone, and a copy the page moved under is cut at once —
-  // the ticket's own scroll-linked drift is not in that offset.
+  // ticket away. The copy follows the page by the scroll offset until it is
+  // gone, and a copy the page moved under is cut at once — the ticket's own
+  // scroll-linked drift is not in that offset. The offset is read in the
+  // page's own scroll event, before the frame's writes (read in a frame loop
+  // after the flight had written its box, it forced a layout every frame).
   const scrollAtStart = window.scrollY;
   let fade: Animation | null = null;
   let scrolled = false;
   let seated = false;
-  const cut = () => {
-    fade?.cancel();
-    paper.remove();
-    window.removeEventListener('wheel', cut, true);
-    window.removeEventListener('keydown', cut, true);
-    window.removeEventListener('touchstart', cut, true);
-  };
   const follow = () => {
     if (!paper.isConnected) return;
     const offset = scrollAtStart - window.scrollY;
@@ -1343,9 +1350,16 @@ function flyStubHome(rail: HTMLElement, home: PlateStub, slug: string | undefine
       scrolled = true;
       if (seated) cut();
     }
-    requestAnimationFrame(follow);
   };
-  requestAnimationFrame(follow);
+  const cut = () => {
+    fade?.cancel();
+    paper.remove();
+    window.removeEventListener('scroll', follow);
+    window.removeEventListener('wheel', cut, true);
+    window.removeEventListener('keydown', cut, true);
+    window.removeEventListener('touchstart', cut, true);
+  };
+  window.addEventListener('scroll', follow, { passive: true });
   aimSharedMarks(shared, home.marks);
   // Normally away since the kept half was handed into the rail; set here
   // too, so the ticket can never show its stub under the copy on its way.
@@ -1589,7 +1603,7 @@ function EndPage({
                 onClick={(event) => onOpenPlate(index, event.currentTarget)}
               >
                 <img
-                  src={`${photo.imageUrl}?auto=format&h=160&q=70`}
+                  src={`${photo.imageUrl}?auto=format&h=200&q=70`}
                   alt=""
                   width={photo.width}
                   height={photo.height}
@@ -2108,7 +2122,11 @@ export default function MagazineLayout({
   // Landed: the grounds have gone. The photograph stays over frame 01 until
   // frame 01's own file has decoded (a bigger candidate than the plate's),
   // then the plane goes — the two are the same pixels in the same box. A
-  // plane that opened on paper fades.
+  // plane that opened on paper fades. There is no clock on it: on a slow
+  // line (the owner reads from far off the image CDN) frame 01 can take ten
+  // seconds, and a cap took the picture away and left blank paper until it
+  // came. The plane is fixed and the page is not, so the reader scrolling
+  // the story is the other thing that lets it go (a failed file ends it too).
   useEffect(() => {
     if (!plane || plane.phase !== 'hold' || plane.story._id !== collection._id) return;
     let live = true;
@@ -2121,25 +2139,20 @@ export default function MagazineLayout({
       const timer = window.setTimeout(done, DUR_MS.swap);
       return () => { live = false; window.clearTimeout(timer); };
     }
-    const image = plane.target ? containerRef.current?.querySelector<HTMLImageElement>('[data-frame-index="0"] img') : null;
+    const root = containerRef.current;
+    const image = plane.target ? root?.querySelector<HTMLImageElement>('[data-frame-index="0"] img') : null;
     if (!image) {
       frame = requestAnimationFrame(done);
       return () => { live = false; cancelAnimationFrame(frame); };
     }
-    // However the file fares, the plane never outstays this.
-    const cap = window.setTimeout(done, 2400);
-    const loaded = image.complete && image.naturalWidth > 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => {
-          image.addEventListener('load', () => resolve(), { once: true });
-          image.addEventListener('error', () => resolve(), { once: true });
-        });
-    void loaded
-      .then(() => (typeof image.decode === 'function' ? image.decode().catch(() => {}) : undefined))
-      .then(() => { frame = requestAnimationFrame(done); });
+    const onScroll = () => {
+      if (root && root.scrollTop > 2) done();
+    };
+    root?.addEventListener('scroll', onScroll, { passive: true });
+    void frameDecoded(image).then(() => { frame = requestAnimationFrame(done); });
     return () => {
       live = false;
-      window.clearTimeout(cap);
+      root?.removeEventListener('scroll', onScroll);
       cancelAnimationFrame(frame);
     };
   }, [plane, collection._id]);
@@ -2418,13 +2431,31 @@ export default function MagazineLayout({
     // `enteringId` changes in the same commit as the story it names.
   }, [live, collection._id, reduce]);
   const spreadSet = spreadSetId === collection._id;
+  // …and not before the spread has actually loaded: frame 01's own file and
+  // the map page's terrain, each decoded (or failed). On a fast line both
+  // are in long before SPREAD_SET_MS; on a slow one the stub used to arrive
+  // beside a blank frame 01 and an undeveloped map.
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!entryLanded || !root) return;
+    let live = true;
+    const images = [
+      root.querySelector<HTMLImageElement>('[data-frame-index="0"] img'),
+      root.querySelector<HTMLImageElement>('.story-spread__terrain'),
+    ].filter((image): image is HTMLImageElement => !!image);
+    void Promise.all(images.map(frameDecoded)).then(() => {
+      if (live) setLoadedId(collection._id);
+    });
+    return () => { live = false; };
+  }, [entryLanded, collection._id]);
   // The story has loaded and the kept stub is handed into the rail (KeptStub).
   // Nothing stub-like is on screen before this: the ticket keeps its stub
   // while the plate grows over it, and gives it up only here, under the
   // opaque story, so the half the reader keeps is never in two places at once.
   // A turn growing over the story leaves its stub where it is: the next
   // story's own stub waits for its own spread.
-  const stubReady = spreadSet && entryLanded;
+  const stubReady = spreadSet && entryLanded && loadedId === collection._id;
   // It is handed in two frames after that, and only when no viewer is open:
   // a story opened onto one of its frames (the closing proof sheet) flies
   // that frame out of the page the moment the story goes live, and the stub
@@ -2695,10 +2726,13 @@ export default function MagazineLayout({
                     />
                   )}
                   {/* A landscape frame 01 has paper under it: its caption,
-                      the dek and the credits are set there. */}
+                      and the credits in the rail's column. The dek is the
+                      place's line, not this picture's, and set directly
+                      under frame 01 it read as its caption (a sunrise under a
+                      midday frame): it stands on the map page under the
+                      title, as a standfirst, whichever way frame 01 turns. */}
                   <div className="story-open__under">
                     <p className="story-cap story-open__cap font-ui"><CaptionText frames={[0]} places={places} /></p>
-                    {dek && <p className="story-dek font-serif">{dek}</p>}
                     <Credits camera={camera} map={!!terrain} />
                   </div>
                   {/* A portrait frame 01 fills the right page: its caption
@@ -2759,7 +2793,7 @@ export default function MagazineLayout({
                   hairline and "15 Captured Frames"). */}
               <aside className="story-rail">
                 <div className="story-rail__foot">
-                  <p className="sr-only">{photos.length} frames</p>
+                  <p className="sr-only font-ui">{photos.length} frames</p>
                   <KeptStub
                     key={collection._id}
                     stubRef={keptStubRef}

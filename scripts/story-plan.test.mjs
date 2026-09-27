@@ -65,7 +65,7 @@ test("today's six sequences", () => {
     page: 'OPEN[1] LEDE[2] SCREEN[3] DIPTYCH[4,5] QUOTE PAGE[6] PART[7] PAIR[8,9] PAGE[10] FEATURE[11] END',
     'zion-national-park': 'OPEN[1] LEDE[2] SCREEN[3] QUOTE PAGE[4] PART[5] FEATURE[6] PAIR[7,8] END',
     'bryce-canyon-national-park': 'OPEN[1] LEDE[2] SCREEN[3] PART[4] FEATURE[5] END',
-    'new-york-stories': 'OPEN[1] LEDE2[2] END',
+    'new-york-stories': 'OPEN[1] LEDE2 PAGE[2] END',
   };
   for (const [slug, sequence] of Object.entries(pinned)) assert.equal(written(story(slug).slots), sequence, slug);
   // Orientation strings the design was judged on (cover first).
