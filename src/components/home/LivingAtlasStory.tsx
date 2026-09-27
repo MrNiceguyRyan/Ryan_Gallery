@@ -35,26 +35,19 @@ interface Props {
   chapterProgress?: MotionValue<number>;
 }
 
-// Photographic paper coming up in the developer: the same 115° sweep the story
-// pages use for their frames (on EASE.develop), so a chapter committed from the
-// rail arrives the way a story's photographs arrive.
-const DEVELOP_MASK = 'linear-gradient(115deg, #000 40%, transparent 60%)';
-const DEVELOP_MASK_STYLE = {
-  WebkitMaskImage: DEVELOP_MASK,
-  maskImage: DEVELOP_MASK,
-  WebkitMaskSize: '300% 100%',
-  maskSize: '300% 100%',
-  WebkitMaskRepeat: 'no-repeat',
-  maskRepeat: 'no-repeat',
-} as const;
-const DEVELOP_MS = 620;
+// A chapter committed from the rail simply appears when the flight lands —
+// no sweep wiping it in (页面下滑，封面部分是自动划出来的，我觉得没必要，直接出现就好:
+// the desktop covers have no reveal either) — and the commit holds it this
+// long while the flight settles onto its anchor, before the scrubbed
+// crossfade takes the window back.
+const COMMIT_HOLD_MS = 620;
 // A committed flight that never lands (the visitor grabs the page mid-scroll,
 // the anchor cannot be reached) must not leave the departure frame frozen on
 // screen. Past this the commit is abandoned and the scrubbed crossfade resumes.
 const COMMIT_LIMIT_MS = 2400;
 // Close enough to the destination anchor to call it an arrival. `visualIndex`
-// flips as the arriving photograph passes half up — still too early to start
-// developing the photograph the flight is travelling towards.
+// flips as the arriving photograph passes half up — still too early to show
+// the photograph the flight is travelling towards.
 const COMMIT_ARRIVAL_EPSILON = 0.18;
 
 function imageUrl(url: string, width: number) {
@@ -223,7 +216,7 @@ function ScrubbedPhotoLayer({
   photoX,
   photoY,
   commitRole,
-  develop,
+  shown,
 }: {
   chapter: VisualChapter;
   progress: MotionValue<number>;
@@ -233,35 +226,32 @@ function ScrubbedPhotoLayer({
   photoY: MotionValue<number>;
   /**
    * Set only while a chapter committed from the rail is in flight or arriving:
-   * `from` is the frame the visitor is leaving, `to` the one being developed,
+   * `from` is the frame the visitor is leaving, `to` the one arriving,
    * `other` every chapter the flight merely passes over.
    */
   commitRole: 'from' | 'to' | 'other' | null;
-  /** 0 → fully masked out, 1 → fully developed. */
-  develop: MotionValue<number>;
+  /** The committed destination: 0 while the flight travels, 1 once landed. */
+  shown: MotionValue<number>;
 }) {
   const opacity = useTransform(progress, (value) => photoChapterWeight(value, chapter.index));
-  const scale = useTransform(progress, (value) => 1 + Math.min(1, Math.abs(value - chapter.index)) * 0.012);
-  const maskPosition = useTransform(develop, (value) => `${(1 - value) * 100}% 0%`);
 
   // A rail tap is the one mobile gesture that IS a commit: a known destination
   // reached over a known duration. Scrubbing it would mean cross-fading every
   // chapter the flight passes over, so instead the departure frame holds, the
-  // passed-over chapters stay down, and the destination develops on arrival.
+  // passed-over chapters stay down, and the destination is simply there on
+  // arrival. The photograph is never zoomed on its way in or out either: only
+  // its ink is scrubbed.
   const committed = !reducedMotion && commitRole !== null;
   const style = committed
     ? {
-        opacity: commitRole === 'other' ? 0 : 1,
+        opacity: commitRole === 'other' ? 0 : commitRole === 'to' ? shown : 1,
         zIndex: commitRole === 'to' ? 2 : 1,
         x: photoX,
         y: photoY,
-        ...(commitRole === 'to'
-          ? { ...DEVELOP_MASK_STYLE, WebkitMaskPosition: maskPosition, maskPosition }
-          : null),
       }
     : reducedMotion
       ? { opacity: selected ? 1 : 0 }
-      : { opacity, scale, x: photoX, y: photoY };
+      : { opacity, x: photoX, y: photoY };
 
   return (
     <motion.div
@@ -546,11 +536,12 @@ export default function LivingAtlasStory({
   const photoY = useSpring(pointerY, { stiffness: 76, damping: 24, mass: 0.72 });
 
   // A chapter chosen from the rail, from the moment it is tapped until its
-  // photograph has finished developing. `token` lets the async arrival and the
-  // clean-up timers recognise their own commit after a second tap replaced it.
+  // photograph has been shown and held (COMMIT_HOLD_MS). `token` lets the
+  // async arrival and the clean-up timers recognise their own commit after a
+  // second tap replaced it.
   const [commit, setCommit] = useState<{ from: number; to: number; token: number; arrived: boolean } | null>(null);
   const commitTokenRef = useRef(0);
-  const develop = useMotionValue(1);
+  const shown = useMotionValue(1);
   // Where a pointer pressed the chapter title or a rail stop: a press that
   // has travelled PRESS_CLICK_SLOP by its click is a drag (a long sideways
   // drag across the title opened the story), the same rule as the desktop
@@ -614,10 +605,10 @@ export default function LivingAtlasStory({
     pointerY.set(0);
   }, [paused, pointerX, pointerY]);
 
-  // Watch the committed flight in. The destination is developed once the scroll
+  // Watch the committed flight in. The destination is shown once the scroll
   // is actually near its anchor AND the exact source the layer will paint has
-  // been decoded — the frame can then come up as one continuous sweep instead
-  // of appearing in whatever state the network left it.
+  // been decoded — the frame then appears whole, at once, instead of in
+  // whatever state the network left it.
   useMotionValueEvent(progress, 'change', (value) => {
     if (!commit || commit.arrived) return;
     if (Math.abs(value - commit.to) > COMMIT_ARRIVAL_EPSILON) return;
@@ -630,7 +621,7 @@ export default function LivingAtlasStory({
     const { token, to, arrived } = commit;
     const clear = () => setCommit((current) => (current && current.token === token ? null : current));
     if (!arrived) {
-      // Nothing has been masked yet while the flight is still travelling; the
+      // Nothing has been shown yet while the flight is still travelling; the
       // limit only covers a flight that never lands at all.
       const limit = window.setTimeout(clear, COMMIT_LIMIT_MS);
       return () => window.clearTimeout(limit);
@@ -640,14 +631,14 @@ export default function LivingAtlasStory({
     const src = imageUrl(stops[to]?.imageUrl ?? '', sourceWidth);
     void decodeImage(src, 'high').then(() => {
       if (cancelled) return;
-      animate(develop, 1, { duration: DEVELOP_MS / 1000, ease: EASE.develop });
-      timer = window.setTimeout(clear, DEVELOP_MS + 90);
+      shown.set(1);
+      timer = window.setTimeout(clear, COMMIT_HOLD_MS + 90);
     });
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [commit, develop, sourceWidth, stops]);
+  }, [commit, shown, sourceWidth, stops]);
 
   // Any real gesture during the flight hands the photograph back to the scroll.
   // The commit is a promise about a destination; once the visitor is steering,
@@ -685,7 +676,7 @@ export default function LivingAtlasStory({
   const idPrefix = mobile ? 'mobile-archive-item-' : 'archive-item-';
   // The stub follows the frame on screen: under reduced motion the frame is
   // `visualIndex`'s; during a rail flight the departure frame holds until the
-  // destination develops; otherwise it is the scrubbed dissolve's lead frame
+  // destination is shown; otherwise it is the scrubbed dissolve's lead frame
   // (held a little longer on the way back, `stubLeadIndex`).
   const stubIndex = reducedMotion
     ? visualIndex
@@ -704,11 +695,10 @@ export default function LivingAtlasStory({
     if (!reducedMotion) {
       commitTokenRef.current += 1;
       // Hold the destination back at the moment it is chosen, not at the moment
-      // it lands: the mask starts closed so the departure frame is the only one
-      // on screen for the whole flight. Left open, the destination appeared at
-      // full strength the instant it was tapped and then developed a second
-      // time on arrival — two reveals of one photograph.
-      develop.set(0);
+      // it lands: it starts hidden so the departure frame is the only one on
+      // screen for the whole flight. Left shown, the destination appeared at
+      // full strength the instant it was tapped and then again on arrival.
+      shown.set(0);
       setCommit({ from: visualIndex, to: index, token: commitTokenRef.current, arrived: false });
       const src = imageUrl(stop.imageUrl, sourceWidth);
       if (src) void decodeImage(src, 'high');
@@ -817,7 +807,7 @@ export default function LivingAtlasStory({
               photoX={photoX}
               photoY={photoY}
               commitRole={commitRoleFor(chapter.index)}
-              develop={develop}
+              shown={shown}
             />
           ))}
         </div>

@@ -951,8 +951,8 @@ html[data-globe-voyage] .globe-prologue {
    the trip and data-voyage-dest on the chapter it is bound for. The ink goes
    on the leave curve; the page comes back up on the arrive curve, started so
    it is whole as the destination lands. A reading scroll never sets it. On a
-   chapter the rule sits on its inner box, because framer owns the opacity of
-   the chapter itself. */
+   chapter the rule sits on its inner box, so the chapter itself carries no
+   opacity of its own at any time (its cover is simply there). */
 [data-archive-column] [data-voyage-pass],
 [data-archive-column] [data-archive-chapter] > * {
   transition: opacity var(--dur-out) var(--ease-arrive);
@@ -3573,6 +3573,18 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 .archive-plate {
   position: relative;
 }
+/* The stage (photograph, corners, cue) is a layer of its own. It no longer
+   moves at all — the cover is simply there, no reveal — but the bridge's
+   select lands on the plate's pixels (GlobePrologue: "its stage is a layer
+   of its own"). Painted into the column's layer instead, the photograph is
+   resampled at its fractional offset: measured at 1728×1000, the landed
+   plate differed from the picture the landing has always handed over to on
+   every edge (mean 6.8/255); as a layer it is the same picture (0.07/255).
+   The layer used to come from the retired album unfold's perspective; it is
+   asked for here, with no transform at all. */
+.archive-plate__stage {
+  will-change: transform;
+}
 /* ── The ticket ─────────────────────────────────────────────────────────
    The cover is a ticket: the photograph on the left, the stub on the right,
    one perforation between them. The holes are punched through both halves
@@ -3591,9 +3603,9 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
    moves (while the rip runs it clips at the seam); `__face` carries the
    tear — the hinge about the rip's tip, the snap, laid aside, the fade — as
    one affine and an opacity, written per frame by ArchiveChapter off one
-   clock (src/lib/ticketTear.ts) as custom properties, and nothing else — so
-   the stage inside keeps its own pivot for the first cover's album unfold.
-   At rest nothing is written and the face is untransformed. */
+   clock (src/lib/ticketTear.ts) as custom properties, and nothing else. At
+   rest nothing is written and the face is untransformed: the cover has no
+   entrance of its own, it is simply there. */
 .archive-plate__tear {
   position: relative;
   flex: 1 1 auto;

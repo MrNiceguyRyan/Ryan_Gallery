@@ -254,8 +254,10 @@ export function bridgeGateOpensAt(value: string | undefined) {
  * The seen clock after a sample at `now`: the time since the last sample
  * (`prevT`) counts — from the landing, if that came later — when at that
  * sample the plate was on screen whole (TEAR_SEEN_SHARE, or as whole as a
- * plate taller than the viewport can be) and its cover had opened. A reader
- * at rest samples nothing, so their first move carries the whole rest.
+ * plate taller than the viewport can be). A cover has no entrance of its own
+ * (it is simply there, whole, wherever it is on screen), so on screen whole
+ * is seen. A reader at rest samples nothing, so their first move carries the
+ * whole rest.
  */
 export function accrueSeen(
   seen: number,
@@ -263,12 +265,11 @@ export function accrueSeen(
   now: number,
   landedAt: number,
   prevShare: number,
-  revealed: boolean,
   height: number,
   viewport: number,
 ) {
   const whole = Math.min(TEAR_SEEN_SHARE, height > 0 ? (viewport - 24) / height : TEAR_SEEN_SHARE);
-  if (!revealed || prevShare < whole) return seen;
+  if (prevShare < whole) return seen;
   return seen + Math.max(0, now - Math.max(prevT, landedAt));
 }
 

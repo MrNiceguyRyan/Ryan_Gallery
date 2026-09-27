@@ -31,14 +31,12 @@ test('every phase is bounded, monotonic and completely reversible without animat
   }
 });
 
-test('geography leads the first film and its caption resolves afterwards', () => {
-  assert.ok(entrancePhase(0.25, ...phases.map) > entrancePhase(0.25, ...phases.film));
-  assert.equal(entrancePhase(0.25, ...phases.type), 0);
-  assert.ok(entrancePhase(0.55, ...phases.film) > entrancePhase(0.55, ...phases.type));
-  assert.equal(entrancePhase(0.55, ...phases.details), 0);
+test('the entrance score is the map\'s and the interface\'s only: no cover has an entrance', () => {
+  // The first film's album unfold, and its type and details arriving on the
+  // entrance, were retired with every other cover reveal (直接出现就好).
+  assert.deepEqual(Object.keys(phases).sort(), ['interface', 'map', 'mapVisibility']);
   assert.equal(entrancePhase(1, ...phases.map), 1);
-  assert.equal(entrancePhase(1, ...phases.film), 1);
-  assert.equal(entrancePhase(1, ...phases.details), 1);
+  assert.equal(entrancePhase(0, ...phases.map), 0);
 });
 
 test('map overscan covers its plane throughout the settling movement', () => {
@@ -54,22 +52,31 @@ test('map overscan covers its plane throughout the settling movement', () => {
   }
 });
 
-test('first film only uses formal entry and becomes interactive after it is visible', () => {
+test('the first film is carried in by the bridge alone and is always a whole, live cover', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
   const prologue = readFileSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url), 'utf8');
-  // Chapter 1's plate is carried in by the bridge's roll since 2026-09-27
-  // (GlobePrologue holds it until its select lands in it), so the homepage
-  // no longer gives chapter 1 the album unfold; ArchiveChapter keeps it for
-  // any caller that does.
+  // Chapter 1's plate is carried in by the bridge's roll (GlobePrologue
+  // holds it until its select lands in it). The plate has no unfold of its
+  // own any more — no cover does — so it is interactive whenever it is there.
   assert.doesNotMatch(home, /handoffProgress=/);
   assert.match(prologue, /html\.dataset\.bridge = bridge/);
-  assert.match(chapter, /if \(reduce \|\| !handoffProgress\) return 1/);
-  assert.match(chapter, /if \(!entryInteractive\) return/);
-  assert.match(chapter, /inert: !entryInteractive/);
-  assert.match(chapter, /tabIndex: entryInteractive \? 0 : -1/);
-  assert.ok(entrancePhase(0.52, ...phases.film) >= 0.49);
-  assert.doesNotMatch(chapter, /albumRotateY|albumRotateZ/);
+  assert.doesNotMatch(chapter, /handoffProgress|entryInteractive|albumOpen|ARCHIVE_ENTRANCE_PHASES/);
+  assert.match(chapter, /tabIndex: 0,/);
+  assert.doesNotMatch(chapter, /inert:/);
+  // The bridge lands on the plate's pixels because the stage is a layer of
+  // its own (GlobePrologue). The unfold that used to make it one is gone, so
+  // the layer is asked for in the stylesheet, with no transform.
+  const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  assert.match(css, /\.archive-plate__stage \{\s*will-change: transform;\s*\}/);
+});
+
+test('the phone window never wipes or zooms a photograph in either', () => {
+  const phone = readFileSync(new URL('../src/components/home/LivingAtlasStory.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(phone, /DEVELOP_MASK|maskPosition|maskImage/);
+  assert.doesNotMatch(phone, /\* 0\.012/);
+  // A rail commit's destination is shown whole on arrival, not played in.
+  assert.match(phone, /shown\.set\(1\);/);
 });
 
 test('fallback, deep-link hydration and the live map share the same scroll score', () => {

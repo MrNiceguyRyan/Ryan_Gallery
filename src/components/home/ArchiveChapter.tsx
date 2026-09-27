@@ -15,7 +15,6 @@ import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import { usePressGive } from '../../lib/usePressGive';
-import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import { stockStyle } from '../../lib/ticketStock';
 import { EASE, SPRING, smootherstep } from '../../lib/motion';
 import {
@@ -69,9 +68,6 @@ interface ArchiveChapterProps {
   /** Position of the shared homepage chapter timeline. Fractional values blend
    *  the focus treatment continuously between neighbouring chapters. */
   chapterProgress?: MotionValue<number>;
-  /** Optional opener-to-archive handoff. Used only by the first desktop cover
-   *  so it can unfold like the first page of a film album. */
-  handoffProgress?: MotionValue<number>;
   /** Timeline position when it differs from the visible display order. */
   chapterIndex?: number;
   /** How many chapters the archive holds — the stub prints "03 / 06". */
@@ -95,9 +91,9 @@ interface ArchiveChapterProps {
   /** 'cover' (default) = full-bleed magazine cover; 'feature' = a 2-column
    *  editorial spread (image + a text rail) used for the opening chapter. */
   variant?: 'feature' | 'cover';
-  /** Desktop archive only: the scroll-owned cover reveal, the masked title
-   *  rise and the focus-driven title weight. The mobile route story keeps its
-   *  own quieter treatment. */
+  /** Desktop archive only: the ticket, the masked title rise and the
+   *  focus-driven title weight. The cover itself has no entrance anywhere: it
+   *  is simply there, whole, and scrolls in with the page. */
   desktopMotion?: boolean;
   /** Desktop tickets: the cover torn away by hand (see PULL_*) goes on to the
    *  next place. Called once the face is free; HomePage starts the voyage.
@@ -293,15 +289,9 @@ const PULL_HOLD_MS = 4000;
 const preventPullSelection = (event: Event) => event.preventDefault();
 /** The section's stamp for a scroll's tear (ticketTear.ts, `tearStampAt`). */
 const tearStamp = (now: number, fromMs: number, rate: number) => String(Math.round(tearStampAt(now, fromMs, rate)));
-// Film pulled out of its canister: the frame is cropped open from the bottom
-// edge while the photograph inside settles from a slight overscan. Pure crop
-// and uniform scale — the picture itself is never warped.
-const COVER_REVEAL_RANGE = [0.03, 0.3] as const;
-const COVER_REVEAL_OVERSCAN = 1.2;
-
 // The shared quintic smootherstep (src/lib/motion.ts), the one RouteAtlas
-// uses. The photograph's focus, matte and copy now accelerate and settle on
-// the same curve as the map halo, route head and left-hand directory.
+// uses. The plate's matte, corners and copy accelerate and settle on the same
+// curve as the map halo, route head and left-hand directory.
 const smoothFocus = smootherstep;
 
 /**
@@ -320,7 +310,6 @@ export default function ArchiveChapter({
   index,
   isActive,
   chapterProgress,
-  handoffProgress,
   chapterIndex,
   chapterTotal,
   padStocks,
@@ -456,26 +445,7 @@ export default function ArchiveChapter({
   const fallbackChapterProgress = useMotionValue(
     isActive ? resolvedChapterIndex : resolvedChapterIndex + 1,
   );
-  const fallbackHandoffProgress = useMotionValue(1);
   const resolvedChapterProgress = chapterProgress ?? fallbackChapterProgress;
-  const resolvedHandoffProgress = handoffProgress ?? fallbackHandoffProgress;
-  const [entryInteractive, setEntryInteractive] = useState(() =>
-    !handoffProgress || !!reduce || resolvedHandoffProgress.get() >= 0.52,
-  );
-  useEffect(() => {
-    if (!handoffProgress || reduce) {
-      setEntryInteractive(true);
-      return;
-    }
-    let available = resolvedHandoffProgress.get() >= 0.52;
-    setEntryInteractive(available);
-    return resolvedHandoffProgress.on('change', (progress) => {
-      const next = progress >= 0.52;
-      if (next === available) return;
-      available = next;
-      setEntryInteractive(next);
-    });
-  }, [handoffProgress, reduce, resolvedHandoffProgress]);
 
   // Existing callers can continue to drive the component with `isActive`.
   // Once the parent provides a shared fractional timeline, every chapter reads
@@ -499,16 +469,13 @@ export default function ArchiveChapter({
   // up contrast first, while the approaching chapter keeps more photographic
   // presence and resolves its copy slightly later. At the exact midpoint the
   // map route remains the visual lead instead of two cards competing equally.
+  // The photograph itself takes no part in it (直接出现就好): it is never
+  // cropped, zoomed, faded or moved on its way in — it is simply there, whole,
+  // and the page's own scroll carries it. Only its grade (the matte), its
+  // corners and cue, and the type answer the timeline.
   const chapterDelta = useTransform(resolvedChapterProgress, (position) =>
     Math.max(-1, Math.min(1, position - resolvedChapterIndex)),
   );
-  const focusScale = useTransform(chapterDelta, (delta) => {
-    if (reduce) return 1;
-    const distance = smoothFocus(Math.abs(delta));
-    // Incoming frames hold a fraction more overscan so they appear to settle
-    // into focus; outgoing frames recede without an obvious reverse zoom.
-    return 1 + distance * (delta < 0 ? 0.038 : 0.026);
-  });
   const scrollMatteOpacity = useTransform(chapterDelta, (delta) => {
     if (reduce) return Math.round(delta) === 0 ? 0.24 : 0.42;
     const distance = smoothFocus(Math.abs(delta));
@@ -556,9 +523,6 @@ export default function ArchiveChapter({
     const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
     return `${(distance * 7).toFixed(2)}px`;
   });
-  // Not multiplied by `albumOpen`: the corners live inside `.archive-plate__stage`,
-  // which already carries it, and squaring it would hold them dark through the
-  // first cover's unfold.
   const focusGlow = useTransform(chapterDelta, (delta) => {
     const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
     return (0.95 - distance * 0.55).toFixed(3);
@@ -583,26 +547,10 @@ export default function ArchiveChapter({
     },
   );
 
+  // The section's own passage through the viewport: read by the type only
+  // (the masthead's and kicker's counter-parallax, the feature title's lime
+  // word). The cover is never driven by it.
   const { scrollYProgress } = useScroll({ target: chapterRef, offset: ['start end', 'end start'] });
-  const opacity = useTransform(scrollYProgress, [0, 0.15, 0.92, 1], [0, 1, 1, 0.26]);
-  // Keep the existing vertical arrival and internal parallax. Scale now belongs
-  // to the shared chapter focus, avoiding a second competing zoom timeline.
-  const entryY = useTransform(scrollYProgress, [0, 0.38], [52, 0], { clamp: true });
-  // Covers after the first open by crop instead of the 52px fade-up. The first
-  // cover keeps its album unfold, which already owns the archive entrance.
-  const coverReveal = desktopMotion && !handoffProgress && !reduce;
-  const revealOpen = useTransform(scrollYProgress, (progress) => {
-    if (!coverReveal) return 1;
-    const [start, end] = COVER_REVEAL_RANGE;
-    const value = Math.max(0, Math.min(1, (progress - start) / (end - start)));
-    return 1 - Math.pow(1 - value, 3);
-  });
-  const revealClip = useTransform(revealOpen, (open) =>
-    open >= 1 ? 'inset(0% 0% 0% 0%)' : `inset(${((1 - open) * 100).toFixed(3)}% 0% 0% 0%)`,
-  );
-  const mediaScale = useTransform([focusScale, revealOpen], ([focus, open]) =>
-    Number(focus) * (1 + (COVER_REVEAL_OVERSCAN - 1) * (1 - Number(open))),
-  );
   // One focus value feeds both title axes, so weight and tracking can never
   // disagree about where the plate is. Rest (0) whenever the rack is off.
   const titleFocus = useTransform(chapterDelta, (delta) =>
@@ -618,9 +566,9 @@ export default function ArchiveChapter({
     `${(titleTrackingRest - TITLE_TRACKING_TIGHTEN * focus).toFixed(4)}em`,
   );
   // The masked rise plays once per visit, the first time this chapter nears
-  // focus. The first cover is excluded: its type already arrives on the
-  // entrance score (titleArrival).
-  const titleRiseEnabled = desktopMotion && !handoffProgress && !reduce;
+  // focus. It is type, not the cover: the photograph under it is already
+  // whole.
+  const titleRiseEnabled = desktopMotion && !reduce;
   const [titleRisen, setTitleRisen] = useState(!titleRiseEnabled);
   useEffect(() => {
     if (!titleRiseEnabled) {
@@ -636,18 +584,6 @@ export default function ArchiveChapter({
       if (Math.abs(delta) < TITLE_RISE_DISTANCE) setTitleRisen(true);
     });
   }, [chapterDelta, titleRiseEnabled, titleRisen]);
-  const albumOpen = useTransform(resolvedHandoffProgress, (progress) => {
-    if (reduce || !handoffProgress) return 1;
-    return entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.film);
-  });
-  const titleArrival = useTransform(resolvedHandoffProgress, (progress) =>
-    reduce || !handoffProgress ? 1 : entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.type),
-  );
-  const detailArrival = useTransform(resolvedHandoffProgress, (progress) =>
-    reduce || !handoffProgress ? 1 : entrancePhase(progress, ...ARCHIVE_ENTRANCE_PHASES.details),
-  );
-  const albumScale = useTransform(albumOpen, [0, 1], [0.945, 1]);
-  const albumRotateX = useTransform(albumOpen, [0, 1], [6, 0]);
   // ── The tear (see "The tear" above the component) ─────────────────────
   // `chapterDelta` is positive once the reader has gone past this chapter.
   // The whole score is read off ONE clock (0 whole → 1 gone, src/lib/
@@ -770,18 +706,12 @@ export default function ArchiveChapter({
     let prevT = -1;
     let prevPx = 0;
     let prevShare = 0;
-    let prevRevealed = false;
     let bridgeLanding: string | undefined;
     const forget = () => {
       samples = [];
       seenMs = 0;
       pushedPx = 0;
     };
-    // Not seen before it has opened: the others by their crop, the first
-    // cover by its album unfold — which settles its last few px after the
-    // photograph is already whole on screen (at 0.9 it is ~7px from its seat
-    // at full ink), so that tail is not waited for. Motion values, not layout.
-    const revealed = () => revealOpen.get() >= 0.999 && albumOpen.get() >= 0.9;
     // One sample of the timeline at `delta`: the gate as it now stands. The
     // seen clock accrues over the time since the last sample, judged by where
     // the plate was at that sample, so a reader at rest (no samples) is
@@ -806,21 +736,20 @@ export default function ArchiveChapter({
       speed = push.vNow;
       if (prevT >= 0) {
         const landedAt = Math.max(readLandedAt(document.documentElement.dataset.atlasLandedAt), bridgeOpens - TEAR_SEEN_MS);
-        seenMs = accrueSeen(seenMs, prevT, now, landedAt, prevShare, prevRevealed, geometry.h, geometry.vh);
+        seenMs = accrueSeen(seenMs, prevT, now, landedAt, prevShare, geometry.h, geometry.vh);
       }
       if (seenMs >= TEAR_SEEN_MS) pushedPx = pushedAfter(pushedPx, push, px - prevPx);
       const share = plateShare(delta, geometry.vh, geometry.h, ARCHIVE_READING_LINE, geometry.span, geometry.prevSpan);
-      const open = revealed();
-      // Off screen, or closed again (the first cover folded back into the
-      // entrance): it has to be seen again.
-      if (share <= 0 || !open) {
+      // The cover has no entrance of its own — wherever it is on screen it is
+      // whole — so on screen whole is seen (`accrueSeen`). Off screen, it has
+      // to be seen again.
+      if (share <= 0) {
         seenMs = 0;
         pushedPx = 0;
       }
       prevT = now;
       prevPx = px;
       prevShare = share;
-      prevRevealed = open;
       // The corner waits for the map to land: before that a push is still
       // the swipe that brought this plate in.
       const landed = readLandedAt(document.documentElement.dataset.atlasLandedAt) <= now && bridgeOpens <= now;
@@ -1003,15 +932,6 @@ export default function ArchiveChapter({
       latch(delta, jump, jump ? undefined : gated(gate));
     };
     section.addEventListener('archive:onward', onOnward);
-    // The first cover's timeline holds at 0 until its photograph is centred,
-    // so while it comes up through the entrance nothing samples it: its
-    // album unfold does instead (open, it is whole on screen), so a reader
-    // who watched it arrive has seen it by the time they read on past it.
-    const offAlbum = handoffProgress
-      ? albumOpen.on('change', () => {
-          observe(effective(chapterDelta.get()), performance.now());
-        })
-      : null;
     const nextSection = document.querySelector<HTMLElement>(
       `[data-archive-chapter][data-chapter-index="${resolvedChapterIndex + 1}"]`,
     );
@@ -1035,12 +955,11 @@ export default function ArchiveChapter({
       latchNowRef.current = null;
       window.clearTimeout(restTimer);
       unsubscribe();
-      offAlbum?.();
       section.removeEventListener('archive:onward', onOnward);
       resizeObserver?.disconnect();
       window.removeEventListener('resize', remeasure);
     };
-  }, [albumOpen, chapterDelta, handoffProgress, reduce, resolvedChapterIndex, revealOpen, tearClock, ticket]);
+  }, [chapterDelta, reduce, resolvedChapterIndex, tearClock, ticket]);
 
   // The clock, for what the latch did not start itself: a jump shown as it
   // is, a pull's tear, reduced motion's fade. A tear taken up mid-reseat (or
@@ -1078,7 +997,7 @@ export default function ArchiveChapter({
   // The hand drives the same clock the scroll's tear plays, so the pose
   // follows it with nothing new to keep in step. No React state while the
   // hand moves: the clock is a MotionValue, the cursor an attribute.
-  const pullable = ticket && isActive && !reduce && canHover && !torn && entryInteractive && Boolean(onTearAway);
+  const pullable = ticket && isActive && !reduce && canHover && !torn && Boolean(onTearAway);
   const plateRef = useRef<HTMLDivElement>(null);
   const onTearAwayRef = useRef(onTearAway);
   useEffect(() => {
@@ -1383,14 +1302,6 @@ export default function ArchiveChapter({
     animate(tearClock, 0, { duration: PULL_RESEAT_S, ease: PULL_RESEAT_EASE });
   };
 
-  const albumClip = useTransform(albumOpen, (open) =>
-    `inset(${(1 - open) * 18}% 0% ${(1 - open) * 30}% 0%)`,
-  );
-  const albumPhotoY = useTransform(albumOpen, (open) => (1 - Number(open)) * 88);
-  const coverCopyOpacity = useTransform([editorialOpacity, titleArrival], ([focus, entry]) => Number(focus) * Number(entry));
-  const coverDetailOpacity = useTransform([fieldNoteOpacity, detailArrival], ([focus, entry]) => Number(focus) * Number(entry));
-  const coverDetailY = useTransform([fieldNoteShift, detailArrival], ([shift, entry]) => Number(shift) + (1 - Number(entry)) * 24);
-  const coverTitleY = useTransform(titleArrival, [0, 1], [34, 0]);
   // Cover text planes counter-parallax against the photo — the masthead lifts,
   // the kicker sinks as the card passes, so name/kicker/photo read as depth.
   const mastheadY = useTransform(scrollYProgress, [0, 1], ['0%', reduce ? '0%' : '-16%']);
@@ -1541,35 +1452,30 @@ export default function ArchiveChapter({
       onPointerUp={(event) => endPull(event, false)}
       onPointerCancel={(event) => endPull(event, true)}
       onLostPointerCapture={(event) => endPull(event, true)}
-      style={variant === 'cover' ? {
-        ...(plateRatio ? { aspectRatio: String(plateRatio) } : null),
-        clipPath: handoffProgress ? albumClip : coverReveal ? revealClip : undefined,
-      } : coverReveal ? { clipPath: revealClip } : undefined}
+      style={plateRatio ? { aspectRatio: String(plateRatio) } : undefined}
       className={`archive-photo-frame relative ${plateRatio ? '' : aspectClass} overflow-hidden`}
     >
       <div className="absolute inset-0">
-        {/* Shared focus layer — exact centre at 1; adjacent/far chapters top out
-            at a restrained 1.035. No blur is used for the depth cue. */}
-        <motion.div className="absolute inset-0" style={{ scale: mediaScale }}>
-          <motion.div
-            className="absolute inset-0"
-            style={{ x: pointerX, y: pointerY, scale: hoverScale }}
-          >
-            {coverUrl && (
-              <motion.img
-                ref={sharedImageSourceRef}
-                src={coverUrl}
-                srcSet={coverSrcSet}
-                sizes="(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw"
-                alt={collection.name}
-                loading={prioritizeImage ? 'eager' : 'lazy'}
-                fetchPriority={prioritizeImage && (isActive || resolvedChapterIndex === 0) ? 'high' : 'auto'}
-                decoding="async"
-                className="absolute inset-0 h-full w-full object-cover"
-                draggable={false}
-              />
-            )}
-          </motion.div>
+        {/* The hand's layer: only a pointer over the photograph moves it (the
+            hover breath and parallax). Nothing on the page's scroll does. */}
+        <motion.div
+          className="absolute inset-0"
+          style={{ x: pointerX, y: pointerY, scale: hoverScale }}
+        >
+          {coverUrl && (
+            <motion.img
+              ref={sharedImageSourceRef}
+              src={coverUrl}
+              srcSet={coverSrcSet}
+              sizes="(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw"
+              alt={collection.name}
+              loading={prioritizeImage ? 'eager' : 'lazy'}
+              fetchPriority={prioritizeImage && (isActive || resolvedChapterIndex === 0) ? 'high' : 'auto'}
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+              draggable={false}
+            />
+          )}
         </motion.div>
         {/* `archive-photo-matte` is read by the Homepage at click time, so the
             story cover can start under the very grade the plate is showing. */}
@@ -1599,7 +1505,6 @@ export default function ArchiveChapter({
   );
 
   const activate = () => {
-    if (!entryInteractive) return;
     setIsHovered(false);
     setIsFocused(false);
     setEngagement(false);
@@ -1669,9 +1574,7 @@ export default function ArchiveChapter({
       }
     },
     role: 'button' as const,
-    tabIndex: entryInteractive ? 0 : -1,
-    inert: !entryInteractive,
-    'aria-hidden': !entryInteractive || undefined,
+    tabIndex: 0,
     'aria-label': `View story: ${collection.name}`,
   };
   const baseline = (
@@ -1688,13 +1591,12 @@ export default function ArchiveChapter({
   // be inspected uniformly, whichever variant a chapter renders.
   if (variant === 'feature') {
     return (
-      <motion.section
+      <section
         id={id}
         ref={chapterRef}
         data-archive-chapter="true"
         data-chapter-index={resolvedChapterIndex}
         data-active={isActive ? 'true' : 'false'}
-        style={{ opacity: reduce ? 1 : opacity, y: reduce || coverReveal ? 0 : entryY }}
         className="relative pb-12 lg:pb-20"
       >
         <motion.div
@@ -1733,26 +1635,15 @@ export default function ArchiveChapter({
             </span>
           </div>
         </motion.div>
-      </motion.section>
+      </section>
     );
   }
 
   // ── COVER (default) — full-bleed magazine cover ──
-  // One transformed stage holds the photograph, the corners that declare its
-  // edges and its cue, so the frame can never be somewhere the picture is not.
-  // The photograph's own crop (clipPath) stays on the image inside it.
+  // One stage holds the photograph, the corners that declare its edges and
+  // its cue, so the frame can never be somewhere the picture is not.
   const plateStage = (
-    <motion.div
-      className="archive-plate__stage"
-      style={{
-        y: albumPhotoY,
-        opacity: albumOpen,
-        scale: albumScale,
-        rotateX: albumRotateX,
-        transformPerspective: 1600,
-        transformOrigin: '50% 100%',
-      }}
-    >
+    <div className="archive-plate__stage">
       {imageBlock}
       <motion.span
         aria-hidden="true"
@@ -1772,19 +1663,15 @@ export default function ArchiveChapter({
         Open story
         <ArrowRight size={13} strokeWidth={1.4} />
       </motion.span>
-    </motion.div>
+    </div>
   );
   return (
-    <motion.section
+    <section
       id={id}
       ref={chapterRef}
       data-archive-chapter="true"
       data-chapter-index={resolvedChapterIndex}
       data-active={isActive ? 'true' : 'false'}
-      style={{
-        opacity: reduce ? 1 : opacity,
-        y: reduce || coverReveal ? 0 : entryY,
-      }}
       className="relative overflow-visible pb-12 lg:pb-16"
     >
       {/* Torn, the face is gone — laid aside and transparent — and the
@@ -1803,8 +1690,7 @@ export default function ArchiveChapter({
         <div className="relative">
           <motion.div
             style={{
-              opacity: reduce ? 1 : coverCopyOpacity,
-              y: reduce ? 0 : coverTitleY,
+              opacity: reduce ? 1 : editorialOpacity,
               x: reduce ? 0 : titleInteractionX,
             }}
             className="archive-plate__meta pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] lg:flex"
@@ -1832,9 +1718,7 @@ export default function ArchiveChapter({
             } : undefined}
           >
             {/* On a ticket the stage sits in the tear: the hinge needs its own
-                pivot (the tip of the rip), and the stage's bottom-centre one
-                belongs to the first cover's album unfold. The outer box never
-                moves; while the rip runs it clips at the seam, because below
+                pivot (the tip of the rip). The outer box never moves; while the rip runs it clips at the seam, because below
                 the tip a hinge about the tip carries the face a few pixels
                 INTO the stub — still-joined paper that would otherwise show
                 through the stub's holes and fill the bottom notch. Under the
@@ -1906,7 +1790,7 @@ export default function ArchiveChapter({
           <motion.div
             style={{
               y: reduce ? 0 : kickerY,
-              opacity: reduce ? 1 : coverCopyOpacity,
+              opacity: reduce ? 1 : editorialOpacity,
               x: reduce ? 0 : titleInteractionX,
             }}
             className="absolute inset-x-0 top-0 flex items-start p-5 pt-24 font-ui text-[10px] uppercase tracking-[0.1em] md:p-8 md:pt-20 md:text-[11px] lg:hidden"
@@ -1923,14 +1807,14 @@ export default function ArchiveChapter({
             style={{
               y: reduce ? 0 : mastheadY,
               x: reduce ? 0 : titleInteractionX,
-              opacity: reduce ? 1 : coverCopyOpacity,
+              opacity: reduce ? 1 : editorialOpacity,
               bottom: 'clamp(-52px, -3.6vw, -34px)',
             }}
             className="archive-cover-title-wrap pointer-events-none absolute left-[-6%] z-20 max-w-[106%] whitespace-normal lg:left-[-14%] lg:max-w-[94%]"
           >
             <motion.h3
               className="archive-cover-title font-serif uppercase leading-[0.78] tracking-[-0.05em] text-[#F4F4ED] drop-shadow-[0_5px_36px_rgba(8,10,7,0.62)]"
-              style={{ fontSize: coverTitleSize, wordSpacing: '0.12em', y: coverTitleY, fontWeight: TITLE_WEIGHT_REST }}
+              style={{ fontSize: coverTitleSize, wordSpacing: '0.12em', fontWeight: TITLE_WEIGHT_REST }}
             >
               {desktopMotion ? risingWords(nameParts) : collection.name}
             </motion.h3>
@@ -1945,7 +1829,7 @@ export default function ArchiveChapter({
           section sits between 10 and 20. */}
         <motion.div
           style={{
-            ...(reduce ? null : { opacity: coverDetailOpacity, y: coverDetailY }),
+            ...(reduce ? null : { opacity: fieldNoteOpacity, y: fieldNoteShift }),
             ...(ticket && torn ? { pointerEvents: 'auto' as const } : null),
           }}
           className="archive-lede relative z-10 ml-[-12%] mt-[clamp(64px,6.5vw,92px)] hidden w-[88%] grid-cols-[96px_minmax(0,1fr)] items-start gap-x-8 pr-3 lg:grid"
@@ -1974,6 +1858,6 @@ export default function ArchiveChapter({
           </p>
         </motion.div>
       </motion.div>
-    </motion.section>
+    </section>
   );
 }

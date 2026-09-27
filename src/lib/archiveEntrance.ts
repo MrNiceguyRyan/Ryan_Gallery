@@ -1,10 +1,10 @@
-/** One reversible scroll score for the archive's formal entrance. */
+/** One reversible scroll score for the archive's formal entrance: the map's
+ *  and its interface's. No cover has an entrance on it — the first film's
+ *  album unfold (and its type's and details' arrival) went with every other
+ *  cover reveal; the covers are simply there (ArchiveChapter). */
 export const ARCHIVE_ENTRANCE_PHASES = {
   map: [0.02, 0.68],
   mapVisibility: [0, 0.34],
-  film: [0.2, 0.84],
-  type: [0.46, 0.94],
-  details: [0.62, 1],
   interface: [0.42, 0.86],
 } as const;
 

@@ -304,7 +304,7 @@ test('the tear line is derived from the layout and clamped', () => {
 // The owner's words for the old trigger: 有点太早了, 有时候没看见就撕下去了. A model
 // of ArchiveChapter's sample loop (the latch effect's `observe`): the ring of
 // timeline samples, the seen clock, the push since seen, and the gated latch.
-function reader({ line, corner, vh = 1000, h = 486, span = 969, prevSpan = span, landedAt = () => 0, revealed = true }) {
+function reader({ line, corner, vh = 1000, h = 486, span = 969, prevSpan = span, landedAt = () => 0 }) {
   let state = LATCH_WHOLE;
   let samples = [];
   let seen = 0;
@@ -317,7 +317,7 @@ function reader({ line, corner, vh = 1000, h = 486, span = 969, prevSpan = span,
     const px = delta * (delta >= 0 ? span : prevSpan);
     addPushSample(samples, t, px);
     const push = pushState(samples, t);
-    if (prevT >= 0) seen = accrueSeen(seen, prevT, t, landedAt(t), prevShare, revealed, h, vh);
+    if (prevT >= 0) seen = accrueSeen(seen, prevT, t, landedAt(t), prevShare, h, vh);
     if (seen >= TEAR_SEEN_MS) pushed = pushedAfter(pushed, push, px - prevPx);
     const share = plateShare(delta, vh, h, 0.48, span, prevSpan);
     if (share <= 0) {
@@ -391,17 +391,30 @@ test('plateShare is the share of the plate on screen, from the geometry alone', 
   assert.equal(plateShare(0, 1000, 0, 0.48, 969, 969), 0);
 });
 
-test('the seen clock: only once landed, only while whole and open, credited for a rest', () => {
+test('the seen clock: only once landed, only while whole on screen, credited for a rest', () => {
   assert.equal(readLandedAt(undefined), 0, 'no atlas: landed long ago');
   assert.equal(readLandedAt('flying'), Infinity);
   assert.equal(readLandedAt('1234'), 1234);
-  assert.equal(accrueSeen(0, 100, 600, 0, 1, true, 486, 1000), 500, 'a rest counts in full');
-  assert.equal(accrueSeen(0, 100, 600, 400, 1, true, 486, 1000), 200, 'from the landing');
-  assert.equal(accrueSeen(0, 100, 600, Infinity, 1, true, 486, 1000), 0, 'not while the map flies');
-  assert.equal(accrueSeen(0, 100, 600, 0, 0.85, true, 486, 1000), 0, 'not while partly off screen');
-  assert.equal(accrueSeen(0, 100, 600, 0, 1, false, 486, 1000), 0, 'not before the cover has opened');
+  assert.equal(accrueSeen(0, 100, 600, 0, 1, 486, 1000), 500, 'a rest counts in full');
+  assert.equal(accrueSeen(0, 100, 600, 400, 1, 486, 1000), 200, 'from the landing');
+  assert.equal(accrueSeen(0, 100, 600, Infinity, 1, 486, 1000), 0, 'not while the map flies');
+  assert.equal(accrueSeen(0, 100, 600, 0, 0.85, 486, 1000), 0, 'not while partly off screen');
   // A plate taller than the viewport counts as whole when it fills it.
-  assert.equal(accrueSeen(0, 100, 600, 0, 0.9, true, 1200, 1000), 500);
+  assert.equal(accrueSeen(0, 100, 600, 0, 0.9, 1200, 1000), 500);
+});
+
+test('a cover has no entrance of its own: on screen whole is seen', () => {
+  // 页面下滑，封面部分是自动划出来的，我觉得没必要，直接出现就好 — the covers are
+  // simply there: no crop wipe, no overscan zoom, no fade or rise, no album
+  // unfold. So nothing but the plate's share on screen gates the seen clock.
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.doesNotMatch(chapter, /COVER_REVEAL|revealOpen|revealClip|coverReveal|mediaScale|focusScale|entryY/);
+  assert.doesNotMatch(chapter, /albumOpen|albumClip|albumScale|albumRotate|albumPhotoY|handoffProgress|entryInteractive/);
+  assert.doesNotMatch(chapter, /revealed\(\)/);
+  assert.match(chapter, /accrueSeen\(seenMs, prevT, now, landedAt, prevShare, geometry\.h, geometry\.vh\)/);
+  // The section and the plate's stage carry no motion style of their own.
+  assert.doesNotMatch(chapter, /<motion\.section/);
+  assert.match(chapter, /<div className="archive-plate__stage">/);
 });
 
 test('a push is new movement: a decaying glide coasts, a hand pushes', () => {
