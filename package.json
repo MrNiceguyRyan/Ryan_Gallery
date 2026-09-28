@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs scripts/globe-look.test.mjs scripts/globe-egg.test.mjs scripts/egg-exposure.test.mjs scripts/ticket-stock.test.mjs scripts/ticket-latch.test.mjs scripts/motion-tokens.test.mjs scripts/travel-silver.test.mjs scripts/chapter-order.test.mjs scripts/exposure-record.test.mjs scripts/bridge-roll.test.mjs scripts/story-plan.test.mjs scripts/plate-rows.test.mjs scripts/notes.test.mjs",
+    "test:regression": "node --experimental-strip-types --test scripts/archive-entrance.test.mjs scripts/atlas-readiness.test.mjs scripts/lightbox-handoff.test.mjs scripts/gallery-transition.test.mjs scripts/globe-look.test.mjs scripts/globe-egg.test.mjs scripts/egg-exposure.test.mjs scripts/ticket-stock.test.mjs scripts/ticket-latch.test.mjs scripts/motion-tokens.test.mjs scripts/travel-silver.test.mjs scripts/chapter-order.test.mjs scripts/exposure-record.test.mjs scripts/story-plan.test.mjs scripts/plate-rows.test.mjs scripts/notes.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

@@ -52,22 +52,32 @@ test('map overscan covers its plane throughout the settling movement', () => {
   }
 });
 
-test('the first film is carried in by the bridge alone and is always a whole, live cover', () => {
+test('the opening goes straight into chapter 1: the first film is simply there, a whole, live cover', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
   const prologue = readFileSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url), 'utf8');
-  // Chapter 1's plate is carried in by the bridge's roll (GlobePrologue
-  // holds it until its select lands in it). The plate has no unfold of its
-  // own any more — no cover does — so it is interactive whenever it is there.
+  const atlas = readFileSync(new URL('../src/components/home/RouteAtlas.tsx', import.meta.url), 'utf8');
+  const closing = readFileSync(new URL('../src/components/home/ArchiveClosing.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  // The owner rejected the film-roll bridge (2026-09-27: repetitive and
+  // unnecessary): the first screen is his name, the globe and one line, and
+  // the globe dives straight into chapter 1. No count page, no index, no roll
+  // — and nothing holds chapter 1's plate back for a landing.
+  assert.match(prologue, /A personal archive of <em>travel<\/em> and <em>thought<\/em>\./);
+  assert.doesNotMatch(prologue, /bridge|archive-index|chapters · |\bframes\b/i);
+  assert.doesNotMatch(home, /rollFrames|rollGates|archive-index|Back to index/);
+  assert.doesNotMatch(atlas, /rollGates|bridgeRoll|prologue-mark|archive-index/);
+  assert.doesNotMatch(closing, /Back to index|onBackToIndex/);
+  assert.match(closing, /Back to the start/);
+  assert.doesNotMatch(css, /data-bridge|\.bridge-|prologue-mark/);
+  // The plate has no unfold of its own any more — no cover does — so it is
+  // interactive whenever it is there.
   assert.doesNotMatch(home, /handoffProgress=/);
-  assert.match(prologue, /html\.dataset\.bridge = bridge/);
-  assert.doesNotMatch(chapter, /handoffProgress|entryInteractive|albumOpen|ARCHIVE_ENTRANCE_PHASES/);
+  assert.doesNotMatch(chapter, /handoffProgress|entryInteractive|albumOpen|ARCHIVE_ENTRANCE_PHASES|bridge-landed|bridgeGate/);
   assert.match(chapter, /tabIndex: 0,/);
   assert.doesNotMatch(chapter, /inert:/);
-  // The bridge lands on the plate's pixels because the stage is a layer of
-  // its own (GlobePrologue). The unfold that used to make it one is gone, so
-  // the layer is asked for in the stylesheet, with no transform.
-  const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  // The stage stays a layer of its own, as it has always been (the unfold
+  // that used to make it one is gone), asked for with no transform at all.
   assert.match(css, /\.archive-plate__stage \{\s*will-change: transform;\s*\}/);
 });
 

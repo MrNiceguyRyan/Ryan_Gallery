@@ -145,9 +145,9 @@ export const SPRING = {
  *  agree. */
 export const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
-/** How long a programmatic voyage down the homepage takes (the index rows,
- *  the atlas, the eggs' tickets, pull-to-tear): a beat longer the further it
- *  goes, from 1.5 s to 2.6 s. `distance` is in CSS pixels. */
+/** How long a programmatic voyage along the homepage takes (the atlas, the
+ *  eggs' tickets, pull-to-tear, Back to the start): a beat longer the further
+ *  it goes, from 1.5 s to 2.6 s. `distance` is in CSS pixels. */
 export const voyageSeconds = (distance: number) =>
   Math.min(2.6, Math.max(1.5, 1.3 + distance / 2400));
 

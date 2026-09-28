@@ -128,7 +128,7 @@ const LEAVE_PLAYING = 0.35;
 // Start fetching the sheet's files about two chapters ahead.
 const PREPARE_AT = -2.5;
 // A change of more than half a page in one frame is a jump (a restored
-// scroll, a deep link, Back to index under reduced motion): shown, never
+// scroll, a deep link, Back to the start under reduced motion): shown, never
 // played.
 const JUMP = 0.5;
 // The face free plus a beat — src/lib/ticketTear.ts's TEAR_FREE_MS (530) +
@@ -192,7 +192,8 @@ interface Props {
   /** The issue's chapters, in the homepage's reading order (HomePage's
    *  `orderedCities`): the same list the ticket stubs are printed from. */
   collections: Collection[];
-  onBackToIndex: () => void;
+  /** Back to the first screen (HomePage's voyage up the page). */
+  onBackToStart: () => void;
   /** Open a chapter's story from the sheet (HomePage owns the overlay). */
   onOpenStory?: (collectionId: string, request: ClosingStoryRequest) => void;
 }
@@ -209,8 +210,7 @@ function documentTop(node: HTMLElement | null) {
 }
 
 const stubSub = (chapter: ProofChapter) => {
-  // A region that only repeats the place (New York, New York) is left off,
-  // as the prologue's index does.
+  // A region that only repeats the place (New York, New York) is left off.
   const region = chapter.region && chapter.region.toLowerCase() !== chapter.place.toLowerCase() ? chapter.region : '';
   return [region, chapter.year].filter(Boolean).join(' · ');
 };
@@ -251,7 +251,7 @@ function fitTitle(ruler: HTMLElement, measure: number) {
   return size;
 }
 
-export default function ArchiveClosing({ collections, onBackToIndex, onOpenStory }: Props) {
+export default function ArchiveClosing({ collections, onBackToStart, onOpenStory }: Props) {
   const reduce = useReducedMotion();
   const chapters = useMemo(() => proofChapters(collections), [collections]);
   const total = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
@@ -651,10 +651,10 @@ export default function ArchiveClosing({ collections, onBackToIndex, onOpenStory
           <div className="closing-links font-ui">
             <button
               type="button"
-              onClick={onBackToIndex}
+              onClick={onBackToStart}
               className="inline-flex min-h-11 items-center uppercase text-[#D2FF00]/85 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
             >
-              Back to index ↑
+              Back to the start ↑
             </button>
             <a
               href="/about"

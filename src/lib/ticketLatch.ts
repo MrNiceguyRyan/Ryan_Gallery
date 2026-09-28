@@ -235,21 +235,6 @@ export function readLandedAt(value: string | undefined) {
   return Number.isFinite(at) ? at : 0;
 }
 
-/** Chapter 1's plate arrives with the bridge's landing (GlobePrologue): the
- *  select from the roll lands in it on the reading line, and a reader's wheel
- *  runs on through the landing. Measured, the face tore 0.33 s after it — the
- *  payoff torn away before it was seen. So chapter 1's gate (seen, or the
- *  corner) opens only this long after the landing; TEAR_HARD_LINE still tears
- *  it before the atlas leaves. */
-export const BRIDGE_DWELL_MS = 900;
-
-/** When chapter 1's gate may open, from `html[data-bridge-landed-at]`
- *  (GlobePrologue): missing is long ago (no bridge, or a voyage carried the
- *  page there), 'flying' is not yet (the plate is still held). */
-export function bridgeGateOpensAt(value: string | undefined) {
-  return readLandedAt(value) + BRIDGE_DWELL_MS;
-}
-
 /**
  * The seen clock after a sample at `now`: the time since the last sample
  * (`prevT`) counts — from the landing, if that came later — when at that
