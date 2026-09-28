@@ -1133,6 +1133,28 @@ export default function HomePage({ collections }: Props) {
     window.scrollTo({ top: targetY, behavior: 'auto' });
   }, [navigateLivingChapter, orderedCities, reduce]);
 
+  // A stop chosen on the atlas (a shield on the map, a group in the tick
+  // strip). Going on, the ticket being read is torn first — exactly as the
+  // reader's push tears it — and the page sets off only once its face is
+  // free (owner, 2026-09-28: 当移走或者点击下一站的时候将会和之前一样撕开票根，
+  // 然后前往下一站); ArchiveChapter answers `archive:tear-then` when it has a
+  // whole ticket to tear. Going back, or with nothing to tear, the voyage goes
+  // at once, as before.
+  const navigateFromAtlas = useCallback((chapterId: string) => {
+    const anchorId = `archive-item-${chapterId}`;
+    const target = orderedCities.findIndex((city) => city._id === chapterId);
+    const from = activeRouteIndex;
+    if (desktopLayout && !reduce && !voyageActiveRef.current && from >= 0 && target > from) {
+      const section = document.querySelector<HTMLElement>(`[data-archive-chapter][data-chapter-index="${from}"]`);
+      const detail: { go: () => void; handled?: boolean } = {
+        go: () => navigateLivingChapter(anchorId, false),
+      };
+      section?.dispatchEvent(new CustomEvent('archive:tear-then', { detail }));
+      if (detail.handled) return;
+    }
+    navigateLivingChapter(anchorId);
+  }, [activeRouteIndex, desktopLayout, navigateLivingChapter, orderedCities, reduce]);
+
   // Back to the start: a voyage up the page to the first screen, the same
   // trip a place on the atlas takes down it (a beat longer the further it
   // goes, sine in and out, the wheel held off), not the browser's smooth
@@ -1768,7 +1790,7 @@ export default function HomePage({ collections }: Props) {
                 paused={atlasPaused}
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
-                onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
+                onNavigate={navigateFromAtlas}
               />
             </aside>
 
@@ -1865,6 +1887,13 @@ export default function HomePage({ collections }: Props) {
                                      already under way — the cover is then
                                      only a click. */
                                   onTearAway={voyage ? undefined : () => tearAwayFrom(index)}
+                                  nextStop={orderedCities[index + 1]
+                                    ? {
+                                        name: orderedCities[index + 1].name.trim(),
+                                        number: index + 2,
+                                        region: orderedCities[index + 1].region?.trim() || undefined,
+                                      }
+                                    : null}
                                 />
                               );
                             })}

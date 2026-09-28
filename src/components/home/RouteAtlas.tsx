@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../../lib/atlasBasemap';
-import { MAP_BURN, MAP_INK, MAP_INK_RGB } from '../../lib/mapInk';
+import { MAP_BURN, MAP_INK } from '../../lib/mapInk';
 import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import {
@@ -18,7 +18,18 @@ import {
   type Process,
 } from 'framer-motion';
 import { getMapboxToken } from '../../config/mapbox';
-import { AfPoint, AtlasTicks, AtlasViewfinder, ATLAS_READING_LINE, type ViewfinderHandle, type ViewfinderPlace } from './AtlasSign';
+import {
+  AtlasTicks,
+  AtlasViewfinder,
+  ATLAS_READING_LINE,
+  RouteSign,
+  signRailHalf,
+  signRowWidth,
+  type ViewfinderHandle,
+  type ViewfinderPlace,
+} from './AtlasSign';
+import { MapShield } from './RouteShield';
+import { pad2, regionSigns, signPose, stateCode } from '../../lib/routeShield';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -548,21 +559,19 @@ const CANVAS_BLEED = 32;
 const FOCAL_PADDING = { top: 48, right: 264 } as const;
 // Where the covers' column starts, as a share of the atlas column: HomePage
 // sets the atlas at 78% of the stage and pulls the archive column 36% back
-// over it, so the column's left edge is at 42/78 of the atlas. A place whose
-// key would land within SIDE_CLEARANCE of that edge sets it on its left.
+// over it, so the column's left edge is at 42/78 of the atlas.
 const ARCHIVE_COLUMN_LEFT = 42 / 78;
-const SIDE_CLEARANCE = 28;
-// A place whose dot itself lands in the covers' column (its knockout's 5px
-// inside the edge) is under the plates and their chapter headers: printed
-// there, New York's "06" read into "01 / 06 · REGION FLORIDA" and its dot
-// sat on the plate's corner like a rivet. It is not printed (unless the
-// camera is on it or flying to it).
-const UNDER_CLEARANCE = 5;
-// How long the camera must have been still before the sides are taken.
-const SIDES_REST_MS = 180;
-// A transparent image round each place that the basemap's names keep out of:
-// the dot, its key on either side, and the current place's landmark standing
-// over it (64 × 38 css px, its centre 12px above the dot).
+// A region's sign keeps this far inside the map column: clear of the covers'
+// edge on the right, clear of the atlas's own edge on the left.
+const SIGN_EDGE = { left: 16, right: 12 } as const;
+// A sign whose region's middle lies under the covers (this far inside their
+// edge) is under the plates and their chapter headers: printed there, New
+// York's shield read into "REGION FLORIDA" and sat on a plate's corner. It is
+// not printed, unless the camera is on one of its places or flying to one.
+const SIGN_UNDER = 4;
+// A transparent image round each place that the basemap's names keep out of,
+// so the ground under a region's sign and its leader reads as the route, not
+// as town names (64 × 38 css px, its centre 12px above the place).
 const ATLAS_KEEP_OUT = { id: 'atlas-keepout', width: 64, height: 38, offsetY: -12 } as const;
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // After the dive the photography does not vanish: it stays under the graded
@@ -835,94 +844,95 @@ function ScrubbedRouteOrdinal({
   );
 }
 
-function LivingMarkerNode({
-  stop,
-  index,
-  stops,
+// The phone's signs: the desktop's region signs (RouteSign) at the phone's
+// scale — the same shields, rail and one leader per region — on the living
+// atlas's projected points (a static overview, re-projected on a resize, not
+// per frame). They HANG below their regions: the phone's upper half is the
+// photograph and its stub (New York's sign stood behind the stub), its lower
+// half open sea. Each shield takes its chapter's nearness from the scroll:
+// far shields sit small and quiet, the chapter being read full size and ink.
+const LIVING_SHIELD_PX = 22;
+const LIVING_SHIELD_GAP = 5;
+const LIVING_SIGN_EDGE = 12;
+
+function LivingShield({
+  place,
+  chapterProgress,
+}: {
+  place: { id: string; number: number; name: string; region?: string };
+  chapterProgress: MotionValue<number>;
+}) {
+  const index = place.number - 1;
+  const emphasis = useTransform(chapterProgress, (chapterPosition) =>
+    smootherstep(Math.max(0, Math.min(1, 1 - Math.abs(chapterPosition - index)))),
+  );
+  const scale = useTransform(emphasis, (strength) => 0.86 + 0.3 * strength);
+  const opacity = useTransform(emphasis, (strength) => 0.62 + 0.38 * strength);
+  return (
+    <motion.span className="route-sign__shield" data-route-stop={place.id} style={{ scale, opacity }}>
+      <MapShield code={stateCode(place.region)} number={pad2(place.number)} />
+    </motion.span>
+  );
+}
+
+function LivingRouteSign({
+  places,
+  points,
+  bounds,
   chapterProgress,
   interfaceVisible,
   reducedMotion,
-  mobile,
   playInterfaceIntro,
+  order,
 }: {
-  stop: RouteStop;
-  index: number;
-  stops: RouteStop[];
+  places: Array<{ id: string; number: number; name: string; region?: string }>;
+  /** The places' projected points, in `places` order. */
+  points: Array<{ x: number; y: number }>;
+  bounds: { left: number; right: number };
   chapterProgress: MotionValue<number>;
   interfaceVisible: boolean;
   reducedMotion: boolean;
-  mobile: boolean;
   playInterfaceIntro: boolean;
+  order: number;
 }) {
-  const emphasis = useTransform(chapterProgress, (chapterPosition) => {
-    const distance = Math.abs(chapterPosition - index);
-    return smootherstep(Math.max(0, Math.min(1, 1 - distance)));
-  });
-  // The atlas's print mark: one 7px dot of white ink with a hard knockout
-  // (the CSS), scaled and inked by how near its chapter is — .64 and .62 far
-  // off, full size and full ink as its chapter arrives. No seat, no ring:
-  // nothing is drawn round a place (owner, 2026-09-27). Scroll-owned, so the
-  // ramp is the scroll's own.
-  const dotScale = useTransform(emphasis, (strength) => 0.64 + 0.36 * strength);
-  const dotOpacity = useTransform(emphasis, (strength) => 0.62 + 0.38 * strength);
-  const labelOpacity = useTransform(
-    emphasis,
-    (strength) => mobile ? strength : 0.56 + strength * 0.44,
-  );
-  const labelOffset = useTransform(emphasis, (strength) => (1 - strength) * 3);
-  const labelColor = useTransform(
-    emphasis,
-    (strength) => `rgba(244, 244, 237, ${0.58 + strength * 0.42})`,
-  );
-  const indexColor = useTransform(
-    emphasis,
-    (strength) => `rgba(${MAP_INK_RGB}, ${0.42 + strength * 0.58})`,
-  );
-  const nearbyStops = stops
-    .filter((candidate) => angularDistance(candidate.coordinates, stop.coordinates) < 0.038)
-    .sort((a, b) => b.coordinates[1] - a.coordinates[1]);
-  const clusterRank = nearbyStops.findIndex((candidate) => candidate.id === stop.id);
-  const clusterOffset = !mobile && nearbyStops.length > 1
-    ? Math.max(-54, Math.min(54, (clusterRank - (nearbyStops.length - 1) / 2) * 36))
-    : 0;
-  const labelOnLeft =
-    (stop.coordinates[0] > -90 && (mobile || stop.coordinates[1] > 35)) ||
-    (!mobile && nearbyStops.length > 1 && clusterRank === 0);
-  const labelX = useTransform(labelOffset, (offset) => labelOnLeft ? -offset : offset);
-
+  const count = places.length;
+  const anchor = {
+    x: points.reduce((sum, point) => sum + point.x, 0) / count,
+    y: points.reduce((sum, point) => sum + point.y, 0) / count,
+  };
+  const bottom = Math.max(...points.map((point) => point.y));
+  const width = count * LIVING_SHIELD_PX + (count - 1) * LIVING_SHIELD_GAP;
+  const rail = ((count - 1) * (LIVING_SHIELD_PX + LIVING_SHIELD_GAP)) / 2;
+  // Hung below: the same rule mirrored (the leader runs down past the
+  // region's southernmost place).
+  const pose = signPose({ x: anchor.x, y: -anchor.y }, -bottom, width, bounds.left, bounds.right, rail);
   return (
     <motion.span
       aria-hidden="true"
-      data-route-stop={stop.id}
+      className="route-sign route-sign--living route-sign--below"
       initial={false}
-      animate={interfaceVisible ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.72 }}
+      animate={interfaceVisible ? { opacity: 1 } : { opacity: 0 }}
       transition={{
         duration: reducedMotion ? 0 : playInterfaceIntro ? 0.56 : 0.32,
-        delay: reducedMotion || !playInterfaceIntro ? 0 : 0.18 + index * 0.035,
+        delay: reducedMotion || !playInterfaceIntro ? 0 : 0.18 + order * 0.06,
         ease: EASE.arrive,
       }}
-      className="relative flex h-11 w-11 items-center justify-center"
+      style={{
+        left: anchor.x,
+        top: anchor.y,
+        width,
+        ['--lead' as never]: `${Math.min(pose.lead, 44)}px`,
+        ['--shift' as never]: `${pose.shift}px`,
+        ['--rail' as never]: `${rail * 2}px`,
+      }}
     >
-      <motion.span
-        className="living-mark__dot"
-        style={{ scale: dotScale, opacity: dotOpacity }}
-      />
-      {interfaceVisible && (
-        <motion.span
-          style={{
-            top: `calc(50% + ${clusterOffset}px)`,
-            opacity: labelOpacity,
-            x: labelX,
-            color: labelColor,
-          }}
-          className={`living-mark__label pointer-events-none absolute top-1/2 min-w-max -translate-y-1/2 whitespace-nowrap font-ui text-[10px] uppercase tracking-[0.1em] ${labelOnLeft ? 'right-[2.15rem] text-right' : 'left-[2.15rem]'}`}
-        >
-          <motion.span className="living-mark__num mr-[10px] inline-block" style={{ color: indexColor }}>
-            {String(index + 1).padStart(2, '0')}
-          </motion.span>
-          {stop.name}
-        </motion.span>
-      )}
+      <i className="route-sign__lead" />
+      <span className="route-sign__row">
+        {count > 1 && <i className="route-sign__rail" />}
+        {places.map((place) => (
+          <LivingShield key={place.id} place={place} chapterProgress={chapterProgress} />
+        ))}
+      </span>
     </motion.span>
   );
 }
@@ -1082,7 +1092,7 @@ export default function RouteAtlas({
     window.clearTimeout(lookTimerRef.current);
     const idle = () => {
       // A hand resting on a place or a tick is still using the instruments.
-      if (atlas.querySelector('.af-point__mark:hover, .atlas-ticks__group:hover')) {
+      if (atlas.querySelector('.route-sign__shield:hover, .atlas-ticks__group:hover')) {
         lookTimerRef.current = window.setTimeout(idle, ATLAS_LOOK_IDLE_MS);
         return;
       }
@@ -1140,37 +1150,79 @@ export default function RouteAtlas({
       element.classList.toggle('is-past', reached > 0 && Number(element.dataset.chapter) < reached);
     });
   };
-  // Which side of its dot each place's key is set on: the left for a place in
-  // reach of the covers' column, so its number never prints half under a
-  // plate; and whether its dot is inside that column (`data-under`: not
-  // printed, see UNDER_CLEARANCE). Written when the camera comes
-  // down and when a place is committed, never per frame, and derived — the
-  // camera's own projection against the layout's constant — not read off the
-  // page.
-  const markSides = () => {
+  // ── The signs ── (RouteSign, src/lib/routeShield.ts)
+  // One sign per stretch of neighbouring places, its shields in stop order,
+  // one leader down to the middle of their region.
+  const regionSignList = useMemo(() => regionSigns(chapterRoute.map((entry) => ({
+    id: entry.stop.id,
+    number: entry.chapterIndex + 1,
+    name: entry.stop.name,
+    region: entry.stop.region,
+    coordinates: entry.stop.coordinates,
+  }))), [chapterRoute]);
+  // The covers' column edge in the atlas's own px (its width × the layout's
+  // constant), written on a resize, never per frame: the signs are placed on
+  // every camera frame and must not read layout there.
+  const plateLeftRef = useRef(0);
+  const signPosesRef = useRef(new Map<string, { lead: number; shift: number; under: boolean; el: HTMLElement }>());
+  // Where each sign stands this camera frame: how long its leader is (the
+  // shields clear the region's northernmost place), how far its row slides to
+  // keep inside the map column, and whether its region lies under the
+  // covers. DERIVED from the camera's own projection against the layout's
+  // constant — a handful of `project` calls, no layout read — and written only
+  // when a value moves. Runs on the map's `render`, so a sign rides the camera
+  // exactly, and not at all while the map rests.
+  const placeSigns = () => {
     const atlas = routeAtlasRef.current;
     const map = mapRef.current?.getMap();
-    if (!atlas || !map) return;
-    const plateLeft = atlas.clientWidth * ARCHIVE_COLUMN_LEFT;
-    atlas.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
-      const entry = chapterRoute.find((candidate) => candidate.stop.id === element.dataset.afStop);
-      if (!entry) return;
-      const x = map.project(entry.stop.coordinates).x - CANVAS_BLEED;
-      const side = x > plateLeft - SIDE_CLEARANCE ? 'left' : 'right';
-      if (element.dataset.side !== side) element.dataset.side = side;
-      const under = x > plateLeft - UNDER_CLEARANCE;
-      if (under !== (element.dataset.under != null)) {
-        if (under) element.dataset.under = '';
-        else delete element.dataset.under;
+    const plateLeft = plateLeftRef.current;
+    if (!atlas || !map || !(plateLeft > 0)) return;
+    // Canvas px: the canvas bleeds CANVAS_BLEED past the atlas on the left.
+    const left = CANVAS_BLEED + SIGN_EDGE.left;
+    const right = CANVAS_BLEED + plateLeft - SIGN_EDGE.right;
+    const underAt = CANVAS_BLEED + plateLeft - SIGN_UNDER;
+    const held = new Set([currentStopRef.current, inboundStopRef.current]);
+    regionSignList.forEach((sign) => {
+      let pose = signPosesRef.current.get(sign.key);
+      if (!pose || !pose.el.isConnected) {
+        const el = atlas.querySelector<HTMLElement>(`[data-route-sign="${CSS.escape(sign.key)}"]`);
+        if (!el) return;
+        pose = { lead: Number.NaN, shift: Number.NaN, under: false, el };
+        signPosesRef.current.set(sign.key, pose);
+      }
+      const anchor = map.project(sign.anchor);
+      let top = anchor.y;
+      sign.places.forEach((place) => {
+        const y = map.project(place.coordinates).y;
+        if (y < top) top = y;
+      });
+      const count = sign.places.length;
+      const next = signPose(anchor, top, signRowWidth(count), left, right, signRailHalf(count));
+      if (next.lead !== pose.lead) {
+        pose.lead = next.lead;
+        pose.el.style.setProperty('--lead', `${next.lead}px`);
+      }
+      if (next.shift !== pose.shift) {
+        pose.shift = next.shift;
+        pose.el.style.setProperty('--shift', `${next.shift}px`);
+      }
+      const under = anchor.x > underAt && !sign.places.some((place) => held.has(place.id));
+      if (under !== pose.under) {
+        pose.under = under;
+        if (under) pose.el.dataset.under = '';
+        else delete pose.el.dataset.under;
       }
     });
   };
+  const placeSignsRef = useRef(placeSigns);
+  placeSignsRef.current = placeSigns;
   const markInboundStop = (id: string | null) => {
     inboundStopRef.current = id;
     routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
       element.classList.toggle('is-inbound', !!id && element.dataset.afStop === id);
     });
     markPast();
+    placeSigns();
   };
   const markCurrentStop = (id: string | null) => {
     if (id) markInboundStop(null);
@@ -1182,22 +1234,32 @@ export default function RouteAtlas({
       element.classList.toggle('is-current', element.dataset.tickGroup === id);
     });
     markPast();
-    if (id) markSides();
+    placeSigns();
   };
-  // A dive from the globe lands by scroll, with no camera state to say so
-  // (the dive is scroll-owned): the map's own `idle`, once it has drawn the
-  // place it came to, is the rest it ends in.
-  const markSidesRef = useRef(markSides);
-  markSidesRef.current = markSides;
+  // The signs ride the camera: placed on every frame the map draws, and once
+  // whenever the signs or the layout change under a resting map.
+  useLayoutEffect(() => {
+    const atlas = routeAtlasRef.current;
+    if (!signs || !atlas) return;
+    const measure = () => {
+      plateLeftRef.current = atlas.clientWidth * ARCHIVE_COLUMN_LEFT;
+      placeSignsRef.current();
+    };
+    measure();
+    window.addEventListener('resize', measure, { passive: true });
+    return () => window.removeEventListener('resize', measure);
+  }, [layoutRevision, mapLoaded, signs, viewportReady]);
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
-    const onIdle = () => markSidesRef.current();
-    map.on('idle', onIdle);
+    signPosesRef.current.clear();
+    const onRender = () => placeSignsRef.current();
+    map.on('render', onRender);
+    onRender();
     return () => {
-      map.off('idle', onIdle);
+      map.off('render', onRender);
     };
-  }, [mapLoaded, signs]);
+  }, [mapLoaded, regionSignList, signs]);
   // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
   // this component renders (its transformer is rebuilt each render), so the
   // state write is ref-guarded and deferred to a microtask.
@@ -1972,6 +2034,8 @@ export default function RouteAtlas({
       reach: number;
       start: number;
       dest: number;
+      /** The place the camera left (the committed place at take-off). */
+      origin: number;
       /** The viewfinder has been told to lock on arrival. */
       lockCalled: boolean;
     }
@@ -2044,12 +2108,29 @@ export default function RouteAtlas({
       }
       document.documentElement.dataset.atlasCamera = state;
       if (state === 'locked') {
-        // The camera is down: each place's key takes its side for this view.
-        markSides();
         cameraStateTimer = window.setTimeout(() => {
           if (document.documentElement.dataset.atlasCamera === 'locked') document.documentElement.dataset.atlasCamera = 'rest';
         }, 620);
       }
+    };
+
+    // A landing, told to the page (`atlas:arrive` on window): the chapter's
+    // ticket turns its sign into place — the state, the stop number and the
+    // name, from the place the camera left (ArchiveChapter, "The sign"). Only
+    // a real arrival: a flight's touchdown or the dive setting down on the
+    // first place, never a restart's snap or a settle.
+    const announceArrival = (index: number, from: number | null) => {
+      const to = chapterRoute[index]?.stop;
+      if (!to) return;
+      const left = from != null && from !== index ? chapterRoute[from] : undefined;
+      window.dispatchEvent(new CustomEvent('atlas:arrive', {
+        detail: {
+          id: to.id,
+          from: left
+            ? { name: left.stop.name, code: stateCode(left.stop.region), num: pad2(left.chapterIndex + 1) }
+            : null,
+        },
+      }));
     };
 
     // A restart (first draw, resize, Story close) must not replay a flight —
@@ -2061,7 +2142,6 @@ export default function RouteAtlas({
     const noteReaderDrove = () => { readerDrove = true; };
     ['wheel', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteReaderDrove, { passive: true }));
     let settleTimer = 0;
-    let sidesTimer = 0;
     // `atOnce`: the place is certain (a cut under a story), so its point is
     // marked current now rather than when the restart window closes.
     const settleSignOn = (index: number, atOnce = false) => {
@@ -2209,6 +2289,7 @@ export default function RouteAtlas({
         reach,
         start: now,
         dest,
+        origin: inAir && flight ? flight.origin : committed,
         lockCalled: false,
       };
       committed = dest;
@@ -2375,6 +2456,7 @@ export default function RouteAtlas({
     const lockFlight = (landing: Flight, now: number) => {
       landing.lockCalled = true;
       setCameraState('locked');
+      announceArrival(landing.dest, landing.origin);
       const destPlace = viewfinderPlace(landing.dest);
       if (destPlace) viewfinderRef.current?.hunt(destPlace, now + HOP.lockSnapMs);
       const destId = destPlace?.id ?? null;
@@ -2751,7 +2833,10 @@ export default function RouteAtlas({
           if (down !== diveDown) {
             const html = document.documentElement;
             if (!down) html.dataset.atlasLandedAt = 'flying';
-            else if (diveDown === false) html.dataset.atlasLandedAt = String(Math.round(performance.now()));
+            else if (diveDown === false) {
+              html.dataset.atlasLandedAt = String(Math.round(performance.now()));
+              announceArrival(committed, null);
+            }
             diveDown = down;
           }
         }
@@ -2864,15 +2949,6 @@ export default function RouteAtlas({
           lastPitch = entryPitch;
           lastBearing = entryBearing;
           lastOverview = false;
-          // The places' sides (and which sit under the covers) once this
-          // camera has come to rest: the entrance's settle onto chapter 1
-          // never locks, and the map's own idle did not always come after
-          // it, so New York kept a side taken mid-dive over chapter 1's
-          // header. Once, SIDES_REST_MS after the last camera write.
-          window.clearTimeout(sidesTimer);
-          sidesTimer = window.setTimeout(() => {
-            if (!disposed) markSides();
-          }, SIDES_REST_MS);
         }
       } else {
         if (!lastOverview) {
@@ -3086,7 +3162,6 @@ export default function RouteAtlas({
       if (veilFrame) cancelAnimationFrame(veilFrame);
       lookWrites.fadeZoom = Number.NaN;
       window.clearTimeout(settleTimer);
-      window.clearTimeout(sidesTimer);
       // A held commit dies with this run; the restart re-derives the place
       // from committedPlaceRef (still the camera's) and snaps, never flies.
       dropHeldHop();
@@ -3689,16 +3764,15 @@ export default function RouteAtlas({
           });
 
           // The same rule /travel follows: the basemap does not name the places
-          // this archive is naming. The route already draws each stop's name at
-          // the viewfinder, so a settlement label underneath it is the page
-          // saying the same word twice in two voices.
+          // this archive is naming. Each stop is signed already (its shield on
+          // the map, its name on its ticket), so a settlement label under the
+          // sign is the page saying the same word twice in two voices.
           silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
           // Keep-out, the /travel technique: an invisible icon on every place,
-          // as big as its dot, its key on either side and the landmark over
-          // it, placed first (the topmost symbol layer) so the basemap can no
-          // longer set a town's name across a place's number ("Fort
-          // Lauderdale" through Miami's 01). It needs the map's cross-source
-          // collisions, which are on for it.
+          // placed first (the topmost symbol layer), so the basemap does not
+          // set a town's name across the stretch of route a sign's leader
+          // points at ("Fort Lauderdale" through Miami). It needs the map's
+          // cross-source collisions, which are on for it.
           if (signs && !map.getLayer(ATLAS_KEEP_OUT.id)) {
             if (!map.hasImage(ATLAS_KEEP_OUT.id)) {
               map.addImage(ATLAS_KEEP_OUT.id, {
@@ -3840,25 +3914,25 @@ export default function RouteAtlas({
           </Source>
         )}
 
-        {/* The places: printed marks, upright to the camera and centred on
-            each place (AfPoint). The current place's dot is the focal mark —
-            the camera sets it exactly on the viewfinder's reading line. */}
-        {signs && chapterRoute.map((entry) => (
+        {/* The places: one route sign per region (RouteSign), upright to
+            the camera, standing on its leader over the middle of the region
+            its shields share. The camera still sets the current place
+            exactly on the reading line; the sign says which stretch of the
+            route that is, and its shield says which stop. */}
+        {signs && regionSignList.map((sign) => (
           <Marker
-            key={`af-${entry.stop.id}`}
-            longitude={entry.stop.coordinates[0]}
-            latitude={entry.stop.coordinates[1]}
-            anchor="center"
+            key={`sign-${sign.key}`}
+            longitude={sign.anchor[0]}
+            latitude={sign.anchor[1]}
+            anchor="bottom"
             pitchAlignment="viewport"
             rotationAlignment="viewport"
           >
-            <AfPoint
-              stopId={entry.stop.id}
-              slug={entry.stop.slug}
-              number={entry.chapterIndex + 1}
-              name={entry.stop.name}
-              initiallyCurrent={entry.stop.id === currentStopRef.current}
-              engaged={engagedChapterId === entry.stop.id}
+            <RouteSign
+              signKey={sign.key}
+              stops={sign.places}
+              initialCurrentId={currentStopRef.current}
+              engagedId={engagedChapterId}
               visibility={classicInterfaceOpacity}
               onEngage={onEngage}
               onNavigate={onNavigate}
@@ -3924,29 +3998,21 @@ export default function RouteAtlas({
               />
             </svg>
           )}
-          {projectedStops.map((projected, index) => {
-            const stop = mappedStops[index];
+          {regionSignList.map((sign, order) => {
+            const points = sign.places.map((place) => projectedStops.find((projected) => projected.id === place.id));
+            if (points.some((point) => !point)) return null;
             return (
-              <div
-                key={projected.id}
-                className="absolute"
-                style={{
-                  left: projected.x,
-                  top: projected.y,
-                  transform: 'translate(-50%, -50%)',
-                }}
-              >
-                <LivingMarkerNode
-                  stop={stop}
-                  index={index}
-                  stops={mappedStops}
-                  chapterProgress={resolvedChapterProgress}
-                  interfaceVisible={interfaceVisible}
-                  reducedMotion={reducedMotion}
-                  mobile={mobile}
-                  playInterfaceIntro={playInterfaceIntro}
-                />
-              </div>
+              <LivingRouteSign
+                key={sign.key}
+                places={sign.places}
+                points={points as Array<{ x: number; y: number }>}
+                bounds={{ left: LIVING_SIGN_EDGE, right: (viewportWidthRef.current || 390) - LIVING_SIGN_EDGE }}
+                chapterProgress={resolvedChapterProgress}
+                interfaceVisible={interfaceVisible}
+                reducedMotion={reducedMotion}
+                playInterfaceIntro={playInterfaceIntro}
+                order={order}
+              />
             );
           })}
         </motion.div>

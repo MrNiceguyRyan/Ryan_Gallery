@@ -22,6 +22,8 @@ import {
 import type { RouteStop } from './RouteAtlas';
 import { stockStyle } from '../../lib/ticketStock';
 import { EASE } from '../../lib/motion';
+import { pad2, stateCode } from '../../lib/routeShield';
+import { FlapWord, RouteShield, runFlap } from './RouteShield';
 
 interface Props {
   stops: RouteStop[];
@@ -393,7 +395,16 @@ const stubVariants = {
     : { y: 16, opacity: 0, transition: { duration: 0.26, ease: STUB_EXIT } }),
 };
 
-function StubFace({ stop, ordinal, total, direction, printIn }: { stop: RouteStop; ordinal: number; total: number; direction: number; printIn: boolean }) {
+function StubFace({ stop, ordinal, total, direction, printIn, leaving, reducedMotion }: {
+  stop: RouteStop;
+  ordinal: number;
+  total: number;
+  direction: number;
+  printIn: boolean;
+  /** The stop whose stub this one replaces: its sign turns into this one's. */
+  leaving: { stop: RouteStop; ordinal: number } | null;
+  reducedMotion: boolean;
+}) {
   const present = useIsPresent();
   // One stub falls at a time. A fling commits three chapters in ~450ms, and
   // three torn stubs used to fall at once, each for 780ms, rotating their own
@@ -430,6 +441,23 @@ function StubFace({ stop, ordinal, total, direction, printIn }: { stop: RouteSto
     }
     return undefined;
   }, [overtaken, present]);
+  // The phone's stub is the place's sign too, as the desktop ticket is: the
+  // route shield (its state, its stop) and the name. A stub that replaces
+  // another turns its sign into place from the one it replaced, like a
+  // departure board (src/lib/routeShield.ts, FLAP); the first stub on the
+  // page, and reduced motion, simply print.
+  const signRef = useRef<HTMLDivElement>(null);
+  const leavingRef = useRef(leaving);
+  useEffect(() => {
+    const node = signRef.current;
+    const from = leavingRef.current;
+    if (!printIn || reducedMotion || !node || !from) return undefined;
+    return runFlap(node, {
+      name: from.stop.name,
+      code: stateCode(from.stop.region),
+      num: pad2(from.ordinal),
+    });
+  }, [printIn, reducedMotion]);
   // Year first, frames last: on a narrow phone the line is cut with an
   // ellipsis, and it used to cut the year ("17 FRAMES · 20…").
   const facts = [
@@ -454,13 +482,20 @@ function StubFace({ stop, ordinal, total, direction, printIn }: { stop: RouteSto
       animate="rest"
       exit="exit"
     >
-      <span className="living-ticket__no font-serif">{String(ordinal).padStart(2, '0')}</span>
-      <span className="living-ticket__text font-ui">
-        <span className="living-ticket__place">{stop.name}</span>
-        <span className="living-ticket__facts">
-          / {String(total).padStart(2, '0')} · {facts}
+      <div ref={signRef} className="living-ticket__sign">
+        <RouteShield
+          className="living-ticket__no"
+          code={stateCode(stop.region)}
+          number={pad2(ordinal)}
+          flap
+        />
+        <span className="living-ticket__text font-ui">
+          <span className="living-ticket__place"><FlapWord text={stop.name} role="name" /></span>
+          <span className="living-ticket__facts">
+            / {pad2(total)} · {facts}
+          </span>
         </span>
-      </span>
+      </div>
     </motion.div>
     </div>
   );
@@ -486,15 +521,33 @@ function LivingTicketStub({ stops, index, reducedMotion }: {
     if (index > counted.current) tears.current += 1;
     counted.current = index;
   }
+  // The stub this one replaces, for its sign's flap.
+  const leftIndex = useRef<number | null>(null);
+  const shownIndex = useRef(index);
+  if (index !== shownIndex.current) {
+    leftIndex.current = shownIndex.current;
+    shownIndex.current = index;
+  }
   const stop = stops[index];
   if (!stop) return null;
+  const leftStop = leftIndex.current != null ? stops[leftIndex.current] : undefined;
+  const leaving = leftStop ? { stop: leftStop, ordinal: (leftIndex.current ?? 0) + 1 } : null;
   return (
     <div className="living-ticket pointer-events-none absolute z-[12]" aria-hidden="true">
       {reducedMotion ? (
-        <StubFace stop={stop} ordinal={index + 1} total={stops.length} direction={1} printIn={false} />
+        <StubFace stop={stop} ordinal={index + 1} total={stops.length} direction={1} printIn={false} leaving={null} reducedMotion />
       ) : (
         <AnimatePresence initial={false} custom={{ direction, tears: tears.current }}>
-          <StubFace key={stop.id} stop={stop} ordinal={index + 1} total={stops.length} direction={direction} printIn={replaced.current} />
+          <StubFace
+            key={stop.id}
+            stop={stop}
+            ordinal={index + 1}
+            total={stops.length}
+            direction={direction}
+            printIn={replaced.current}
+            leaving={leaving}
+            reducedMotion={false}
+          />
         </AnimatePresence>
       )}
     </div>

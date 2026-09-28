@@ -1,13 +1,13 @@
 /**
  * The landmark each place stands up on the map.
  *
- * Every place on both maps is printed the same way — a dot of white ink
- * (AtlasSign's AfPoint, /travel's place marks in MapboxMap). The
+ * /travel prints every place as a mark of white ink (MapboxMap). The
  * landmark is the one thing a place gets of its own, and it gets it only when
- * it is looked at properly: the homepage atlas stands the current place's
- * landmark just above its dot, /travel the chosen place's beside its mark.
+ * it is looked at properly: /travel stands the chosen place's beside its mark.
  * Nothing is drawn round it — no disc, no medal ring (owner, 2026-09-27:
  * 地图上对应的小标志太丑了; the landmarks themselves he asked for on 09-21).
+ * (The homepage atlas signs its places with route shields instead —
+ * src/lib/routeShield.ts, owner 2026-09-28 — and stands no landmark.)
  *
  * A place with no drawing yet is simply its dot and number. The archive is
  * going to keep growing: a new city ships the day its photographs do, and
