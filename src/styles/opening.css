@@ -5,7 +5,10 @@
    Sheets are drawn at the desktop's scale (a found word's cap height is
    about 64 px); the island's camera scales and places them. Faces: our own
    (Fraunces, Space Grotesk) and web-safe stacks for variety — nothing is
-   downloaded for the film. No lime but the finder; no yellow anywhere. */
+   downloaded for the film (his photographs are fetched after the first
+   paint, at low priority). No lime but the finder; no yellow anywhere. The
+   grounds are lifted off black toward the site's olive: a calm grade, not a
+   strobe of black and white. */
 
 .opening {
   /* The found word's cap height on screen (src/lib/openingFilm.ts capFor). */
@@ -13,8 +16,9 @@
   /* Where the code scene locks ARCHIVE (FOCUS.archive). */
   --of-fx: 50vw;
   --of-fy: 46vh;
-  /* The locked letters' scale while they sit in the rain. */
-  --of-k0: 0.2;
+  /* The locked letters' scale while they sit in the rain (the rain's own
+     glyphs are this size: at 0.3 its jargon reads — ISO400, F/2.8, LAT25.76N). */
+  --of-k0: 0.3;
   --of-mono: Menlo, "SF Mono", Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
   --of-georgia: Georgia, "Times New Roman", Times, serif;
   --of-old: Baskerville, "Baskerville Old Face", "Libre Baskerville", Georgia, "Times New Roman", serif;
@@ -32,7 +36,7 @@
   display: none;
   overflow: hidden;
   contain: strict;
-  background: #0b0d09;
+  background: #15180f;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
@@ -134,9 +138,12 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   background: radial-gradient(ellipse 78% 72% at 50% 48%, transparent 52%, rgba(6, 7, 5, 0.34) 100%);
 }
 
-/* The finder: four thin corners, the one lime on screen, in an ink casing
-   so they read on paper as well as on the dark. The island moves each
-   corner (a transform: the lines never scale). */
+/* The finder, the one lime on screen, in an ink casing so it reads on paper
+   as well as on the dark. Its default look is a READING RULE under the word
+   (data-look="rule": 2 px of lime, the word's ink width + 8 px, 6 px under
+   its baseline); ?finder=frame gives four thin viewfinder corners instead.
+   The island moves them (transforms only: the rule is 100 px scaled to the
+   word, the corners never scale). */
 .of-finder {
   position: absolute;
   left: 0;
@@ -146,6 +153,19 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   opacity: 0;
   pointer-events: none;
 }
+.of-finder__rule {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 100px;
+  height: 4px;
+  transform-origin: 0 0;
+  background: linear-gradient(180deg, rgba(8, 10, 6, 0.55) 0 1px, var(--of-lime) 1px 3px, rgba(8, 10, 6, 0.55) 3px);
+  will-change: transform;
+}
+.of-finder__c { display: none; }
+.of-finder[data-look='frame'] .of-finder__rule { display: none; }
+.of-finder[data-look='frame'] .of-finder__c { display: block; }
 .of-finder__c {
   position: absolute;
   left: 0;
@@ -164,8 +184,9 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   .of-finder__c { width: 14px; height: 14px; }
 }
 
-/* The timecode and the scene count, bottom left, on an ink pill; the Skip
-   pill bottom right. Digits run on strips (a transform, stepped). */
+/* The timecode, bottom left, on an ink pill (a film's running clock, no
+   progress count); the Skip pill bottom right. Digits run on strips (a
+   transform, stepped). */
 .of-hud {
   position: absolute;
   left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
@@ -188,16 +209,6 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
-.of-hud__rec {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--of-bone);
-  animation: of-rec 1s steps(1) infinite;
-}
-@keyframes of-rec {
-  50% { opacity: 0.25; }
-}
 .of-digits {
   display: inline-block;
   height: 1em;
@@ -213,10 +224,7 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
 .of-digits--ss .of-digits__strip { animation: of-strip-10 10s steps(10) infinite; }
 @keyframes of-strip-24 { to { transform: translateY(-24em); } }
 @keyframes of-strip-10 { to { transform: translateY(-10em); } }
-.of-hud__total--phone { display: none; }
 @media (max-width: 1023px) {
-  .of-hud__total--desk { display: none; }
-  .of-hud__total--phone { display: inline; }
   .of-hud__tc-label { display: none; }
 }
 
@@ -256,7 +264,7 @@ html[data-reel='skip'] .of-skip { display: none; }
 
 /* ── 1. Code ──────────────────────────────────────────────────────────── */
 .of-scene--code {
-  background: radial-gradient(ellipse 70% 60% at 50% 46%, #11140d 0%, #0b0d09 70%);
+  background: radial-gradient(ellipse 70% 60% at 50% 46%, #1d2117 0%, #15180f 70%);
   --of-lockfs: calc(var(--of-cap) / 0.729);
   --of-pitch: calc(var(--of-lockfs) * 0.602 * var(--of-k0));
 }
@@ -328,7 +336,7 @@ html[data-reel='skip'] .of-skip { display: none; }
   width: 1ch;
   height: 1.14em;
   margin-top: -0.07em;
-  background: #0b0d09;
+  background: #181b12;
 }
 .of-lock__slot {
   position: relative;
@@ -341,11 +349,15 @@ html[data-reel='skip'] .of-skip { display: none; }
 .of-lock__strip {
   display: block;
   width: 1ch;
+  /* One character a line (the word above is nowrap: without this the strip
+     is one clipped line and the scramble shows as a blank slot). */
+  white-space: normal;
   word-break: break-all;
   line-height: 1;
   color: #8f9a72;
-  animation: of-scramble 230ms steps(7, end) both;
-  animation-delay: calc(160ms + var(--k) * 62ms);
+  /* CODE_BEATS (src/lib/openingFilm.ts): scramble 120 + k × 50, lock 200 later. */
+  animation: of-scramble 200ms steps(7, end) both;
+  animation-delay: calc(120ms + var(--k) * 50ms);
 }
 @keyframes of-scramble {
   from { transform: translate3d(0, 0, 0); }
@@ -361,7 +373,7 @@ html[data-reel='skip'] .of-skip { display: none; }
   text-shadow: 0 0 0.12em rgba(244, 244, 237, 0.28);
   opacity: 0;
   animation: of-lock-on 80ms linear both;
-  animation-delay: calc(390ms + var(--k) * 62ms);
+  animation-delay: calc(320ms + var(--k) * 50ms);
 }
 @keyframes of-lock-on { to { opacity: 1; } }
 
@@ -509,7 +521,7 @@ html[data-reel='skip'] .of-skip { display: none; }
 .of-scene--magazine {
   background:
     radial-gradient(ellipse 46% 42% at 50% 46%, rgba(80, 66, 48, 0.35), transparent 70%),
-    radial-gradient(ellipse 80% 70% at 50% 46%, #231f18 0%, #110f0b 80%);
+    radial-gradient(ellipse 80% 70% at 50% 46%, #2a251d 0%, #1a1712 80%);
 }
 .of-mag {
   width: 700px;
@@ -533,6 +545,31 @@ html[data-reel='skip'] .of-skip { display: none; }
     repeating-linear-gradient(0deg, rgba(10, 6, 9, 0) 0 20px, rgba(10, 6, 9, 0.5) 20px 27px),
     linear-gradient(180deg, #5a3b52 0%, #3b2536 45%, #1f141d 100%);
 }
+/* His photograph as a plate on the picture page, at its own ratio, under the
+   giant word; the drawn stand-in stays until it has arrived. */
+.of-mag__picture.has-pic {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 60%, rgba(244, 230, 214, 0.08), transparent 72%),
+    #2f1e2b;
+}
+.of-mag__plate {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 168px;
+  display: block;
+  overflow: hidden;
+  background: rgba(10, 6, 9, 0.35);
+}
+.of-pic {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 160ms var(--ease-arrive);
+}
+.of-pic.is-in { opacity: 1; }
 .of-mag__caption {
   position: absolute;
   left: 20px;
@@ -610,7 +647,7 @@ html[data-reel='skip'] .of-skip { display: none; }
 .of-mag__folio--right { right: 24px; color: #5b3a50; }
 
 /* ── 5. Subtitles ─────────────────────────────────────────────────────── */
-.of-scene--subtitles { background: #040404; }
+.of-scene--subtitles { background: #0e100c; }
 .of-subs {
   width: 2800px;
   height: 1500px;
@@ -777,13 +814,13 @@ html[data-reel='skip'] .of-skip { display: none; }
 }
 
 /* ── 8. Departure board ───────────────────────────────────────────────── */
-.of-scene--board { background: #0c0d0e; }
+.of-scene--board { background: #16181a; }
 .of-board {
   width: 3200px;
   height: 2200px;
   background:
     radial-gradient(ellipse 50% 45% at 45% 40%, rgba(255, 255, 255, 0.04), transparent 70%),
-    #141517;
+    #1c1e21;
   font-family: var(--of-helv);
   color: #efeee6;
 }
@@ -1061,8 +1098,10 @@ html[data-reel='skip'] .of-skip { display: none; }
 }
 .of-film__frame {
   display: block;
+  flex: none;
   width: 1000px;
   height: 640px;
+  overflow: hidden;
 }
 .of-film__frame--a { background: linear-gradient(170deg, #5a6a73 0%, #2e3a40 60%, #1b2226 100%); }
 .of-film__frame--b { background: linear-gradient(190deg, #8a6f55 0%, #4d3a2b 55%, #221a14 100%); }
@@ -1070,7 +1109,7 @@ html[data-reel='skip'] .of-skip { display: none; }
 
 /* ── 13. The clapperboard ─────────────────────────────────────────────── */
 .of-scene--slate {
-  background: radial-gradient(ellipse 60% 60% at 42% 42%, #1c1f18 0%, #0c0e0a 78%);
+  background: radial-gradient(ellipse 60% 60% at 42% 42%, #22261c 0%, #14170f 78%);
 }
 .of-slate {
   width: 1180px;
@@ -1252,7 +1291,13 @@ html[data-reel='skip'] .of-skip { display: none; }
   left: 0;
   top: 0;
   white-space: pre;
-  will-change: opacity, filter;
+  will-change: transform, opacity;
+}
+/* The word itself: the morph's horizontal scale goes on it (both faces held
+   to one ink width). */
+.of-fly__ink {
+  display: inline-block;
+  will-change: transform;
 }
 
 /* ── Reduced motion: no montage ───────────────────────────────────────────
@@ -1267,7 +1312,6 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-rain__col,
   .of-lock__strip,
   .of-lock__letter,
-  .of-hud__rec,
   .of-digits__strip { animation: none; }
   .of-hud { display: none; }
   .of-chalk { stroke-dashoffset: 0; }

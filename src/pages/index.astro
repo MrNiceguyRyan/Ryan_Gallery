@@ -5,6 +5,7 @@ import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
+import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
@@ -44,6 +45,8 @@ const collectionsQuery = `
 const collections = await fetchSanityWithRetry(() =>
   sanityClient.fetch<Collection[]>(collectionsQuery),
 );
+// His own frames for the film's magazine page and strip of film.
+const openingPictures = pickPictures(collections ?? []);
 ---
 
 <Layout dark={true}>
@@ -58,6 +61,6 @@ const collections = await fetchSanityWithRetry(() =>
   </Fragment>
   {/* The opening film: a word hunt through many texts, over the page. Its
       first scene is the server's markup, so it is the first paint. */}
-  <OpeningFilm client:load />
+  <OpeningFilm client:load pictures={openingPictures} />
   <HomePage client:load collections={collections} />
 </Layout>

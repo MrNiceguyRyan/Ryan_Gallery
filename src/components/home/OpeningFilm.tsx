@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import OpeningScenes from './OpeningScenes';
 import {
   CODE_BEATS,
+  FF_RATE,
   FF_TAIL,
   FILM_DESKTOP,
   FILM_PHONE,
@@ -11,14 +12,17 @@ import {
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
   RAIN_DIM,
+  LIFT_EASE,
   STILL,
   cameraFor,
   cameraTransform,
   clamp01,
+  codeFinderKeys,
   cutSchedule,
   fastForwardTarget,
   filmLength,
   finderBox,
+  finderLookFrom,
   finderTrack,
   flightFor,
   flightPath,
@@ -26,9 +30,11 @@ import {
   globeReleaseAt,
   landingAEnd,
   landingFrom,
+  morphScales,
   onScreen,
   portalAt,
   portalTarget,
+  ruleFor,
   runProgress,
   segment,
   slateBeats,
@@ -37,6 +43,7 @@ import {
   type Camera,
   type Cut,
   type FinderKey,
+  type FinderLook,
   type Landing,
   type OpeningDetail,
   type OpeningState,
@@ -44,6 +51,7 @@ import {
 } from '../../lib/openingFilm';
 import { markReelSeen } from '../../lib/reelVisit';
 import { EASE } from '../../lib/motion';
+import type { OpeningPicture } from './OpeningScenes';
 
 const bezier = ([a, b, c, d]: readonly number[]) => `cubic-bezier(${a}, ${b}, ${c}, ${d})`;
 const EASES = {
@@ -53,10 +61,17 @@ const EASES = {
   leave: bezier(EASE.leave),
   linear: 'linear',
 } as const;
+// The finder's curves: the hunt between words lands on the house arrive curve
+// too (fast off the mark, so a late, short cut is spent on its word).
+const FINDER_EASES = { arrive: EASES.arrive, travel: EASES.arrive, linear: 'linear' } as const;
 // The word lifting off the rain toward the lens: slow to leave, soft to land.
-const LIFT_EASE = 'cubic-bezier(0.5, 0, 0.15, 1)';
+const LIFT_CSS = bezier(LIFT_EASE);
+// The two faces' shared width across landing A's morph: one curve for both.
+const MORPH_EASE = 'cubic-bezier(0.45, 0, 0.55, 1)';
 // The finder's padding round a word, px (on a phone a little less).
 const FINDER_PAD = { desktop: 16, phone: 10 } as const;
+// The rule is drawn 100 px long and scaled to the word (a transform only).
+const RULE_UNIT = 100;
 // Keys that scroll a page: held (and taken as the reader's hurry) while the
 // film plays.
 const SCROLL_KEYS = new Set([' ', 'Spacebar', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End']);
@@ -66,6 +81,10 @@ interface Measured {
   anchor: Anchor;
   /** Its ink box in the sheet. */
   ink: Box;
+  /** Its cap box (ascent to baseline, no descenders): the rule sits under
+   *  it, so a word's rule does not drop when the next scene's face has a
+   *  descender. */
+  cap: Box;
 }
 
 interface SceneRig {
@@ -128,10 +147,26 @@ function measureFind(find: HTMLElement, container: HTMLElement): Measured {
     // The tiles' own letters give the size to match.
     const letter = find.querySelector<HTMLElement>('.of-flap') ?? find;
     const cap = inkOf(letter, text).ascent;
-    return { anchor: { x: box.x + box.w / 2, y: box.y + box.h / 2, cap }, ink: box };
+    return { anchor: { x: box.x + box.w / 2, y: box.y + box.h / 2, cap }, ink: box, cap: box };
   }
   const box = { x: at.x - ink.left, y: baseline - ink.ascent, w: ink.left + ink.right, h: ink.ascent + ink.descent };
-  return { anchor: { x: box.x + box.w / 2, y: baseline - ink.ascent / 2, cap: ink.ascent }, ink: box };
+  return {
+    anchor: { x: box.x + box.w / 2, y: baseline - ink.ascent / 2, cap: ink.ascent },
+    ink: box,
+    cap: { x: box.x, y: baseline - ink.ascent, w: box.w, h: ink.ascent },
+  };
+}
+
+/** Where an element's baseline is on screen: a zero-size probe on its last
+ *  line, read once (the landings measure their words this way, before
+ *  anything moves). */
+function baselineOf(el: HTMLElement) {
+  const probe = document.createElement('i');
+  probe.className = 'of-bl';
+  el.append(probe);
+  const y = probe.getBoundingClientRect().top;
+  probe.remove();
+  return y;
 }
 
 function textBox(el: Element): Box | null {
@@ -160,27 +195,33 @@ const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 *
  * It plays once a tab session (src/lib/reelVisit.ts decides before the first
  * paint: html[data-opening] present means it plays).
  */
-export default function OpeningFilm() {
+export default function OpeningFilm({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const overlay = rootRef.current;
-    const skip = skipRef.current;
+    const overlayEl = rootRef.current;
+    const skipEl = skipRef.current;
     const html = document.documentElement;
-    if (!overlay || !skip) return;
+    if (!overlayEl || !skipEl) return;
+    // (Typed non-null: the landings are function declarations, which keep no
+    // narrowing.)
+    const overlay: HTMLDivElement = overlayEl;
+    const skip: HTMLButtonElement = skipEl;
     if (!html.hasAttribute('data-opening') || html.dataset.reel === 'skip') return;
 
     const body = document.body;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const landing: Landing = landingFrom(window.location.search);
+    const look: FinderLook = finderLookFrom(window.location.search);
     const stage = overlay.querySelector<HTMLElement>('[data-stage]')!;
     const finder = overlay.querySelector<HTMLElement>('[data-finder]')!;
+    finder.dataset.look = look;
     const corners = Array.from(finder.querySelectorAll<HTMLElement>('.of-finder__c'));
+    const rule = finder.querySelector<HTMLElement>('.of-finder__rule');
     const flightLayer = overlay.querySelector<HTMLElement>('[data-flight]')!;
     const portal = overlay.querySelector<HTMLCanvasElement>('[data-portal]')!;
     const hud = overlay.querySelector<HTMLElement>('.of-hud');
-    const sceneNo = overlay.querySelector<HTMLElement>('.of-digits--sc .of-digits__strip');
     const grain = overlay.querySelector<HTMLElement>('.of-grain');
     const vignette = overlay.querySelector<HTMLElement>('.of-vignette');
 
@@ -188,6 +229,10 @@ export default function OpeningFilm() {
     let state: OpeningState = 'film';
     let globe = false;
     let phase: 'film' | 'landing' | 'done' = 'film';
+    // The reader asked to hurry: the landing plays at FF_RATE.
+    let hurried = false;
+    // Landing A's globe keeps its rise after the page is handed over.
+    let globeSettle = 0;
     const timers = new Set<number>();
     const later = (fn: () => void, ms: number) => {
       const id = window.setTimeout(() => {
@@ -259,7 +304,11 @@ export default function OpeningFilm() {
       markSeen();
       html.removeAttribute('data-opening');
       html.removeAttribute('data-open-fly');
-      html.removeAttribute('data-open-globe');
+      // (The globe's rise, if landing A started it, runs to its end first:
+      // dropping the attribute takes its transition away.)
+      if (html.hasAttribute('data-open-globe')) {
+        globeSettle = window.setTimeout(() => html.removeAttribute('data-open-globe'), 700);
+      }
       skip.classList.remove('is-gone');
       state = 'page';
       globe = true;
@@ -375,7 +424,7 @@ export default function OpeningFilm() {
       t0 += delta;
     };
 
-    const measureAll = (): { cap: number; archiveFocus: Vec2; lockInk: Box } => {
+    const measureAll = (): { cap: number; archiveFocus: Vec2; lockInk: Box; lockCap: Box; lockCentre: Vec2 } => {
       const lock = overlay.querySelector<HTMLElement>('[data-lock]')!;
       const word = lock.querySelector<HTMLElement>('.of-lock__word')!;
       // The locked word at full size: its box centred on the lock point.
@@ -388,6 +437,9 @@ export default function OpeningFilm() {
       const ink = inkOf(word, 'ARCHIVE');
       const left = lx - w / 2;
       const lockInk: Box = { x: left - ink.left, y: baseline - ink.ascent, w: ink.left + ink.right, h: ink.ascent + ink.descent };
+      const lockCap: Box = { x: lockInk.x, y: baseline - ink.ascent, w: lockInk.w, h: ink.ascent };
+      // The locked word scales about its own box's centre: the lock point.
+      const lockCentre: Vec2 = [lx, ly];
       const cap = ink.ascent;
       const archiveFocus: Vec2 = [lockInk.x + lockInk.w / 2, baseline - ink.ascent / 2];
       rigs = cuts.map((cut) => {
@@ -396,10 +448,11 @@ export default function OpeningFilm() {
         const find = sheet?.querySelector<HTMLElement>('[data-find]');
         return { cut, scene, sheet, measured: sheet && find ? measureFind(find, sheet) : null };
       });
-      return { cap, archiveFocus, lockInk };
+      return { cap, archiveFocus, lockInk, lockCap, lockCentre };
     };
 
     let geometry = measureAll();
+    let finderFrom: number | null = null;
 
     const camAt = (i: number, t: number): Camera | null => {
       const rig = rigs[i];
@@ -469,13 +522,13 @@ export default function OpeningFilm() {
       const lockWord = code.scene.querySelector<HTMLElement>('.of-lock__word');
       const lockCells = code.scene.querySelector<HTMLElement>('.of-lock__cells');
       const rain = code.scene.querySelector<HTMLElement>('[data-rain]');
-      const k0 = getComputedStyle(overlay).getPropertyValue('--of-k0').trim() || '0.2';
+      const k0 = getComputedStyle(overlay).getPropertyValue('--of-k0').trim() || '0.3';
       const lifted = (k: string) => `translate(-50%, -50%) scale(${k})`;
       const [liftA, liftB] = CODE_BEATS.lift;
       if (lockWord) {
         play(lockWord, [
           { offset: 0, transform: lifted(k0) },
-          { offset: at(liftA), transform: lifted(k0), easing: LIFT_EASE },
+          { offset: at(liftA), transform: lifted(k0), easing: LIFT_CSS },
           { offset: at(liftB), transform: lifted('1') },
           { offset: 1, transform: lifted('1') },
         ]);
@@ -483,7 +536,7 @@ export default function OpeningFilm() {
       if (lockCells) {
         play(lockCells, [
           { offset: 0, transform: lifted(k0), opacity: 1 },
-          { offset: at(liftA), transform: lifted(k0), opacity: 1, easing: LIFT_EASE },
+          { offset: at(liftA), transform: lifted(k0), opacity: 1, easing: LIFT_CSS },
           { offset: at(liftA + (liftB - liftA) * 0.5), opacity: 0 },
           { offset: at(liftB), transform: lifted('1'), opacity: 0 },
           { offset: 1, transform: lifted('1'), opacity: 0 },
@@ -501,62 +554,62 @@ export default function OpeningFilm() {
       }
 
       // ── The finder ──
+      // Its track is boxes (the word's box + pad, per scene start and end);
+      // the look draws them: four corners (?finder=frame, the word's ink box)
+      // or the reading rule (its cap box, growing only sideways).
       const pad = FINDER_PAD[phone() ? 'phone' : 'desktop'];
+      const vy = look === 'rule' ? 0 : 1;
+      const wordBox = (m: Measured) => (look === 'rule' ? m.cap : m.ink);
+      const lockBox = look === 'rule' ? geometry.lockCap : geometry.lockInk;
       const boxes: [Box, Box][] = rigs.map((rig, i) => {
-        if (i === 0) {
-          const b = finderBox(geometry.lockInk, pad);
-          return [b, b];
-        }
+        const fallback = finderBox(lockBox, pad);
+        if (i === 0) return [fallback, fallback];
         const a = camAt(i, rig.cut.start);
         const b = camAt(i, rig.cut.end);
-        if (!a || !b || !rig.measured) {
-          const fallback = finderBox(geometry.lockInk, pad);
-          return [fallback, fallback];
-        }
-        return [finderBox(onScreen(rig.measured.ink, a), pad), finderBox(onScreen(rig.measured.ink, b), pad)];
+        if (!a || !b || !rig.measured) return [fallback, fallback];
+        return [finderBox(onScreen(wordBox(rig.measured), a), pad), finderBox(onScreen(wordBox(rig.measured), b), pad)];
       });
       const [finderA, finderB] = CODE_BEATS.finder;
       const keys: FinderKey[] = [
-        { t: 0, box: grow(boxes[0][0], 46), ease: 'linear' },
-        { t: finderA, box: grow(boxes[0][0], 46), ease: 'arrive' },
-        ...finderTrack(cuts, boxes, finderB),
+        ...codeFinderKeys(lockBox, geometry.lockCentre[0], geometry.lockCentre[1], parseFloat(k0) || 0.3, pad, vy),
+        ...finderTrack(cuts, boxes, finderB, vy),
       ];
-      const arm = corners[0]?.offsetWidth || 22;
-      const cornerAt = (box: Box, which: number) => {
-        const x = which % 2 === 0 ? box.x : box.x + box.w - arm;
-        const y = which < 2 ? box.y : box.y + box.h - arm;
-        return `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
-      };
-      corners.forEach((corner, which) => {
+      const track = (el: HTMLElement, place: (box: Box) => string) => {
         const frames: Keyframe[] = [];
         let lastOffset = 0;
         keys.forEach((key) => {
           const offset = Math.max(lastOffset, at(key.t));
           lastOffset = offset;
-          frames.push({ offset, transform: cornerAt(key.box, which), easing: EASES[key.ease] });
+          frames.push({ offset, transform: place(key.box), easing: FINDER_EASES[key.ease] });
         });
-        frames.push({ offset: 1, transform: cornerAt(keys[keys.length - 1].box, which) });
+        frames.push({ offset: 1, transform: place(keys[keys.length - 1].box) });
         frames[0].offset = 0;
-        play(corner, frames);
-      });
+        play(el, frames);
+      };
+      if (look === 'rule' && rule) {
+        track(rule, (box) => {
+          const r = ruleFor(box, pad);
+          return `translate3d(${r.x.toFixed(2)}px, ${r.y.toFixed(2)}px, 0) scaleX(${(r.w / RULE_UNIT).toFixed(4)})`;
+        });
+      } else {
+        const arm = corners[0]?.offsetWidth || 22;
+        corners.forEach((corner, which) =>
+          track(corner, (box) => {
+            const x = which % 2 === 0 ? box.x : box.x + box.w - arm;
+            const y = which < 2 ? box.y : box.y + box.h - arm;
+            return `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+          }),
+        );
+      }
+      // It comes up round the scrambling letters (or at once, if the island
+      // came up later than that: from where the film is, never a pop).
+      if (finderFrom == null) finderFrom = Math.max(finderA, filmTime());
       play(finder, [
         { offset: 0, opacity: 0 },
-        { offset: at(finderA), opacity: 0 },
-        { offset: at(finderA + 140), opacity: 1 },
+        { offset: at(finderFrom), opacity: 0 },
+        { offset: at(finderFrom + 140), opacity: 1 },
         { offset: 1, opacity: 1 },
       ]);
-
-      // ── The scene count ──
-      if (sceneNo) {
-        const frames: Keyframe[] = [{ offset: 0, transform: 'translateY(0em)' }];
-        cuts.forEach((cut, i) => {
-          if (i === 0) return;
-          frames.push({ offset: at(cut.start), transform: `translateY(-${i - 1}em)` });
-          frames.push({ offset: at(cut.start), transform: `translateY(-${i}em)` });
-        });
-        frames.push({ offset: 1, transform: `translateY(-${cuts.length - 1}em)` });
-        play(sceneNo, frames);
-      }
 
       // ── The clapperboard's own life ──
       const slate = rigs[rigs.length - 1];
@@ -607,6 +660,7 @@ export default function OpeningFilm() {
 
     const fastForward = () => {
       if (phase !== 'film') return;
+      hurried = true;
       markSeen();
       releaseGlobe();
       const t = filmTime();
@@ -656,6 +710,9 @@ export default function OpeningFilm() {
     function landA() {
       const slate = rigs[rigs.length - 1];
       const desk = !phone();
+      // Hurried (the reader wheeled, touched, pressed): every beat at FF_RATE.
+      const rate = hurried ? FF_RATE : 1;
+      const ms = (v: number) => v / rate;
       const pairs: { src: HTMLElement; dst: HTMLElement }[] = [];
       const pick = (sel: string) => document.querySelector<HTMLElement>(sel);
       if (desk) {
@@ -677,8 +734,11 @@ export default function OpeningFilm() {
       overlay.classList.add('is-landing');
       html.setAttribute('data-open-fly', '');
       html.dataset.reel = 'flight';
-      fadeFurniture(LANDING_A.furniture[1]);
+      fadeFurniture(ms(LANDING_A.furniture[1]));
 
+      // Every word measured once, before anything moves: where its ink is
+      // on the board (centre, cap height) and where its ink will be on the
+      // page. The flight goes from ink centre to ink centre.
       const flights = pairs
         .map(({ src, dst }, order) => {
           const srcRect = src.getBoundingClientRect();
@@ -688,56 +748,81 @@ export default function OpeningFilm() {
           const scale = srcRect.height / Math.max(1, src.offsetHeight);
           const srcText = (src.textContent || '').replace(/\s+/g, ' ').trim();
           const srcInk = inkOf(src, srcText);
+          const srcBase = baselineOf(src);
           const dstText = (dst.textContent || '').trim();
           const dstInk = inkOf(dst, dstText);
-          const srcBox: Box = { x: srcRect.left, y: srcRect.top, w: srcRect.width, h: srcRect.height };
-          const flight = flightFor(srcBox, dstBox, srcInk.ascent * scale, dstInk.ascent, order);
-          return { src, dst, srcText, dstText, srcBox, dstBox, scale, flight };
+          const dstBase = baselineOf(dst);
+          const from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * srcInk.ascent) / 2];
+          const to: Vec2 = [dstBox.x + (dstInk.right - dstInk.left) / 2, dstBase - dstInk.ascent / 2];
+          const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, srcInk.ascent * scale, dstInk.ascent, order);
+          return { src, dst, srcText, dstText, dstBox, dstBase, scale, to, flight };
         })
         .filter(<T,>(x: T | null): x is T => x != null);
 
-      const srcStyle = (el: HTMLElement) => getComputedStyle(el);
+      // A face: a positioned box holding the word on an inline-block (the
+      // morph's horizontal scale goes on that inner span, the placement on
+      // the box), with a baseline probe.
       const face = (text: string, style: CSSStyleDeclaration, size: number) => {
-        const span = document.createElement('span');
-        span.className = 'of-fly__face';
-        span.textContent = text;
-        span.style.fontFamily = style.fontFamily;
-        span.style.fontWeight = style.fontWeight;
-        span.style.fontStyle = style.fontStyle;
-        span.style.fontSize = `${size}px`;
-        span.style.letterSpacing = style.letterSpacing === 'normal' ? 'normal' : `${(parseFloat(style.letterSpacing) * size) / (parseFloat(style.fontSize) || size)}px`;
-        span.style.textTransform = style.textTransform;
-        span.style.color = style.color;
-        span.style.lineHeight = 'normal';
-        span.style.fontVariationSettings = style.fontVariationSettings;
-        span.style.fontOpticalSizing = (style as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing;
-        span.style.fontFeatureSettings = style.fontFeatureSettings;
-        span.style.textShadow = style.textShadow;
-        return span;
+        const box = document.createElement('span');
+        box.className = 'of-fly__face';
+        const inner = document.createElement('span');
+        inner.className = 'of-fly__ink';
+        inner.textContent = text;
+        const probe = document.createElement('i');
+        probe.className = 'of-bl';
+        inner.append(probe);
+        box.append(inner);
+        inner.style.fontFamily = style.fontFamily;
+        inner.style.fontWeight = style.fontWeight;
+        inner.style.fontStyle = style.fontStyle;
+        inner.style.fontSize = `${size}px`;
+        inner.style.letterSpacing = style.letterSpacing === 'normal' ? 'normal' : `${(parseFloat(style.letterSpacing) * size) / (parseFloat(style.fontSize) || size)}px`;
+        inner.style.textTransform = style.textTransform;
+        inner.style.color = style.color;
+        inner.style.lineHeight = 'normal';
+        inner.style.fontVariationSettings = style.fontVariationSettings;
+        inner.style.fontOpticalSizing = (style as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing;
+        inner.style.fontFeatureSettings = style.fontFeatureSettings;
+        inner.style.textShadow = style.textShadow;
+        return { box, inner, probe };
       };
 
-      const built = flights.map(({ src, dst, srcText, dstText, dstBox, scale, flight }) => {
+      const built = flights.map(({ src, dst, srcText, dstText, to, scale, flight }) => {
         const wrap = document.createElement('div');
         wrap.className = 'of-fly';
-        const cx = dstBox.x + dstBox.w / 2;
-        const cy = dstBox.y + dstBox.h / 2;
-        wrap.style.transformOrigin = `${cx}px ${cy}px`;
-        const sStyle = srcStyle(src);
-        const sourceFace = face(srcText, sStyle, ((parseFloat(sStyle.fontSize) || 16) * scale) / flight.k);
-        sourceFace.style.textShadow = 'none';
+        wrap.style.transformOrigin = `${to[0]}px ${to[1]}px`;
+        const sStyle = getComputedStyle(src);
+        // The board's face at the size it has once landed (its cap = the
+        // page's): the wrap's scale takes it back to the board's on screen.
+        const source = face(srcText, sStyle, ((parseFloat(sStyle.fontSize) || 16) * scale) / flight.k);
+        source.inner.style.textShadow = 'none';
         const dStyle = getComputedStyle(dst);
-        const targetFace = face(dstText, dStyle, parseFloat(dStyle.fontSize) || 16);
-        wrap.append(sourceFace, targetFace);
+        const target = face(dstText, dStyle, parseFloat(dStyle.fontSize) || 16);
+        wrap.append(source.box, target.box);
         flightLayer.append(wrap);
-        return { wrap, sourceFace, targetFace, dstBox, cx, cy, flight };
+        return { wrap, source, target, srcText, dstText, flight };
       });
-      // Place the faces (one read each, before anything moves): the target
-      // face exactly on the page's own glyphs, the source face centred on
-      // them at the size it will have when it lands.
-      const placed = built.map((b) => ({ ...b, s: b.sourceFace.getBoundingClientRect(), t: b.targetFace.getBoundingClientRect() }));
-      placed.forEach(({ sourceFace, targetFace, dstBox, cx, cy, s, t }) => {
-        targetFace.style.transform = `translate3d(${(dstBox.x - t.left).toFixed(2)}px, ${(dstBox.y - t.top).toFixed(2)}px, 0)`;
-        sourceFace.style.transform = `translate3d(${(cx - s.width / 2 - s.left).toFixed(2)}px, ${(cy - s.height / 2 - s.top).toFixed(2)}px, 0)`;
+      // Place the faces (one read each, before anything moves): the page's
+      // face exactly on the page's own glyphs, the board's face with its ink
+      // centred on the same point and its baseline where their cap heights
+      // share a middle — the one ink box both are held to.
+      const placed = built.map((b, i) => {
+        const { dstBox, dstBase } = flights[i];
+        const sRect = b.source.box.getBoundingClientRect();
+        const sBase = b.source.probe.getBoundingClientRect().top;
+        const tRect = b.target.box.getBoundingClientRect();
+        const tBase = b.target.probe.getBoundingClientRect().top;
+        const sInk = inkOf(b.source.inner, b.srcText);
+        const tInk = inkOf(b.target.inner, b.dstText);
+        const [cx, cy] = flights[i].to;
+        b.target.box.style.transform = `translate3d(${(dstBox.x - tRect.left).toFixed(2)}px, ${(dstBase - tBase).toFixed(2)}px, 0)`;
+        const sx = cx - (sInk.right - sInk.left) / 2 - sRect.left;
+        const sy = cy + sInk.ascent / 2 - sBase;
+        b.source.box.style.transform = `translate3d(${sx.toFixed(2)}px, ${sy.toFixed(2)}px, 0)`;
+        // Each face's morph scales about its own ink centre (= the shared one).
+        b.source.inner.style.transformOrigin = `${((sInk.right - sInk.left) / 2).toFixed(2)}px 50%`;
+        b.target.inner.style.transformOrigin = `${((tInk.right - tInk.left) / 2).toFixed(2)}px 50%`;
+        return { ...b, morph: morphScales(sInk.left + sInk.right, tInk.left + tInk.right) };
       });
 
       // The clapperboard's words leave it; the board dissolves into the page.
@@ -745,47 +830,58 @@ export default function OpeningFilm() {
         src.style.visibility = 'hidden';
       });
       slate.scene.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: LANDING_A.dissolve[1] - LANDING_A.dissolve[0],
-        delay: LANDING_A.dissolve[0],
+        duration: ms(LANDING_A.dissolve[1] - LANDING_A.dissolve[0]),
+        delay: ms(LANDING_A.dissolve[0]),
         fill: 'forwards',
         easing: EASES.fade,
       });
 
-      placed.forEach(({ wrap, sourceFace, targetFace, flight }) => {
-        const timing = { duration: flight.duration, delay: flight.delay, fill: 'both' as FillMode };
+      const [m0, m1] = LANDING_A.morph;
+      placed.forEach(({ wrap, source, target, flight, morph }) => {
+        const timing = { duration: ms(flight.duration), delay: ms(flight.delay), fill: 'both' as FillMode, easing: 'linear' };
         wrap.animate(
           flightPath(flight).map((k) => ({
             offset: k.offset,
             transform: `translate3d(${k.x.toFixed(2)}px, ${k.y.toFixed(2)}px, 0) scale(${k.s.toFixed(4)})`,
           })),
-          { ...timing, easing: 'linear' },
+          timing,
         );
+        // One ink width for both faces at every moment (board's → page's).
+        const widths = (from: number, to: number): Keyframe[] => [
+          { offset: 0, transform: `scaleX(${from.toFixed(4)})` },
+          { offset: m0, transform: `scaleX(${from.toFixed(4)})`, easing: MORPH_EASE },
+          { offset: m1, transform: `scaleX(${to.toFixed(4)})` },
+          { offset: 1, transform: `scaleX(${to.toFixed(4)})` },
+        ];
+        source.inner.animate(widths(morph.source[0], morph.source[1]), timing);
+        target.inner.animate(widths(morph.target[0], morph.target[1]), timing);
+        // …and one crossfade window, no blur: the letterforms turn.
         const [so, sf] = LANDING_A.sourceOut;
         const [ti, tf] = LANDING_A.targetIn;
-        sourceFace.animate(
+        source.box.animate(
           [
-            { offset: 0, opacity: 1, filter: 'blur(0px)' },
-            { offset: so, opacity: 1, filter: 'blur(0px)' },
-            { offset: sf, opacity: 0, filter: 'blur(5px)' },
-            { offset: 1, opacity: 0, filter: 'blur(5px)' },
+            { offset: 0, opacity: 1 },
+            { offset: so, opacity: 1 },
+            { offset: sf, opacity: 0 },
+            { offset: 1, opacity: 0 },
           ],
-          { ...timing, easing: 'linear' },
+          timing,
         );
-        targetFace.animate(
+        target.box.animate(
           [
-            { offset: 0, opacity: 0, filter: 'blur(6px)' },
-            { offset: ti, opacity: 0, filter: 'blur(6px)' },
-            { offset: tf, opacity: 1, filter: 'blur(0px)' },
-            { offset: 1, opacity: 1, filter: 'blur(0px)' },
+            { offset: 0, opacity: 0 },
+            { offset: ti, opacity: 0 },
+            { offset: tf, opacity: 1 },
+            { offset: 1, opacity: 1 },
           ],
-          { ...timing, easing: 'linear' },
+          timing,
         );
       });
 
-      later(() => html.setAttribute('data-open-globe', ''), LANDING_A.globe);
+      later(() => html.setAttribute('data-open-globe', ''), ms(LANDING_A.globe));
       later(() => {
         html.dataset.reel = 'landed';
-      }, LANDING_A.rest);
+      }, ms(LANDING_A.rest));
       later(() => {
         // Landed: the page's own words take over on the very frame the
         // clones go.
@@ -793,8 +889,8 @@ export default function OpeningFilm() {
         flightLayer.replaceChildren();
         unlock();
         detachInput();
-      }, landingAEnd(placed.length));
-      later(finish, LANDING_A.done);
+      }, ms(landingAEnd(placed.length)));
+      later(finish, ms(LANDING_A.done));
     }
 
     // B: through the o.
@@ -825,8 +921,10 @@ export default function OpeningFilm() {
       const half = oRect.width / 2;
       const c0: Vec2 = [oRect.left + half, oRect.top + oRect.height / 2];
       const r0 = (half * 36.5) / 50;
-      const ringRatio = 48.5 / 36.5;
-      const target = portalTarget(w, h, phone());
+      const onPhone = phone();
+      const target = portalTarget(w, h, onPhone);
+      // Hurried (the reader wheeled, touched, pressed): the push at FF_RATE.
+      const rate = hurried ? FF_RATE : 1;
       const zoomEnd = target.r / r0;
       const pivot: Vec2 = [(zoomEnd * c0[0] - target.x) / (zoomEnd - 1), (zoomEnd * c0[1] - target.y) / (zoomEnd - 1)];
       // Drawn afresh at every scale (not a bitmap blown up): the letters
@@ -842,7 +940,7 @@ export default function OpeningFilm() {
       slate.scene.style.background = 'transparent';
       overlay.classList.add('is-landing');
       html.dataset.reel = 'portal';
-      fadeFurniture(200);
+      fadeFurniture(200 / rate);
 
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       portal.width = Math.round(w * dpr);
@@ -852,10 +950,14 @@ export default function OpeningFilm() {
       const start = performance.now();
       let raf = 0;
       let risen = false;
+      // The ground round the window starts as the board's own dark and
+      // warms to the page's olive as the camera goes in.
+      const ground0 = [0x1b, 0x1e, 0x16];
+      const ground1 = [0x28, 0x2c, 0x20];
       const frame = (now: number) => {
         raf = 0;
         if (disposed) return;
-        const t = now - start;
+        const t = (now - start) * rate;
         const u = clamp01(t / LANDING_B.push);
         const p = portalAt(u, c0, r0, target);
         const zoom = p.zoom;
@@ -865,31 +967,33 @@ export default function OpeningFilm() {
         sheet.style.opacity = String(1 - sheetFade);
         if (ctx) {
           const surround = 1 - segment(t, LANDING_B.surround[0], LANDING_B.surround[1]);
-          const ring = sheetFade * (1 - segment(t, LANDING_B.ring[0], LANDING_B.ring[1]));
+          const ring = sheetFade * (1 - segment(t, LANDING_B.ringOut[0], LANDING_B.ringOut[1]));
+          const warm = segment(u, 0, 0.5);
+          const ground = `rgb(${ground0.map((c, i) => Math.round(c + (ground1[i] - c) * warm)).join(',')})`;
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           ctx.clearRect(0, 0, w, h);
           if (surround > 0) {
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = surround;
-            ctx.fillStyle = '#131511';
+            ctx.fillStyle = ground;
             ctx.fillRect(0, 0, w, h);
+            // A phone's window opens on its card, whose own letters would
+            // show through the O: its window stays olive until the iris.
             ctx.globalCompositeOperation = 'destination-out';
-            ctx.globalAlpha = 1;
+            ctx.globalAlpha = onPhone ? sheetFade : 1;
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
             ctx.fill();
             ctx.globalCompositeOperation = 'source-over';
           }
           if (ring > 0) {
-            // The O's own stroke while the board is there; then, as it
-            // opens onto the planet, it thins to a hairline round the limb.
-            const thin = segment(u, 0.3, 0.9);
-            const width = p.r * (ringRatio - 1) * (1 - thin) + 2.5 * thin;
+            // A white-ink hairline at the counter's edge, one weight at any
+            // scale; it takes over from the O's own stroke as the board goes.
             ctx.globalAlpha = ring;
             ctx.strokeStyle = '#efeee4';
-            ctx.lineWidth = width;
+            ctx.lineWidth = LANDING_B.ring;
             ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r + width / 2, 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, p.r + LANDING_B.ring / 2, 0, Math.PI * 2);
             ctx.stroke();
             ctx.globalAlpha = 1;
           }
@@ -911,6 +1015,34 @@ export default function OpeningFilm() {
     }
 
     const cleanups: (() => void)[] = [];
+
+    // ── His photographs, for the magazine's picture page and the strip of
+    // film: fetched after the first paint at low priority (those scenes are
+    // seconds in); until one has arrived and decoded, its scene keeps the
+    // drawn stand-in.
+    const pictureTimer = window.setTimeout(() => {
+      if (disposed) return;
+      overlay.querySelectorAll<HTMLImageElement>('img[data-src]').forEach((img) => {
+        const src = img.dataset.src;
+        if (!src || img.getAttribute('src')) return;
+        img.decoding = 'async';
+        (img as HTMLImageElement & { fetchPriority: string }).fetchPriority = 'low';
+        img.addEventListener(
+          'load',
+          () => {
+            const show = () => {
+              if (disposed) return;
+              img.classList.add('is-in');
+              img.parentElement?.classList.add('has-pic');
+            };
+            (img.decode ? img.decode() : Promise.resolve()).then(show, show);
+          },
+          { once: true },
+        );
+        img.src = src;
+      });
+    }, 200);
+    cleanups.push(() => window.clearTimeout(pictureTimer));
 
     // ── Go ──
     const begin = () => {
@@ -972,6 +1104,7 @@ export default function OpeningFilm() {
       detachInput();
       unlock();
       cleanups.forEach((fn) => fn());
+      window.clearTimeout(globeSettle);
       window.clearTimeout(refit);
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisible);
@@ -985,24 +1118,24 @@ export default function OpeningFilm() {
     };
   }, []);
 
-  const sceneTotal = (n: number) => String(n).padStart(2, '0');
   return (
     <>
       <div ref={rootRef} className="opening" aria-hidden="true">
         <canvas className="of-portal" data-portal />
         <div className="of-stage" data-stage>
-          <OpeningScenes />
+          <OpeningScenes pictures={pictures} />
         </div>
         <div className="of-grain" />
         <div className="of-vignette" />
         <div className="of-finder" data-finder>
+          <i className="of-finder__rule" />
           <i className="of-finder__c of-finder__c--tl" />
           <i className="of-finder__c of-finder__c--tr" />
           <i className="of-finder__c of-finder__c--bl" />
           <i className="of-finder__c of-finder__c--br" />
         </div>
+        {/* The timecode only: a film's running clock, not a progress count. */}
         <div className="of-hud">
-          <span className="of-hud__rec" />
           <span>
             <span className="of-hud__tc-label">TC </span>00:00:0
             <span className="of-digits of-digits--ss">
@@ -1014,16 +1147,6 @@ export default function OpeningFilm() {
                 {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).join('\n')}
               </span>
             </span>
-          </span>
-          <span>
-            SC{' '}
-            <span className="of-digits of-digits--sc">
-              <span className="of-digits__strip">
-                {Array.from({ length: FILM_DESKTOP.length }, (_, i) => sceneTotal(i + 1)).join('\n')}
-              </span>
-            </span>
-            <span className="of-hud__total--desk"> / {sceneTotal(FILM_DESKTOP.length)}</span>
-            <span className="of-hud__total--phone"> / {sceneTotal(FILM_PHONE.length)}</span>
           </span>
         </div>
         <div className="of-flight" data-flight />

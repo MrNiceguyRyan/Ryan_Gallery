@@ -11,15 +11,18 @@
 // What makes it smooth is the MATCH CUT: while the camera hunts one word, the
 // word keeps its place and its size on the screen across every cut — only the
 // world round it changes (the paper, the typeface, the scale of the page) —
-// and a thin lime finder, the one lime on screen, stays locked on it like
-// autofocus. The camera only ever pushes in and drifts, on eased curves. Cuts
-// come faster as it goes, like a trailer.
+// and a thin lime reading rule, the one lime on screen, snaps under it like
+// autofocus (?finder=frame swaps it for four viewfinder corners). The camera
+// only ever pushes in and drifts, on eased curves. Cuts come faster as it
+// goes, like a trailer.
 //
 // Two ways to land, chosen by the URL (?open=a, the default, or ?open=b):
 //  A "words fly home": the clapperboard dissolves into the page's olive, and
 //    RYAN, XU, ARCHIVE, TRAVEL and THOUGHT glide into their own places in the
 //    first screen's name and line, their typeface turning into Fraunces on
-//    the way; the globe rises out of the dark behind them, the nav last.
+//    the way (both faces held to one ink box, so the change is a morph, never
+//    a double image); the globe rises out of the dark behind them, the nav
+//    last.
 //  B "through the o": the camera pushes into the O of THOUGHT; its round
 //    counter opens onto the page and grows into the Earth's own disc (a match
 //    cut on the circle), and the first screen rises round it.
@@ -96,41 +99,48 @@ export interface ScenePlan {
   ms: number;
 }
 
-// Desktop: thirteen scenes, 6.4 s to the clap. The first holds while the code
-// locks into ARCHIVE and the word lifts off it; from there every cut is
-// shorter than the one before (a trailer's rhythm), from 640 ms down to 250;
-// the clapperboard then holds long enough to be read, and claps.
+// Desktop: thirteen scenes, 5.6 s to the clap (he reviews by reloading, so
+// he sits through it every time). The first holds while the code locks into
+// ARCHIVE and the word lifts off it; from there every cut is shorter than
+// the one before (a trailer's rhythm), from 580 ms down to 225; the
+// clapperboard then holds long enough to be read, and claps.
+//
+// The order is also a GRADE: dark code, light archive paper, dark cinema,
+// the board (still dark), then light travel / thought / catalogue paper, and
+// dark film into the olive page — four changes of tone, never two in one
+// second (a calm site: no black-white strobe).
 export const FILM_DESKTOP: readonly ScenePlan[] = [
-  { id: 'code', word: 'archive', ms: 1150 },
-  { id: 'dictionary', word: 'archive', ms: 640 },
-  { id: 'newspaper', word: 'archive', ms: 540 },
-  { id: 'magazine', word: 'cinema', ms: 520 },
-  { id: 'subtitles', word: 'cinema', ms: 450 },
-  { id: 'ticket', word: 'cinema', ms: 400 },
-  { id: 'book', word: 'travel', ms: 380 },
-  { id: 'board', word: 'travel', ms: 330 },
-  { id: 'telegram', word: 'thought', ms: 310 },
-  { id: 'notebook', word: 'thought', ms: 290 },
-  { id: 'catalogue', word: 'ryanxu', ms: 270 },
-  { id: 'contact', word: 'ryanxu', ms: 250 },
-  { id: 'slate', word: 'ryanxu', ms: 860 },
+  { id: 'code', word: 'archive', ms: 900 },
+  { id: 'dictionary', word: 'archive', ms: 580 },
+  { id: 'newspaper', word: 'archive', ms: 490 },
+  { id: 'magazine', word: 'cinema', ms: 470 },
+  { id: 'subtitles', word: 'cinema', ms: 410 },
+  { id: 'ticket', word: 'cinema', ms: 360 },
+  { id: 'board', word: 'travel', ms: 340 },
+  { id: 'book', word: 'travel', ms: 300 },
+  { id: 'telegram', word: 'thought', ms: 280 },
+  { id: 'notebook', word: 'thought', ms: 260 },
+  { id: 'catalogue', word: 'ryanxu', ms: 240 },
+  { id: 'contact', word: 'ryanxu', ms: 225 },
+  { id: 'slate', word: 'ryanxu', ms: 700 },
 ];
 
-// Phone: the same film, fewer and simpler scenes (eight, 4.5 s to the clap).
+// Phone: the same film, fewer and simpler scenes (eight, 3.9 s to the clap).
 export const FILM_PHONE: readonly ScenePlan[] = [
-  { id: 'code', word: 'archive', ms: 1050 },
-  { id: 'dictionary', word: 'archive', ms: 600 },
-  { id: 'magazine', word: 'cinema', ms: 520 },
-  { id: 'ticket', word: 'cinema', ms: 440 },
-  { id: 'book', word: 'travel', ms: 400 },
-  { id: 'telegram', word: 'thought', ms: 360 },
-  { id: 'catalogue', word: 'ryanxu', ms: 320 },
-  { id: 'slate', word: 'ryanxu', ms: 800 },
+  { id: 'code', word: 'archive', ms: 900 },
+  { id: 'dictionary', word: 'archive', ms: 560 },
+  { id: 'magazine', word: 'cinema', ms: 470 },
+  { id: 'ticket', word: 'cinema', ms: 400 },
+  { id: 'book', word: 'travel', ms: 340 },
+  { id: 'telegram', word: 'thought', ms: 300 },
+  { id: 'catalogue', word: 'ryanxu', ms: 270 },
+  { id: 'slate', word: 'ryanxu', ms: 700 },
 ];
 
 // How each scene reads on screen, light or dark: the cut rhythm must never
 // strobe (scripts/opening-film.test.mjs: at most three light/dark changes in
-// any one second, under the general flash threshold).
+// any one second, under the general flash threshold; on the desktop at most
+// one, four in all).
 export const SCENE_TONE: Record<SceneId, 'light' | 'dark'> = {
   code: 'dark',
   dictionary: 'light',
@@ -193,22 +203,31 @@ export function runOf(cuts: readonly Cut[], i: number) {
 
 // ── The code scene (scene 1) ──────────────────────────────────────────────
 // Its beats are CSS from the first paint (the rain falls, the letters of
-// ARCHIVE scramble and lock one by one) and WAAPI once the island is up (the
-// word lifts off the rain toward the lens, the rain dims, the finder closes
-// on it). Film ms.
+// ARCHIVE scramble and lock one by one — opening.css writes these same
+// numbers into of-scramble / of-lock-on) and WAAPI once the island is up
+// (the word lifts off the rain toward the lens, the rain dims, the finder
+// rides it). Film ms. The finder is there early: it comes up round the
+// scrambling letters at `finder[0]`, closes on them, and rides the lift until
+// it is on the word at full size at `finder[1]` — the first second is a hunt,
+// not generic rain.
 export const CODE_BEATS = {
   /** Letter i starts to scramble at `scramble + i * stagger`… */
-  scramble: 160,
-  stagger: 62,
+  scramble: 120,
+  stagger: 50,
   /** …and locks `lockAfter` later. */
-  lockAfter: 230,
+  lockAfter: 200,
   /** The locked word lifts off the rain (scale k0 → 1). */
-  lift: [600, 1040] as const,
+  lift: [420, 800] as const,
   /** The rain dims behind it. */
-  dim: [560, 1030] as const,
-  /** The finder closes on it. */
-  finder: [800, 1040] as const,
+  dim: [400, 800] as const,
+  /** The finder: in round the scrambling cells, then on the word at full
+   *  size (the lift's end). */
+  finder: [200, 800] as const,
+  /** How far outside the scrambling cells the finder first comes up, px. */
+  search: 46,
 } as const;
+/** The lift's curve (slow to leave, soft to land); the finder rides it. */
+export const LIFT_EASE = [0.5, 0, 0.15, 1] as const;
 /** The rain's own dimmed strength once ARCHIVE has lifted off it. */
 export const RAIN_DIM = 0.3;
 
@@ -217,19 +236,21 @@ export const RAIN_DIM = 0.3;
 // down at the end (the clap) and the landing starts on the clap.
 export function slateBeats(slateMs: number) {
   return {
-    underline: [110, 220, 330] as const,
-    underlineMs: 170,
+    underline: [90, 170, 250] as const,
+    underlineMs: 150,
     /** The sticks close: an ease-in fall, contact at `slateMs`. */
-    clap: [slateMs - 150, slateMs] as const,
+    clap: [slateMs - 130, slateMs] as const,
   };
 }
 
 // ── Fast-forward ───────────────────────────────────────────────────────────
 // A wheel, a touch, a key or a click takes the film to the clapperboard with
 // FF_TAIL ms of it left (the words already chalked under, the sticks about to
-// fall), then the landing plays as it always does. Never a hard cut to the
-// page, never back, and nothing once the clap has come.
-export const FF_TAIL = 460;
+// fall), then the landing plays HURRIED (the reader asked to hurry: every
+// landing beat at FF_RATE). Never a hard cut to the page, never back, and
+// nothing once the clap has come.
+export const FF_TAIL = 320;
+export const FF_RATE = 1.35;
 export function fastForwardTarget(cuts: readonly Cut[], t: number): number | null {
   const end = filmLength(cuts);
   if (!cuts.length || t >= end) return null;
@@ -336,10 +357,37 @@ export function finderBox(word: Box, pad: number): Box {
 // Its box at every scene's start and end (the word under the camera then).
 // On a cut inside a run it re-acquires — a small autofocus pulse from a box
 // FINDER_PULSE px wider back onto the word; on the first cut of a new run it
-// TRAVELS from where the last word was to the new one, over FINDER_TRAVEL_MS.
+// TRAVELS from where the last word was to the new one, over FINDER_TRAVEL_MS
+// on the house arrive curve (fast off the mark, so even a 225 ms cut is
+// mostly spent ON its word, not on the way to it).
 export const FINDER_PULSE = 12;
 export const FINDER_PULSE_MS = 150;
-export const FINDER_TRAVEL_MS = 240;
+export const FINDER_TRAVEL_MS = 150;
+
+/** The finder's two looks (?finder=frame for the corners). The owner had the
+ *  four-corner frame taken off the covers; the default is a READING RULE: a
+ *  2 px lime line under the word, its ink width + 8 px, 6 px under the
+ *  baseline — the slate's chalk underlines are the same gesture by hand. */
+export type FinderLook = 'rule' | 'frame';
+export function finderLookFrom(search: string): FinderLook {
+  try {
+    return new URLSearchParams(search).get('finder') === 'frame' ? 'frame' : 'rule';
+  } catch {
+    return 'rule';
+  }
+}
+/** The rule under a finder box (a box of the word's cap box + `pad`): x, the
+ *  top of its line, and its width. */
+export const RULE_GAP = 6;
+export const RULE_OVERHANG = 4;
+export function ruleFor(box: Box, pad: number) {
+  return { x: box.x + pad - RULE_OVERHANG, y: box.y + box.h - pad + RULE_GAP, w: Math.max(0, box.w - 2 * pad + 2 * RULE_OVERHANG) };
+}
+/** A box grown by `d` (and by `d * vy` up and down: a rule grows only
+ *  sideways, `vy` 0). */
+export const growBox = (b: Box, d: number, vy = 1): Box => ({ x: b.x - d, y: b.y - d * vy, w: b.w + 2 * d, h: b.h + 2 * d * vy });
+/** A box scaled by `s` about the point (cx, cy). */
+export const scaleBox = (b: Box, s: number, cx: number, cy: number): Box => ({ x: cx + (b.x - cx) * s, y: cy + (b.y - cy) * s, w: b.w * s, h: b.h * s });
 
 export interface FinderKey {
   t: number;
@@ -351,10 +399,10 @@ export interface FinderKey {
 
 /** `boxes[i]` = [box at the scene's start, box at its end]; the track starts
  *  at the code scene's own close (`from`). */
-export function finderTrack(cuts: readonly Cut[], boxes: readonly (readonly [Box, Box])[], from: number): FinderKey[] {
+export function finderTrack(cuts: readonly Cut[], boxes: readonly (readonly [Box, Box])[], from: number, vy = 1): FinderKey[] {
   const keys: FinderKey[] = [];
   const mix = (a: Box, b: Box, k: number): Box => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), w: lerp(a.w, b.w, k), h: lerp(a.h, b.h, k) });
-  const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 * d, h: b.h + 2 * d });
+  const grow = (b: Box, d: number) => growBox(b, d, vy);
   cuts.forEach((cut, i) => {
     const [a, b] = boxes[i];
     if (i === 0) {
@@ -377,39 +425,79 @@ export function finderTrack(cuts: readonly Cut[], boxes: readonly (readonly [Box
   return keys;
 }
 
+/** The finder in the code scene, up to the lift's end: it comes up round the
+ *  scrambling letters (their box at the rain's scale `k0`, grown by
+ *  CODE_BEATS.search), closes on them as they lock, then RIDES the lift —
+ *  sampled on the lift's own curve, so it never lags the word. `ink` is the
+ *  locked word's box at full size, (cx, cy) the point it scales about. */
+const liftCurve = bezierFn(LIFT_EASE);
+export function codeFinderKeys(ink: Box, cx: number, cy: number, k0: number, pad: number, vy = 1, samples = 10): FinderKey[] {
+  const at = (s: number) => finderBox(scaleBox(ink, s, cx, cy), pad);
+  const [findA] = CODE_BEATS.finder;
+  const [liftA, liftB] = CODE_BEATS.lift;
+  const search = growBox(at(k0), CODE_BEATS.search, vy);
+  const keys: FinderKey[] = [
+    { t: 0, box: search, ease: 'linear' },
+    { t: findA, box: search, ease: 'arrive' },
+    { t: liftA, box: at(k0), ease: 'linear' },
+  ];
+  for (let i = 1; i <= samples; i += 1) {
+    const u = i / samples;
+    keys.push({ t: liftA + (liftB - liftA) * u, box: at(k0 + (1 - k0) * liftCurve(u)), ease: 'linear' });
+  }
+  return keys;
+}
+
 // ── Landing A: the words fly home ─────────────────────────────────────────
 // Each found word leaves the clapperboard from its own box and lands on its
 // own glyph box in the first screen (one continuous FLIP), a little after
-// the one before; the clapperboard's typeface crossfades into Fraunces on the
-// way (a rack focus: the one blurs out as the other comes in). Landing ms.
+// the one before; the clapperboard's typeface turns into Fraunces on the way.
+// The two faces are held to ONE ink box the whole time — the same centre,
+// the same cap height, and one shared width that goes from the board's ink
+// width to the page's across `morph` — so the crossfade (one window, no blur)
+// is a morph of letterforms, never a double image. The words leave on the
+// clap itself (its jolt is beat enough). Landing ms.
 export const LANDING_A = {
   /** The clapperboard dissolves into the page. */
-  dissolve: [60, 560] as const,
+  dissolve: [0, 420] as const,
   /** The finder and the film's furniture go. */
   furniture: [0, 220] as const,
   /** Word i leaves at `start + i * stagger`, and flies `fly` ms; the fall
    *  leads the slide (`yLead`: the vertical move is done by that share of
    *  the flight), so words that land lower drop clear of the ones above
    *  before they slide home — no word crosses another. */
-  start: 40,
-  stagger: 60,
-  fly: 1150,
+  start: 0,
+  stagger: 45,
+  fly: 1000,
   yLead: 0.8,
-  /** The crossfade, as a share of the flight. */
-  sourceOut: [0.34, 0.62] as const,
-  targetIn: [0.38, 0.64] as const,
+  /** The shared ink width, board's → page's, as a share of the flight. */
+  morph: [0.18, 0.62] as const,
+  /** The crossfade (one window for both faces), as a share of the flight. */
+  sourceOut: [0.4, 0.56] as const,
+  targetIn: [0.4, 0.56] as const,
   /** The globe rises out of the dark behind the flying words. */
-  globe: 540,
+  globe: 380,
   /** The rest of the first screen (the line's other words, the kicker, the
    *  scroll cue, the nav last) comes up round the landed words. */
-  rest: 1160,
-  done: 2000,
+  rest: 900,
+  done: 1500,
 } as const;
 export const FLY_ORDER = ['ryan', 'xu', 'archive', 'travel', 'thought'] as const;
 export type FlyWord = (typeof FLY_ORDER)[number];
 
-/** The landing curve: an ease-in-out with a long, soft arrival. */
-export const FLY_EASE = [0.62, 0, 0.18, 1] as const;
+/** The landing curve: an ease-in-out with a soft arrival, quick enough off
+ *  the clap that the board never sits frozen after it (15% of the way at
+ *  200 ms). */
+export const FLY_EASE = [0.38, 0, 0.2, 1] as const;
+
+/** The two faces' horizontal scales across the morph: at every moment both
+ *  have ink width lerp(srcW, dstW, p) — `srcW` the board face's ink width and
+ *  `dstW` the page face's, both at the landed size. */
+export function morphScales(srcW: number, dstW: number) {
+  const s = Math.max(1e-6, srcW);
+  const d = Math.max(1e-6, dstW);
+  return { source: [1, d / s] as const, target: [s / d, 1] as const };
+}
 
 export interface Flight {
   /** Source centre minus target centre (px) and source/target scale. */
@@ -456,12 +544,19 @@ export const landingAEnd = (words: number) => LANDING_A.start + Math.max(0, word
 export const LANDING_B = {
   push: 980,
   /** The clapperboard itself fades out while the counter is this many times
-   *  its own size (past it only the O's ring and the dark round it are
-   *  left, drawn crisp at any scale). */
-  sheetFade: [2.2, 9] as const,
-  /** Then the dark round the globe lifts, the ring goes, the name rises. */
+   *  its own size (past it only the O's ring and the olive round it are
+   *  left, drawn crisp at any scale): late enough that the push is seen
+   *  going THROUGH the letters. */
+  sheetFade: [6, 20] as const,
+  /** The ring: a white-ink hairline from the first frame (not the O's
+   *  stroke blown up), px. */
+  ring: 2.5,
+  /** The ground round the window: the page's own olive, so the dive never
+   *  goes black. */
+  ground: '#282c20',
+  /** Then the olive round the globe lifts, the ring goes, the name rises. */
   surround: [960, 1480] as const,
-  ring: [900, 1360] as const,
+  ringOut: [900, 1360] as const,
   rise: 900,
   done: 1560,
 } as const;
@@ -575,4 +670,40 @@ export function scrambleStrip(letter: string, index: number, count = 7) {
   let strip = '';
   for (let k = 0; k < count; k += 1) strip += RAIN_EXTRA[Math.floor(rand() * RAIN_EXTRA.length)];
   return strip + letter;
+}
+
+// ── His photographs in the film ───────────────────────────────────────────
+// The magazine's picture page and the strip of film carry his own frames
+// (a photographer's archive should not open without one photograph): the
+// first landscape frame of each chapter, in the order given, at a size the
+// scene needs (a plate on the magazine page, 640 px; a 35 mm frame, 800 px)
+// from the Sanity CDN at a modest quality. Each keeps its own ratio; frames
+// far from 3:2 are passed over (a frame of film is landscape).
+export interface PictureSource {
+  imageUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+export const PICTURE_RATIO = [1.3, 1.7] as const;
+export function pickPictures(groups: readonly { photos?: readonly PictureSource[] | null }[], count = 4) {
+  const usable = (p: PictureSource) => {
+    if (!p.imageUrl || !p.width || !p.height) return false;
+    const r = p.width / p.height;
+    return r >= PICTURE_RATIO[0] && r <= PICTURE_RATIO[1];
+  };
+  const chosen: PictureSource[] = [];
+  // One per chapter first, then (if there are fewer chapters than frames) a
+  // second round.
+  for (let round = 0; chosen.length < count && round < 3; round += 1) {
+    for (const group of groups) {
+      if (chosen.length >= count) break;
+      const pick = (group.photos ?? []).filter(usable)[round];
+      if (pick && !chosen.includes(pick)) chosen.push(pick);
+    }
+  }
+  return chosen.map((p, i) => {
+    const w = i === 0 ? 640 : 800;
+    const sep = p.imageUrl!.includes('?') ? '&' : '?';
+    return { src: `${p.imageUrl}${sep}w=${w}&q=60&auto=format`, ratio: Math.round((p.width! / p.height!) * 10000) / 10000 };
+  });
 }

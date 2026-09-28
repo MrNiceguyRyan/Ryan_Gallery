@@ -13,10 +13,26 @@ import { RAIN_COLUMNS, rainColumns, scrambleStrip, type FoundWord, type SceneId 
 //
 // The words are real text, never quoted from anything under copyright: the
 // dictionary is Webster's 1913 (public domain), the book is Stevenson's
-// Travels with a Donkey in the Cévennes (1879, public domain), and the rest
-// is written for the film. Nothing here says anything about Ryan beyond
-// "photographs / camera: Ryan Xu" and "a personal archive of travel and
-// thought".
+// Travels with a Donkey in the Cévennes (1879, public domain, the passage
+// as he wrote it), and the rest is written for the film. Nothing here says
+// anything about Ryan beyond "photographs / camera: Ryan Xu" and "a personal
+// archive of travel and thought". The magazine's picture page and the strip
+// of film carry his own photographs (index.astro picks them; the island
+// fetches them after the first paint), each at its own ratio.
+
+/** One of his photographs for the film: its URL (sized for the scene) and
+ *  its width / height. */
+export interface OpeningPicture {
+  src: string;
+  ratio: number;
+}
+
+/** A photograph the island loads later (no src in the markup: the first
+ *  paint never waits on it). */
+function Picture({ picture, className = '' }: { picture?: OpeningPicture; className?: string }) {
+  if (!picture) return null;
+  return <img className={`of-pic ${className}`} data-src={picture.src} alt="" draggable={false} />;
+}
 
 /** A found word: measured by the island (its box, its baseline). `ink` is
  *  the text to measure when the span's own text is not it (the locked
@@ -166,12 +182,18 @@ function NewspaperScene() {
 // ── 4. Magazine ───────────────────────────────────────────────────────────
 // The wide shot: a whole spread lying on a table, CINEMA set across its
 // gutter — light on the picture, dark on the page (one word, one blend).
-function MagazineScene() {
+function MagazineScene({ picture }: { picture?: OpeningPicture }) {
   return (
     <Scene id="magazine" word="cinema">
       <div className="of-sheet of-mag" data-sheet>
         <div className="of-mag__page of-mag__page--photo" aria-hidden="true">
-          <div className="of-mag__picture" />
+          <div className="of-mag__picture">
+            {picture && (
+              <span className="of-mag__plate" style={{ aspectRatio: String(picture.ratio) }}>
+                <Picture picture={picture} />
+              </span>
+            )}
+          </div>
           <span className="of-mag__caption">The last row, before the lights go down.</span>
           <span className="of-mag__folio of-mag__folio--left">42</span>
         </div>
@@ -248,9 +270,9 @@ function BookScene() {
     <Scene id="book" word="travel">
       <div className="of-sheet of-book" data-sheet>
         <div className="of-book__text">
-          <span className="of-book__line of-book__line--far">a slice of bread and a flask of brandy. The road</span>
-          <span className="of-book__line of-book__line--near">wound up the valley, and the chestnut leaves were</span>
-          <span className="of-book__line">turning. For my part, I <Find word="travel">travel</Find> not to go anywhere,</span>
+          <span className="of-book__line of-book__line--far">Why any one should desire to visit either Luc or</span>
+          <span className="of-book__line of-book__line--near">Cheylard is more than my much-inventing spirit can</span>
+          <span className="of-book__line">suppose. For my part, I <Find word="travel">travel</Find> not to go anywhere,</span>
           <span className="of-book__line">but to go. I travel for travel&rsquo;s sake. The great</span>
           <span className="of-book__line of-book__line--near">affair is to move; to feel the needs and hitches of</span>
           <span className="of-book__line of-book__line--far">our life more nearly; to come down off this feather-</span>
@@ -362,10 +384,12 @@ function CatalogueScene() {
         <div className="of-card__text">
           <span className="of-card__call">TR<br />790<br />.X8</span>
           <span className="of-card__lines">
-            <span className="of-card__line"><Find word="ryanxu">Xu, Ryan.</Find></span>
+            <span className="of-card__line">Xu, Ryan.</span>
             <span className="of-card__line of-card__line--in">A personal archive of travel</span>
             <span className="of-card__line of-card__line--in">and thought / photographs,</span>
-            <span className="of-card__line of-card__line--in">Ryan Xu.</span>
+            {/* The statement of responsibility names him in reading order:
+                the cut to the film's edge print lines up letter for letter. */}
+            <span className="of-card__line of-card__line--in"><Find word="ryanxu">Ryan Xu</Find>.</span>
             <span className="of-card__line of-card__line--in of-card__line--gap">1. Travel photography. I. Title.</span>
           </span>
         </div>
@@ -378,7 +402,7 @@ function CatalogueScene() {
 // ── 12. The edge of a strip of film ───────────────────────────────────────
 const PERFS = Array.from({ length: 18 }, (_, index) => <i key={index} />);
 
-function ContactScene() {
+function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undefined)[] }) {
   return (
     <Scene id="contact" word="ryanxu">
       <div className="of-sheet of-film" data-sheet>
@@ -391,9 +415,20 @@ function ContactScene() {
             <span>&#9656; 24A</span>
           </div>
           <div className="of-film__frames" aria-hidden="true">
-            <span className="of-film__frame of-film__frame--a" />
-            <span className="of-film__frame of-film__frame--b" />
-            <span className="of-film__frame of-film__frame--c" />
+            {(['a', 'b', 'c'] as const).map((key, index) => {
+              const picture = pictures[index];
+              return (
+                <span
+                  key={key}
+                  className={`of-film__frame of-film__frame--${key}`}
+                  // A frame of his is as wide as its photograph (the frame's
+                  // height fixed): nothing is cropped or stretched.
+                  style={picture ? { width: `${Math.round(640 * picture.ratio)}px` } : undefined}
+                >
+                  <Picture picture={picture} />
+                </span>
+              );
+            })}
           </div>
           <div className="of-film__perfs of-film__perfs--bottom" aria-hidden="true">{PERFS}</div>
         </div>
@@ -461,14 +496,15 @@ function SlateScene() {
   );
 }
 
-/** Every scene, in no particular order (the island's schedule orders them). */
-export default function OpeningScenes() {
+/** Every scene, in no particular order (the island's schedule orders them).
+ *  `pictures`: his photographs, the magazine's first, then the film's. */
+export default function OpeningScenes({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   return (
     <>
       <CodeScene />
       <DictionaryScene />
       <NewspaperScene />
-      <MagazineScene />
+      <MagazineScene picture={pictures[0]} />
       <SubtitlesScene />
       <TicketScene />
       <BookScene />
@@ -476,7 +512,7 @@ export default function OpeningScenes() {
       <TelegramScene />
       <NotebookScene />
       <CatalogueScene />
-      <ContactScene />
+      <ContactScene pictures={[pictures[1], pictures[2], pictures[3]]} />
       <SlateScene />
     </>
   );
