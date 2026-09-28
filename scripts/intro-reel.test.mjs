@@ -15,7 +15,11 @@
 // 2026-09-28 pass's: a shorter pin, the film clock (turns played by time on
 // one eased curve, holds scrubbed, never at rest mid-turn, committed and
 // released with hysteresis), the chase at a slow and a brisk wheel, and
-// colours that blend through OKLab without a step or a flip. The modules
+// colours that blend through OKLab without a step or a flip; and its review
+// pass's: lattices that dissolve where they lie (never stretched round the
+// ball), turns that have landed — exactly on the next ball — well before
+// their clock runs out, a shorter tail to the shutter, and a focus beat the
+// reader sees before the shutter fires, however fast he scrolls. The modules
 // import their siblings without extensions (Vite's way), so they are
 // bundled first.
 import assert from 'node:assert/strict';
@@ -25,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 
 const entry = `
 export * from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReel.ts', import.meta.url)))};
-export { REEL_INK, paintCover, paintSphereScene, paintTurn, actClock, moonSphere, moonLight, cookieBites, holeGeometry, focusCentre, shutterCentre, stageOf, ballAt, reelFlow, finderWindow, phoneMoonTarget, facetCuts, blendCuts, facetsOf, viewFor, groundWave, GROUND_WAVE, tileStone, mixHex } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelPaint.ts', import.meta.url)))};
+export { REEL_INK, REEL_GROUND, paintCover, paintSphereScene, paintTurn, actClock, moonSphere, moonLight, cookieBites, holeGeometry, focusCentre, shutterCentre, stageOf, ballAt, reelFlow, finderWindow, phoneMoonTarget, facetCuts, blendCuts, facetsOf, viewFor, groundWave, GROUND_WAVE, GROUND_SPAN, TURN_LANDS, land, tileStone, mixHex } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelPaint.ts', import.meta.url)))};
 export { reelCoverMarkup } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelCover.ts', import.meta.url)))};
 export { SvgRecorder } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelSvg.ts', import.meta.url)))};
 `;
@@ -507,7 +511,7 @@ test('a turn commits past half its window, releases under a third, and never fla
 // pace, then at rest; the film clock chases it as IntroReel does.
 function ride(score, pinnedPx, plan, seconds = 14) {
   const dt = 1 / 60;
-  let goal = 0, y = 0, target = 0;
+  let goal = 0, y = 0, target = 0, focusBeat = 0;
   let chase = { tau: 0, v: 0 };
   const frames = [];
   for (let i = 0; i * dt < seconds; i += 1) {
@@ -519,8 +523,9 @@ function ride(score, pinnedPx, plan, seconds = 14) {
     const goalTau = R.filmClock(score, target);
     chase = R.chaseFilm(chase, goalTau, dt);
     const film = R.filmAt(score, chase.tau);
+    focusBeat = R.stepFocusBeat(focusBeat, film >= score.glide[1] - 1e-3, dt);
     const beat = R.beatAt(score, film);
-    frames.push({ t, p, film, pos: beat.index + beat.mix, beat, settled: R.filmSettled(chase, goalTau) });
+    frames.push({ t, p, film, pos: beat.index + beat.mix, beat, settled: R.filmSettled(chase, goalTau), focusBeat, focus: R.finderFocus(score, p, focusBeat) });
   }
   return frames;
 }
@@ -556,7 +561,8 @@ test('the chase: at a brisk wheel the film keeps up, and has glided in by the ti
   const frames = ride(score, pinned, (t, g) => Math.min(pinned * 1.05, g + 1430 / 60), 8);
   const fire = frames.find((f) => f.p >= score.fire);
   assert.ok(fire, 'reaches the shutter');
-  const ready = frames.find((f) => f.t >= fire.t && f.film >= score.glide[1] - 1e-3);
+  // Glided in and focused (the blades wait for both).
+  const ready = frames.find((f) => f.t >= fire.t && f.film >= score.glide[1] - 1e-3 && f.focusBeat >= 1);
   assert.ok(ready && ready.t - fire.t <= R.SHUTTER_WAIT_MS / 1000, `film ready ${ready ? (ready.t - fire.t).toFixed(3) : 'never'}s after the latch`);
   // Faster, but still turns, not cuts: no turn in under a fifth of a second.
   for (const s of turnSpans(frames)) assert.ok(s >= 0.2, `turn ${s.toFixed(3)}s`);
@@ -614,13 +620,14 @@ test('colour: blends run through OKLab, exact at both ends, and no colour steps 
   assert.ok(worstStep < 0.02, `worst quantised step ${worstStep}`);
 });
 
-test('colour: through a turn at full speed no lozenge or tile changes by more than a tenth of ΔE a frame (it used to flip whole)', () => {
+test('colour: through a turn at full speed no lozenge or tile changes by more than an eighth of its change a frame (it used to flip whole)', () => {
   // The fastest a turn plays from rest: a cubic ease over turnSeconds, 60 Hz.
   const T = R.REEL_DESKTOP.turnSeconds;
   const mixAt = (t) => { const v = Math.min(1, Math.max(0, t / T)); return v * v * (3 - 2 * v); };
   const inks = Object.values(R.REEL_INK).map((c) => c.toLowerCase());
   const pairs = inks.flatMap((x) => inks.map((y) => [x, y]));
   const [a, b] = pairs.reduce((best, pair) => (dE(pair[0], pair[1]) > dE(best[0], best[1]) ? pair : best));
+  const whole = dE(a, b);
   let worst = 0;
   for (const lead of [0, 0.25, 0.5, 0.75, 1]) {
     let prevGround = a, prevTile = a;
@@ -629,14 +636,154 @@ test('colour: through a turn at full speed no lozenge or tile changes by more th
       const ground = R.mixHex(a, b, R.groundWave(mix, lead));
       const tile = R.mixHex(a, b, Math.round(R.tileStone({ mid: [lead - 0.5, 0.1, 0.8], sparkle: lead }, mix) * 16) / 16);
       worst = Math.max(worst, dE(prevGround, ground));
-      assert.ok(dE(prevGround, ground) < 0.1, `lozenge ${a}→${b} lead ${lead} frame ${i}: ${dE(prevGround, ground).toFixed(3)}`);
+      assert.ok(dE(prevGround, ground) <= whole * 0.13, `lozenge ${a}→${b} lead ${lead} frame ${i}: ${dE(prevGround, ground).toFixed(3)} of ${whole.toFixed(3)}`);
       assert.ok(dE(prevTile, tile) < 0.16, `tile frame ${i}`);
       prevGround = ground;
       prevTile = tile;
     }
     assert.equal(prevGround, b, 'lands on the new colour');
   }
-  assert.ok(dE(a, b) > 0.5 && worst < dE(a, b) / 5, `worst ${worst.toFixed(3)} of ${dE(a, b).toFixed(3)}`);
-  // The wave starts at 0 and ends at 1 for every lozenge.
+  assert.ok(whole > 0.5 && worst <= whole * 0.13, `worst ${worst.toFixed(3)} of ${whole.toFixed(3)}`);
+  // The wave starts at 0 and ends at 1 for every lozenge, the last of them by
+  // 0.8 of the turn; it is monotone, and the lozenges by the ball lead.
   for (const lead of [0, 0.5, 1]) assert.ok(R.groundWave(0, lead) === 0 && R.groundWave(1, lead) === 1);
+  assert.ok(Math.abs(R.GROUND_WAVE + R.GROUND_SPAN - 0.8) < 1e-9 && R.groundWave(0.8, 1) === 1);
+  for (let i = 1; i <= 200; i += 1) {
+    const m = i / 200;
+    for (const lead of [0, 0.3, 0.7, 1]) {
+      assert.ok(R.groundWave(m, lead) >= R.groundWave(m - 0.005, lead) - 1e-12, 'monotone');
+      assert.ok(R.groundWave(m, lead) >= R.groundWave(m, Math.min(1, lead + 0.2)) - 1e-12, 'the ball leads');
+    }
+  }
+});
+
+// ── Review pass (2026-09-28, later): silk, pace, the focus beat ────────────
+
+const holdAndTurn = (score, i, p) => {
+  const frame = R.FRAME_DESKTOP;
+  const flow = R.reelFlow(score, p, 2.2, false);
+  const envA = { w: frame.w, h: frame.h, phone: false, t: 2.2, p, a: R.actClock(score, i, p), flow };
+  const envB = { ...envA, a: R.actClock(score, i + 1, p) };
+  return { envA, envB, from: score.beats[i].kind, to: score.beats[i + 1].kind };
+};
+// A bare tape of what a frame strokes (the SVG recorder trims ruled lines
+// that cross the frame end to end): the lattice's lines are the strokes
+// 1.5 design px wide.
+class Tape {
+  constructor() { this.strokes = []; this.path = []; this.fillStyle = '#000'; this.strokeStyle = '#000'; this.lineWidth = 1; this.lineCap = 'butt'; this.lineJoin = 'miter'; this.globalAlpha = 1; }
+  save() {} restore() {} translate() {} rotate() {} scale() {} clip() {} fill() {} fillRect() {} closePath() {}
+  beginPath() { this.path = []; }
+  moveTo(x, y) { this.path.push(['M', x, y]); }
+  lineTo(x, y) { this.path.push(['L', x, y]); }
+  arc(x, y, r) { this.path.push(['A', x, y, r]); }
+  stroke() { this.strokes.push({ width: this.lineWidth, alpha: this.globalAlpha, path: this.path.slice() }); }
+}
+const latticeStrokes = (draw) => {
+  const tape = new Tape();
+  draw(tape);
+  return tape.strokes.filter((s) => s.width === 1.5);
+};
+
+test('a lattice dissolves where it lies: through a turn both are drawn exactly as their holds lay them, never stretched or moved', () => {
+  const score = R.REEL_DESKTOP;
+  let checked = 0;
+  for (let i = 1; i + 1 < score.beats.length; i += 1) {
+    const { envA, envB, from, to } = holdAndTurn(score, i, score.beats[i + 1].at - score.turn * 0.5);
+    const holdA = latticeStrokes((c) => R.paintSphereScene(c, from, envA, score, null));
+    const holdB = latticeStrokes((c) => R.paintSphereScene(c, to, envB, score, null));
+    assert.equal(holdA.length, 1, `${from} hold: one set of lattice lines`);
+    assert.equal(holdB.length, 1, `${to} hold: one set of lattice lines`);
+    let fade = 1;
+    for (const mix of [0.2, 0.4, 0.6]) {
+      const turn = latticeStrokes((c) => R.paintTurn(c, from, to, envA, envB, mix, score, null));
+      assert.equal(turn.length, 2, `${from}>${to} at ${mix}: both lattices`);
+      assert.deepEqual(turn[0].path, holdA[0].path, `${from}>${to} at ${mix}: the old lattice, in place`);
+      assert.deepEqual(turn[1].path, holdB[0].path, `${from}>${to} at ${mix}: the new lattice, in place`);
+      // The old fades as the new comes up.
+      assert.ok(turn[0].alpha < fade && turn[1].alpha > 0);
+      fade = turn[0].alpha;
+    }
+    checked += 1;
+  }
+  assert.equal(checked, 5);
+  // The cover's turn keeps one lattice (the lens holds it): its two looks
+  // are within a few per cent of each other's proportions.
+  const hole = R.REEL_GROUND.hole, basket = R.REEL_GROUND.basket;
+  assert.ok(Math.abs(basket.cw / hole.cw - 1) <= 0.05, 'lozenge width');
+  assert.ok(Math.abs((basket.cw * basket.aspect) / (hole.cw * hole.aspect) - 1) <= 0.05, 'row height');
+});
+
+test('every turn has landed — exactly on the next ball — well before its clock runs out, so it comes to rest instead of stopping dead', () => {
+  const score = R.REEL_DESKTOP;
+  assert.ok(R.TURN_LANDS >= 0.8 && R.TURN_LANDS <= 0.9);
+  let checked = 0;
+  for (let i = 0; i + 1 < score.beats.length; i += 1) {
+    const { envA, envB, from, to } = holdAndTurn(score, i, score.beats[i + 1].at - score.turn * 0.5);
+    const holdB = painted((c) => R.paintSphereScene(c, to, envB, score, null));
+    for (const mix of [0.88, 0.94]) {
+      const frame = painted((c) => R.paintTurn(c, from, to, envA, envB, mix, score, null));
+      assert.equal(frame, holdB, `${from}>${to} has landed by ${mix}`);
+    }
+    // …and has not before the ground's wave is in (a turn, not a cut).
+    const early = painted((c) => R.paintTurn(c, from, to, envA, envB, 0.6, score, null));
+    assert.notEqual(early, holdB, `${from}>${to} still turning at 0.6`);
+    checked += 1;
+  }
+  assert.equal(checked, 6);
+  // The film's clock reaches 0.88 of a turn with a fifth of its time to run:
+  // the last fifth of every turn is the new ball at rest.
+  const ease = (t) => t * t * (3 - 2 * t);
+  let t = 0;
+  while (ease(t) < 0.88) t += 1e-4;
+  assert.ok(t <= 0.8, `landed at ${t.toFixed(3)} of the turn's time`);
+  // The slides and blends that simply follow the turn start at rest (the
+  // clock eases them in) and land at rest.
+  assert.ok(R.land(0) === 0 && R.land(R.TURN_LANDS) === 1 && R.land(1) === 1);
+  assert.ok(R.land(R.TURN_LANDS - 0.01) > 0.999 - 0.001 && R.land(R.TURN_LANDS - 0.01) < 1);
+});
+
+test('pacing: the tail from the moon in the finder to the shutter is shorter than a ball\'s slot', () => {
+  const score = R.REEL_DESKTOP;
+  assert.ok(score.screens <= 3.7, `desktop ${score.screens} screens`);
+  const slot = score.beats[2].at - score.beats[1].at;
+  const tail = score.fire - score.glide[1];
+  assert.ok(tail < slot, `tail ${(tail * score.screens).toFixed(2)} screens, slot ${(slot * score.screens).toFixed(2)}`);
+  assert.ok(tail * score.screens <= 0.45, `tail ${(tail * score.screens).toFixed(2)} screens`);
+  // Every ball's slot is the same (the film keeps one beat).
+  for (let k = 2; k < score.beats.length; k += 1) assert.ok(Math.abs(score.beats[k].at - score.beats[k - 1].at - slot) < 1e-9, `${score.beats[k].kind} slot`);
+});
+
+test('the focus beat: the split image comes together no faster than its beat once the moon is in, never jumps, and the blades wait for it', () => {
+  assert.ok(R.FOCUS_BEAT_S >= 0.25 && R.FOCUS_BEAT_S <= 0.5);
+  assert.ok(R.SHUTTER_WAIT_MS >= 500 && R.SHUTTER_WAIT_MS <= 1000);
+  // The beat's clock: up while glided in, down while not, continuous.
+  let beat = 0;
+  let steps = 0;
+  while (beat < 1 && steps < 1000) { beat = R.stepFocusBeat(beat, true, 1 / 60); steps += 1; }
+  assert.ok(Math.abs(steps / 60 - R.FOCUS_BEAT_S) < 1 / 60 + 1e-9, `${steps} frames`);
+  for (let i = 0; i < 200; i += 1) {
+    const next = R.stepFocusBeat(beat, i % 37 < 20, 1 / 60);
+    assert.ok(Math.abs(next - beat) <= 1 / 60 / R.FOCUS_BEAT_S + 1e-9);
+    beat = next;
+  }
+  // Scrubbed by the scroll, held back by the beat.
+  const score = R.REEL_DESKTOP;
+  assert.equal(R.finderFocus(score, 1, 0), 0);
+  assert.equal(R.finderFocus(score, 1, 1), 1);
+  assert.equal(R.finderFocus(score, score.focus[0], 1), 0);
+  // At a brisk wheel (1430 px/s on a 1000 px screen, 1728 wide): the split
+  // image is not together before the moon is in, it takes the beat to come
+  // together, and the blades (which wait for it) go within their wait.
+  const pinned = score.screens * 1000;
+  const frames = ride(score, pinned, (t, g) => Math.min(pinned * 1.05, g + 1430 / 60), 8);
+  const glided = frames.find((f) => f.film >= score.glide[1] - 1e-3);
+  assert.ok(glided && glided.focus <= 1 / 60 / R.FOCUS_BEAT_S + 1e-9, 'apart when the moon arrives');
+  const together = frames.find((f) => f.focus >= 1);
+  assert.ok(together && together.t - glided.t >= R.FOCUS_BEAT_S - 0.02, `focused ${(together.t - glided.t).toFixed(3)}s after the glide`);
+  const fire = frames.find((f) => f.p >= score.fire);
+  assert.ok(together.t - fire.t <= R.SHUTTER_WAIT_MS / 1000, `blades wait ${((together.t - fire.t) * 1000).toFixed(0)} ms`);
+  // A gentle reader scrubs the focus himself: the beat is long done.
+  const slow = ride(score, pinned, (t, g) => Math.min(pinned * 1.02, g + 200 / 60), 22);
+  const mid = slow.find((f) => f.p >= (score.focus[0] + score.focus[1]) / 2);
+  assert.ok(mid && Math.abs(mid.focus - R.finderFocus(score, mid.p, 1)) < 1e-9, 'scrubbed by the scroll');
 });

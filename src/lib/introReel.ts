@@ -121,7 +121,8 @@ export interface ReelDetail {
   /** The shutter's latch: set going down past `fire`, cleared going back up
    *  past `rearm`. Its rising edge is HomePage's cue for the detent. */
   fired: boolean;
-  /** The blades are moving (a click is in progress). */
+  /** The blades are moving, or waiting to (the latch has fired and the
+   *  film is finishing its glide and focus): a click is in progress. */
   blades: boolean;
 }
 declare global {
@@ -166,7 +167,8 @@ export interface ReelScore {
   glideSeconds: number;
   /** …while the viewfinder's mask and focusing screen come in over this
    *  stretch of it; the split image then comes together over `focus`,
-   *  scrubbed by the scroll. */
+   *  scrubbed by the scroll — but never in under FOCUS_BEAT_S once the
+   *  moon has glided in (a reader already past it sees it focus). */
   finder: readonly [number, number];
   focus: readonly [number, number];
   /** The shutter fires when the SCROLL passes `fire` going down and fires
@@ -176,26 +178,30 @@ export interface ReelScore {
   rearm: number;
 }
 
+// Desktop: every ball's slot is 0.13 of the pin (468 px of scroll on a
+// 1000 px screen), its hold 0.4 of a screen; the tail from the moon in the
+// finder to the shutter is 385 px (it was 720: over a second of a nearly
+// still moon at a gentle pace).
 export const REEL_DESKTOP: ReelScore = {
-  screens: 3.9,
+  screens: 3.6,
   beats: [
     { kind: 'hole', at: 0 },
-    { kind: 'basket', at: 0.075 },
-    { kind: 'football', at: 0.195 },
-    { kind: 'cookie', at: 0.315 },
-    { kind: 'light', at: 0.435 },
-    { kind: 'disco', at: 0.555 },
-    { kind: 'moon', at: 0.675 },
+    { kind: 'basket', at: 0.08 },
+    { kind: 'football', at: 0.21 },
+    { kind: 'cookie', at: 0.34 },
+    { kind: 'light', at: 0.47 },
+    { kind: 'disco', at: 0.6 },
+    { kind: 'moon', at: 0.73 },
   ],
   turn: 0.02,
   turnSeconds: 0.5,
   longTurn: 1.5,
-  glide: [0.765, 0.79],
-  glideSeconds: 0.8,
-  finder: [0.775, 0.79],
-  focus: [0.815, 0.93],
-  fire: 0.975,
-  rearm: 0.955,
+  glide: [0.83, 0.855],
+  glideSeconds: 0.6,
+  finder: [0.84, 0.855],
+  focus: [0.865, 0.935],
+  fire: 0.962,
+  rearm: 0.942,
 };
 
 /** Phones and small tablets: the same film on a shorter pin, one sphere
@@ -215,7 +221,7 @@ export const REEL_PHONE: ReelScore = {
   turnSeconds: 0.5,
   longTurn: 1.5,
   glide: [0.775, 0.805],
-  glideSeconds: 0.8,
+  glideSeconds: 0.6,
   finder: [0.787, 0.805],
   focus: [0.83, 0.93],
   fire: 0.975,
@@ -380,9 +386,30 @@ export function shutterLatch(score: ReelScore, fired: boolean, p: number) {
 export const SHUTTER_MS = { close: 170, open: 440, hold: 450 } as const;
 /** A reader who scrolled faster than the turns play reaches the shutter
  *  before the film has caught up: the detent starts at once (the page is
- *  carried and held), and the blades wait at most this long for the film to
- *  finish its glide (the moon in the corner, the finder up). */
-export const SHUTTER_WAIT_MS = 360;
+ *  carried to the first screen and held there, still under the frame, as
+ *  long as the click is in progress), and the blades wait at most this long
+ *  for the film to finish its glide and its focus (the moon in the corner,
+ *  the finder up, the split image together) — so the reader sees the camera
+ *  focus, then fire. (At a brisk 1430 px/s the wait is about 0.7 s on a
+ *  1000 px screen and 0.9 s on an 800 px one; faster than that the blades
+ *  go at the cap, the focus finishing under them.) */
+export const SHUTTER_WAIT_MS = 900;
+
+/** The focus beat: once the moon has glided in, the split image takes at
+ *  least this long to come together, however far past the focus stretch
+ *  the scroll already is (at a brisk wheel it was together before the
+ *  finder was even up, and the focus-then-fire was never seen). */
+export const FOCUS_BEAT_S = 0.35;
+/** The beat's clock, 0 → 1: it runs up while the film is at the end of the
+ *  glide and back down (as fast) while it is not, so it never jumps. */
+export function stepFocusBeat(beat: number, glided: boolean, dt: number) {
+  return clamp01(beat + ((glided ? 1 : -1) * Math.max(0, dt)) / FOCUS_BEAT_S);
+}
+/** The split image's focus, 0 (apart) → 1 (together): the scroll's, held
+ *  back by the beat. */
+export function finderFocus(score: ReelScore, life: number, beat: number) {
+  return Math.min(segment(life, score.focus[0], score.focus[1]), clamp01(beat));
+}
 
 export interface ShutterFrame {
   /** 0 = wide open (the blade tips just outside the frame), 1 = shut. */

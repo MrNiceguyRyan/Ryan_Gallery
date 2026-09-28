@@ -157,6 +157,24 @@ test('the head script: carries a restored scroll into the layout about to show',
   assert.equal(box.replaced.length, 0);
 });
 
+test('the head script: a reload deep in the archive keeps the reel\'s frame hidden until the island takes over', () => {
+  const restore = (opts) => {
+    const box = sandbox(opts);
+    vm.runInContext(HEAD, box.ctx);
+    return box.attrs['data-reel-restore'];
+  };
+  // Deep in the archive, the film playing above it: the guard.
+  assert.equal(restore({ seen: '1', nav: 'reload', state: { scrollY: 1500, reelOffset: 0 } }), '');
+  assert.equal(restore({ seen: null, nav: 'back_forward', state: { scrollY: 5400, reelOffset: 3900 } }), '');
+  // On the cover, inside the film, on the first screen (a reload restarts
+  // the film), skipped, or nothing saved: none.
+  assert.equal(restore({ seen: '1', nav: 'reload', state: { scrollY: 0, reelOffset: 0 } }), undefined);
+  assert.equal(restore({ seen: null, nav: 'back_forward', state: { scrollY: 1200, reelOffset: 3900 } }), undefined);
+  assert.equal(restore({ seen: '1', nav: 'reload', state: { scrollY: 3900, reelOffset: 3900 } }), undefined);
+  assert.equal(restore({ seen: '1', nav: 'back_forward', state: { scrollY: 5400, reelOffset: 3900 } }), undefined);
+  assert.equal(restore({ seen: '1', nav: 'reload' }), undefined);
+});
+
 test('the router script: an in-site arrival at the homepage decides on the incoming document', () => {
   const box = sandbox({ readyState: 'complete', seen: '1' });
   vm.runInContext(V.reelRouterScript(), box.ctx);

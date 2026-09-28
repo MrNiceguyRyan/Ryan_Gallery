@@ -101,8 +101,11 @@ export interface ReelHeadConstants {
  *  paint, and carry a restored scroll position (Astro's router restores
  *  history.state.scrollY as its module runs, after this) into the layout
  *  about to show — the film's length estimated from the viewport, as CSS
- *  will size it. (An in-site arrival runs it again after the swap, by then
- *  decided: it steps aside.) */
+ *  will size it. A position restored below the film (a reload deep in the
+ *  archive) also marks <html data-reel-restore>: CSS keeps the reel's frame
+ *  hidden until IntroReel takes over, so the page's first composite, at the
+ *  top before the scroll is restored, is not the cover. (An in-site arrival
+ *  runs it again after the swap, by then decided: it steps aside.) */
 export function reelHeadScript(c: ReelHeadConstants) {
   return (
     '(function(){' +
@@ -122,6 +125,7 @@ export function reelHeadScript(c: ReelHeadConstants) {
     "var now=plan==='skip'?0:Math.round(screens*innerHeight);" +
     "var y=reelScroll(st.scrollY,st.reelOffset,now,nav==='reload'&&plan==='play',innerHeight*0.5);" +
     "if(y!==st.scrollY||now!==st.reelOffset)history.replaceState(Object.assign({},st,{scrollY:y,reelOffset:now}),'');" +
+    "if(plan==='play'&&now>0&&y>now)root.setAttribute('data-reel-restore','');" +
     '}}catch(e){}' +
     '})();'
   );

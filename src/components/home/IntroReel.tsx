@@ -20,6 +20,7 @@ import {
   segment,
   shutterAt,
   shutterLatch,
+  stepFocusBeat,
   toDesign,
   type FilmChase,
   type ReelDetail,
@@ -84,8 +85,9 @@ function documentTop(node: HTMLElement) {
  * into the next ball, once the scroll commits it, plays by itself on one
  * ease-in-out curve (src/lib/introReel.ts, "The film clock").
  *
- * It plays once a tab session: on a later view (back from another page, the
- * wordmark elsewhere) it has been skipped before the first paint
+ * It plays once a tab session: once the reader has seen it under way (its
+ * first turn, or the shutter), a later view (back from another page, the
+ * wordmark elsewhere) has it skipped before the first paint
  * (src/lib/reelVisit.ts, html[data-reel="skip"]) and this island does
  * nothing; a reload plays it again.
  *
@@ -190,6 +192,9 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     let filmGoal = filmTarget(score, p, p);
     let chase: FilmChase = { tau: filmClock(score, filmGoal), v: 0 };
     let film = filmAt(score, chase.tau);
+    // The focus beat (src/lib/introReel.ts): the split image comes together
+    // no faster than FOCUS_BEAT_S once the moon has glided in.
+    let focusBeat = film >= score.glide[1] - 1e-3 ? 1 : 0;
     let chaseScore = score;
     let fired = still ? p >= STILL_CUT : p >= score.fire;
     let release = -1;
@@ -218,7 +223,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     const costs: number[] = [];
 
     const publish = () => {
-      const detail: ReelDetail = { state, framed, fired, blades: release >= 0 };
+      const detail: ReelDetail = { state, framed, fired, blades: release >= 0 || pending >= 0 };
       window.__archiveReel = detail;
       root.dataset.reel = state;
       window.dispatchEvent(new CustomEvent<ReelDetail>(REEL_EVENT, { detail }));
@@ -232,14 +237,21 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     const show = (on: boolean, interactive: boolean) => {
       frame.style.visibility = on ? 'visible' : 'hidden';
       frame.style.pointerEvents = on && interactive ? 'auto' : 'none';
-      // The film has been on screen: a later view in this session skips it.
-      if (on && !seen) {
-        seen = true;
-        markReelSeen();
-      }
+    };
+    // The film has been seen under way (its first turn, or the shutter — the
+    // cut, under reduced motion): a later view in this session skips it. (A
+    // reader who only saw the cover and left by the address bar gets it
+    // again: over the cover there is no nav to leave by.)
+    const markSeen = () => {
+      if (seen) return;
+      seen = true;
+      markReelSeen();
     };
     publish();
     show(!fired, !fired);
+    // (The head script's guard for a reload deep in the archive: from here
+    // the frame's visibility is this island's.)
+    delete root.dataset.reelRestore;
 
     const tick = (now: number) => {
       raf = 0;
@@ -280,13 +292,8 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         }
         frame.style.opacity = state === 'reel' ? '1' : '0';
         frame.style.pointerEvents = state === 'reel' ? 'auto' : 'none';
-        if (state === 'reel') {
-          frame.style.visibility = 'visible';
-          if (!seen) {
-            seen = true;
-            markReelSeen();
-          }
-        }
+        if (state === 'reel') frame.style.visibility = 'visible';
+        else markSeen();
         // A cut waiting on the tiles looks again next frame.
         if (stillCutWait >= 0 && state === 'reel') raf = requestAnimationFrame(tick);
         return;
@@ -304,14 +311,18 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       chase = chaseFilm(chase, goalTau, dt);
       film = filmAt(score, chase.tau);
       const filmMoving = !filmSettled(chase, goalTau);
-      // The film has glided into the corner and the finder is up (or there
-      // is nothing left to wait for: the scroll's own target is short of it).
-      const filmReady = film >= Math.min(score.glide[1], filmGoal) - 1e-3;
+      focusBeat = stepFocusBeat(focusBeat, film >= score.glide[1] - 1e-3, dt);
+      // The film has glided into the corner, the finder is up and the split
+      // image has come together (or there is nothing left to wait for: the
+      // scroll's own target is short of it).
+      const filmReady = film >= Math.min(score.glide[1], filmGoal) - 1e-3 && (filmGoal < score.glide[1] - 1e-3 || focusBeat >= 1);
+      if (film >= score.beats[1].at) markSeen();
 
       // The shutter: fires going down past `fire`, back going up past `rearm`.
       const latched = shutterLatch(score, fired, p);
       if (latched !== fired) {
         fired = latched;
+        if (latched) markSeen();
         heldSince = -1;
         holdDone = !latched;
         touchJumped = false;
@@ -368,7 +379,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       // reveal) — from the moon's arrival, so its fade, dawn and first turn
       // (and the tiles they ask for) are done when the blades open on it.
       const nextFramed = fired || p >= score.beats[score.beats.length - 1].at;
-      const blading = release >= 0;
+      const blading = release >= 0 || pending >= 0;
       if (nextState !== state || nextFramed !== framed || (window.__archiveReel?.blades ?? false) !== blading || (window.__archiveReel?.fired ?? false) !== fired) {
         state = nextState;
         framed = nextFramed;
@@ -389,10 +400,10 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       show(true, !showsPage || !!shutter);
 
       clock += dt;
-      const busy = !!shutter || pending >= 0 || filmMoving || now - lastMove < 240;
+      const busy = !!shutter || pending >= 0 || filmMoving || (focusBeat > 0 && focusBeat < 1) || now - lastMove < 240;
       if (busy || now - lastDraw >= idleFrameMs - 2 || !drawn) {
         const start = performance.now();
-        renderer?.render(score, film, p, clock, target, shutter);
+        renderer?.render(score, film, p, clock, target, shutter, focusBeat);
         const cost = performance.now() - start;
         lastDraw = now;
         if (!drawn) {

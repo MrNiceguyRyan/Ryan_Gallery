@@ -243,6 +243,10 @@ html[data-reel-finder] nav[data-site-nav] {
    overlaps are gone, and the page opens at the top on the first screen, as
    it did before the reel existed. */
 html[data-reel='skip'] .intro-reel { display: none; }
+/* A reload deep in the archive: the frame stays hidden until IntroReel takes
+   over (the page's first composite is at the top, before the scroll is
+   restored — it is not the cover). */
+html[data-reel-restore] .intro-reel__frame { visibility: hidden; }
 /* The frame is a size container: its cq units place the cue in the design
    frame's own units, fitted the way the canvas is (cover). --reel-u is one
    design pixel; --reel-hole the hole's lower rim (cy + 1.05 R) from the
