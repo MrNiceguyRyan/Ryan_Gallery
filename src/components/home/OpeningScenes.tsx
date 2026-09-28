@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { RAIN_COLUMNS, rainColumns, scrambleStrip, type FoundWord, type SceneId } from '../../lib/openingFilm';
+import type { CSSProperties, ReactNode } from 'react';
+import { RAIN_COLUMNS, rainColumns, scrambleStrip, seeded, type FoundWord, type KickEase, type SceneId } from '../../lib/openingFilm';
 
 // ── The opening film's scenes ──
 // Plain markup, the same on the server and the client (no branch on the
@@ -9,16 +9,28 @@ import { RAIN_COLUMNS, rainColumns, scrambleStrip, type FoundWord, type SceneId 
 // (`.of-bl`, a zero-height inline-block sitting on the baseline) so the
 // island can measure where the word is in its sheet without reading any
 // transform. Sheets are drawn at the desktop's scale: a found word's cap
-// height is about 64 px (src/lib/openingFilm.ts, "The camera").
+// height is about 64 px (src/lib/openingFilm.ts, "The camera"). Nothing that
+// holds a found word is itself transformed at rest (layout is where the word
+// is); what moves in a scene — the dial, the lens rings, the slices, the
+// flaps — moves FROM somewhere TO its resting place (data-kick, played by
+// the island on the film's clock).
+//
+// Type as material: engraved metal, paint in the grooves of a lens ring, a
+// halftone screen, stencil paint on wood, an LED matrix, letterpress pressed
+// into card, chalk, typewriter ink bleeding into a photocopy, a two-colour
+// print a hair out of register. Faces: ours and web-safe / system stacks
+// (Copperplate, Impact, DIN Condensed, SuperClarendon, Chalkduster, American
+// Typewriter, Didot…, each with a fallback) — nothing is downloaded.
 //
 // The words are real text, never quoted from anything under copyright: the
 // dictionary is Webster's 1913 (public domain), the book is Stevenson's
 // Travels with a Donkey in the Cévennes (1879, public domain, the passage
 // as he wrote it), and the rest is written for the film. Nothing here says
 // anything about Ryan beyond "photographs / camera: Ryan Xu" and "a personal
-// archive of travel and thought". The magazine's picture page and the strip
-// of film carry his own photographs (index.astro picks them; the island
-// fetches them after the first paint), each at its own ratio.
+// archive of travel and thought". Lines new in this cut are marked PROPOSED
+// copy (awaiting the owner). The newspaper's picture and the contact sheet
+// carry his own photographs in black and white (index.astro picks them; the
+// island fetches them after the first paint), each at its own ratio.
 
 /** One of his photographs for the film: its URL (sized for the scene) and
  *  its width / height. */
@@ -37,10 +49,11 @@ function Picture({ picture, className = '' }: { picture?: OpeningPicture; classN
 /** A found word: measured by the island (its box, its baseline). `ink` is
  *  the text to measure when the span's own text is not it (the locked
  *  letters' scramble strips), or "box" to take the span's layout box (the
- *  departure board's tiles). */
-function Find({ children, word, className = '', ink }: { children: ReactNode; word: FoundWord; className?: string; ink?: string }) {
+ *  departure board's tiles, the slices' cells); `cap` gives the cap height
+ *  outright (sheet px) when the word is set in several faces at once. */
+function Find({ children, word, className = '', ink, cap }: { children: ReactNode; word: FoundWord; className?: string; ink?: string; cap?: number }) {
   return (
-    <span className={`of-find ${className}`} data-find={word} data-ink={ink}>
+    <span className={`of-find ${className}`} data-find={word} data-ink={ink} data-cap={cap}>
       {children}
       <i className="of-bl" aria-hidden="true" />
     </span>
@@ -55,10 +68,28 @@ function Scene({ id, word, children, className = '' }: { id: SceneId; word: Foun
   );
 }
 
+/** A kick: this element moves FROM `from` (a transform) to `to` (its resting
+ *  transform, none by default), `at` ms after its scene's cut, for `ms`, on
+ *  a named curve (src/lib/openingFilm.ts KICK_EASES). `op` fades it in from
+ *  that opacity over the same span. */
+function kick(from: string, at: number, ms: number, ease: KickEase = 'lock', to = 'none', op?: number) {
+  return {
+    'data-kick': '',
+    'data-from': from,
+    'data-to': to,
+    'data-at': at,
+    'data-ms': ms,
+    'data-ease': ease,
+    ...(op != null ? { 'data-op': op } : {}),
+  };
+}
+
+const vars = (v: Record<string, string | number>) => v as CSSProperties;
+
 // ── 1. Code ─────────────────────────────────────────────────────────────
 // The archive's own jargon falling down the screen, read a character at a
 // time; seven columns in the middle lock, one letter after another, into
-// ARCHIVE, and the word lifts off the rain toward the lens.
+// ARCHIVE, and the word jumps off the rain toward the lens.
 const RAIN = rainColumns();
 const LOCK = 'ARCHIVE';
 
@@ -70,12 +101,12 @@ function CodeScene() {
           <div
             key={index}
             className="of-rain__col"
-            style={{
-              ['--i' as string]: column.i,
-              ['--fall' as string]: `${column.fall.toFixed(2)}s`,
-              ['--phase' as string]: column.phase.toFixed(3),
-              ['--len' as string]: column.len,
-            }}
+            style={vars({
+              '--i': column.i,
+              '--fall': `${column.fall.toFixed(2)}s`,
+              '--phase': column.phase.toFixed(3),
+              '--len': column.len,
+            })}
           >
             <span className="of-rain__tail">{column.text.slice(0, -1)}</span>
             <span className="of-rain__head">{column.text.slice(-1)}</span>
@@ -85,12 +116,12 @@ function CodeScene() {
       <div className="of-lock" data-lock>
         <span className="of-lock__cells" aria-hidden="true">
           {LOCK.split('').map((letter, index) => (
-            <span key={index} className="of-lock__cell" style={{ ['--k' as string]: index }} />
+            <span key={index} className="of-lock__cell" style={vars({ '--k': index })} />
           ))}
         </span>
         <Find word="archive" className="of-lock__word" ink="ARCHIVE">
           {LOCK.split('').map((letter, index) => (
-            <span key={index} className="of-lock__slot" style={{ ['--k' as string]: index }}>
+            <span key={index} className="of-lock__slot" style={vars({ '--k': index })}>
               <span className="of-lock__strip">{scrambleStrip(letter, index)}</span>
               <span className="of-lock__letter">{letter}</span>
             </span>
@@ -118,7 +149,7 @@ function DictionaryScene() {
               <b>Ar&prime;chi&middot;pel&prime;a&middot;go</b>, <i>n.</i>; <i>pl.</i> <b>-goes</b>. [It. <i>arcipelago</i>.] Any sea or broad sheet of water interspersed with many islands or with a group of islands.
             </p>
             <p>
-              <b>Ar&prime;chi&middot;tect</b>, <i>n.</i> [L. <i>architectus</i>, Gr. <i>architekt&omacr;n</i> chief artificer.] <b>1.</b> A person skilled in the art of building; one who makes it his occupation to form plans and designs of buildings, and to superintend their construction. <b>2.</b> A contriver, designer, or maker.
+              <b>Ar&prime;chi&middot;tect</b>, <i>n.</i> [L. <i>architectus</i>, Gr. <i>architekt&#333;n</i> chief artificer.] <b>1.</b> A person skilled in the art of building; one who makes it his occupation to form plans and designs of buildings, and to superintend their construction. <b>2.</b> A contriver, designer, or maker.
             </p>
             <p>
               <b>Ar&prime;chi&middot;trave</b>, <i>n.</i> [F. <i>architrave</i>.] <i>(Arch.)</i> (a) The lower division of an entablature, or that part which rests immediately on the column. (b) The group of moldings, or other architectural member, above and on both sides of a door or other opening.
@@ -145,8 +176,11 @@ function DictionaryScene() {
   );
 }
 
-// ── 3. Newspaper ──────────────────────────────────────────────────────────
-function NewspaperScene() {
+// ── 3. Newspaper, in black and white ──────────────────────────────────────
+// Newsprint and one ink: a heavy condensed flag, and a halftone of one of
+// his photographs (a screen of dots, thresholded) — the drawn stand-in until
+// it arrives.
+function NewspaperScene({ picture }: { picture?: OpeningPicture }) {
   return (
     <Scene id="newspaper" word="archive">
       <div className="of-sheet of-news" data-sheet>
@@ -159,6 +193,17 @@ function NewspaperScene() {
           From the <Find word="archive">Archive</Find>
         </div>
         <div className="of-news__hed">What a drawer of negatives remembers</div>
+        <div className="of-news__fig" aria-hidden="true">
+          {/* The box takes the photograph's own ratio (never cropped). */}
+          <span className="of-news__halftone" style={picture ? { aspectRatio: String(picture.ratio) } : undefined}>
+            <span className="of-news__plate">
+              <Picture picture={picture} />
+            </span>
+            <span className="of-news__screen" />
+          </span>
+          {/* PROPOSED copy (awaiting the owner): the picture's credit line. */}
+          <span className="of-news__credit">Photograph from the archive</span>
+        </div>
         <div className="of-news__cols">
           <p>
             Every archive begins as a drawer. Somewhere between the first roll and the hundredth, the pictures stop being souvenirs and start being a record: of light on one particular afternoon, of a street that has since changed its name, of a sea that was grey the day the ferry ran late.
@@ -166,7 +211,6 @@ function NewspaperScene() {
           <p>
             Nobody sets out to keep one. The contact sheets pile up, the envelopes are labelled in pencil and then in ink, and one winter the labels are moved into a ledger with the date, the place and the frame number beside each.
           </p>
-          <div className="of-news__photo" aria-hidden="true" />
           <p>
             What such a drawer remembers is rarely what its keeper meant it to. The famous view is there, of course, and the monument; but so is the waiter who stepped into the frame, the rain on the lens, the shadow of the one holding the camera.
           </p>
@@ -179,90 +223,300 @@ function NewspaperScene() {
   );
 }
 
-// ── 4. Magazine ───────────────────────────────────────────────────────────
-// The wide shot: a whole spread lying on a table, CINEMA set across its
-// gutter — light on the picture, dark on the page (one word, one blend).
-function MagazineScene({ picture }: { picture?: OpeningPicture }) {
-  return (
-    <Scene id="magazine" word="cinema">
-      <div className="of-sheet of-mag" data-sheet>
-        <div className="of-mag__page of-mag__page--photo" aria-hidden="true">
-          <div className="of-mag__picture">
-            {picture && (
-              <span className="of-mag__plate" style={{ aspectRatio: String(picture.ratio) }}>
-                <Picture picture={picture} />
-              </span>
-            )}
-          </div>
-          <span className="of-mag__caption">The last row, before the lights go down.</span>
-          <span className="of-mag__folio of-mag__folio--left">42</span>
-        </div>
-        <div className="of-mag__page of-mag__page--text">
-          <span className="of-mag__kicker">The Picture Issue — Feature</span>
-          <span className="of-mag__deck">Twenty-four frames a second, and the one that stays.</span>
-          <div className="of-mag__body">
-            <p>
-              A film is mostly forgotten on the way home. What stays is a frame or two: a face turned to a window, a road seen through a windscreen, the exact grey of a harbour at five. The rest dissolves, and it is right that it should.
-            </p>
-            <p>
-              A photograph works the other way round. It is the one frame, chosen and kept; the film it came from, the walk and the waiting and the weather, is the part the viewer has to supply.
-            </p>
-          </div>
-          <span className="of-mag__folio of-mag__folio--right">43</span>
-        </div>
-        <div className="of-mag__giant">
-          <Find word="cinema">Cinema</Find>
-        </div>
-      </div>
-    </Scene>
-  );
-}
+// ── 4. A camera's top plate ───────────────────────────────────────────────
+// The front of a rangefinder, close: brushed chrome, the maker's word
+// engraved and filled with black paint (here the word is CAMERA: no maker's
+// name), the windows, the shutter-speed dial on top turning to its setting
+// and the lens mount below. An original drawing; no real camera's name,
+// shape or mark.
+const DIAL = ['B', '1', '2', '4', '8', '15', '30', '60', '125', '250', '500', '1000', 'B', '1', '2', '4', '8', '15', '30', '60'];
 
-// ── 5. Subtitles ──────────────────────────────────────────────────────────
-function SubtitlesScene() {
+function TopPlateScene() {
   return (
-    <Scene id="subtitles" word="cinema">
-      <div className="of-sheet of-subs" data-sheet>
-        <div className="of-subs__frame" aria-hidden="true">
-          <span className="of-subs__light of-subs__light--a" />
-          <span className="of-subs__light of-subs__light--b" />
-          <span className="of-subs__light of-subs__light--c" />
-          <span className="of-subs__light of-subs__light--d" />
-        </div>
-        <div className="of-subs__lines">
-          <span className="of-subs__line">Let&rsquo;s go to the <Find word="cinema">cinema</Find> tonight,</span>
-          <span className="of-subs__line">if only to get out of the rain.</span>
-        </div>
-      </div>
-    </Scene>
-  );
-}
-
-// ── 6. Ticket ─────────────────────────────────────────────────────────────
-function TicketScene() {
-  return (
-    <Scene id="ticket" word="cinema">
-      <div className="of-sheet of-ticket" data-sheet>
-        <div className="of-ticket__stub">
-          <span className="of-ticket__admit">Admit one</span>
-          <span className="of-ticket__no">Nº 004127</span>
-        </div>
-        <div className="of-ticket__body">
-          <span className="of-ticket__admit">Admit one · Evening</span>
-          <Find word="cinema" className="of-ticket__word">Cinema</Find>
-          <span className="of-ticket__row">
-            <span>Screen 2</span>
-            <span>Row F</span>
-            <span>Seat 12</span>
+    <Scene id="topplate" word="camera">
+      <div className="of-sheet of-top" data-sheet>
+        <div className="of-top__body">
+          <span className="of-top__rewind" aria-hidden="true" />
+          <span className="of-top__shoe" aria-hidden="true" />
+          <span className="of-top__release" aria-hidden="true" />
+          <span className="of-top__dial" aria-hidden="true">
+            <span className="of-top__dial-band" {...kick('translate3d(-420px, 0, 0)', 40, 300, 'lock')}>
+              {DIAL.map((v, i) => (
+                <span key={i} className="of-top__dial-n">
+                  {v}
+                </span>
+              ))}
+            </span>
+            <span className="of-top__dial-knurl" {...kick('translate3d(-420px, 0, 0)', 40, 300, 'lock')} />
+            <span className="of-top__dial-shade" />
           </span>
-          <span className="of-ticket__fine">Keep this ticket. Not valid for re-entry.</span>
+          <div className="of-top__plate">
+            <span className="of-top__window of-top__window--vf" aria-hidden="true" />
+            <span className="of-top__window of-top__window--frame" aria-hidden="true" />
+            <span className="of-top__window of-top__window--rf" aria-hidden="true" />
+            <Find word="camera" className="of-top__name">CAMERA</Find>
+            <span className="of-top__serial" aria-hidden="true">No 1048226</span>
+          </div>
+          <div className="of-top__leather" aria-hidden="true" />
+          {/* The lens stands out of the body toward the camera (depth: it
+              moves against the plate as the camera swings in). */}
+          <span className="of-top__mount" aria-hidden="true">
+            <span className="of-top__mount-ring" />
+            <span className="of-top__mount-scale">16&ensp;11&ensp;8&ensp;4&ensp;|&ensp;4&ensp;8&ensp;11&ensp;16</span>
+          </span>
         </div>
       </div>
     </Scene>
   );
 }
 
-// ── 7. Book (Stevenson, Travels with a Donkey in the Cévennes, 1879) ─────
+// ── 5. The lens, its rings ────────────────────────────────────────────────
+// A lens stood on its mount, the camera close on its barrel: rings of black
+// anodised metal with their scales in white paint, the type WRAPPED ROUND
+// THE CYLINDER (flat plates at their angles in 3D, turning about the
+// barrel's axis). On the beat the name ring turns CAMERA round to the front
+// and locks; the aperture and focus rings tick the other way. PROPOSED (the
+// owner may give his own): the engraved figures here and on the top plate —
+// 1:2, f = 50 mm, the serial numbers — are the drawing's, not a claim about
+// the camera he uses.
+const R = 720;
+function Ring({ className, plates, from, at = 0, ms = 260, ease = 'lock' as KickEase }: { className: string; plates: { a: number; text: ReactNode; find?: boolean; cls?: string }[]; from: number; at?: number; ms?: number; ease?: KickEase }) {
+  return (
+    <div className={`of-ring ${className}`}>
+      <div className="of-ring__turn" {...kick(`translateZ(-${R}px) rotateY(${from}deg)`, at, ms, ease, `translateZ(-${R}px) rotateY(0deg)`)}>
+        {plates.map((p, i) => (
+          // The found word's plate spans the barrel (its layout is where it
+          // rests); the others are as wide as their type, turned about the
+          // axis from their own middle (less to draw as the ring turns).
+          <span
+            key={i}
+            className={`of-ring__plate${p.find ? '' : ' of-ring__plate--tight'} ${p.cls ?? ''}`}
+            style={{ transform: p.find ? `rotateY(${p.a}deg) translateZ(${R}px)` : `rotateY(${p.a}deg) translateZ(${R}px) translateX(-50%)` }}
+          >
+            {p.find ? <Find word="camera" className="of-lens__name">{p.text}</Find> : p.text}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LensScene() {
+  return (
+    <Scene id="lens" word="camera">
+      <div className="of-sheet of-lens" data-sheet>
+        <div className="of-lens__barrel">
+          <span className="of-lens__band of-lens__band--lip" aria-hidden="true" />
+          <div className="of-lens__band of-lens__band--name">
+            <Ring
+              className="of-ring--name"
+              from={-118}
+              plates={[
+                { a: -62, text: '⌀ 46' },
+                { a: -34, text: '1:2' },
+                { a: 0, text: 'CAMERA', find: true },
+                { a: 34, text: 'f = 50 mm' },
+                { a: 64, text: 'No 2618004' },
+                { a: 100, text: '1:2' },
+                { a: 136, text: 'f = 50 mm' },
+                { a: 172, text: '\u2300 46' },
+              ]}
+            />
+            <span className="of-lens__shade" aria-hidden="true" />
+          </div>
+          <div className="of-lens__band of-lens__band--aperture" aria-hidden="true">
+            <span className="of-lens__knurl" {...kick('translate3d(180px, 0, 0)', 0, 260, 'lock')} />
+            <Ring
+              className="of-ring--aperture"
+              from={26}
+              plates={['2', '2.8', '4', '5.6', '8', '11', '16'].map((text, i) => ({ a: (i - 3) * 13, text, cls: i === 3 ? 'is-set' : '' }))}
+            />
+            <span className="of-lens__shade" />
+          </div>
+          <div className="of-lens__band of-lens__band--dof" aria-hidden="true">
+            <span className="of-lens__dof">
+              <span>16</span>
+              <span>11</span>
+              <span>8</span>
+              <span>4</span>
+              <span className="of-lens__index" />
+              <span>4</span>
+              <span>8</span>
+              <span>11</span>
+              <span>16</span>
+            </span>
+            <span className="of-lens__shade" />
+          </div>
+          <div className="of-lens__band of-lens__band--focus" aria-hidden="true">
+            <Ring
+              className="of-ring--focus"
+              from={-34}
+              ms={300}
+              plates={['∞', '10', '5', '3', '2', '1.5', '1.2', '1', '.9', '.8', '.7'].map((text, i) => ({ a: (i - 4) * 11, text }))}
+            />
+            <span className="of-lens__knurl of-lens__knurl--grip" {...kick('translate3d(-240px, 0, 0)', 0, 300, 'lock')} />
+            <span className="of-lens__shade" />
+          </div>
+        </div>
+      </div>
+    </Scene>
+  );
+}
+
+// ── 6. Slices ─────────────────────────────────────────────────────────────
+// The frame cut into strips of six materials — chrome, newsprint, crate
+// wood, an LED panel, letterpress card, a blackboard — and CAMERA set across
+// six of them, one letter per strip, each letter in its strip's own face and
+// finish. On the beat the strips slam in from above and below, the word's
+// first, and lock.
+const PITCH = 96;
+type Material = 'chrome' | 'news' | 'wood' | 'led' | 'card' | 'board' | 'steel' | 'film';
+const SLICE_WORD: { letter: string; material: Material }[] = [
+  { letter: 'C', material: 'chrome' },
+  { letter: 'A', material: 'news' },
+  { letter: 'M', material: 'wood' },
+  { letter: 'E', material: 'led' },
+  { letter: 'R', material: 'card' },
+  { letter: 'A', material: 'board' },
+];
+// The strips either side of the word: mostly dark stock (the shot stays in
+// the dark block of the grade), a light one now and then.
+const SLICE_OUTER_CYCLE: Material[] = ['steel', 'led', 'film', 'board', 'news', 'steel', 'wood', 'film', 'led', 'board', 'card', 'film'];
+const SLICE_OUTER = 12;
+/** Every strip: its index from the word's first (negative to the left), its
+ *  material, and when and from where it slams in. */
+const SLICES = Array.from({ length: SLICE_OUTER * 2 + 6 }, (_, n) => {
+  const j = n - SLICE_OUTER;
+  const inWord = j >= 0 && j < 6;
+  const material: Material = inWord ? SLICE_WORD[j].material : SLICE_OUTER_CYCLE[(j + 24) % SLICE_OUTER_CYCLE.length];
+  const reach = Math.abs(j - 2.5);
+  const at = inWord ? Math.round(reach * 10) : Math.round(30 + reach * 9);
+  const up = n % 2 === 0;
+  // The outer strips rest a little out of line (a cut-up); the word's are
+  // true to one baseline.
+  const rand = seeded(7000 + n);
+  const rest = inWord ? 0 : Math.round((rand() - 0.5) * 90);
+  // How far it slams from: past the frame's edge for the word's strips, a
+  // ragged part of the way for the rest (the cut opens on a broken frame).
+  const reachPx = inWord ? 900 : Math.round(600 + rand() * 600);
+  return { j, n, inWord, material, at, up, rest, reachPx };
+});
+const NEWS_TEXT =
+  'Every archive begins as a drawer. The contact sheets pile up, the envelopes are labelled in pencil and then in ink. Read in order, the frames make a route; read out of order, something closer to a mind. ';
+
+/** What a strip carries besides its stock (the word's strips carry nothing
+ *  near the word). */
+function SliceBody({ material, n, inWord }: { material: Material; n: number; inWord: boolean }) {
+  switch (material) {
+    case 'news':
+      return <span className={`of-slice__news${inWord ? ' is-short' : ''}`}>{NEWS_TEXT.repeat(inWord ? 1 : 3)}</span>;
+    case 'led':
+      return <span className="of-slice__dots" />;
+    case 'card':
+      return inWord ? null : <span className="of-slice__big">{'&R3'[n % 3]}</span>;
+    case 'board':
+      return inWord ? null : <span className="of-slice__chalk">{['1/125', 'f/8', '36'][n % 3]}</span>;
+    case 'wood':
+      return inWord ? null : <span className="of-slice__stencil">{['07', 'UP', '35'][n % 3]}</span>;
+    case 'film':
+      return <span className="of-slice__perfs" />;
+    case 'steel':
+    case 'chrome':
+      return inWord ? null : <span className="of-slice__screw" />;
+    default:
+      return null;
+  }
+}
+
+function SlicesScene() {
+  return (
+    <Scene id="slices" word="camera">
+      <div className="of-sheet of-slices" data-sheet>
+        {SLICES.map((s) => (
+          <span
+            key={s.n}
+            className={`of-slice of-slice--${s.material}${s.inWord ? ' is-word' : ''}`}
+            style={{ left: `${1012 + s.j * PITCH}px`, top: `${s.rest}px` }}
+            {...kick(`translate3d(0, ${s.up ? -s.reachPx : s.reachPx}px, 0)`, s.at, 150, 'whip')}
+          >
+            <SliceBody material={s.material} n={s.n} inWord={s.inWord} />
+          </span>
+        ))}
+        <span className="of-slices__shade" aria-hidden="true" />
+        <Find word="camera" className="of-slices__word" ink="box" cap={64}>
+          {SLICE_WORD.map((cell, j) => {
+            const s = SLICES[SLICE_OUTER + j];
+            return (
+              <span key={j} className={`of-slices__cell of-slices__cell--${cell.material}`} {...kick(`translate3d(0, ${s.up ? -s.reachPx : s.reachPx}px, 0)`, s.at, 150, 'whip')}>
+                <span className="of-slices__letter">{cell.letter}</span>
+              </span>
+            );
+          })}
+        </Find>
+      </div>
+    </Scene>
+  );
+}
+
+// ── 7. Departure board ────────────────────────────────────────────────────
+const BOARD_ROWS = [
+  ['08:15', 'MIAMI', '04', 'ON TIME'],
+  ['08:40', 'ORLANDO', '07', 'BOARDING'],
+  ['09:05', 'PAGE AZ', '02', 'ON TIME'],
+  ['09:30', 'ZION', '11', 'DELAYED'],
+  ['10:10', 'BRYCE', '03', 'ON TIME'],
+  ['10:45', 'NEW YORK', '01', 'GATE OPEN'],
+] as const;
+const BOARD_COLS = [5, 10, 2, 9] as const;
+
+function Flaps({ text, width, row }: { text: string; width: number; row: number }) {
+  const cells = text.padEnd(width, ' ').slice(0, width).split('');
+  return (
+    <span className="of-flaps">
+      {cells.map((ch, index) => (
+        <span key={index} className="of-flap">
+          {ch === ' ' ? ' ' : ch}
+          {row === 1 && ch !== ' ' && <span className="of-flap__leaf" {...kick('scaleY(0.04)', 90 + index * 22, 150, 'fall')}><span>{ch}</span></span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function BoardScene() {
+  return (
+    <Scene id="board" word="travel">
+      <div className="of-sheet of-board" data-sheet>
+        <div className="of-board__title">
+          <Find word="travel" className="of-board__word" ink="box">
+            {'TRAVEL'.split('').map((ch, index) => (
+              <span key={index} className="of-flap of-flap--big">
+                <span className="of-flap__top">
+                  <span>{ch}</span>
+                </span>
+                <span className="of-flap__leaf" {...kick('scaleY(0.04)', 16 + index * 18, 100, 'fall')}>
+                  <span>{ch}</span>
+                </span>
+              </span>
+            ))}
+          </Find>
+          <span className="of-board__label">Departures · Abfahrt · Départs</span>
+        </div>
+        <div className="of-board__rows" aria-hidden="true">
+          {BOARD_ROWS.map((row, r) => (
+            <div key={r} className="of-board__row">
+              {row.map((cell, c) => (
+                <Flaps key={c} text={cell} width={BOARD_COLS[c]} row={r} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Scene>
+  );
+}
+
+// ── 8. Book (Stevenson, Travels with a Donkey in the Cévennes, 1879) ─────
 function BookScene() {
   // Set line by line (each justified to the measure), so the found word
   // falls mid-line; the lines away from it are out of focus.
@@ -285,121 +539,89 @@ function BookScene() {
   );
 }
 
-// ── 8. Departure board ────────────────────────────────────────────────────
-const BOARD_ROWS = [
-  ['08:15', 'MIAMI', '04', 'ON TIME'],
-  ['08:40', 'ORLANDO', '07', 'BOARDING'],
-  ['09:05', 'PAGE AZ', '02', 'ON TIME'],
-  ['09:30', 'ZION', '11', 'DELAYED'],
-  ['10:10', 'BRYCE', '03', 'ON TIME'],
-  ['10:45', 'NEW YORK', '01', 'GATE OPEN'],
-] as const;
-const BOARD_COLS = [5, 10, 2, 9] as const;
-
-function Flaps({ text, width, className = '' }: { text: string; width: number; className?: string }) {
-  const cells = text.padEnd(width, ' ').slice(0, width).split('');
+// ── 9. A telegram, typed, then photocopied ───────────────────────────────
+// Black and white: the printed form, the typewriter's letters each struck a
+// little harder or softer, a little high or low, the ink bled into the
+// paper, and the copier's toner and dark edge over all of it.
+function Typed({ text, seed }: { text: string; seed: number }) {
+  const rand = seeded(seed);
   return (
-    <span className={`of-flaps ${className}`}>
-      {cells.map((ch, index) => (
-        <span key={index} className="of-flap">
-          {ch === ' ' ? ' ' : ch}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function BoardScene() {
-  return (
-    <Scene id="board" word="travel">
-      <div className="of-sheet of-board" data-sheet>
-        <div className="of-board__title">
-          <Find word="travel" className="of-board__word" ink="box">
-            {'TRAVEL'.split('').map((ch, index) => (
-              <span key={index} className="of-flap of-flap--big">{ch}</span>
-            ))}
-          </Find>
-          <span className="of-board__label">Departures · Abfahrt · Départs</span>
-        </div>
-        <div className="of-board__rows" aria-hidden="true">
-          {BOARD_ROWS.map((row, r) => (
-            <div key={r} className="of-board__row" style={{ ['--r' as string]: r }}>
-              {row.map((cell, c) => (
-                <Flaps key={c} text={cell} width={BOARD_COLS[c]} />
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </Scene>
-  );
-}
-
-// ── 9. Telegram ───────────────────────────────────────────────────────────
-function TelegramScene() {
-  return (
-    <Scene id="telegram" word="thought">
-      <div className="of-sheet of-wire" data-sheet>
-        <div className="of-wire__head">
-          <span className="of-wire__title">Telegram</span>
-          <span className="of-wire__field">Received at 16.40</span>
-          <span className="of-wire__field">Words 17</span>
-        </div>
-        <div className="of-wire__tapes">
-          <span className="of-wire__tape">ARRIVED STOP LIGHT HOLDING STOP</span>
-          <span className="of-wire__tape">
-            <Find word="thought">THOUGHT</Find> OF THE SEA ALL DAY STOP
+    <>
+      {text.split('').map((ch, i) => {
+        const ink = 0.84 + rand() * 0.16;
+        const lift = (rand() - 0.5) * 3.2;
+        return ch === ' ' ? (
+          ' '
+        ) : (
+          <span key={i} className="of-typed" style={vars({ '--ink': ink.toFixed(2), '--lift': `${lift.toFixed(1)}px` })}>
+            {ch}
           </span>
-          <span className="of-wire__tape">MORE FILM TOMORROW STOP</span>
+        );
+      })}
+    </>
+  );
+}
+
+function TypewriterScene() {
+  return (
+    <Scene id="typewriter" word="thought">
+      <div className="of-sheet of-type" data-sheet>
+        <span className="of-type__edge" aria-hidden="true" />
+        <div className="of-type__head" aria-hidden="true">
+          <span className="of-type__title">Telegram</span>
+          <span className="of-type__field">Received at 16.40</span>
+          <span className="of-type__field">Words 17</span>
         </div>
-        <div className="of-wire__rules" aria-hidden="true" />
-      </div>
-    </Scene>
-  );
-}
-
-// ── 10. Notebook ──────────────────────────────────────────────────────────
-function NotebookScene() {
-  return (
-    <Scene id="notebook" word="thought">
-      <div className="of-sheet of-note" data-sheet>
-        <span className="of-note__margin" aria-hidden="true" />
-        <p className="of-note__text">
-          <span className="of-note__line of-note__line--soft">tuesday — the ferry late again, the light good.</span>
-          <span className="of-note__line">a <Find word="thought">thought</Find>, written down,</span>
-          <span className="of-note__line">is a place you can go back to.</span>
-          <span className="of-note__line of-note__line--soft">(frame 14: the rope, not the boat)</span>
-        </p>
-      </div>
-    </Scene>
-  );
-}
-
-// ── 11. Library catalogue card ────────────────────────────────────────────
-function CatalogueScene() {
-  return (
-    <Scene id="catalogue" word="ryanxu">
-      <div className="of-sheet of-card" data-sheet>
-        <span className="of-card__rule" aria-hidden="true" />
-        <div className="of-card__text">
-          <span className="of-card__call">TR<br />790<br />.X8</span>
-          <span className="of-card__lines">
-            <span className="of-card__line">Xu, Ryan.</span>
-            <span className="of-card__line of-card__line--in">A personal archive of travel</span>
-            <span className="of-card__line of-card__line--in">and thought / photographs,</span>
-            {/* The statement of responsibility names him in reading order:
-                the cut to the film's edge print lines up letter for letter. */}
-            <span className="of-card__line of-card__line--in"><Find word="ryanxu">Ryan Xu</Find>.</span>
-            <span className="of-card__line of-card__line--in of-card__line--gap">1. Travel photography. I. Title.</span>
+        <div className="of-type__lines">
+          <span className="of-type__line">
+            <Typed text="ARRIVED STOP LIGHT HOLDING STOP" seed={31} />
+          </span>
+          <span className="of-type__line">
+            <Find word="thought">
+              <Typed text="THOUGHT" seed={47} />
+            </Find>{' '}
+            <Typed text="OF THE SEA ALL DAY STOP" seed={53} />
+          </span>
+          <span className="of-type__line">
+            <Typed text="MORE FILM TOMORROW STOP" seed={71} />
           </span>
         </div>
-        <span className="of-card__hole" aria-hidden="true" />
+        <span className="of-type__toner" aria-hidden="true" />
       </div>
     </Scene>
   );
 }
 
-// ── 12. The edge of a strip of film ───────────────────────────────────────
+// ── 10. A letterpress poster ──────────────────────────────────────────────
+// Wood type of several faces pressed into thick card, two inks (black and a
+// red) a hair out of register, and the notebook's line set as a broadside.
+function PosterScene() {
+  return (
+    <Scene id="poster" word="thought">
+      <div className="of-sheet of-poster" data-sheet>
+        {/* The red A is a layer of its own: it arrives slower than the page
+            (a depth behind the black). */}
+        <span className="of-poster__giant" aria-hidden="true" {...kick('scale(1.32)', 0, 300, 'lock')}>A</span>
+        <span className="of-poster__rule of-poster__rule--top" aria-hidden="true" />
+        <div className="of-poster__set">
+          <span className="of-poster__l of-poster__l--1">
+            <span className="of-poster__a">a</span> <Find word="thought" className="of-poster__word">Thought</Find>,
+          </span>
+          <span className="of-poster__l of-poster__l--2">Written down,</span>
+          <span className="of-poster__l of-poster__l--3">is a place</span>
+          <span className="of-poster__l of-poster__l--4">you can go</span>
+          <span className="of-poster__l of-poster__l--5">back to.</span>
+        </div>
+        <span className="of-poster__rule of-poster__rule--bottom" aria-hidden="true" />
+        <span className="of-poster__stars" aria-hidden="true">&#9733;&emsp;&#9733;&emsp;&#9733;</span>
+      </div>
+    </Scene>
+  );
+}
+
+// ── 11. The edge of a strip of film, on a contact sheet ───────────────────
+// A black-and-white contact print: the strip's rebate with its edge print
+// and frame numbers, his frames in black and white, a china-marker circle.
 const PERFS = Array.from({ length: 18 }, (_, index) => <i key={index} />);
 
 function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undefined)[] }) {
@@ -430,14 +652,22 @@ function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undef
               );
             })}
           </div>
+          <div className="of-film__numbers" aria-hidden="true">
+            <span>23</span>
+            <span>24</span>
+            <span>25</span>
+          </div>
           <div className="of-film__perfs of-film__perfs--bottom" aria-hidden="true">{PERFS}</div>
         </div>
+        <svg className="of-film__mark" viewBox="0 0 400 260" aria-hidden="true">
+          <path d="M40 150 C 30 60, 170 18, 280 34 S 392 120, 360 190 S 190 262, 96 236 S 22 190, 58 118" pathLength="1" />
+        </svg>
       </div>
     </Scene>
   );
 }
 
-// ── 13. The clapperboard ──────────────────────────────────────────────────
+// ── 12. The clapperboard ──────────────────────────────────────────────────
 // It carries every word the film found. RYAN XU is where the last run held
 // it; the line under it is the first screen's own line, and its found words
 // are chalked under before the sticks come down. The O of THOUGHT is a true
@@ -475,7 +705,7 @@ function SlateScene() {
               <span className="of-slate__found" data-fly="travel">TRAVEL<Chalk /></span>{' '}
               AND{' '}
               <span className="of-slate__found" data-fly="thought">
-                TH<span className="of-slate__o" data-portal-o><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
+                TH<span className="of-slate__o" data-portal-o><span className="of-slate__o-ch">O</span><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
               </span>
             </span>
           </div>
@@ -497,21 +727,21 @@ function SlateScene() {
 }
 
 /** Every scene, in no particular order (the island's schedule orders them).
- *  `pictures`: his photographs, the magazine's first, then the film's. */
+ *  `pictures`: his photographs, the newspaper's first, then the contact
+ *  sheet's. */
 export default function OpeningScenes({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   return (
     <>
       <CodeScene />
       <DictionaryScene />
-      <NewspaperScene />
-      <MagazineScene picture={pictures[0]} />
-      <SubtitlesScene />
-      <TicketScene />
-      <BookScene />
+      <NewspaperScene picture={pictures[0]} />
+      <TopPlateScene />
+      <LensScene />
+      <SlicesScene />
       <BoardScene />
-      <TelegramScene />
-      <NotebookScene />
-      <CatalogueScene />
+      <BookScene />
+      <TypewriterScene />
+      <PosterScene />
       <ContactScene pictures={[pictures[1], pictures[2], pictures[3]]} />
       <SlateScene />
     </>

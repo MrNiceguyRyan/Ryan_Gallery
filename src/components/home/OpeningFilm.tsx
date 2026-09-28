@@ -2,27 +2,34 @@ import { useEffect, useRef } from 'react';
 import OpeningScenes from './OpeningScenes';
 import {
   CODE_BEATS,
+  ENTRANCES,
+  ENTRANCE_SAMPLES,
   FF_RATE,
   FF_TAIL,
   FILM_DESKTOP,
   FILM_PHONE,
   GLOBE_WAIT_MS,
+  INPUT_POLICY,
+  KICK_EASES,
   LANDING_A,
   LANDING_B,
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
   RAIN_DIM,
   LIFT_EASE,
+  SCENE_TONE,
   STILL,
   cameraFor,
   cameraTransform,
   clamp01,
   codeFinderKeys,
   cutSchedule,
+  entranceAt,
   fastForwardTarget,
   filmLength,
   finderBox,
   finderLookFrom,
+  finderStrength,
   finderTrack,
   flightFor,
   flightPath,
@@ -37,13 +44,17 @@ import {
   ruleFor,
   runProgress,
   segment,
+  sheetTransform,
   slateBeats,
+  streakAt,
   type Anchor,
   type Box,
   type Camera,
   type Cut,
+  type FilmInput,
   type FinderKey,
   type FinderLook,
+  type KickEase,
   type Landing,
   type OpeningDetail,
   type OpeningState,
@@ -62,9 +73,12 @@ const EASES = {
   linear: 'linear',
 } as const;
 // The finder's curves: the hunt between words lands on the house arrive curve
-// too (fast off the mark, so a late, short cut is spent on its word).
-const FINDER_EASES = { arrive: EASES.arrive, travel: EASES.arrive, linear: 'linear' } as const;
-// The word lifting off the rain toward the lens: slow to leave, soft to land.
+// too (fast off the mark, so a late, short cut is spent on its word); while
+// it waits for a shot to land it holds.
+const FINDER_EASES = { arrive: EASES.arrive, travel: EASES.arrive, hold: 'linear', linear: 'linear' } as const;
+// A scene's kicks, on their named curves.
+const KICK_CSS = Object.fromEntries(Object.entries(KICK_EASES).map(([name, curve]) => [name, bezier(curve)])) as Record<KickEase, string>;
+// The word jumping off the rain toward the lens: off at once, braked hard.
 const LIFT_CSS = bezier(LIFT_EASE);
 // The two faces' shared width across landing A's morph: one curve for both.
 const MORPH_EASE = 'cubic-bezier(0.45, 0, 0.55, 1)';
@@ -72,9 +86,6 @@ const MORPH_EASE = 'cubic-bezier(0.45, 0, 0.55, 1)';
 const FINDER_PAD = { desktop: 16, phone: 10 } as const;
 // The rule is drawn 100 px long and scaled to the word (a transform only).
 const RULE_UNIT = 100;
-// Keys that scroll a page: held (and taken as the reader's hurry) while the
-// film plays.
-const SCROLL_KEYS = new Set([' ', 'Spacebar', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End']);
 
 interface Measured {
   /** The word's centre and cap height in its sheet (sheet px). */
@@ -142,6 +153,13 @@ function measureFind(find: HTMLElement, container: HTMLElement): Measured {
   const inkText = find.dataset.ink;
   const text = inkText && inkText !== 'box' ? inkText : (find.textContent || '').trim();
   const ink = inkOf(find, text);
+  if (inkText === 'box' && find.dataset.cap) {
+    // A word set in several faces at once (the slices): its cells' box across,
+    // its baseline from the probe, its cap height given.
+    const cap = Number(find.dataset.cap) || 64;
+    const box = { x: at.x, y: baseline - cap, w: find.offsetWidth, h: cap };
+    return { anchor: { x: box.x + box.w / 2, y: baseline - cap / 2, cap }, ink: box, cap: box };
+  }
   if (inkText === 'box') {
     const box = { x: at.x, y: at.y, w: find.offsetWidth, h: find.offsetHeight };
     // The tiles' own letters give the size to match.
@@ -188,9 +206,13 @@ const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 *
  * any script). Once this island is up, the rest of the film is WAAPI on
  * transforms and opacity — the compositor plays it, so the page's own
  * hydration and the map's start-up behind it cannot stutter it — timed
- * from the same start as the CSS. The page's scroll is held (body
- * overflow: clip, the one lock the sticky atlas survives) and any wheel,
- * touch, key or click fast-forwards to the clapperboard and the landing.
+ * from the same start as the CSS. Every shot cuts in hard and makes one
+ * short move (its entrance: a transform on its sheet about the found word,
+ * sampled into keyframes) and its own kicks (the dial, the rings, the
+ * slices, the flaps), then holds. The page's scroll is held (body overflow:
+ * clip, the one lock the sticky atlas survives); a wheel, a touch, a key or
+ * a click does nothing else — only the Skip pill skips, to the clapperboard
+ * and the landing.
  *
  * It plays once a tab session (src/lib/reelVisit.ts decides before the first
  * paint: html[data-opening] present means it plays).
@@ -229,7 +251,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     let state: OpeningState = 'film';
     let globe = false;
     let phase: 'film' | 'landing' | 'done' = 'film';
-    // The reader asked to hurry: the landing plays at FF_RATE.
+    // The reader pressed Skip: the landing plays at FF_RATE.
     let hurried = false;
     // Landing A's globe keeps its rise after the page is handed over.
     let globeSettle = 0;
@@ -318,31 +340,43 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       flightLayer.replaceChildren();
     };
 
-    // ── Input: the reader's hurry ──
-    let onHurry: () => void = () => {};
-    const hurry = () => onHurry();
+    // ── Input: only the Skip pill skips ──
+    // (src/lib/openingFilm.ts INPUT_POLICY.) A wheel, a drag or a scrolling
+    // key is held — the page must not scroll under the film — and that is
+    // all; a click anywhere but the pill does nothing. The pill is a real
+    // button: Tab reaches it, and Enter and Space press it.
+    let onSkipFilm: () => void = () => {};
+    const input = (source: FilmInput) => {
+      if (INPUT_POLICY[source] === 'skip') onSkipFilm();
+    };
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopImmediatePropagation();
-      hurry();
+      input('wheel');
     };
     const onTouchMove = (event: TouchEvent) => {
       event.preventDefault();
       event.stopImmediatePropagation();
-    };
-    const onTouchStart = () => hurry();
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') return;
-      hurry();
+      input('touch');
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      // The browser's own keys (shortcuts, F-keys) and Tab (to reach the
+      // pill) are left alone.
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (SCROLL_KEYS.has(event.key)) event.preventDefault();
-      hurry();
+      if (event.key === 'Tab' || /^F\d{1,2}$/.test(event.key)) return;
+      // The pill's own keys press it (at once, on the key going down).
+      if (event.target === skip && (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar')) {
+        event.preventDefault();
+        input('skip');
+        return;
+      }
+      // Anything else does nothing — no scroll, no default action at all.
+      event.preventDefault();
+      input('key');
     };
     const onSkip = (event: MouseEvent) => {
       event.preventDefault();
-      hurry();
+      input('skip');
     };
     let inputAttached = false;
     const attachInput = () => {
@@ -350,8 +384,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       inputAttached = true;
       window.addEventListener('wheel', onWheel, { capture: true, passive: false });
       window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
-      window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
-      window.addEventListener('pointerdown', onPointerDown, { capture: true });
       window.addEventListener('keydown', onKeyDown, { capture: true });
       skip.addEventListener('click', onSkip);
     };
@@ -360,8 +392,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       inputAttached = false;
       window.removeEventListener('wheel', onWheel, { capture: true });
       window.removeEventListener('touchmove', onTouchMove, { capture: true });
-      window.removeEventListener('touchstart', onTouchStart, { capture: true });
-      window.removeEventListener('pointerdown', onPointerDown, { capture: true });
       window.removeEventListener('keydown', onKeyDown, { capture: true });
       skip.removeEventListener('click', onSkip);
     };
@@ -383,7 +413,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         overlay.style.opacity = '0';
         later(finish, STILL.fade + 40);
       };
-      onHurry = fade;
+      onSkipFilm = fade;
       later(fade, STILL.hold);
       return () => {
         disposed = true;
@@ -492,7 +522,15 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         else scene.style.visibility = '';
       });
 
-      // ── Cuts and cameras ──
+      // ── Cuts, cameras, entrances and kicks ──
+      // Every cut is hard (opacity steps on the frame). Each shot's sheet
+      // carries its camera and, on top of it, its entrance about the found
+      // word (sampled, so the curve is the entrance's own and the camera's
+      // push stays exact under it); a whip adds a streak plate; a rack focus a
+      // blur; and the scene's own kicks play on the same clock.
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const whips: Cut[] = [];
       rigs.forEach((rig, i) => {
         const { cut } = rig;
         const last = i === rigs.length - 1;
@@ -505,16 +543,69 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           else opacity.push({ offset: at(cut.end), opacity: 1 }, { offset: at(cut.end), opacity: 0 }, { offset: 1, opacity: 0 });
         }
         play(rig.scene, opacity);
-        if (i === 0 || !rig.sheet) return;
-        const a = camAt(i, cut.start);
-        const b = camAt(i, cut.end);
-        if (!a || !b) return;
-        play(rig.sheet, [
-          { offset: 0, transform: cameraTransform(a) },
-          { offset: at(cut.start), transform: cameraTransform(a) },
-          { offset: at(cut.end), transform: cameraTransform(b) },
-          { offset: 1, transform: cameraTransform(b) },
-        ]);
+
+        // The scene's own life: each kick FROM its transform TO its rest.
+        rig.scene.querySelectorAll<HTMLElement>('[data-kick]').forEach((el) => {
+          const d = el.dataset;
+          const from = d.from || 'none';
+          const to = d.to || 'none';
+          const t1 = cut.start + (Number(d.at) || 0);
+          const t2 = t1 + (Number(d.ms) || 200);
+          const ease = KICK_CSS[(d.ease ?? 'lock') as KickEase] ?? KICK_CSS.lock;
+          const op = d.op != null && d.op !== '' ? Number(d.op) : null;
+          const frame = (offset: number, transform: string, o: number | null, easing?: string): Keyframe => ({
+            offset,
+            transform,
+            ...(o != null ? { opacity: o } : {}),
+            ...(easing ? { easing } : {}),
+          });
+          play(el, [frame(0, from, op), frame(at(t1), from, op, ease), frame(at(t2), to, op != null ? 1 : null), frame(1, to, op != null ? 1 : null)]);
+        });
+
+        if (i === 0 || !rig.sheet || !rig.measured) return;
+        const entrance = ENTRANCES[cut.id];
+        // The entrance turns about where the word comes to rest.
+        const f = focusAt(cuts, i, cut.start + entrance.ms, vw, vh, phone(), geometry.archiveFocus);
+        rig.scene.style.perspectiveOrigin = `${f[0].toFixed(1)}px ${f[1].toFixed(1)}px`;
+        // Only a swing turns in depth; the other shots stay flat (a flat
+        // sheet needs no surface of its own to be drawn through).
+        const depth = !!(entrance.rx || entrance.ry);
+        const sheetAt = (t: number, u: number) => sheetTransform(camAt(i, t)!, entranceAt(entrance, u, vw, vh), f, depth);
+        const frames: Keyframe[] = [{ offset: 0, transform: sheetAt(cut.start, 0) }];
+        const blur: Keyframe[] = [];
+        if (entrance.ms > 0) {
+          for (let k = 0; k <= ENTRANCE_SAMPLES; k += 1) {
+            const u = k / ENTRANCE_SAMPLES;
+            const t = cut.start + entrance.ms * u;
+            frames.push({ offset: at(t), transform: sheetAt(t, u) });
+            if (entrance.blur) blur.push({ offset: at(t), filter: `blur(${entranceAt(entrance, u, vw, vh).blur.toFixed(2)}px)` });
+          }
+        }
+        frames.push({ offset: at(cut.end), transform: sheetAt(cut.end, 1) }, { offset: 1, transform: sheetAt(cut.end, 1) });
+        play(rig.sheet, frames);
+        if (blur.length) {
+          play(rig.sheet, [{ offset: 0, filter: 'blur(0px)' }, { offset: at(cut.start), filter: 'blur(0px)' }, ...blur, { offset: 1, filter: 'blur(0px)' }]);
+        }
+        if (entrance.kind === 'whip') whips.push(cut);
+      });
+
+      // The whips' motion blur: a streak plate in the incoming shot's tone,
+      // as dense as the move is fast.
+      overlay.querySelectorAll<HTMLElement>('[data-whip]').forEach((plate) => {
+        const tone = plate.dataset.whip;
+        const mine = whips.filter((cut) => SCENE_TONE[cut.id] === tone);
+        if (!mine.length) return;
+        const frames: Keyframe[] = [{ offset: 0, opacity: 0 }];
+        mine.forEach((cut) => {
+          const entrance = ENTRANCES[cut.id];
+          frames.push({ offset: at(cut.start), opacity: 0 });
+          for (let k = 0; k <= ENTRANCE_SAMPLES; k += 1) {
+            const u = k / ENTRANCE_SAMPLES;
+            frames.push({ offset: at(cut.start + entrance.ms * u), opacity: k === ENTRANCE_SAMPLES ? 0 : streakAt(u) });
+          }
+        });
+        frames.push({ offset: 1, opacity: 0 });
+        play(plate, frames);
       });
 
       // ── Scene one: the word lifts off the rain; the rain dims and pushes ──
@@ -610,6 +701,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         { offset: at(finderFrom + 140), opacity: 1 },
         { offset: 1, opacity: 1 },
       ]);
+      // Dim while a shot moves, full once it locks on.
+      const strength: Keyframe[] = [{ offset: 0, opacity: 1 }, ...finderStrength(cuts).map((k) => ({ offset: at(k.t), opacity: k.o })), { offset: 1, opacity: 1 }];
+      Array.from(finder.children).forEach((mark) => play(mark, strength.map((k) => ({ ...k }))));
 
       // ── The clapperboard's own life ──
       const slate = rigs[rigs.length - 1];
@@ -658,6 +752,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       later(startLanding, end - t);
     };
 
+    // The Skip pill: to the clapperboard's tail, and a hurried landing.
     const fastForward = () => {
       if (phase !== 'film') return;
       hurried = true;
@@ -669,7 +764,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       shiftAll(-(target - t));
       schedule();
     };
-    onHurry = fastForward;
+    onSkipFilm = fastForward;
 
     // ── Landing ──
     let landingWaited = 0;
@@ -1125,6 +1220,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         <div className="of-stage" data-stage>
           <OpeningScenes pictures={pictures} />
         </div>
+        {/* A whip's motion blur: streak plates, one per tone. */}
+        <div className="of-whip of-whip--light" data-whip="light" />
+        <div className="of-whip of-whip--dark" data-whip="dark" />
         <div className="of-grain" />
         <div className="of-vignette" />
         <div className="of-finder" data-finder>
