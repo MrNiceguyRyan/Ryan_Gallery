@@ -93,347 +93,6 @@ html.lenis body {
   transition-duration: var(--dur-in);
 }
 
-/* ── The bridge (GlobePrologue, src/lib/bridgeRoll.ts) ─────────────────────
-   Between the opening and chapter 1: a statement of what the archive is, and
-   a roll of his own frames running through it along the foot of the screen,
-   the last chapter first, until chapter 1's select is lifted out and lands
-   in its plate. Server-rendered, the statements are plain text in the page's
-   flow (the first paint, and a page without scripts, read them where they
-   stand) and the roll does not exist; hydrated (`data-roll-live`) the
-   statements are held to the screen and latch on the prologue clock
-   (`is-on`, then `is-past`), and the roll is laid out. Every move is on the
-   wheel: the band's transform and ink, and the lander's transform, are
-   written per frame from derived geometry; the rest are class toggles. */
-.bridge-say {
-  color: #F4F4ED;
-}
-.bridge-say__kicker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.6);
-}
-.bridge-say__dot {
-  display: block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #F4F4ED;
-}
-.bridge-say__line {
-  font-weight: 400;
-}
-.bridge-say__line em {
-  font-style: italic;
-  font-weight: 400;
-}
-/* "A personal archive of / travel and thought." — the measure breaks it
-   there at every desktop width (not balanced, as headings are elsewhere:
-   balanced, "of" went down to the second line). */
-.bridge-say__line--one {
-  margin-top: 22px;
-  max-width: 10.6em;
-  text-wrap: wrap;
-  font-size: clamp(40px, 4.3vw, 80px);
-  line-height: 1;
-  letter-spacing: -0.028em;
-}
-.bridge-say__line--two {
-  max-width: 13.5em;
-  font-size: clamp(30px, 2.9vw, 52px);
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  /* Three even lines, never "dated." alone on the last. */
-  text-wrap: balance;
-}
-.bridge-say__foot {
-  margin-top: 26px;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.5);
-}
-.globe-prologue[data-roll-live] .bridge-say {
-  position: fixed;
-  opacity: 0;
-  transform: translate3d(0, 20px, 0);
-  transition:
-    opacity var(--dur-out) var(--ease-fade),
-    transform var(--dur-out) var(--ease-leave);
-}
-.globe-prologue[data-roll-live] .bridge-say--one {
-  left: 6vw;
-  top: 19vh;
-}
-/* Beside the planet as it glides to the focal point, clear of its limb, and
-   inside the page's 48px right margin (the nav's edge): at 1728 its 13.5em
-   measure ran to 23px from the window's edge. */
-.globe-prologue[data-roll-live] .bridge-say--two {
-  left: 58vw;
-  top: 15vh;
-  max-width: calc(42vw - 48px);
-}
-@media (min-width: 1600px) {
-  .globe-prologue[data-roll-live] .bridge-say--two {
-    left: 60vw;
-    max-width: calc(40vw - 48px);
-  }
-}
-.globe-prologue[data-roll-live] .bridge-say.is-on {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity var(--dur-settle) var(--ease-arrive),
-    transform var(--dur-settle) var(--ease-arrive);
-}
-.globe-prologue[data-roll-live] .bridge-say.is-past {
-  transform: translate3d(0, -12px, 0);
-}
-/* The opening hands over to the first statement: it steps aside as the
-   statement latches, and comes back if the reader turns round. */
-.bridge-opening {
-  transition: opacity var(--dur-settle) var(--ease-arrive);
-}
-.globe-prologue[data-bridge-s1] .bridge-opening {
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-
-/* The roll's layer: fixed over the atlas, under the nav. Only its chapter
-   marks take the pointer. A voyage (a mark, the globe's ticket, Back to
-   index) crosses it in a second or two, so the whole layer steps aside for
-   the trip and comes back when it lands. */
-.bridge-roll {
-  position: relative;
-  pointer-events: none;
-}
-.bridge-stage {
-  display: none;
-}
-.globe-prologue[data-roll-live] .bridge-roll {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  transition: opacity var(--dur-out) var(--ease-arrive);
-}
-html:is([data-voyage], [data-globe-voyage]) .globe-prologue[data-roll-live] .bridge-roll {
-  opacity: 0;
-  transition: opacity var(--dur-in) var(--ease-leave);
-}
-/* The landing: once the select is lifted out of the roll, the prologue's
-   layer steps down under the lander (z 17), still over the atlas (10) and
-   its release veil (15). The frames it leaves are left behind UNDER it, so
-   the select never slides under a translucent neighbour as it grows. */
-.globe-prologue[data-bridge-landing] {
-  z-index: 16;
-}
-/* Shown once every frame has decoded. */
-.globe-prologue[data-roll-live] .bridge-stage {
-  display: block;
-  opacity: 0;
-  transition: opacity var(--dur-settle) var(--ease-arrive);
-}
-.globe-prologue[data-roll-live] .bridge-stage[data-ready] {
-  opacity: 1;
-}
-/* The band: a point on the frames' foot line (0.925 of the viewport down;
-   the numbers hang below it). Each chapter's piece of the roll stands on it
-   at its own offset (bridgeRoll's `rollCuts`), so the layout is the one the
-   maths laid out, to the pixel. */
-.bridge-band {
-  position: absolute;
-  left: 0;
-  bottom: 7.5vh;
-  width: 0;
-  height: 0;
-  will-change: transform, opacity;
-}
-.bridge-cut {
-  position: absolute;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-/* A chapter's mark: its number and name in bone, its figures in white. The
-   current chapter (the last select past the gate) is full bone; the one lime
-   on the bridge answers the pointer, on the name. */
-.bridge-mark {
-  pointer-events: auto;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 8px 0 10px;
-  white-space: nowrap;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  text-align: left;
-  color: rgba(255, 255, 255, 0.44);
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-.bridge-mark b {
-  font-weight: 500;
-}
-.bridge-mark b,
-.bridge-mark__name {
-  color: rgba(244, 244, 237, 0.62);
-  transition: color var(--dur-out) var(--ease-arrive);
-}
-.bridge-mark.is-current b,
-.bridge-mark.is-current .bridge-mark__name {
-  color: #F4F4ED;
-}
-.bridge-mark:hover .bridge-mark__name,
-.bridge-mark:focus-visible .bridge-mark__name {
-  color: #D2FF00;
-  transition-duration: var(--dur-in);
-}
-.bridge-mark:focus-visible {
-  outline: 1px solid #D2FF00;
-  outline-offset: 4px;
-}
-.bridge-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-}
-.bridge-frame {
-  position: relative;
-  flex: none;
-}
-.bridge-frame img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* Edge numbers: each frame's number in its chapter, hung under it. */
-.bridge-frame__n {
-  position: absolute;
-  left: 0;
-  top: 100%;
-  padding-top: 7px;
-  white-space: nowrap;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.42);
-}
-.bridge-frame.is-select .bridge-frame__n {
-  color: rgba(244, 244, 237, 0.82);
-}
-/* The select on its way into chapter 1's plate, at the plate's own size and
-   scaled from its top-left corner; it takes on the plate's grade (the
-   matte at `--plate-matte` and the two shades, ArchiveChapter's own) as it
-   grows (`--lander-grade`, 0 → 1). It stands in the desktop stage between
-   the atlas (z 10, and its release veil at 15) and the archive column (20):
-   chapter 1's name overlaps its plate's foot, and stays over the lander as
-   it will over the plate. */
-.bridge-lander {
-  position: fixed;
-  z-index: 17;
-  left: 0;
-  top: 0;
-  overflow: hidden;
-  transform-origin: 0 0;
-  will-change: transform;
-  visibility: hidden;
-  pointer-events: none;
-}
-.bridge-lander img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.bridge-lander i {
-  position: absolute;
-  display: block;
-}
-.bridge-lander__matte {
-  inset: 0;
-  background: #30352a;
-  opacity: calc(var(--lander-grade, 0) * var(--plate-matte, 0.24));
-}
-.bridge-lander__shade-top {
-  inset: 0 0 auto;
-  height: 33.3333%;
-  background: linear-gradient(180deg, rgba(24, 28, 20, 0.54) 0%, rgba(24, 28, 20, 0.16) 52%, transparent 100%);
-  opacity: var(--lander-grade, 0);
-}
-.bridge-lander__shade-bottom {
-  inset: auto 0 0;
-  height: 75%;
-  background: linear-gradient(0deg, rgba(20, 24, 17, 0.72) 0%, rgba(20, 24, 17, 0.3) 44%, transparent 100%);
-  opacity: var(--lander-grade, 0);
-}
-/* Chapter 1 while the select carries it: its photograph (and the plate's
-   label, and its region's row) held at 0.001 ink — never 0, so it stays
-   rasterised and the frame the select arrives on shows it without a hitch.
-   Its stub and pad are not there yet; going back up they go out on the fade
-   rather than cut. Landed by the wheel, the stub and the pad print out of
-   the plate's edge, and the region's row a beat after. A voyage passes
-   straight through (`pass`). */
-html[data-bridge="held"] [data-archive-column] [data-archive-chapter][data-chapter-index="0"] :is(.archive-plate__tear, .archive-plate__meta),
-html[data-bridge="held"] [data-archive-column] section:first-of-type > [data-voyage-pass] {
-  opacity: 0.001 !important;
-}
-html[data-bridge="held"] [data-archive-column] [data-archive-chapter][data-chapter-index="0"] :is(.archive-ticket-stub, .archive-ticket-pad) {
-  opacity: 0 !important;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-@keyframes bridge-print {
-  from {
-    clip-path: inset(0 100% 0 0);
-    translate: -14px 0;
-  }
-}
-@keyframes bridge-print-row {
-  from {
-    opacity: 0;
-    clip-path: inset(0 100% 0 0);
-  }
-}
-html[data-bridge-print] [data-archive-column] [data-archive-chapter][data-chapter-index="0"] :is(.archive-ticket-stub, .archive-ticket-pad) {
-  animation: bridge-print var(--dur-grow) var(--ease-arrive) backwards;
-}
-html[data-bridge-print] [data-archive-column] section:first-of-type > [data-voyage-pass] {
-  animation: bridge-print-row var(--dur-grow) var(--ease-arrive) 80ms backwards;
-}
-/* Reduced motion: the same bridge, still. The statements and the opening
-   cut; nothing prints. */
-@media (prefers-reduced-motion: reduce) {
-  .globe-prologue[data-roll-live] .bridge-say,
-  .globe-prologue[data-roll-live] .bridge-say.is-on,
-  .globe-prologue[data-roll-live] .bridge-say.is-past {
-    transform: none;
-    transition: none;
-  }
-  .bridge-opening,
-  .globe-prologue[data-bridge-s1] .bridge-opening,
-  .globe-prologue[data-roll-live] .bridge-roll,
-  .globe-prologue[data-roll-live] .bridge-stage {
-    transition: none;
-  }
-  .bridge-mark b,
-  .bridge-mark__name {
-    transition: none;
-  }
-  html[data-bridge-print] [data-archive-column] [data-archive-chapter][data-chapter-index="0"] :is(.archive-ticket-stub, .archive-ticket-pad),
-  html[data-bridge-print] [data-archive-column] section:first-of-type > [data-voyage-pass] {
-    animation: none;
-  }
-}
-
 /* Globe prologue (desktop homepage opening). Each display line rises out of
    its own mask; the padding/negative margin pair gives the glyphs' overshoot
    room without changing the line boxes. */
@@ -449,9 +108,7 @@ html[data-bridge-print] [data-archive-column] section:first-of-type > [data-voya
   text-shadow: 0 6px 44px rgba(12, 14, 9, 0.55);
 }
 /* The scroll cue's sweep is the first screen's one lime mark (the kicker's
-   dot is bone ink). While a chapter mark on the bridge's roll answers the
-   pointer (its name lights lime) the sweep steps down to bone, so the answer
-   is the only lime on the screen. */
+   dot is bone ink). */
 .prologue-scroll-cue::after {
   content: '';
   position: absolute;
@@ -459,11 +116,6 @@ html[data-bridge-print] [data-archive-column] section:first-of-type > [data-voya
   background: #D2FF00;
   transform: translateY(-100%);
   animation: prologue-scroll-cue 2.6s var(--ease-arrive) infinite;
-  transition: background-color var(--dur-out) var(--ease-arrive);
-}
-.globe-prologue:has(.bridge-mark:hover, .bridge-mark:focus-visible) .prologue-scroll-cue::after {
-  background: #F4F4ED;
-  transition-duration: var(--dur-in);
 }
 @keyframes prologue-scroll-cue {
   0% { transform: translateY(-100%); }
@@ -944,8 +596,8 @@ html[data-globe-voyage] .globe-prologue {
   opacity: 0;
   transition: opacity 240ms var(--ease-leave);
 }
-/* A voyage's passing. A click on the index, a ticket from the globe, a place
-   on the atlas or Back to index carries the page across several chapters in
+/* A voyage's passing. A ticket from the globe, a place on the atlas, a torn
+   cover or Back to the start carries the page across several chapters in
    about two seconds. What it passes steps back to a fifth of its ink, so only
    the destination reads: HomePage sets data-voyage on the archive column for
    the trip and data-voyage-dest on the chapter it is bound for. The ink goes
@@ -1374,75 +1026,6 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   .af-point__num,
   .af-point__name,
   .af-point__landmark { transition: none !important; animation: none !important; }
-}
-/* The index globe's marks (RouteAtlas's prologue marks): the atlas's own
-   print mark at full size, the numeral a size up (at 10px it was nearly lost
-   on the whole planet). One is on at a time — the place pointed at on the
-   roll, else the place its frames lit last — so the roll's current chapter
-   is named on the planet without a pointer. It prints in (scale .64 to 1,
-   the numeral a beat after the dot) and fades out where it stood as the next
-   one prints — transitions both ways, because an animation on opacity stops
-   it fading out when it ends. On the dive it fades with the dots under it. */
-.prologue-mark {
-  position: relative;
-  display: block;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-  opacity: var(--prologue-mark-fade, 1);
-}
-.prologue-mark__dot {
-  position: absolute;
-  left: -3.5px;
-  top: -3.5px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
-  opacity: 0;
-  transform: scale(0.64);
-  transition:
-    opacity var(--dur-out) var(--ease-fade),
-    transform var(--dur-out) var(--ease-leave);
-}
-.prologue-mark__num {
-  position: absolute;
-  left: 7px;
-  top: 0;
-  transform: translateY(calc(-50% - 6px));
-  white-space: nowrap;
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  font-variant-numeric: tabular-nums;
-  color: #F4F4ED;
-  -webkit-text-stroke: 1.5px rgba(11, 14, 9, 0.8);
-  paint-order: stroke fill;
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-.prologue-mark.is-on .prologue-mark__dot {
-  opacity: 1;
-  transform: scale(1);
-  transition-duration: var(--dur-in);
-  transition-timing-function: var(--ease-arrive);
-}
-.prologue-mark.is-on .prologue-mark__num {
-  opacity: 1;
-  transition-duration: var(--dur-in);
-  transition-timing-function: var(--ease-arrive);
-  transition-delay: 120ms;
-}
-@starting-style {
-  .prologue-mark.is-on .prologue-mark__dot { opacity: 0; transform: scale(0.64); }
-  .prologue-mark.is-on .prologue-mark__num { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prologue-mark__dot,
-  .prologue-mark__num { transition: none !important; }
 }
 
 /* Under a story the archive recedes: the atlas grows and softens behind the
@@ -3574,14 +3157,12 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   position: relative;
 }
 /* The stage (photograph, corners, cue) is a layer of its own. It no longer
-   moves at all — the cover is simply there, no reveal — but the bridge's
-   select lands on the plate's pixels (GlobePrologue: "its stage is a layer
-   of its own"). Painted into the column's layer instead, the photograph is
-   resampled at its fractional offset: measured at 1728×1000, the landed
-   plate differed from the picture the landing has always handed over to on
-   every edge (mean 6.8/255); as a layer it is the same picture (0.07/255).
-   The layer used to come from the retired album unfold's perspective; it is
-   asked for here, with no transform at all. */
+   moves at all — the cover is simply there, no reveal — but it has always
+   been composited on its own (it used to come from the retired album
+   unfold's perspective): painted into the column's layer instead, the
+   photograph is resampled at its fractional offset (measured at 1728×1000,
+   a mean 6.8/255 on every edge against 0.07/255 as a layer). It is asked for
+   here, with no transform at all, so the picture is drawn as it always was. */
 .archive-plate__stage {
   will-change: transform;
 }

@@ -45,8 +45,7 @@ import {
 import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight';
 import { createEggExposure, setEggMarks } from '../../lib/eggExposure';
 import { wrap180 } from '../../lib/globeEgg';
-import { CSS_EASE, DUR_MS, EASE, bezierFn, smootherstep, voyageEase } from '../../lib/motion';
-import { ROLL, gatePassed, litWhenSeen, routeTail } from '../../lib/bridgeRoll';
+import { CSS_EASE, DUR_MS, EASE, smootherstep, voyageEase } from '../../lib/motion';
 
 // The globe's easter eggs (desk spin, BULB): their own chunk, fetched only
 // where the prologue globe can be played with (desktop, motion allowed).
@@ -68,16 +67,17 @@ export interface RouteStop {
   coordinateLabel: string;
 }
 
-/** A click on the index or the rail: the page scrolls to `chapterId` over
- *  `duration` ms and the camera goes straight there. `outbound`: Back to
- *  index instead — the page goes up to the index (where the prologue reads
- *  `outbound.prologue`) and the camera leaves the archive in one zoom-out
- *  (`chapterId` is not read). */
+/** A click on a place, the globe's ticket or a torn cover: the page scrolls
+ *  to `chapterId` over `duration` ms and the camera goes straight there.
+ *  `outbound`: Back to the start instead — the page goes up to the first
+ *  screen and the camera leaves the archive in one zoom-out over the first
+ *  `entryShare` of the trip, after which the prologue's own scroll glides the
+ *  planet home to the corner (`chapterId` is not read). */
 export interface AtlasVoyage {
   chapterId: string;
   duration: number;
   token: number;
-  outbound?: { prologue: number };
+  outbound?: { entryShare: number };
 }
 
 interface Props {
@@ -105,13 +105,6 @@ interface Props {
   onEngage?: (chapterId: string | null) => void;
   /** An AF point is clicked: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
-  /** Where the prologue's planet sits on screen (viewport px), or null. */
-  onPlanet?: (planet: { x: number; y: number; r: number } | null) => void;
-  /** The bridge's roll (GlobePrologue): the prologue progress at which each
-   *  chapter's select crosses the gate, in roll order (the last chapter
-   *  first). Each place lights on the globe once its select has crossed and
-   *  it faces the reader (src/lib/bridgeRoll.ts). */
-  rollGates?: number[] | null;
 }
 
 interface ProjectedPoint {
@@ -240,8 +233,8 @@ const HOP = {
 // for home, never the map arriving at a place whose cover is missing.
 // `wholeBackTo` is kept as the guard that makes it so whatever the order in
 // which the two hear the scroll.
-// Not held: voyages (a click on the index or the rail asks to be taken there,
-// and passes its covers at the scroll's pace), restart snaps, and reduced
+// Not held: voyages (a click on a place asks to be taken there, and passes
+// its covers at the scroll's pace), restart snaps, and reduced
 // motion (no hops at all).
 const TEAR_BEFORE_FLIGHT_MS = 590;
 // A held forward commit re-reads the stamps when its timer runs out (a cover
@@ -437,6 +430,12 @@ const GLOBE_START_LATITUDE = 21;
 // in, which would hide the turn. Inside the window below, the shares are:
 // turning, diving to the handoff zoom, and settling onto the chapter's pitch
 // (and on down to its own rest zoom, where that is closer than the handoff).
+// With the prologue in front of it (the homepage) there is nothing left to
+// turn — its glide hands over the planet on the focal point, already facing
+// the first chapter — so the window opens on the entrance's first frame and
+// the dive begins there (GlobeMode's `windowStart` / `diveStart`): the
+// planet goes straight on into the dive instead of holding still for a
+// third of it.
 const GLOBE_ENTRY_WINDOW = [0.06, 0.92] as const;
 const GLOBE_TURN_END = 0.5;
 const GLOBE_DIVE_START = 0.32;
@@ -452,6 +451,11 @@ const GLOBE_FOG = {
   'star-intensity': 0,
 };
 
+// The share of the entrance over which the route and his places print in on
+// the planet as the dive begins (see the camera's "The places on the
+// planet"); by its end the dive is at the zoom where they start to fade.
+const PROLOGUE_INK_ENTRY = 0.15;
+
 // The prologue globe's limb is lit air, not a halo all the way round: the
 // planet light (src/lib/planetLight.ts) draws it on the lit side only, so the
 // atmosphere itself keeps just a whisper of paper white. The lite light draws
@@ -459,31 +463,26 @@ const GLOBE_FOG = {
 const PROLOGUE_FOG = SILVER_FOG;
 const PROLOGUE_FOG_LITE = SILVER_FOG_LITE;
 
-// The prologue's places light as the bridge's roll carries each chapter's
-// select past the gate, once the place faces the reader, and the route draws
-// back from the last chapter toward the first behind them (the camera's
-// "The roll's places" below; src/lib/bridgeRoll.ts). A newly lit dot prints
-// in over DUR_MS.in; two lighting on one frame come ROLL.stepMs apart.
-const easeLit = bezierFn(EASE.arrive);
-
-// Back to index (see `beginOutbound`): the share of the trip over which the
-// hop pose is carried from where the camera was onto the first place. It
-// starts once the entrance has begun to pull out (a pan at the rest zoom
-// would slide the map under the page) and is done before the globe turns.
+// Back to the start (see `beginOutbound`): the share of the trip's zoom-out
+// (its first `entryShare`) over which the hop pose is carried from where the
+// camera was onto the first place. It starts once the entrance has begun to
+// pull out (a pan at the rest zoom would slide the map under the page) and is
+// done before the planet is whole again.
 const OUTBOUND_AIM: readonly [number, number] = [0.12, 0.55];
 
-function globeEntryProgress(entry: number) {
-  const [start, end] = GLOBE_ENTRY_WINDOW;
+function globeEntryProgress(entry: number, mode: GlobeMode = FLAT_ENTRY_GLOBE) {
+  const start = mode.windowStart;
+  const end = GLOBE_ENTRY_WINDOW[1];
   return clamp01((entry - start) / (end - start));
 }
 
 // With the prologue in front of it, the globe has already been turned to North
 // America by the time the entrance begins, so the entrance only descends.
 const PROLOGUE_GLOBE = {
-  turnDegrees: 0,
-  startZoom: 2.25,
   // Where the prologue keeps the globe: its centre low on the right, most of
-  // the disc off-screen, big enough to read as a planet rather than a map.
+  // the disc off-screen, big enough to read as a planet rather than a map
+  // (`cornerZoomFor`). It keeps that size through the glide: the dive starts
+  // from it, so the planet never pulls back before it falls.
   centerX: 0.84,
   centerY: 0.93,
   zoom: 2.78,
@@ -491,9 +490,11 @@ const PROLOGUE_GLOBE = {
   // westward, 195° from the first screen's face to the first chapter.
   startLatitude: 9,
   // The stretch of the prologue spent gliding from the corner to the atlas
-  // focus — finished before the index (which sits on the right) is read.
-  glideStart: 0.5,
-  glideEnd: 0.8,
+  // focus. It runs to the prologue's end, where the dive takes the planet on
+  // from the very pose the glide arrives at: there is nothing to read on the
+  // way (the index and the film roll that stood there are gone).
+  glideStart: 0.35,
+  glideEnd: 1,
   // The load-in: the canvas waits for its first tiles, then fades in while
   // the dawn sweeps the light round and the globe settles this many degrees
   // eastward — the way the drift and the scroll turn it — into place. (It used
@@ -514,19 +515,24 @@ const PROLOGUE_GLOBE = {
   pointerLatitude: 3,
   // The cursor lean folds back to zero across this stretch, so the glide and
   // the dive always start from the exact scroll-owned pose.
-  lifeFade: [0.28, 0.5] as [number, number],
+  lifeFade: [0.2, 0.35] as [number, number],
   // A voyage that starts with the globe still in the corner (a ticket dealt
-  // on the first screen, or an index row) eases from the corner pose into
-  // the dive over this long, instead of jumping the planet ~900px and a third
-  // of its size in one frame.
+  // on the first screen) eases from the corner pose into the dive over this
+  // long, instead of jumping the planet ~900px in one frame.
   voyageBridgeMs: 700,
 } as const;
+/** The corner globe's zoom: it keeps its share of the screen on wider
+ *  displays (radius doubles per zoom level). The glide keeps it and the dive
+ *  starts from it. */
+function cornerZoomFor(viewportWidth: number) {
+  return PROLOGUE_GLOBE.zoom + Math.log2(Math.max(0.75, viewportWidth / 1440));
+}
 // Reduced motion keeps the same globe, still. It holds two poses: the corner
 // planet exactly as the first screen shows it (q = 0, before any drift) and
-// the whole planet beside the index (q = 1: the index pose, where the dive
-// starts). Nothing turns, drifts, leans or glides. Where the glide would be
-// halfway the canvas dips out and comes back on the other pose; the dive into
-// the first chapter (and the way back up) cuts to the ground and fades the new
+// the planet on the atlas's focal point (q = 1, where the dive starts).
+// Nothing turns, drifts, leans or glides. Where the glide would be halfway
+// the canvas dips out and comes back on the other pose; the dive into the
+// first chapter (and the way back up) cuts to the ground and fades the new
 // view in. The route and its places are drawn whole on the planet at once.
 const STILL_SWAP_Q = (PROLOGUE_GLOBE.glideStart + PROLOGUE_GLOBE.glideEnd) / 2;
 type StillPose = 'corner' | 'planet' | 'archive';
@@ -553,20 +559,6 @@ const SIDES_REST_MS = 180;
 // the dot, its key on either side, and the current place's landmark standing
 // over it (64 × 38 css px, its centre 12px above the dot).
 const ATLAS_KEEP_OUT = { id: 'atlas-keepout', width: 64, height: 38, offsetY: -12 } as const;
-// How big the globe looks on screen. Its limb radius is not simply
-// proportional to 2^zoom: Mapbox draws it in perspective, so
-//   r = k · R · D / (D + R),  R = radiusAtZoom0 · 2^zoom,  D = depth · canvas height
-// (fitted against measured limbs at three canvas sizes; within 0.3%). The
-// index step inverts this to make the planet exactly fill the space beside
-// the index column.
-const PLANET_FIT = { radiusAtZoom0: 81.277, k: 1.428, depth: 1.0228, minZoom: 1.2, maxZoom: 2.6 };
-const PLANET_MARGIN = 48;
-function planetZoomFor(limbRadius: number, canvasHeight: number) {
-  const depth = PLANET_FIT.depth * canvasHeight;
-  const radius = (limbRadius * depth) / (PLANET_FIT.k * depth - limbRadius);
-  if (!(radius > 0)) return PLANET_FIT.minZoom;
-  return Math.min(PLANET_FIT.maxZoom, Math.max(PLANET_FIT.minZoom, Math.log2(radius / PLANET_FIT.radiusAtZoom0)));
-}
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // After the dive the photography does not vanish: it stays under the graded
 // atlas at this strength, so chapters keep a little real ground.
@@ -618,18 +610,23 @@ function satelliteOpacityAt(stops: readonly number[], zoom: number) {
 interface GlobeMode {
   turnDegrees: number;
   startZoom: number;
+  /** Where the entrance's window opens on its score, and where in the window
+   *  the dive begins (see GLOBE_ENTRY_WINDOW). */
+  windowStart: number;
+  diveStart: number;
   /** Where the globe was left when the prologue handed over; the entrance
    *  turns from here to the target instead of starting on the target. */
   startLongitude?: number;
-  /** Set only while Back to index flies out: the latitude the prologue will
-   *  hold the planet at on the index, so the entrance ends where it takes
-   *  over. */
-  startLatitude?: number;
 }
-const FLAT_ENTRY_GLOBE: GlobeMode = { turnDegrees: GLOBE_TURN_DEGREES, startZoom: GLOBE_START_ZOOM };
+const FLAT_ENTRY_GLOBE: GlobeMode = {
+  turnDegrees: GLOBE_TURN_DEGREES,
+  startZoom: GLOBE_START_ZOOM,
+  windowStart: GLOBE_ENTRY_WINDOW[0],
+  diveStart: GLOBE_DIVE_START,
+};
 
 function globeStartCenter(target: GeoCoordinate, mode: GlobeMode = FLAT_ENTRY_GLOBE): GeoCoordinate {
-  return [mode.startLongitude ?? target[0] - mode.turnDegrees, mode.startLatitude ?? GLOBE_START_LATITUDE];
+  return [mode.startLongitude ?? target[0] - mode.turnDegrees, GLOBE_START_LATITUDE];
 }
 
 function globeEntryPose(
@@ -644,7 +641,7 @@ function globeEntryPose(
     start[1] + (target.coordinate[1] - start[1]) * turn,
   ];
   const turningZoom = mode.startZoom + 0.5 * turn;
-  const dive = clamp01((progress - GLOBE_DIVE_START) / (GLOBE_HANDOFF_AT - GLOBE_DIVE_START));
+  const dive = clamp01((progress - mode.diveStart) / (GLOBE_HANDOFF_AT - mode.diveStart));
   const diveEase = dive * dive * (3 - 2 * dive);
   const settle = smootherstep(clamp01((progress - GLOBE_HANDOFF_AT) / (1 - GLOBE_HANDOFF_AT)));
   const divedZoom = turningZoom + (GLOBE_HANDOFF_ZOOM - turningZoom) * diveEase;
@@ -940,8 +937,6 @@ export default function RouteAtlas({
   voyage = null,
   onEngage,
   onNavigate,
-  onPlanet,
-  rollGates = null,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -991,16 +986,15 @@ export default function RouteAtlas({
     voyageRef.current = voyage;
     voyageHandlerRef.current?.(voyage);
   }, [voyage]);
-  // Zoom at which the prologue globe is a whole planet beside the index; the
-  // glide lands on it and the entrance dives from it.
-  const [planetZoom, setPlanetZoom] = useState<number>(PROLOGUE_GLOBE.startZoom);
-  // The entrance starts on the latitude the prologue ends on
-  // (GLOBE_START_LATITUDE, 21°): it used to inherit the prologue's own
-  // starting latitude (9°) from the spread, and the frame the prologue handed
-  // over snapped the planet 12° (~80px) south.
+  // The zoom the entrance dives from: the corner globe's own (`cornerZoomFor`
+  // this viewport), which the glide keeps, so the prologue hands over the
+  // planet at the size it has. The entrance starts on the latitude the
+  // prologue ends on (GLOBE_START_LATITUDE, 21°) and on the longitude it was
+  // left at (`handoffLongitude`), with no turn of its own.
+  const [diveZoom, setDiveZoom] = useState<number>(() => cornerZoomFor(1440));
   const globeMode = useMemo<GlobeMode>(
-    () => (prologue ? { ...PROLOGUE_GLOBE, startZoom: planetZoom, startLatitude: undefined } : FLAT_ENTRY_GLOBE),
-    [planetZoom, prologue],
+    () => (prologue ? { turnDegrees: 0, startZoom: diveZoom, windowStart: 0, diveStart: 0 } : FLAT_ENTRY_GLOBE),
+    [diveZoom, prologue],
   );
   const [mapLoaded, setMapLoaded] = useState(false);
   // The ground the places are printed on: a layer inside the map, right after
@@ -1145,7 +1139,7 @@ export default function RouteAtlas({
     markPast();
     if (id) markSides();
   };
-  // A voyage from the index lands by scroll, with no camera state to say so
+  // A dive from the globe lands by scroll, with no camera state to say so
   // (the dive is scroll-owned): the map's own `idle`, once it has drawn the
   // place it came to, is the rest it ends in.
   const markSidesRef = useRef(markSides);
@@ -1243,67 +1237,14 @@ export default function RouteAtlas({
 
   const fullRouteCoordinates = useMemo(() => routeCoordinates(mappedStops), [mappedStops]);
   const fullRoute = useMemo(() => lineFeature(fullRouteCoordinates), [fullRouteCoordinates]);
-  // Pointing at an index name lights that place on the globe: only while the
-  // globe is the prologue's (cover hovers in the archive set the same id, and
-  // there the AF point's ring answers instead).
-  const [prologueStage, setPrologueStage] = useState(() => prologue && resolvedPrologueProgress.get() < 1);
-  useMotionValueEvent(resolvedPrologueProgress, 'change', (progress) => {
-    const next = prologue && progress < 1;
-    setPrologueStage((current) => (current === next ? current : next));
-  });
-  const engagedOnGlobe = prologueStage ? engagedChapterId : null;
-  // How many places are lit on the prologue globe, in the roll's order (the
-  // last chapter first): written by the camera ("The roll's places"), on a
-  // change only, for the prologue marks below. The dots themselves are
-  // painted by the camera. Outside the prologue every place is lit.
-  const [litStops, setLitStops] = useState(() => (prologue ? 0 : 99));
-  // The places in the roll's order, as the camera lights them.
-  const rollOrderIds = useMemo(
-    () => [...chapterRoute].sort((a, b) => b.chapterIndex - a.chapterIndex).map((entry) => entry.stop.id),
-    [chapterRoute],
-  );
-  // The prologue marks (in the JSX): the atlas's own print mark, a 7px dot
-  // keyed by the chapter number, printed over a lit place's dot on the globe.
-  // A DOM mark, because GL paint keyed on the pointer cannot ease. One is on
-  // at a time, so the canyon places never print their numbers into each
-  // other: the place pointed at on the roll, else the place lit last — the
-  // chapter whose frames just passed the gate, so the one link between the
-  // roll and the planet reads without a pointer. Each place keeps its own
-  // mark, so the one going off fades where it stood as the next prints in.
-  // Reduced motion lights every place at once on the still planet, while its
-  // roll cuts between windows: there is no "last lit", so only a pointer
-  // prints a mark there.
-  const rollMarkId = prologueStage && litStops > 0 && !reducedMotion
-    ? rollOrderIds[Math.min(litStops, rollOrderIds.length) - 1] ?? null
-    : null;
-  const globeMarkOn = engagedOnGlobe ?? rollMarkId;
-  const rollGatesRef = useRef<number[] | null>(rollGates ?? null);
-  rollGatesRef.current = rollGates ?? null;
   const prologueStops = useMemo(() => ({
     type: 'FeatureCollection' as const,
-    features: mappedStops.map((stop, index) => ({
+    features: mappedStops.map((stop) => ({
       type: 'Feature' as const,
-      properties: { id: stop.id, order: index + 1 },
+      properties: { id: stop.id },
       geometry: { type: 'Point' as const, coordinates: stop.coordinates },
     })),
   }), [mappedStops]);
-  // The marks fade on the dive with the dots they are printed over (the same
-  // zoom keys as their circle-opacity), written once per zoom on the map's
-  // own element, which every marker inherits it from.
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!prologue || !map) return;
-    const container = map.getContainer();
-    const apply = () => {
-      const fade = 1 - clamp01((map.getZoom() - PROLOGUE_SATELLITE_FADE[0]) / (PROLOGUE_SATELLITE_FADE[1] - PROLOGUE_SATELLITE_FADE[0]));
-      container.style.setProperty('--prologue-mark-fade', fade.toFixed(3));
-    };
-    apply();
-    map.on('zoom', apply);
-    return () => {
-      map.off('zoom', apply);
-    };
-  }, [prologue, mapLoaded]);
   const staticMapUrl = useMemo(
     () => living ? '' : staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, living, mapboxToken, mobile],
@@ -1533,33 +1474,20 @@ export default function RouteAtlas({
   useLayoutEffect(() => {
     if (!prologue) {
       setCanvasExtension(0);
-      onPlanet?.(null);
       return;
     }
     const atlas = routeAtlasRef.current;
     if (!atlas) return;
+    // Widths only: horizontal geometry does not depend on the scroll.
     const viewportWidth = document.documentElement.clientWidth;
-    const viewportHeight = window.innerHeight;
     const rect = atlas.getBoundingClientRect();
     const extension = Math.max(0, Math.round(viewportWidth - rect.right));
     setCanvasExtension((current) => (current === extension ? current : extension));
-    // Size the index-step planet: a whole disc on the focal point, as large
-    // as the left margin, the index column and the viewport's top and bottom
-    // allow. The index nav sits to the right (GlobePrologue's #archive-index).
-    const canvasHeight = rect.height + 2 * CANVAS_BLEED;
-    const focalX = rect.left - CANVAS_BLEED + (rect.width + 2 * CANVAS_BLEED - FOCAL_PADDING.right) / 2;
-    const focalY = ATLAS_READING_LINE * viewportHeight;
-    const indexLeft = document.getElementById('archive-index')?.getBoundingClientRect().left ?? viewportWidth * 0.56;
-    const limb = Math.min(
-      indexLeft - PLANET_MARGIN - focalX,
-      focalX - PLANET_MARGIN,
-      focalY - 2 * PLANET_MARGIN,
-      viewportHeight - PLANET_MARGIN - focalY,
-    );
-    const zoom = planetZoomFor(limb, canvasHeight);
-    setPlanetZoom((current) => (Math.abs(current - zoom) < 0.002 ? current : zoom));
-    onPlanet?.({ x: focalX, y: focalY, r: limb });
-  }, [layoutRevision, onPlanet, prologue, viewportReady]);
+    // The dive starts from the corner globe's own size (see `diveZoom`); the
+    // camera's prologue frames derive the same number from the same width.
+    const zoom = cornerZoomFor(viewportWidth);
+    setDiveZoom((current) => (Math.abs(current - zoom) < 0.0005 ? current : zoom));
+  }, [layoutRevision, prologue, viewportReady]);
 
   // Mapbox is the heaviest homepage dependency. HomePage first imports this
   // module near the atlas; this tighter second gate waits to create WebGL until
@@ -1597,7 +1525,7 @@ export default function RouteAtlas({
   // Preloading and engagement are intentionally separate. The WebGL canvas can
   // warm up just outside the viewport, but the camera, route and interface wait
   // until the atlas occupies a meaningful part of the screen. Engagement is
-  // reversible: scrolling back to the index restores the page-coloured veil
+  // reversible: scrolling back up to the opening restores the page-coloured veil
   // instead of leaving an already-revealed map cutting into the handoff.
   useEffect(() => {
     if (!viewportReady) return;
@@ -1708,75 +1636,39 @@ export default function RouteAtlas({
     let pointerTargetY = 0;
     let lastBearingKey = Number.NaN;
     let prologuePaddingKey = '';
-    // ── The roll's places ──
-    // The bridge's roll (GlobePrologue) carries each chapter's select past
-    // the gate at the progresses in `rollGates`, the last chapter first. A
-    // place lights once its select has crossed AND it faces the reader, and
-    // never before the one ahead of it in the roll (litWhenSeen, on the centre
-    // this frame writes), so every lighting happens where it can be seen. Two
-    // lighting on one frame come ROLL.stepMs apart, each printing in over
-    // DUR_MS.in: data-driven paint does not transition, so the frames write
-    // it, and only while one is printing. Going back up they go at once. The
-    // route draws back from the last chapter to the last place lit. Written
-    // on a change only, and never while an egg has cut the marks.
-    const rollOrder = [...chapterRoute].sort((a, b) => b.chapterIndex - a.chapterIndex);
-    const rollPlaces = rollOrder.map((entry) => entry.stop.coordinates);
-    const rollProgress = rollOrder.map((entry) => entry.routeProgress);
-    const rollFeatureOrder = rollOrder.map((entry) => mappedStops.indexOf(entry.stop) + 1);
-    const lit = { target: 0, shown: 0, at: [] as number[], stepAt: Number.NEGATIVE_INFINITY, frame: 0, key: '', tail: Number.NaN, reported: -1, routeAllHidden: null as boolean | null };
-    const writeLit = (now: number) => {
-      if (!rollFeatureOrder.length || !map.getLayer('prologue-stops-dot')) return;
+    // ── The places on the planet ──
+    // The prologue's globe is unmarked photography: it glides in under the
+    // first screen's type, and a route drawn on it crossed the line under his
+    // name. As the dive begins (the first PROLOGUE_INK_ENTRY of the entrance)
+    // the route and his places print in on it, all together and on the
+    // scroll, so the planet the dive falls into is the archive's; the dive
+    // then fades them with the zoom (their paint's zoom keys,
+    // PROLOGUE_SATELLITE_FADE) as the archive's own marks come up. Going back
+    // up they go out the same way. Reduced motion draws them whole on its
+    // still planet. Data-driven paint does not transition, so the frames
+    // write it: on a change of the quantised ink only, and never while an egg
+    // has cut the marks (the egg puts back what it cut).
+    const marks = { ink: Number.NaN, routeAllHidden: null as boolean | null };
+    const writePrologueInk = (ink: number) => {
       if (globeChannel.marksHidden) {
-        lit.key = '';
+        marks.ink = Number.NaN;
         return;
       }
-      const inks = rollFeatureOrder.map((order, index) => [
-        order,
-        index < lit.shown ? easeLit(clamp01((now - lit.at[index]) / DUR_MS.in)) : 0,
-      ] as const);
-      const key = inks.map(([, ink]) => ink.toFixed(3)).join('|');
-      if (key === lit.key) return;
-      lit.key = key;
-      const byOrder = (scale: number) => ['match', ['get', 'order'], ...inks.flatMap(([order, ink]) => [order, Math.round(ink * scale * 1000) / 1000]), 0];
+      const quantised = Math.round(clamp01(ink) * 100) / 100;
+      if (quantised === marks.ink || !map.getLayer('prologue-stops-dot') || !map.getLayer('prologue-route')) return;
+      marks.ink = quantised;
       const [fadeFrom, fadeTo] = PROLOGUE_SATELLITE_FADE;
-      map.setPaintProperty('prologue-stops-dot', 'circle-opacity', ['interpolate', ['linear'], ['zoom'], fadeFrom, byOrder(1), fadeTo, 0]);
-      map.setPaintProperty('prologue-stops-dot', 'circle-stroke-opacity', ['interpolate', ['linear'], ['zoom'], fadeFrom, byOrder(0.88), fadeTo, 0]);
+      const byZoom = (value: number) => ['interpolate', ['linear'], ['zoom'], fadeFrom, Math.round(value * 1000) / 1000, fadeTo, 0];
+      map.setPaintProperty('prologue-stops-dot', 'circle-opacity', byZoom(quantised));
+      map.setPaintProperty('prologue-stops-dot', 'circle-stroke-opacity', byZoom(quantised * 0.88));
+      map.setPaintProperty('prologue-route', 'line-opacity', byZoom(quantised * 0.95));
     };
-    const stepLit = (target: number, now: number, instant = false) => {
-      lit.target = target;
-      if (target < lit.shown || (instant && target > lit.shown)) {
-        for (let index = lit.shown; index < target; index += 1) lit.at[index] = Number.NEGATIVE_INFINITY;
-        lit.shown = target;
-      } else if (target > lit.shown && now - lit.stepAt >= ROLL.stepMs) {
-        lit.at[lit.shown] = now;
-        lit.shown += 1;
-        lit.stepAt = now;
-      }
-      writeLit(now);
-      if (lit.shown !== lit.reported) {
-        lit.reported = lit.shown;
-        const shown = lit.shown >= rollFeatureOrder.length ? 99 : lit.shown;
-        setLitStops((current) => (current === shown ? current : shown));
-      }
-      const printing = lit.at.slice(0, lit.shown).some((at) => now - at < DUR_MS.in);
-      if ((lit.target > lit.shown || printing) && !lit.frame && !disposed) {
-        lit.frame = requestAnimationFrame(() => {
-          lit.frame = 0;
-          if (!disposed) stepLit(lit.target, performance.now());
-        });
-      }
-    };
-    const writeRouteTail = (tail: number) => {
-      const quantised = Math.round(tail * 500) / 500;
-      if (quantised === lit.tail || !map.getLayer('prologue-route')) return;
-      lit.tail = quantised;
-      map.setPaintProperty('prologue-route', 'line-trim-offset', [0, quantised]);
-    };
-    // The whole route waits under the prologue's own drawing until the
-    // planet has arrived, so the draw reads as a draw.
+    // The archive's whole route (the same line) waits until the prologue's
+    // own has printed in, so the two never come up over each other at
+    // different paces: two dashed lines half in read as neither.
     const hideRouteAll = (hidden: boolean) => {
-      if (lit.routeAllHidden === hidden) return;
-      lit.routeAllHidden = hidden;
+      if (marks.routeAllHidden === hidden) return;
+      marks.routeAllHidden = hidden;
       ['route-all-glow', 'route-all-line'].forEach((layerId) => {
         if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', hidden ? 'none' : 'visible');
       });
@@ -1838,9 +1730,11 @@ export default function RouteAtlas({
     // committed; when the trip ends (or is cut short) the state reconciles
     // with wherever the scroll is.
     // `to`: the entry the driven clock ends on (1 into the archive, 0 out of
-    // it). `outbound`: Back to index — where the camera was when it set off;
-    // the hop pose is carried from there onto the first place (see hopStep)
-    // while the driven entry dives the globe out of the archive.
+    // it). `outbound`: Back to the start — where the camera was when it set
+    // off; the hop pose is carried from there onto the first place (see
+    // hopStep) while the driven entry dives the globe out of the archive over
+    // the first `share` of the trip. Past that the page is in the prologue,
+    // and the prologue's own scroll takes the planet home (see `homeward`).
     let voyageState: {
       index: number;
       start: number;
@@ -1848,7 +1742,7 @@ export default function RouteAtlas({
       dive: boolean;
       from: number;
       to: number;
-      outbound?: { center: GeoCoordinate; zoom: number };
+      outbound?: { center: GeoCoordinate; zoom: number; share: number };
     } | null = null;
     let entryBlend: { from: number; start: number } | null = null;
     // A dive voyage that leaves while the globe is still in the prologue's
@@ -1869,9 +1763,13 @@ export default function RouteAtlas({
     // curve already concentrates mid-way) never blinks past.
     const drivenEntry = (now: number) => {
       if (!voyageState || !voyageState.dive) return null;
-      const t = clamp01((now - voyageState.start) / voyageState.duration);
+      const t = clamp01((now - voyageState.start) / (voyageState.duration * (voyageState.outbound?.share ?? 1)));
       return voyageState.from + (voyageState.to - voyageState.from) * voyageEase(t);
     };
+    // Back to the start, once its zoom-out is done: the planet is whole on the
+    // focal point, the very pose the prologue holds at its end, and as soon as
+    // the page is in the prologue its scroll glides the planet home.
+    const homeward = (now: number) => !!voyageState?.outbound && (drivenEntry(now) ?? 1) <= 0;
     const effectiveEntry = (now = performance.now()) => {
       const driven = drivenEntry(now);
       if (driven != null) return driven;
@@ -1896,7 +1794,7 @@ export default function RouteAtlas({
     // the camera there in one frame.
     const entryCameraAt = (entry: number) => {
       if (!entryProgress) return 1;
-      if (classicGlobe) return globeEntryProgress(entry);
+      if (classicGlobe) return globeEntryProgress(entry, entryMode);
       return classicEntrance ? entrancePhase(entry, ...ARCHIVE_ENTRANCE_PHASES.map) : clamp01(entry);
     };
     const cameraOnChapter = (now = performance.now()) => hopEnabled
@@ -2050,6 +1948,9 @@ export default function RouteAtlas({
     let lastHopTime = 0;
     let plantTimers: number[] = [];
     let paintMode: 'prologue' | 'archive' | null = null;
+    // Whether the scroll's dive has set its camera down on the first place
+    // (null until the entrance first draws; see the entrance's draw).
+    let diveDown: boolean | null = null;
     // Mirrors currentStopId inside this closure, so a flight back to the place
     // the viewfinder is locked on does not blink its AF point on and off.
     let plantedLocal: string | null = null;
@@ -2285,7 +2186,7 @@ export default function RouteAtlas({
       clearPlantTimers();
       settleSignOn(index);
     };
-    // Outside the archive (the entrance, or a jump back to the index) the
+    // Outside the archive (the entrance, or a jump back to the start) the
     // committed place still follows the scroll — without a flight: the pose
     // glides to it through the follow smoothing, and any flight in progress is
     // dropped, so the entrance never dives onto a stale place.
@@ -2419,12 +2320,12 @@ export default function RouteAtlas({
       lastHopTime = time;
       const now = performance.now();
       if (voyageState?.outbound) {
-        // Back to index: the hop pose goes from where the camera set off onto
-        // the first place (the entrance's pose sits on it until the globe
-        // starts to turn out, past OUTBOUND_AIM).
-        const t = clamp01((now - voyageState.start) / voyageState.duration);
+        // Back to the start: the hop pose goes from where the camera set off
+        // onto the first place (the entrance's pose sits on it until the
+        // globe starts to pull out, past OUTBOUND_AIM of the zoom-out).
+        const { center, zoom, share } = voyageState.outbound;
+        const t = clamp01((now - voyageState.start) / (voyageState.duration * share));
         const k = smootherstep(clamp01((t - OUTBOUND_AIM[0]) / (OUTBOUND_AIM[1] - OUTBOUND_AIM[0])));
-        const { center, zoom } = voyageState.outbound;
         targetCenter = greatCirclePoint(center, restCenter(0), k);
         targetZoom = zoom + (restZoom(0) - zoom) * k;
       } else if (flight) {
@@ -2497,9 +2398,6 @@ export default function RouteAtlas({
       if (!voyageState) return;
       const now = performance.now();
       const driven = drivenEntry(now);
-      // Back to index has landed on the prologue, which holds the globe from
-      // here: the entrance forgets where it was told to end.
-      if (voyageState.outbound) entryMode.startLatitude = undefined;
       voyageState = null;
       voyageEntry.set(-1);
       if (driven != null && Math.abs(driven - queuedEntry) > 0.002) entryBlend = { from: driven, start: now };
@@ -2514,7 +2412,7 @@ export default function RouteAtlas({
       }
       if (!hopEnabled) return;
       if (next.outbound) {
-        beginOutbound(next.duration, next.outbound.prologue);
+        beginOutbound(next.duration, next.outbound.entryShare);
         return;
       }
       const index = chapterRoute.findIndex((entry) => entry.stop.id === next.chapterId);
@@ -2552,35 +2450,36 @@ export default function RouteAtlas({
       schedule(queuedSample);
     };
     voyageHandlerRef.current = beginVoyage;
-    // ── Back to index: one zoom-out ──
+    // ── Back to the start: one zoom-out, then the prologue home ──
     // Left to the scroll, the camera flew back place by place (each flight
     // retargeted mid-air), then — the moment the page left the archive —
     // was pulled back IN onto the first place before the entrance zoomed it
     // out: a 0.4-level bump over Miami, and a zoom-out so steep that the
     // silver grade (which follows a rate-limited zoom) arrived ~300ms after
     // the planet did. Instead the trip drives the entry clock from here down
-    // to the index's own (0) over the page's own time and curve, and carries
-    // the hop pose from where the camera is onto the first place over the
-    // middle of it (OUTBOUND_AIM), while the entrance's pose still
-    // sits on it; the entrance then turns and pulls the planet out to where
-    // the prologue will hold it on the index (`prologue`: its progress
-    // there), so the prologue takes over on the landing frame. The zoom only
-    // ever falls. Outside the archive (the camera still in the entrance or
-    // on the globe) the scroll has it, as before.
-    const beginOutbound = (duration: number, prologueAt: number) => {
+    // to 0 over the first `share` of the page's own time and curve (the page
+    // is at the prologue's end by then, see HomePage's backToStart), and
+    // carries the hop pose from where the camera is onto the first place over
+    // the middle of that (OUTBOUND_AIM), while the entrance's pose still sits
+    // on it; the entrance then pulls the planet out to the pose the prologue
+    // holds at its end (the corner globe's size on the focal point, turned to
+    // the first place), and from there the prologue's own scroll glides it
+    // home to the corner as the page climbs the first screen (`homeward`).
+    // The zoom only ever falls. Outside the archive (the camera still in the
+    // entrance or on the globe) the scroll has it, as before.
+    const beginOutbound = (duration: number, share: number) => {
       const now = performance.now();
       if (!prologue || !classicGlobe || !(chapterMode() || cameraOnChapter(now))) return;
       dropHeldHop();
       entryBlend = null;
       flight = null;
       clearPlantTimers();
-      const q = clamp01(prologueAt);
+      // Where the prologue's frames will turn the planet at their end (q = 1),
+      // taken the short way round from the first place.
       const home = restCenter(0);
-      const natural = prologueNaturalLongitude(home[0], q, globeChannel.drift, PROLOGUE_GLOBE.settle * globeIntro.get());
-      const longitude = globeChannel.compose(natural, q) + globeChannel.wobble;
+      const natural = prologueNaturalLongitude(home[0], 1, globeChannel.drift, PROLOGUE_GLOBE.settle * globeIntro.get());
+      const longitude = globeChannel.compose(natural, 1) + globeChannel.wobble;
       entryMode.startLongitude = home[0] + wrap180(longitude - home[0]);
-      entryMode.startLatitude = PROLOGUE_GLOBE.startLatitude +
-        (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q);
       voyageState = {
         index: 0,
         start: now,
@@ -2588,7 +2487,7 @@ export default function RouteAtlas({
         dive: true,
         from: effectiveEntry(now),
         to: 0,
-        outbound: { center: [hopCenter[0], hopCenter[1]], zoom: hopZoom },
+        outbound: { center: [hopCenter[0], hopCenter[1]], zoom: hopZoom, share: clamp01(share) || 1 },
       };
       wakeHop();
       schedule(queuedSample);
@@ -2651,11 +2550,12 @@ export default function RouteAtlas({
       // would otherwise keep unwinding its spin toward the scrubbed chapter
       // (east) while the entrance turns toward the destination (west).
       // Reduced motion: the pose on the canvas decides (a swap finishes on
-      // the pose it started from before the new one is drawn).
+      // the pose it started from before the new one is drawn). Back to the
+      // start hands the camera back to the prologue once its zoom-out is done.
       const still = reducedMotion && prologue ? stillPose() : null;
       const inPrologue = prologue && !!sample && !!canvasBox && (still
         ? still !== 'archive'
-        : queuedPrologue < 1 && !(voyageState && voyageState.dive));
+        : queuedPrologue < 1 && !(voyageState && voyageState.dive && !homeward(performance.now())));
       if (bridge && !(voyageState && voyageState.dive)) bridge = null;
       // While the bridge runs, the padding travels inside its jumpTo instead.
       if (!inPrologue && !bridge && padded !== focused) {
@@ -2665,10 +2565,11 @@ export default function RouteAtlas({
 
       if (inPrologue && sample && canvasBox) {
         // ── Globe prologue ── the lit globe low in the bottom-right corner,
-        // turning with the page; over the last third it glides into the atlas
-        // focus and arrives exactly at the entrance's starting pose. Reduced
-        // motion draws only the two ends of it: the corner at q = 0, the
-        // planet at q = 1 (no drift or lean ever runs there, and no settle).
+        // turning with the page; past the first screen it glides into the
+        // atlas focus, at its own size, and arrives exactly at the entrance's
+        // starting pose. Reduced motion draws only the two ends of it: the
+        // corner at q = 0, the planet at q = 1 (no drift or lean ever runs
+        // there, and no settle).
         const q = still ? (still === 'planet' ? 1 : 0) : clamp01(queuedPrologue);
         const intro = globeIntro.get();
         const glide = smootherstep(clamp01((q - PROLOGUE_GLOBE.glideStart) / (PROLOGUE_GLOBE.glideEnd - PROLOGUE_GLOBE.glideStart)));
@@ -2709,9 +2610,9 @@ export default function RouteAtlas({
         ];
         handoffLongitude = center[0];
         const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
-        // The corner globe keeps its share of the screen on wider displays
-        // (radius doubles per zoom level), then settles to the entrance pose.
-        const cornerZoom = PROLOGUE_GLOBE.zoom + Math.log2(Math.max(0.75, viewportWidth / 1440));
+        // The corner globe's size, handed to the entrance exactly (the
+        // entrance's copy is set per layout from the same width).
+        const cornerZoom = cornerZoomFor(viewportWidth);
         const zoom = cornerZoom + (globeMode.startZoom - cornerZoom) * glide;
         const paddingKey = `${padding.top.toFixed(1)}|${padding.right.toFixed(1)}|${padding.bottom.toFixed(1)}|${padding.left.toFixed(1)}`;
         const paddingChanged = paddingKey !== prologuePaddingKey;
@@ -2727,19 +2628,9 @@ export default function RouteAtlas({
           lastBearingKey = bearing;
           lastOverview = false;
         }
-        // The roll's places light as their frames pass (see "The roll's
-        // places"). Reduced motion lights them all on the still planet, and
-        // none on the corner globe. Before the roll has been measured the
-        // planet lights them as it arrives.
-        const gates = rollGatesRef.current;
-        const gate = gates && !still ? gatePassed(q, gates) : { passed: 0, fraction: 0 };
-        const litTarget = still
-          ? (still === 'planet' ? rollPlaces.length : 0)
-          : gates
-            ? litWhenSeen(gate.passed, center, rollPlaces)
-            : (q >= PROLOGUE_GLOBE.glideEnd ? rollPlaces.length : 0);
-        stepLit(litTarget, performance.now(), !!still);
-        writeRouteTail(routeTail(lit.shown, gate.passed, gate.fraction, rollProgress));
+        // Unmarked until the dive (see "The places on the planet"); reduced
+        // motion has them whole on its still planet, none on the corner.
+        writePrologueInk(still === 'planet' ? 1 : 0);
         hideRouteAll(true);
         writeLook(q);
         // Leaving the prologue must resubmit the atlas padding.
@@ -2751,13 +2642,6 @@ export default function RouteAtlas({
           ? { ...sample, coordinate: hopCenter, zoom: hopZoom, pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING }
           : sample;
         if (prologue && prologuePaddingKey) prologuePaddingKey = '';
-        // Past the prologue (or diving from it on a voyage) every place is
-        // lit and the route is whole, at once; they fade with the dive.
-        if (prologue) {
-          stepLit(rollPlaces.length, performance.now(), true);
-          writeRouteTail(0);
-          hideRouteAll(false);
-        }
         // Enter The Route through geography, not through a scaled interface
         // panel. The same scroll-owned entry clock carries the camera from a
         // continental overview into the first chapter, so slow, fast and
@@ -2766,6 +2650,32 @@ export default function RouteAtlas({
         // after that phase ends, the existing chapter camera is untouched.
         // Reduced motion's archive pose holds until its swap has finished.
         const entryNow = still === 'archive' ? 1 : effectiveEntry();
+        // Past the prologue (or diving from it on a voyage) the route and his
+        // places print in as the dive begins, and fade with it (see "The
+        // places on the planet"). The archive's own route joins under the
+        // prologue's once that is whole: the same line, so it comes in unseen.
+        if (prologue) {
+          const ink = still ? 1 : smootherstep(clamp01(entryNow / PROLOGUE_INK_ENTRY));
+          writePrologueInk(ink);
+          hideRouteAll(ink < 1);
+        }
+        // The scroll's dive is a flight too (see setCameraState): until its
+        // camera has settled on the first place (the end of its window) the
+        // map is in the air for the tickets' gate, so chapter 1's ticket,
+        // which comes up the page with the dive, counts as seen only once
+        // the map under it is down, as every other ticket does after its
+        // flight. (The film roll's landing used to hold it back, until the
+        // roll went.) The attribute alone: the camera's own state (the
+        // focus corners) stays the hop controller's, and voyages keep theirs.
+        if (prologue && hopEnabled && !voyageState) {
+          const down = entryCameraAt(entryNow) >= 1;
+          if (down !== diveDown) {
+            const html = document.documentElement;
+            if (!down) html.dataset.atlasLandedAt = 'flying';
+            else if (diveDown === false) html.dataset.atlasLandedAt = String(Math.round(performance.now()));
+            diveDown = down;
+          }
+        }
         const entryCameraProgress = entryProgress
           ? classicEntrance
             ? entrancePhase(entryNow, ...ARCHIVE_ENTRANCE_PHASES.map)
@@ -2793,7 +2703,7 @@ export default function RouteAtlas({
           if (prologue && Number.isFinite(handoffLongitude)) {
             entryMode.startLongitude = aim.coordinate[0] + wrap180(handoffLongitude - aim.coordinate[0]);
           }
-          const globePose = globeEntryPose(aim, globeEntryProgress(entryNow), entryMode);
+          const globePose = globeEntryPose(aim, globeEntryProgress(entryNow, entryMode), entryMode);
           entryCoordinate = globePose.center;
           entryZoom = globePose.zoom;
           entryPitch = globePose.pitch;
@@ -2801,8 +2711,8 @@ export default function RouteAtlas({
         }
         let bridgedPadding: typeof activePadding | null = null;
         // Past the prologue (or diving on a voyage from it) the globe is lit
-        // and graded as at the index step; a voyage leaving the corner swings
-        // the light round with the bridge below, not on its first frame.
+        // and graded as at the prologue's end; a voyage leaving the corner
+        // swings the light round with the bridge below, not on its first frame.
         let lookQ = 1;
         if (bridge) {
           const t = (performance.now() - bridge.t0) / PROLOGUE_GLOBE.voyageBridgeMs;
@@ -3095,7 +3005,6 @@ export default function RouteAtlas({
       if (lifeFrame) cancelAnimationFrame(lifeFrame);
       if (hopFrame) cancelAnimationFrame(hopFrame);
       if (veilFrame) cancelAnimationFrame(veilFrame);
-      if (lit.frame) cancelAnimationFrame(lit.frame);
       lookWrites.fadeZoom = Number.NaN;
       window.clearTimeout(settleTimer);
       window.clearTimeout(sidesTimer);
@@ -3819,8 +3728,10 @@ export default function RouteAtlas({
                 'line-color': MAP_INK,
                 'line-width': 1.15,
                 'line-dasharray': [3, 2.5],
-                'line-opacity': ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0], 0.95, PROLOGUE_SATELLITE_FADE[1], 0],
-                'line-trim-offset': [0, 1],
+                // Seeded dark, once: the camera prints it in with the glide
+                // ("The places on the planet"), and a value here that changed
+                // per render would be re-applied behind its back.
+                'line-opacity': 0,
               }}
             />
           )}
@@ -3828,12 +3739,9 @@ export default function RouteAtlas({
         {prologue && (
           <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
             {/* Each place a small dot of white ink with a hard knockout of
-                burn round it (the index globe's version of the atlas's printed
+                burn round it (the globe's version of the atlas's printed
                 marks), upright to the viewer, so it reads as a point rather
-                than a disc lying on the sphere. Constant values: nothing here
-                is keyed on the pointer, because data-driven paint snaps. The
-                place pointed at in the index is printed over it in the DOM
-                (the prologue mark below), where it can ease. */}
+                than a disc lying on the sphere. */}
             <Layer
               id="prologue-stops-dot"
               type="circle"
@@ -3843,38 +3751,13 @@ export default function RouteAtlas({
                 'circle-stroke-color': MAP_BURN,
                 'circle-stroke-width': 1.25,
                 'circle-pitch-alignment': 'viewport',
-                // Seeded dark, once: the camera lights each place as the
-                // roll passes it ("The roll's places"), and a value here that
-                // changed per render would be re-applied behind its back.
+                // Seeded dark, once, like the route above.
                 'circle-opacity': 0,
                 'circle-stroke-opacity': 0,
               }}
             />
           </Source>
         )}
-        {/* The prologue marks (see `globeMarkOn`): the atlas's own mark (a
-            7px dot with its knockout, keyed by its chapter number), upright
-            to the viewer, over each place's dot; one prints at a time, and
-            only on a place that is lit. */}
-        {prologue && chapterRoute.map((entry) => {
-          const rollIndex = rollOrderIds.indexOf(entry.stop.id);
-          const on = globeMarkOn === entry.stop.id && rollIndex >= 0 && rollIndex < litStops;
-          return (
-            <Marker
-              key={`prologue-mark-${entry.stop.id}`}
-              longitude={entry.stop.coordinates[0]}
-              latitude={entry.stop.coordinates[1]}
-              anchor="center"
-              pitchAlignment="viewport"
-              rotationAlignment="viewport"
-            >
-              <span aria-hidden="true" className={`prologue-mark${on ? ' is-on' : ''}`}>
-                <i className="prologue-mark__dot" />
-                <span className="prologue-mark__num font-ui">{String(entry.chapterIndex + 1).padStart(2, '0')}</span>
-              </span>
-            </Marker>
-          );
-        })}
 
         {/* The places: printed marks, upright to the camera and centred on
             each place (AfPoint). The current place's dot is the focal mark —

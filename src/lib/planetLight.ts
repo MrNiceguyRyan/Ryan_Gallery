@@ -79,8 +79,9 @@ function limbByBisection(map: MapboxMap, x: number, y: number, width: number, he
 
 /** Where the planet sits on the map canvas, in canvas CSS px: its centre
  *  (padding-aware) and its true limb radius. The limb comes straight from the
- *  camera — r = f·R / √(d² − R²) — because the zoom fit the atlas uses for the
- *  index step reads 7% small at the corner zoom (592 against 641 at 1728).
+ *  camera — r = f·R / √(d² − R²) — because a fit on the zoom alone (the one
+ *  the atlas once sized its index planet with) reads 7% small at the corner
+ *  zoom (592 against 641 at 1728).
  *  Camera maths only; no layout is read. */
 export function planetOnScreen(map: MapboxMap): { x: number; y: number; r: number } | null {
   const center = map.project(map.getCenter());

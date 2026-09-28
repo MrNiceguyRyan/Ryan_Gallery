@@ -171,7 +171,7 @@ export interface GlobeLookValues {
 
 /** The single source for everything that changes with the scroll: the key
  *  light starts upper left, from the name's side, and swings round onto the
- *  archive's places by the index step; the ocean floor lifts once the page is
+ *  archive's places as the planet glides in; the ocean floor lifts once the page is
  *  under way; a faint graticule shows mid-prologue only (never on the first
  *  screen). `dawn` (0..1) sweeps the light in from behind the planet on load. */
 export function globeLookAt(q: number, dawn = 1): GlobeLookValues {
@@ -209,14 +209,11 @@ export function lightDirection(azimuthDeg: number, thetaDeg: number): [number, n
 }
 
 // ── The turn ──
-/** The prologue's turn runs WEST: Asia, Africa, the Atlantic, the Americas.
- *  The bridge's roll winds back from the last chapter (New York) to the first
- *  (Miami), and each place lights as its frames pass only once it faces the
- *  reader (src/lib/bridgeRoll.ts): turning west, New York comes round first
- *  and the canyons follow, in the roll's own order. (It used to turn east,
- *  across the Pacific, and New York came into view last.) The centre is
- *  target + A·(1 − q)³ + B·(1 − q): quick while the planet sits in the corner,
- *  slow as it glides in. A + B is the whole turn, chosen so the first screen
+/** The prologue's turn runs WEST: Asia, Africa, the Atlantic, the Americas,
+ *  so the planet comes round onto the first chapter from the east as it
+ *  glides in, and the eggs' pin and the BULB's hand-back turn with it. The
+ *  centre is target + A·(1 − q)³ + B·(1 − q): quick while the planet sits in
+ *  the corner, slow as it glides in. A + B is the whole turn, chosen so the first screen
  *  keeps its face: ≈ 115°E once the load-in has settled, drifting west over
  *  India toward ≈ 85°E, it faces 90–97°E through the first seconds, as the
  *  eastward drift did. `dir` is the way the centre's longitude goes as the

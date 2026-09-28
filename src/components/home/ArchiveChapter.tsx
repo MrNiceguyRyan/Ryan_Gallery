@@ -25,7 +25,6 @@ import {
   TEAR_SEEN_MS,
   accrueSeen,
   addPushSample,
-  bridgeGateOpensAt,
   deriveCornerLine,
   deriveTearLine,
   plateShare,
@@ -706,7 +705,6 @@ export default function ArchiveChapter({
     let prevT = -1;
     let prevPx = 0;
     let prevShare = 0;
-    let bridgeLanding: string | undefined;
     const forget = () => {
       samples = [];
       seenMs = 0;
@@ -718,24 +716,11 @@ export default function ArchiveChapter({
     // credited with the whole rest on their first move.
     const observe = (delta: number, now: number): TearGate => {
       const px = delta * (delta >= 0 ? geometry.span : geometry.prevSpan);
-      // Chapter 1 arrives with the bridge's landing: its gate waits out the
-      // dwell after it (BRIDGE_DWELL_MS), and the wheel that carried the page
-      // through the landing is a glide, not the reader's push — a new landing
-      // starts the hand's samples and the seen clock afresh.
-      let bridgeOpens = 0;
-      if (resolvedChapterIndex === 0) {
-        const landing = document.documentElement.dataset.bridgeLandedAt;
-        if (landing !== bridgeLanding) {
-          bridgeLanding = landing;
-          forget();
-        }
-        bridgeOpens = bridgeGateOpensAt(landing);
-      }
       addPushSample(samples, now, px);
       const push = pushState(samples, now);
       speed = push.vNow;
       if (prevT >= 0) {
-        const landedAt = Math.max(readLandedAt(document.documentElement.dataset.atlasLandedAt), bridgeOpens - TEAR_SEEN_MS);
+        const landedAt = readLandedAt(document.documentElement.dataset.atlasLandedAt);
         seenMs = accrueSeen(seenMs, prevT, now, landedAt, prevShare, geometry.h, geometry.vh);
       }
       if (seenMs >= TEAR_SEEN_MS) pushedPx = pushedAfter(pushedPx, push, px - prevPx);
@@ -752,7 +737,7 @@ export default function ArchiveChapter({
       prevShare = share;
       // The corner waits for the map to land: before that a push is still
       // the swipe that brought this plate in.
-      const landed = readLandedAt(document.documentElement.dataset.atlasLandedAt) <= now && bridgeOpens <= now;
+      const landed = readLandedAt(document.documentElement.dataset.atlasLandedAt) <= now;
       return {
         seen: seenMs >= TEAR_SEEN_MS && pushedPx >= TEAR_PUSH_PX,
         pushing: push.pushing,

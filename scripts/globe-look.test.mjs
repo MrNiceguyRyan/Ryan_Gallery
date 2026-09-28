@@ -20,8 +20,8 @@ import {
 const TARGET = -80.19;
 
 test('the prologue turn never stalls or turns back, whatever the drift, and ends on the target', () => {
-  // It turns WEST (the bridge's roll lights New York first, see
-  // scripts/bridge-roll.test.mjs): the centre's longitude only ever falls.
+  // It turns WEST (the eggs' pin and the BULB's hand-back go with it, see
+  // scripts/globe-egg.test.mjs): the centre's longitude only ever falls.
   for (const drift of [0, 15, 30]) {
     let previous = Infinity;
     for (let step = 0; step <= 1000; step += 1) {
@@ -86,7 +86,7 @@ test('the first screen keeps the approved light, and eases to the under-way ligh
     assert.ok(glow <= previous + 1e-12);
     previous = glow;
   }
-  // The swing still halves the glint by the index step.
+  // The swing still halves the glint by the time the planet has glided in.
   assert.ok(Math.abs(globeLookAt(0.9).spec - PLANET_LIGHT.spec * 0.5) < 1e-9);
 });
 

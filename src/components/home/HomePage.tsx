@@ -21,7 +21,6 @@ import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
 import { startLenis } from '../../lib/smoothScroll';
 import { archiveEntryProgress, entrancePhase, ARCHIVE_ENTRANCE_PHASES, ARCHIVE_ENTRY_LEAD } from '../../lib/archiveEntrance';
-import { rollFrames } from '../../lib/bridgeRoll';
 import { storyFrames } from '../../lib/storyPlan';
 import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
 import { activeChapters, chapterSections, issueChapters } from '../../lib/chapterOrder';
@@ -68,9 +67,6 @@ interface Props {
 // 768px switch selected the desktop tree on tablets while the desktop atlas
 // itself stayed hidden until 1024px, leaving an entire breakpoint without a
 // map.
-/** The one chapter rendered as ArchiveChapter's two-column editorial spread.
- *  Mid-stack on purpose: chapter 0's cover plate is where the bridge's roll
- *  lands (GlobePrologue). */
 /* Every chapter is the same kind of cover. One editorial spread used to break
    the run (index 3); the owner asked for one treatment throughout. -1 keeps
    the `feature` variant reachable without any chapter using it. */
@@ -80,8 +76,14 @@ const FEATURE_CHAPTER_INDEX = -1;
 // src/lib/chapterOrder.ts, which /about reads too.
 // Desktop globe prologue: the height of the opening laid over the atlas. The
 // atlas entrance overlaps it by ARCHIVE_ENTRY_LEAD of the viewport (the
-// entrance begins when the archive's top edge is 56% down the screen).
-const PROLOGUE_HEIGHT = '300svh';
+// entrance begins when the archive's top edge is 56% down the screen), so the
+// prologue's own clock runs over the first ~0.7 of a screen: the first screen
+// (his name, the line, the globe and its eggs), then the globe's glide to the
+// focal point. The dive into chapter 1 follows at once, and the first
+// photograph comes up the page about a screen from the top. (It was 300svh:
+// the name, a count page, then the index or the film roll, and the first
+// photograph was nearly three screens down.)
+const PROLOGUE_HEIGHT = '125svh';
 // A voyage's passing (global.css, "A voyage's passing"): while a click carries
 // the page to a place, what it streams past steps back so only the destination
 // reads. The page comes back up over DUR.out, started that long before the
@@ -140,8 +142,6 @@ function useDesktopLayout() {
 }
 
 interface DeferredRouteAtlasProps {
-  /** The bridge's gate crossings (see RouteAtlas's `rollGates`). */
-  rollGates?: number[] | null;
   stops: RouteStop[];
   activeIndex: number;
   engagedChapterId?: string | null;
@@ -279,13 +279,9 @@ export default function HomePage({ collections }: Props) {
   const [storyClosing, setStoryClosing] = useState(false);
   const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
-  // The trip a click on the index or the rail set in motion (desktop).
+  // The trip a click set in motion (desktop): a place on the atlas, the
+  // globe's ticket, pull to tear, Back to the start.
   const [voyage, setVoyage] = useState<AtlasVoyage | null>(null);
-  // The bridge's roll (GlobePrologue): where each chapter's select crosses
-  // the gate, for the globe to light its place (RouteAtlas).
-  const [rollGates, setRollGates] = useState<number[] | null>(null);
-  // The page's Lenis, as state: the roll writes itself from its scroll event.
-  const [lenisInstance, setLenisInstance] = useState<Lenis | null>(null);
   const voyageTimerRef = useRef(0);
   // Semantic city changes belong to React, but the optical timeline does not.
   // Keeping the current ID in a ref prevents every scroll frame from entering
@@ -676,11 +672,9 @@ export default function HomePage({ collections }: Props) {
   useEffect(() => {
     const { lenis, destroy } = startLenis();
     lenisRef.current = lenis;
-    setLenisInstance(lenis);
     return () => {
       destroy();
       lenisRef.current = null;
-      setLenisInstance(null);
     };
   }, [reduce]);
 
@@ -847,14 +841,10 @@ export default function HomePage({ collections }: Props) {
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
   }, [selectedCollection]);
-  // Closing-page figures, derived from the archive itself. Some chapters store
-  // their year as a string, so parse rather than trust the type.
-  // From the whole archive, deliberately — these figures are a claim about the
+  // The first screen's kicker years, derived from the archive itself. Some
+  // chapters store their year as a string, so parse rather than trust the
+  // type. From the whole archive, deliberately — the span is a claim about the
   // archive, not about the chapters that happen to be on the front this month.
-  const archiveFrameTotal = useMemo(
-    () => activeCollections.reduce((sum, city) => sum + (city.photoCount ?? city.photos?.length ?? 0), 0),
-    [activeCollections],
-  );
   const archiveYearSpan = useMemo(() => {
     const years = activeCollections
       .map((city) => Number(city.year))
@@ -964,29 +954,6 @@ export default function HomePage({ collections }: Props) {
       );
     }
   }, [activeCollections, orderedCities, routeStops]);
-
-
-  // The desktop prologue's roll mirrors the real chapter order exactly and
-  // previews no place without a story. Each entry carries its chapter anchor,
-  // the collection id the globe uses to light the stop, and its piece of the
-  // roll (its select and the frame either side of it).
-  const prologueCities = useMemo(
-    () => orderedCities.map((city) => {
-      const name = city.name.trim();
-      const region = (city.region ?? city.location)?.trim();
-      return {
-        name,
-        id: cityDomId(city),
-        chapterId: city._id,
-        // A state that only repeats the city (New York, New York) is left off.
-        region: region && region.toLowerCase() !== name.toLowerCase() ? region : undefined,
-        frames: city.photoCount ?? city.photos?.length ?? 0,
-        year: city.year ?? undefined,
-        roll: rollFrames(city.photos ?? [], city.coverImageUrl),
-      };
-    }),
-    [orderedCities],
-  );
 
   // Index of the active city — drives the geographic trace (−1 in the hero).
   // `activeArchiveId` holds the active city's full DOM id.
@@ -1106,10 +1073,10 @@ export default function HomePage({ collections }: Props) {
   }, [desktopLayout, reduce, startPassing, endPassing]);
 
   // Pull to tear (desktop tickets, ArchiveChapter): a cover torn away by hand
-  // goes on to the next place — the very voyage the index takes, asked for
-  // only once the face is free. The last ticket goes on to the closing, the
-  // page it tears on when scrolled (its top on the viewport's top is where
-  // the closing counts as arrived).
+  // goes on to the next place — the very voyage a place on the atlas takes,
+  // asked for only once the face is free. The last ticket goes on to the
+  // closing, the page it tears on when scrolled (its top on the viewport's
+  // top is where the closing counts as arrived).
   const tearAwayFrom = useCallback((index: number) => {
     const next = orderedCities[index + 1];
     if (next) {
@@ -1132,25 +1099,25 @@ export default function HomePage({ collections }: Props) {
     window.scrollTo({ top: targetY, behavior: 'auto' });
   }, [navigateLivingChapter, orderedCities, reduce]);
 
-  // Back to index: a voyage up the page, the same trip the index takes down
-  // it (a beat longer the further it goes, sine in and out, the wheel held
-  // off), not the browser's smooth scroll, which whipped seven thousand
-  // pixels past in 1.4 s, up to 366 px a frame. Every chapter on the way is
-  // passed. Focus goes to the index at once, without a scroll of its own.
-  // Without Lenis (reduced motion, a touch screen) it is a jump.
-  const backToIndex = useCallback(() => {
-    const index = document.getElementById('archive-index');
-    if (!index) return;
+  // Back to the start: a voyage up the page to the first screen, the same
+  // trip a place on the atlas takes down it (a beat longer the further it
+  // goes, sine in and out, the wheel held off), not the browser's smooth
+  // scroll, which whipped seven thousand pixels past in 1.4 s, up to 366 px a
+  // frame. Every chapter on the way is passed. Focus goes to the top of the
+  // page's content at once, without a scroll of its own. Without Lenis
+  // (reduced motion, a touch screen) it is a jump.
+  const backToStart = useCallback(() => {
+    const start = document.getElementById('main-content');
     const lenis = lenisRef.current;
     if (!lenis || reduce) {
-      index.scrollIntoView({ behavior: 'auto' });
-      index.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      start?.focus({ preventScroll: true });
       return;
     }
     if (voyageActiveRef.current) return;
-    index.focus({ preventScroll: true });
-    const targetY = documentTop(index);
-    const duration = voyageSeconds(Math.abs(targetY - window.scrollY));
+    start?.focus({ preventScroll: true });
+    const fromY = window.scrollY;
+    const duration = voyageSeconds(fromY);
     const token = Date.now();
     const settle = () => {
       voyageActiveRef.current = false;
@@ -1159,19 +1126,24 @@ export default function HomePage({ collections }: Props) {
     };
     voyageActiveRef.current = true;
     // The atlas flies out of the archive in one zoom-out on the trip's own
-    // clock (RouteAtlas, `beginOutbound`), ending where the prologue holds
-    // the planet on the index — its progress there, from the same offsets
-    // the scroll sampler uses.
-    const stage = desktopStageRef.current;
+    // clock (RouteAtlas, `beginOutbound`), and the prologue's own scroll
+    // glides the planet home to the first screen's corner for the last
+    // stretch. The zoom-out has to be done by the time the page reaches the
+    // prologue's end (where the dive begins going down): the share of the
+    // trip that takes, on the trip's own curve (voyageEase inverted), from
+    // the same offsets the scroll sampler uses — a beat early, so the
+    // prologue always takes the planet from the pose the dive starts from.
     const atlasSection = desktopAtlasSectionRef.current;
-    if (stage && atlasSection) {
-      const prologueAt = prologueProgressAt(targetY, documentTop(stage), documentTop(atlasSection), window.innerHeight);
-      setVoyage({ chapterId: '', duration: duration * 1000, token, outbound: { prologue: prologueAt } });
+    if (atlasSection && fromY > 0) {
+      const prologueEnd = documentTop(atlasSection) - window.innerHeight * ARCHIVE_ENTRY_LEAD;
+      const reached = Math.max(0, Math.min(1, (fromY - prologueEnd) / fromY));
+      const entryShare = Math.max(0.2, Math.min(1, 0.95 * (Math.acos(1 - 2 * reached) / Math.PI)));
+      setVoyage({ chapterId: '', duration: duration * 1000, token, outbound: { entryShare } });
     }
     startPassing(null, duration * 1000);
     window.clearTimeout(voyageTimerRef.current);
     voyageTimerRef.current = window.setTimeout(settle, duration * 1000 + 500);
-    lenis.scrollTo(targetY, {
+    lenis.scrollTo(0, {
       duration,
       easing: voyageEase,
       lock: true,
@@ -1691,13 +1663,6 @@ export default function HomePage({ collections }: Props) {
           <WalkIn collections={walkInCollections} places={walkInCollections.length} />
         </div>
 
-        {/* The city index is the single, lightweight seam between the opening
-            cover and the live atlas chapter. */}
-        {/* The seam between the opening cover and the atlas, and the target of
-            the end-cap's "Back to index". Desktop keeps it now that the living
-            composition renders there too; below 1024px the atlas stage starts
-            immediately under the opener and the band has no room. */}
-
         {/* One responsive archive tree at a time. This keeps Mapbox and every
              motion observer from mounting twice behind CSS-only visibility. */}
         <main
@@ -1738,17 +1703,7 @@ export default function HomePage({ collections }: Props) {
             className="relative pb-8 pt-24 lg:pt-0"
             style={{ ['--prologue-h' as never]: PROLOGUE_HEIGHT }}
           >
-          <GlobePrologue
-            chapters={orderedCities.length}
-            frames={archiveFrameTotal}
-            years={archiveYearSpan}
-            cities={prologueCities}
-            onSelect={navigateLivingChapter}
-            onHighlight={setEngagedChapterId}
-            progress={prologueProgress}
-            lenis={lenisInstance}
-            onRollGates={setRollGates}
-          />
+          <GlobePrologue years={archiveYearSpan} progress={prologueProgress} />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the
               prologue was laid over the atlas. */}
@@ -1780,7 +1735,6 @@ export default function HomePage({ collections }: Props) {
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
                 onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
-                rollGates={rollGates}
               />
             </aside>
 
@@ -1795,13 +1749,13 @@ export default function HomePage({ collections }: Props) {
 
             {/* Exhibition Content — leans subtly with scroll velocity */}
             <div data-archive-column className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
-              {/* Where "Selected Works" stood. The bridge's statements now say
-                  what the archive is, so the heading is gone from sight (it
-                  landed on the planet and repeated "enter"); its box stays,
-                  invisible and out of the accessibility tree, because chapter
-                  1's plate is where the roll's select lands and where the dive
-                  ends, and it must keep its place on the page. The heading
-                  itself stays for screen readers. */}
+              {/* Where "Selected Works" stood. The first screen says what the
+                  archive is, so the heading is gone from sight (it landed on
+                  the planet and repeated "enter"); its box stays, invisible
+                  and out of the accessibility tree, because the globe's dive
+                  ends as chapter 1's plate reaches the reading line, and the
+                  plate must keep its place on the page for the two to meet.
+                  The heading itself stays for screen readers. */}
               <h2 className="sr-only font-ui">Selected Works</h2>
               <div aria-hidden="true" className="invisible relative max-w-2xl select-none lg:ml-[12%]">
                 <div className="space-y-5">
@@ -1871,9 +1825,6 @@ export default function HomePage({ collections }: Props) {
                                   sharedLayoutId={
                                     selectedCollection?._id === city._id ? storySharedLayoutId : undefined
                                   }
-                                  /* One editorial spread breaks the run of
-                                     look-alike covers. Never chapter 0 — the
-                                     bridge's select lands in its cover plate. */
                                   variant={index === FEATURE_CHAPTER_INDEX ? 'feature' : 'cover'}
                                   desktopMotion
                                   /* Pull to tear: never while a voyage is
@@ -1954,7 +1905,7 @@ export default function HomePage({ collections }: Props) {
         {desktopLayout ? (
           <ArchiveClosing
             collections={orderedCities}
-            onBackToIndex={backToIndex}
+            onBackToStart={backToStart}
             onOpenStory={openStoryFromClosing}
           />
         ) : (
@@ -1968,10 +1919,10 @@ export default function HomePage({ collections }: Props) {
           </span>
           <button
             type="button"
-            onClick={backToIndex}
+            onClick={backToStart}
             className="min-h-11 font-ui text-[9px] uppercase tracking-[0.1em] text-[#D2FF00]/82 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           >
-            Back to index ↑
+            Back to the start ↑
           </button>
         </div>
         )}
