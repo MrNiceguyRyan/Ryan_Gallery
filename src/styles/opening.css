@@ -1,0 +1,1275 @@
+/* ── The opening film (src/components/home/OpeningFilm.tsx) ────────────────
+   A word hunt through many texts; the schedule, the camera and the landings
+   are src/lib/openingFilm.ts. This sheet is the film's MATERIALS: the
+   overlay, the code rain, the finder, the timecode, and one block per scene.
+   Sheets are drawn at the desktop's scale (a found word's cap height is
+   about 64 px); the island's camera scales and places them. Faces: our own
+   (Fraunces, Space Grotesk) and web-safe stacks for variety — nothing is
+   downloaded for the film. No lime but the finder; no yellow anywhere. */
+
+.opening {
+  /* The found word's cap height on screen (src/lib/openingFilm.ts capFor). */
+  --of-cap: clamp(36px, min(6.4vh, 3.9vw), 96px);
+  /* Where the code scene locks ARCHIVE (FOCUS.archive). */
+  --of-fx: 50vw;
+  --of-fy: 46vh;
+  /* The locked letters' scale while they sit in the rain. */
+  --of-k0: 0.2;
+  --of-mono: Menlo, "SF Mono", Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --of-georgia: Georgia, "Times New Roman", Times, serif;
+  --of-old: Baskerville, "Baskerville Old Face", "Libre Baskerville", Georgia, "Times New Roman", serif;
+  --of-didone: Didot, "Bodoni 72", "Bodoni MT", "Bodoni 72 Oldstyle", Georgia, serif;
+  --of-helv: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --of-type: "American Typewriter", "Courier New", Courier, monospace;
+  --of-courier: Courier, "Courier New", monospace;
+  --of-lime: #d2ff00;
+  --of-bone: #f4f4ed;
+  --of-ink: #16190f;
+
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: none;
+  overflow: hidden;
+  contain: strict;
+  background: #0b0d09;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+@media (max-width: 1023px) {
+  .opening {
+    --of-fy: 44vh;
+    --of-k0: 0.34;
+  }
+}
+/* The head script writes html[data-opening] before the first paint when the
+   film plays (src/lib/reelVisit.ts); without it — a second view, no
+   scripts — the film is not there at all. */
+html[data-opening] .opening { display: block; }
+html[data-reel='skip'] .opening { display: none; }
+/* A failsafe: the island marks the film running (data-opening="run"). If it
+   never does — its script failed or never came — the layer lets the page
+   through after a while instead of covering it for good. */
+html[data-opening='']:not([data-reel='skip']) .opening,
+html[data-opening='']:not([data-reel='skip']) .of-skip {
+  animation: of-failsafe 600ms var(--ease-fade) 12s both;
+}
+html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
+  animation: of-failsafe-in 600ms var(--ease-arrive) 12s both;
+}
+@keyframes of-failsafe {
+  to { opacity: 0; visibility: hidden; }
+}
+@keyframes of-failsafe-in {
+  from { opacity: 0; }
+  to { opacity: 1; pointer-events: auto; }
+}
+/* Landing: the page shows through where the film has gone. */
+.opening.is-landing { background: transparent; }
+
+.of-stage,
+.of-portal,
+.of-flight {
+  position: absolute;
+  inset: 0;
+}
+.of-portal {
+  display: block;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+}
+.of-flight { pointer-events: none; }
+
+.of-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  contain: strict;
+}
+.of-scene--code { opacity: 1; }
+.of-sheet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.of-find {
+  white-space: nowrap;
+}
+.of-bl {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+
+/* ── The film's furniture ─────────────────────────────────────────────── */
+/* Grain: a still tile of noise, jumped about twelve times a second. */
+.of-grain {
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  opacity: 0.085;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 1.6 -0.35'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  animation: of-grain 0.5s steps(1) infinite;
+  will-change: transform;
+}
+@keyframes of-grain {
+  0% { transform: translate3d(0, 0, 0); }
+  17% { transform: translate3d(-37px, 21px, 0); }
+  33% { transform: translate3d(52px, -44px, 0); }
+  50% { transform: translate3d(-18px, -71px, 0); }
+  67% { transform: translate3d(66px, 38px, 0); }
+  83% { transform: translate3d(-61px, 9px, 0); }
+}
+.of-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 78% 72% at 50% 48%, transparent 52%, rgba(6, 7, 5, 0.34) 100%);
+}
+
+/* The finder: four thin corners, the one lime on screen, in an ink casing
+   so they read on paper as well as on the dark. The island moves each
+   corner (a transform: the lines never scale). */
+.of-finder {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.of-finder__c {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border: 0 solid var(--of-lime);
+  filter: drop-shadow(0 0 0.6px rgba(8, 10, 6, 0.95)) drop-shadow(0 0 0.6px rgba(8, 10, 6, 0.95));
+  will-change: transform;
+}
+.of-finder__c--tl { border-top-width: 2px; border-left-width: 2px; }
+.of-finder__c--tr { border-top-width: 2px; border-right-width: 2px; }
+.of-finder__c--bl { border-bottom-width: 2px; border-left-width: 2px; }
+.of-finder__c--br { border-bottom-width: 2px; border-right-width: 2px; }
+@media (max-width: 1023px) {
+  .of-finder__c { width: 14px; height: 14px; }
+}
+
+/* The timecode and the scene count, bottom left, on an ink pill; the Skip
+   pill bottom right. Digits run on strips (a transform, stepped). */
+.of-hud {
+  position: absolute;
+  left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
+  bottom: max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: rgba(22, 25, 15, 0.82);
+  box-shadow: 0 0 0 1px rgba(244, 244, 237, 0.08);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: rgba(244, 244, 237, 0.72);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.of-hud__rec {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--of-bone);
+  animation: of-rec 1s steps(1) infinite;
+}
+@keyframes of-rec {
+  50% { opacity: 0.25; }
+}
+.of-digits {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: top;
+}
+.of-digits__strip {
+  display: block;
+  white-space: pre;
+  line-height: 1;
+}
+.of-digits--ff .of-digits__strip { animation: of-strip-24 1s steps(24) infinite; }
+.of-digits--ss .of-digits__strip { animation: of-strip-10 10s steps(10) infinite; }
+@keyframes of-strip-24 { to { transform: translateY(-24em); } }
+@keyframes of-strip-10 { to { transform: translateY(-10em); } }
+.of-hud__total--phone { display: none; }
+@media (max-width: 1023px) {
+  .of-hud__total--desk { display: none; }
+  .of-hud__total--phone { display: inline; }
+  .of-hud__tc-label { display: none; }
+}
+
+.of-skip {
+  position: fixed;
+  right: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right));
+  bottom: max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom));
+  z-index: 71;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  border: 1px solid rgba(244, 244, 237, 0.12);
+  background: rgba(22, 25, 15, 0.82);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--of-bone);
+  cursor: pointer;
+  transition: background-color var(--dur-in) var(--ease-arrive), opacity var(--dur-out) var(--ease-fade);
+}
+.of-skip:hover { background: rgba(22, 25, 15, 0.94); }
+.of-skip:focus-visible {
+  outline: 2px solid var(--of-lime);
+  outline-offset: 3px;
+}
+html[data-opening] .of-skip { display: inline-flex; }
+html[data-reel='skip'] .of-skip { display: none; }
+.of-skip.is-gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── 1. Code ──────────────────────────────────────────────────────────── */
+.of-scene--code {
+  background: radial-gradient(ellipse 70% 60% at 50% 46%, #11140d 0%, #0b0d09 70%);
+  --of-lockfs: calc(var(--of-cap) / 0.729);
+  --of-pitch: calc(var(--of-lockfs) * 0.602 * var(--of-k0));
+}
+.of-rain {
+  position: absolute;
+  inset: 0;
+  transform-origin: var(--of-fx) var(--of-fy);
+  will-change: transform, opacity;
+}
+.of-rain__col {
+  position: absolute;
+  top: 0;
+  left: calc(var(--of-fx) + var(--i) * var(--of-pitch) - var(--of-pitch) / 2);
+  width: var(--of-pitch);
+  font-family: var(--of-mono);
+  font-size: calc(var(--of-pitch) / 0.602 * 0.8);
+  line-height: 1.24;
+  text-align: center;
+  word-break: break-all;
+  white-space: normal;
+  background: linear-gradient(180deg, rgba(122, 134, 94, 0) 0%, rgba(122, 134, 94, 0.28) 40%, rgba(150, 162, 118, 0.85) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: of-rain var(--fall) linear infinite;
+  animation-delay: calc(var(--phase) * var(--fall) * -1);
+  will-change: transform;
+}
+.of-rain__head {
+  color: #e8ebd8;
+  text-shadow: 0 0 9px rgba(232, 235, 216, 0.4);
+}
+@keyframes of-rain {
+  from { transform: translate3d(0, -100%, 0); }
+  to { transform: translate3d(0, 100vh, 0); }
+}
+@media (max-width: 1023px) {
+  /* A phone shows a fraction of the columns; the rest stay out of the tree. */
+  .of-rain__col:nth-child(-n + 44),
+  .of-rain__col:nth-child(n + 98) { display: none; }
+}
+.of-lock {
+  position: absolute;
+  left: var(--of-fx);
+  top: var(--of-fy);
+  width: 0;
+  height: 0;
+}
+.of-lock__cells,
+.of-lock__word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--of-mono);
+  font-size: var(--of-lockfs);
+  line-height: 1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) scale(var(--of-k0));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.of-lock__word {
+  display: inline-block;
+  color: var(--of-bone);
+}
+.of-lock__cells { display: flex; }
+.of-lock__cell {
+  display: block;
+  width: 1ch;
+  height: 1.14em;
+  margin-top: -0.07em;
+  background: #0b0d09;
+}
+.of-lock__slot {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  width: 1ch;
+  height: 1em;
+  overflow: hidden;
+}
+.of-lock__strip {
+  display: block;
+  width: 1ch;
+  word-break: break-all;
+  line-height: 1;
+  color: #8f9a72;
+  animation: of-scramble 230ms steps(7, end) both;
+  animation-delay: calc(160ms + var(--k) * 62ms);
+}
+@keyframes of-scramble {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, -7em, 0); }
+}
+.of-lock__letter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1ch;
+  line-height: 1;
+  color: var(--of-bone);
+  text-shadow: 0 0 0.12em rgba(244, 244, 237, 0.28);
+  opacity: 0;
+  animation: of-lock-on 80ms linear both;
+  animation-delay: calc(390ms + var(--k) * 62ms);
+}
+@keyframes of-lock-on { to { opacity: 1; } }
+
+/* ── 2. Dictionary ────────────────────────────────────────────────────── */
+.of-scene--dictionary { background: #1a1813; }
+.of-dict {
+  width: 3400px;
+  height: 2500px;
+  background:
+    radial-gradient(ellipse 50% 40% at 34% 40%, rgba(255, 252, 240, 0.55), transparent 70%),
+    #e9e1cc;
+  color: #29241c;
+  font-family: var(--of-georgia);
+}
+.of-dict__head {
+  position: absolute;
+  left: 860px;
+  top: 520px;
+  width: 1900px;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 18px;
+  border-bottom: 2px solid rgba(41, 36, 28, 0.55);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.of-dict__cols {
+  position: absolute;
+  left: 860px;
+  top: 620px;
+  width: 1900px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 96px;
+}
+.of-dict__col {
+  border-right: 0;
+}
+.of-dict__col + .of-dict__col {
+  box-shadow: -48px 0 0 -46.5px rgba(41, 36, 28, 0.4);
+}
+.of-dict p {
+  margin: 0 0 14px;
+  padding-left: 44px;
+  text-indent: -44px;
+  font-size: 40px;
+  line-height: 1.42;
+  text-align: justify;
+  hyphens: auto;
+}
+.of-dict__hw {
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+.of-dict__pos { font-style: italic; }
+
+/* ── 3. Newspaper ─────────────────────────────────────────────────────── */
+.of-scene--newspaper { background: #181713; }
+.of-news {
+  width: 3600px;
+  height: 2700px;
+  background:
+    radial-gradient(ellipse 60% 50% at 45% 38%, rgba(250, 246, 234, 0.45), transparent 72%),
+    #ded8c6;
+  color: #1c1b17;
+  font-family: var(--of-georgia);
+}
+.of-news__mast {
+  position: absolute;
+  left: 700px;
+  top: 360px;
+  width: 2300px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 0 16px;
+  border-top: 3px solid #1c1b17;
+  border-bottom: 6px double #1c1b17;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.of-news__name {
+  font-size: 84px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  font-style: italic;
+}
+.of-news__flag {
+  position: absolute;
+  left: 700px;
+  top: 560px;
+  width: 1500px;
+  padding-top: 20px;
+  border-top: 10px solid #1c1b17;
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.of-news__hed {
+  position: absolute;
+  left: 700px;
+  top: 700px;
+  width: 1500px;
+  font-size: 58px;
+  font-style: italic;
+  line-height: 1.1;
+}
+.of-news__cols {
+  position: absolute;
+  left: 700px;
+  top: 820px;
+  width: 2300px;
+  height: 1500px;
+  columns: 5;
+  column-gap: 44px;
+  column-rule: 1px solid rgba(28, 27, 23, 0.32);
+  column-fill: auto;
+  font-size: 27px;
+  line-height: 1.36;
+  text-align: justify;
+  hyphens: auto;
+}
+.of-news__cols p {
+  margin: 0 0 12px;
+  text-indent: 1.4em;
+}
+.of-news__photo {
+  height: 520px;
+  margin: 8px 0 18px;
+  background:
+    radial-gradient(circle at 50% 50%, #1c1b17 0 34%, transparent 36%) 0 0 / 9px 9px,
+    linear-gradient(160deg, rgba(222, 216, 198, 0.9) 10%, rgba(222, 216, 198, 0.2) 55%, rgba(222, 216, 198, 0.75) 90%);
+  background-blend-mode: normal;
+  break-inside: avoid;
+}
+
+/* ── 4. Magazine (the wide shot) ──────────────────────────────────────── */
+.of-scene--magazine {
+  background:
+    radial-gradient(ellipse 46% 42% at 50% 46%, rgba(80, 66, 48, 0.35), transparent 70%),
+    radial-gradient(ellipse 80% 70% at 50% 46%, #231f18 0%, #110f0b 80%);
+}
+.of-mag {
+  width: 700px;
+  height: 460px;
+  display: flex;
+  isolation: isolate;
+  box-shadow: 0 34px 70px rgba(0, 0, 0, 0.6), 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+.of-mag__page {
+  position: relative;
+  width: 350px;
+  height: 460px;
+  overflow: hidden;
+}
+.of-mag__page--photo { background: #3b2536; }
+.of-mag__picture {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 34% 20% at 56% 34%, rgba(244, 230, 214, 0.5), transparent 72%),
+    repeating-linear-gradient(0deg, rgba(10, 6, 9, 0) 0 20px, rgba(10, 6, 9, 0.5) 20px 27px),
+    linear-gradient(180deg, #5a3b52 0%, #3b2536 45%, #1f141d 100%);
+}
+.of-mag__caption {
+  position: absolute;
+  left: 20px;
+  bottom: 22px;
+  max-width: 150px;
+  font-family: var(--of-didone);
+  font-style: italic;
+  font-size: 10px;
+  line-height: 1.3;
+  color: rgba(244, 238, 228, 0.8);
+}
+.of-mag__page--text {
+  padding: 150px 30px 0 36px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.16), transparent 9%), #efe9dd;
+  color: #1c1917;
+  font-family: var(--of-didone);
+}
+.of-mag__kicker {
+  position: absolute;
+  left: 36px;
+  top: 30px;
+  font-family: var(--font-ui);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5b3a50;
+}
+.of-mag__giant {
+  position: absolute;
+  left: 0;
+  top: 44px;
+  width: 100%;
+  text-align: center;
+  font-family: var(--of-didone);
+  font-size: 97px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  /* Bone on the picture, ink on the page: the ink changes exactly at the
+     gutter (the block is the spread's width). */
+  background: linear-gradient(90deg, #f1ebe0 0 350px, #1c1917 350px);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.of-mag__deck {
+  display: block;
+  max-width: 250px;
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.22;
+}
+.of-mag__body {
+  margin-top: 16px;
+  columns: 2;
+  column-gap: 14px;
+  font-family: var(--of-georgia);
+  font-size: 6.4px;
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+  color: #2a2522;
+}
+.of-mag__body p { margin: 0 0 5px; }
+.of-mag__folio {
+  position: absolute;
+  bottom: 16px;
+  font-family: var(--font-ui);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+.of-mag__folio--left { left: 20px; color: rgba(244, 238, 228, 0.7); bottom: auto; top: 18px; }
+.of-mag__folio--right { right: 24px; color: #5b3a50; }
+
+/* ── 5. Subtitles ─────────────────────────────────────────────────────── */
+.of-scene--subtitles { background: #040404; }
+.of-subs {
+  width: 2800px;
+  height: 1500px;
+}
+.of-subs__frame {
+  position: absolute;
+  left: 0;
+  top: 170px;
+  width: 2800px;
+  height: 1172px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #111416 0%, #1c1d1f 55%, #0c0d0e 100%);
+}
+.of-subs__light {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.8;
+}
+.of-subs__light--a { left: 520px; top: 260px; width: 420px; height: 420px; background: #c79a70; }
+.of-subs__light--b { left: 1180px; top: 150px; width: 300px; height: 300px; background: #8d5e5a; opacity: 0.7; }
+.of-subs__light--c { left: 1760px; top: 330px; width: 520px; height: 520px; background: #3d5c58; opacity: 0.75; }
+.of-subs__light--d { left: 900px; top: 640px; width: 900px; height: 240px; background: #2a2b2d; opacity: 0.9; filter: blur(60px); }
+.of-subs__lines {
+  position: absolute;
+  left: 0;
+  top: 890px;
+  width: 2800px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--of-helv);
+  font-size: 86px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #f6f4ec;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 3px 3px rgba(0, 0, 0, 0.85);
+}
+
+/* ── 6. Ticket (a cinema ticket on its own stock) ─────────────────────── */
+.of-scene--ticket {
+  background: radial-gradient(ellipse 65% 60% at 44% 42%, #2a241c 0%, #15120d 80%);
+}
+.of-ticket {
+  width: 1280px;
+  height: 520px;
+  display: flex;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 30%, rgba(255, 255, 255, 0.07), transparent 70%),
+    #223b55;
+  color: var(--stub-ink, #f4f4ed);
+  font-family: var(--font-ui);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 6px 14px rgba(0, 0, 0, 0.3);
+  transform: rotate(0deg);
+}
+.of-ticket__stub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 300px;
+  padding: 44px 36px;
+  background-image: radial-gradient(circle at 100% 50%, #15120d 0 7px, transparent 7.5px);
+  background-size: 16px 30px;
+  background-repeat: repeat-y;
+  background-position: right 0 top 6px;
+}
+.of-ticket__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 70px;
+  flex: 1;
+}
+.of-ticket__admit {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.66);
+}
+.of-ticket__no {
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  color: rgba(244, 244, 237, 0.66);
+}
+.of-ticket__word {
+  margin-top: 14px;
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.of-ticket__row {
+  display: flex;
+  gap: 40px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(244, 244, 237, 0.24);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.of-ticket__fine {
+  margin-top: 26px;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  color: rgba(244, 244, 237, 0.55);
+}
+
+/* ── 7. Book ──────────────────────────────────────────────────────────── */
+.of-scene--book { background: #1d1a14; }
+.of-book {
+  width: 3600px;
+  height: 2600px;
+  background:
+    radial-gradient(ellipse 45% 40% at 50% 45%, rgba(255, 251, 238, 0.5), transparent 75%),
+    #ece3cd;
+  color: #2a241d;
+  font-family: var(--of-old);
+}
+.of-book__text {
+  position: absolute;
+  left: 760px;
+  top: 560px;
+  width: 2120px;
+  font-size: 86px;
+  line-height: 1.5;
+}
+.of-book__line {
+  display: block;
+  white-space: nowrap;
+  text-align: justify;
+  text-align-last: justify;
+}
+.of-book__line--near {
+  color: rgba(42, 36, 29, 0.55);
+  text-shadow: 0 0 2px rgba(42, 36, 29, 0.55);
+}
+.of-book__line--far {
+  color: transparent;
+  text-shadow: 0 0 8px rgba(42, 36, 29, 0.66);
+}
+.of-book__folio {
+  position: absolute;
+  left: 760px;
+  top: 420px;
+  font-size: 40px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: transparent;
+  text-shadow: 0 0 9px rgba(42, 36, 29, 0.6);
+}
+.of-book__gutter {
+  position: absolute;
+  left: 470px;
+  top: 0;
+  width: 240px;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(40, 32, 22, 0.55), rgba(40, 32, 22, 0) 100%);
+}
+
+/* ── 8. Departure board ───────────────────────────────────────────────── */
+.of-scene--board { background: #0c0d0e; }
+.of-board {
+  width: 3200px;
+  height: 2200px;
+  background:
+    radial-gradient(ellipse 50% 45% at 45% 40%, rgba(255, 255, 255, 0.04), transparent 70%),
+    #141517;
+  font-family: var(--of-helv);
+  color: #efeee6;
+}
+.of-board__title {
+  position: absolute;
+  left: 860px;
+  top: 560px;
+  display: flex;
+  align-items: flex-end;
+  gap: 48px;
+}
+.of-board__word {
+  display: inline-flex;
+  gap: 8px;
+}
+.of-flap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 66px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2a2c30 0%, #222428 49.4%, #0c0d0e 49.4%, #0c0d0e 50.6%, #1b1c20 50.6%, #16171a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 0 rgba(0, 0, 0, 0.6);
+  font-size: 46px;
+  font-weight: 500;
+  line-height: 1;
+}
+.of-flap--big {
+  width: 86px;
+  height: 128px;
+  border-radius: 6px;
+  font-size: 90px;
+}
+.of-board__label {
+  padding-bottom: 12px;
+  font-family: var(--font-ui);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(239, 238, 230, 0.55);
+}
+.of-board__rows {
+  position: absolute;
+  left: 860px;
+  top: 730px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.of-board__row {
+  display: flex;
+  gap: 34px;
+}
+.of-flaps {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* ── 9. Telegram ──────────────────────────────────────────────────────── */
+.of-scene--telegram { background: #1b1813; }
+.of-wire {
+  width: 3400px;
+  height: 2400px;
+  background:
+    radial-gradient(ellipse 50% 45% at 40% 45%, rgba(255, 250, 232, 0.45), transparent 72%),
+    #e6dcc0;
+  color: #5b3a2e;
+  font-family: var(--of-georgia);
+}
+.of-wire__head {
+  position: absolute;
+  left: 640px;
+  top: 460px;
+  width: 2200px;
+  display: flex;
+  align-items: baseline;
+  gap: 90px;
+  padding-bottom: 20px;
+  border-bottom: 3px solid rgba(91, 58, 46, 0.7);
+}
+.of-wire__title {
+  font-size: 76px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.of-wire__field {
+  font-size: 28px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.of-wire__tapes {
+  position: absolute;
+  left: 640px;
+  top: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 34px;
+}
+.of-wire__tape {
+  padding: 10px 34px 12px;
+  background: #f7f1df;
+  box-shadow: 0 2px 4px rgba(60, 40, 20, 0.22), 0 0 0 1px rgba(60, 40, 20, 0.06);
+  font-family: var(--of-type);
+  font-size: 97px;
+  line-height: 1.1;
+  color: #1f1d1a;
+  white-space: nowrap;
+}
+.of-wire__rules {
+  position: absolute;
+  left: 640px;
+  top: 1150px;
+  width: 2200px;
+  height: 700px;
+  background: repeating-linear-gradient(180deg, transparent 0 86px, rgba(91, 58, 46, 0.35) 86px 88px);
+}
+
+/* ── 10. Notebook ─────────────────────────────────────────────────────── */
+.of-scene--notebook { background: #1c1a16; }
+.of-note {
+  width: 3400px;
+  height: 2600px;
+  background:
+    radial-gradient(ellipse 50% 45% at 45% 45%, rgba(255, 255, 255, 0.4), transparent 72%),
+    repeating-linear-gradient(180deg, transparent 0 116px, rgba(120, 145, 180, 0.42) 116px 118px),
+    #f1eee4;
+  color: #1f2c4a;
+  font-family: var(--font-serif);
+}
+.of-note__margin {
+  position: absolute;
+  left: 700px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(190, 128, 120, 0.7);
+  box-shadow: 8px 0 0 rgba(190, 128, 120, 0.45);
+}
+.of-note__text {
+  position: absolute;
+  left: 780px;
+  top: 494px;
+  margin: 0;
+  font-size: 92px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 118px;
+}
+.of-note__line {
+  display: block;
+  white-space: nowrap;
+}
+.of-note__line--soft {
+  color: transparent;
+  text-shadow: 0 0 6px rgba(31, 44, 74, 0.7);
+}
+
+/* ── 11. Library catalogue card ───────────────────────────────────────── */
+.of-scene--catalogue {
+  background: radial-gradient(ellipse 70% 60% at 40% 40%, #33271b 0%, #1a130d 80%);
+}
+.of-card {
+  width: 2700px;
+  height: 1620px;
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 30%, rgba(255, 255, 255, 0.45), transparent 70%),
+    #efe8d6;
+  color: #26231e;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+}
+.of-card__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 118px;
+  height: 4px;
+  background: rgba(160, 82, 70, 0.8);
+}
+.of-card__text {
+  position: absolute;
+  left: 110px;
+  top: 190px;
+  display: flex;
+  gap: 120px;
+  font-family: var(--of-courier);
+  font-size: 108px;
+  line-height: 1.22;
+}
+.of-card__call {
+  line-height: 1.22;
+}
+.of-card__lines {
+  display: flex;
+  flex-direction: column;
+}
+.of-card__line { white-space: nowrap; }
+.of-card__line--in { padding-left: 1.2em; }
+.of-card__line--gap { margin-top: 0.6em; }
+.of-card__hole {
+  position: absolute;
+  left: 50%;
+  bottom: 90px;
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+  border-radius: 50%;
+  background: #1a130d;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* ── 12. The edge of a strip of film, on a contact sheet ──────────────── */
+.of-scene--contact { background: #ebe7dd; }
+.of-film {
+  width: 3400px;
+  height: 1500px;
+}
+.of-film__strip {
+  position: absolute;
+  left: 0;
+  top: 90px;
+  width: 3400px;
+  height: 1200px;
+  background: #0c0c0b;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.of-film__perfs {
+  position: absolute;
+  left: 40px;
+  right: 0;
+  height: 112px;
+  display: flex;
+  gap: 110px;
+}
+.of-film__perfs i {
+  flex: none;
+  display: block;
+  width: 78px;
+  height: 112px;
+  border-radius: 12px;
+  background: #ebe7dd;
+}
+.of-film__perfs--top { top: 40px; }
+.of-film__perfs--bottom { bottom: 40px; }
+.of-film__edge {
+  position: absolute;
+  left: 260px;
+  top: 172px;
+  display: flex;
+  align-items: baseline;
+  gap: 140px;
+  font-family: var(--font-ui);
+  font-size: 91px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #dccda8;
+  white-space: nowrap;
+}
+.of-film__edge > span:not(.of-film__print) {
+  font-size: 58px;
+  color: rgba(220, 205, 168, 0.7);
+}
+.of-film__frames {
+  position: absolute;
+  left: 60px;
+  top: 300px;
+  display: flex;
+  gap: 90px;
+}
+.of-film__frame {
+  display: block;
+  width: 1000px;
+  height: 640px;
+}
+.of-film__frame--a { background: linear-gradient(170deg, #5a6a73 0%, #2e3a40 60%, #1b2226 100%); }
+.of-film__frame--b { background: linear-gradient(190deg, #8a6f55 0%, #4d3a2b 55%, #221a14 100%); }
+.of-film__frame--c { background: linear-gradient(175deg, #6c6f64 0%, #3a3d35 60%, #1a1c18 100%); }
+
+/* ── 13. The clapperboard ─────────────────────────────────────────────── */
+.of-scene--slate {
+  background: radial-gradient(ellipse 60% 60% at 42% 42%, #1c1f18 0%, #0c0e0a 78%);
+}
+.of-slate {
+  width: 1180px;
+  height: 830px;
+  color: #efeee4;
+  font-family: var(--font-ui);
+  /* A still frame without the island (reduced motion, first paint): the
+     board in the middle of the screen. */
+  transform: translate3d(calc(50vw - 590px), calc(50vh - 415px), 0);
+}
+.of-slate__sticks {
+  position: relative;
+  height: 118px;
+}
+.of-slate__stick {
+  position: absolute;
+  left: 0;
+  width: 1180px;
+  height: 52px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(-58deg, #ecebe2 0 54px, #151713 54px 108px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+}
+.of-slate__stick--top {
+  top: 4px;
+  transform-origin: 26px 50%;
+  transform: rotate(-17deg);
+}
+.of-slate__stick--base { top: 62px; }
+.of-slate__board {
+  height: 712px;
+  padding: 36px 44px 30px;
+  border-radius: 6px;
+  background:
+    radial-gradient(ellipse 70% 60% at 40% 40%, rgba(255, 255, 255, 0.05), transparent 70%),
+    #171915;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+.of-slate__row {
+  display: flex;
+  align-items: baseline;
+  gap: 28px;
+  border-bottom: 1.5px solid rgba(239, 238, 228, 0.3);
+}
+.of-slate__row--name { padding: 30px 0 40px; }
+.of-slate__row--prod { padding: 30px 0 36px; }
+.of-slate__label {
+  flex: none;
+  width: 118px;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(239, 238, 228, 0.58);
+}
+.of-slate__name {
+  font-size: 91px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+.of-slate__prod {
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+}
+.of-slate__found {
+  position: relative;
+  display: inline-block;
+}
+.of-chalk {
+  position: absolute;
+  left: -2%;
+  bottom: -0.34em;
+  width: 104%;
+  height: 0.3em;
+  overflow: visible;
+  fill: none;
+  stroke: #efeee4;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+.of-chalk path { vector-effect: non-scaling-stroke; }
+.of-slate__o {
+  display: inline-block;
+  width: 0.74em;
+  height: 0.72em;
+  margin: 0 0.02em;
+  vertical-align: baseline;
+}
+.of-slate__o svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 12;
+}
+.of-slate__row--grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding: 0;
+}
+.of-slate__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 26px 0 30px 0;
+}
+.of-slate__cell + .of-slate__cell {
+  padding-left: 26px;
+  border-left: 1.5px solid rgba(239, 238, 228, 0.3);
+}
+.of-slate__val {
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.of-slate__foot {
+  display: flex;
+  gap: 40px;
+  margin-top: auto;
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(239, 238, 228, 0.5);
+}
+/* A phone's board stands upright, everything on its centre line. */
+@media (max-width: 1023px) {
+  .of-slate {
+    width: 680px;
+    height: 1160px;
+    transform: translate3d(calc(50vw - 190px), calc(50vh - 325px), 0) scale(0.56);
+  }
+  .of-slate__stick { width: 680px; }
+  .of-slate__board {
+    height: 1042px;
+    padding: 30px 40px 28px;
+  }
+  .of-slate__row {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+  }
+  .of-slate__label { width: auto; }
+  .of-slate__prod {
+    max-width: 560px;
+    font-size: 42px;
+    line-height: 1.45;
+  }
+  .of-slate__row--grid { grid-template-columns: repeat(2, 1fr); }
+  .of-slate__cell { align-items: center; }
+  .of-slate__cell + .of-slate__cell { padding-left: 0; }
+  .of-slate__cell:nth-child(3) { border-left: 0; }
+  .of-slate__cell:nth-child(n + 3) { border-top: 1.5px solid rgba(239, 238, 228, 0.3); }
+  .of-slate__foot { justify-content: center; }
+}
+
+/* ── Landing A: the flight's clones ───────────────────────────────────── */
+.of-fly {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+.of-fly__face {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: pre;
+  will-change: opacity, filter;
+}
+
+/* ── Reduced motion: no montage ───────────────────────────────────────────
+   The clapperboard as a still (the film's poster), then a calm crossfade
+   into the first screen (the island times it). Values, not structure: the
+   same scenes are there; only which one shows differs. */
+@media (prefers-reduced-motion: reduce) {
+  .of-scene--code { opacity: 0; }
+  .of-scene--slate { opacity: 1; }
+  .of-slate__stick--top { transform: none; }
+  .of-grain,
+  .of-rain__col,
+  .of-lock__strip,
+  .of-lock__letter,
+  .of-hud__rec,
+  .of-digits__strip { animation: none; }
+  .of-hud { display: none; }
+  .of-chalk { stroke-dashoffset: 0; }
+  .opening { transition: opacity 700ms var(--ease-fade); }
+}

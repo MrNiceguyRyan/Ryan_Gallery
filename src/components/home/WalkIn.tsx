@@ -517,7 +517,8 @@ export default function WalkIn({
                       className={`walkin-city mt-[2%] block max-w-full text-center font-serif uppercase leading-[0.86] tracking-[-0.045em] ${reduce ? '[animation:none]' : ''}`}
                       style={{ color: OFF, fontSize: 'clamp(42px, 7.6vw, 128px)' }}
                     >
-                      Ryan Xu
+                      {/* Where the opening film's RYAN XU lands on a phone. */}
+                      <span data-open-land="phone-name">Ryan Xu</span>
                     </span>,
                     1.34,
                   )}
