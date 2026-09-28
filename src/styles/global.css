@@ -1481,9 +1481,11 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
       linear-gradient(0deg, rgba(10, 10, 9, 0.5) 0%, rgba(10, 10, 9, 0) 40%);
   }
 }
+/* The poster's lines at their full light (they were held at 0.86): lighter
+   in the lines only, never under the type (owner, 2026-09-28: 背景很暗). */
 .story-terrain-ink {
   display: block;
-  filter: grayscale(1) invert(1) contrast(1.35) brightness(0.86);
+  filter: grayscale(1) invert(1) contrast(1.35) brightness(1);
   mix-blend-mode: screen;
 }
 .story[data-map="dark"] .story-terrain-ink {
@@ -2653,23 +2655,47 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .archive-dock :is(.archive-photo-shade-top, .archive-photo-shade-bottom) {
   display: none;
 }
-/* The joint: a hairline across the gap, from the plate's corner to the
-   shield's, so the ticket reads as hung from its sign rather than set near
-   it. White ink, like every mark on the map. */
-.archive-dock__joint {
+/* The joint is the gap itself (DOCK.gap): no line crosses it — the owner
+   has struck lines off the signs twice (不需要下面的引线, 不需要白色竖干). The
+   plate's corner nearest its shield points at it instead, a caret cut from
+   the card as the reference's board points at its stop: the photograph's
+   dark edge on the face's corners, the stub's own stock on the stub's. It
+   goes with the face when the face is torn off. */
+.archive-plate__caret {
   position: absolute;
-  width: calc(var(--dock-gap, 12px) * 1.4142 + 2px);
-  height: 1px;
-  margin-top: -0.5px;
-  background: rgba(244, 244, 237, 0.78);
-  box-shadow: 0 0 3px rgba(11, 14, 9, 0.6);
-  transform-origin: 0 50%;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
   pointer-events: none;
+  background: #0f120d;
 }
-.archive-dock[data-quadrant='tr'] .archive-dock__joint { left: 0; top: 100%; transform: rotate(135deg); }
-.archive-dock[data-quadrant='tl'] .archive-dock__joint { left: 100%; top: 100%; transform: rotate(45deg); }
-.archive-dock[data-quadrant='br'] .archive-dock__joint { left: 0; top: 0; transform: rotate(-135deg); }
-.archive-dock[data-quadrant='bl'] .archive-dock__joint { left: 100%; top: 0; transform: rotate(-45deg); }
+.archive-plate__caret[data-half='stub'] {
+  background: var(--stub-paper, #30352a);
+}
+.archive-dock[data-quadrant='tr'] .archive-plate__caret {
+  left: -4px;
+  top: calc(100% - 8px);
+  clip-path: polygon(4px 0, 4px 8px, 12px 8px, 0 12px);
+}
+.archive-dock[data-quadrant='tl'] .archive-plate__caret {
+  left: calc(100% - 8px);
+  top: calc(100% - 8px);
+  clip-path: polygon(8px 0, 8px 8px, 0 8px, 12px 12px);
+}
+.archive-dock[data-quadrant='br'] .archive-plate__caret {
+  left: -4px;
+  top: -4px;
+  clip-path: polygon(4px 12px, 4px 4px, 12px 4px, 0 0);
+}
+.archive-dock[data-quadrant='bl'] .archive-plate__caret {
+  left: calc(100% - 8px);
+  top: -4px;
+  clip-path: polygon(8px 12px, 8px 4px, 0 4px, 12px 0);
+}
+.archive-plate.is-torn .archive-plate__caret[data-half='face'] {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
 /* "Open story" goes on the plate's edge away from the shield. */
 .archive-dock[data-quadrant='tl'] .archive-plate__cue,
 .archive-dock[data-quadrant='bl'] .archive-plate__cue {
@@ -2721,20 +2747,47 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   z-index: -1;
   inset: -110px -96px -130px -128px;
   pointer-events: none;
+  /* Lighter than it was (0.8 at its heart): on the pale rock of Page,
+     Bryce and Zion a heavier pool read as a dark cloud of smoke over the
+     land. The type carries a soft shadow of its own instead (below), which
+     keeps the lede at 5:1 and more where the ground is brightest. */
   background: radial-gradient(
-    closest-side at 52% 52%,
-    rgba(16, 20, 14, 0.8) 0%,
-    rgba(16, 20, 14, 0.74) 40%,
-    rgba(16, 20, 14, 0.46) 68%,
-    rgba(16, 20, 14, 0.14) 88%,
+    closest-side at 50% 50%,
+    rgba(16, 20, 14, 0.58) 0%,
+    rgba(16, 20, 14, 0.5) 40%,
+    rgba(16, 20, 14, 0.28) 68%,
+    rgba(16, 20, 14, 0.08) 88%,
     transparent 100%
   );
 }
+/* Under the lede a second, smaller pool: body copy keeps 4.5:1 and more
+   (worst 5% of its ground) on Zion's pale rock, where the rail's own pool
+   alone left it at 4:1. */
 .archive-rail .archive-lede::before {
-  display: none;
+  inset: -28px -44px -36px -40px;
+  background: radial-gradient(
+    closest-side at 58% 50%,
+    rgba(16, 20, 14, 0.44) 0%,
+    rgba(16, 20, 14, 0.34) 55%,
+    rgba(16, 20, 14, 0.12) 85%,
+    transparent 100%
+  );
 }
 .archive-rail__lede {
   color: rgba(244, 244, 237, 0.92);
+  text-shadow: 0 0 14px rgba(16, 20, 14, 0.55), 0 1px 2px rgba(16, 20, 14, 0.45);
+}
+.archive-rail .archive-cover-title {
+  text-shadow: 0 0 24px rgba(16, 20, 14, 0.35);
+}
+/* Narrower windows: the frames count over the lede rather than beside it,
+   so the lede has the rail's whole measure (at 1280 it ran 28 characters a
+   line over eleven lines). */
+@media (max-width: 1439px) {
+  .archive-rail .archive-lede {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 14px;
+  }
 }
 .archive-chapter--docked .archive-plate__meta > span {
   opacity: 0;
@@ -3765,7 +3818,7 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   height: 10px;
   display: block;
   background: #333a2b;
-  box-shadow: 0 1px 0 rgba(8, 10, 7, 0.55);
+  box-shadow: inset 0 1px 0 rgba(244, 244, 237, 0.12), 0 1px 0 rgba(8, 10, 7, 0.55);
 }
 /* A press-drag that starts on the ticket's print, its pad or the nav lit a
    selection flashing across the page under the hand (684 characters from the

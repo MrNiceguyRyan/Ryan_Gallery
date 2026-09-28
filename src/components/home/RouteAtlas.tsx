@@ -42,7 +42,22 @@ import {
   type StackSlot,
 } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
-import { DOCK, centreFor, coverDock, planDock, railBox, type DockCamera, type DockChapter, type DockEntry } from '../../lib/coverDock';
+import {
+  DOCK,
+  DOCK_GATE,
+  askDock,
+  centreFor,
+  coverDock,
+  dockShown,
+  planDock,
+  poseRemainPx,
+  railBox,
+  restLean,
+  type DockAsk,
+  type DockCamera,
+  type DockChapter,
+  type DockEntry,
+} from '../../lib/coverDock';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -498,12 +513,18 @@ const GLOBE_DIVE_START = 0.32;
 const GLOBE_HANDOFF_AT = 0.84;
 const GLOBE_HANDOFF_ZOOM = HOP.restZoom;
 // The archive's air: a long flight's apex sees the planet's edge through it.
+// Owner, 2026-09-28 (背景很暗): the far land used to fog toward near-black
+// (#1B2319), so every chapter with the horizon in view — the Florida and New
+// York chapters, over the sea — was dark in its upper half and darkest by
+// the rail. The air is a lit haze now, the land going pale into distance as
+// real air takes it (atmospheric perspective), the space above the limb the
+// page's own ground.
 const GLOBE_FOG = {
-  range: [9, 20] as [number, number],
-  color: '#1B2319',
-  'high-color': '#3b4330',
+  range: [7, 18] as [number, number],
+  color: '#7a806c',
+  'high-color': '#5f6650',
   'space-color': '#282c20',
-  'horizon-blend': 0.09,
+  'horizon-blend': 0.14,
   'star-intensity': 0,
 };
 
@@ -516,8 +537,27 @@ const PROLOGUE_INK_ENTRY = 0.15;
 // planet light (src/lib/planetLight.ts) draws it on the lit side only, so the
 // atmosphere itself keeps just a whisper of paper white. The lite light draws
 // no air, and its fog carries the rim instead (see globeLook).
-const PROLOGUE_FOG = SILVER_FOG;
-const PROLOGUE_FOG_LITE = SILVER_FOG_LITE;
+// Down the dive's last zooms that air turns into the archive's own
+// (GLOBE_FOG), on the zoom itself: on a tall window the first chapter is
+// read before the atlas takes the camera (its reading line sits inside the
+// entrance's last stretch), and it was read under the prologue's clear air
+// — its sea and the space over the limb the darkest ground of any chapter —
+// with the archive's haze cutting in a scroll later.
+const DIVE_FOG_ZOOMS = [4.2, 5] as const;
+function diveFog(prologueAir: typeof SILVER_FOG) {
+  const [from, to] = DIVE_FOG_ZOOMS;
+  const ramp = <T,>(a: T, b: T) => ['interpolate', ['linear'], ['zoom'], from, a, to, b];
+  return {
+    range: ramp(['literal', prologueAir.range], ['literal', GLOBE_FOG.range]),
+    color: ramp(prologueAir.color, GLOBE_FOG.color),
+    'high-color': ramp(prologueAir['high-color'], GLOBE_FOG['high-color']),
+    'space-color': ramp(prologueAir['space-color'], GLOBE_FOG['space-color']),
+    'horizon-blend': ramp(prologueAir['horizon-blend'], GLOBE_FOG['horizon-blend']),
+    'star-intensity': 0,
+  } as unknown as typeof GLOBE_FOG;
+}
+const PROLOGUE_FOG = diveFog(SILVER_FOG);
+const PROLOGUE_FOG_LITE = diveFog(SILVER_FOG_LITE);
 
 // Back to the start (see `beginOutbound`): the share of the trip's zoom-out
 // (its first `entryShare`) over which the hop pose is carried from where the
@@ -1564,7 +1604,10 @@ export default function RouteAtlas({
   // where its neighbours' shields stand on its resting camera. The camera
   // reads it for where it sets each place; the chapters for their covers.
   const dockPlanRef = useRef<Readonly<Record<string, DockEntry>> | null>(null);
+  // The place whose cover shows (decided on publish, below), and what the
+  // camera asks of it on its latest draw (`setDockAt`).
   const dockAtRef = useRef<string | null>(null);
+  const dockAskRef = useRef<DockAsk | null>(null);
   useLayoutEffect(() => {
     if (!signs || !viewportReady) return;
     const vw = window.innerWidth;
@@ -1608,10 +1651,20 @@ export default function RouteAtlas({
     coverDock.publish({ at: null, points: {} });
   }, []);
   // Every place's foot this frame, and the place whose cover shows: handed
-  // to the covers on the map's `render` — the frame the canvas and the
-  // shields' markers are drawn in (Mapbox writes a marker as a DOM task of
-  // its render, at its projected point rounded to the pixel) — so a cover
-  // and its shield never part by a frame.
+  // to the covers on the map's `move` and `render`, as the shields' markers
+  // are placed (above) — Mapbox writes a marker as a DOM task of its render,
+  // at its projected point rounded to the pixel, and the pile on `move` too —
+  // so a cover and its shield never part by a frame (on `render` alone the
+  // cover trailed its sign by one: the joint closed from 12px to 3 as the
+  // camera left).
+  //
+  // Whether a cover shows is decided here, against the camera's ask
+  // (`askDock`, `dockShown`): it APPEARS only once the camera has settled on
+  // its place (down, the entrance done, the pose within DOCK_GATE.settledPx
+  // of where it rests), so it is never seen to slide into its seat (owner:
+  // covers appear directly); once shown it STAYS while the camera is on that
+  // place, riding every move of it — the reader's pre-roll, the first
+  // chapter's entrance scrub — and goes when the camera leaves.
   const publishDock = () => {
     const map = mapRef.current?.getMap();
     if (!map || !signs) return;
@@ -1620,23 +1673,28 @@ export default function RouteAtlas({
       const point = map.project(place.coordinates);
       points[place.id] = { x: Math.round(point.x) - CANVAS_BLEED, y: Math.round(point.y) - CANVAS_BLEED };
     });
-    coverDock.publish({ at: dockAtRef.current, points });
+    const at = dockShown(dockAtRef.current, dockAskRef.current, (id) => !!points[id]);
+    dockAtRef.current = at;
+    coverDock.publish({ at, points });
   };
   const publishDockRef = useRef(publishDock);
   publishDockRef.current = publishDock;
   // Written by the camera (its draw), published with the next render.
-  const setDockAt = (id: string | null) => {
-    if (dockAtRef.current === id) return;
-    dockAtRef.current = id;
+  const setDockAt = (ask: DockAsk | null) => {
+    const was = dockAskRef.current;
+    if (was === ask || (was && ask && was.id === ask.id && was.appear === ask.appear && was.stay === ask.stay)) return;
+    dockAskRef.current = ask;
     mapRef.current?.getMap()?.triggerRepaint();
   };
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
     const onRender = () => publishDockRef.current();
+    map.on('move', onRender);
     map.on('render', onRender);
     onRender();
     return () => {
+      map.off('move', onRender);
       map.off('render', onRender);
     };
   }, [mapLoaded, signs]);
@@ -2630,6 +2688,21 @@ export default function RouteAtlas({
     // Whether the camera is down on the committed place (the dock shows its
     // cover): false from a take-off until the landing's lock.
     let dockLanded = true;
+    // How far (screen px, roughly) the drawn pose still is from the one it
+    // is heading for (a flight's landing, else the target): the dock lets a
+    // cover appear only once this is under DOCK_GATE.settledPx.
+    let hopRemainPx = 0;
+    // The entrance's camera as last drawn, and when it last moved (the dock
+    // lets the first chapter's cover appear once the scroll holds still).
+    let entryDrawn = Number.NaN;
+    let entryMovedAt = 0;
+    let entryStillTimer = 0;
+    // Where on the route the reader was when the camera last came down on
+    // its place (a landing, a snap, a settle): the pre-roll leans only past
+    // the stretch between there and the place's reading line, so a landed
+    // camera holds until the hand moves on (src/lib/coverDock.ts, restLean).
+    const leanOrigin = (index: number) => Math.min(index + HOP.forward, Math.max(index - HOP.back, routePosition(queuedSample)));
+    let leanFrom = leanOrigin(committed);
     interface Flight {
       originCenter: GeoCoordinate;
       originZoom: number;
@@ -2959,6 +3032,7 @@ export default function RouteAtlas({
       hopFocal = planFocal(index);
       targetFocal = hopFocal;
       dockLanded = true;
+      leanFrom = leanOrigin(index);
       clearPlantTimers();
       settleSignOn(index);
     };
@@ -2978,6 +3052,7 @@ export default function RouteAtlas({
       targetZoom = restZoom(index);
       targetFocal = planFocal(index);
       dockLanded = true;
+      leanFrom = leanOrigin(index);
       clearPlantTimers();
       settleSignOn(index);
       wakeHop();
@@ -3048,13 +3123,14 @@ export default function RouteAtlas({
       }
       if (next === committed) {
         // Not far enough to commit: lean the resting camera toward where the
-        // scroll is heading (reversible, eased, capped).
+        // scroll is heading (reversible, eased, capped) — from the edge of
+        // the stretch the camera came down in (`leanFrom`, the reader's
+        // place at the landing, to the place's own reading line), never
+        // inside it, so a landed camera holds until the hand moves on.
         if (flight) return;
-        const lean = position - committed;
-        const neighbour = lean >= 0 ? Math.min(lastRouteIndex, committed + 1) : Math.max(0, committed - 1);
-        const amount = neighbour === committed
-          ? 0
-          : smootherstep(clamp01(lean >= 0 ? lean / HOP.forward : -lean / HOP.back));
+        const lean = restLean(position, committed, leanFrom, lastRouteIndex, HOP.forward, HOP.back);
+        leanFrom = lean.from;
+        const { neighbour, amount } = lean;
         if (neighbour !== preroll[0] || Math.abs(amount - preroll[1]) > 0.002) {
           preroll = [neighbour, amount];
           wakeHop();
@@ -3090,9 +3166,12 @@ export default function RouteAtlas({
     // plants. Called once per flight (`lockCalled`).
     const lockFlight = (landing: Flight, now: number) => {
       landing.lockCalled = true;
-      // Down: the place's cover appears beside its shield, whole (no slide),
-      // and rides the last few pixels of the settle with it.
+      // Down: the place's cover appears beside its shield, whole, once the
+      // pose has settled (DOCK_GATE.settledPx: nothing slides it into its seat).
+      // The camera holds there: the pre-roll leans only once the reader
+      // scrolls on past where they were at this lock (`leanFrom`).
       dockLanded = true;
+      leanFrom = leanOrigin(landing.dest);
       setCameraState('locked');
       announceArrival(landing.dest, landing.origin);
       const destPlace = viewfinderPlace(landing.dest);
@@ -3191,6 +3270,11 @@ export default function RouteAtlas({
         hopZoom = targetZoom;
         hopFocal = targetFocal;
       }
+      // What is left to go: to a flight's landing pose while it is in the
+      // air or settling out of it, else to the target.
+      const restAt = flight ? flight.destCenter : targetCenter;
+      const restZoomAt = flight ? flight.destZoom : targetZoom;
+      hopRemainPx = poseRemainPx(pixelsAtZoom(mercatorDegrees(hopCenter, restAt), hopZoom), restZoomAt - hopZoom);
       const driven = drivenEntry(now);
       if (driven != null) voyageEntry.set(driven);
       schedule(queuedSample);
@@ -3369,8 +3453,8 @@ export default function RouteAtlas({
         padded = focused;
         map.setPadding(focused ? activePadding : neutralPadding);
       }
-      // The place whose cover the dock shows this frame (see `setDockAt`).
-      let dockPlace: string | null = null;
+      // What the camera asks of the dock this frame (see `setDockAt`).
+      let dockAsk: DockAsk | null = null;
 
       if (inPrologue && sample && canvasBox) {
         // ── Globe prologue ── the lit globe low in the bottom-right corner,
@@ -3608,12 +3692,33 @@ export default function RouteAtlas({
           lastOverview = false;
         }
         // Down on its place (a landing's lock, the dive's end, a snap), the
-        // camera shows that place's cover beside its shield; in the air, and
+        // camera asks for that place's cover beside its shield: to appear
+        // once the pose has settled and the entrance is done, to stay while
+        // the entrance's camera is still most of the way down (the first
+        // chapter's reading line sits in its last stretch); in the air, and
         // above the archive, none. Reduced motion's camera, cut from rest
-        // pose to rest pose, shows the place it is cut to.
-        dockPlace = hopEnabled
-          ? (dockLanded && entryCameraAt(entryNow) >= 1 ? chapterRoute[committed]?.stop.id ?? null : null)
-          : (still && still !== 'archive' ? null : chapterRoute[cutTo]?.stop.id ?? null);
+        // pose to rest pose, shows the place it is cut to at once.
+        if (hopEnabled) {
+          // The entrance's camera is the scroll's: still once the scroll has
+          // left it alone a beat (and a draw is asked for then, to see it).
+          const entryAt = entryCameraAt(entryNow);
+          const drawnAt = performance.now();
+          if (!(Math.abs(entryAt - entryDrawn) <= 1e-4)) {
+            entryDrawn = entryAt;
+            entryMovedAt = drawnAt;
+          }
+          const entryStill = drawnAt - entryMovedAt >= DOCK_GATE.entryStillMs;
+          if (!entryStill && entryAt < 1 && !entryStillTimer) {
+            entryStillTimer = window.setTimeout(() => {
+              entryStillTimer = 0;
+              schedule(queuedSample);
+            }, DOCK_GATE.entryStillMs + 16);
+          }
+          dockAsk = askDock(chapterRoute[committed]?.stop.id ?? null, dockLanded, entryAt, entryStill, hopRemainPx);
+        } else {
+          const placeId = still && still !== 'archive' ? null : chapterRoute[cutTo]?.stop.id ?? null;
+          dockAsk = placeId ? { id: placeId, appear: true, stay: true } : null;
+        }
         // The viewfinder's readouts hang off the place in view.
         tellFocal(hopEnabled
           ? lerpPoint(focalPoint, hopFocal, smootherstep(clamp01(entryCameraAt(entryNow))))
@@ -3634,7 +3739,7 @@ export default function RouteAtlas({
         }
       }
 
-      setDockAt(dockPlace);
+      setDockAt(dockAsk);
 
       const routeProgress = hopEnabled
         ? chapterMode() ? hopTrim : restRoute(committed)
@@ -3822,6 +3927,7 @@ export default function RouteAtlas({
       }
       ['wheel', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteReaderDrove));
       disposed = true;
+      window.clearTimeout(entryStillTimer);
       unsubscribe();
       ticketObserver?.disconnect();
       unsubscribeEntry();

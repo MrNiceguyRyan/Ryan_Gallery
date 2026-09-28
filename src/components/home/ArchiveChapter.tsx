@@ -309,6 +309,9 @@ const PULL_HOLD_MS = 4000;
 // this ticket in no longer than this after the landing.
 const FLAP_PRIME_MAX_MS = 2500;
 const FLAP_VOYAGE_WAIT_MS = 900;
+// A docked sign waits for its cover to appear (the camera settled) at most
+// this long after the landing.
+const FLAP_DOCK_WAIT_MS = 1600;
 // While a hand holds a face, nothing on the page starts a text selection.
 // Module-level so the same function is added and removed.
 const preventPullSelection = (event: Event) => event.preventDefault();
@@ -519,10 +522,25 @@ export default function ArchiveChapter({
     [scrollMatteOpacity, interactionDepth],
     ([matte, interaction]) => Math.max(cleanGrade ? 0 : 0.12, Number(matte) - Number(interaction) * 0.085),
   );
+  // A docked chapter's rail stands down the right of the page, under the
+  // nav's pills: carried up past its reading line it ran under MAP / NOTES /
+  // ABOUT and between them. It goes before it gets there — on this
+  // chapter's own scroll, from where its top would stand 240px down the
+  // screen to where it would reach 120px (the nav's band, 24–92px, and a
+  // breath) — DERIVED from its rest (its centre on the reading line) and
+  // the step to the next chapter, measured once per layout (the latch's
+  // `measureGeometry`), never read off the screen per frame.
+  const railNavRef = useRef<{ span: number; from: number; to: number } | null>(null);
+  const railClear = (delta: number) => {
+    const rail = railNavRef.current;
+    if (!rail || delta <= 0) return 1;
+    const past = delta * rail.span;
+    return 1 - smootherstep(Math.max(0, Math.min(1, (past - rail.from) / Math.max(1, rail.to - rail.from))));
+  };
   const editorialOpacity = useTransform(chapterDelta, (delta) => {
     if (reduce) return Math.round(delta) === 0 ? 1 : 0.72;
     const distance = smoothFocus(Math.abs(delta));
-    return 1 - distance * (delta < 0 ? 0.3 : 0.52);
+    return (1 - distance * (delta < 0 ? 0.3 : 0.52)) * railClear(delta);
   });
   const editorialShift = useTransform(chapterDelta, (delta) => {
     if (reduce) return 0;
@@ -538,7 +556,7 @@ export default function ArchiveChapter({
   const fieldNoteOpacity = useTransform(chapterDelta, (delta) => {
     if (reduce) return Math.round(delta) === 0 ? 1 : 0.68;
     const distance = smoothFocus(Math.abs(delta));
-    return 1 - distance * (delta < 0 ? 0.38 : 1);
+    return (1 - distance * (delta < 0 ? 0.38 : 1)) * railClear(delta);
   });
   // A torn ticket's lede answers the pointer (see the torn note below) only
   // while it is there to be seen: gone, it must not leave a hit area over the
@@ -638,6 +656,8 @@ export default function ArchiveChapter({
   // Whether the cover is on the atlas now: the latch counts it seen only
   // while it is.
   const dockShownRef = useRef(false);
+  // Called once when the cover next appears (the sign's flap waits for it).
+  const dockAppearRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!dockReady) return;
     const dock = dockRef.current;
@@ -651,8 +671,12 @@ export default function ArchiveChapter({
       if (at !== shown) {
         shown = at;
         dockShownRef.current = at;
-        if (at) dock.setAttribute('data-at', '');
-        else {
+        if (at) {
+          dock.setAttribute('data-at', '');
+          const appeared = dockAppearRef.current;
+          dockAppearRef.current = null;
+          appeared?.();
+        } else {
           dock.removeAttribute('data-at');
           hiddenAt = performance.now();
         }
@@ -973,6 +997,12 @@ export default function ArchiveChapter({
           ? anchor - (documentOffsetTop(prevFrame) + prevFrame.offsetHeight / 2)
           : span;
         if (docked) {
+          // The rail's way out under the nav (see `railClear`): its top at
+          // rest is the reading line less half its height.
+          const restTop = ARCHIVE_READING_LINE * geometry.vh - own.offsetHeight / 2;
+          railNavRef.current = span > 0
+            ? { span, from: Math.max(0, restTop - 240), to: Math.max(1, restTop - 120) }
+            : null;
           // Docked beside its shield the cover never leaves the screen
           // while its chapter is read: one fixed line (TEAR_LINE_DOCKED),
           // the gate from there.
@@ -1392,11 +1422,13 @@ export default function ArchiveChapter({
   //    was: ORLANDO settled on screen for ~350ms, then MIAMI, then ORLANDO).
   //    A take-off anywhere else puts this board back; so does a landing
   //    elsewhere, and FLAP_PRIME_MAX_MS with no landing at all.
-  //  - It turns once the ticket has come to rest: at the landing, or, while
-  //    the page is still gliding on a voyage to this chapter (short hops
-  //    land ~400px before the page does), at the voyage's end
-  //    (`archive:voyage-end`, HomePage), never more than FLAP_VOYAGE_WAIT_MS
-  //    after the landing.
+  //  - It turns once the ticket has come to rest. Docked (the desktop), that
+  //    is when its cover appears at its shield (the dock's gate: the camera
+  //    settled), never more than FLAP_DOCK_WAIT_MS after the landing. In a
+  //    column: at the landing, or, while the page is still gliding on a
+  //    voyage to this chapter (short hops land ~400px before the page
+  //    does), at the voyage's end (`archive:voyage-end`, HomePage), never
+  //    more than FLAP_VOYAGE_WAIT_MS after the landing.
   // Never on a first paint, a restore, a snap, a flight back or the dive
   // (whose ticket the reader has read on the way down), and never under
   // reduced motion, where the sign is simply printed.
@@ -1421,6 +1453,7 @@ export default function ArchiveChapter({
       waitTimer = 0;
       if (onVoyageEnd) window.removeEventListener('archive:voyage-end', onVoyageEnd);
       onVoyageEnd = null;
+      dockAppearRef.current = null;
     };
     const reset = () => {
       cancelWait();
@@ -1459,7 +1492,19 @@ export default function ArchiveChapter({
         clearPrime = null;
         stopFlap = runFlap(root, from);
       };
-      if (document.documentElement.dataset.voyageTo === id) {
+      if (docked && dockRef.current) {
+        // Docked, the ticket is seen only once its cover appears at its
+        // shield — when the camera has settled, whichever way it came
+        // (a push, "Next stop", a shield) — and it turns from there: the
+        // name it carried in shows for FLAP.delay, then the board runs. At
+        // the lock it was hidden still, and "03 PAGE" had stood on Zion's
+        // photograph for half a second before the voyage's end turned it.
+        if (dockShownRef.current) start();
+        else {
+          dockAppearRef.current = start;
+          waitTimer = window.setTimeout(start, FLAP_DOCK_WAIT_MS);
+        }
+      } else if (document.documentElement.dataset.voyageTo === id) {
         onVoyageEnd = (ended: Event) => {
           const endedId = (ended as CustomEvent<{ id?: string }>).detail?.id;
           if (!endedId || endedId === id) start();
@@ -1477,7 +1522,7 @@ export default function ArchiveChapter({
       window.removeEventListener('atlas:arrive', onArrive);
       reset();
     };
-  }, [collection._id, reduce, ticket]);
+  }, [collection._id, docked, reduce, ticket]);
 
   const handlePullStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pullable || pullRef.current) return;
@@ -2098,36 +2143,50 @@ export default function ArchiveChapter({
         </aside>
 
         {/* The tickets still bound under this one: the pad thins as the
-            archive is read, each sheet the next chapter's own card. */}
+            archive is read, each sheet the next chapter's own card, solid
+            (at half strength and less they read as smears on the lit map),
+            the next one on top and the later ones' edges under it. */}
         {chapterTotal != null && chapterTotal - index - 1 > 0 && (
           <span className="archive-ticket-pad" aria-hidden="true">
             {Array.from({ length: Math.min(3, chapterTotal - index - 1) }, (_, sheet) => (
               <i
                 key={sheet}
-                style={{ top: sheet * 4, opacity: 0.5 - sheet * 0.13, background: padStocks?.[sheet] }}
+                style={{
+                  top: sheet * 4,
+                  zIndex: 3 - sheet,
+                  ...(padStocks?.[sheet] ? { background: `color-mix(in oklab, ${padStocks[sheet]} 72%, #0e110c)` } : null),
+                }}
               />
             ))}
           </span>
         )}
+
+        {/* The caret: the plate's corner nearest its shield points at it,
+            as the reference's board points at its stop — part of the card
+            (the photograph's dark edge or the stub's stock, whichever half
+            that corner is), never a line across the gap. */}
+        <i
+          className="archive-plate__caret"
+          data-half={quadrant === 'tr' || quadrant === 'br' ? 'face' : 'stub'}
+          aria-hidden="true"
+        />
       </div>
     );
     // The dock: written at the place's foot every camera frame (`translate3d`,
     // by the dock subscription above); the seat hangs the plate at its corner
-    // of the shield, a joint's gap off it, with the joint's hairline across
-    // the gap, the region's tab on the edge away from the shield.
+    // of the shield, a joint's gap off it (its caret pointing across), the
+    // region's tab on the edge away from the shield.
     const dock = dockReady && dockEntry && dockHost ? createPortal(
       <div
         ref={dockRef}
         className="archive-dock"
         data-cover-for={id}
         data-quadrant={quadrant}
-        style={{ ['--dock-gap' as never]: `${DOCK.gap}px` }}
       >
         <div
           className="archive-dock__seat"
           style={{ left: dockEntry.offset.x, top: dockEntry.offset.y }}
         >
-          <i className="archive-dock__joint" aria-hidden="true" />
           {regionTab && (
             <div className="archive-dock__tab font-ui" data-side={side} aria-hidden="true">
               <span className="archive-dock__tab-label">Region</span>
@@ -2161,6 +2220,11 @@ export default function ArchiveChapter({
         data-active={isActive ? 'true' : 'false'}
         data-ticket=""
         className="archive-chapter--docked relative flex min-h-[100svh] items-center justify-end"
+        // The last chapter a little taller than the screen: the sticky atlas
+        // releases at the archive's end, and at New York's reading line it
+        // had let go by 16px — a band of the closing's still map under the
+        // atlas's foot.
+        style={chapterTotal != null && index === chapterTotal - 1 ? { minHeight: 'calc(100svh + 48px)' } : undefined}
       >
         {/* The rail: the chapter's control (a click or Enter opens its
             story), soft ground under its type (global.css `.archive-rail`),
