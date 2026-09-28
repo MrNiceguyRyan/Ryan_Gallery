@@ -1,20 +1,24 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { ExposureTotals } from '../../lib/exposureRecord';
 import { startLenis } from '../../lib/smoothScroll';
+import ContactTicket from './ContactTicket';
 
-// ── /about: the darkroom biography ──
-// The monograph's end matter: the contributor cover lifts off a page that is
-// already set; the photographer's page (a silver-print portrait and the
-// name); the notes' teaser, once a note is published; the signature, drawn by
-// the scroll over one sentence; a correspondence ticket and the colophon.
+// ── /about: the profile ──
+// The page the owner kept coming back to (restored 2026-09-27 over the
+// "darkroom biography" of the same day): the contributor cover lifting off
+// the profile — the droplet portrait and its stacked particulars beside the
+// name, its lime line, the lede, the bio and FOCUS / METHOD / LOG — then,
+// once a note is published, a quiet line from the notes where the log used
+// to stand, and the closing card: the autograph, written by the scroll, over
+// "Always chasing the light.", the correspondence ticket (whose stub can be
+// torn off to copy the address) and the colophon.
 //
-// Everything here renders at its final values, on the server and on the
-// client alike: the page paints finished without JavaScript. How it arrives
-// is CSS (global.css, "/about: darkroom biography"), keyed off attributes
-// about.astro's inline scripts write on <html> before the first paint —
-// outside React, so nothing here can mismatch hydration. Nothing reads
-// reduced motion: under it CSS changes values, never structure. The one
-// client state is whether the cover has gone.
+// Everything renders at its final values, on the server and on the client
+// alike: the page paints finished without JavaScript. How it arrives is CSS
+// (global.css, "/about: the profile"), keyed off attributes about.astro's
+// inline scripts write on <html> before the first paint — outside React, so
+// nothing here can mismatch hydration. Nothing reads reduced motion to
+// decide what to render: under it CSS changes values, never structure.
 
 // The contributor cover plays in full once per session. about.astro writes
 // the key before the first paint; Layout.astro reads it (via the cover's
@@ -33,16 +37,14 @@ const PARTICULARS: Array<[string, string]> = [
   ['Log', 'Personal archive, selected frames only.'],
 ];
 
-/** The portrait as about.astro printed it: the silver webps at their
- *  widths, or (a portrait that is not a Sanity asset) the file itself with
- *  the live silver filter's tables. */
+/** The portrait as about.astro sized it: the 4:5 crop at its widths, or the
+ *  file itself when it is not a Sanity asset. */
 export interface AboutPortrait {
   src: string;
   srcSet?: string;
   sizes?: string;
   width: number;
   height: number;
-  silver?: [number[], number[], number[]];
 }
 
 /** The note the middle quotes (about.astro: the featured note, else the
@@ -76,6 +78,15 @@ interface Props {
 }
 
 const vars = (values: Record<string, string | number>) => values as CSSProperties;
+
+/** Space Grotesk has no arrows: drawn, in the text's own ink. */
+function ArrowRight() {
+  return (
+    <svg className="about-arrow-r" viewBox="0 0 16 10" width="16" height="10" aria-hidden="true" focusable="false">
+      <path d="M1 5h13.5M10.5 1l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
+    </svg>
+  );
+}
 
 /**
  * The contributor cover. Built and lifted by CSS from the first paint; this
@@ -112,10 +123,7 @@ function ContributorCover({ name, onGone }: { name: string; onGone: () => void }
     };
   }, [onGone]);
 
-  // "It can be left" (c55e206): the plane goes on a quick wipe off the
-  // finished page. Not the repeat visit's entrance: switched mid-cover, that
-  // restarted some of the page's moves and not others, and the lime line
-  // stood under a name that had not risen yet.
+  // "It can be left": the plane goes on a quick wipe off the finished page.
   const skip = () => {
     ref.current?.setAttribute('data-skipped', '');
     document.documentElement.setAttribute('data-about-entry', 'skip');
@@ -164,9 +172,14 @@ function ContributorCover({ name, onGone }: { name: string; onGone: () => void }
   );
 }
 
-/** The profile: running head, the portrait in its droplet, the name, the
- *  lede, the bio and the particulars. */
-function Profile({ name, bio, portrait }: Pick<Props, 'name' | 'bio' | 'portrait'>) {
+/**
+ * The profile: the running head, the droplet portrait over its stacked
+ * particulars on the left, the name (its lime line the first screen's one
+ * lime), the lede, the bio and FOCUS / METHOD / LOG on the right. Each
+ * `.about-set` is one line of the page being set, in reading order (`--o`),
+ * when the cover lifts or on a repeat visit (global.css).
+ */
+function Profile({ name, bio, portrait, bodies }: Pick<Props, 'name' | 'bio' | 'portrait'> & { bodies: string[] }) {
   const dropRef = useRef<HTMLDivElement>(null);
 
   // The droplet morphs forever, twice (print and outline); off screen it
@@ -186,22 +199,19 @@ function Profile({ name, bio, portrait }: Pick<Props, 'name' | 'bio' | 'portrait
   }, []);
 
   return (
-    <section className="about-hero about-wrap" aria-labelledby="about-name">
-      <header className="about-runhead">
-        <span className="about-label">The Profile</span>
-        <span className="about-label">
-          <span className="about-runhead__long">New York · Since 2023</span>
-          <span className="about-runhead__short">NY · 2023</span>
-        </span>
-        <span className="about-runhead__rule" aria-hidden="true" />
+    <section className="about-hero safe-inline-page" aria-labelledby="about-name">
+      <header className="about-runhead about-set" style={vars({ '--o': 0 })}>
+        <span className="about-runhead__lead">The Profile</span>
+        <span className="about-runhead__short">NY · 2023</span>
+        <span className="about-runhead__long">New York · Since 2023</span>
       </header>
 
       <div className="about-hero__grid">
-        <figure className="about-portrait">
-          {/* The droplet (a3e2ac3): the photo masked in an organic water-drop
-              shape that slowly morphs, and an offset bone outline drifting on
-              a desynced phase behind it. The print inside is the globe's
-              silver, graded once at build time (portrait-[w].webp). */}
+        <div className="about-hero__side">
+          {/* The droplet: the photograph masked in a water-drop shape that
+              slowly morphs, and an offset bone outline drifting on a desynced
+              phase behind it — the border is water, not a box. Under a
+              resting pointer the print pushes in, slowly, inside its shape. */}
           <div ref={dropRef} className="about-drop">
             <span className="about-drop__outline" aria-hidden="true" />
             <div className="about-drop__print">
@@ -217,60 +227,52 @@ function Profile({ name, bio, portrait }: Pick<Props, 'name' | 'bio' | 'portrait
                 fetchPriority="high"
                 decoding="async"
                 draggable={false}
-                style={portrait.silver ? { filter: 'url(#about-silver)' } : undefined}
               />
             </div>
-            {portrait.silver && (
-              <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
-                <filter id="about-silver" colorInterpolationFilters="sRGB">
-                  <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0" />
-                  <feComponentTransfer>
-                    <feFuncR type="table" tableValues={portrait.silver[0].join(' ')} />
-                    <feFuncG type="table" tableValues={portrait.silver[1].join(' ')} />
-                    <feFuncB type="table" tableValues={portrait.silver[2].join(' ')} />
-                  </feComponentTransfer>
-                </filter>
-              </svg>
-            )}
           </div>
-          <figcaption className="about-caption about-label">
-            <span>Photographer</span>
+          {/* One fact per line (no middle-dot pileup). */}
+          <div className="about-meta about-set" style={vars({ '--o': 3 })}>
+            <span className="about-meta__lead">Photographer</span>
             <span>New York, NY</span>
-          </figcaption>
-        </figure>
+            <span>{bodies.length ? bodies.join(' · ') : 'Fujifilm X-T50 · Nikon Zf'}</span>
+            <span className="about-meta__since">Since 2023</span>
+          </div>
+        </div>
 
         <div className="about-hero__text">
-          <h1 className="about-name" id="about-name">
-            <span className="about-mask">
-              <span className="about-name__line">{name}</span>
-            </span>
-            <span className="about-underline" aria-hidden="true" />
-          </h1>
-          <p className="about-lede">Cities and landscapes, one frame at a time.</p>
-          <div className="about-hero__cols">
-            {/* Override the fallback by filling `siteSettings.bio` in Sanity. */}
-            <div className="about-bio">
-              {bio ? (
-                <p style={{ whiteSpace: 'pre-line' }}>{bio}</p>
-              ) : (
-                <>
-                  <p>
-                    A photographic record of moving through cities and landscapes, from the high-contrast geometry of
-                    Manhattan to the geologic time of the American Southwest. No commissioned work, no client briefs.
-                    Frames selected on a slow timeline, organized by location, dated.
-                  </p>
-                  <p>
-                    Off the camera: engineering and AI research. The discipline of careful observation transfers
-                    between the two; both reward patience over output volume. This site is one node in a personal
-                    archive, not a portfolio for hire.
-                  </p>
-                </>
-              )}
-            </div>
+          <div className="about-set" style={vars({ '--o': 1 })}>
+            <h1 className="about-name" id="about-name">
+              <span className="about-name__ink">
+                {name}
+                <span className="about-underline" aria-hidden="true" />
+              </span>
+            </h1>
+          </div>
+          <p className="about-lede about-set" style={vars({ '--o': 2 })}>
+            Cities and landscapes, one frame at a time.
+          </p>
+          {/* Override the fallback by filling `siteSettings.bio` in Sanity. */}
+          <div className="about-bio about-set" style={vars({ '--o': 3 })}>
+            {bio ? (
+              <p style={{ whiteSpace: 'pre-line' }}>{bio}</p>
+            ) : (
+              <>
+                <p>
+                  A photographic record of moving through cities and landscapes, from the high-contrast geometry of
+                  Manhattan to the geologic time of the American Southwest. No commissioned work, no client briefs.
+                  Frames selected on a slow timeline, organized by location, dated.
+                </p>
+                <p>
+                  Off the camera: engineering and AI research. The discipline of careful observation transfers
+                  between the two; both reward patience over output volume. This site is one node in a personal
+                  archive, not a portfolio for hire.
+                </p>
+              </>
+            )}
             <dl className="about-particulars">
-              {PARTICULARS.map(([term, value], i) => (
-                <div key={term} style={vars({ '--i': i })}>
-                  <dt className="about-label">{term}</dt>
+              {PARTICULARS.map(([term, value]) => (
+                <div key={term}>
+                  <dt>{term}</dt>
                   <dd>{value}</dd>
                 </div>
               ))}
@@ -282,42 +284,40 @@ function Profile({ name, bio, portrait }: Pick<Props, 'name' | 'bio' | 'portrait
   );
 }
 
-/** The written middle: the notes' teaser, where the log was. The running
- *  head's device (THE NOTES … the note's number and date over a hairline),
- *  then one quiet statement — the note's own dek (its title when it has
- *  none), a link to that note — and the way to the notes. Bone throughout:
- *  the view's one lime is the name's underline above and "light." below, a
- *  screen apart. */
+/**
+ * Where the log stood: one line from the notes, once one is published — the
+ * log's own running head (THE NOTES … its number and date), then the note's
+ * dek in the lede's italic, on the name's column, linked to the note, and
+ * the way to the rest. Bone only: it adds no lime.
+ */
 function NotesTeaser({ note }: { note: AboutNote }) {
   const statement = note.dek ?? note.title;
   const lang = note.dek ? note.dekLang : note.titleLang;
   return (
     <section
-      className="about-notes about-wrap"
+      className="about-notes safe-inline-page"
       data-about-reveal="notes"
       data-cjk-serif={note.cjkSerif ? '' : undefined}
-      aria-label="The Notes"
+      aria-labelledby="about-notes-head"
     >
-      <header className="about-runhead about-notes__block" style={vars({ '--i': 0 })}>
-        <span className="about-label">The Notes</span>
-        <span className="about-label">
+      <div className="about-notes__head about-notes__block" style={vars({ '--i': 0 })}>
+        <h2 className="about-notes__title" id="about-notes-head">
+          The notes
+        </h2>
+        <span className="about-notes__stamp">
           No. {note.number} · {note.date}
         </span>
-        <span className="about-runhead__rule" aria-hidden="true" />
-      </header>
-      <div className="about-notes__grid">
-        <div className="about-notes__text">
-          <p className="about-notes__statement about-notes__block" lang={lang ?? undefined} style={vars({ '--i': 1 })}>
+      </div>
+      <div className="about-notes__grid about-notes__block" style={vars({ '--i': 1 })}>
+        <div className="about-notes__body">
+          <p className="about-notes__dek" lang={lang ?? undefined}>
             <a href={note.href} aria-label={note.dek ? `${note.title}: ${note.dek}` : undefined}>
               {statement}
             </a>
           </p>
-          <a className="about-notes__more about-label about-notes__block" href="/notes" style={vars({ '--i': 2 })}>
+          <a className="about-notes__more" href="/notes">
             Read the notes
-            {/* Space Grotesk has no arrow: drawn, in the label's ink. */}
-            <svg className="about-notes__arrow" viewBox="0 0 16 10" width="16" height="10" aria-hidden="true" focusable="false">
-              <path d="M1 5h13.5M10.5 1l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
-            </svg>
+            <ArrowRight />
           </a>
         </div>
       </div>
@@ -325,157 +325,105 @@ function NotesTeaser({ note }: { note: AboutNote }) {
   );
 }
 
-/** The sign-off: the autograph over the one sentence. It is drawn as the page
- *  is scrolled down past it and un-drawn as it is scrolled back up
- *  (about.astro moves the pen); fully drawn by default. */
-function SignOff() {
-  return (
-    <section className="about-signoff about-wrap" data-about-reveal="signoff">
-      <div className="about-signature" aria-hidden="true">
-        <svg viewBox="0 0 320 84" focusable="false">
-          <defs>
-            <mask
-              id="about-sig-mask"
-              x="0"
-              y="0"
-              width="320"
-              height="84"
-              maskUnits="userSpaceOnUse"
-              maskContentUnits="userSpaceOnUse"
-              style={{ maskType: 'alpha' }}
-            >
-              <path
-                className="about-pen"
-                d={SIGNATURE_REVEAL_PATH}
-                pathLength={1}
-                fill="none"
-                stroke="white"
-                strokeWidth="14"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </mask>
-            {/* Bone ink: the asset is lime, and the view's one lime is
-                "light." below. The matrix keeps the scan's alpha. */}
-            <filter id="about-sig-ink" colorInterpolationFilters="sRGB">
-              <feColorMatrix type="matrix" values="0 0 0 0 0.957  0 0 0 0 0.957  0 0 0 0 0.929  0 0 0 1 0" />
-            </filter>
-          </defs>
-          <image
-            href="/assets/signature/abstract-autograph-rounded.png"
-            x="0"
-            y="0"
-            width="320"
-            height="84"
-            preserveAspectRatio="none"
-            filter="url(#about-sig-ink)"
-            mask="url(#about-sig-mask)"
-          />
-        </svg>
-      </div>
-      {/* Set in the site's face (it was Space Grotesk 700 at display size):
-          Fraunces 400, the verb in italic, only the light lit. */}
-      <p className="about-sentence">
-        <span className="about-mask">
-          <span className="about-sentence__line" style={vars({ '--i': 0 })}>
-            Always <em>chasing</em>
-          </span>
-        </span>
-        <span className="about-mask">
-          <span className="about-sentence__line" style={vars({ '--i': 1 })}>
-            the <em className="about-lime">light.</em>
-          </span>
-        </span>
-      </p>
-    </section>
-  );
-}
-
-/** End matter: the correspondence ticket (the homepage ticket's anatomy,
- *  used once) and the colophon, then the foot. */
-function EndMatter({ name, email, instagram, totals, updatedOn, year }: Pick<Props, 'name' | 'email' | 'instagram' | 'totals' | 'updatedOn' | 'year'>) {
-  const at = email.indexOf('@');
-  const handle = '@' + (instagram.replace(/\/+$/, '').split('/').pop() || 'instagram');
+/**
+ * The closing card: the autograph over the one sentence (the card's one
+ * lime is "light."), the correspondence ticket in the middle — the contact,
+ * where the pill was — and the colophon under a hairline, then the foot.
+ */
+function Closing({ name, email, instagram, totals, updatedOn, year }: Pick<Props, 'name' | 'email' | 'instagram' | 'totals' | 'updatedOn' | 'year'>) {
+  // Facts only. The frames report their own bodies, so the colophon cannot
+  // claim a camera the archive does not contain; the chapter and frame
+  // counts are on the ticket's stub.
   const colophon: Array<[string, string]> = [
     ['Type', 'Fraunces, Space Grotesk'],
-    // The frames report their own bodies, so the colophon cannot claim a
-    // camera the archive does not contain.
     ['Cameras', totals.bodies.length ? totals.bodies.join(', ') : 'Fujifilm X-T50, Nikon Zf'],
     ['Built with', 'Astro, React, Sanity and Mapbox GL, on Cloudflare Workers'],
   ];
   if (updatedOn) colophon.push(['Updated', updatedOn]);
 
   return (
-    <section className="about-end about-wrap" data-about-reveal="end">
-      <div className="about-end__grid">
-        <div className="about-end__contact about-end__block" style={vars({ '--i': 0 })}>
-          <span className="about-label">Get in touch</span>
-          <div className="about-ticket">
-            <div className="about-ticket__face ticket-seam-right">
-              <span className="about-label">Email</span>
-              <span className="about-ticket__write">
-                <a className="about-ticket__mail" href={`mailto:${email}`}>
-                  {at > 0 ? (
-                    <>
-                      {email.slice(0, at)}
-                      <wbr />
-                      {email.slice(at)}
-                    </>
-                  ) : (
-                    email
-                  )}
-                  {' '}
-                  <span className="about-arrow" aria-hidden="true">↗</span>
-                </a>
-              </span>
-              <div className="about-ticket__rule" />
-              <div className="about-ticket__line">
-                <span className="about-label">Instagram</span>
-                <a className="about-data" href={instagram} target="_blank" rel="noopener noreferrer">
-                  {handle} <span aria-hidden="true">↗</span>
-                </a>
-              </div>
-            </div>
-            {/* The stub: the archive's count, and where it is kept from. */}
-            <div className="about-ticket__stub ticket-seam-left">
-              <span className="about-stub__no">{String(totals.chapters).padStart(2, '0')}</span>
-              <span className="about-label about-stub__of">Chapters</span>
-              <span className="about-stub__rule" />
-              <dl className="about-stub__rows">
-                <div>
-                  <dt>Frames</dt>
-                  <dd>{totals.frames}</dd>
-                </div>
-                <div>
-                  <dt>Since</dt>
-                  <dd>2023</dd>
-                </div>
-                <div>
-                  <dt>Base</dt>
-                  <dd>New York</dd>
-                </div>
-              </dl>
-            </div>
+    <section className="about-close safe-inline-page">
+      <div className="about-card">
+        <div className="about-signoff">
+          {/* Drawn as the page is scrolled down past it and un-drawn as it is
+              scrolled back up (about.astro moves the pen); whole by default.
+              The pen is its arrival, so it is never faded in with the
+              sentence: its first stroke shows from the first pixel of
+              scroll. */}
+          <div className="about-signature" aria-hidden="true">
+            <svg viewBox="0 0 320 84" focusable="false">
+              <defs>
+                <mask
+                  id="about-sig-mask"
+                  x="0"
+                  y="0"
+                  width="320"
+                  height="84"
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                  style={{ maskType: 'alpha' }}
+                >
+                  <path
+                    className="about-pen"
+                    d={SIGNATURE_REVEAL_PATH}
+                    pathLength={1}
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="14"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </mask>
+                {/* Bone ink: the asset is lime, and the card's one lime is
+                    "light." below. The matrix keeps the scan's alpha. */}
+                <filter id="about-sig-ink" colorInterpolationFilters="sRGB">
+                  <feColorMatrix type="matrix" values="0 0 0 0 0.957  0 0 0 0 0.957  0 0 0 0 0.929  0 0 0 1 0" />
+                </filter>
+              </defs>
+              <image
+                href="/assets/signature/abstract-autograph-rounded.png"
+                x="0"
+                y="0"
+                width="320"
+                height="84"
+                preserveAspectRatio="none"
+                filter="url(#about-sig-ink)"
+                mask="url(#about-sig-mask)"
+              />
+            </svg>
           </div>
+          {/* Space Grotesk 700 with the verb and the light in Fraunces italic
+              500; only the light is lit. */}
+          <h2 className="about-statement" data-about-reveal="signoff">
+            Always <em>chasing</em>
+            <br />
+            the <em className="about-lime">light.</em>
+          </h2>
         </div>
-        <div className="about-end__colophon about-end__block" style={vars({ '--i': 1 })}>
-          <span className="about-label">Colophon</span>
-          <dl className="about-colophon">
-            {colophon.map(([term, value]) => (
-              <div key={term}>
-                <dt className="about-label">{term}</dt>
-                <dd>{value}</dd>
-              </div>
+
+        <ContactTicket email={email} instagram={instagram} chapters={totals.chapters} frames={totals.frames} />
+
+        {/* The colophon — what the archive is set in, what made it, what it
+            runs on, when it last changed. Facts only, two to a line from
+            768px; each fact is timed by the line it lands on (`--r`, `--rp`). */}
+        <div className="about-colophon" data-about-reveal="colophon">
+          <span className="about-colophon__rule" aria-hidden="true" />
+          <dl className="about-colophon__list">
+            {colophon.map(([term, value], i) => (
+              <Fragment key={term}>
+                <dt style={vars({ '--r': i, '--rp': Math.floor(i / 2) })}>{term}</dt>
+                <dd style={vars({ '--r': i, '--rp': Math.floor(i / 2) })}>{value}</dd>
+              </Fragment>
             ))}
           </dl>
+          <footer className="about-foot" style={vars({ '--r': colophon.length - 1, '--rp': Math.floor((colophon.length - 1) / 2) })}>
+            <span>
+              © {year} {name}. All rights reserved.
+            </span>
+            <a href="/">ryanxugallery.com</a>
+          </footer>
         </div>
       </div>
-      <footer className="about-foot about-label about-end__block" style={vars({ '--i': 2 })}>
-        <span>
-          © {year} {name}. All rights reserved.
-        </span>
-        <a href="/">ryanxugallery.com</a>
-      </footer>
     </section>
   );
 }
@@ -496,15 +444,12 @@ export default function AboutPage({ name, bio, email, instagram, portrait, total
     <main id="main-content" tabIndex={-1} className="about">
       {!coverGone && <ContributorCover name={name} onGone={onCoverGone} />}
       <div className="about-page">
-        <Profile name={name} bio={bio} portrait={portrait} />
-        {/* The middle: the notes' teaser (his writing lives at /notes). Below
-            the fold it is armed and played once (data-about-reveal "notes",
-            global.css "Below the fold"); the signature's scrub derives its
-            range from the layout, so it needs nothing. With no note
-            published there is nothing here, not an empty box. */}
-        {note && <NotesTeaser note={note} />}
-        <SignOff />
-        <EndMatter name={name} email={email} instagram={instagram} totals={totals} updatedOn={updatedOn} year={year} />
+        <Profile name={name} bio={bio} portrait={portrait} bodies={totals.bodies} />
+        {/* The middle, where the log stood: the notes' line once a note is
+            published, nothing (not an empty box) before. It also keeps the
+            name's lime line and "light." a screen apart (global.css). */}
+        <div className="about-middle">{note && <NotesTeaser note={note} />}</div>
+        <Closing name={name} email={email} instagram={instagram} totals={totals} updatedOn={updatedOn} year={year} />
       </div>
     </main>
   );
