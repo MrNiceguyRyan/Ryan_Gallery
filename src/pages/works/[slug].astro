@@ -5,6 +5,7 @@ import type { Collection, Photo } from '../../types';
 import WorkStory from '../../components/works/WorkStory';
 import { fetchSanityWithRetry } from '../../lib/sanityFetch';
 import { photoDescription } from '../../lib/narratives';
+import { withSampleChapters } from '../../lib/storyChaptersSample';
 
 export async function getStaticPaths() {
   const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Array<{ slug: string }>>(`
@@ -25,7 +26,7 @@ const { slug } = Astro.params;
 // photograph twice made each standalone story pay for the entire site.
 // `region` is for the rail's kept stub, which prints the REGION the homepage
 // ticket prints (the homepage query already carries it).
-const [collection, collectionIndex] = await Promise.all([
+const [fetchedCollection, collectionIndex] = await Promise.all([
   fetchSanityWithRetry(() => sanityClient.fetch<Collection | null>(`
   *[_type == "collection" && slug.current == $slug][0] {
     _id,
@@ -38,6 +39,13 @@ const [collection, collectionIndex] = await Promise.all([
     year,
     description,
     introduction,
+    "chapters": chapters[defined(title)] {
+      _key,
+      title,
+      kicker,
+      intro,
+      "photoIds": photos[]._ref
+    },
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
       _id,
       title,
@@ -68,6 +76,10 @@ const [collection, collectionIndex] = await Promise.all([
     }
   `)),
 ]);
+
+// Its sub-chapters as fetched, or a STORY_CHAPTERS_SAMPLE=1 preview build's
+// placeholder ones (src/lib/storyChaptersSample.ts), as the homepage prints.
+const collection = withSampleChapters(fetchedCollection);
 
 if (!collection) {
   throw new Error(`Collection not found: ${slug}`);

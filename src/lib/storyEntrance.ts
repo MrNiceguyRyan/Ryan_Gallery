@@ -77,6 +77,7 @@ function placedFrom(slot: Slot): EntranceFrom {
     case 'LEDE':
     case 'LEDE2':
     case 'PART':
+    case 'CHAPTER':
       return 'right';
     default:
       return slot.side === -1 ? 'left' : 'right';

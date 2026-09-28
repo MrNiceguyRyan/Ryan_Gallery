@@ -55,6 +55,14 @@ async function countPublishedNotes() {
   return null;
 }
 
+// ── STORY_CHAPTERS_SAMPLE=1: sub-chapters on a PREVIEW build only ──
+// Prints Miami's Collection Story in three placeholder sub-chapters with a
+// contents list (src/lib/storyChaptersSample.ts), so the owner can see the
+// design before he writes chapters in Sanity. Read by the pages at build time
+// (index.astro, works/[slug].astro); production builds never set it, and a
+// story with chapters of its own is never replaced. Nothing in Sanity changes.
+//   STORY_CHAPTERS_SAMPLE=1 npm run build
+
 let notesLive = false;
 
 function notesNav() {

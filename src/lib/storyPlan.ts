@@ -9,6 +9,11 @@
 // collection story里面不要出现两张照片拼接在一起 — the touching diptych is gone,
 // and the screen-high moment it made is a single page now).
 //
+// A story the owner has split into sub-chapters (src/lib/storyChapters.ts) is
+// planned chapter by chapter: the introduction as one band, then per chapter
+// an opener beside its first frame and its frames by the same templates
+// (planChapters; scripts/story-chapters.test.mjs).
+//
 // Everything here is pure, so the server can print the final layout: the
 // planner decides which template each frame goes into from the frames' ratios
 // alone, and the geometry writes every box twice from one formula — as CSS
@@ -77,6 +82,7 @@ export type SlotKind =
   | 'SMALL'
   | 'QUOTE' // the pull quote's page
   | 'PART' // "II", paragraph 2 and a column frame
+  | 'CHAPTER' // a sub-chapter's opener (number, title, intro) and its first frame
   | 'END'; // the end page, on the stock
 
 export interface Slot {
@@ -85,6 +91,15 @@ export interface Slot {
   frames: number[];
   /** For the templates set to one side: 1 right, -1 left, alternating. */
   side?: 1 | -1;
+  /** A CHAPTER's section, as an index into the story's sections. */
+  section?: number;
+}
+
+/** A sub-chapter's frames in the story's reading order: [start, start +
+ *  count) (src/lib/storyChapters.ts groups them). */
+export interface PlanSection {
+  start: number;
+  count: number;
 }
 
 const SIDED: ReadonlySet<SlotKind> = new Set(['FEATURE', 'PAIR', 'COLUMN', 'SMALL']);
@@ -106,10 +121,16 @@ const SIDED: ReadonlySet<SlotKind> = new Set(['FEATURE', 'PAIR', 'COLUMN', 'SMAL
  * pair ever swallows it); the pull quote follows the slot that reaches frame
  * 0.4n, in stories of six or more with a quote to print, and never directly
  * before Part II.
+ *
+ * A story in sub-chapters (`sections`, src/lib/storyChapters.ts) is planned
+ * by chapter instead (planChapters); every other story exactly as before.
  */
-export function planStory(ratios: readonly number[], { hasQuote = false }: { hasQuote?: boolean } = {}): Slot[] {
+export function planStory(
+  ratios: readonly number[],
+  { hasQuote = false, sections }: { hasQuote?: boolean; sections?: readonly PlanSection[] | null } = {},
+): Slot[] {
   const n = ratios.length;
-  const landscape = (index: number) => isLandscape(ratios[index]);
+  if (sections && sections.length > 0 && wholeSections(sections, n)) return planChapters(ratios, hasQuote, sections);
   const slots: Slot[] = [];
   if (n > 0) slots.push({ kind: 'OPEN', frames: [0] });
   // The text always runs: a one-frame story still has its band, frameless.
@@ -123,55 +144,121 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
   // Frame numbers here are 1-based, as the reader counts them.
   const quoteAt = n >= 6 && hasQuote ? Math.round(0.4 * n) : null;
   const partAt = n >= 4 ? Math.min(n, Math.max(4, Math.round(0.66 * n))) : null;
-  const maxScreens = Math.max(1, Math.floor(n / 7));
-  let screens = 0;
-  let lastScreen = -99;
-  let lastPage = -99;
+  const state = pickState(n, ['OPEN', 'LEDE']);
   let quoted = false;
-  const history: SlotKind[] = ['OPEN', 'LEDE'];
   let index = Math.min(n, 2);
   while (index < n) {
     const no = index + 1;
     if (partAt !== null && no === partAt) {
       slots.push({ kind: 'PART', frames: [index] });
-      history.push('PART');
+      state.history.push('PART');
       index += 1;
     } else {
       const nextOk = index + 1 < n && !(partAt !== null && no + 1 === partAt);
-      const candidates: SlotKind[] = [];
-      if (landscape(index)) {
-        if (screens < maxScreens && no >= 3 && no - lastScreen >= 5) candidates.push('SCREEN');
-        candidates.push('FEATURE');
-        if (nextOk) candidates.push('PAIR');
-        candidates.push('COLUMN', 'SMALL');
-      } else {
-        // The head of a run of portraits, where the diptych stood.
-        if (nextOk && !landscape(index + 1) && no - lastPage >= 5) candidates.push('PAGE');
-        if (nextOk) candidates.push('PAIR');
-        candidates.push('PAGE', 'COLUMN', 'SMALL');
-      }
-      const recent = history.slice(-2);
-      const pick = candidates.find((kind) => !recent.includes(kind))
-        ?? candidates.find((kind) => kind !== history[history.length - 1])
-        ?? candidates[0];
-      const take = pick === 'PAIR' ? 2 : 1;
-      slots.push({ kind: pick, frames: take === 2 ? [index, index + 1] : [index] });
-      if (pick === 'SCREEN') { screens += 1; lastScreen = no; }
-      if (pick === 'PAGE') lastPage = no;
-      history.push(pick);
-      index += take;
+      const slot = pickTemplate(ratios, index, nextOk, state);
+      slots.push(slot);
+      index += slot.frames.length;
     }
     // `index` frames are placed. The quote comes before Part II with a
     // picture between them: never straight before it, never after it (a
     // story too short to fit it there goes without).
     if (quoteAt !== null && !quoted && index >= quoteAt && index < n
-      && !history.includes('PART') && !(partAt !== null && index + 1 === partAt)) {
+      && !state.history.includes('PART') && !(partAt !== null && index + 1 === partAt)) {
       slots.push({ kind: 'QUOTE', frames: [] });
-      history.push('QUOTE');
+      state.history.push('QUOTE');
       quoted = true;
     }
   }
   slots.push({ kind: 'END', frames: [] });
+  return setSides(slots);
+}
+
+/**
+ * A story in sub-chapters. Frame 01 opens as always; the story's own words
+ * follow as a band (paragraphs 1 and 2 side by side, frameless: the lede's
+ * hung frame would be a chapter's picture set before its chapter opened, and
+ * Part II's place is taken by the chapters themselves). Then each chapter:
+ * its opener (number, title, intro) with its first frame hung beside it, as
+ * Part II's words hang beside theirs, and the rest of its frames by the same
+ * templates as any story — the metronome rule, the screens and the pages run
+ * on across chapters, and a pair never straddles two. The pull quote follows
+ * the slot that reaches frame 0.4n while a picture of the same chapter is
+ * still to come, so it is never set straight before an opener or the end
+ * page; a story with nowhere to put it goes without.
+ */
+function planChapters(ratios: readonly number[], hasQuote: boolean, sections: readonly PlanSection[]): Slot[] {
+  const n = ratios.length;
+  const slots: Slot[] = [{ kind: 'OPEN', frames: [0] }, { kind: 'LEDE2', frames: [] }];
+  const quoteAt = n >= 6 && hasQuote ? Math.round(0.4 * n) : null;
+  const state = pickState(n, ['OPEN', 'LEDE2']);
+  let quoted = false;
+  sections.forEach((section, at) => {
+    const end = section.start + section.count;
+    slots.push({ kind: 'CHAPTER', frames: [section.start], section: at });
+    state.history.push('CHAPTER');
+    let index = section.start + 1;
+    while (index < end) {
+      const slot = pickTemplate(ratios, index, index + 1 < end, state);
+      slots.push(slot);
+      index += slot.frames.length;
+      if (quoteAt !== null && !quoted && index >= quoteAt && index < end) {
+        slots.push({ kind: 'QUOTE', frames: [] });
+        state.history.push('QUOTE');
+        quoted = true;
+      }
+    }
+  });
+  slots.push({ kind: 'END', frames: [] });
+  return setSides(slots);
+}
+
+/** What the template picker carries through a story: the screens and pages
+ *  it has used, and the templates so far (no A-B-A-B metronome). */
+interface PickState {
+  maxScreens: number;
+  screens: number;
+  lastScreen: number;
+  lastPage: number;
+  history: SlotKind[];
+}
+
+const pickState = (n: number, history: SlotKind[]): PickState => ({
+  maxScreens: Math.max(1, Math.floor(n / 7)),
+  screens: 0,
+  lastScreen: -99,
+  lastPage: -99,
+  history,
+});
+
+/** The template for the frame at `index` (0-based; see planStory), which
+ *  takes the next frame too when it is a pair. `nextOk`: the next frame may
+ *  join this one. */
+function pickTemplate(ratios: readonly number[], index: number, nextOk: boolean, state: PickState): Slot {
+  const no = index + 1;
+  const landscape = (at: number) => isLandscape(ratios[at]);
+  const candidates: SlotKind[] = [];
+  if (landscape(index)) {
+    if (state.screens < state.maxScreens && no >= 3 && no - state.lastScreen >= 5) candidates.push('SCREEN');
+    candidates.push('FEATURE');
+    if (nextOk) candidates.push('PAIR');
+    candidates.push('COLUMN', 'SMALL');
+  } else {
+    // The head of a run of portraits, where the diptych stood.
+    if (nextOk && !landscape(index + 1) && no - state.lastPage >= 5) candidates.push('PAGE');
+    if (nextOk) candidates.push('PAIR');
+    candidates.push('PAGE', 'COLUMN', 'SMALL');
+  }
+  const recent = state.history.slice(-2);
+  const pick = candidates.find((kind) => !recent.includes(kind))
+    ?? candidates.find((kind) => kind !== state.history[state.history.length - 1])
+    ?? candidates[0];
+  if (pick === 'SCREEN') { state.screens += 1; state.lastScreen = no; }
+  if (pick === 'PAGE') state.lastPage = no;
+  state.history.push(pick);
+  return { kind: pick, frames: pick === 'PAIR' ? [index, index + 1] : [index] };
+}
+
+function setSides(slots: Slot[]): Slot[] {
   let side: 1 | -1 = 1;
   for (const slot of slots) {
     if (!SIDED.has(slot.kind)) continue;
@@ -179,6 +266,17 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
     side = side === 1 ? -1 : 1;
   }
   return slots;
+}
+
+/** Whether `sections` hold frames 2..n once each, in order, with no gap:
+ *  the only shape a chapter plan is made from (groupChapters makes it). */
+function wholeSections(sections: readonly PlanSection[], n: number): boolean {
+  let next = 1;
+  for (const section of sections) {
+    if (section.start !== next || !(section.count >= 1)) return false;
+    next += section.count;
+  }
+  return next === n;
 }
 
 /** The frames per slot in reading order, as the kept stub reads them. */
@@ -289,7 +387,7 @@ export interface FrameBox {
 }
 
 export interface TextBox {
-  role: 'lede' | 'band1' | 'band2' | 'part' | 'quote';
+  role: 'lede' | 'band1' | 'band2' | 'part' | 'chapter' | 'quote';
   x: Q;
   w: Q;
   y: Q;
@@ -380,6 +478,18 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
           frames: r.length ? [frame(0, right(w), w)] : [],
           text: [{ role: 'part', x: g.colX(4), w: g.cols(4), y: px(40) }],
           top: add(g.gap, px(28)),
+        };
+      }
+      case 'CHAPTER': {
+        // The opener's words in columns 4–7 and the chapter's first frame
+        // hung at the right edge beside them, as Part II's. A chapter is a
+        // longer pause than a slot: half a gap more above it.
+        const w = capped(g.cols(isLandscape(r[0]) ? 5 : 4), r[0]);
+        return {
+          slot,
+          frames: [frame(0, right(w), w)],
+          text: [{ role: 'chapter', x: g.colX(4), w: g.cols(4), y: ZERO }],
+          top: add(g.gap, over(g.gap, 2)),
         };
       }
       case 'QUOTE':

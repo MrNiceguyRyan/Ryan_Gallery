@@ -35,6 +35,16 @@ import {
   type SlotKind,
 } from '../../lib/storyPlan';
 import { planEntrances, playEntrance, POP_EASE, SHUTTER_BLADES, type SlotEntrance } from '../../lib/storyEntrance';
+import {
+  CONTENTS_LABEL,
+  chapterAnchor,
+  currentSection,
+  frameSpan,
+  glideSeconds,
+  groupChapters,
+  jumpTop,
+  type StorySection,
+} from '../../lib/storyChapters';
 import { signNameSize, stateCode } from '../../lib/routeShield';
 import { FlapWord, RouteShield } from './RouteShield';
 
@@ -150,14 +160,16 @@ const DARK_TERRAIN: ReadonlySet<string> = new Set(['new-york-stories']);
  *  frame once, in order; otherwise the planner's stands. None today. */
 const STORY_SEQUENCE: Partial<Record<string, Slot[]>> = {};
 
-function storySlots(slug: string | undefined, ratios: readonly number[], hasQuote: boolean): Slot[] {
-  const set = slug ? STORY_SEQUENCE[slug] : undefined;
+function storySlots(slug: string | undefined, ratios: readonly number[], hasQuote: boolean, sections: readonly StorySection[]): Slot[] {
+  // A story in sub-chapters is always the planner's: a hand-set sequence
+  // knows nothing of its openers.
+  const set = slug && sections.length === 0 ? STORY_SEQUENCE[slug] : undefined;
   if (set) {
     const placed = set.flatMap((slot) => slot.frames);
     const whole = placed.length === ratios.length && placed.every((frame, index) => frame === index);
     if (whole && set[0]?.kind === 'OPEN' && set[set.length - 1]?.kind === 'END') return set;
   }
-  return planStory(ratios, { hasQuote });
+  return planStory(ratios, { hasQuote, sections });
 }
 
 function terrainFor(story: Pick<Collection, 'slug'> | null | undefined): string {
@@ -359,12 +371,15 @@ export function photoOrigin(frame: HTMLElement, image: HTMLImageElement | null):
   };
 }
 
-/** The story's frames in reading order, their shapes, and its plan. One
- *  source for the grid, the lightbox, the kept stub and the grow's aim. */
+/** The story's frames in reading order, their shapes, its sub-chapters (none
+ *  for most stories) and its plan. One source for the grid, the lightbox, the
+ *  kept stub, the contents and the grow's aim. A story in chapters reads its
+ *  frames chapter by chapter (src/lib/storyChapters.ts); frame 01 is the
+ *  cover either way. */
 function storyPlanFor(story: Collection) {
-  const frames = storyFrames(story.photos ?? [], story.coverImageUrl);
+  const { frames, sections } = groupChapters(storyFrames(story.photos ?? [], story.coverImageUrl), story.chapters);
   const ratios = frames.map(frameRatio);
-  return { frames, ratios, slots: storySlots(story.slug, ratios, !!pullQuote(story.slug)) };
+  return { frames, ratios, sections, slots: storySlots(story.slug, ratios, !!pullQuote(story.slug), sections) };
 }
 
 /** The shape of a story's frame 01 without its photographs (a lightweight
@@ -772,9 +787,104 @@ const EndMarked = ({ text }: { text: string }) => (
 function frameSizes(kind: SlotKind, desktopShare: number, at: number): string {
   let phone = 100;
   if (kind === 'SMALL' || kind === 'LEDE') phone = 58;
-  else if (kind === 'COLUMN' || kind === 'PART' || kind === 'LEDE2') phone = 83;
+  else if (kind === 'COLUMN' || kind === 'PART' || kind === 'LEDE2' || kind === 'CHAPTER') phone = 83;
   else if (kind === 'PAIR') phone = at === 0 ? 100 : 80;
   return `(min-width: 1024px) ${Math.max(10, Math.round(desktopShare * 100))}vw, ${Math.round(phone)}vw`;
+}
+
+/* ── Sub-chapters: the opener and the contents ──
+   A story the owner has split into chapters in Sanity (src/lib/storyChapters.ts)
+   opens each one with a quiet opener in the story's own type — its number
+   (PROPOSED label: "Chapter 01"), his kicker, his title and intro — beside its
+   first frame, and carries a small numbered contents list: in the rail on
+   desktop (columns 1–3, above the kept stub, pinned under the running head
+   from the introduction to the end page), a row under the running head on the
+   phone. Both are one element. A link glides the story's own scroller to its
+   chapter (the scroller is outside Lenis: data-lenis-prevent) and hands focus
+   to the chapter's title; the chapter being read is marked from the openers'
+   tops, measured on mount and resize, against the reading line — never a
+   rect per frame. */
+
+interface ChapterOpenerProps {
+  section: StorySection;
+  /** Its place among the story's sections. */
+  index: number;
+  anchor: string;
+  heading: 'h2' | 'h3';
+}
+
+/** PROPOSED copy awaiting the owner: the word before a chapter's number. */
+const CHAPTER_LABEL = 'Chapter';
+
+/** The keys that scroll the story: pressed during a jump, the reader has
+ *  taken the scroll back and the glide gives way. */
+const SCROLL_KEYS: ReadonlySet<string> = new Set(['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' ']);
+
+function ChapterOpener({ section, heading, style }: ChapterOpenerProps & { style?: CSSProperties }) {
+  const Heading = heading;
+  const numbered = section.no !== null;
+  return (
+    <div className={`story-text story-chapter${numbered ? '' : ' story-chapter--more'}`} style={style}>
+      {(numbered || section.kicker) && (
+        <p className="story-chapter__label font-ui">
+          {numbered && <span>{CHAPTER_LABEL}&nbsp;<b>{pad2(section.no ?? 0)}</b></span>}
+          {numbered && section.kicker && <span className="story-chapter__sep" aria-hidden="true">·</span>}
+          {section.kicker && <span>{section.kicker}</span>}
+        </p>
+      )}
+      <Heading className="story-chapter__title font-serif" tabIndex={-1}>{section.title}</Heading>
+      {section.intro && <p className="story-chapter__intro font-serif">{section.intro}</p>}
+    </div>
+  );
+}
+
+function ChapterContents({
+  sections,
+  slug,
+  navRef,
+  onJump,
+}: {
+  sections: readonly StorySection[];
+  slug: string | undefined;
+  navRef: RefObject<HTMLElement | null>;
+  onJump: (index: number) => void;
+}) {
+  const labelId = chapterAnchor(slug, 'contents');
+  return (
+    <div className="story-toc-track">
+      <nav ref={navRef} className="story-toc" aria-labelledby={labelId}>
+        <p id={labelId} className="story-toc__label font-ui">{CONTENTS_LABEL}</p>
+        <ol className="story-toc__list">
+          {sections.map((section, index) => (
+            <li key={section.key} className="story-toc__item">
+              <a
+                href={`#${chapterAnchor(slug, section.key)}`}
+                className="story-toc__link story-focus"
+                data-toc-index={index}
+                onClick={(event) => {
+                  // A modified click keeps the browser's own behaviour.
+                  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  event.preventDefault();
+                  onJump(index);
+                }}
+              >
+                <span className="story-toc__no font-ui">
+                  {section.no !== null && (
+                    <>
+                      <span className="sr-only">{CHAPTER_LABEL} </span>
+                      {pad2(section.no)}
+                    </>
+                  )}
+                </span>
+                <span className="story-toc__title font-serif">{section.title}</span>
+                <span className="story-toc__frames font-ui" aria-hidden="true">{frameSpan(section)}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </div>
+  );
 }
 
 /** One slot of the story: its frames and its words, placed by its boxes. */
@@ -788,6 +898,8 @@ function SlotView({
   arrive,
   armed,
   shared,
+  chapter,
+  partNumeral = true,
 }: {
   box: SlotBoxes;
   photos: readonly Photo[];
@@ -799,6 +911,10 @@ function SlotView({
   arrive: SlotEntrance | null;
   armed: boolean;
   shared: FrameShared;
+  /** A CHAPTER slot's section, its anchor and its heading level. */
+  chapter?: ChapterOpenerProps;
+  /** Whether paragraph 2 is printed as Part II ("II"). */
+  partNumeral?: boolean;
 }) {
   const { slot } = box;
   const { kind } = slot;
@@ -824,7 +940,7 @@ function SlotView({
         key={photo._id}
         photo={photo}
         index={frame.frame}
-        kind={kind === 'LEDE' ? 'SMALL' : kind === 'LEDE2' || kind === 'PART' ? 'COLUMN' : kind}
+        kind={kind === 'LEDE' ? 'SMALL' : kind === 'LEDE2' || kind === 'PART' || kind === 'CHAPTER' ? 'COLUMN' : kind}
         style={style}
         arrive={arrive}
         armed={armed}
@@ -843,9 +959,11 @@ function SlotView({
   return (
     <section
       className="story-slot"
+      id={chapter?.anchor}
       data-kind={kind}
       data-side={slot.side}
       data-pp={portraits ? 'true' : undefined}
+      data-chapter-opener={chapter ? chapter.index : undefined}
       style={{ '--slot-top': css(box.top) } as CSSProperties}
     >
       {kind === 'LEDE' && lede && (
@@ -856,12 +974,15 @@ function SlotView({
           {lede && <div className="story-text story-lede font-serif" style={textStyle(0)}><p>{lede}</p></div>}
           {part2 && (
             <div className="story-text story-prose font-serif" style={textStyle(1)}>
-              <span className="story-part-no font-serif" aria-hidden="true">II</span>
+              {/* In a story in chapters the numbers are the chapters': the
+                  introduction's second paragraph is not Part II there. */}
+              {partNumeral &&<span className="story-part-no font-serif" aria-hidden="true">II</span>}
               <EndMarked text={part2} />
             </div>
           )}
         </>
       )}
+      {kind === 'CHAPTER' && chapter && <ChapterOpener {...chapter} style={textStyle(0)} />}
       {kind === 'PART' && part2 && (
         <div className="story-text story-prose font-serif" style={textStyle(0)}>
           <span className="story-part-no font-serif" aria-hidden="true">II</span>
@@ -2147,7 +2268,7 @@ export default function MagazineLayout({
   // Its frames (frame 01 is the cover the reader clicked), their shapes and
   // its plan. The boxes' CSS does not depend on the window; the pixel values
   // at the design window (1728×1000) only feed `sizes`.
-  const { frames: photos, ratios, slots } = useMemo(() => storyPlanFor(collection), [collection]);
+  const { frames: photos, ratios, slots, sections } = useMemo(() => storyPlanFor(collection), [collection]);
   const boxes = useMemo(() => storyBoxes(slots, ratios, 1728, 1000), [slots, ratios]);
   // How each slot's frames arrive: four photographic entrances dealt in
   // reading order (src/lib/storyEntrance.ts), aligned with `slots`; the
@@ -2446,6 +2567,132 @@ export default function MagazineLayout({
   }, [entryLanded, collection._id, paintFolio]);
   useMotionValueEvent(scrollY, 'change', paintFolio);
 
+  // ── The contents of a story in chapters (see ChapterContents) ──
+  // Each opener's top is an offsetTop chain inside the scroller, measured on
+  // mount and on resize; a scroll compares one number (the reading line)
+  // against them and writes the chapter being read straight onto the links
+  // (aria-current), never through a render. On the phone the row also slides
+  // the current chapter's link into view, only when it changes.
+  const tocRef = useRef<HTMLElement>(null);
+  const chapterLinesRef = useRef<{ tops: number[]; view: number } | null>(null);
+  const currentChapterRef = useRef(-1);
+  const paintChapters = useCallback((scrollTop: number) => {
+    const lines = chapterLinesRef.current;
+    const nav = tocRef.current;
+    if (!lines || !nav) return;
+    const current = currentSection(lines.tops, scrollTop + lines.view * STORY_READING_LINE);
+    if (current === currentChapterRef.current) return;
+    currentChapterRef.current = current;
+    let currentLink: HTMLElement | null = null;
+    nav.querySelectorAll<HTMLElement>('[data-toc-index]').forEach((link) => {
+      if (Number(link.dataset.tocIndex) === current) {
+        link.setAttribute('aria-current', 'location');
+        currentLink = link;
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+    // The phone's row scrolls sideways; the rail's list does not.
+    const list = nav.querySelector<HTMLElement>('.story-toc__list');
+    const item = (currentLink as HTMLElement | null)?.parentElement;
+    if (list && item && list.scrollWidth > list.clientWidth + 1) {
+      const left = Math.max(0, item.offsetLeft - (list.clientWidth - item.offsetWidth) / 2);
+      list.scrollTo({ left, behavior: reduce ? 'auto' : 'smooth' });
+    }
+  }, [reduce]);
+  useEffect(() => {
+    const root = containerRef.current;
+    currentChapterRef.current = -1;
+    chapterLinesRef.current = null;
+    if (!entryLanded || !root || sections.length === 0) return;
+    const measure = () => {
+      const tops: number[] = [];
+      root.querySelectorAll<HTMLElement>('[data-chapter-opener]').forEach((node) => {
+        const index = Number(node.dataset.chapterOpener);
+        if (!Number.isFinite(index)) return;
+        let top = 0;
+        let step: HTMLElement | null = node;
+        while (step && step !== root) {
+          top += step.offsetTop;
+          step = step.offsetParent instanceof HTMLElement ? step.offsetParent : null;
+        }
+        tops[index] = step === root ? top : Infinity;
+      });
+      chapterLinesRef.current = { tops, view: root.clientHeight };
+      currentChapterRef.current = -2;
+      paintChapters(root.scrollTop);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    if (frameGridRef.current) observer.observe(frameGridRef.current);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [entryLanded, collection._id, sections, paintChapters]);
+  useMotionValueEvent(scrollY, 'change', paintChapters);
+  // A jump glides on the house travel curve (A to B on a clock) and gives way
+  // the moment the reader takes the scroll back.
+  const glideRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => glideRef.current?.(), [collection._id]);
+  const jumpToChapter = (index: number) => {
+    const root = containerRef.current;
+    const opener = root?.querySelector<HTMLElement>(`[data-chapter-opener="${index}"]`);
+    if (!root || !opener) return;
+    let top = chapterLinesRef.current?.tops[index];
+    if (top === undefined || !Number.isFinite(top)) {
+      top = 0;
+      let step: HTMLElement | null = opener;
+      while (step && step !== root) {
+        top += step.offsetTop;
+        step = step.offsetParent instanceof HTMLElement ? step.offsetParent : null;
+      }
+    }
+    // Where the opener's rule lands, read once, in the click: on desktop on
+    // the contents' own top rule, pinned in the rail beside it; on the phone
+    // a little under the contents row that sticks beneath the running head.
+    const nav = tocRef.current;
+    const list = nav?.querySelector<HTMLElement>('.story-toc__list');
+    let inset = (headRef.current?.offsetHeight ?? 0) + 24;
+    if (nav && window.innerWidth < 1024) inset = (headRef.current?.offsetHeight ?? 0) + nav.offsetHeight + 20;
+    else if (nav && list) inset = (Number.parseFloat(getComputedStyle(nav).top) || 0) + list.offsetTop;
+    const to = jumpTop(top, inset, root.scrollHeight - root.clientHeight);
+    // Focus goes to the chapter's title now, without scrolling, so a screen
+    // reader lands where the page is going.
+    opener.querySelector<HTMLElement>('.story-chapter__title')?.focus({ preventScroll: true });
+    glideRef.current?.();
+    const from = root.scrollTop;
+    if (reduce || Math.abs(to - from) < 2) {
+      root.scrollTop = to;
+      return;
+    }
+    const behavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+    let controls: { stop: () => void } | null = null;
+    const onKey = (event: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(event.key)) stop();
+    };
+    const stop = () => {
+      controls?.stop();
+      root.style.scrollBehavior = behavior;
+      root.removeEventListener('wheel', stop);
+      root.removeEventListener('touchstart', stop);
+      root.removeEventListener('pointerdown', stop);
+      window.removeEventListener('keydown', onKey, true);
+      if (glideRef.current === stop) glideRef.current = null;
+    };
+    root.addEventListener('wheel', stop, { passive: true });
+    root.addEventListener('touchstart', stop, { passive: true });
+    root.addEventListener('pointerdown', stop);
+    window.addEventListener('keydown', onKey, true);
+    glideRef.current = stop;
+    controls = animate(from, to, {
+      duration: glideSeconds(to - from),
+      ease: EASE.travel,
+      onUpdate: (value) => { root.scrollTop = value; },
+      onComplete: stop,
+    });
+  };
+
   useEffect(() => {
     setIsShared(false);
     setShareStatus('');
@@ -2665,6 +2912,31 @@ export default function MagazineLayout({
     onOpen: (index, element) => openLightbox(index, element),
   };
   const openerPhoto = photos[0];
+  // The inside pages, slot by slot (the end page is its own component).
+  const chapterHeading = standalone ? 'h2' : 'h3';
+  const slotViews = boxes.slice(1).flatMap((box, index) => {
+    if (box.slot.kind === 'END') return [];
+    const at = box.slot.section;
+    const section = box.slot.kind === 'CHAPTER' && at !== undefined ? sections[at] : undefined;
+    return [
+      <SlotView
+        key={`${box.slot.kind}-${index}-${box.slot.frames.join('.')}`}
+        box={box}
+        photos={photos}
+        ratios={ratios}
+        places={places}
+        paragraphs={paragraphs}
+        quote={quote}
+        arrive={entrances[index + 1]}
+        armed={revealArmed}
+        shared={frameShared}
+        chapter={section && at !== undefined
+          ? { section, index: at, anchor: chapterAnchor(collection.slug, section.key), heading: chapterHeading }
+          : undefined}
+        partNumeral={sections.length === 0}
+      />,
+    ];
+  });
 
   return (
     <>
@@ -2883,20 +3155,22 @@ export default function MagazineLayout({
                   <p className="story-cap story-open__cap story-open__cap--side font-ui"><CaptionText frames={[0]} places={places} /></p>
                 </div>
                 <div className="story-paper">
-                  {boxes.slice(1).map((box, index) => (box.slot.kind === 'END' ? null : (
-                    <SlotView
-                      key={`${box.slot.kind}-${index}-${box.slot.frames.join('.')}`}
-                      box={box}
-                      photos={photos}
-                      ratios={ratios}
-                      places={places}
-                      paragraphs={paragraphs}
-                      quote={quote}
-                      arrive={entrances[index + 1]}
-                      armed={revealArmed}
-                      shared={frameShared}
-                    />
-                  )))}
+                  {sections.length === 0 ? slotViews : (
+                    /* A story in chapters: its introduction, the contents
+                       (the rail's on desktop, a row under the head on the
+                       phone; pinned only as far as the end page) and the
+                       chapters, in one block so the contents is held to it. */
+                    <div className="story-chapters">
+                      {slotViews[0]}
+                      <ChapterContents
+                        sections={sections}
+                        slug={collection.slug}
+                        navRef={tocRef}
+                        onJump={jumpToChapter}
+                      />
+                      {slotViews.slice(1)}
+                    </div>
+                  )}
                   <EndPage
                     collection={collection}
                     photos={photos}
