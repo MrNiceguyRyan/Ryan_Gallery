@@ -20,7 +20,7 @@ import {
   useTransform,
 } from 'framer-motion';
 import type { RouteStop } from './RouteAtlas';
-import { stockStyle } from '../../lib/ticketStock';
+import { stockPaper, stockStyle } from '../../lib/ticketStock';
 import { EASE } from '../../lib/motion';
 import { pad2, stateCode } from '../../lib/routeShield';
 import { FlapWord, RouteShield, runFlap } from './RouteShield';
@@ -486,6 +486,7 @@ function StubFace({ stop, ordinal, total, direction, printIn, leaving, reducedMo
         <RouteShield
           className="living-ticket__no"
           code={stateCode(stop.region)}
+          accent={stockPaper(stop.slug)}
           number={pad2(ordinal)}
           flap
         />

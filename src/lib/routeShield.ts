@@ -1,18 +1,74 @@
 // ── The route shield: how a place is signed on the homepage ──
-// Owner, 2026-09-28 (甲，我喜欢路盾这样): every place is a US-route shield —
-// the 1926 state shield's form, bone plate, dark ink — carrying its state's
-// two letters in the top band and its stop number below. The same shield
-// heads the chapter's ticket (the stub IS the place's sign: 将右侧的大号封面
-// 和路牌上方的州名缩写+地名和第几站结合在一起) and stands on the map.
+// Owner, 2026-09-28: every place is a road shield carrying its state's two
+// letters and its stop number, and the same shield heads the chapter's
+// ticket (将右侧的大号封面和路牌上方的州名缩写+地名和第几站结合在一起).
 //
-// On the map there is no post under a shield (不需要下面的引线). A group of
-// neighbouring places is ONE sign: its shields side by side in stop order,
-// with a single leader pointing at the region they share, never one leader
-// per place (引线指向一段区域即可，同一块区域不需要反复指引，按照数字排序即可).
+// Later the same day (完全和这个网站对齐 11moissanstoit.com/etape/paris-1):
+// ONE shield per place, standing on the map with the point of its foot
+// exactly on the place — no grouping of neighbouring places, no post, stem
+// or leader of any kind (不需要白色竖干). Shields that meet at a camera's zoom
+// cascade like a pile of stop signs (`stackShields`), never merge. And the
+// shields of different states are not one style (每个地区的路牌盾风格不能一样，
+// 要差异化): each state has its own FORM, drawn after that state's real route
+// marker (below), and each place prints its own ticket stock in the form's
+// band, so Miami and Orlando (both Florida) still differ, and every shield
+// matches its ticket.
 //
-// Pure, so scripts/route-shield.test.mjs can hold it: the outline, the
-// state code, the regions and the split-flap's plan.
-import { haversineKm } from './geo.ts';
+// Pure, so scripts/route-shield.test.mjs can hold it: the forms, the state
+// code, the stacking and the split-flap's plan.
+
+// ── The forms ──
+// Every form is drawn in a box 100 units wide (`h` tall, foot included), in
+// the site's own ink: a bone plate, dark ink, and a BAND printed in the
+// place's stock (src/lib/ticketStock.ts) that carries the state's letters in
+// bone. The foot's point (`tip`) is what stands on the place. The drawings
+// are ours — simplified, never traced from a sign — after the real markers
+// (MUTCD 2009 and the states' supplements; checked against the public-domain
+// drawings on Wikimedia Commons, 2026-09-28):
+//   FL  Florida state road: a white square, the state's outline drawn round
+//       it in black. Here: a square plate, and the state as the band — the
+//       panhandle across the head (it carries FL), the peninsula down the
+//       right-hand side; the number sits centred in the Gulf.
+//   AZ  Arizona state route: the state's own outline, white on black — the
+//       notch at its north-west corner, the diagonal of its south-west
+//       border — with ARIZONA across the head. Here: the outline, its head
+//       band carrying AZ, the foot where the diagonal meets the border.
+//   UT  Utah state route: a beehive (the Beehive State) — tiers of a skep,
+//       a knob on top — standing on a slab. Here: four tiers and the knob in
+//       bone, the slab as the band, carrying UT.
+//   NY  New York state route: a shield with a raised, ogee-curved head and a
+//       pointed foot. Here: that shield, its head the band, carrying NY.
+//   US  Anything else: the US-route shield (MUTCD M1-4), the 1926 form the
+//       archive signed every place with until now.
+export interface ShieldText {
+  /** Centre of the line, in the form's units. */
+  x: number;
+  /** The baseline, in the form's units. */
+  y: number;
+  /** Font size, in the form's units. */
+  size: number;
+}
+
+export interface ShieldForm {
+  key: 'FL' | 'AZ' | 'UT' | 'NY' | 'US';
+  /** Height of the box (the width is always 100), foot included. */
+  h: number;
+  /** The point that stands on the place. */
+  tip: readonly [number, number];
+  /** The plate: bone, foot included. May be several sub-paths (a union). */
+  plate: string;
+  /** Printed in the place's stock; carries the state's letters. */
+  band: string;
+  /** Dark ink linework over the plate (rims, the hive's seams). */
+  ink: string;
+  /** The ink's stroke width, in the form's units. */
+  inkWidth: number;
+  /** An ink ring: the plate's own outline drawn again at this scale about
+   *  the box's centre (the US shield's 1926 border ring). */
+  rim?: number;
+  code: ShieldText;
+  num: ShieldText;
+}
 
 /** The US-route shield outline (MUTCD M1-4, a generic public-domain form),
  *  normalised to a 100 × 100 box: ears at 19.8% / 80.2%, a centre cusp,
@@ -23,9 +79,105 @@ export const SHIELD_PATH =
   '65.2,5.7 C70.6,5.7 76.1,3.6 80.2,0.1 L100,19.2 C96.2,24.4 93.9,31.3 93.9,37.9 C93.9,47.6 99.9,54.4 99.9,63.8 ' +
   'C99.9,79 87.5,91.4 72.4,91.4 L68.1,91.4 C61.2,91.4 54.5,94.6 50,100Z';
 
-/** Where the 1926 shield's band ends: a full-width rule of ink at this
- *  height (of 100), which closes the state's band over the stop number. */
-export const SHIELD_BAND_RULE_Y = 35.5;
+// A tier of the hive: a band `hw` either side of the middle, 11.5 tall, its
+// ends rounded, so the tiers' sides stack as the skep's coils.
+const tier = (top: number, hw: number) =>
+  `M${50 - hw + 5.75},${top} H${50 + hw - 5.75} A5.75,5.75 0 0 1 ${50 + hw - 5.75},${top + 11.5} H${50 - hw + 5.75} A5.75,5.75 0 0 1 ${50 - hw + 5.75},${top}Z`;
+// Where two tiers meet: the seam, cut in from the notch between the coils
+// on each side (`hw`, the lower tier's half-width).
+const seam = (y: number, hw: number, reach: number) =>
+  `M${50 - hw + 7},${y} h${reach} M${50 + hw - 7},${y} h${-reach}`;
+
+export const SHIELD_FORMS: Readonly<Record<ShieldForm['key'], ShieldForm>> = {
+  FL: {
+    key: 'FL',
+    h: 108,
+    tip: [50, 108],
+    plate: 'M8,0 H92 Q100,0 100,8 V88 Q100,96 92,96 H58 L50,108 L42,96 H8 Q0,96 0,88 V8 Q0,0 8,0Z',
+    // The state: the panhandle along the head, the Big Bend, Tampa Bay, the
+    // peninsula down to its tip; the Atlantic coast straight up the side.
+    // The peninsula narrow, as the state's is: its west coast from the Big
+    // Bend (x≈64) down to the tip (x≈86), so the number sits whole in the
+    // Gulf, clear of the rim and the coast (at 32.5 it hugged the rim and the
+    // peninsula took a third of the plate: a dog-eared tile, not Florida).
+    band: 'M8,8 H92 L92.5,42 C92.5,60 91.5,73 88.5,83 L86,89.5 C84,87.5 82.5,84 81,79 L78,69 ' +
+      'C76.5,65 74.5,63 72,61 C73.5,58.5 73,55.5 71.5,52.5 C69.5,47.5 67,42.5 63.5,38.5 C59.5,33.5 54,29.8 46.5,28.8 ' +
+      'L34.5,28.2 C33,30.8 30.2,31.2 28.6,28 L8,27.2Z',
+    ink: 'M4.2,11 Q4.2,4.2 11,4.2 H89 Q95.8,4.2 95.8,11 V85 Q95.8,91.8 89,91.8 H11 Q4.2,91.8 4.2,85Z',
+    inkWidth: 2.2,
+    code: { x: 21, y: 23, size: 16.5 },
+    num: { x: 40, y: 84, size: 38 },
+  },
+  AZ: {
+    key: 'AZ',
+    h: 102,
+    tip: [50, 102],
+    // The notch at the north-west corner; the south-west border's diagonal
+    // down to the foot; the Mexican border flat to the east.
+    plate: 'M20,0 H100 V90 H57 L50,102 L43,88 L0,77 V19 H20Z',
+    band: 'M24,4 H96 V24 H24Z',
+    ink: 'M23.6,3.6 H96.4 V86.4 H55.6 L3.6,73.9 V22.6 H23.6Z',
+    inkWidth: 2.2,
+    code: { x: 60, y: 20.5, size: 17 },
+    num: { x: 52, y: 72, size: 44 },
+  },
+  UT: {
+    key: 'UT',
+    h: 100,
+    tip: [50, 100],
+    // The knob, five tiers of the skep, the slab it stands on, the foot.
+    plate: [
+      'M43.5,11 A6.5,6.5 0 0 1 56.5,11Z',
+      tier(9, 17),
+      tier(19.5, 27),
+      tier(30, 35),
+      tier(40.5, 41),
+      tier(51, 45),
+      'M3,61 H97 Q100,61 100,64 V84 Q100,87 97,87 H57 L50,100 L43,87 H3 Q0,87 0,84 V64 Q0,61 3,61Z',
+    ].join(' '),
+    band: 'M4,64.5 H96 V83.5 H4Z',
+    ink: [seam(20, 27, 5), seam(30.5, 35, 5), seam(41, 41, 5), seam(51.5, 45, 5)].join(' '),
+    inkWidth: 2.2,
+    code: { x: 50, y: 80.2, size: 17 },
+    num: { x: 50, y: 55.5, size: 34 },
+  },
+  NY: {
+    key: 'NY',
+    h: 100,
+    tip: [50, 100],
+    plate: 'M50,0 C61.2,0 67,2.3 73.8,7.4 C81.3,12.9 89.9,16.4 100,16.4 V75.3 C100,80.5 99.9,80.5 97.3,83.3 ' +
+      'C92.6,87.8 50,100 50,100 C50,100 7.4,87.8 2.7,83.3 C0.1,80.5 0,80.5 0,75.3 V16.4 C10.1,16.4 18.7,12.9 26.2,7.4 ' +
+      'C33,2.3 38.8,0 50,0Z',
+    band: 'M50,4.6 C60,4.6 65.6,6.8 71.8,11.4 C79,16.7 87,20 95.4,20.5 V34 H4.6 V20.5 C13,20 21,16.7 28.2,11.4 ' +
+      'C34.4,6.8 40,4.6 50,4.6Z',
+    ink: 'M95.4,34 V74.6 C95.4,78.4 95.3,78.6 93.4,80.6 C89.4,84.4 50,95.2 50,95.2 C50,95.2 10.6,84.4 6.6,80.6 ' +
+      'C4.7,78.6 4.6,78.4 4.6,74.6 V34',
+    inkWidth: 2.2,
+    code: { x: 50, y: 29.5, size: 17 },
+    num: { x: 50, y: 74, size: 42 },
+  },
+  US: {
+    key: 'US',
+    h: 100,
+    tip: [50, 100],
+    plate: SHIELD_PATH,
+    // The 1926 border ring (the plate at 0.84, `rim`) and the band above its rule.
+    band: 'M8,24.1 L24.6,8.1 C28,11 32.6,12.8 37.2,12.8 C41.8,12.8 46.6,11.1 50,8 C53.4,11.1 58.2,12.8 62.8,12.8 ' +
+      'C67.4,12.8 72,11 75.4,8.1 L92,24.1 C89.5,27.5 88.2,31.5 87.9,35.5 H12.1 C11.8,31.5 10.5,27.5 8,24.1Z',
+    ink: 'M12.5,35.5 H87.5',
+    rim: 0.84,
+    inkWidth: 3.6,
+    code: { x: 50, y: 30.2, size: 18.5 },
+    num: { x: 50, y: 79.5, size: 45 },
+  },
+};
+
+/** A state's form, from its two letters: the four states the archive has
+ *  been to have their own; anything else the US-route shield. */
+export function shieldForm(code?: string | null): ShieldForm {
+  const key = (code ?? '').trim().toUpperCase();
+  return key in SHIELD_FORMS ? SHIELD_FORMS[key as ShieldForm['key']] : SHIELD_FORMS.US;
+}
 
 // USPS codes. The archive stores a place's `region` as the state's name
 // ("Florida", "New York"); the two letters on a shield are DERIVED from it
@@ -77,143 +229,240 @@ export function signNameSize(name: string): number {
   return Math.max(SIGN_NAME_MIN, Math.min(SIGN_NAME_MAX, Math.floor(SIGN_NAME_MEASURE / (longest * 0.66))));
 }
 
-// ── Regions: one sign per stretch of neighbouring places ──
-/** Places read one after another no further apart than this share a sign:
- *  Miami–Orlando (~330 km) is one stretch, Page–Zion–Bryce (~145 and ~80 km)
- *  another; Orlando–Page (~2 900 km) and Bryce–New York (~3 000 km) are not.
- *  By distance, not by the region field: Page is in Arizona and Zion in Utah,
- *  and on the map they are one corner of the Southwest. */
-export const REGION_REACH_KM = 450;
+// ── One shield per place, and how they stack ──
+// Each place's shield stands on the map with its foot's point on the place,
+// placed on every camera frame from the camera's projection (RouteAtlas,
+// "The shields"). Nothing moves a shield off its place, except this: where
+// two shields meet at a camera's zoom (Zion and Bryce are ~80 km apart, a
+// few px on a zoomed-out flight), they STACK, as 11 mois sans toi(t)'s stop
+// signs do — each still on its own place, in stop order, the current stop on
+// top, and the pile's front shield carries a small count. A shield buried
+// almost entirely behind the one in front of it (their places a few px
+// apart) is lifted just enough that its head shows above (STACK_PEEK), so a
+// pile always reads as so many signs, never as one.
+//
+// The map's sizes, css px. At every chapter's own resting camera no two
+// shields meet (measured at 1728 × 1000 and 1280 × 800: the nearest pair,
+// Miami–Orlando from Miami, stands 46px apart across and 93px down).
+export const SHIELD_MAP_PX = 34;
+/** How a shield carries its state, as the CSS scales it (global.css, "The
+ *  place shields"; scripts/route-shield.test.mjs holds the two together). */
+export const SHIELD_SCALE = { ahead: 0.9, past: 0.94, inbound: 1.1, current: 1.2 } as const;
+/** A shield showing less than this beyond the one in front of it (above,
+ *  below or to either side) is buried: its head is lifted this far above
+ *  the other's, px. */
+export const STACK_PEEK = 6;
+/** Two shields that overlap by more than this (box into box, px) are one
+ *  pile; shields that merely touch stand apart and carry no count. */
+export const STACK_GAP = -1;
+/** A shield in front that reaches less than this (px, each way) into
+ *  another's type leaves it printed: a corner touching the foot of a number
+ *  (Miami's, read on a phone, at Orlando's 02) does not hide it. */
+export const TYPE_SLACK = 1;
 
-export interface SignPlace {
+export interface StackSlot {
   id: string;
   /** 1-based stop number. */
   number: number;
-  /** [longitude, latitude] */
-  coordinates: [number, number];
+  /** The foot's point on screen, px. */
+  x: number;
+  y: number;
+  /** The shield as drawn now (its state's scale applied), px. */
+  w: number;
+  h: number;
+  /** 2 the stop the camera is on, 1 the stop it is flying to, else 0. */
+  rank: number;
+  /** Where the form prints its type (`typeBox`), as fractions of the box.
+   *  Without it, every shield behind a pile's front counts as buried. */
+  type?: readonly [number, number, number, number];
 }
 
-export interface RegionSign<T extends SignPlace = SignPlace> {
-  /** Stable: the first member's id. */
-  key: string;
-  /** In stop order. */
-  places: T[];
-  /** Where the sign's one leader points: halfway along the region's own
-   *  stretch of the route (by length, on its legs in stop order), so the
-   *  leader lands ON the road the region's places share — a stretch, not a
-   *  pin and not bare ground between two legs. A single place is its own
-   *  anchor (and its sign has no leader: `SignPose`, RouteSign). */
-  anchor: [number, number];
+export interface StackPlace {
+  /** The lift of a buried shield, px (≤ 0: up). */
+  dy: number;
+  /** 0 = back of its pile. Front shields are above every shield behind. */
+  z: number;
+  /** On a pile's front shield: how many shields the pile holds (else 0). */
+  count: number;
+  /** The id of its pile's front shield (its own, alone or in front). */
+  front: string;
+  /** Behind a shield that covers some of its type: its number and letters
+   *  are not printed (half a number beside the front's read as a third
+   *  digit, "053"), so a pile reads as a deck — the front's number, the
+   *  edges of the shields behind, the count. */
+  buried: boolean;
 }
 
-/** The point halfway along a polyline of [lng, lat] points, by haversine
- *  length, interpolated within the leg it falls on (the region's legs are a
- *  few hundred km at most, where lng/lat interpolation and the map's drawn
- *  leg agree to well under a pixel at the atlas's zooms). */
-export function routeMidpoint(points: ReadonlyArray<readonly [number, number]>): [number, number] {
-  if (!points.length) return [0, 0];
-  if (points.length === 1) return [points[0][0], points[0][1]];
-  const legs = points.slice(1).map((point, index) => haversineKm(points[index] as [number, number], point as [number, number]));
-  const total = legs.reduce((sum, km) => sum + km, 0);
-  if (!(total > 0)) return [points[0][0], points[0][1]];
-  let left = total / 2;
-  for (let index = 0; index < legs.length; index += 1) {
-    const km = legs[index];
-    if (left <= km || index === legs.length - 1) {
-      const t = km > 0 ? Math.min(1, left / km) : 0;
-      const [a, b] = [points[index], points[index + 1]];
-      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+const overlaps = (a: StackSlot, b: StackSlot, gap: number) =>
+  a.x - a.w / 2 < b.x + b.w / 2 + gap &&
+  b.x - b.w / 2 < a.x + a.w / 2 + gap &&
+  a.y - a.h < b.y + gap &&
+  b.y - b.h < a.y + gap;
+
+/** Where a form prints its type — the stop number and the state's letters —
+ *  as fractions of the shield's box [left, top, right, bottom]: two digits
+ *  of the label face (their ink ≈0.55em either side of the centre, the caps
+ *  0.7em over the baseline) and the letters' line (≈0.65em either side). A
+ *  pile hides a shield's type when a shield in front covers some of it
+ *  (more than TYPE_SLACK). */
+export function typeBox(form: ShieldForm): [number, number, number, number] {
+  const lines = [
+    { x0: form.num.x - 0.55 * form.num.size, x1: form.num.x + 0.55 * form.num.size, y0: form.num.y - 0.7 * form.num.size, y1: form.num.y },
+    { x0: form.code.x - 0.65 * form.code.size, x1: form.code.x + 0.65 * form.code.size, y0: form.code.y - 0.7 * form.code.size, y1: form.code.y },
+  ];
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return [
+    round(Math.min(...lines.map((line) => line.x0)) / 100),
+    round(Math.min(...lines.map((line) => line.y0)) / form.h),
+    round(Math.max(...lines.map((line) => line.x1)) / 100),
+    round(Math.max(...lines.map((line) => line.y1)) / form.h),
+  ];
+}
+
+/** Places the shields of one camera frame: piles, their order, the lift of
+ *  a buried shield, the front shield's count and whose type is covered.
+ *  Pure and cheap (six places, one frame). */
+export function stackShields(slots: readonly StackSlot[], gap = STACK_GAP): Map<string, StackPlace> {
+  const parent = slots.map((_, index) => index);
+  const find = (index: number): number => (parent[index] === index ? index : (parent[index] = find(parent[index])));
+  for (let a = 0; a < slots.length; a += 1) {
+    for (let b = a + 1; b < slots.length; b += 1) {
+      if (overlaps(slots[a], slots[b], gap)) parent[find(a)] = find(b);
     }
-    left -= km;
   }
-  const last = points[points.length - 1];
-  return [last[0], last[1]];
-}
-
-/** The same halfway point on screen (the phone's static overview, which
- *  signs its regions on projected points): by straight length in px. */
-export function screenMidpoint(points: ReadonlyArray<{ x: number; y: number }>): { x: number; y: number } {
-  if (!points.length) return { x: 0, y: 0 };
-  const legs = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
-  const total = legs.reduce((sum, px) => sum + px, 0);
-  if (!(total > 0)) return { x: points[0].x, y: points[0].y };
-  let left = total / 2;
-  for (let index = 0; index < legs.length; index += 1) {
-    if (left <= legs[index] || index === legs.length - 1) {
-      const t = legs[index] > 0 ? Math.min(1, left / legs[index]) : 0;
-      const a = points[index];
-      const b = points[index + 1];
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    }
-    left -= legs[index];
-  }
-  return { x: points[points.length - 1].x, y: points[points.length - 1].y };
-}
-
-/** The map's signs: places in stop order, a new sign wherever a leg is
- *  longer than `reachKm`. */
-export function regionSigns<T extends SignPlace>(places: readonly T[], reachKm = REGION_REACH_KM): Array<RegionSign<T>> {
-  const ordered = [...places].sort((a, b) => a.number - b.number);
-  const signs: Array<RegionSign<T>> = [];
-  let current: T[] = [];
-  const close = () => {
-    if (!current.length) return;
-    signs.push({ key: current[0].id, places: current, anchor: routeMidpoint(current.map((place) => place.coordinates)) });
-    current = [];
-  };
-  ordered.forEach((place, index) => {
-    const previous = ordered[index - 1];
-    if (previous && haversineKm(previous.coordinates, place.coordinates) > reachKm) close();
-    current.push(place);
+  const piles = new Map<number, StackSlot[]>();
+  slots.forEach((slot, index) => {
+    const root = find(index);
+    const pile = piles.get(root);
+    if (pile) pile.push(slot);
+    else piles.set(root, [slot]);
   });
-  close();
-  return signs;
+  const placed = new Map<string, StackPlace>();
+  piles.forEach((pile) => {
+    // Back to front: in stop order, the later stop in front; the stop the
+    // camera is flying to over that, the stop it is on over everything.
+    const order = [...pile].sort((a, b) => a.rank - b.rank || a.number - b.number);
+    const lifted = new Map<string, number>();
+    for (let index = order.length - 1; index >= 0; index -= 1) {
+      const slot = order[index];
+      let dy = 0;
+      // Every shield in front of this one that would bury it — leave less
+      // than STACK_PEEK of it showing on every side — pushes its head up
+      // above theirs (again, until none does: a lift past one can leave it
+      // under another). A shield whose side or foot still shows is left on
+      // its place: it reads as its own sign already.
+      for (let pass = 0; pass < order.length; pass += 1) {
+        let moved = false;
+        for (let front = index + 1; front < order.length; front += 1) {
+          const other = order[front];
+          const otherFoot = other.y + (lifted.get(other.id) ?? 0);
+          const otherTop = otherFoot - other.h;
+          const foot = slot.y + dy;
+          const top = foot - slot.h;
+          const showing = Math.max(
+            otherTop - top,
+            foot - otherFoot,
+            other.x - other.w / 2 - (slot.x - slot.w / 2),
+            slot.x + slot.w / 2 - (other.x + other.w / 2),
+          );
+          if (showing < STACK_PEEK - 0.01) {
+            dy += otherTop - STACK_PEEK - top;
+            moved = true;
+          }
+        }
+        if (!moved) break;
+      }
+      // Half pixels: the lift is written as a transform, only when it moves.
+      dy = Math.round(dy * 2) / 2 + 0;
+      lifted.set(slot.id, dy);
+    }
+    // With every lift known: whose type a shield in front of it covers.
+    const front = order[order.length - 1];
+    const box = (slot: StackSlot) => {
+      const foot = slot.y + (lifted.get(slot.id) ?? 0);
+      return { left: slot.x - slot.w / 2, right: slot.x + slot.w / 2, top: foot - slot.h, bottom: foot };
+    };
+    order.forEach((slot, index) => {
+      let buried = false;
+      if (index < order.length - 1) {
+        if (!slot.type) buried = true;
+        else {
+          const own = box(slot);
+          const type = {
+            left: own.left + slot.type[0] * slot.w,
+            top: own.top + slot.type[1] * slot.h,
+            right: own.left + slot.type[2] * slot.w,
+            bottom: own.top + slot.type[3] * slot.h,
+          };
+          buried = order.slice(index + 1).some((other) => {
+            const cover = box(other);
+            return Math.min(type.right, cover.right) - Math.max(type.left, cover.left) > TYPE_SLACK &&
+              Math.min(type.bottom, cover.bottom) - Math.max(type.top, cover.top) > TYPE_SLACK;
+          });
+        }
+      }
+      placed.set(slot.id, {
+        dy: lifted.get(slot.id) ?? 0,
+        z: index,
+        count: index === order.length - 1 && order.length > 1 ? order.length : 0,
+        front: front.id,
+        buried,
+      });
+    });
+  });
+  return placed;
 }
 
-// ── The sign's geometry on the map, derived per camera frame ──
-// The sign hangs over its region: the leader runs up from its anchor (the
-// middle of the region's stretch of road) until the shields clear the
-// region's northernmost place by SIGN_CLEAR. The row slides sideways (the
-// leader stays where it points) to keep inside the map column, never so far
-// that the leader leaves the row. A single place's sign has no leader at all
-// (不需要下面的引线): its shield stands SIGN_SINGLE_GAP over the place, and its
-// own point is the pointer.
-export const SIGN_CLEAR = 18;
-export const SIGN_LEAD_MIN = 14;
-export const SIGN_LEAD_MAX = 150;
-/** A lone shield's point stands this far above its place, css px. */
-export const SIGN_SINGLE_GAP = 6;
+// ── A phone's pile as a deck ──
+// On the phone's overview Page, Zion and Bryce stand 7–12px apart: always one
+// pile, whose lifted heads (STACK_PEEK) jumbled three forms and three
+// half-numbers ("053"). Where a shield's place lies within DECK_REACH of its
+// pile's front shield's, it is laid as a deck behind that shield, as 11 mois
+// sans toi(t)'s close stops are: its box set on the front's top-left corner,
+// DECK_STEP up and left per place further back (in the pile's order), its
+// type hidden — the front's number, the edges of the shields behind, the
+// count. DECK_REACH is three-quarters of a phone shield (22px): over the
+// overview's zooms (≈2.6–2.85, 390px to a tablet) the Southwest's three lie
+// 7–14px apart and Miami–Orlando 22–27px, so the three are one deck and the
+// two Florida shields always stand on their own places.
+export const DECK_REACH = 16;
+export const DECK_STEP = 3;
 
-export interface SignPose {
-  /** Leader length, px. */
-  lead: number;
-  /** The row's sideways shift from centred over the anchor, px. */
-  shift: number;
-}
-
-/**
- * Where a sign sits, from projected screen points (any one frame of
- * reference): `anchor` (the region's middle), `topY` (its northernmost place
- * on screen), the row's width, the column it must keep inside, and how far
- * the row may slide before the leader would leave the rail its shields stand
- * on (`reach`; 0 for a single shield, whose own point the leader meets).
- */
-export function signPose(
-  anchor: { x: number; y: number },
-  topY: number,
-  rowWidth: number,
-  left: number,
-  right: number,
-  reach: number,
-): SignPose {
-  const lead = Math.max(SIGN_LEAD_MIN, Math.min(SIGN_LEAD_MAX, anchor.y - topY + SIGN_CLEAR));
-  const half = rowWidth / 2;
-  let shift = 0;
-  if (anchor.x + half > right) shift = right - (anchor.x + half);
-  if (anchor.x - half + shift < left) shift = left - (anchor.x - half);
-  const limit = Math.max(0, reach);
-  // `+ 0`: a clamp to a zero reach must not hand back -0.
-  return { lead: Math.round(lead * 2) / 2, shift: Math.round(Math.max(-limit, Math.min(limit, shift)) * 2) / 2 + 0 };
+/** The foot point of every shield laid in a deck (see above), by id, and
+ *  how far back it lies (1 = just behind the front). */
+export function deckShields(
+  slots: readonly StackSlot[],
+  placed: ReadonlyMap<string, StackPlace>,
+  reach = DECK_REACH,
+  step = DECK_STEP,
+): Map<string, { x: number; y: number; depth: number }> {
+  const byId = new Map(slots.map((slot) => [slot.id, slot]));
+  const decks = new Map<string, Array<{ slot: StackSlot; z: number }>>();
+  slots.forEach((slot) => {
+    const place = placed.get(slot.id);
+    const front = place ? byId.get(place.front) : undefined;
+    if (!place || !front || front.id === slot.id) return;
+    if (Math.hypot(slot.x - front.x, slot.y - front.y) > reach) return;
+    const deck = decks.get(front.id);
+    if (deck) deck.push({ slot, z: place.z });
+    else decks.set(front.id, [{ slot, z: place.z }]);
+  });
+  const laid = new Map<string, { x: number; y: number; depth: number }>();
+  decks.forEach((members, frontId) => {
+    const front = byId.get(frontId);
+    if (!front) return;
+    const left = front.x - front.w / 2;
+    const top = front.y - front.h;
+    [...members].sort((a, b) => b.z - a.z).forEach(({ slot }, index) => {
+      const depth = index + 1;
+      laid.set(slot.id, {
+        x: left - step * depth + slot.w / 2,
+        y: top - step * depth + slot.h,
+        depth,
+      });
+    });
+  });
+  return laid;
 }
 
 // ── The split-flap: a stop's name arriving ──
@@ -231,7 +480,9 @@ export function signPose(
 // FLAP.base flips of FLAP.tick after FLAP.delay, each later character
 // FLAP.stagger and a flip later). Only what changes turns: a name already
 // right stays down; the state turns only when the state changes (FL → AZ,
-// two flips, `CODE_FLIPS`); the stop number counts through the real stops
+// two flips, `CODE_FLIPS`), in from a blank band — the shield already wears
+// the new state's form, and FL's letters on Arizona's outline read as a
+// misprint; the stop number counts through the real stops
 // between (03 → 04 → 05), its last step landing with the name's last
 // character. Short and legible: a twelve-letter name lands inside
 // DUR.scene. Reduced motion shows the word, no flap.

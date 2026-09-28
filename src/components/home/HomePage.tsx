@@ -179,7 +179,8 @@ interface DeferredRouteAtlasProps {
   mobile?: boolean;
   paused?: boolean;
   presentation?: 'classic' | 'living';
-  onNavigate?: (chapterId: string) => void;
+  /** `focus` false (a pointer's click on the atlas): keyboard focus stays. */
+  onNavigate?: (chapterId: string, options?: { focus?: boolean }) => void;
   /** Mount the map now (the opening reel covers the first screen, a whole
    *  film away), not when the atlas nears the viewport. */
   eager?: boolean;
@@ -1253,19 +1254,23 @@ export default function HomePage({ collections }: Props) {
   // 然后前往下一站); ArchiveChapter answers `archive:tear-then` when it has a
   // whole ticket to tear. Going back, or with nothing to tear, the voyage goes
   // at once, as before.
-  const navigateFromAtlas = useCallback((chapterId: string) => {
+  // Keyboard focus goes with the trip only for a keyboard's click (`focus`,
+  // AtlasSign): a mouse's click focused the destination chapter too, and
+  // Chrome ringed the whole chapter in lime beside the leg's lime name.
+  const navigateFromAtlas = useCallback((chapterId: string, options?: { focus?: boolean }) => {
     const anchorId = `archive-item-${chapterId}`;
+    const moveFocus = options?.focus !== false;
     const target = orderedCities.findIndex((city) => city._id === chapterId);
     const from = activeRouteIndex;
     if (desktopLayout && !reduce && !voyageActiveRef.current && from >= 0 && target > from) {
       const section = document.querySelector<HTMLElement>(`[data-archive-chapter][data-chapter-index="${from}"]`);
       const detail: { go: () => void; handled?: boolean } = {
-        go: () => navigateLivingChapter(anchorId, false),
+        go: () => navigateLivingChapter(anchorId, false, moveFocus),
       };
       section?.dispatchEvent(new CustomEvent('archive:tear-then', { detail }));
       if (detail.handled) return;
     }
-    navigateLivingChapter(anchorId);
+    navigateLivingChapter(anchorId, true, moveFocus);
   }, [activeRouteIndex, desktopLayout, navigateLivingChapter, orderedCities, reduce]);
 
   // Back to the start: a voyage up the page to the first screen, the same
@@ -2017,6 +2022,7 @@ export default function HomePage({ collections }: Props) {
                                         name: orderedCities[index + 1].name.trim(),
                                         number: index + 2,
                                         region: orderedCities[index + 1].region?.trim() || undefined,
+                                        slug: orderedCities[index + 1].slug,
                                       }
                                     : null}
                                 />

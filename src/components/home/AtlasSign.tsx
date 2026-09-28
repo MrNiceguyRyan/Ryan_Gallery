@@ -5,6 +5,7 @@ import { EASE } from '../../lib/motion';
 // The leg's distance: the one rule /about's route figure also reads.
 import { formatKm, haversineKm } from '../../lib/geo';
 import { pad2, stateCode } from '../../lib/routeShield';
+import { stockPaper } from '../../lib/ticketStock';
 import { MapShield } from './RouteShield';
 
 /** Everything the sign prints for a place. */
@@ -21,9 +22,25 @@ export interface ViewfinderPlace {
   coordinates: [number, number];
 }
 
+/** A shield on the map as drawn this camera frame, in the atlas's px. */
+export interface ShieldBox {
+  /** The place's id: frame to frame, how fast its shield moves. */
+  id: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface ViewfinderHandle {
   /** Show a place at rest, with no animation (first draw, restores, reduced motion). */
   settle(place: ViewfinderPlace): void;
+  /**
+   * The shields the readouts must not print over (every one in view),
+   * handed over by the atlas on each camera frame it places them
+   * (RouteAtlas `placeShields`).
+   */
+  avoid(boxes: readonly ShieldBox[]): void;
   /**
    * The camera has taken off toward `to`: the sign reads the flight until
    * `lockAt` (a performance.now() timestamp — the flight's touchdown), then
@@ -36,6 +53,29 @@ export interface ViewfinderHandle {
 // Geometry, measured from the atlas focal point (the place the camera rests on).
 const ARM = 168;
 const META_TOP = 84;
+// The leg's other line: above the current stop's shield (34 × 1.2 × the
+// tallest form's 1.08 ≈ 44px over the place, its landing accent ≈ 48), for a
+// landing whose shield below the place would sit under the line below.
+const META_ABOVE = 66;
+// The readouts' boxes, DERIVED from their text (never measured: they are
+// set every frame of a flight): the label face at 10px, 0.08em tracking,
+// measured 6.4px a character, 10px a line; the leg's dot and its gap 14px.
+const READOUT_CHAR_PX = 6.4;
+const READOUT_LINE_PX = 10;
+const META_DOT_PX = 14;
+/** A readout this close to a shield (px) steps back from it. */
+const YIELD_PAD = 6;
+/** The readouts' step back (global.css `.viewfinder__yield[data-yield]`,
+ *  --dur-in on the fade curve): the leg moves to its other line only once it
+ *  has gone. */
+const YIELD_OUT_MS = 200;
+/** A shield in motion (a flight) is met where it will be this far ahead, so
+ *  a readout has stepped back by the time the shield reaches it — as far as
+ *  YIELD_SWEEP_PX ahead: a faster shield crosses a 10px line in a frame or
+ *  two, and a longer reach would empty the instruments mid-flight. Its speed
+ *  is DERIVED from the boxes the atlas hands over frame to frame. */
+const YIELD_LEAD_MS = 200;
+const YIELD_SWEEP_PX = 80;
 /** Where the archive reads: the line a chapter's cover photograph sits on
  *  (HomePage scrolls a chapter to it), and therefore the line the map's focal
  *  point and this sign must share — otherwise the sign reads out a place
@@ -68,8 +108,8 @@ const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}
  * leg — where from, where to, and the kilometres covered.
  *
  * It does not name the place. The place is signed twice already, and both
- * signs are the same route shield: on the map, where its region's sign stands
- * (RouteSign), and on the chapter's ticket, whose stub IS the place's sign —
+ * signs are the same route shield: on the map, where it stands on the place
+ * (PlaceShield), and on the chapter's ticket, whose stub IS the place's sign —
  * its state, its stop number and its name, turning into place on the landing
  * (owner, 2026-09-28: 将右侧的大号封面和路牌上方的州名缩写+地名和第几站结合在一起).
  * So the year and the "03 / 06 · REGION · FRAMES" line this used to print on
@@ -98,6 +138,9 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   const latRef = useRef<HTMLSpanElement>(null);
   const lonRef = useRef<HTMLSpanElement>(null);
   const metaRef = useRef<HTMLSpanElement>(null);
+  const latYieldRef = useRef<HTMLSpanElement>(null);
+  const lonYieldRef = useRef<HTMLSpanElement>(null);
+  const metaYieldRef = useRef<HTMLSpanElement>(null);
   const instrumentsRef = useRef<HTMLSpanElement>(null);
   const scrimRef = useRef<HTMLSpanElement>(null);
   // draw() reads the scrim's offset from here: it only moves when the scrim
@@ -119,7 +162,110 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     legKm: null as HTMLSpanElement | null,
     /** Ends the landing's report (see REPORT_HOLD_MS). */
     reportTimer: 0,
+    /** The shields the readouts keep off (see `avoid`), and how each moved
+     *  (px/ms, as of `t`). */
+    boxes: [] as readonly ShieldBox[],
+    motion: new Map<string, { x: number; y: number; t: number; vx: number; vy: number }>(),
+    /** The leg's line: below the place, or above its shield. */
+    legSlot: 'below' as 'below' | 'above',
+    /** When the leg began to step back to change lines (0: it is not). */
+    legLeaving: 0,
+    legTimer: 0,
+    /** The leg is up this flight (its first frame picks its line at once). */
+    legShown: false,
   });
+
+  // A readout steps back while a shield stands under it (`data-yield` on its
+  // wrapper: CSS fades it out, and back in once the shield has gone), written
+  // only when it changes. The readouts are placed on fixed offsets from the
+  // focal point; the shields stand on their places, so at some landings a
+  // neighbour's shield sits exactly where a readout prints (Miami under
+  // "MIAMI → ORLANDO 330 KM", Page under Zion's longitude).
+  const setYield = (node: HTMLElement | null, on: boolean) => {
+    if (!node) return;
+    if (on && !node.hasAttribute('data-yield')) node.setAttribute('data-yield', '');
+    if (!on && node.hasAttribute('data-yield')) node.removeAttribute('data-yield');
+  };
+  const blocked = (left: number, top: number, right: number, bottom: number) => {
+    const s = state.current;
+    const now = performance.now();
+    return s.boxes.some((box) => {
+      // A moving shield sweeps where it is going (a resting one does not:
+      // its last move is old).
+      const motion = s.motion.get(box.id);
+      let dx = 0;
+      let dy = 0;
+      if (motion && now - motion.t < 100) {
+        dx = Math.max(-YIELD_SWEEP_PX, Math.min(YIELD_SWEEP_PX, motion.vx * YIELD_LEAD_MS));
+        dy = Math.max(-YIELD_SWEEP_PX, Math.min(YIELD_SWEEP_PX, motion.vy * YIELD_LEAD_MS));
+      }
+      return left - YIELD_PAD < Math.max(box.right, box.right + dx) && Math.min(box.left, box.left + dx) < right + YIELD_PAD &&
+        top - YIELD_PAD < Math.max(box.bottom, box.bottom + dy) && Math.min(box.top, box.top + dy) < bottom + YIELD_PAD;
+    });
+  };
+  const metaTop = (slot: 'below' | 'above') => state.current.focalY + (slot === 'below' ? META_TOP : -META_ABOVE);
+  // Every readout against the shields: DERIVED boxes on both sides (the
+  // readouts' from their text and the focal point, the shields' from the
+  // camera's projection), no layout read. The leg first tries its other
+  // line; it moves there only once it has stepped back, and steps back where
+  // both lines are taken.
+  const clearReadouts = () => {
+    const s = state.current;
+    const cx = s.focalX;
+    const cy = s.focalY;
+    const latChars = latRef.current?.textContent?.length ?? 0;
+    const lonChars = lonRef.current?.textContent?.length ?? 0;
+    const top = cy + 10;
+    setYield(latYieldRef.current, latChars > 0 && blocked(cx - ARM, top, cx - ARM + READOUT_CHAR_PX * latChars, top + READOUT_LINE_PX));
+    setYield(lonYieldRef.current, lonChars > 0 && blocked(cx + ARM - READOUT_CHAR_PX * lonChars, top, cx + ARM, top + READOUT_LINE_PX));
+    const metaChars = metaRef.current?.textContent?.length ?? 0;
+    if (!metaChars) {
+      setYield(metaYieldRef.current, false);
+      return;
+    }
+    const half = (READOUT_CHAR_PX * metaChars + META_DOT_PX) / 2;
+    const taken = (slot: 'below' | 'above') => blocked(cx - half, metaTop(slot), cx + half, metaTop(slot) + READOUT_LINE_PX);
+    const other = s.legSlot === 'below' ? 'above' : 'below';
+    const here = taken(s.legSlot);
+    const moveTo = (slot: 'below' | 'above') => {
+      s.legSlot = slot;
+      s.legLeaving = 0;
+      window.clearTimeout(s.legTimer);
+      s.legTimer = 0;
+      if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${metaTop(slot)}px) translateX(-50%)`;
+    };
+    if (!s.legShown) {
+      // Not up yet: it takes the free line straight away.
+      if (here && !taken(other)) moveTo(other);
+      setYield(metaYieldRef.current, taken(s.legSlot));
+      return;
+    }
+    if (!here) {
+      s.legLeaving = 0;
+      window.clearTimeout(s.legTimer);
+      s.legTimer = 0;
+      setYield(metaYieldRef.current, false);
+      return;
+    }
+    setYield(metaYieldRef.current, true);
+    if (taken(other)) {
+      s.legLeaving = 0;
+      return;
+    }
+    const now = performance.now();
+    if (!s.legLeaving) s.legLeaving = now;
+    if (now - s.legLeaving >= YIELD_OUT_MS) {
+      moveTo(other);
+      setYield(metaYieldRef.current, false);
+    } else if (!s.legTimer) {
+      // Nothing may draw again before it has gone (a landed, resting map):
+      // come back for it then.
+      s.legTimer = window.setTimeout(() => {
+        state.current.legTimer = 0;
+        clearReadouts();
+      }, YIELD_OUT_MS - (now - s.legLeaving) + 16);
+    }
+  };
 
   // The report: an attribute on the instruments layer, written only when it
   // changes; CSS does the fading.
@@ -201,7 +347,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
 
     // The leg: up from 300ms into a flight, counting its kilometres to the
     // lock; after that it holds the whole distance until the report ends.
-    if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${cy + META_TOP}px) translateX(-50%)`;
+    if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${metaTop(s.legSlot)}px) translateX(-50%)`;
     if (switching && from && to && t >= 300) {
       setLegMeta(from, to);
       const covered = t < lock ? travel : 1;
@@ -209,10 +355,20 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       if (metaRef.current) metaRef.current.style.opacity = progress(300, 520, t).toFixed(3);
     } else if (switching && metaRef.current) {
       // The first 300ms of a flight: the last trip's line is not this one's.
+      // Unseen, it goes back to its own line below the place.
       metaRef.current.style.opacity = '0';
+      if (s.legShown) {
+        s.legShown = false;
+        s.legSlot = 'below';
+        s.legLeaving = 0;
+        metaRef.current.style.transform = `translate(${cx}px, ${metaTop('below')}px) translateX(-50%)`;
+      }
     } else if (metaRef.current) {
       metaRef.current.style.opacity = '1';
     }
+    clearReadouts();
+    if (switching && t >= 300) s.legShown = true;
+    else if (!moving) s.legShown = true;
 
     const offset = scrimOffsetRef.current;
     if (scrimRef.current) scrimRef.current.style.transform = `translate(${cx + offset}px, ${cy + 16 + offset}px) translate(-50%, -50%)`;
@@ -264,6 +420,28 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     };
     return {
       settle,
+      avoid(boxes: readonly ShieldBox[]) {
+        const s = state.current;
+        const now = performance.now();
+        boxes.forEach((box) => {
+          const x = (box.left + box.right) / 2;
+          const y = box.bottom;
+          const last = s.motion.get(box.id);
+          // Twice a frame (the map's move and render): only a new frame
+          // measures a speed; a long gap is a shield at rest.
+          if (last && now - last.t < 8) return;
+          const dt = last ? now - last.t : Infinity;
+          s.motion.set(box.id, {
+            x,
+            y,
+            t: now,
+            vx: last && dt < 100 ? (x - last.x) / dt : 0,
+            vy: last && dt < 100 ? (y - last.y) / dt : 0,
+          });
+        });
+        s.boxes = boxes;
+        clearReadouts();
+      },
       hunt(to: ViewfinderPlace, lockAt: number) {
         const s = state.current;
         if (reducedMotion) {
@@ -321,6 +499,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   useEffect(() => () => {
     stop();
     window.clearTimeout(state.current.reportTimer);
+    window.clearTimeout(state.current.legTimer);
   }, []);
 
   return (
@@ -343,10 +522,13 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
         )
         : <span ref={scrimRef} className="viewfinder__scrim" />}
       {/* The readouts: instrument type, reported on demand (see above). */}
+      {/* Each readout on its own layer, which steps back (`data-yield`)
+          while a shield stands under it: the readouts' own opacity is
+          written per frame. */}
       <span ref={instrumentsRef} className="viewfinder__instruments">
-        <span ref={latRef} className="viewfinder__readout" />
-        <span ref={lonRef} className="viewfinder__readout" />
-        <span ref={metaRef} className="viewfinder__readout viewfinder__meta" />
+        <span ref={latYieldRef} className="viewfinder__yield"><span ref={latRef} className="viewfinder__readout" /></span>
+        <span ref={lonYieldRef} className="viewfinder__yield"><span ref={lonRef} className="viewfinder__readout" /></span>
+        <span ref={metaYieldRef} className="viewfinder__yield"><span ref={metaRef} className="viewfinder__readout viewfinder__meta" /></span>
       </span>
     </motion.div>
   );
@@ -366,7 +548,7 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
   currentId: string | null;
   engagedId: string | null;
   onEngage?: (chapterId: string | null) => void;
-  onNavigate?: (chapterId: string) => void;
+  onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
 }) {
   const [initialCurrent] = useState(currentId);
   return (
@@ -383,7 +565,7 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
             onPointerLeave={() => onEngage?.(null)}
             onFocus={() => onEngage?.(chapter.id)}
             onBlur={() => onEngage?.(null)}
-            onClick={() => onNavigate?.(chapter.id)}
+            onClick={(event) => onNavigate?.(chapter.id, { focus: event.detail === 0 })}
           >
             <span className="atlas-ticks__label" aria-hidden="true">
               {pad2(chapter.number)}&nbsp;·&nbsp;{chapter.name}
@@ -398,101 +580,88 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
 }
 
 
-/** A map shield's size and the gap between two in one sign, css px. */
-export const SIGN_SHIELD_PX = 30;
-export const SIGN_SHIELD_GAP = 8;
-/** A sign's row: its shields side by side. */
-export const signRowWidth = (count: number) => count * SIGN_SHIELD_PX + Math.max(0, count - 1) * SIGN_SHIELD_GAP;
-/** How far the leader may sit off the row's middle and still meet the rail
- *  the shields stand on (a single shield has no rail: its own point). */
-export const signRailHalf = (count: number) => (Math.max(0, count - 1) * (SIGN_SHIELD_PX + SIGN_SHIELD_GAP)) / 2;
+/** A stop chosen on the atlas: `focus` false keeps keyboard focus where it
+ *  is (a pointer's click), true or absent takes it to the chapter. */
+export interface AtlasNavigateOptions {
+  focus?: boolean;
+}
 
-export interface SignStop {
+export interface ShieldStop {
   id: string;
   /** 1-based stop number. */
   number: number;
   name: string;
   region?: string;
+  /** The chapter's slug: its ticket stock, printed in the shield's band. */
+  slug?: string;
 }
 
 /**
- * RouteSign — one region's sign on the map (owner, 2026-09-28: 甲，我喜欢路盾
- * 这样). The places of a stretch of the route stand as US-route shields side
- * by side, in stop order (按照数字排序即可), on one rail, and ONE leader runs
- * from the rail down to the middle of the region they share (引线指向一段区域
- * 即可，同一块区域不需要反复指引). No post under a shield (不需要下面的引线), no
- * ring, halo, dot or crosshair, and no lime: bone plate, dark ink, the map's
- * white ink for the leader.
+ * PlaceShield — one place's shield on the map (owner, 2026-09-28: 完全和这个
+ * 网站对齐 11moissanstoit.com/etape/paris-1). Every place stands on its own:
+ * the shield is a Mapbox marker anchored at its bottom on the place, and its
+ * foot's point IS the place — no post, stem or leader (不需要白色竖干). Its
+ * form is its state's (src/lib/routeShield.ts, SHIELD_FORMS), its band the
+ * place's ticket stock, so no two regions share a style (每个地区的路牌盾风格
+ * 不能一样) and each shield is the one its ticket prints.
  *
- * The sign is a Mapbox marker anchored at its bottom on the middle of the
- * region's stretch of road. How long the leader is and how far the row
- * slides sideways are written per camera frame by the atlas (`--lead`,
- * `--shift`: RouteAtlas, "The signs"), derived from the camera's projection —
- * never read off the page. A place alone in its region (New York) has no
- * leader and no rail: its shield stands just over the place (SIGN_SINGLE_GAP)
- * and its own point is the pointer, as on 11 mois's stop signs.
+ * Where shields meet at a camera's zoom they stack like a pile of stop signs
+ * (`stackShields`): the atlas writes a buried shield's lift (`--lift`), its
+ * place in the pile (the marker's z-index) and, on a pile's front shield, the
+ * pile's count (`data-pile`) — derived per camera frame from the camera's
+ * projection (RouteAtlas, "The shields"), never read off the page.
  *
  * Each shield is a button (the in-map navigation): it carries its state by
  * size and ink — ahead quieter, visited fuller, the one the camera is flying
  * to comes up at take-off, the one it is on stands tallest and gives a small
  * landing accent. The atlas toggles is-current / is-inbound / is-past on the
- * shields directly (no re-render mid-flight). Pointed at, a shield brings its
- * chapter's cover up and prints the place's name over itself.
+ * button directly (no re-render mid-flight). Pointed at, a shield comes to the
+ * top of its pile, brings its chapter's cover up and prints the place's name
+ * over itself.
  */
-export function RouteSign({ signKey, stops, initialCurrentId, engagedId, visibility, onEngage, onNavigate }: {
-  signKey: string;
-  stops: SignStop[];
+export function PlaceShield({ stop, width, initialCurrentId, engaged, visibility, onEngage, onNavigate }: {
+  stop: ShieldStop;
+  /** The shield's box width at its resting size, css px (SHIELD_MAP_PX). */
+  width: number;
   /** Only the first render reads this. */
   initialCurrentId: string | null;
-  engagedId: string | null;
+  engaged: boolean;
   visibility: MotionValue<number>;
-  /** Pointer or focus on a shield (null when it leaves). */
+  /** Pointer or focus on the shield (null when it leaves). */
   onEngage?: (chapterId: string | null) => void;
-  /** A click: go to that chapter. */
-  onNavigate?: (chapterId: string) => void;
+  /** A click: go to that chapter (keyboard focus goes with a keyboard's
+   *  click only, `event.detail` 0: a mouse's left a lime ring round the
+   *  whole destination chapter, a second lime in the view). */
+  onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
 }) {
   const [initialCurrent] = useState(initialCurrentId);
-  // Invisible signs (the prologue, the entrance) must not be hit targets, nor
-  // stops in the tab order: `visibility` removes both, off the same value,
-  // with no re-render.
+  // Invisible shields (the prologue, the entrance) must not be hit targets,
+  // nor stops in the tab order: `visibility` removes both, off the same
+  // value, with no re-render.
   const pointerEvents = useTransform(visibility, (value) => (value > 0.5 ? 'auto' : 'none'));
   const reachable = useTransform(visibility, (value) => (value > 0.5 ? 'visible' : 'hidden'));
-  const count = stops.length;
   return (
     <motion.span
-      className={`route-sign${count === 1 ? ' route-sign--single' : ''}`}
-      data-route-sign={signKey}
-      style={{
-        opacity: visibility,
-        pointerEvents,
-        visibility: reachable,
-        width: signRowWidth(count),
-        ['--rail' as never]: `${signRailHalf(count) * 2}px`,
-      }}
+      className="place-shield"
+      data-place-shield={stop.id}
+      style={{ opacity: visibility, pointerEvents, visibility: reachable }}
     >
-      {count > 1 && <i className="route-sign__lead" aria-hidden="true" />}
-      <span className="route-sign__row">
-        {count > 1 && <i className="route-sign__rail" aria-hidden="true" />}
-        {stops.map((stop) => (
-          <button
-            key={stop.id}
-            type="button"
-            data-af-stop={stop.id}
-            data-chapter={stop.number}
-            data-engaged={engagedId === stop.id ? '' : undefined}
-            className={`route-sign__shield${stop.id === initialCurrent ? ' is-current' : ''}`}
-            aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
-            onPointerEnter={() => onEngage?.(stop.id)}
-            onPointerLeave={() => onEngage?.(null)}
-            onFocus={() => onEngage?.(stop.id)}
-            onBlur={() => onEngage?.(null)}
-            onClick={() => onNavigate?.(stop.id)}
-          >
-            <MapShield code={stateCode(stop.region)} number={pad2(stop.number)} />
-            <span className="route-sign__name font-ui" aria-hidden="true">{stop.name}</span>
-          </button>
-        ))}
-      </span>
+      <button
+        type="button"
+        data-af-stop={stop.id}
+        data-chapter={stop.number}
+        data-engaged={engaged ? '' : undefined}
+        className={`place-shield__sign${stop.id === initialCurrent ? ' is-current' : ''}`}
+        aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
+        onPointerEnter={() => onEngage?.(stop.id)}
+        onPointerLeave={() => onEngage?.(null)}
+        onFocus={() => onEngage?.(stop.id)}
+        onBlur={() => onEngage?.(null)}
+        onClick={(event) => onNavigate?.(stop.id, { focus: event.detail === 0 })}
+      >
+        <MapShield code={stateCode(stop.region)} number={pad2(stop.number)} accent={stockPaper(stop.slug)} width={width} />
+        <span className="place-shield__name font-ui" aria-hidden="true">{stop.name}</span>
+      </button>
     </motion.span>
   );
 }

@@ -955,7 +955,7 @@ function StubFace({
   reading,
   reduce,
 }: {
-  chapter: Pick<Collection, 'name' | 'location' | 'region' | 'year'>;
+  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year'>;
   ordinal: string;
   total: string;
   frames: number;
@@ -1011,6 +1011,7 @@ function StubFace({
             <RouteShield
               className="archive-ticket-sign__shield"
               code={stateCode(chapter.region)}
+              accent={stockPaper(chapter.slug)}
               number={ordinal}
               numberClassName="story-stub__no"
               flap
