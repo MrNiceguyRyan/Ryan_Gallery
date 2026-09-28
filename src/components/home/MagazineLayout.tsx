@@ -647,7 +647,7 @@ function StoryFrame({
       from: arrive.from,
       delay: order * arrive.stagger,
       phone: window.innerWidth < 1024,
-      tall: kind === 'SCREEN' || kind === 'PAGE' || kind === 'DIPTYCH',
+      tall: kind === 'SCREEN' || kind === 'PAGE',
     });
     let live = true;
     Promise.all(animations.map((animation) => animation.finished)).then(() => {
@@ -765,24 +765,11 @@ const EndMarked = ({ text }: { text: string }) => (
   </p>
 );
 
-/** The phone's width for a frame (below 1024px the slots stack). */
-function phoneWidth(kind: SlotKind, ratios: readonly number[], frames: readonly number[], at: number): string {
-  if (kind === 'DIPTYCH') {
-    // Touching at one height: the window's width shared out by ratio, or
-    // (a window wider than it is tall) the screen's height under the head.
-    const sum = frames.reduce((total, frame) => total + ratios[frame], 0);
-    const r = ratios[frames[at]];
-    return `min(calc(100vw * ${(r / sum).toFixed(6)}), calc((100svh - var(--story-head) - 40px) * ${r.toFixed(6)}))`;
-  }
-  return '';
-}
-
 /** `sizes` for a frame: its box at the design window as a share of the
  *  width, and the phone's share. */
-function frameSizes(kind: SlotKind, desktopShare: number, ratios: readonly number[], frames: readonly number[], at: number): string {
+function frameSizes(kind: SlotKind, desktopShare: number, at: number): string {
   let phone = 100;
-  if (kind === 'DIPTYCH') phone = (ratios[frames[at]] / frames.reduce((total, frame) => total + ratios[frame], 0)) * 100;
-  else if (kind === 'SMALL' || kind === 'LEDE') phone = 58;
+  if (kind === 'SMALL' || kind === 'LEDE') phone = 58;
   else if (kind === 'COLUMN' || kind === 'PART' || kind === 'LEDE2') phone = 83;
   else if (kind === 'PAIR') phone = at === 0 ? 100 : 80;
   return `(min-width: 1024px) ${Math.max(10, Math.round(desktopShare * 100))}vw, ${Math.round(phone)}vw`;
@@ -827,10 +814,9 @@ function SlotView({
       '--fw': css(frame.w),
       '--fy': css(frame.y),
       '--r': ratios[frame.frame].toFixed(6),
-      '--pw': phoneWidth(kind, ratios, slot.frames, at) || undefined,
     } as CSSProperties;
-    // One keyed caption for a pair or a diptych, under the first frame.
-    const captionFrames = PAIRED_KINDS.has(kind) ? (at === 0 ? slot.frames : null) : [frame.frame];
+    // One keyed caption for a pair, under the first frame.
+    const captionFrames = kind === 'PAIR' ? (at === 0 ? slot.frames : null) : [frame.frame];
     return (
       <StoryFrame
         key={photo._id}
@@ -842,7 +828,7 @@ function SlotView({
         armed={armed}
         order={at}
         caption={captionFrames ? <CaptionText frames={captionFrames} places={places} /> : null}
-        sizes={frameSizes(kind, frame.w.v / 1728, ratios, slot.frames, at)}
+        sizes={frameSizes(kind, frame.w.v / 1728, at)}
         wide={kind === 'SCREEN'}
         eager={false}
         place={places[frame.frame] ?? ''}
@@ -889,8 +875,6 @@ function SlotView({
     </section>
   );
 }
-
-const PAIRED_KINDS: ReadonlySet<SlotKind> = new Set(['PAIR', 'DIPTYCH']);
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 

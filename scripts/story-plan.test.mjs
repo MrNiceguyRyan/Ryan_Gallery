@@ -4,8 +4,9 @@
 // template each frame goes into, and where every box sits. Pinned on the
 // archive as Sanity served it on 2026-09-27 (the fixture the chapter-order
 // test reads): frame 01 is the chapter's cover, the six stories' sequences
-// are the ones the design was judged on, and every box is the photograph's
-// own shape and fits on one screen. The geometry is written twice from one
+// are the ones the design was judged on (less the touching diptych, gone
+// 2026-09-28), every box is the photograph's own shape and fits on one
+// screen, and no two photographs are joined. The geometry is written twice from one
 // formula — CSS calc() for the server HTML and pixels for the plate's grow —
 // so the two are evaluated against each other at three windows.
 import assert from 'node:assert/strict';
@@ -59,10 +60,14 @@ test('frame 01 is the cover the reader clicked', () => {
 });
 
 test("today's six sequences", () => {
+  // No diptych (the owner, 2026-09-28: no two photographs joined together).
+  // Where one stood — miami 13/14, orlando 3/4, 8/9 and 14/15, page 4/5 —
+  // the first portrait is a page of its own and the next is planned as any
+  // other frame; miami, zion, bryce and New York are otherwise as judged.
   const pinned = {
-    miami: 'OPEN[1] LEDE[2] PAIR[3,4] SCREEN[5] FEATURE[6] QUOTE PAIR[7,8] PAGE[9] PART[10] PAIR[11,12] DIPTYCH[13,14] SCREEN[15] END',
-    orlando: 'OPEN[1] LEDE[2] DIPTYCH[3,4] PAIR[5,6] SCREEN[7] QUOTE DIPTYCH[8,9] PAGE[10] PART[11] PAIR[12,13] DIPTYCH[14,15] PAGE[16] COLUMN[17] END',
-    page: 'OPEN[1] LEDE[2] SCREEN[3] DIPTYCH[4,5] QUOTE PAGE[6] PART[7] PAIR[8,9] PAGE[10] FEATURE[11] END',
+    miami: 'OPEN[1] LEDE[2] PAIR[3,4] SCREEN[5] FEATURE[6] QUOTE PAIR[7,8] PAGE[9] PART[10] PAIR[11,12] PAGE[13] COLUMN[14] SCREEN[15] END',
+    orlando: 'OPEN[1] LEDE[2] PAGE[3] PAIR[4,5] COLUMN[6] SCREEN[7] QUOTE PAGE[8] PAIR[9,10] PART[11] PAGE[12] PAIR[13,14] COLUMN[15] PAGE[16] SMALL[17] END',
+    page: 'OPEN[1] LEDE[2] SCREEN[3] PAGE[4] QUOTE PAIR[5,6] PART[7] PAGE[8] PAIR[9,10] FEATURE[11] END',
     'zion-national-park': 'OPEN[1] LEDE[2] SCREEN[3] QUOTE PAGE[4] PART[5] FEATURE[6] PAIR[7,8] END',
     'bryce-canyon-national-park': 'OPEN[1] LEDE[2] SCREEN[3] PART[4] FEATURE[5] END',
     'new-york-stories': 'OPEN[1] LEDE2 PAGE[2] END',
@@ -98,7 +103,9 @@ test('every frame is placed once, in order, and no template repeats back to back
     assert.equal(slots.at(-1).kind, 'END');
     for (const s of slots) {
       if (s.kind === 'SCREEN' || s.kind === 'FEATURE') assert.ok(s.frames.every((f) => isLandscape(ratios[f])), `${name}: ${s.kind} is a landscape`);
-      if (s.kind === 'DIPTYCH') assert.ok(s.frames.every((f) => !isLandscape(ratios[f])), `${name}: a diptych is two portraits`);
+      // The one template that holds two photographs is the pair.
+      if (s.frames.length > 1) assert.equal(s.kind, 'PAIR', `${name}: ${written(slots)}`);
+      assert.ok(s.frames.length <= 2, `${name}: ${written(slots)}`);
     }
     // The rows the kept stub reads are the frames in reading order.
     assert.deepEqual(slotRows(slots).flat(), ratios.map((_, i) => i));
@@ -123,7 +130,7 @@ test('the quote comes before Part II with a picture between; Part II never follo
 test('a story of five or more has a frame the height of the screen and a small one', () => {
   for (const { name, ratios, slots } of cases()) {
     if (ratios.length < 5) continue;
-    const tall = slots.some((s) => ['SCREEN', 'PAGE', 'DIPTYCH'].includes(s.kind) || (s.kind === 'OPEN' && !isLandscape(ratios[0])));
+    const tall = slots.some((s) => ['SCREEN', 'PAGE'].includes(s.kind) || (s.kind === 'OPEN' && !isLandscape(ratios[0])));
     const small = slots.some((s) => s.kind === 'LEDE' || s.kind === 'SMALL');
     assert.ok(tall && small, `${name}: ${written(slots)}`);
   }
@@ -145,6 +152,25 @@ test('every box is the photograph’s own shape and every in-flow frame fits on 
           // which passes over it as a full-bleed page drops its folio.
           if (box.slot.kind !== 'SCREEN' && box.slot.kind !== 'OPEN') assert.ok(f.x.v >= g.fieldX.v - 0.01, `${name} ${box.slot.kind} at ${W}: in the field`);
         }
+      }
+    }
+  }
+});
+
+test('no two photographs are joined: a pair keeps its gutter, and no frame touches another', () => {
+  // The owner (2026-09-28): collection story里面不要出现两张照片拼接在一起.
+  // Within a slot the frames sit side by side, at least the pair's gutter
+  // apart; slots stack, `top` apart, so frames of two slots never meet.
+  for (const [W, H] of WINDOWS) {
+    const g = storyGrid(W, H);
+    for (const { name, ratios, slots } of cases()) {
+      for (const box of storyBoxes(slots, ratios, W, H)) {
+        const frames = [...box.frames].sort((a, b) => a.x.v - b.x.v);
+        for (let i = 1; i < frames.length; i += 1) {
+          const gutter = frames[i].x.v - (frames[i - 1].x.v + frames[i - 1].w.v);
+          assert.ok(gutter >= g.pairGap.v - 1e-6, `${name} ${box.slot.kind} at ${W}: ${gutter.toFixed(1)}px apart`);
+        }
+        if (box.slot.kind !== 'OPEN') assert.ok(box.top.v > 0, `${name} ${box.slot.kind}`);
       }
     }
   }

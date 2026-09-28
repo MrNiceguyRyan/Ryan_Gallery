@@ -1928,20 +1928,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     align-self: flex-start;
     margin: 16px 0 0 calc(4 * (var(--sC) + var(--sG)));
   }
-  /* A diptych touches, full-bleed, at one height. */
-  .story-slot[data-kind="DIPTYCH"] {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 0;
-  }
-  .story-slot[data-kind="DIPTYCH"] > .story-fig {
-    width: var(--pw);
-    max-width: none;
-    margin: 0;
-  }
-  .story-slot > :is(.story-fig--screen, .story-fig--feature, .story-fig--page, .story-fig--diptych) .story-cap,
+  .story-slot > :is(.story-fig--screen, .story-fig--feature, .story-fig--page) .story-cap,
   .story-fig--open + .story-cap {
     padding: 0 var(--sM);
   }

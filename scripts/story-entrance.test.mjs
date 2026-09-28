@@ -75,9 +75,11 @@ test("today's six stories, as they are dealt", () => {
   const pinned = {
     // The review's re-deal, to the letter: the develop on the feature, the
     // 07/08 burst straight after the quote.
-    miami: 'LEDE:zoom PAIR:advance/right SCREEN:zoom FEATURE:develop/top PAIR:shutter PAGE:zoom PART:zoom PAIR:advance/left DIPTYCH:advance/right SCREEN:zoom',
-    orlando: 'LEDE:shutter DIPTYCH:advance/right PAIR:advance/right SCREEN:develop/top DIPTYCH:advance/right PAGE:zoom PART:zoom PAIR:advance/left DIPTYCH:advance/right PAGE:zoom COLUMN:zoom',
-    page: 'LEDE:zoom SCREEN:zoom DIPTYCH:advance/right PAGE:zoom PART:shutter PAIR:advance/right PAGE:zoom FEATURE:develop/top',
+    // Where a diptych stood (gone 2026-09-28) a single page is dealt a
+    // single frame's entrance: it zooms, or advances to break a third zoom.
+    miami: 'LEDE:zoom PAIR:advance/right SCREEN:zoom FEATURE:develop/top PAIR:shutter PAGE:zoom PART:zoom PAIR:advance/left PAGE:zoom COLUMN:zoom SCREEN:advance/left',
+    orlando: 'LEDE:zoom PAGE:zoom PAIR:advance/right COLUMN:zoom SCREEN:develop/top PAGE:zoom PAIR:advance/right PART:zoom PAGE:zoom PAIR:advance/left COLUMN:zoom PAGE:zoom SMALL:shutter',
+    page: 'LEDE:zoom SCREEN:zoom PAGE:advance/right PAIR:advance/right PART:shutter PAGE:zoom PAIR:advance/left FEATURE:develop/top',
     'zion-national-park': 'LEDE:zoom SCREEN:zoom PAGE:advance/right PART:zoom FEATURE:develop/top PAIR:shutter',
     'bryce-canyon-national-park': 'LEDE:zoom SCREEN:zoom PART:shutter FEATURE:develop/top',
     'new-york-stories': 'PAGE:zoom',
@@ -134,7 +136,7 @@ test('a shutter fires only over a frame it can be seen crossing, twice at most, 
     for (const i of at) assert.ok(suitsShutter(framed[i]), `${c.name}: ${framed[i].slot.kind} ${Math.round(framed[i].tallest)}px`);
     for (let k = 1; k < at.length; k += 1) assert.ok(at[k] - at[k - 1] >= SHUTTER_SPACING, `${c.name}: ${written(c.slots, c.entrances)}`);
     // Never over a screen-high template: its plate is taller than the rule.
-    for (const f of framed) if (['SCREEN', 'PAGE', 'DIPTYCH'].includes(f.slot.kind)) assert.notEqual(f.entrance, 'shutter', c.name);
+    for (const f of framed) if (['SCREEN', 'PAGE'].includes(f.slot.kind)) assert.notEqual(f.entrance, 'shutter', c.name);
     // A story with a frame a shutter suits fires one.
     const suited = framed.filter((f) => suitsShutter(f) && f.entrance !== 'develop');
     if (suited.length) assert.ok(at.length >= 1, `${c.name}: ${written(c.slots, c.entrances)}`);
@@ -153,7 +155,7 @@ test('the first shutter falls on the first frame after the pull quote a shutter 
 });
 
 test('the rest: a strip of film advances and a single frame zooms, except to break a run of three', () => {
-  const strips = new Set(['PAIR', 'DIPTYCH', 'FEATURE']);
+  const strips = new Set(['PAIR', 'FEATURE']);
   for (const c of cases()) {
     const framed = framedOf(c);
     framed.forEach((f, i) => {

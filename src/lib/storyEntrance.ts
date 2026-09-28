@@ -5,8 +5,8 @@
 // photographic ways for a picture to come up:
 //   zoom    — the print settles onto the page: a hair large, fading up as it
 //             comes to size. The house default for a single frame;
-//   advance — the film is wound on: a strip (a pair, a diptych, a feature)
-//             comes in a short way from its own side and glides to rest;
+//   advance — the film is wound on: a strip (a pair, a feature) comes in a
+//             short way from its own side and glides to rest;
 //   shutter — a vertical-travel focal-plane shutter fires over the frame:
 //             four blades run down and close it, then run on down to open it
 //             on the picture, top first, the way the reader scrolls;
@@ -38,8 +38,8 @@ export type EntranceFrom = 'left' | 'right' | 'top';
 export interface SlotEntrance {
   entrance: Entrance;
   from: EntranceFrom;
-  /** Seconds between the two frames of a pair or a diptych: 0 where they
-   *  arrive as one thing (a strip of film). */
+  /** Seconds between the two frames of a pair: 0 where they arrive as one
+   *  thing (a strip of film). */
   stagger: number;
 }
 
@@ -66,7 +66,7 @@ export const RUN = 2;
 const SHUTTER_BURST = 0.12;
 
 /** The templates that arrive as a strip of film: they advance. */
-const STRIPS: ReadonlySet<SlotKind> = new Set(['PAIR', 'DIPTYCH', 'FEATURE']);
+const STRIPS: ReadonlySet<SlotKind> = new Set(['PAIR', 'FEATURE']);
 
 /** The side a template's frame is set on, which is where it advances from. */
 function placedFrom(slot: Slot): EntranceFrom {
@@ -77,7 +77,6 @@ function placedFrom(slot: Slot): EntranceFrom {
     case 'LEDE':
     case 'LEDE2':
     case 'PART':
-    case 'DIPTYCH':
       return 'right';
     default:
       return slot.side === -1 ? 'left' : 'right';
@@ -184,8 +183,8 @@ export interface PlayOptions {
   delay: number;
   /** Below 1024px: the same moves, lighter. */
   phone: boolean;
-  /** A screen-high frame (a screen, a page, a diptych) zooms from nearer
-   *  its size: at 1.06 a 1374px frame's edges would move 41px. */
+  /** A screen-high frame (a screen, a page) zooms from nearer its size: at
+   *  1.06 a 1374px frame's edges would move 41px. */
   tall: boolean;
 }
 

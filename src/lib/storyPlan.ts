@@ -3,8 +3,11 @@
 // opening spread (the place's map page printed on the chapter's ticket stock
 // beside the photograph the reader opened, at its own ratio), then inside
 // pages on paper with an edited ladder of frame sizes — a frame the height of
-// the screen, a pair, a touching diptych, a small frame hung beside the text,
-// a pull quote, Part II — and an end page on the stock again.
+// the screen, a pair, a small frame hung beside the text, a pull quote,
+// Part II — and an end page on the stock again. Two photographs are never
+// joined: a pair always has its gutter between them (the owner, 2026-09-28:
+// collection story里面不要出现两张照片拼接在一起 — the touching diptych is gone,
+// and the screen-high moment it made is a single page now).
 //
 // Everything here is pure, so the server can print the final layout: the
 // planner decides which template each frame goes into from the frames' ratios
@@ -68,8 +71,7 @@ export type SlotKind =
   | 'LEDE2' // a short story: paragraphs 1 and 2 side by side, a column frame under them (none in a story of two)
   | 'SCREEN' // a landscape the height of the screen, flush left over the rail
   | 'FEATURE' // a landscape across eight columns
-  | 'PAIR' // two frames at one height
-  | 'DIPTYCH' // two portraits touching, the height of the screen
+  | 'PAIR' // two frames at one height, a gutter between them
   | 'PAGE' // one portrait the height of the screen
   | 'COLUMN'
   | 'SMALL'
@@ -86,7 +88,6 @@ export interface Slot {
 }
 
 const SIDED: ReadonlySet<SlotKind> = new Set(['FEATURE', 'PAIR', 'COLUMN', 'SMALL']);
-const PAIRED: ReadonlySet<SlotKind> = new Set(['PAIR', 'DIPTYCH']);
 
 /**
  * Which template each frame goes into. Frame 01 opens; frame 02 is hung
@@ -95,8 +96,12 @@ const PAIRED: ReadonlySet<SlotKind> = new Set(['PAIR', 'DIPTYCH']);
  * metronome), else the first that is not the last one:
  *   landscape: SCREEN (at most one per seven frames, from frame 3, five
  *              frames apart), FEATURE, PAIR, COLUMN, SMALL;
- *   portrait:  DIPTYCH (beside a portrait, five frames apart), PAIR, PAGE,
- *              COLUMN, SMALL.
+ *   portrait:  PAGE at the head of a run of portraits (this frame and the
+ *              next both portraits, five frames from the last page), then
+ *              PAIR, PAGE, COLUMN, SMALL.
+ * The head of a run is where the touching diptych stood: its screen-high
+ * moment goes to the first portrait alone, and the next is planned as any
+ * other frame. No template joins two photographs; a pair keeps its gutter.
  * Part II takes the frame at 0.66 of the story (never before frame 4, and no
  * pair ever swallows it); the pull quote follows the slot that reaches frame
  * 0.4n, in stories of six or more with a quote to print, and never directly
@@ -121,7 +126,7 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
   const maxScreens = Math.max(1, Math.floor(n / 7));
   let screens = 0;
   let lastScreen = -99;
-  let lastDiptych = -99;
+  let lastPage = -99;
   let quoted = false;
   const history: SlotKind[] = ['OPEN', 'LEDE'];
   let index = Math.min(n, 2);
@@ -140,7 +145,8 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
         if (nextOk) candidates.push('PAIR');
         candidates.push('COLUMN', 'SMALL');
       } else {
-        if (nextOk && !landscape(index + 1) && no - lastDiptych >= 5) candidates.push('DIPTYCH');
+        // The head of a run of portraits, where the diptych stood.
+        if (nextOk && !landscape(index + 1) && no - lastPage >= 5) candidates.push('PAGE');
         if (nextOk) candidates.push('PAIR');
         candidates.push('PAGE', 'COLUMN', 'SMALL');
       }
@@ -148,10 +154,10 @@ export function planStory(ratios: readonly number[], { hasQuote = false }: { has
       const pick = candidates.find((kind) => !recent.includes(kind))
         ?? candidates.find((kind) => kind !== history[history.length - 1])
         ?? candidates[0];
-      const take = PAIRED.has(pick) ? 2 : 1;
+      const take = pick === 'PAIR' ? 2 : 1;
       slots.push({ kind: pick, frames: take === 2 ? [index, index + 1] : [index] });
       if (pick === 'SCREEN') { screens += 1; lastScreen = no; }
-      if (pick === 'DIPTYCH') lastDiptych = no;
+      if (pick === 'PAGE') lastPage = no;
       history.push(pick);
       index += take;
     }
@@ -354,13 +360,6 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
           ? (slot.side === -1 ? g.fieldX : sub(g.fieldEnd, total))
           : add(g.fieldX, over(sub(g.field, total), 2));
         return { slot, frames: [frame(0, x, w0), frame(1, add(x, w0, g.pairGap), w1)], text: [], top: g.gap };
-      }
-      case 'DIPTYCH': {
-        const h = least(over(g.field, r[0] + r[1]), g.Hmax);
-        const w0 = times(h, r[0]);
-        const w1 = times(h, r[1]);
-        const x = sub(g.fieldEnd, times(h, r[0] + r[1]));
-        return { slot, frames: [frame(0, x, w0), frame(1, add(x, w0), w1)], text: [], top: g.gap };
       }
       case 'PAGE': {
         const w = least(times(g.Hmax, r[0]), g.field);
