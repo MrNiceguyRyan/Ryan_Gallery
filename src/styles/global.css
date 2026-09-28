@@ -168,152 +168,85 @@ html.lenis body {
   .prologue-hero-kicker,
   .prologue-hero-cue { animation: none; }
 }
-/* The opening reel (IntroReel) lies over this first screen until its
-   shutter opens on it (<html data-reel>, written before the first paint by
-   index.astro's head script and kept by IntroReel). Held under the reel, the
-   entrance is off — the finished screen, unseen — and when the shutter opens
-   on it the animations come back and so play from the start: his name rises
-   into the photograph the shutter has just taken. Without scripts there is
-   no data-reel, and the entrance runs from the first paint as it always has. */
+/* ── The opening film (OpeningFilm; its own sheet is opening.css) ────────
+   It lies over this first screen until it lands (<html data-reel>, written
+   before the first paint by index.astro's head script and kept by the film):
+   'reel' while it plays, 'flight' while landing A's words fly home,
+   'portal' while landing B pushes through the O, then 'landed' (A) or
+   'page' (B, reduced motion). Held under the film, the entrance is off — the
+   finished screen, unseen. Without scripts there is no data-reel, and the
+   entrance runs from the first paint as it always has. */
 html[data-reel='reel'] .globe-prologue .prologue-hero-rise,
 html[data-reel='reel'] .globe-prologue .prologue-hero-tagline,
 html[data-reel='reel'] .globe-prologue .prologue-hero-kicker,
-html[data-reel='reel'] .globe-prologue .prologue-hero-cue { animation: none; }
-/* Arriving through the shutter, the entrance starts on the very frame the
-   blades begin to open and is quick (the page is at rest, locked, for the
-   blades' 440 ms and 450 ms more): the name is up by the time the lock lets
-   go. */
+html[data-reel='reel'] .globe-prologue .prologue-hero-cue,
+html[data-reel='flight'] .globe-prologue .prologue-hero-rise,
+html[data-reel='flight'] .globe-prologue .prologue-hero-tagline,
+html[data-reel='flight'] .globe-prologue .prologue-hero-kicker,
+html[data-reel='flight'] .globe-prologue .prologue-hero-cue,
+html[data-reel='landed'] .globe-prologue .prologue-hero-rise,
+html[data-reel='landed'] .globe-prologue .prologue-hero-tagline,
+html[data-reel='portal'] .globe-prologue .prologue-hero-rise,
+html[data-reel='portal'] .globe-prologue .prologue-hero-tagline,
+html[data-reel='portal'] .globe-prologue .prologue-hero-kicker,
+html[data-reel='portal'] .globe-prologue .prologue-hero-cue { animation: none; }
+/* Landing A: the found words fly home. While they fly their own places on
+   the page wait for them (the flight's clones are drawn there), and the rest
+   of the first screen is not there yet; then the line's other words, the
+   kicker and the scroll cue come up round them. */
+html[data-open-fly] [data-open-land] { visibility: hidden; }
+html[data-reel='flight'] .globe-prologue .open-rest,
+html[data-reel='flight'] .globe-prologue .prologue-hero-kicker,
+html[data-reel='flight'] .globe-prologue .prologue-hero-cue { opacity: 0; }
+html[data-reel='landed'] .globe-prologue .open-rest {
+  animation: prologue-hero-fade 760ms var(--ease-arrive) 60ms backwards;
+}
+html[data-reel='landed'] .globe-prologue .prologue-hero-kicker {
+  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 240ms backwards;
+}
+html[data-reel='landed'] .globe-prologue .prologue-hero-cue {
+  animation: prologue-hero-fade 700ms var(--ease-arrive) 420ms backwards;
+}
+/* …and the globe rises out of the dark behind them (html[data-open-globe],
+   a little into the flight). */
+html[data-reel='flight']:not([data-open-globe]) .opening-atlas {
+  opacity: 0;
+  transform: translate3d(0, 4vh, 0);
+}
+html[data-open-globe] .opening-atlas {
+  transition: opacity 1200ms var(--ease-arrive), transform 1600ms var(--ease-arrive);
+}
+/* Landing B: under the portal only the ground and the globe show through the
+   O; the first screen rises as the dark round the globe lifts. */
+html[data-reel='portal'] .globe-prologue { visibility: hidden; }
 html[data-reel='page'] .globe-prologue .prologue-hero-rise {
-  animation-duration: 520ms;
+  animation-duration: 760ms;
   animation-delay: 0ms;
 }
-html[data-reel='page'] .globe-prologue .prologue-hero-rise--late { animation-delay: 60ms; }
+html[data-reel='page'] .globe-prologue .prologue-hero-rise--late { animation-delay: 70ms; }
 html[data-reel='page'] .globe-prologue .prologue-hero-tagline {
-  animation-duration: 520ms;
-  animation-delay: 170ms;
+  animation-duration: 640ms;
+  animation-delay: 220ms;
 }
 html[data-reel='page'] .globe-prologue .prologue-hero-kicker {
-  animation-duration: 460ms;
-  animation-delay: 240ms;
-}
-html[data-reel='page'] .globe-prologue .prologue-hero-cue {
-  animation-duration: 460ms;
+  animation-duration: 560ms;
   animation-delay: 320ms;
 }
-
-/* The homepage nav over the reel. Its scrim is off there (HomePage), so the
-   paper cover is not printed with an olive band; the wordmark sits on an ink
-   pill like MAP / ABOUT, and the pills are solid ink (no backdrop blur over a
-   canvas that repaints every frame). From the viewfinder on (IntroReel sets
-   data-reel-finder) the nav steps out — the reader is looking through the
-   camera — and it comes back as the blades open. */
-html[data-reel] nav[data-site-nav] {
-  transition: opacity 360ms var(--ease-arrive);
+html[data-reel='page'] .globe-prologue .prologue-hero-cue {
+  animation-duration: 560ms;
+  animation-delay: 420ms;
 }
-html[data-reel='reel'] nav[data-site-nav] .nav-wordmark {
-  mix-blend-mode: normal;
-  border-radius: 9999px;
-  background-color: #16190f;
-  padding-inline: 1.5rem;
-  box-shadow: 0 10px 34px rgba(7, 9, 6, 0.18);
-}
-html[data-reel='reel'] nav[data-site-nav] .nav-pill {
-  background-color: #16190f;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-html[data-reel-finder] nav[data-site-nav] {
+/* The homepage nav is not over the film; it comes in last, once the film
+   has landed. */
+html[data-reel='reel'] nav[data-site-nav],
+html[data-reel='flight'] nav[data-site-nav],
+html[data-reel='portal'] nav[data-site-nav] {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms var(--ease-leave);
 }
-
-/* The reel's pin: its height is the film's length plus the screen it
-   overlaps (IntroReel writes both lengths from src/lib/introReel.ts as custom
-   properties); reduced motion keeps only a one-screen pin for its still. */
-.intro-reel { height: var(--reel-h-phone); }
-@media (min-width: 1024px) {
-  .intro-reel { height: var(--reel-h-desktop); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .intro-reel { height: 200svh; }
-}
-/* A second view in the same tab session skips the film (src/lib/reelVisit.ts
-   decides before the first paint): the pinned block and the screen it
-   overlaps are gone, and the page opens at the top on the first screen, as
-   it did before the reel existed. */
-html[data-reel='skip'] .intro-reel { display: none; }
-/* A reload deep in the archive: the frame stays hidden until IntroReel takes
-   over (the page's first composite is at the top, before the scroll is
-   restored — it is not the cover). */
-html[data-reel-restore] .intro-reel__frame { visibility: hidden; }
-/* The frame is a size container: its cq units place the cue in the design
-   frame's own units, fitted the way the canvas is (cover). --reel-u is one
-   design pixel; --reel-hole the hole's lower rim (cy + 1.05 R) from the
-   frame's middle, in design pixels (src/lib/introReelPaint.ts' holeGeometry:
-   phone cy 0.45 h, R 0.2 w; desktop cy 0.52 h, R 0.18 h). */
-.intro-reel__frame {
-  container-type: size;
-  --reel-u: max(100cqw / 390, 100cqh / 844);
-  --reel-hole: 39.7;
-}
-@media (min-width: 1024px) {
-  .intro-reel__frame {
-    --reel-u: max(100cqw / 1728, 100cqh / 1000);
-    --reel-hole: 209;
-  }
-}
-/* The reel's first paint: its cover as SVG, one per design frame. */
-.intro-reel__svg {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.intro-reel__svg--desktop { display: none; }
-@media (min-width: 1024px) {
-  .intro-reel__svg--desktop { display: block; }
-  .intro-reel__svg--phone { display: none; }
-}
-/* The cue: a plumb line from the hole's lower rim to 64px above the foot of
-   the screen — a lime core in an ink casing, so it reads on paper — with a
-   dash of lime light running down it every 1.8 s, and SCROLL at its foot. */
-.intro-reel__plumb {
-  position: absolute;
-  left: 50%;
-  top: calc(50% + var(--reel-hole) * var(--reel-u));
-  bottom: 64px;
-  width: 4px;
-  margin-left: -2px;
-  overflow: hidden;
-  border-radius: 2px;
-  background:
-    linear-gradient(90deg, transparent 1.25px, #D2FF00 1.25px, #D2FF00 2.75px, transparent 2.75px),
-    rgba(22, 25, 15, 0.82);
-}
-.intro-reel__plumb::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 22%;
-  background: #D2FF00;
-  box-shadow: 0 0 0 1px rgba(22, 25, 15, 0.9);
-  transform: translateY(-100%);
-  animation: intro-reel-plumb 1.8s cubic-bezier(0.55, 0, 0.35, 1) infinite;
-}
-@keyframes intro-reel-plumb {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(455%); }
-}
-.intro-reel__pill { bottom: calc(64px - 2.25rem); }
-/* Reduced motion keeps the still cover and cuts to the page with a short
-   fade; the dash rests at the line's foot. */
-@media (prefers-reduced-motion: reduce) {
-  .intro-reel__frame { transition: opacity var(--dur-out) var(--ease-fade); }
-  .intro-reel__plumb::after { animation: none; transform: translateY(355%); }
+html[data-reel='landed'] nav[data-site-nav],
+html[data-reel='page'] nav[data-site-nav] {
+  transition: opacity 640ms var(--ease-arrive) 480ms;
 }
 /* ── Ticket ink (one set for every chapter's stock) ──────────────────────
    Paper objects print on their chapter's own card (src/lib/ticketStock.ts

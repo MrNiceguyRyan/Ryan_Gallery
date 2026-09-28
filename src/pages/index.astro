@@ -3,10 +3,10 @@ import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
-import IntroReel from '../components/home/IntroReel';
-import { reelCoverMarkup } from '../lib/introReelCover';
-import { PHONE_MAX_WIDTH, REEL_DESKTOP, REEL_PHONE } from '../lib/introReel';
+import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
+import { pickPictures } from '../lib/openingFilm';
+import '../styles/opening.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 // ─── GROQ: All collections with photos + location data ───
@@ -45,26 +45,22 @@ const collectionsQuery = `
 const collections = await fetchSanityWithRetry(() =>
   sanityClient.fetch<Collection[]>(collectionsQuery),
 );
+// His own frames for the film's magazine page and strip of film.
+const openingPictures = pickPictures(collections ?? []);
 ---
 
 <Layout dark={true}>
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
-    {/* The opening reel covers the first screen from the first paint: say so
-        before anything paints (the nav's wordmark goes on its ink pill, the
-        first screen's entrance waits for the shutter). IntroReel keeps it.
-        On a second view in the same tab session it is skipped instead
-        (data-reel="skip": CSS collapses it and the page opens on the first
-        screen), src/lib/reelVisit.ts. */}
-    <script
-      is:inline
-      set:html={reelHeadScript({ desktopScreens: REEL_DESKTOP.screens, phoneScreens: REEL_PHONE.screens, phoneMaxWidth: PHONE_MAX_WIDTH })}
-    />
+    {/* The opening film covers the first screen from the first paint: say so
+        before anything paints (html[data-opening] shows its layer, the first
+        screen's entrance waits under it). On a second view in the same tab
+        session it is skipped instead (data-reel="skip": the layer is not
+        shown and the page opens on the first screen), src/lib/reelVisit.ts. */}
+    <script is:inline set:html={reelHeadScript()} />
   </Fragment>
-  {/* The opening film, pinned over the top of the page; its cover is drawn
-      here, on the server, so it is the first paint. */}
-  <IntroReel client:load>
-    <Fragment set:html={reelCoverMarkup()} />
-  </IntroReel>
+  {/* The opening film: a word hunt through many texts, over the page. Its
+      first scene is the server's markup, so it is the first paint. */}
+  <OpeningFilm client:load pictures={openingPictures} />
   <HomePage client:load collections={collections} />
 </Layout>

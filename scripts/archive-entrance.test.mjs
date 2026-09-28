@@ -63,7 +63,12 @@ test('the opening goes straight into chapter 1: the first film is simply there, 
   // unnecessary): the first screen is his name, the globe and one line, and
   // the globe dives straight into chapter 1. No count page, no index, no roll
   // — and nothing holds chapter 1's plate back for a landing.
-  assert.match(prologue, /A personal archive of <em>travel<\/em> and <em>thought<\/em>\./);
+  // (Its found words are spans of their own, where the opening film's words
+  // land; the line reads the same.)
+  const line = prologue.match(/prologue-hero-tagline[^>]*>([\s\S]*?)<\/p>/)[1].replace(/\n\s*/g, '').replace(/<[^>]+>/g, '');
+  assert.equal(line, 'A personal archive of travel and thought.');
+  assert.match(prologue, /<em data-open-land="travel">travel<\/em>/);
+  assert.match(prologue, /<em data-open-land="thought">thought<\/em>/);
   assert.doesNotMatch(prologue, /bridge|archive-index|chapters · |\bframes\b/i);
   assert.doesNotMatch(home, /rollFrames|rollGates|archive-index|Back to index/);
   assert.doesNotMatch(atlas, /rollGates|bridgeRoll|prologue-mark|archive-index/);

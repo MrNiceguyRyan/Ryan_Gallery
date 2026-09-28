@@ -5,7 +5,7 @@ interface Props {
   years: string;
   /** Prologue progress 0–1 (HomePage's clock for the globe). */
   progress?: MotionValue<number>;
-  /** The opening reel lies over the first screen (IntroReel): the globe
+  /** The opening film lies over the first screen (OpeningFilm): the globe
    *  cannot be played with, so its key is out of the tab order. */
   covered?: boolean;
 }
@@ -88,17 +88,26 @@ export default function GlobePrologue({ years, progress, covered = false }: Prop
           className="prologue-display mt-5 font-serif uppercase text-[#F4F4ED]"
           style={{ fontSize: 'clamp(112px, 15.2vw, 280px)' }}
         >
-          <span className="prologue-line"><span className="prologue-hero-rise block">Ryan</span></span>
-          <span className="prologue-line"><span className="prologue-hero-rise prologue-hero-rise--late block">Xu</span></span>
+          <span className="prologue-line"><span className="prologue-hero-rise block" data-open-land="ryan">Ryan</span></span>
+          <span className="prologue-line"><span className="prologue-hero-rise prologue-hero-rise--late block" data-open-land="xu">Xu</span></span>
         </p>
         {/* What this is, in his words: roman, with the two things it is an
             archive of set in italic. The measure is in em, not ch: 30ch in the
             metric fallback is 454px at 28px against 542px in Fraunces, so the
             line wrapped in two until the webfont landed and then pulled the
             whole bottom-anchored column, his name included, 38px down. 19.4em
-            is Fraunces' 30ch, in either face. */}
+            is Fraunces' 30ch, in either face.
+            The words the opening film found in its texts (OpeningFilm, landing
+            A) fly home to their own spans here; the rest of the line comes up
+            round them. */}
         <p className="prologue-hero-tagline mt-8 max-w-[19.4em] font-serif text-[clamp(20px,1.7vw,28px)] leading-snug text-white/78">
-          A personal archive of <em>travel</em> and <em>thought</em>.
+          <span className="open-rest">A personal </span>
+          <span data-open-land="archive">archive</span>
+          <span className="open-rest"> of </span>
+          <em data-open-land="travel">travel</em>
+          <span className="open-rest"> and </span>
+          <em data-open-land="thought">thought</em>
+          <span className="open-rest">.</span>
         </p>
         <div className="mt-14 flex items-center gap-10">
           {/* Last of the first screen, but inside the name's own rise: the
