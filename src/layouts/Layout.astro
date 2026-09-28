@@ -4,6 +4,7 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
+import { reelRouterScript } from '../lib/reelVisit';
 
 // When this build was made, in the build machine's local time. Printed ONLY on
 // the preview worker (the inline script before </body> checks the hostname),
@@ -334,6 +335,11 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
     {/* Custom cursor removed — the native cursor is the cursor. Interactive
         elements use standard `cursor: pointer` affordance. */}
 
+    {/* The opening reel on a second view (src/lib/reelVisit.ts): an in-site
+        arrival at the homepage decides, on the incoming document, whether the
+        film plays; a traversal's saved scroll is carried into the layout now
+        showing. Registered once per full load, on every page. */}
+    <script is:inline set:html={reelRouterScript()} />
     <script is:inline>
       // ── Image protection ──
       // Block right-click anywhere on a photo (img tag OR a container that
@@ -376,6 +382,9 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         }
         return window.scrollY;
       }
+      function homeReelOffset() {
+        return window.__reelVisit ? window.__reelVisit.offset() : 0;
+      }
       function transitionPath(value, fallback) {
         if (!value) return fallback;
         try { return new URL(value, window.location.origin).pathname; }
@@ -385,7 +394,10 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         var fromPath = transitionPath(e && e.from, window.location.pathname);
         var toPath = transitionPath(e && e.to, window.location.pathname);
         if (fromPath === '/' && toPath !== '/') {
-          sessionStorage.setItem('home-filmstrip-scroll', String(readHomeFilmstripScroll()));
+          // Kept from the first screen, not the top of the document: the
+          // opening reel above it may be skipped on the way back (a film's
+          // length shorter), src/lib/reelVisit.ts.
+          sessionStorage.setItem('home-filmstrip-scroll', String(readHomeFilmstripScroll() - homeReelOffset()));
         }
         restoreHomeScrollOnSwap = toPath === '/' && (!e || e.navigationType !== 'traverse');
       });
@@ -396,7 +408,9 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
         // Astro has finished sampling scroll by this point but has not pushed
         // the destination entry yet. Correct the existing Home entry so native
         // Back restores it too; never overwrite the destination of a traversal.
-        history.replaceState(Object.assign({}, history.state, { scrollY: readHomeFilmstripScroll() }), '');
+        // (With the reel's offset, so the way back can carry it into a page
+        // with or without the film.)
+        history.replaceState(Object.assign({}, history.state, { scrollY: readHomeFilmstripScroll(), reelOffset: homeReelOffset() }), '');
       });
       function restoreHomeFilmstrip() {
         if (restoreHomeScrollOnSwap && window.location.pathname === '/') {
@@ -405,12 +419,14 @@ const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/trave
           if (saved) {
             sessionStorage.removeItem('home-filmstrip-scroll');
             var y = parseInt(saved, 10);
-            // Only restore if user was past the hero (i.e., in the filmstrip area)
+            // Only restore if user was past the hero (i.e., in the filmstrip
+            // area). Saved from the first screen: add the reel's offset as the
+            // page arrives (0 when the film is skipped).
             if (y > 100) {
               // after-swap runs before the browser captures the incoming View
               // Transition snapshot. Restore now so Home never appears at the
               // top and then jumps to the visitor's previous chapter.
-              window.scrollTo({ top: y, behavior: 'instant' });
+              window.scrollTo({ top: y + homeReelOffset(), behavior: 'instant' });
             }
           }
         }

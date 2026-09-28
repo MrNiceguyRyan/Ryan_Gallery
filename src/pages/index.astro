@@ -5,6 +5,8 @@ import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 import IntroReel from '../components/home/IntroReel';
 import { reelCoverMarkup } from '../lib/introReelCover';
+import { PHONE_MAX_WIDTH, REEL_DESKTOP, REEL_PHONE } from '../lib/introReel';
+import { reelHeadScript } from '../lib/reelVisit';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 // ─── GROQ: All collections with photos + location data ───
@@ -50,8 +52,14 @@ const collections = await fetchSanityWithRetry(() =>
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     {/* The opening reel covers the first screen from the first paint: say so
         before anything paints (the nav's wordmark goes on its ink pill, the
-        first screen's entrance waits for the shutter). IntroReel keeps it. */}
-    <script is:inline>document.documentElement.dataset.reel = 'reel';</script>
+        first screen's entrance waits for the shutter). IntroReel keeps it.
+        On a second view in the same tab session it is skipped instead
+        (data-reel="skip": CSS collapses it and the page opens on the first
+        screen), src/lib/reelVisit.ts. */}
+    <script
+      is:inline
+      set:html={reelHeadScript({ desktopScreens: REEL_DESKTOP.screens, phoneScreens: REEL_PHONE.screens, phoneMaxWidth: PHONE_MAX_WIDTH })}
+    />
   </Fragment>
   {/* The opening film, pinned over the top of the page; its cover is drawn
       here, on the server, so it is the first paint. */}

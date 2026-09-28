@@ -7,18 +7,27 @@ import {
   REEL_EVENT,
   REEL_PHONE,
   SHUTTER_MS,
+  SHUTTER_WAIT_MS,
+  chaseFilm,
   coverTransform,
+  filmAt,
+  filmClock,
+  filmSettled,
+  filmTarget,
   firstScreenGlobe,
   reelProgressAt,
   reversedElapsed,
   segment,
   shutterAt,
   shutterLatch,
+  stepFocusBeat,
   toDesign,
+  type FilmChase,
   type ReelDetail,
   type ReelScore,
   type ReelState,
 } from '../../lib/introReel';
+import { markReelSeen, recordReelOffset, reelOffsetIn } from '../../lib/reelVisit';
 import {
   ReelRenderer,
   phoneMoonTarget,
@@ -71,7 +80,16 @@ function documentTop(node: HTMLElement) {
  * It is pinned over the top of the page (its wrapper overlaps the first
  * screen by one viewport, so the first screen is in place, under it, when it
  * ends), drawn on one canvas, driven by the scroll through one derived
- * progress value (the geometry is read at resize, never per frame).
+ * progress value (the geometry is read at resize, never per frame) — and by
+ * the film clock that chases it: a ball's hold follows the scroll, a turn
+ * into the next ball, once the scroll commits it, plays by itself on one
+ * ease-in-out curve (src/lib/introReel.ts, "The film clock").
+ *
+ * It plays once a tab session: once the reader has seen it under way (its
+ * first turn, or the shutter), a later view (back from another page, the
+ * wordmark elsewhere) has it skipped before the first paint
+ * (src/lib/reelVisit.ts, html[data-reel="skip"]) and this island does
+ * nothing; a reload plays it again.
  *
  * When the shutter fires going down, the page is carried to rest on the
  * first screen as the blades finish (HomePage does that through Lenis; on a
@@ -100,6 +118,14 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     const cue = cueRef.current;
     if (!wrap || !frame || !canvas) return;
     const root = document.documentElement;
+    // A second view in this tab session: the film was decided away before
+    // the first paint (src/lib/reelVisit.ts; CSS has collapsed the pin). No
+    // pin, no lock, no detent: the page is on show from the start, and
+    // HomePage, hearing nothing from here, treats the globe as uncovered.
+    if (root.dataset.reel === 'skip') {
+      recordReelOffset(0);
+      return;
+    }
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let renderer: ReelRenderer | null = null;
@@ -151,15 +177,31 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         target = { x, y, r: globe.r / fit.s };
       }
       centre = shutterCentre(design, phone, view) as [number, number];
+      // The first screen's distance from the top, on this history entry, so
+      // a scroll saved here is restored to the same place with or without
+      // the film (src/lib/reelVisit.ts).
+      recordReelOffset(reelOffsetIn(document));
     };
     measure();
 
     // ── State ──
     const progress = () => reelProgressAt(window.scrollY - top, pinned);
     let p = progress();
+    // The film clock (src/lib/introReel.ts): the scroll's target on the film,
+    // and the film's own position chasing it — turns play by themselves.
+    let filmGoal = filmTarget(score, p, p);
+    let chase: FilmChase = { tau: filmClock(score, filmGoal), v: 0 };
+    let film = filmAt(score, chase.tau);
+    // The focus beat (src/lib/introReel.ts): the split image comes together
+    // no faster than FOCUS_BEAT_S once the moon has glided in.
+    let focusBeat = film >= score.glide[1] - 1e-3 ? 1 : 0;
+    let chaseScore = score;
     let fired = still ? p >= STILL_CUT : p >= score.fire;
     let release = -1;
     let releaseToPage = true;
+    // The latch has fired but the film is still catching up: the blades wait
+    // for it (at most SHUTTER_WAIT_MS) while the detent carries the page.
+    let pending = -1;
     // The blades may hold shut for the globe's tiles (at most SHUTTER_MS.hold).
     let heldSince = -1;
     let holdDone = false;
@@ -169,6 +211,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     let state: ReelState = fired ? 'page' : 'reel';
     let framed = fired || p >= (still ? STILL_FRAMED : score.beats[score.beats.length - 1].at);
     let finderUp = false;
+    let seen = false;
     let lastP = p;
     let lastMove = performance.now();
     let lastNow = 0;
@@ -180,7 +223,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     const costs: number[] = [];
 
     const publish = () => {
-      const detail: ReelDetail = { state, framed, fired, blades: release >= 0 };
+      const detail: ReelDetail = { state, framed, fired, blades: release >= 0 || pending >= 0 };
       window.__archiveReel = detail;
       root.dataset.reel = state;
       window.dispatchEvent(new CustomEvent<ReelDetail>(REEL_EVENT, { detail }));
@@ -195,8 +238,20 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       frame.style.visibility = on ? 'visible' : 'hidden';
       frame.style.pointerEvents = on && interactive ? 'auto' : 'none';
     };
+    // The film has been seen under way (its first turn, or the shutter — the
+    // cut, under reduced motion): a later view in this session skips it. (A
+    // reader who only saw the cover and left by the address bar gets it
+    // again: over the cover there is no nav to leave by.)
+    const markSeen = () => {
+      if (seen) return;
+      seen = true;
+      markReelSeen();
+    };
     publish();
     show(!fired, !fired);
+    // (The head script's guard for a reload deep in the archive: from here
+    // the frame's visibility is this island's.)
+    delete root.dataset.reelRestore;
 
     const tick = (now: number) => {
       raf = 0;
@@ -238,21 +293,57 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         frame.style.opacity = state === 'reel' ? '1' : '0';
         frame.style.pointerEvents = state === 'reel' ? 'auto' : 'none';
         if (state === 'reel') frame.style.visibility = 'visible';
+        else markSeen();
         // A cut waiting on the tiles looks again next frame.
         if (stillCutWait >= 0 && state === 'reel') raf = requestAnimationFrame(tick);
         return;
       }
 
+      // The film chases the scroll (a new score after a resize across the
+      // phone line starts from where the scroll is).
+      if (chaseScore !== score) {
+        chaseScore = score;
+        filmGoal = filmTarget(score, p, p);
+        chase = { tau: filmClock(score, filmGoal), v: 0 };
+      }
+      filmGoal = filmTarget(score, p, filmGoal);
+      const goalTau = filmClock(score, filmGoal);
+      chase = chaseFilm(chase, goalTau, dt);
+      film = filmAt(score, chase.tau);
+      const filmMoving = !filmSettled(chase, goalTau);
+      focusBeat = stepFocusBeat(focusBeat, film >= score.glide[1] - 1e-3, dt);
+      // The film has glided into the corner, the finder is up and the split
+      // image has come together (or there is nothing left to wait for: the
+      // scroll's own target is short of it).
+      const filmReady = film >= Math.min(score.glide[1], filmGoal) - 1e-3 && (filmGoal < score.glide[1] - 1e-3 || focusBeat >= 1);
+      if (film >= score.beats[1].at) markSeen();
+
       // The shutter: fires going down past `fire`, back going up past `rearm`.
       const latched = shutterLatch(score, fired, p);
       if (latched !== fired) {
-        const elapsed = release >= 0 ? now - release : -1;
-        release = now - (elapsed >= 0 ? reversedElapsed(elapsed) : 0);
-        releaseToPage = latched;
         fired = latched;
+        if (latched) markSeen();
         heldSince = -1;
         holdDone = !latched;
         touchJumped = false;
+        // (Only with Lenis, whose detent holds the page meanwhile: a touch
+        // screen's momentum would carry it past the pin, so there the
+        // blades go at once.)
+        if (latched && release < 0 && !filmReady && root.classList.contains('lenis')) {
+          pending = now;
+        } else if (!latched && pending >= 0) {
+          // Fired back before the blades had moved: nothing to reverse.
+          pending = -1;
+        } else {
+          const elapsed = release >= 0 ? now - release : -1;
+          release = now - (elapsed >= 0 ? reversedElapsed(elapsed) : 0);
+          releaseToPage = latched;
+        }
+      }
+      if (pending >= 0 && (filmReady || now - pending >= SHUTTER_WAIT_MS)) {
+        pending = -1;
+        release = now;
+        releaseToPage = true;
       }
       // Shut, going to the page: hold the blades closed until the globe's
       // tiles are in (a slower shutter speed), for at most SHUTTER_MS.hold.
@@ -262,7 +353,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         else holdDone = true;
       }
       let shutter: ShutterState | null = null;
-      let showsPage = fired;
+      let showsPage = fired && pending < 0;
       if (release >= 0) {
         const blades = shutterAt(now - release, releaseToPage);
         showsPage = blades.showsPage;
@@ -288,20 +379,20 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       // reveal) — from the moon's arrival, so its fade, dawn and first turn
       // (and the tiles they ask for) are done when the blades open on it.
       const nextFramed = fired || p >= score.beats[score.beats.length - 1].at;
-      const blading = release >= 0;
+      const blading = release >= 0 || pending >= 0;
       if (nextState !== state || nextFramed !== framed || (window.__archiveReel?.blades ?? false) !== blading || (window.__archiveReel?.fired ?? false) !== fired) {
         state = nextState;
         framed = nextFramed;
         publish();
       }
       // The nav steps out while the reader looks through the camera.
-      setFinder(state === 'reel' && p >= score.finder[0]);
+      setFinder(state === 'reel' && film >= score.finder[0]);
       // While the blades move, the frame is held to the viewport: the click
       // fires a little before the pin ends, and the page is carried on under
       // it to the first screen.
       const pinnedStyle = shutter ? 'fixed' : '';
       if (frame.style.position !== pinnedStyle) frame.style.position = pinnedStyle;
-      if (fired && release < 0) {
+      if (fired && release < 0 && pending < 0) {
         // The archive is on show: the canvas is off until the reader comes back.
         show(false, false);
         return;
@@ -309,10 +400,10 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       show(true, !showsPage || !!shutter);
 
       clock += dt;
-      const busy = !!shutter || now - lastMove < 240;
+      const busy = !!shutter || pending >= 0 || filmMoving || (focusBeat > 0 && focusBeat < 1) || now - lastMove < 240;
       if (busy || now - lastDraw >= idleFrameMs - 2 || !drawn) {
         const start = performance.now();
-        renderer?.render(score, p, clock, target, shutter);
+        renderer?.render(score, film, p, clock, target, shutter, focusBeat);
         const cost = performance.now() - start;
         lastDraw = now;
         if (!drawn) {
@@ -371,7 +462,9 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       window.removeEventListener('scroll', wake);
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('load', onResize);
-      delete root.dataset.reel;
+      // (Only what this island wrote: an in-site arrival may already have
+      // swapped in the next page's own decision, "skip" among them.)
+      if (root.dataset.reel === state) delete root.dataset.reel;
       delete root.dataset.reelFinder;
       window.__archiveReel = undefined;
     };
