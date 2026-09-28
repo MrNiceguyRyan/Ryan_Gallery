@@ -48,6 +48,10 @@ const collections = await fetchSanityWithRetry(() =>
 <Layout dark={true}>
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
+    {/* The opening reel covers the first screen from the first paint: say so
+        before anything paints (the nav's wordmark goes on its ink pill, the
+        first screen's entrance waits for the shutter). IntroReel keeps it. */}
+    <script is:inline>document.documentElement.dataset.reel = 'reel';</script>
   </Fragment>
   {/* The opening film, pinned over the top of the page; its cover is drawn
       here, on the server, so it is the first paint. */}

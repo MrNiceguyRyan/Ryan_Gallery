@@ -7,8 +7,11 @@
 // click and through a click reversed halfway), the cover fit the server's SVG
 // and the canvas share, the first screen's globe the moon lands on, the
 // sphere maths, the football, the collage cuts, the iris, the cookie's bites,
-// the lens, the palette (no lime, nothing neon) and the server's cover
-// markup (deterministic, balanced, small). The modules import their siblings
+// the lens, the palette (no lime, nothing neon), the server's cover
+// markup (deterministic, balanced, small), and the review pass's promises:
+// one stage for every ball, turns that begin and end exactly on the holds
+// either side, a wallpaper that never jumps, the viewfinder's 3:2 window,
+// the detent's timing and blades that move from the first frame. The modules import their siblings
 // without extensions (Vite's way), so they are bundled first.
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -17,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const entry = `
 export * from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReel.ts', import.meta.url)))};
-export { REEL_INK, paintCover, paintSphereScene, actClock, moonSphere, moonLight, cookieBites, holeGeometry, focusCentre, shutterCentre } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelPaint.ts', import.meta.url)))};
+export { REEL_INK, paintCover, paintSphereScene, paintTurn, actClock, moonSphere, moonLight, cookieBites, holeGeometry, focusCentre, shutterCentre, stageOf, ballAt, reelFlow, finderWindow, phoneMoonTarget, facetCuts, blendCuts, facetsOf, viewFor } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelPaint.ts', import.meta.url)))};
 export { reelCoverMarkup } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelCover.ts', import.meta.url)))};
 export { SvgRecorder } from ${JSON.stringify(fileURLToPath(new URL('../src/lib/introReelSvg.ts', import.meta.url)))};
 `;
@@ -282,4 +285,135 @@ test('the server\'s cover is deterministic, balanced and small', () => {
   assert.ok(!/NaN|Infinity|undefined/.test(a));
   assert.ok(a.length < 70000, `cover markup is ${a.length} bytes`);
   assert.ok(a.includes('preserveAspectRatio="xMidYMid slice"'));
+});
+
+// ── The review pass ─────────────────────────────────────────────────────────
+
+test('every ball stands on the one stage, at one size', () => {
+  for (const [label, score, frame, phone] of [['desktop', R.REEL_DESKTOP, R.FRAME_DESKTOP, false], ['phone', R.REEL_PHONE, R.FRAME_PHONE, true]]) {
+    const S = R.stageOf({ w: frame.w, h: frame.h, phone });
+    if (!phone) assert.deepEqual([S.cx, S.cy, S.r], [864, 480, 270]);
+    score.beats.forEach((b, i) => {
+      if (b.kind === 'hole') return;
+      for (const f of [0, 0.1, 0.2]) {
+        const p = b.at + f * 0.1;
+        const env = { w: frame.w, h: frame.h, phone, t: 1.3, p, a: R.actClock(score, i, p) };
+        const ball = R.ballAt(b.kind, env, score);
+        assert.ok(close(ball.cx, S.cx, 1e-9), `${label} ${b.kind} x`);
+        assert.ok(close(ball.r, S.r, 1e-9), `${label} ${b.kind} r`);
+        // The basketball bounces in place: ±0.04 of the frame's height.
+        const reach = b.kind === 'basket' ? frame.h * 0.04 + 1e-6 : 1e-9;
+        assert.ok(Math.abs(ball.cy - S.cy) <= reach, `${label} ${b.kind} y ${ball.cy}`);
+      }
+    });
+  }
+});
+
+// What a frame paints, as the SVG recorder writes it, with the clip
+// scaffolding (empty groups a turn opens for parts not yet drawn) taken out.
+const painted = (draw) => {
+  const rec = new R.SvgRecorder('t', R.FRAME_DESKTOP);
+  draw(rec);
+  return rec.markup().replace(/<clipPath[^>]*>.*?<\/clipPath>/g, '').replace(/<\/?g[^>]*>/g, '');
+};
+
+test('each turn on the ball begins exactly as the hold before it and ends exactly as the hold after it', () => {
+  const score = R.REEL_DESKTOP;
+  const frame = R.FRAME_DESKTOP;
+  const onBall = new Set(['hole>basket', 'basket>football', 'cookie>light', 'light>disco', 'disco>moon']);
+  let checked = 0;
+  for (let i = 0; i + 1 < score.beats.length; i += 1) {
+    const from = score.beats[i].kind, to = score.beats[i + 1].kind;
+    if (!onBall.has(`${from}>${to}`)) continue;
+    for (const p of [score.beats[i].at + (score.beats[i + 1].at - score.beats[i].at) * 0.5]) {
+      const flow = R.reelFlow(score, p, 2.2, false);
+      const envA = { w: frame.w, h: frame.h, phone: false, t: 2.2, p, a: R.actClock(score, i, p), flow };
+      const envB = { ...envA, a: R.actClock(score, i + 1, p) };
+      // (The cookie's crack starts as the whole cookie cut in three — the
+      // same picture drawn as three pieces, which differs from the hold only
+      // on the crack's anti-aliased seams: 0.3% of pixels in a browser.)
+      if (from !== 'cookie') {
+        const holdA = painted((c) => R.paintSphereScene(c, from, envA, score, null));
+        const start = painted((c) => R.paintTurn(c, from, to, envA, envB, 0, score, null));
+        assert.equal(start, holdA, `${from}>${to} starts on the ${from}`);
+      }
+      const holdB = painted((c) => R.paintSphereScene(c, to, envB, score, null));
+      const end = painted((c) => R.paintTurn(c, from, to, envA, envB, 1, score, null));
+      assert.equal(end, holdB, `${from}>${to} ends on the ${to}`);
+      checked += 1;
+    }
+  }
+  assert.equal(checked, 5);
+});
+
+test('the wallpaper flows on without a jump, through the cover and every turn', () => {
+  for (const [score, phone] of [[R.REEL_DESKTOP, false], [R.REEL_PHONE, true]]) {
+    for (const t of [0, 1.6, 7.25]) {
+      let last = R.reelFlow(score, 0, t, phone);
+      for (let i = 1; i <= 4000; i += 1) {
+        const f = R.reelFlow(score, i / 4000, t, phone);
+        assert.ok(Math.abs(f - last) < 4, `flow jumps at p=${i / 4000}, t=${t}`);
+        last = f;
+      }
+    }
+    // Left alone on the cover, it keeps moving down the page.
+    assert.ok(R.reelFlow(score, 0, 1, phone) > R.reelFlow(score, 0, 0, phone) + 30);
+  }
+});
+
+test('the viewfinder is a 3:2 frame (2:3 upright on a phone) with black round it, and focuses at its centre', () => {
+  for (const [w, h, phone] of [[1728, 1000, false], [1280, 800, false], [2560, 1080, false], [390, 844, true]]) {
+    const frame = phone ? R.FRAME_PHONE : R.FRAME_DESKTOP;
+    const view = R.viewFor(R.coverTransform(frame, w, h), w, h);
+    const env = { w: frame.w, h: frame.h, phone, t: 0, p: 1, a: 1, view };
+    const win = R.finderWindow(env, 1);
+    const ww = win.x1 - win.x0, hh = win.y1 - win.y0;
+    const vw = view.x1 - view.x0, vh = view.y1 - view.y0;
+    assert.ok(close(ww / hh, phone ? 2 / 3 : 3 / 2, 1e-9), `${w}×${h} aspect`);
+    assert.ok(win.x0 - view.x0 >= vw * 0.05 - 1e-6 && view.x1 - win.x1 >= vw * 0.05 - 1e-6, `${w}×${h} sides`);
+    assert.ok(view.y1 - win.y1 >= vh * 0.12 - 1e-6, `${w}×${h} meter strip`);
+    const [fx, fy] = R.focusCentre(env);
+    assert.ok(close(fx, (win.x0 + win.x1) / 2) && close(fy, (win.y0 + win.y1) / 2));
+    // Not in yet, the window is the whole view.
+    const open = R.finderWindow(env, 0);
+    assert.ok(close(open.x0, view.x0) && close(open.y1, view.y1));
+  }
+});
+
+test('on a phone the moon settles low on the right, its limb through the focusing screen', () => {
+  const frame = R.FRAME_PHONE;
+  const view = R.viewFor(R.coverTransform(frame, 390, 844), 390, 844);
+  const env = { w: frame.w, h: frame.h, phone: true, t: 0, p: R.REEL_PHONE.glide[1], a: 1, view };
+  const target = R.phoneMoonTarget(env);
+  const s = R.moonSphere(env, R.REEL_PHONE, target);
+  const [fx, fy] = R.focusCentre(env);
+  assert.ok(Math.abs(Math.hypot(fx - s.cx, fy - s.cy) - s.r) < 6, 'limb through the focus');
+  assert.ok(s.cx > fx && s.cy > fy, 'low on the right');
+});
+
+test('the facets are four cuts round the ball, and keep their codes as they turn from one set to another', () => {
+  const env = { w: 1728, h: 1000, phone: false };
+  const a = R.facetCuts('basket', env), b = R.facetCuts('football', env);
+  assert.equal(a.length, 4);
+  const codes = (cuts) => new Set(R.facetsOf(env, cuts).map((f) => f.code));
+  const start = codes(R.blendCuts(a, b, 0)), end = codes(R.blendCuts(a, b, 1));
+  assert.deepEqual([...start].sort(), [...codes(a)].sort());
+  assert.deepEqual([...end].sort(), [...codes(b)].sort());
+  for (const t of [0.25, 0.5, 0.75]) {
+    const area = R.facetsOf(env, R.blendCuts(a, b, t)).reduce((sum, f) => sum + Math.abs(R.polygonArea(f.poly)), 0);
+    assert.ok(area >= 1728 * 1000 - 1e-3, 'the planes still cover the frame');
+  }
+});
+
+test('the detent: the page arrives as the blades finish, holds, and the blades move from the first frame', () => {
+  assert.ok(close(R.DETENT_S * 1000, R.SHUTTER_MS.close + R.SHUTTER_MS.open, 1e-9));
+  assert.ok(R.DETENT_HOLD_MS >= 300 && R.DETENT_HOLD_MS <= 600);
+  assert.ok(R.detentEase(0) === 0 && close(R.detentEase(1), 1));
+  // Quadratic in: already moving one frame after the release.
+  assert.ok(R.shutterAt(16, true).closed > 0.005);
+  // The latch leaves room for the detent before the pin ends.
+  for (const score of [R.REEL_DESKTOP, R.REEL_PHONE]) {
+    assert.ok(score.fire <= 0.98 && score.fire - score.rearm >= 0.015);
+    assert.ok(score.finder[1] < score.focus[1] && score.focus[1] < score.rearm);
+  }
 });

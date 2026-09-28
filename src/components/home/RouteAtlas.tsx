@@ -116,6 +116,11 @@ interface Props {
    *  pose (its tiles loading) by the time the reel hands over — as it did
    *  when the globe was the first thing on the page. */
   engage?: boolean;
+  /** The opening reel still lies over the globe (even with its reveal let
+   *  go): the globe's own life — the drift, the lean to the cursor — waits,
+   *  so the map does not repaint behind the reel; it starts as the shutter
+   *  opens. */
+  covered?: boolean;
 }
 
 interface ProjectedPoint {
@@ -956,6 +961,7 @@ export default function RouteAtlas({
   eager = false,
   holdReveal = false,
   engage = false,
+  covered = false,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -1419,10 +1425,14 @@ export default function RouteAtlas({
   // whether this machine needs the lighter light pass.
   const globeRevealPlayedRef = useRef(false);
   // While the opening reel covers the first screen the gate keeps waiting
-  // (the tiles still load behind it), so the fade, the dawn and the settle
-  // play as the reel's shutter opens on the globe, not unseen under it.
+  // (the tiles load behind it, and the reveal's poses are warmed), until the
+  // reel's last sphere comes on: the fade, the dawn and most of the settle
+  // then play under the reel's final stretch, and the shutter opens on a
+  // globe that is lit, loaded and all but in place.
   const holdRevealRef = useRef(holdReveal);
   holdRevealRef.current = holdReveal;
+  const reelCoveredRef = useRef(covered);
+  reelCoveredRef.current = covered;
   useEffect(() => {
     if (!prologue) return;
     if (!mapLoaded) {
@@ -1495,6 +1505,72 @@ export default function RouteAtlas({
       };
       dawnFrame = requestAnimationFrame(step);
     };
+    // ── Warming, while held ── The reel's cover is a whole film away from
+    // the globe: once the page is idle, turn the hidden globe through the
+    // poses the reveal will pass through — settled, and a half and a full
+    // drift on — each until its tiles are in, then put it back. Every tile
+    // the dawn and the first turn will ask for is then in the cache when the
+    // shutter opens on it (they used to arrive, square by square, just
+    // after).
+    const WARM_POSES: readonly [number, number][] = [[0, 0], [0, PROLOGUE_GLOBE.driftMax * 0.5], [0, PROLOGUE_GLOBE.driftMax]];
+    let warm: 'waiting' | 'pending' | 'running' | 'done' = fromTop ? 'waiting' : 'done';
+    let warmStep = 0;
+    let warmTimer = 0;
+    let warmIdleHandle = 0;
+    const onWarmIdle = () => {
+      window.clearTimeout(warmTimer);
+      warmNext();
+    };
+    const endWarm = () => {
+      if (warm === 'pending') {
+        warm = 'done';
+        return;
+      }
+      if (warm !== 'running') return;
+      warm = 'done';
+      window.clearTimeout(warmTimer);
+      map?.off('idle', onWarmIdle);
+      globeIntro.set(1);
+      channel.drift = 0;
+      channel.requestDraw();
+    };
+    const warmNext = () => {
+      if (disposed || warm !== 'running') return;
+      if (warmStep >= WARM_POSES.length || !holdRevealRef.current) {
+        endWarm();
+        return;
+      }
+      const [intro, drift] = WARM_POSES[warmStep];
+      warmStep += 1;
+      globeIntro.set(intro);
+      channel.drift = drift;
+      channel.requestDraw();
+      map?.off('idle', onWarmIdle);
+      // The camera moves on the next frame; the pose is warm at the next
+      // idle after that (or, failing one, soon enough anyway).
+      window.clearTimeout(warmTimer);
+      warmTimer = window.setTimeout(() => {
+        if (disposed || warm !== 'running') return;
+        map?.once('idle', onWarmIdle);
+        warmTimer = window.setTimeout(onWarmIdle, 2400);
+      }, 60);
+    };
+    const maybeWarm = () => {
+      if (warm !== 'waiting' || !map) return;
+      warm = 'pending';
+      const go = () => {
+        if (disposed || warm !== 'pending') return;
+        if (!holdRevealRef.current) {
+          warm = 'done';
+          return;
+        }
+        warm = 'running';
+        warmNext();
+      };
+      const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (idle) warmIdleHandle = idle(go, { timeout: 2500 });
+      else warmTimer = window.setTimeout(go, 600);
+    };
     const poll = () => {
       pollTimer = 0;
       if (disposed) return;
@@ -1502,7 +1578,13 @@ export default function RouteAtlas({
         // Held: the cap counts from the release, not from the map's load.
         start = performance.now();
         readyPolls = 0;
+        maybeWarm();
         pollTimer = window.setTimeout(poll, 60);
+        return;
+      }
+      if (warm === 'running' || warm === 'pending') {
+        endWarm();
+        pollTimer = window.setTimeout(poll, 40);
         return;
       }
       let ready = false;
@@ -1522,8 +1604,13 @@ export default function RouteAtlas({
     };
     poll();
     return () => {
+      if (warm === 'running' || warm === 'pending') endWarm();
       disposed = true;
       window.clearTimeout(pollTimer);
+      window.clearTimeout(warmTimer);
+      const cancelIdle = (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback;
+      if (warmIdleHandle && cancelIdle) cancelIdle(warmIdleHandle);
+      map?.off('idle', onWarmIdle);
       if (dawnFrame) cancelAnimationFrame(dawnFrame);
       settle?.stop();
       if (!channel.revealed) {
@@ -1536,6 +1623,29 @@ export default function RouteAtlas({
       channel.veil = 0;
     };
   }, [globeChannel, globeIntro, mapLoaded, prologue, reducedMotion, resolvedPrologueProgress]);
+
+  // The reel's shutter asks whether the globe's tiles are in: shut, it holds
+  // a moment for them (a slower shutter speed) before it opens on the globe.
+  useEffect(() => {
+    if (!prologue || !mapLoaded) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const ready = () => {
+      try {
+        return map.isSourceLoaded('prologue-satellite') && map.areTilesLoaded();
+      } catch {
+        return true;
+      }
+    };
+    window.__archiveGlobeReady = ready;
+    return () => {
+      if (window.__archiveGlobeReady === ready) delete window.__archiveGlobeReady;
+    };
+  }, [mapLoaded, prologue]);
+  // Uncovered (the shutter open on it), the globe's own life begins.
+  useEffect(() => {
+    if (!covered) globeChannel.requestDraw();
+  }, [covered, globeChannel]);
 
   useEffect(() => {
     if (!prologue) return;
@@ -3036,7 +3146,7 @@ export default function RouteAtlas({
     let lastLifeTime = 0;
     // The drift starts with the reveal: before it the canvas is hidden, and the
     // settle carries the first seconds. Reduced motion's globe has no life.
-    const lifeActive = () => prologue && !reducedMotion && globeChannel.revealed &&
+    const lifeActive = () => prologue && !reducedMotion && globeChannel.revealed && !reelCoveredRef.current &&
       queuedPrologue < PROLOGUE_GLOBE.lifeFade[1] && document.visibilityState === 'visible';
     const lifeStep = (time: number) => {
       lifeFrame = 0;

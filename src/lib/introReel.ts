@@ -35,6 +35,7 @@ export const easeInOutCubic = (t: number) => {
 };
 export const easeOutCubic = (t: number) => 1 - (1 - clamp01(t)) ** 3;
 export const easeInCubic = (t: number) => clamp01(t) ** 3;
+export const easeInQuad = (t: number) => clamp01(t) ** 2;
 /** 0 at the ends, 1 in the middle: the shape of a transition's disorder. */
 export const bump = (t: number) => Math.sin(Math.PI * clamp01(t));
 
@@ -50,11 +51,20 @@ export const REEL_EVENT = 'archive:reel';
 export type ReelState = 'reel' | 'page';
 export interface ReelDetail {
   state: ReelState;
+  /** The globe behind may start to appear (HomePage releases its reveal). */
   framed: boolean;
+  /** The shutter's latch: set going down past `fire`, cleared going back up
+   *  past `rearm`. Its rising edge is HomePage's cue for the detent. */
+  fired: boolean;
+  /** The blades are moving (a click is in progress). */
+  blades: boolean;
 }
 declare global {
   interface Window {
     __archiveReel?: ReelDetail;
+    /** RouteAtlas: are the first screen's globe tiles in? (The shutter holds
+     *  shut for them, briefly, before it opens on the globe.) */
+    __archiveGlobeReady?: () => boolean;
   }
 }
 
@@ -84,40 +94,43 @@ export interface ReelScore {
 }
 
 export const REEL_DESKTOP: ReelScore = {
-  screens: 6.4,
+  screens: 4.8,
   beats: [
     { kind: 'hole', at: 0 },
-    { kind: 'basket', at: 0.15 },
-    { kind: 'football', at: 0.29 },
-    { kind: 'cookie', at: 0.42 },
-    { kind: 'light', at: 0.55 },
-    { kind: 'disco', at: 0.67 },
-    { kind: 'moon', at: 0.78 },
+    { kind: 'basket', at: 0.12 },
+    { kind: 'football', at: 0.25 },
+    { kind: 'cookie', at: 0.38 },
+    { kind: 'light', at: 0.51 },
+    { kind: 'disco', at: 0.63 },
+    { kind: 'moon', at: 0.74 },
   ],
-  hold: 0.36,
-  glide: [0.82, 0.9],
-  finder: [0.86, 0.92],
-  focus: [0.91, 0.97],
-  fire: 0.992,
-  rearm: 0.976,
+  hold: 0.22,
+  glide: [0.78, 0.86],
+  finder: [0.82, 0.88],
+  focus: [0.87, 0.94],
+  fire: 0.975,
+  rearm: 0.955,
 };
 
-/** Phones and small tablets: the same film, five spheres, a shorter pin. */
+/** Phones and small tablets: the same film on a shorter pin, one sphere
+ *  fewer (the mirror ball is only passed through, between the traffic light
+ *  and the moon). */
 export const REEL_PHONE: ReelScore = {
-  screens: 4.2,
+  screens: 3.4,
   beats: [
     { kind: 'hole', at: 0 },
-    { kind: 'basket', at: 0.19 },
-    { kind: 'football', at: 0.37 },
-    { kind: 'light', at: 0.54 },
-    { kind: 'moon', at: 0.71 },
+    { kind: 'basket', at: 0.14 },
+    { kind: 'football', at: 0.29 },
+    { kind: 'cookie', at: 0.44 },
+    { kind: 'light', at: 0.58 },
+    { kind: 'moon', at: 0.74 },
   ],
-  hold: 0.34,
-  glide: [0.76, 0.86],
-  finder: [0.8, 0.88],
-  focus: [0.87, 0.965],
-  fire: 0.99,
-  rearm: 0.972,
+  hold: 0.22,
+  glide: [0.78, 0.86],
+  finder: [0.82, 0.88],
+  focus: [0.87, 0.94],
+  fire: 0.975,
+  rearm: 0.955,
 };
 
 /** Reel progress from the scroll: the reel is the first thing on the page, so
@@ -163,21 +176,25 @@ export function shutterLatch(score: ReelScore, fired: boolean, p: number) {
   return fired;
 }
 
-/** How long the shutter takes, ms: the blades snap shut and open slower. */
-export const SHUTTER_MS = { close: 170, open: 440 } as const;
+/** How long the shutter takes, ms: the blades snap shut and open slower.
+ *  (Between the two they may hold shut a moment for the globe's tiles —
+ *  IntroReel pauses the clock there, at most `hold` ms.) */
+export const SHUTTER_MS = { close: 170, open: 440, hold: 450 } as const;
 
 export interface ShutterFrame {
-  /** 0 = wide open, 1 = shut. */
+  /** 0 = wide open (the blade tips just outside the frame), 1 = shut. */
   closed: number;
   /** What the opening shows: the page beneath (the archive) or the reel. */
   showsPage: boolean;
   done: boolean;
 }
 /** The blades `elapsed` ms after a release toward the page (`toPage`) or
- *  back to the reel: they close over what was showing and open on the other. */
+ *  back to the reel: they close over what was showing and open on the other.
+ *  The close eases in (quadratic, so the tips are in the frame from the very
+ *  first frame after the release); the open eases out. */
 export function shutterAt(elapsed: number, toPage: boolean): ShutterFrame {
   const e = Math.max(0, elapsed);
-  if (e < SHUTTER_MS.close) return { closed: easeInCubic(e / SHUTTER_MS.close), showsPage: !toPage, done: false };
+  if (e < SHUTTER_MS.close) return { closed: (e / SHUTTER_MS.close) ** 2, showsPage: !toPage, done: false };
   const t = (e - SHUTTER_MS.close) / SHUTTER_MS.open;
   if (t >= 1) return { closed: 0, showsPage: toPage, done: true };
   return { closed: 1 - easeOutCubic(t), showsPage: toPage, done: false };
@@ -192,8 +209,16 @@ export function reversedElapsed(elapsed: number) {
   const frame = shutterAt(elapsed, true);
   if (frame.done) return 0;
   if (elapsed < SHUTTER_MS.close) return SHUTTER_MS.close + SHUTTER_MS.open * (1 - Math.cbrt(clamp01(frame.closed)));
-  return SHUTTER_MS.close * Math.cbrt(clamp01(frame.closed));
+  return SHUTTER_MS.close * Math.sqrt(clamp01(frame.closed));
 }
+/** The detent: when the shutter fires going down, the page is carried to the
+ *  first screen and arrives at rest as the blades finish opening (seconds,
+ *  and the curve — HomePage hands both to Lenis). */
+export const DETENT_S = (SHUTTER_MS.close + SHUTTER_MS.open) / 1000;
+export const detentEase = (t: number) => easeOutCubic(t);
+/** …and holds still this long after the blades are open, so a flick's
+ *  momentum does not carry the reader on past the first screen. */
+export const DETENT_HOLD_MS = 450;
 
 // ── Design frames ──────────────────────────────────────────────────────────
 // The reel is composed in a fixed design frame and laid over the viewport

@@ -6,6 +6,7 @@ import {
   REEL_DESKTOP,
   REEL_EVENT,
   REEL_PHONE,
+  SHUTTER_MS,
   coverTransform,
   firstScreenGlobe,
   reelProgressAt,
@@ -18,16 +19,33 @@ import {
   type ReelScore,
   type ReelState,
 } from '../../lib/introReel';
-import { ReelRenderer, shutterCentre, type MoonTarget, type ShutterState } from '../../lib/introReelPaint';
+import {
+  ReelRenderer,
+  phoneMoonTarget,
+  shutterCentre,
+  viewFor,
+  type MoonTarget,
+  type ShutterState,
+  type View,
+} from '../../lib/introReelPaint';
 
 // The canvas never draws finer than 2 device pixels per CSS pixel, and it
 // steps down on its own if a machine cannot keep up (see `quality`).
 const MAX_DPR = 2;
-// Left alone, the reel keeps its slow life at ~30 fps.
-const IDLE_FRAME_MS = 33;
+// Left alone, the cover keeps its slow life at every frame while it is cheap
+// (the wallpaper flows 70 design px a second; at 30 fps it visibly steps),
+// and drops to ~30 fps on a machine where a frame costs more than 6 ms.
+const IDLE_FRAME_MS = 16;
+const IDLE_FRAME_SLOW_MS = 33;
 // Reduced motion (or no canvas): the still cover holds over a one-screen pin
-// and cuts to the page when the first screen is all but in place under it.
+// and cuts to the page when the first screen is all but in place under it —
+// the globe released under it well before, and the cut held (briefly) for
+// its tiles.
 const STILL_CUT = 0.94;
+const STILL_FRAMED = 0.3;
+const STILL_TILE_WAIT_MS = 400;
+// Without Lenis (a touch screen), the detent is a jump and a short lock.
+const TOUCH_LOCK_MS = 600;
 
 function documentTop(node: HTMLElement) {
   let top = 0;
@@ -43,16 +61,23 @@ function documentTop(node: HTMLElement) {
  * IntroReel — the homepage's opening film.
  *
  * A black hole in a harlequin wallpaper that its gravity bends into a sphere
- * of curves; scrolling turns it into a vortex and then into a run of spheres
- * (src/lib/introReel.ts has the score), each becoming the next; the last, the
- * moon, glides to where the Earth sits on the first screen, a film camera's
- * viewfinder closes round it and focuses on its limb, and the shutter fires:
- * the blades close and open on the real globe. The archive begins.
+ * of curves; scrolling turns it into a vortex and then into one ball after
+ * another on the same stage (src/lib/introReel.ts has the score), each
+ * becoming the next on the ball itself; the last, the moon, glides to where
+ * the Earth sits on the first screen, a film camera's viewfinder closes round
+ * it and focuses on its limb, and the shutter fires: the blades close and
+ * open on the real globe. The archive begins.
  *
  * It is pinned over the top of the page (its wrapper overlaps the first
  * screen by one viewport, so the first screen is in place, under it, when it
  * ends), drawn on one canvas, driven by the scroll through one derived
  * progress value (the geometry is read at resize, never per frame).
+ *
+ * When the shutter fires going down, the page is carried to rest on the
+ * first screen as the blades finish (HomePage does that through Lenis; on a
+ * touch screen, with no Lenis, this island jumps the page there under the
+ * shut blades and holds it still a moment), so the reader arrives on his
+ * name and the globe, not somewhere past them.
  *
  * The first paint is the cover as SVG (index.astro renders it into
  * `children`, a static slot the client never recomputes); the canvas draws
@@ -87,6 +112,13 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     }
     // Without a canvas the reel is its still cover, as under reduced motion.
     const still = !renderer;
+    const globeReady = () => {
+      try {
+        return window.__archiveGlobeReady ? window.__archiveGlobeReady() : true;
+      } catch {
+        return true;
+      }
+    };
 
     // ── Geometry: read at resize only ──
     let top = 0;
@@ -95,27 +127,30 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     let score: ReelScore = REEL_DESKTOP;
     let target: MoonTarget | null = null;
     let centre: [number, number] = [0, 0];
+    let view: View = { x0: 0, y0: 0, x1: FRAME_DESKTOP.w, y1: FRAME_DESKTOP.h };
+    let unit = 1;
     let quality = 1;
-    let viewW = 0;
-    let viewH = 0;
+    let idleFrameMs = IDLE_FRAME_MS;
     const measure = () => {
       top = documentTop(wrap);
-      viewW = frame.clientWidth;
-      viewH = frame.clientHeight;
+      const viewW = frame.clientWidth;
+      const viewH = frame.clientHeight;
       pinned = Math.max(1, wrap.offsetHeight - viewH);
       phone = window.innerWidth <= PHONE_MAX_WIDTH;
       score = phone ? REEL_PHONE : REEL_DESKTOP;
       const design = phone ? FRAME_PHONE : FRAME_DESKTOP;
       const fit = coverTransform(design, viewW, viewH);
+      view = viewFor(fit, viewW, viewH);
+      unit = 1 / fit.s;
       renderer?.resize(viewW, viewH, Math.min(MAX_DPR, window.devicePixelRatio || 1) * quality, design, phone, fit);
       if (phone) {
-        target = null;
+        target = phoneMoonTarget({ w: design.w, h: design.h, phone, t: 0, p: 1, a: 1, view });
       } else {
         const globe = firstScreenGlobe(viewW, viewH);
         const [x, y] = toDesign(fit, globe.x, globe.y);
         target = { x, y, r: globe.r / fit.s };
       }
-      centre = shutterCentre(design, phone) as [number, number];
+      centre = shutterCentre(design, phone, view) as [number, number];
     };
     measure();
 
@@ -125,8 +160,15 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     let fired = still ? p >= STILL_CUT : p >= score.fire;
     let release = -1;
     let releaseToPage = true;
+    // The blades may hold shut for the globe's tiles (at most SHUTTER_MS.hold).
+    let heldSince = -1;
+    let holdDone = false;
+    let touchJumped = false;
+    let touchLock = 0;
+    let stillCutWait = -1;
     let state: ReelState = fired ? 'page' : 'reel';
-    let framed = fired || (!still && p >= score.finder[0]);
+    let framed = fired || p >= (still ? STILL_FRAMED : score.beats[score.beats.length - 1].at);
+    let finderUp = false;
     let lastP = p;
     let lastMove = performance.now();
     let lastNow = 0;
@@ -138,10 +180,16 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     const costs: number[] = [];
 
     const publish = () => {
-      const detail: ReelDetail = { state, framed };
+      const detail: ReelDetail = { state, framed, fired, blades: release >= 0 };
       window.__archiveReel = detail;
       root.dataset.reel = state;
       window.dispatchEvent(new CustomEvent<ReelDetail>(REEL_EVENT, { detail }));
+    };
+    const setFinder = (on: boolean) => {
+      if (on === finderUp) return;
+      finderUp = on;
+      if (on) root.dataset.reelFinder = '';
+      else delete root.dataset.reelFinder;
     };
     const show = (on: boolean, interactive: boolean) => {
       frame.style.visibility = on ? 'visible' : 'hidden';
@@ -166,16 +214,32 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
 
       if (still) {
         // Reduced motion (or no canvas): the still cover, then a cut — a
-        // short fade — to the page as its first screen arrives under it.
-        const next: ReelState = p >= STILL_CUT ? 'page' : 'reel';
-        if (next !== state) {
+        // short fade — to the page as its first screen arrives under it. The
+        // globe is let go under the cover a good way before, and the cut
+        // waits a moment for its tiles if they are not in yet.
+        let next: ReelState = 'reel';
+        if (p >= STILL_CUT) {
+          if (state === 'page' || globeReady()) next = 'page';
+          else {
+            if (stillCutWait < 0) stillCutWait = now;
+            if (now - stillCutWait >= STILL_TILE_WAIT_MS) next = 'page';
+          }
+        } else {
+          stillCutWait = -1;
+        }
+        const nextFramed = next === 'page' || p >= STILL_FRAMED;
+        const nextFired = next === 'page';
+        if (next !== state || nextFramed !== framed || nextFired !== fired) {
           state = next;
-          framed = next === 'page';
+          framed = nextFramed;
+          fired = nextFired;
           publish();
         }
         frame.style.opacity = state === 'reel' ? '1' : '0';
         frame.style.pointerEvents = state === 'reel' ? 'auto' : 'none';
         if (state === 'reel') frame.style.visibility = 'visible';
+        // A cut waiting on the tiles looks again next frame.
+        if (stillCutWait >= 0 && state === 'reel') raf = requestAnimationFrame(tick);
         return;
       }
 
@@ -186,6 +250,16 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         release = now - (elapsed >= 0 ? reversedElapsed(elapsed) : 0);
         releaseToPage = latched;
         fired = latched;
+        heldSince = -1;
+        holdDone = !latched;
+        touchJumped = false;
+      }
+      // Shut, going to the page: hold the blades closed until the globe's
+      // tiles are in (a slower shutter speed), for at most SHUTTER_MS.hold.
+      if (release >= 0 && releaseToPage && !holdDone && now - release >= SHUTTER_MS.close) {
+        if (heldSince < 0) heldSince = now;
+        if (!globeReady() && now - heldSince < SHUTTER_MS.hold) release = now - SHUTTER_MS.close;
+        else holdDone = true;
       }
       let shutter: ShutterState | null = null;
       let showsPage = fired;
@@ -193,20 +267,38 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         const blades = shutterAt(now - release, releaseToPage);
         showsPage = blades.showsPage;
         if (blades.done) release = -1;
-        else shutter = { closed: blades.closed, revealed: blades.showsPage, cx: centre[0], cy: centre[1] };
+        else shutter = { closed: blades.closed, revealed: blades.showsPage, cx: centre[0], cy: centre[1], view, unit };
+        // No Lenis (a touch screen): under the shut blades, jump the page to
+        // the first screen and hold it still a moment (body overflow: clip,
+        // the one lock that keeps the sticky atlas in place).
+        if (releaseToPage && !touchJumped && blades.closed >= 0.98 && !root.classList.contains('lenis')) {
+          touchJumped = true;
+          window.scrollTo({ top: top + pinned, behavior: 'instant' as ScrollBehavior });
+          const body = document.body;
+          const previous = body.style.overflow;
+          body.style.overflow = 'clip';
+          window.clearTimeout(touchLock);
+          touchLock = window.setTimeout(() => {
+            if (body.style.overflow === 'clip') body.style.overflow = previous;
+          }, TOUCH_LOCK_MS);
+        }
       }
       const nextState: ReelState = showsPage ? 'page' : 'reel';
       // Framed: the globe behind may start to appear (HomePage releases its
-      // reveal), so it is there, its dawn under way, when the blades open.
-      const nextFramed = fired || p >= score.finder[0];
-      if (nextState !== state || nextFramed !== framed) {
+      // reveal) — from the moon's arrival, so its fade, dawn and first turn
+      // (and the tiles they ask for) are done when the blades open on it.
+      const nextFramed = fired || p >= score.beats[score.beats.length - 1].at;
+      const blading = release >= 0;
+      if (nextState !== state || nextFramed !== framed || (window.__archiveReel?.blades ?? false) !== blading || (window.__archiveReel?.fired ?? false) !== fired) {
         state = nextState;
         framed = nextFramed;
         publish();
       }
+      // The nav steps out while the reader looks through the camera.
+      setFinder(state === 'reel' && p >= score.finder[0]);
       // While the blades move, the frame is held to the viewport: the click
-      // fires a few dozen pixels before the pin ends, and a brisk scroll
-      // would otherwise carry the viewfinder up the page mid-click.
+      // fires a little before the pin ends, and the page is carried on under
+      // it to the first screen.
       const pinnedStyle = shutter ? 'fixed' : '';
       if (frame.style.position !== pinnedStyle) frame.style.position = pinnedStyle;
       if (fired && release < 0) {
@@ -218,7 +310,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
 
       clock += dt;
       const busy = !!shutter || now - lastMove < 240;
-      if (busy || now - lastDraw >= IDLE_FRAME_MS || !drawn) {
+      if (busy || now - lastDraw >= idleFrameMs - 2 || !drawn) {
         const start = performance.now();
         renderer?.render(score, p, clock, target, shutter);
         const cost = performance.now() - start;
@@ -233,6 +325,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
         if (costs.length >= 24) {
           const mean = costs.reduce((a, b) => a + b, 0) / costs.length;
           costs.length = 0;
+          if (mean > 6) idleFrameMs = IDLE_FRAME_SLOW_MS;
           if (mean > 10 && quality > 0.62) {
             quality = Math.max(0.62, quality * 0.82);
             measure();
@@ -270,6 +363,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
     return () => {
       disposed = true;
       window.clearTimeout(boot);
+      window.clearTimeout(touchLock);
       cancelAnimationFrame(raf);
       cancelAnimationFrame(resizeFrame);
       observer?.disconnect();
@@ -278,6 +372,7 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('load', onResize);
       delete root.dataset.reel;
+      delete root.dataset.reelFinder;
       window.__archiveReel = undefined;
     };
   }, []);
@@ -302,14 +397,17 @@ export default function IntroReel({ children }: { children?: ReactNode }) {
           {children}
         </div>
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
-        {/* The one lime mark on the cover: the scroll cue's sweep, on an ink
-            pill so it reads over the wallpaper. */}
-        <div
-          ref={cueRef}
-          className="intro-reel__cue absolute bottom-[max(4.5svh,1.5rem)] left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-[#16190f] py-2.5 pl-3.5 pr-4 font-ui text-[10px] uppercase tracking-[0.1em] text-[#F4F4ED]/85 shadow-[0_8px_30px_rgba(22,25,15,0.28)]"
-        >
-          <span className="prologue-scroll-cue relative block h-5 w-px overflow-hidden bg-white/25" />
-          Scroll
+        {/* The scroll cue, the one lime on the cover: a plumb line dropped
+            from the hole's lower rim to the foot of the screen, a dash of
+            light running down it, and SCROLL at its foot on an ink pill.
+            Placed in the design frame's own units (container units, the
+            same cover fit as the canvas), so the server's first paint has it
+            where the hole is. */}
+        <div ref={cueRef} className="intro-reel__cue pointer-events-none absolute inset-0">
+          <span className="intro-reel__plumb" aria-hidden="true" />
+          <span className="intro-reel__pill absolute left-1/2 flex -translate-x-1/2 items-center rounded-full bg-[#16190f] px-4 py-2 font-ui text-[11px] uppercase leading-none tracking-[0.1em] text-[#F4F4ED]/90 shadow-[0_8px_30px_rgba(22,25,15,0.28)]">
+            Scroll
+          </span>
         </div>
       </div>
     </section>
