@@ -4,14 +4,15 @@ import { LANDMARK_VIEWBOX, landmarkFor } from '../../lib/placeLandmarks';
 import type { LabelPlacement, TravelChapter } from '../../lib/travelSilver';
 
 // ─── A chapter's mark on /travel ───
-// ONE component for every chapter's mark, printed in the same system as the
-// homepage atlas's places (owner, 2026-09-27: 地图上对应的小标志太丑了 — the
-// rings, seats and arrival rings are gone): a dot of white ink with a hard
-// knockout, keyed by the chapter's number. The map itself draws every place's
-// dot (the `travel-rings` circle layers: it moves with the ground exactly and
-// costs React nothing); this is the part that has to be DOM — the hit area,
-// the dot of the place pointed at or chosen (so it can be struck on arrival),
-// the chapter's number and name, a callout's leader, and the landmark.
+// ONE component for every chapter's mark. The map itself draws the ring (the
+// `travel-rings` circle layers: it moves with the ground exactly and costs
+// React nothing); this is the part that has to be DOM — the hit area, the
+// selected ring, the 5px focus point, the chapter's number and name, a
+// callout's leader, the landmark and the arrival ring. The homepage atlas
+// prints its places as dots now; the owner kept these rings for /travel
+// (2026-09-27: Map里面的地点的球型我更喜欢以前的), so the selected ring is
+// /travel's own (`.travel-mark__ring`), no longer the homepage's
+// `.af-point__ring`.
 
 /** Which side of its mark a place's landmark stands on. */
 export type LandmarkSide = 'above' | 'right' | 'left' | 'below';
@@ -25,7 +26,7 @@ export const LANDMARK_CLEARANCE = 12;
 /**
  * Where a landmark's ground line (its viewBox origin, the box's middle) sits
  * relative to the centre of its mark. Above: standing over the place. Beside:
- * level with it, clear of the dot. Below: hung under it.
+ * level with it, clear of the ring. Below: hung under it.
  */
 export function landmarkOrigin(side: LandmarkSide, height: number, clearance: number) {
   const tall = height * LANDMARK_UNIT;
@@ -130,7 +131,7 @@ interface TravelMarkProps {
   selected: boolean;
   hovered: boolean;
   dimmed: boolean;
-  /** The flight to it ran its full clock: the dot is struck. */
+  /** The flight to it ran its full clock: one arrival ring. */
   arrived: boolean;
   landmarkShown: boolean;
   landmarkSide: LandmarkSide;
@@ -146,9 +147,9 @@ interface TravelMarkProps {
   onHover: (slug: string | null) => void;
 }
 
-/** A chapter's mark. Its name — the chapter's number and the place, both in
- *  the label face, the index's own numbering — only ever changes ink: its
- *  place and tracking never move while it is read. */
+/** A chapter's mark. Its name — the chapter's number in the display face and
+ *  the place in the label face, the index's own numbering — only ever changes
+ *  colour: its size and tracking never move while it is read. */
 function TravelMark({
   chapter,
   total,
@@ -178,10 +179,12 @@ function TravelMark({
       data-hover={hovered ? '' : undefined}
       data-dimmed={dimmed ? '' : undefined}
     >
-      {/* The dot of the place pointed at (over its canvas dot) or chosen
-          (handed over from the canvas). Arrival is the homepage's strike: the
-          dot pressed down and back like a stamp, its number printing. */}
-      <span aria-hidden="true" className="travel-mark__dot" data-struck={!reduce && arrived ? '' : undefined} />
+      {/* Arrival — one thin ring, snapped in and eased out, the same confirm
+          the homepage atlas gives a landed flight. */}
+      {!reduce && arrived && <span aria-hidden="true" className="atlas-arrival-ring" />}
+      <span aria-hidden="true" className="travel-mark__seat" />
+      <span aria-hidden="true" className="travel-mark__ring" />
+      <span aria-hidden="true" className="travel-mark__focus" />
       <TravelLandmark slug={chapter.slug} shown={landmarkShown} side={landmarkSide} />
       {leader && (
         <svg className="travel-mark__leader" aria-hidden="true" data-hidden={labelHidden ? '' : undefined}>
@@ -216,12 +219,8 @@ function TravelMark({
         onMouseEnter={() => onHover(chapter.slug)}
         onMouseLeave={() => onHover(null)}
         data-travel-label={chapter.slug}
-        data-side={placement.dx < 0 ? 'left' : 'right'}
-        data-struck={!reduce && arrived ? '' : undefined}
       >
-        {/* The number sits by the dot: "01 MIAMI" to the right of it,
-            "MIAMI 01" to the left (the CSS turns the row round). */}
-        <span className="travel-mark__ord font-ui">{chapter.ordinal}</span>
+        <span className="travel-mark__ord font-serif">{chapter.ordinal}</span>
         <span className="travel-mark__name font-ui">{chapter.name}</span>
       </button>
     </div>

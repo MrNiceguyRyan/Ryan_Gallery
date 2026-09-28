@@ -466,12 +466,9 @@ const STACK_OUT = [0, 24, 48, 72] as const;
 const STACK_SHIFT = [0, -11, 11, -22, 22, -33, 33] as const;
 
 export const LABEL = {
-  /** A name starts this far from its mark's centre: the chosen place's 9px
-   *  dot and its 2px knockout, and 4px of air — the number sits by the dot. */
-  gap: 10,
-  /** A callout's leader starts this far from its mark's centre: the canvas
-   *  dot (3px and its 1.5px knockout) plus 3px, never at the centre. */
-  leaderFrom: 7.5,
+  /** A name starts this far from its mark's centre: clear of the selected
+   *  mark's 21px ring. */
+  gap: 17,
   /** A callout's names stand this far out from the group's outermost mark… */
   stackGap: 40,
   /** …one under another at this step. */
@@ -516,25 +513,18 @@ export function legsCross(legs: ReadonlyArray<ReadonlyArray<ScreenPoint>>, box: 
  *  labels' own widths, measured in their own face. `legs` are the route's
  *  legs in screen px: a name keeps off them where it can (the route is
  *  canvas under the DOM names, and a dashed leg through a name read as one
- *  tangle with the callout's dashed leaders). `obstacles` are other boxes, in
- *  screen px, a single name keeps off: the landed place's landmark, which a
- *  name set by its own dot and moved a line up to clear a leg ran into. */
+ *  tangle with the callout's dashed leaders). */
 export function placeLabels(
   points: readonly ScreenPoint[],
   groups: readonly number[][],
   widths: readonly number[],
   canvasWidth: number,
   legs: ReadonlyArray<ReadonlyArray<ScreenPoint>> = [],
-  obstacles: ReadonlyArray<{ x0: number; x1: number; y0: number; y1: number }> = [],
 ): LabelPlacement[] {
   const out: LabelPlacement[] = points.map(() => ({ mode: 'right', dx: LABEL.gap, dy: 0, leader: null, group: null }));
-  // Every label box set so far, every mark and every obstacle, in screen px:
-  // a single name takes the side that clears them (a callout's stack is set
-  // first). The marks come first, so a mark's index is its point's.
-  const taken: Array<{ x0: number; x1: number; y0: number; y1: number }> = [
-    ...points.map((p) => ({ x0: p.x - 6, x1: p.x + 6, y0: p.y - 6, y1: p.y + 6 })),
-    ...obstacles,
-  ];
+  // Every label box set so far, and every mark, in screen px: a single name
+  // takes the side that clears them (a callout's stack is set first).
+  const taken: Array<{ x0: number; x1: number; y0: number; y1: number }> = points.map((p) => ({ x0: p.x - 6, x1: p.x + 6, y0: p.y - 6, y1: p.y + 6 }));
   const HALF = 8;
   const AIR = 10;
   const hits = (box: { x0: number; x1: number; y0: number; y1: number }, own: number) =>
@@ -620,8 +610,8 @@ export function placeLabels(
         dx: Math.round(((toRight ? x0 : x0 - w) - p.x) * 10) / 10,
         dy: Math.round((ly - p.y) * 10) / 10,
         leader: {
-          x1: Math.round((vx / d) * LABEL.leaderFrom * 10) / 10,
-          y1: Math.round((vy / d) * LABEL.leaderFrom * 10) / 10,
+          x1: Math.round((vx / d) * 6 * 10) / 10,
+          y1: Math.round((vy / d) * 6 * 10) / 10,
           x2: Math.round(vx * 10) / 10,
           y2: Math.round(vy * 10) / 10,
         },
@@ -646,23 +636,17 @@ export function placeLabels(
     });
     const preferLeft = (clipsRight || crowded) && !clipsLeft;
     // The preferred side; the other side if it is on the canvas; then the
-    // preferred side a line above or below the mark, and the other side's
-    // (a place standing its landmark has the line above taken, and the legs
-    // leaving it can close the preferred side's line below). The first that
-    // runs into no name, no mark and no obstacle already set is the one.
-    const otherFits = !(preferLeft ? clipsRight : clipsLeft);
+    // preferred side a line above or below the mark. The first that runs
+    // into no name and no mark already set is the one.
     const candidates: Array<[boolean, number]> = [[preferLeft, 0]];
-    if (otherFits) candidates.push([!preferLeft, 0]);
+    if (!(preferLeft ? clipsRight : clipsLeft)) candidates.push([!preferLeft, 0]);
     candidates.push([preferLeft, -LABEL.step * 0.75], [preferLeft, LABEL.step * 0.75]);
-    if (otherFits) candidates.push([!preferLeft, -LABEL.step * 0.75], [!preferLeft, LABEL.step * 0.75]);
     const clear = (side: boolean, shift: number) => {
       const b = box(side, shift);
-      // Its own mark does not count: the name is set by it on purpose, and
-      // at LABEL.gap its word space of AIR reaches back over its own dot.
-      return !hits(b, i) && !legsCross(legs, { x0: b.x0 + AIR - 3, x1: b.x1 - AIR + 3, y0: b.y0, y1: b.y1 });
+      return !hits(b, -1) && !legsCross(legs, { x0: b.x0 + AIR - 3, x1: b.x1 - AIR + 3, y0: b.y0, y1: b.y1 });
     };
     const [left, dy] = candidates.find(([side, shift]) => clear(side, shift))
-      ?? candidates.find(([side, shift]) => !hits(box(side, shift), i))
+      ?? candidates.find(([side, shift]) => !hits(box(side, shift), -1))
       ?? candidates[0];
     out[i] = { mode: left ? 'left' : 'right', dx: left ? -(LABEL.gap + w) : LABEL.gap, dy, leader: null, group: null };
     taken.push(box(left, dy));

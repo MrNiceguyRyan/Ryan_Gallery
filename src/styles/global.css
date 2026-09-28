@@ -4622,6 +4622,45 @@ body.travel-workspace-active {
    the column can be translated by whole cells and the window shows exactly one
    name at a time. Each cell sets its own type on the window's bottom edge — the
    name's baseline must not move as the column rolls past it. */
+/* Arrival ring — the /travel map's confirm that a flight has landed on the
+   chapter it promised. One 1px ring, snapped open on the house curve and let
+   go on the fade curve (a fade-out eases in), then gone: 700ms in all. Two
+   animations rather than per-keyframe curves, because a var() inside a
+   @keyframes rule is not resolved (see Layout.astro's fall). It plays once,
+   on mount. White ink like every mark on the map: a lime ring here would put
+   the one remaining lime on the confirmation gesture itself. */
+@keyframes atlas-arrival-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+@keyframes atlas-arrival-out {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+.atlas-arrival-ring {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 9999px;
+  animation:
+    atlas-arrival-in 168ms var(--ease-arrive) both,
+    atlas-arrival-out 532ms var(--ease-fade) 168ms forwards;
+  pointer-events: none;
+}
+
 /* The selected place's landmark on /travel — the same drawing (and the same
    `.af-place__*` inks) the homepage atlas gives a place at close range, stood
    beside the mark: its ground line's centre (viewBox 0,0, the box's middle)
@@ -4684,14 +4723,14 @@ body.travel-workspace-active {
     radial-gradient(110% 120% at 104% 104%, rgba(11, 14, 9, 0.46), rgba(11, 14, 9, 0) 58%);
 }
 
-/* The masthead's legend: the map's printed dot in miniature. */
-.travel-legend-dot {
+/* The masthead's legend: the map's hollow ring in miniature. */
+.travel-legend-ring {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
+  border: 1.25px solid rgba(244, 244, 237, 0.9);
+  box-sizing: border-box;
 }
 
 /* ── A chapter's mark (TravelMark.tsx) ──
@@ -4722,63 +4761,75 @@ body.travel-workspace-active {
   outline: 2px solid #d2ff00;
   outline-offset: -8px;
 }
-/* The dot of the place pointed at (over its canvas dot) or chosen (the canvas
-   hands the chosen place's dot to the DOM, so it can be struck): the homepage
-   atlas's print mark at /travel's scale — Ø7 pointed at, Ø9 with a 2px
-   knockout chosen. No seat, no ring: nothing is drawn round a place. */
-.travel-mark__dot {
+/* The seat: a dark burn under an engaged place, so its ink stands off pale
+   rock. Hover sets it, selection deepens it. */
+.travel-mark__seat {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
   border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
-  pointer-events: none;
+  background: radial-gradient(circle, rgba(11, 14, 9, 0.6) 0%, rgba(11, 14, 9, 0.24) 34%, rgba(11, 14, 9, 0) 72%);
   opacity: 0;
-  transform: scale(0.78);
-  transition:
-    opacity var(--dur-out) var(--ease-fade),
-    transform var(--dur-out) var(--ease-leave);
+  pointer-events: none;
+  transition: opacity var(--dur-out) var(--ease-fade);
 }
-.travel-mark[data-hover] .travel-mark__dot {
+.travel-mark[data-hover] .travel-mark__seat {
+  opacity: 0.55;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+.travel-mark[data-selected] .travel-mark__seat {
   opacity: 1;
-  transition-duration: var(--dur-in);
-  transition-timing-function: var(--ease-arrive);
+  transition: opacity var(--dur-in) var(--ease-arrive);
 }
-.travel-mark[data-selected] .travel-mark__dot {
+/* The chosen chapter: a 21px ring round a 5px focus point, where the canvas
+   ring was — the homepage atlas's old `.af-point__ring`, which /travel keeps
+   as its own now that the homepage prints its places as dots (owner,
+   2026-09-27: Map里面的地点的球型我更喜欢以前的). */
+.travel-mark__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 21px;
+  height: 21px;
+  margin: -10.5px 0 0 -10.5px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 244, 237, 0.95);
+  box-shadow: 0 0 0 1px rgba(11, 14, 9, 0.22);
+  opacity: 0;
+  transform: scale(1.35);
+  pointer-events: none;
+  transition: opacity 420ms var(--ease-arrive), transform 420ms var(--ease-arrive);
+}
+.travel-mark[data-selected] .travel-mark__ring {
   opacity: 1;
   transform: scale(1);
-  box-shadow: 0 0 0 2px rgba(11, 14, 9, 0.88);
-  transition-duration: var(--dur-in);
+  transition-duration: 280ms;
+}
+.travel-mark__focus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-in) var(--ease-fade);
+}
+.travel-mark[data-selected] .travel-mark__focus {
+  opacity: 1;
   transition-timing-function: var(--ease-arrive);
 }
-/* Arrival (the flight ran its full clock): the homepage's strike — the dot
-   pressed down and back like a stamp — and its number prints (below). */
-.travel-mark[data-selected] .travel-mark__dot[data-struck] {
-  animation:
-    travel-strike-down calc(var(--dur-swap) * 0.3) var(--ease-leave) 1 both,
-    travel-strike-up calc(var(--dur-swap) * 0.7) var(--ease-arrive) calc(var(--dur-swap) * 0.3) 1 forwards;
-}
-/* On `scale`, so the dot's own size still eases down when it is let go. */
-@keyframes travel-strike-down {
-  from { scale: 1; }
-  to { scale: 0.7; }
-}
-@keyframes travel-strike-up {
-  from { scale: 0.7; }
-  to { scale: 1; }
-}
-/* The name: the chapter's number by the dot and the place after it — "01
-   MIAMI" to the right of a mark, "MIAMI 01" to the left — both in the label
+/* The name: the chapter's number in the display face, the place in the label
    face, set beside the mark (or stacked in a callout) at --lx / --ly from its
-   centre. Held off the ground by the same hard print trap as the homepage's
-   keys (a stroke of ground under the glyphs, not a glow). Only its ink ever
-   changes; its place and size never move while it is read (the callout
-   layout measures it). A name that changes side comes back in rather than
-   sliding. */
+   centre. Only its colour ever changes; size and tracking never move while it
+   is read. A name that changes side comes back in rather than sliding. */
 .travel-mark__label {
   position: absolute;
   left: 50%;
@@ -4786,19 +4837,16 @@ body.travel-workspace-active {
   z-index: 3;
   display: flex;
   align-items: baseline;
-  gap: 0.5em;
+  gap: 6px;
   padding: 3px 0;
   border: 0;
   background: none;
   white-space: nowrap;
   cursor: pointer;
-  font-size: 9px;
-  transform: translate(var(--lx, 10px), calc(var(--ly, 0px) - 50%));
+  transform: translate(var(--lx, 17px), calc(var(--ly, 0px) - 50%));
+  text-shadow: 0 0 5px rgba(12, 15, 10, 0.72), 0 0 12px rgba(12, 15, 10, 0.4);
   animation: travel-name-in 180ms var(--ease-arrive) both;
   transition: opacity 90ms var(--ease-fade);
-}
-.travel-mark__label[data-side='left'] {
-  flex-direction: row-reverse;
 }
 .travel-mark__label[data-hidden] {
   opacity: 0;
@@ -4808,51 +4856,37 @@ body.travel-workspace-active {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.travel-mark__ord,
+.travel-mark__ord {
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1;
+  color: rgba(244, 244, 237, 0.62);
+  transition: color var(--dur-out) var(--ease-arrive);
+}
 .travel-mark__name {
-  display: inline-block;
   font-family: var(--font-ui);
   font-size: 9px;
   font-weight: 500;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  -webkit-text-stroke: 1.5px rgba(11, 14, 9, 0.8);
-  paint-order: stroke fill;
+  color: rgba(244, 244, 237, 0.84);
   transition: color var(--dur-out) var(--ease-arrive);
 }
-.travel-mark__ord {
-  color: rgba(244, 244, 237, 0.6);
+.travel-mark[data-dimmed] .travel-mark__name {
+  color: rgba(244, 244, 237, 0.58);
 }
-.travel-mark__name {
-  color: rgba(244, 244, 237, 0.74);
-}
-/* Dimmed (another chapter chosen): the ink and its trap both recede — at
-   full trap a faint fill read as dark engraved type on the pale print. */
-.travel-mark[data-dimmed] .travel-mark__name,
 .travel-mark[data-dimmed] .travel-mark__ord {
-  color: rgba(244, 244, 237, 0.5);
-  -webkit-text-stroke-color: rgba(11, 14, 9, 0.4);
+  color: rgba(244, 244, 237, 0.44);
 }
 .travel-mark[data-hover] .travel-mark__name,
 .travel-mark[data-selected] .travel-mark__name,
 .travel-mark[data-hover] .travel-mark__ord,
 .travel-mark[data-selected] .travel-mark__ord {
-  color: #F4F4ED;
+  color: #f4f4ed;
   transition-duration: var(--dur-in);
 }
-/* The chosen chapter's number prints in 600 (at once: the face ships static
-   weights), settling as the stamp lifts on arrival. */
-.travel-mark[data-selected] .travel-mark__ord {
-  font-weight: 600;
-}
-.travel-mark[data-selected] .travel-mark__label[data-struck] .travel-mark__ord {
-  animation: af-print var(--dur-in) var(--ease-arrive) 90ms 1 both;
-}
-/* A callout's leader: one hairline of ink from just off the mark's dot to its
-   stacked name (solid: a dashed leader read as one tangle with the dashed
-   route). */
+/* A callout's leader: a dashed hairline from the mark to its stacked name. */
 .travel-mark__leader {
   position: absolute;
   left: 50%;
@@ -4867,14 +4901,17 @@ body.travel-workspace-active {
   opacity: 0;
 }
 .travel-mark__leader line {
-  stroke: rgba(244, 244, 237, 0.55);
-  stroke-width: 1;
+  stroke: rgba(244, 244, 237, 0.5);
+  stroke-width: 0.75;
+  stroke-dasharray: 2 2.5;
 }
 @media (prefers-reduced-motion: reduce) {
   .travel-mark__label { animation: none; transition: none; }
-  .travel-mark__dot,
+  .travel-mark__seat,
+  .travel-mark__focus,
+  .travel-mark__ring,
   .travel-mark__ord,
-  .travel-mark__name { transition: none !important; animation: none !important; }
+  .travel-mark__name { transition: none !important; }
 }
 
 /* ── The scale collar: bottom left, as a surveyor prints it. Its length is

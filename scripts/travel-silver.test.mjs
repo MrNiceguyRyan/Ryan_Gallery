@@ -226,11 +226,6 @@ test('the names keep off the route: a callout moves out along its side, a name t
   // Nothing clear anywhere: set as without the route.
   const walled = [[{ x: 0, y: 290 }, { x: 1340, y: 290 }], [{ x: 0, y: 300 }, { x: 1340, y: 300 }], [{ x: 0, y: 310 }, { x: 1340, y: 310 }]];
   assert.equal(T.placeLabels([{ x: 400, y: 300 }], [[0]], [80], 1340, walled)[0].mode, 'right');
-  // A name keeps off an obstacle (the landed place's landmark) as it keeps
-  // off a leg, and is set by its own dot, not pushed off it.
-  const drawing = [{ x0: 405, x1: 460, y0: 280, y1: 310 }];
-  assert.equal(T.placeLabels([{ x: 400, y: 300 }], [[0]], [80], 1340, [], drawing)[0].mode, 'left');
-  assert.equal(T.placeLabels([{ x: 400, y: 300 }], [[0]], [80], 1340)[0].dx, T.LABEL.gap);
 });
 
 test('the sheet: one height rule', () => {

@@ -6,8 +6,5 @@
 // Both maps import these, so a place is never marked in two whites.
 export const MAP_INK = '#FFFFFF';
 export const MAP_BURN = '#0B0E09';
-/** White ink dimmed: the places a chosen chapter leaves in the background.
- *  A colour, not an alpha, so nothing under a mark shows through it. */
-export const MAP_INK_DIM = '#6B706A';
 /** The white ink as an rgb triplet, for alpha ramps in inline styles. */
 export const MAP_INK_RGB = '255, 255, 255';

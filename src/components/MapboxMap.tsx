@@ -8,7 +8,7 @@ import { silenceArchivePlaceLabels } from '../lib/atlasBasemap';
 import { greatCircle } from '../lib/routeGeometry';
 import { CSS_EASE, DUR_MS, EASE, bezierFn } from '../lib/motion';
 import { TRAVEL_PLATE_HOLD_MS, TRAVEL_PLATE_RELEASE_MS, clearTravelPlate, markTravelPlate } from '../lib/travelPlate';
-import { MAP_BURN, MAP_INK, MAP_INK_DIM } from '../lib/mapInk';
+import { MAP_BURN, MAP_INK } from '../lib/mapInk';
 import { landmarkFor } from '../lib/placeLandmarks';
 import {
   HAIRLINES,
@@ -365,36 +365,25 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       const point = map.project(coordinate as [number, number]);
       return { x: point.x, y: point.y };
     }));
-    // The landed place's landmark is an obstacle every single name keeps off
-    // — its own name included, which sits by the dot now and, moved a line
-    // up to clear a leg, ran into the drawing.
-    const landed = landedRef.current;
-    const landedIndex = landed ? chapters.findIndex((chapter) => chapter.slug === landed) : -1;
-    const drawing = landedIndex >= 0 && map.getZoom() >= LANDMARK_MIN_ZOOM
-      ? landmarkBox(landed, landmarkSideRef.current[landed as string] ?? 'above')
-      : null;
-    const obstacles = drawing
-      ? [{
-        x0: points[landedIndex].x + drawing.x0,
-        x1: points[landedIndex].x + drawing.x1,
-        y0: points[landedIndex].y + drawing.y0,
-        y1: points[landedIndex].y + drawing.y1,
-      }]
-      : [];
-    const placements = placeLabels(points, groups, widths, container.clientWidth, legs, obstacles);
+    const placements = placeLabels(points, groups, widths, container.clientWidth, legs);
     // A dimmed name that would lie across the landed place's landmark waits
     // until the camera leaves (Zion's name under Page's canyon on the phone).
     const hidden = chapters.map(() => false);
-    if (drawing) {
-      const origin = points[landedIndex];
-      chapters.forEach((_, j) => {
-        if (j === landedIndex) return;
-        const x0 = points[j].x + placements[j].dx - origin.x;
-        const x1 = x0 + widths[j];
-        const y0 = points[j].y + placements[j].dy - 8 - origin.y;
-        const y1 = y0 + 16;
-        if (x1 > drawing.x0 && x0 < drawing.x1 && y1 > drawing.y0 && y0 < drawing.y1) hidden[j] = true;
-      });
+    const landed = landedRef.current;
+    const landedIndex = landed ? chapters.findIndex((chapter) => chapter.slug === landed) : -1;
+    if (landedIndex >= 0 && map.getZoom() >= LANDMARK_MIN_ZOOM) {
+      const box = landmarkBox(landed, landmarkSideRef.current[landed as string] ?? 'above');
+      if (box) {
+        const origin = points[landedIndex];
+        chapters.forEach((_, j) => {
+          if (j === landedIndex) return;
+          const x0 = points[j].x + placements[j].dx - origin.x;
+          const x1 = x0 + widths[j];
+          const y0 = points[j].y + placements[j].dy - 8 - origin.y;
+          const y1 = y0 + 16;
+          if (x1 > box.x0 && x0 < box.x1 && y1 > box.y0 && y0 < box.y1) hidden[j] = true;
+        });
+      }
     }
     setLabels((current) => (sameLabels(current, placements, hidden) ? current : { placements, hidden }));
   }, [chapters, labelWidths, leads, routeGeo]);
@@ -410,16 +399,8 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     if (!map || !destGroups) return;
     const current = groupsRef.current;
     const container: HTMLElement = map.getContainer();
-    // The place flown to will stand its landmark (over its mark, as a rule):
-    // its name is set clear of it from take-off, so it does not jump a line
-    // when the drawing arrives.
-    const focusPoint = destination.focus != null && destination.focus >= 0 ? destination.points?.[destination.focus] : null;
-    const focusDrawing = focusPoint ? landmarkBox(chapters[destination.focus as number]?.slug, 'above') : null;
-    const destObstacles = focusPoint && focusDrawing
-      ? [{ x0: focusPoint.x + focusDrawing.x0, x1: focusPoint.x + focusDrawing.x1, y0: focusPoint.y + focusDrawing.y0, y1: focusPoint.y + focusDrawing.y1 }]
-      : [];
     const destPlacements = destination.points
-      ? placeLabels(destination.points, destGroups, labelWidths(container), container.clientWidth, destination.legs, destObstacles)
+      ? placeLabels(destination.points, destGroups, labelWidths(container), container.clientWidth, destination.legs)
       : null;
     setLabels((state) => {
       const placements = [...state.placements];
@@ -790,26 +771,25 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       layout: lineLayout,
       paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0, 'line-opacity-transition': fade },
     }));
-    // The places: every place printed as the homepage atlas prints one — a
-    // dot of white ink with a hard knockout of burn round it (no blur, no
-    // ring), upright to the viewer. The chosen chapter's lead place hands its
-    // dot to the DOM mark (where it can be struck); its other places keep
-    // theirs at full ink while the rest of the field dims. Dimmed by COLOUR,
-    // never by alpha, so the route's dashes do not show through a dot, and on
-    // constant values, which transition (data-driven paint would snap). The
-    // ids keep their old name, `travel-rings`.
-    const dot = {
-      'circle-radius': 3,
-      'circle-color': MAP_INK,
-      'circle-color-transition': { duration: reduceRef.current ? 0 : 320, delay: 0 },
-      'circle-stroke-color': MAP_BURN,
-      'circle-stroke-width': 1.5,
-      'circle-stroke-opacity': 0.88,
+    // The rings: every place a small hollow ring in the homepage's ink, on a
+    // soft burn, upright to the viewer. The chosen chapter's lead place hands
+    // its ring to the DOM mark (focus point and ring); its other places keep
+    // theirs at full ink while the rest of the field dims by alpha, never to
+    // a grey disc.
+    const ring = {
+      'circle-radius': 3.9,
+      'circle-color': '#1b1f16',
+      'circle-opacity': 0.86,
+      'circle-stroke-color': MAP_INK,
+      'circle-stroke-width': 1.25,
+      'circle-stroke-opacity': 0.96,
+      'circle-stroke-opacity-transition': { duration: reduceRef.current ? 0 : 320, delay: 0 },
       'circle-pitch-alignment': 'viewport',
       'circle-emissive-strength': 1,
     };
-    add({ id: 'travel-rings', type: 'circle', source: 'travel-places', paint: dot });
-    add({ id: 'travel-rings-own', type: 'circle', source: 'travel-places', filter: ['==', ['get', 'chapter'], -1], paint: dot });
+    add({ id: 'travel-rings-burn', type: 'circle', source: 'travel-places', paint: { 'circle-radius': 6.2, 'circle-color': MAP_BURN, 'circle-opacity': 0.42, 'circle-blur': 0.9, 'circle-pitch-alignment': 'viewport' } });
+    add({ id: 'travel-rings', type: 'circle', source: 'travel-places', paint: ring });
+    add({ id: 'travel-rings-own', type: 'circle', source: 'travel-places', filter: ['==', ['get', 'chapter'], -1], paint: ring });
     // Keep-out: an invisible icon as big as a mark, its name and its
     // landmark, placed first (the topmost symbol layer), so the basemap can
     // no longer set "Hialeah" under Miami's name or "Kayenta" on Page.
@@ -899,9 +879,9 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     return () => { live = false; };
   }, [layoutLabels, mapReady]);
 
-  // The chosen chapter on the canvas: its lead dot handed to the DOM mark,
-  // its other places at full ink, the rest of the field dimmed, and its legs
-  // of the route lit.
+  // The chosen chapter on the canvas: its lead ring handed to the DOM mark,
+  // its other places at full ink, the rest of the field dimmed by alpha, and
+  // its legs of the route lit.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !layersReady) return;
@@ -909,7 +889,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     const chapterNo = index >= 0 ? index + 1 : -1;
     map.setFilter('travel-rings', chapterNo > 0 ? ['!=', ['get', 'chapter'], chapterNo] : null);
     map.setFilter('travel-rings-own', ['all', ['==', ['get', 'chapter'], chapterNo], ['!', ['get', 'lead']]]);
-    map.setPaintProperty('travel-rings', 'circle-color', chapterNo > 0 ? MAP_INK_DIM : MAP_INK);
+    map.setPaintProperty('travel-rings', 'circle-stroke-opacity', chapterNo > 0 ? 0.5 : 0.96);
     map.setPaintProperty('travel-route-line', 'line-opacity', chapterNo > 0 ? 0.4 : 0.62);
     const lit = litRef.current;
     if (lit.chapters[lit.live] === chapterNo) return;
