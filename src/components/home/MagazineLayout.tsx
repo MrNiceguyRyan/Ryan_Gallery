@@ -14,7 +14,7 @@ import { usePressGive } from '../../lib/usePressGive';
 import { useInViewOnce } from '../../lib/useInViewOnce';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
 import { fileDims } from '../../lib/lightboxImage';
-import { CSS_EASE, DUR, DUR_MS, EASE, STAGGER } from '../../lib/motion';
+import { CSS_EASE, DUR, DUR_MS, EASE } from '../../lib/motion';
 import { travelPlateLeft } from '../../lib/travelPlate';
 import { chapterOrdinal } from '../../lib/chapterOrder';
 import { plateRows, type PlateRows } from '../../lib/plateRows';
@@ -34,6 +34,7 @@ import {
   type SlotBoxes,
   type SlotKind,
 } from '../../lib/storyPlan';
+import { planEntrances, playEntrance, POP_EASE, SHUTTER_BLADES, type SlotEntrance } from '../../lib/storyEntrance';
 
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
@@ -54,9 +55,10 @@ const DEVELOP_MASK_STYLE = {
 // sanctioned exception to house expo, approved by the owner so each page
 // "springs out" instead of sliding in. The 1.56 overshoots and settles, so the
 // frames lift just past rest and land. It drives transform only: opacity keeps
-// expo, because an overshooting opacity has nothing to overshoot into.
+// expo, because an overshooting opacity has nothing to overshoot into. The
+// inside frames' entrances (src/lib/storyEntrance.ts) hold its one copy.
 // Named exception - see src/lib/motion.ts.
-const popEase = [0.34, 1.56, 0.64, 1] as const;
+const popEase = POP_EASE;
 // The Next card grows into the next story's opening spread. Long enough to
 // read as one object arriving, short enough to stay a single page turn.
 const COVER_EXPAND_MS = 500;
@@ -481,14 +483,28 @@ function labelsMatch(a?: string, b?: string): boolean {
 
 /* ── The frames on the page — their own ratio, never cropped ── */
 
-/** How a slot's frames arrive. 'rest': as sent — a /works page's server
- *  HTML, and any slot already on screen (or above it) when the page arms;
- *  'waiting': below the fold, not developed yet; 'shown': the reader has
- *  reached it and it develops. */
+/** How a frame arrives. 'rest': as sent — a /works page's server HTML, any
+ *  frame already on screen (or above it) when the page arms, a frame the
+ *  viewer flew home onto, and every frame once its entrance has played;
+ *  'waiting': below the fold, not come up yet; 'shown': the reader has
+ *  reached it and its entrance plays (src/lib/storyEntrance.ts). */
 type Reach = 'rest' | 'waiting' | 'shown';
 
-/** One native observer per slot, on the slot's own box (never whileInView). */
-function useSlotReach<T extends Element>(armed: boolean, reduce: boolean) {
+/** The event the story sends a frame when the viewer is about to fly home
+ *  onto it: it drops its entrance and stands at rest to be measured. */
+const FRAME_SETTLE = 'story-frame-settle';
+
+/** One native observer per frame (never whileInView): each frame plays
+ *  once, when it is on screen. It watches the photograph's own box, not the
+ *  figure: a pair's caption hangs under its first frame only, and a taller
+ *  target would reach the threshold later than its partner. So a pair's two
+ *  frames, on one row on desktop, are reached in the same callback; on the
+ *  phone, where they stack, each is reached on its own. A frame is reached
+ *  as soon as its top edge is 6% of the screen in: a share of a tall
+ *  frame's area came late, and a reader who paused left up to 226px of its
+ *  place as blank paper for two seconds. Every entrance reads from the top
+ *  or all at once, so it reads with only the frame's top on screen. */
+function useFrameReach<T extends HTMLElement>(armed: boolean, reduce: boolean) {
   const ref = useRef<T>(null);
   const [reach, setReach] = useState<Reach>('rest');
   useEffect(() => {
@@ -501,7 +517,7 @@ function useSlotReach<T extends Element>(armed: boolean, reduce: boolean) {
         if (first) {
           first = false;
           // On screen or above it when the page arms: it stays as it is,
-          // rather than vanishing to develop again in front of the reader.
+          // rather than vanishing to arrive again in front of the reader.
           if (entry.isIntersecting || entry.boundingClientRect.top < window.innerHeight) {
             observer.disconnect();
             return;
@@ -512,16 +528,38 @@ function useSlotReach<T extends Element>(armed: boolean, reduce: boolean) {
           observer.disconnect();
         }
       }
-    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.08 });
-    observer.observe(node);
-    return () => observer.disconnect();
+    }, { rootMargin: '0px 0px -6% 0px', threshold: 0 });
+    observer.observe(node.querySelector('.story-fig__plate') ?? node);
+    const settle = () => {
+      observer.disconnect();
+      setReach('rest');
+    };
+    node.addEventListener(FRAME_SETTLE, settle);
+    return () => {
+      observer.disconnect();
+      node.removeEventListener(FRAME_SETTLE, settle);
+    };
   }, [armed, reduce]);
   return [ref, reach] as const;
 }
 
-/** Frames big enough to read a diagonal edge crossing them: they develop.
- *  The rest rise and fade in. */
-const DEVELOPS: ReadonlySet<SlotKind> = new Set(['SCREEN', 'FEATURE', 'PAGE', 'DIPTYCH', 'PAIR']);
+/** The shutter's blades, top to bottom (storyEntrance.ts plays them). */
+const SHUTTER_BLADE_KEYS = Array.from({ length: SHUTTER_BLADES }, (_, blade) => blade);
+
+/** Stands a frame at rest at once, entrance or not: the viewer is about to
+ *  measure it and fly home onto it. Called with the frame's button. */
+function settleFrame(node: HTMLElement) {
+  const figure = node.closest<HTMLElement>('.story-fig');
+  if (!figure || !figure.hasAttribute('data-reach')) return;
+  for (const animation of figure.getAnimations({ subtree: true })) {
+    if (animation instanceof CSSTransition) continue;
+    animation.finish();
+  }
+  // The attribute goes now, so the frame is visible for the measure and the
+  // landing; the state follows on the next render.
+  figure.removeAttribute('data-reach');
+  figure.dispatchEvent(new Event(FRAME_SETTLE));
+}
 
 interface FrameShared {
   collectionName: string;
@@ -556,7 +594,8 @@ function StoryFrame({
   index,
   kind,
   style,
-  reach,
+  arrive,
+  armed,
   order,
   caption,
   sizes,
@@ -571,9 +610,12 @@ function StoryFrame({
   kind: SlotKind;
   /** The box as CSS custom properties (global.css, Story block). */
   style: CSSProperties;
-  reach: Reach;
-  /** Position within its slot: a slot arrives as one unit and its frames
-   *  follow in reading order. */
+  /** How it arrives, dealt by the plan; none for frame 01, which grows. */
+  arrive: SlotEntrance | null;
+  /** Hydrated: a frame below the fold may now wait for the reader. */
+  armed: boolean;
+  /** Position within its slot: a pair's second frame follows the first by
+   *  the entrance's stagger. */
   order: number;
   caption: ReactNode;
   sizes: string;
@@ -586,12 +628,37 @@ function StoryFrame({
   shared: FrameShared;
 }) {
   const reduce = useReducedMotion();
+  const [figureRef, reach] = useFrameReach<HTMLElement>(armed && !!arrive, !!reduce);
   const imageRef = useRef<HTMLImageElement>(null);
   const [hasError, setHasError] = useState(false);
   useEffect(() => {
     const image = imageRef.current;
     setHasError(!!image?.complete && image.naturalWidth === 0);
   }, [photo.imageUrl]);
+  // The entrance plays on the commit that shows the frame, before it is
+  // painted, so its first keyframe is what the reader first sees. It leaves
+  // nothing behind (fill: backwards), and once it has played the frame is
+  // put back at rest (its blades unmounted); an unmount cancels it.
+  useLayoutEffect(() => {
+    const figure = figureRef.current;
+    if (reach !== 'shown' || !arrive || !figure) return;
+    const animations = playEntrance(figure, {
+      entrance: arrive.entrance,
+      from: arrive.from,
+      delay: order * arrive.stagger,
+      phone: window.innerWidth < 1024,
+      tall: kind === 'SCREEN' || kind === 'PAGE' || kind === 'DIPTYCH',
+    });
+    let live = true;
+    Promise.all(animations.map((animation) => animation.finished)).then(() => {
+      if (live) figure.dispatchEvent(new Event(FRAME_SETTLE));
+    }, () => {});
+    return () => {
+      live = false;
+      animations.forEach((animation) => animation.cancel());
+    };
+    // Once, when it is shown: the rest of what it reads is fixed by then.
+  }, [reach]);
   const ladder = wide ? [480, 800, 1200, 1600, 2200, 2800, 3600] : [480, 800, 1200, 1600, 2200, 2800];
   const srcSet = ladder.map((w) => `${photo.imageUrl}?auto=format&w=${w}&q=82 ${w}w`).join(', ');
   // What is announced: the frame's number, its written title if it has one
@@ -604,43 +671,26 @@ function StoryFrame({
   // A still press gives the frame a hair; a press that travels (a swipe, a
   // selection) lets it straight back, on a tween (see usePressGive).
   const pressGive = usePressGive(interactiveHover);
-  const develops = DEVELOPS.has(kind);
-  const waiting = develops
-    ? { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' }
-    : { opacity: 0, y: 10 };
-  const rest = develops
-    ? { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' }
-    : { opacity: 1, y: 0 };
-  const arriving = reach === 'shown' && !reduce;
-  const delay = order * STAGGER.set;
-  const span = kind === 'SCREEN' || kind === 'PAGE' || kind === 'DIPTYCH' ? 0.8 : 0.62;
+  // The shutter's blades exist only for a frame that will fire one: never in
+  // the server's HTML, never at rest.
+  const blades = arrive?.entrance === 'shutter' && reach !== 'rest';
 
   return (
     // The figure owns the placement only. The photograph and its caption are
     // two different kinds of thing and do not arrive as one: the picture
-    // develops, and the caption is printed under it a beat later. The button
-    // wraps only the image — a caption inside the control would be read as
-    // part of its name.
-    <figure className={`story-fig story-fig--${kind.toLowerCase()}`} style={style}>
-      <motion.div
-        className="story-fig__plate"
-        // The photograph develops: a soft diagonal edge sweeps across it (the
-        // mask is three times the frame's width, so the edge crosses at an
-        // even pace), with a small rise. Only a frame that will arrive wears
-        // the mask; one sent at rest never does.
-        style={develops && reach !== 'rest' && !reduce ? DEVELOP_MASK_STYLE : undefined}
-        initial={false}
-        animate={reach === 'waiting' ? waiting : rest}
-        transition={arriving
-          ? {
-              opacity: { duration: 0.25, delay, ease: EASE.arrive },
-              y: { duration: span, delay, ease: popEase },
-              WebkitMaskPosition: { duration: span, delay, ease: EASE.develop },
-              maskPosition: { duration: span, delay, ease: EASE.develop },
-            }
-          // Waiting is a place, not a move: it is taken below the fold.
-          : { duration: 0 }}
-      >
+    // comes up, and the caption is printed under it a beat later. The
+    // button wraps only the image — a caption inside the control would be
+    // read as part of its name. What the frame looks like while it waits is
+    // CSS off `data-reach` (global.css, Story block); how it arrives is
+    // playEntrance.
+    <figure
+      ref={figureRef}
+      className={`story-fig story-fig--${kind.toLowerCase()}`}
+      style={style}
+      data-arrive={arrive?.entrance}
+      data-reach={reach === 'rest' ? undefined : reach}
+    >
+      <div className="story-fig__plate">
         <motion.button
           type="button"
           {...(interactiveHover && {
@@ -680,18 +730,15 @@ function StoryFrame({
             draggable={false}
           />
         </motion.button>
-      </motion.div>
+        {blades && (
+          <span className="story-shutter" aria-hidden="true">
+            {SHUTTER_BLADE_KEYS.map((key) => <span key={key} className="story-shutter__blade" />)}
+          </span>
+        )}
+      </div>
       {caption && (
-        // Printed under the frame a beat after it, keyed to the sweep, so the
-        // line settles just as the print finishes coming up.
-        <motion.figcaption
-          className="story-cap font-ui"
-          initial={false}
-          animate={reach === 'waiting' ? { opacity: 0, y: 6 } : { opacity: 1, y: 0 }}
-          transition={arriving ? { duration: 0.42, delay: delay + span * 0.62, ease: EASE.arrive } : { duration: 0 }}
-        >
-          {caption}
-        </motion.figcaption>
+        // Printed under the frame once the picture reads as there.
+        <figcaption className="story-cap font-ui">{caption}</figcaption>
       )}
     </figure>
   );
@@ -749,8 +796,8 @@ function SlotView({
   places,
   paragraphs,
   quote,
+  arrive,
   armed,
-  reduce,
   shared,
 }: {
   box: SlotBoxes;
@@ -759,11 +806,11 @@ function SlotView({
   places: readonly string[];
   paragraphs: readonly string[];
   quote: string;
+  /** How its frames arrive (planEntrances); a pair shares one. */
+  arrive: SlotEntrance | null;
   armed: boolean;
-  reduce: boolean;
   shared: FrameShared;
 }) {
-  const [ref, reach] = useSlotReach<HTMLElement>(armed, reduce);
   const { slot } = box;
   const { kind } = slot;
   const portraits = slot.frames.length === 2 && slot.frames.every((frame) => !isLandscape(ratios[frame]));
@@ -791,7 +838,8 @@ function SlotView({
         index={frame.frame}
         kind={kind === 'LEDE' ? 'SMALL' : kind === 'LEDE2' || kind === 'PART' ? 'COLUMN' : kind}
         style={style}
-        reach={reach}
+        arrive={arrive}
+        armed={armed}
         order={at}
         caption={captionFrames ? <CaptionText frames={captionFrames} places={places} /> : null}
         sizes={frameSizes(kind, frame.w.v / 1728, ratios, slot.frames, at)}
@@ -806,7 +854,6 @@ function SlotView({
   const [lede, part2] = paragraphs;
   return (
     <section
-      ref={ref}
       className="story-slot"
       data-kind={kind}
       data-side={slot.side}
@@ -2015,6 +2062,10 @@ export default function MagazineLayout({
     const nodes = Array.from(root.querySelectorAll<HTMLElement>(`[${attribute}="${index}"]`));
     const node = nodes.find((candidate) => candidate.offsetParent !== null);
     if (!node) return null;
+    // A frame the reader has not reached yet (the viewer riffled past it)
+    // is waiting or mid-entrance: it stands at rest to be flown home onto,
+    // rather than arriving again under the landing picture.
+    if (!plateReturnRef.current) settleFrame(node);
     let box = node.getBoundingClientRect();
     if (!box.width || !box.height) return null;
     // The reader may have paged a long way from the frame they opened, and the
@@ -2085,6 +2136,10 @@ export default function MagazineLayout({
   // at the design window (1728×1000) only feed `sizes`.
   const { frames: photos, ratios, slots } = useMemo(() => storyPlanFor(collection), [collection]);
   const boxes = useMemo(() => storyBoxes(slots, ratios, 1728, 1000), [slots, ratios]);
+  // How each slot's frames arrive: four photographic entrances dealt in
+  // reading order (src/lib/storyEntrance.ts), aligned with `slots`; the
+  // shutter goes only where the design window's frame is short enough.
+  const entrances = useMemo(() => planEntrances(slots, ratios), [slots, ratios]);
   // The slots as the kept stub reads them: frame indices, in reading order.
   const frameRows = useMemo(() => slotRows(slots), [slots]);
   // Where the reader is, for the kept stub. A /works page's server HTML
@@ -2789,7 +2844,8 @@ export default function MagazineLayout({
                       index={0}
                       kind="OPEN"
                       style={{ '--fx': css(opener.x), '--fw': css(opener.w), '--r': (ratios[0] ?? 1.5).toFixed(6) } as CSSProperties}
-                      reach="rest"
+                      arrive={null}
+                      armed={false}
                       order={0}
                       caption={null}
                       sizes={`(min-width: 1024px) ${Math.round((opener.w.v / 1728) * 100)}vw, 100vw`}
@@ -2823,8 +2879,8 @@ export default function MagazineLayout({
                       places={places}
                       paragraphs={paragraphs}
                       quote={quote}
+                      arrive={entrances[index + 1]}
                       armed={revealArmed}
-                      reduce={!!reduce}
                       shared={frameShared}
                     />
                   )))}

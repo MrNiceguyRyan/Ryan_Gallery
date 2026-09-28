@@ -217,6 +217,23 @@ test('the scale ladder at 1728×1000', () => {
   assert.ok(Math.max(...widths) / Math.min(...widths) >= 3.5);
 });
 
+test('the rhythm is compact: slots a tenth of the screen apart, a pair a hair closer', () => {
+  // The owner (2026-09-27): the layout is right, the photographs a little
+  // closer. Between slots was max(96px, 14svh) and a pair's gutter
+  // max(48px, 4.5vw); both came in by about a quarter to a third.
+  const at = (W, H) => storyGrid(W, H);
+  assert.equal(at(1728, 1000).gap.v, 100);
+  assert.equal(at(1280, 800).gap.v, 80);
+  assert.equal(at(1024, 600).gap.v, 68);
+  assert.ok(Math.abs(at(1728, 1000).pairGap.v - 58.752) < 1e-9);
+  assert.equal(at(1024, 768).pairGap.v, 36);
+  for (const [W, H] of WINDOWS) {
+    const was = Math.max(96, 0.14 * H);
+    const cut = 1 - at(W, H).gap.v / was;
+    assert.ok(cut >= 0.25 && cut <= 0.35, `gap at ${W}x${H} came in by ${(cut * 100).toFixed(1)}%`);
+  }
+});
+
 test('captions, credits and facts', () => {
   assert.deepEqual(slotCaption([4, 5], ['', '', '', '', '', '']), [{ no: '05, 06', place: '' }]);
   assert.deepEqual(slotCaption([0], ['Midtown']), [{ no: '01', place: 'Midtown' }]);
