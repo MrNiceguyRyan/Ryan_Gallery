@@ -9,7 +9,7 @@ import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../lib/atlasBasemap';
 import { greatCircle } from '../lib/routeGeometry';
 import { CSS_EASE, DUR_MS, EASE, bezierFn } from '../lib/motion';
 import { TRAVEL_PLATE_HOLD_MS, TRAVEL_PLATE_RELEASE_MS, clearTravelPlate, markTravelPlate } from '../lib/travelPlate';
-import { MAP_BURN, MAP_INK, MAP_INK_RGB } from '../lib/mapInk';
+import { MAP_INK, MAP_INK_RGB } from '../lib/mapInk';
 import { LANDMARK_VIEWBOX, landmarkFor } from '../lib/placeLandmarks';
 import { flightMs, greatCircleKm, landingCamera, leadOf, routeKm, sheetHeight } from '../lib/travelSilver';
 import type { SheetMode, TravelChapter, TravelViewport } from '../lib/travelSilver';
@@ -22,7 +22,8 @@ import TravelTicket, { warmPlate } from './travel/TravelTicket';
 // 即可): dark-v11 graded into the site's olive emulsion on a globe, every
 // place a white-ink mark with its name set beside it, places that stand close
 // together gathered into a bone disc carrying their count and their region's
-// name, and the archive's route a dashed white hairline. Around it the page is
+// name. No route is drawn (owner, 2026-09-27: map的地图不需要路线): the places
+// stand on their own; the route belongs to the homepage atlas. Around it the page is
 // today's: the chapters' index and tickets in the rail (TravelIndex), the
 // phone sheet, and the ticket's plate grown into its story. Choosing on the
 // map chooses the chapter in the rail; choosing a row flies the map.
@@ -435,7 +436,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   // The side each chapter's landmark stands on, chosen once at its landing
   // and kept, so a drawing fading OUT leaves from where it stood.
   const landmarkSideRef = useRef<Record<string, LandmarkSide>>({});
-  const litRef = useRef<{ chapters: [number, number]; live: 0 | 1 }>({ chapters: [-1, -1], live: 0 });
 
   const bySlug = useMemo(() => new Map(chapters.map((chapter) => [chapter.slug, chapter])), [chapters]);
   const leads = useMemo(() => chapters.map(leadOf), [chapters]);
@@ -992,40 +992,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   const moveEndRef = useRef(handleMoveEnd);
   moveEndRef.current = handleMoveEnd;
 
-  // The route: the homepage atlas's dashed white leg, [3, 4], on a soft burn
-  // casing so it reads over land and water alike. Quiet at rest (it is the
-  // archive's shape, not a call to action) and quieter still while a chapter
-  // is chosen, when that chapter's own legs are overdrawn at full ink on two
-  // layers that take turns (a constant opacity transitions; a data-driven one
-  // would snap). The lit layers repeat the base line's width and dash, so
-  // they land dash-for-dash on it. Under the basemap's type and, being
-  // canvas, under every DOM mark.
-  const addRouteLayers = useCallback((map: any) => {
-    const firstSymbol = map.getStyle()?.layers?.find((layer: any) => layer.type === 'symbol' && layer.layout?.visibility !== 'none')?.id;
-    const fade = { duration: reduceRef.current ? 0 : 520, delay: 0 };
-    if (!map.getSource('travel-route')) map.addSource('travel-route', { type: 'geojson', data: routeGeo });
-    const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
-    const add = (layer: any) => { if (!map.getLayer(layer.id)) map.addLayer(layer, firstSymbol); };
-    add({ id: 'travel-route-casing', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_BURN, 'line-width': 4, 'line-blur': 3, 'line-opacity': 0.2 } });
-    ([0, 1] as const).forEach((slot) => add({
-      id: `travel-route-lit-casing-${slot}`,
-      type: 'line',
-      source: 'travel-route',
-      filter: ['==', ['get', 'from'], -1],
-      layout: lineLayout,
-      paint: { 'line-color': MAP_BURN, 'line-width': 4.5, 'line-blur': 3, 'line-opacity': 0, 'line-opacity-transition': fade },
-    }));
-    add({ id: 'travel-route-line', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0.44, 'line-opacity-transition': fade } });
-    ([0, 1] as const).forEach((slot) => add({
-      id: `travel-route-lit-${slot}`,
-      type: 'line',
-      source: 'travel-route',
-      filter: ['==', ['get', 'from'], -1],
-      layout: lineLayout,
-      paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0, 'line-opacity-transition': fade },
-    }));
-  }, [routeGeo]);
-
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
@@ -1038,7 +1004,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       if (window.matchMedia('(pointer: coarse)').matches) map.touchZoomRotate.disableRotation();
       gradeAtlasBasemap(map);
       silenceArchivePlaceLabels(map, archiveNames);
-      addRouteLayers(map);
       map.on('moveend', (event: any) => moveEndRef.current(event));
       // A hand on the map takes the camera: the flight it stopped lands nowhere.
       map.on('dragstart', () => { flightSlugRef.current = null; });
@@ -1053,7 +1018,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     };
     if (map.isStyleLoaded()) finish();
     else map.once('style.load', finish);
-  }, [addRouteLayers, archiveNames, frameArchiveOverview]);
+  }, [archiveNames, frameArchiveOverview]);
 
   const handleMapIdle = useCallback(() => {
     if (!atlasStyleReadyRef.current || atlasReadySignaledRef.current) return;
@@ -1064,27 +1029,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     window.dispatchEvent(new CustomEvent('gallery:atlas-ready'));
   }, []);
 
-  // The chosen chapter on the canvas: the route quietens and its own legs
-  // light.
-  useEffect(() => {
-    const map = mapRef.current?.getMap();
-    if (!map || !layersReady) return;
-    const index = chapters.findIndex((chapter) => chapter.slug === selectedSlug);
-    const chapterNo = index >= 0 ? index + 1 : -1;
-    map.setPaintProperty('travel-route-line', 'line-opacity', chapterNo > 0 ? 0.3 : 0.44);
-    const lit = litRef.current;
-    if (lit.chapters[lit.live] === chapterNo) return;
-    const next: 0 | 1 = lit.live === 0 ? 1 : 0;
-    const legs = ['any', ['==', ['get', 'from'], chapterNo], ['==', ['get', 'to'], chapterNo]];
-    map.setFilter(`travel-route-lit-${next}`, legs);
-    map.setFilter(`travel-route-lit-casing-${next}`, legs);
-    map.setPaintProperty(`travel-route-lit-${next}`, 'line-opacity', chapterNo > 0 ? 0.94 : 0);
-    map.setPaintProperty(`travel-route-lit-casing-${next}`, 'line-opacity', chapterNo > 0 ? 0.3 : 0);
-    map.setPaintProperty(`travel-route-lit-${lit.live}`, 'line-opacity', 0);
-    map.setPaintProperty(`travel-route-lit-casing-${lit.live}`, 'line-opacity', 0);
-    lit.chapters[next] = chapterNo;
-    lit.live = next;
-  }, [chapters, layersReady, selectedSlug]);
 
   // Mapbox does not recompute its canvas or camera padding when a phone
   // rotates inside the mobile breakpoint. Coalesce the burst into one frame,
