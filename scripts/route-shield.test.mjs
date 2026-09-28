@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CODE_FLIPS,
+  DECK_REACH,
+  DECK_STEP,
   FLAP,
   SHIELD_FORMS,
   SHIELD_MAP_PX,
@@ -17,6 +19,7 @@ import {
   SIGN_NAME_MEASURE,
   STACK_PEEK,
   codePlan,
+  deckShields,
   flapGlyph,
   flapNumber,
   flapPlan,
@@ -25,6 +28,7 @@ import {
   signNameSize,
   stackShields,
   stateCode,
+  typeBox,
 } from '../src/lib/routeShield.ts';
 import { TICKET_STOCK } from '../src/lib/ticketStock.ts';
 
@@ -95,12 +99,13 @@ const REST = [
   { current: 'bryce', pts: { bryce: [542, 480], zion: [463, 502], page: [609, 538] } },
   { current: 'new-york', pts: { 'new-york': [542, 456] } },
 ];
-const slotsAt = (points, current, inbound = null) => Object.entries(points).map(([id, [x, y]]) => {
+const slotsAt = (points, current, inbound = null, { px = SHIELD_MAP_PX, scales = SHIELD_SCALE } = {}) => Object.entries(points).map(([id, [x, y]]) => {
   const stop = STOPS.find((candidate) => candidate.id === id);
   const rank = id === current ? 2 : id === inbound ? 1 : 0;
-  const scale = rank === 2 ? SHIELD_SCALE.current : rank === 1 ? SHIELD_SCALE.inbound : SHIELD_SCALE.ahead;
-  const w = SHIELD_MAP_PX * scale;
-  return { id, number: stop.number, x, y, w, h: (w * shieldForm(stateCode(stop.region)).h) / 100, rank };
+  const scale = rank === 2 ? scales.current : rank === 1 ? scales.inbound : scales.ahead;
+  const w = px * scale;
+  const form = shieldForm(stateCode(stop.region));
+  return { id, number: stop.number, x, y, w, h: (w * form.h) / 100, rank, type: typeBox(form) };
 });
 
 test('at every chapter\'s resting camera the shields stand apart, each on its place', () => {
@@ -279,7 +284,8 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(css, /\.place-shield__sign \{[^}]*transform-origin: 50% 100%;/);
   // The phone: the same shields on its overview's points, stacked the same way.
   assert.match(atlas, /<LivingShields/);
-  assert.match(atlas, /stackShields\(places\.map/);
+  assert.match(atlas, /const stacked = stackShields\(slots\);/);
+  assert.match(atlas, /deck: deckShields\(slots, stacked\)/);
   assert.match(css, /\.place-shield--living \{[^}]*transform: translate\(-50%, -100%\)/);
   // No lime on the map's shields (the keyboard ring aside).
   assert.doesNotMatch(shieldCss.replace(/:focus-visible \{[^}]*\}/g, ''), /#D2FF00|210,\s*255,\s*0/i);
@@ -330,4 +336,116 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(chapter, /<RouteShield/);
   assert.doesNotMatch(chapter, /archive-focus/);
   assert.doesNotMatch(css, /\.archive-focus/);
+});
+
+test('Florida\'s number sits whole in the Gulf, clear of the rim and the coast', () => {
+  const form = SHIELD_FORMS.FL;
+  // Centred like every other form's (50–52), not hugging the rim at 32.5.
+  assert.ok(form.num.x >= 38 && form.num.x <= 44, 'the number near the middle');
+  // The number's own lines: two digits of ≈0.6em, caps ≈0.72em.
+  const left = form.num.x - 0.6 * form.num.size;
+  const right = form.num.x + 0.6 * form.num.size;
+  const top = form.num.y - 0.72 * form.num.size;
+  // The rim's inner edge: 4.2 + half its 2.2 stroke.
+  assert.ok(left - 5.3 >= 4, 'clear of the rim');
+  // The peninsula's west coast over the number's lines (the band's
+  // points below the Big Bend, x at each y): at least 4 units clear.
+  const coast = [...form.band.matchAll(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g)]
+    .map(([, x, y]) => [Number(x), Number(y)])
+    .filter(([x, y]) => y >= top && y <= form.num.y && x > 50 && x < 90);
+  assert.ok(coast.length >= 3);
+  for (const [x] of coast) assert.ok(x - right >= 4, `the coast at ${x} clears the number (${right})`);
+});
+
+test('in a pile, a shield whose type is covered prints none; the front prints its own', () => {
+  // The phone's Southwest: three places a few px apart, the reader on Miami.
+  const slots = slotsAt({ page: [90, 440], zion: [89, 439], bryce: [91, 438] }, 'miami', null, { px: 22, scales: { current: 1.16, inbound: 1.16, ahead: 0.86 } });
+  const pile = stackShields(slots);
+  assert.equal(pile.get('bryce').count, 3, 'the front counts the pile');
+  assert.equal(pile.get('bryce').buried, false, 'the front prints its number');
+  assert.ok(pile.get('page').buried && pile.get('zion').buried, 'the shields behind print none');
+  for (const id of ['page', 'zion', 'bryce']) assert.equal(pile.get(id).front, 'bryce');
+  // Two shields that overlap only at a corner: the one behind still prints
+  // its number, whole.
+  const corner = stackShields(slotsAt({ miami: [328, 545], orlando: [300, 520] }, 'page'));
+  assert.equal(corner.get('orlando').count, 2);
+  assert.equal(corner.get('miami').buried, false, 'its number is clear of Orlando');
+  // Read on a phone, Miami's corner just touches the foot of Orlando's 02:
+  // Orlando keeps its number (the feet as the overview projects them).
+  const phone = { px: 22, scales: { current: 1.16, inbound: 1.16, ahead: 0.86 } };
+  const touch = stackShields(slotsAt({ miami: [314, 571], orlando: [305.5, 548] }, 'miami', null, phone));
+  assert.equal(touch.get('miami').count, 2);
+  assert.equal(touch.get('orlando').buried, false);
+  // A lone shield is its own front, never buried.
+  const alone = stackShields(slotsAt({ 'new-york': [500, 400] }, 'new-york'));
+  assert.deepEqual({ ...alone.get('new-york') }, { dy: 0, z: 0, count: 0, front: 'new-york', buried: false });
+});
+
+test('on the phone, places a few px apart are laid as a deck behind the front', () => {
+  const phone = { px: 22, scales: { current: 1.16, inbound: 1.16, ahead: 0.86 } };
+  // The feet as the phone's overview projects them (390 × 844, 2026-09-28).
+  for (const reading of ['miami', 'page', 'zion', 'bryce']) {
+    const slots = slotsAt({ page: [101, 476], zion: [89.7, 472.6], bryce: [95.8, 470] }, reading, null, phone);
+    const pile = stackShields(slots);
+    const deck = deckShields(slots, pile);
+    const frontId = pile.get('page').front;
+    const front = slots.find((slot) => slot.id === frontId);
+    assert.equal(front.id, reading === 'miami' ? 'bryce' : reading, 'the chapter being read is the front');
+    assert.equal(deck.size, 2, `${reading}: the two behind are a deck`);
+    assert.ok(!deck.has(frontId), 'the front stands on its own place');
+    // Each behind shows DECK_STEP more of its head and left edge than the
+    // one in front of it, in the pile's order (depth 1 just behind).
+    const behind = slots.filter((slot) => slot.id !== frontId)
+      .sort((a, b) => deck.get(a.id).depth - deck.get(b.id).depth);
+    behind.forEach((slot, index) => {
+      const laid = deck.get(slot.id);
+      assert.equal(laid.depth, index + 1);
+      const left = laid.x - slot.w / 2;
+      const top = laid.y - slot.h;
+      assert.ok(Math.abs(left - (front.x - front.w / 2 - DECK_STEP * laid.depth)) < 1e-9);
+      assert.ok(Math.abs(top - (front.y - front.h - DECK_STEP * laid.depth)) < 1e-9);
+      // Never far off its place: a deck, not a move.
+      assert.ok(Math.hypot(laid.x - slot.x, laid.y - slot.y) < 3 * DECK_REACH);
+      assert.ok(pile.get(slot.id).z < pile.get(frontId).z);
+    });
+  }
+  // Miami and Orlando, 22–27px apart on a phone, stand on their own places,
+  // never a deck, even while one is read at full size over the other.
+  const florida = slotsAt({ miami: [327.8, 554.7], orlando: [319.2, 533.9] }, 'miami', null, phone);
+  assert.equal(deckShields(florida, stackShields(florida)).size, 0);
+  assert.ok(DECK_REACH < 22 && DECK_REACH > 14);
+});
+
+test('the readouts step back from the shields; a pointer\'s click keeps focus', () => {
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const sign = source('src/components/home/AtlasSign.tsx');
+  const home = source('src/components/home/HomePage.tsx');
+  const css = source('src/styles/global.css');
+  // The atlas hands every shield in view to the viewfinder, in the atlas's
+  // px, from the same projection it stacks with.
+  const place = atlas.slice(atlas.indexOf('const placeShields = () => {'), atlas.indexOf('const placeShieldsRef'));
+  assert.match(place, /boxes\.push\(\{ id: slot\.id,/);
+  assert.match(place, /- CANVAS_BLEED/);
+  assert.match(place, /viewfinderRef\.current\?\.avoid\(boxes\)/);
+  assert.match(atlas, /map\.on\('move', onRender\)/);
+  // The readouts' boxes are derived from their text, never measured.
+  const clear = sign.slice(sign.indexOf('const clearReadouts = () => {'), sign.indexOf('// One frame of the viewfinder'));
+  assert.ok(clear.length > 400);
+  assert.doesNotMatch(clear, /getBoundingClientRect|offsetWidth|clientWidth|scrollWidth/);
+  assert.match(clear, /READOUT_CHAR_PX \* latChars/);
+  assert.match(sign, /className="viewfinder__yield"/);
+  assert.match(css, /\.viewfinder__yield\[data-yield\] \{\s*opacity: 0;/);
+  // Buried type is not printed, on the map and the phone.
+  assert.match(atlas, /pose\.sign\.dataset\.buried = ''/);
+  assert.match(atlas, /data-buried=\{buried \? '' : undefined\}/);
+  assert.match(css, /\.place-shield__sign\[data-buried\] :is\(\.place-shield__num, \.place-shield__code\) \{\s*opacity: 0;/);
+  // The phone's overview keeps the read shield's half inside the gutter.
+  assert.match(atlas, /const LIVING_SIDE_PAD = 18 \+ Math\.ceil\(\(LIVING_SHIELD_PX \* LIVING_SCALE\.read\) \/ 2\);/);
+  assert.match(atlas, /right: LIVING_SIDE_PAD,/);
+  assert.match(atlas, /longitude: livingOverviewLongitude\(/);
+  // A mouse's click on a shield or a tick leaves focus where it is; a
+  // keyboard's (detail 0) takes it to the chapter, torn or not.
+  assert.equal((sign.match(/onNavigate\?\.\([^)]*\{ focus: event\.detail === 0 \}\)/g) ?? []).length, 2);
+  assert.match(home, /go: \(\) => navigateLivingChapter\(anchorId, false, moveFocus\)/);
+  assert.match(home, /navigateLivingChapter\(anchorId, true, moveFocus\);/);
 });

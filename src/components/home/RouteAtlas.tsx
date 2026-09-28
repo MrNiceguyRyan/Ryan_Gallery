@@ -23,6 +23,8 @@ import {
   AtlasViewfinder,
   ATLAS_READING_LINE,
   PlaceShield,
+  type AtlasNavigateOptions,
+  type ShieldBox,
   type ViewfinderHandle,
   type ViewfinderPlace,
 } from './AtlasSign';
@@ -31,10 +33,12 @@ import {
   SHIELD_FORMS,
   SHIELD_MAP_PX,
   SHIELD_SCALE,
+  deckShields,
   pad2,
   shieldForm,
   stackShields,
   stateCode,
+  typeBox,
   type StackSlot,
 } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
@@ -122,8 +126,9 @@ interface Props {
   voyage?: AtlasVoyage | null;
   /** An AF point is pointed at or focused (null when it is left). */
   onEngage?: (chapterId: string | null) => void;
-  /** An AF point is clicked: go to that chapter. */
-  onNavigate?: (chapterId: string) => void;
+  /** An AF point is clicked: go to that chapter (`focus` false: a pointer's
+   *  click, keyboard focus stays where it is). */
+  onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
   /** Create the map now, not when the atlas nears the viewport (the opening
    *  reel covers the first screen; HomePage warms the map behind it). */
   eager?: boolean;
@@ -890,6 +895,11 @@ function writeAtlasPlace(id: string | null | undefined) {
 // top, a buried shield's head lifted into view, the pile's count on its front.
 const LIVING_SHIELD_PX = 22;
 const LIVING_SCALE = { rest: 0.86, read: 1.16 } as const;
+// The overview holds half the read shield inside the 18px gutter (its centre
+// longitude, livingOverviewLongitude, and a fitted overview's side padding):
+// New York's shield, its place on the route's eastern edge, stood 4px from a
+// 390px screen's edge. DERIVED from the shield's size.
+const LIVING_SIDE_PAD = 18 + Math.ceil((LIVING_SHIELD_PX * LIVING_SCALE.read) / 2);
 // The phone's overview stands its shields clear of the photograph's stub
 // (New York's stood behind it): no place lies higher on the screen than the
 // stub's bottom edge plus the tallest shield (the chapter being read, the
@@ -915,6 +925,21 @@ function livingOverviewLatitude(north: number, width: number, height: number) {
   const needed = mercatorLatitude(mercatorY(north) - (height / 2 - livingShieldClearance(width, height)) / perUnit);
   return Number.isFinite(needed) ? Math.max(LIVING_OVERVIEW.latitude, needed) : LIVING_OVERVIEW.latitude;
 }
+/** The phone overview's centre longitude: LIVING_OVERVIEW's, or moved just
+ *  far enough east that the easternmost place's shield, read at full size,
+ *  stands inside the gutter (LIVING_SIDE_PAD; at −98.5 New York's stood 4px
+ *  from a 390px screen's edge) — and centred on the route if it cannot fit
+ *  either way (a flat map at LIVING_OVERVIEW_ZOOM: 512 · 2^z / 360 px a
+ *  degree). */
+function livingOverviewLongitude(west: number, east: number, width: number) {
+  const perDegree = (512 * 2 ** LIVING_OVERVIEW_ZOOM) / 360;
+  const reach = width / 2 - LIVING_SIDE_PAD;
+  let longitude = LIVING_OVERVIEW.longitude;
+  const eastOver = (east - longitude) * perDegree - reach;
+  if (eastOver > 0) longitude += eastOver / perDegree;
+  if ((longitude - west) * perDegree > reach) longitude = (west + east) / 2;
+  return Number.isFinite(longitude) ? longitude : LIVING_OVERVIEW.longitude;
+}
 
 interface LivingPlace {
   id: string;
@@ -922,21 +947,28 @@ interface LivingPlace {
   name: string;
   region?: string;
   slug?: string;
+  /** Where its form prints its type (typeBox). */
+  type: readonly [number, number, number, number];
 }
 
 function LivingShield({
   place,
   point,
+  shift,
   lift,
   z,
   count,
+  buried,
   chapterProgress,
 }: {
   place: LivingPlace;
   point: { x: number; y: number };
+  /** Off its place, px: a deck's offset (a transform, so it glides). */
+  shift: number;
   lift: number;
   z: number;
   count: number;
+  buried: boolean;
   chapterProgress: MotionValue<number>;
 }) {
   const index = place.number - 1;
@@ -954,9 +986,14 @@ function LivingShield({
     <span
       className="place-shield place-shield--living"
       data-place-shield={place.id}
-      style={{ left: point.x, top: point.y, zIndex: 1 + z, ['--lift' as never]: `${lift}px` }}
+      style={{ left: point.x, top: point.y, zIndex: 1 + z, ['--dx' as never]: `${shift}px`, ['--lift' as never]: `${lift}px` }}
     >
-      <motion.span className="place-shield__sign" data-pile={count || undefined} style={{ scale, filter }}>
+      <motion.span
+        className="place-shield__sign"
+        data-pile={count || undefined}
+        data-buried={buried ? '' : undefined}
+        style={{ scale, filter }}
+      >
         <MapShield
           code={stateCode(place.region)}
           number={pad2(place.number)}
@@ -991,19 +1028,26 @@ function LivingShields({
     const next = Math.round(value);
     setReading((current) => (current === next ? current : next));
   });
-  const stack = useMemo(() => stackShields(places.map((place, index): StackSlot => {
-    const read = place.number - 1 === reading;
-    const width = LIVING_SHIELD_PX * (read ? LIVING_SCALE.read : LIVING_SCALE.rest);
-    return {
-      id: place.id,
-      number: place.number,
-      x: points[index].x,
-      y: points[index].y,
-      w: width,
-      h: (width * shieldForm(stateCode(place.region)).h) / 100,
-      rank: read ? 2 : 0,
-    };
-  })), [places, points, reading]);
+  const { stack, deck } = useMemo(() => {
+    const slots = places.map((place, index): StackSlot => {
+      const read = place.number - 1 === reading;
+      const width = LIVING_SHIELD_PX * (read ? LIVING_SCALE.read : LIVING_SCALE.rest);
+      return {
+        id: place.id,
+        number: place.number,
+        x: points[index].x,
+        y: points[index].y,
+        w: width,
+        h: (width * shieldForm(stateCode(place.region)).h) / 100,
+        rank: read ? 2 : 0,
+        type: place.type,
+      };
+    });
+    const stacked = stackShields(slots);
+    // Places a few px apart (the Southwest's three) are laid as a deck
+    // behind the pile's front shield (deckShields): only its number shows.
+    return { stack: stacked, deck: deckShields(slots, stacked) };
+  }, [places, points, reading]);
   return (
     <motion.div
       aria-hidden="true"
@@ -1018,14 +1062,18 @@ function LivingShields({
     >
       {places.map((place, index) => {
         const placed = stack.get(place.id);
+        const laid = deck.get(place.id);
+        const point = points[index];
         return (
           <LivingShield
             key={place.id}
             place={place}
-            point={points[index]}
-            lift={placed?.dy ?? 0}
+            point={point}
+            shift={laid ? Math.round((laid.x - point.x) * 2) / 2 : 0}
+            lift={laid ? Math.round((laid.y - point.y) * 2) / 2 : placed?.dy ?? 0}
             z={(placed?.z ?? 0) + (place.number - 1 === reading ? 10 : 0)}
             count={placed?.count ?? 0}
+            buried={!!laid || !!placed?.buried}
             chapterProgress={chapterProgress}
           />
         );
@@ -1263,6 +1311,7 @@ export default function RouteAtlas({
     slug: entry.stop.slug,
     coordinates: entry.stop.coordinates,
     ratio: shieldForm(stateCode(entry.stop.region)).h / 100,
+    type: typeBox(shieldForm(stateCode(entry.stop.region))),
   })), [chapterRoute]);
   // The phone's shields stand on the living overview's projected points.
   const livingPoints = useMemo(() => {
@@ -1282,7 +1331,10 @@ export default function RouteAtlas({
     lift: number;
     z: number;
     count: number;
+    buried: boolean;
     under: boolean;
+    /** When it went under the covers (it fades out over --dur-out). */
+    underSince: number;
     /** The state's scale, the one it is leaving and when it changed: a
      *  shield shrinks over --dur-out, and is stacked at its larger size
      *  until it has. */
@@ -1316,6 +1368,9 @@ export default function RouteAtlas({
     const now = performance.now();
     const slots: StackSlot[] = [];
     const unders = new Map<string, boolean>();
+    // Every shield still printed, for the viewfinder: those in the piles and
+    // those still fading out under the covers.
+    const printed: StackSlot[] = [];
     shieldPlaces.forEach((place) => {
       let pose = shieldPosesRef.current.get(place.id);
       if (!pose || !pose.el.isConnected) {
@@ -1328,7 +1383,9 @@ export default function RouteAtlas({
           lift: 0,
           z: -1,
           count: 0,
+          buried: false,
           under: false,
+          underSince: 0,
           scale: 0,
           was: 0,
           since: 0,
@@ -1352,12 +1409,30 @@ export default function RouteAtlas({
       const point = map.project(place.coordinates);
       const under = rank === 0 && point.x + w / 2 > underAt;
       unders.set(place.id, under);
-      const inView = !under &&
-        point.x + w / 2 > 0 && point.x - w / 2 < width && point.y > 0 && point.y - h < height &&
+      // On screen: inside the atlas, not merely the canvas — a shield out in
+      // the bleed is off the page's edge, and counted in a pile there it
+      // gave the one in view a count of three over two shields.
+      const onScreen = point.x + w / 2 > CANVAS_BLEED && point.x - w / 2 < width - CANVAS_BLEED &&
+        point.y > CANVAS_BLEED && point.y - h < height - CANVAS_BLEED &&
         angularDistance([centre.lng, centre.lat], place.coordinates) < SHIELD_HORIZON;
-      if (inView) slots.push({ id: place.id, number: place.number, x: point.x, y: point.y, w, h, rank });
+      const slot: StackSlot = { id: place.id, number: place.number, x: point.x, y: point.y, w, h, rank, type: place.type };
+      if (onScreen && !under) slots.push(slot);
+      if (onScreen && (!under || !pose.under || now - pose.underSince < DUR_MS.out)) printed.push(slot);
     });
     const stack = stackShields(slots);
+    // The viewfinder's readouts keep off every shield still printed (in
+    // view, or fading out as it goes under the covers — Orlando's, leaving
+    // for Page, crossed the longitude that way): the same boxes, in the
+    // atlas's px (the canvas bleeds CANVAS_BLEED past it). The one the camera
+    // is on counts too — at rest it stands on the focal point, clear of every
+    // readout's line; leaving, it sweeps out through them.
+    const boxes: ShieldBox[] = [];
+    printed.forEach((slot) => {
+      const foot = slot.y + (stack.get(slot.id)?.dy ?? 0) - CANVAS_BLEED;
+      const x = slot.x - CANVAS_BLEED;
+      boxes.push({ id: slot.id, left: x - slot.w / 2, top: foot - slot.h, right: x + slot.w / 2, bottom: foot });
+    });
+    viewfinderRef.current?.avoid(boxes);
     shieldPlaces.forEach((place) => {
       const pose = shieldPosesRef.current.get(place.id);
       if (!pose) return;
@@ -1368,6 +1443,7 @@ export default function RouteAtlas({
       const rank = place.id === current ? 2 : place.id === inbound ? 1 : 0;
       const z = 1 + (placed?.z ?? 0) + rank * 10;
       const count = placed?.count ?? 0;
+      const buried = placed?.buried ?? false;
       const under = unders.get(place.id) ?? false;
       if (lift !== pose.lift) {
         pose.lift = lift;
@@ -1382,8 +1458,14 @@ export default function RouteAtlas({
         if (count > 1) pose.sign.dataset.pile = String(count);
         else delete pose.sign.dataset.pile;
       }
+      if (buried !== pose.buried && pose.sign) {
+        pose.buried = buried;
+        if (buried) pose.sign.dataset.buried = '';
+        else delete pose.sign.dataset.buried;
+      }
       if (under !== pose.under) {
         pose.under = under;
+        if (under) pose.underSince = now;
         if (under) pose.el.dataset.under = '';
         else delete pose.el.dataset.under;
       }
@@ -1432,10 +1514,15 @@ export default function RouteAtlas({
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
     shieldPosesRef.current.clear();
+    // On `move` as well as `render`: the markers ride the camera on `move`,
+    // and a pile placed a frame late left two shields overlapping with no
+    // count at the viewport's edge (1280, Orlando → Page).
     const onRender = () => placeShieldsRef.current();
+    map.on('move', onRender);
     map.on('render', onRender);
     onRender();
     return () => {
+      map.off('move', onRender);
       map.off('render', onRender);
     };
   }, [mapLoaded, shieldPlaces, signs]);
@@ -1994,7 +2081,12 @@ export default function RouteAtlas({
     map?.stop();
     map?.fitBounds(routeBounds, {
       padding: mobile
-        ? { top: Math.max(240, livingShieldClearance(window.innerWidth, window.innerHeight)), right: 18, bottom: 174, left: 18 }
+        ? {
+            top: Math.max(240, livingShieldClearance(window.innerWidth, window.innerHeight)),
+            right: LIVING_SIDE_PAD,
+            bottom: 174,
+            left: LIVING_SIDE_PAD,
+          }
         : { top: 88, right: 62, bottom: 64, left: 238 },
       maxZoom: mobile ? 2.85 : 4.05,
       bearing: 0,
@@ -3771,6 +3863,11 @@ export default function RouteAtlas({
                 ? {
                     ...LIVING_OVERVIEW,
                     zoom: LIVING_OVERVIEW_ZOOM,
+                    longitude: livingOverviewLongitude(
+                      Math.min(...chapterRoute.map((entry) => entry.stop.coordinates[0])),
+                      Math.max(...chapterRoute.map((entry) => entry.stop.coordinates[0])),
+                      window.innerWidth,
+                    ),
                     latitude: livingOverviewLatitude(
                       Math.max(...chapterRoute.map((entry) => entry.stop.coordinates[1])),
                       window.innerWidth,

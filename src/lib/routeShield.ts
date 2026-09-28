@@ -28,7 +28,7 @@
 //   FL  Florida state road: a white square, the state's outline drawn round
 //       it in black. Here: a square plate, and the state as the band — the
 //       panhandle across the head (it carries FL), the peninsula down the
-//       right-hand side; the number sits in the Gulf.
+//       right-hand side; the number sits centred in the Gulf.
 //   AZ  Arizona state route: the state's own outline, white on black — the
 //       notch at its north-west corner, the diagonal of its south-west
 //       border — with ARIZONA across the head. Here: the outline, its head
@@ -96,13 +96,17 @@ export const SHIELD_FORMS: Readonly<Record<ShieldForm['key'], ShieldForm>> = {
     plate: 'M8,0 H92 Q100,0 100,8 V88 Q100,96 92,96 H58 L50,108 L42,96 H8 Q0,96 0,88 V8 Q0,0 8,0Z',
     // The state: the panhandle along the head, the Big Bend, Tampa Bay, the
     // peninsula down to its tip; the Atlantic coast straight up the side.
-    band: 'M8,8 H92 L92.5,42 C92.5,58 90,72 84.5,83.5 L81,89.5 C78.5,87 76.5,83 74.5,78 L71,68.5 ' +
-      'C69.5,64.5 67.5,62.5 65,60.5 C66.5,58 66,55.5 64.5,52.5 C62.5,47.5 60.5,42.5 57,38.5 C53.5,33.5 48,29.5 41,28.5 ' +
+    // The peninsula narrow, as the state's is: its west coast from the Big
+    // Bend (x≈64) down to the tip (x≈86), so the number sits whole in the
+    // Gulf, clear of the rim and the coast (at 32.5 it hugged the rim and the
+    // peninsula took a third of the plate: a dog-eared tile, not Florida).
+    band: 'M8,8 H92 L92.5,42 C92.5,60 91.5,73 88.5,83 L86,89.5 C84,87.5 82.5,84 81,79 L78,69 ' +
+      'C76.5,65 74.5,63 72,61 C73.5,58.5 73,55.5 71.5,52.5 C69.5,47.5 67,42.5 63.5,38.5 C59.5,33.5 54,29.8 46.5,28.8 ' +
       'L34.5,28.2 C33,30.8 30.2,31.2 28.6,28 L8,27.2Z',
     ink: 'M4.2,11 Q4.2,4.2 11,4.2 H89 Q95.8,4.2 95.8,11 V85 Q95.8,91.8 89,91.8 H11 Q4.2,91.8 4.2,85Z',
     inkWidth: 2.2,
     code: { x: 21, y: 23, size: 16.5 },
-    num: { x: 32.5, y: 84, size: 39 },
+    num: { x: 40, y: 84, size: 38 },
   },
   AZ: {
     key: 'AZ',
@@ -251,6 +255,10 @@ export const STACK_PEEK = 6;
 /** Two shields that overlap by more than this (box into box, px) are one
  *  pile; shields that merely touch stand apart and carry no count. */
 export const STACK_GAP = -1;
+/** A shield in front that reaches less than this (px, each way) into
+ *  another's type leaves it printed: a corner touching the foot of a number
+ *  (Miami's, read on a phone, at Orlando's 02) does not hide it. */
+export const TYPE_SLACK = 1;
 
 export interface StackSlot {
   id: string;
@@ -264,6 +272,9 @@ export interface StackSlot {
   h: number;
   /** 2 the stop the camera is on, 1 the stop it is flying to, else 0. */
   rank: number;
+  /** Where the form prints its type (`typeBox`), as fractions of the box.
+   *  Without it, every shield behind a pile's front counts as buried. */
+  type?: readonly [number, number, number, number];
 }
 
 export interface StackPlace {
@@ -273,6 +284,13 @@ export interface StackPlace {
   z: number;
   /** On a pile's front shield: how many shields the pile holds (else 0). */
   count: number;
+  /** The id of its pile's front shield (its own, alone or in front). */
+  front: string;
+  /** Behind a shield that covers some of its type: its number and letters
+   *  are not printed (half a number beside the front's read as a third
+   *  digit, "053"), so a pile reads as a deck — the front's number, the
+   *  edges of the shields behind, the count. */
+  buried: boolean;
 }
 
 const overlaps = (a: StackSlot, b: StackSlot, gap: number) =>
@@ -281,9 +299,29 @@ const overlaps = (a: StackSlot, b: StackSlot, gap: number) =>
   a.y - a.h < b.y + gap &&
   b.y - b.h < a.y + gap;
 
+/** Where a form prints its type — the stop number and the state's letters —
+ *  as fractions of the shield's box [left, top, right, bottom]: two digits
+ *  of the label face (their ink ≈0.55em either side of the centre, the caps
+ *  0.7em over the baseline) and the letters' line (≈0.65em either side). A
+ *  pile hides a shield's type when a shield in front covers some of it
+ *  (more than TYPE_SLACK). */
+export function typeBox(form: ShieldForm): [number, number, number, number] {
+  const lines = [
+    { x0: form.num.x - 0.55 * form.num.size, x1: form.num.x + 0.55 * form.num.size, y0: form.num.y - 0.7 * form.num.size, y1: form.num.y },
+    { x0: form.code.x - 0.65 * form.code.size, x1: form.code.x + 0.65 * form.code.size, y0: form.code.y - 0.7 * form.code.size, y1: form.code.y },
+  ];
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return [
+    round(Math.min(...lines.map((line) => line.x0)) / 100),
+    round(Math.min(...lines.map((line) => line.y0)) / form.h),
+    round(Math.max(...lines.map((line) => line.x1)) / 100),
+    round(Math.max(...lines.map((line) => line.y1)) / form.h),
+  ];
+}
+
 /** Places the shields of one camera frame: piles, their order, the lift of
- *  a buried shield and the front shield's count. Pure and cheap (six places,
- *  one frame). */
+ *  a buried shield, the front shield's count and whose type is covered.
+ *  Pure and cheap (six places, one frame). */
 export function stackShields(slots: readonly StackSlot[], gap = STACK_GAP): Map<string, StackPlace> {
   const parent = slots.map((_, index) => index);
   const find = (index: number): number => (parent[index] === index ? index : (parent[index] = find(parent[index])));
@@ -337,14 +375,94 @@ export function stackShields(slots: readonly StackSlot[], gap = STACK_GAP): Map<
       // Half pixels: the lift is written as a transform, only when it moves.
       dy = Math.round(dy * 2) / 2 + 0;
       lifted.set(slot.id, dy);
+    }
+    // With every lift known: whose type a shield in front of it covers.
+    const front = order[order.length - 1];
+    const box = (slot: StackSlot) => {
+      const foot = slot.y + (lifted.get(slot.id) ?? 0);
+      return { left: slot.x - slot.w / 2, right: slot.x + slot.w / 2, top: foot - slot.h, bottom: foot };
+    };
+    order.forEach((slot, index) => {
+      let buried = false;
+      if (index < order.length - 1) {
+        if (!slot.type) buried = true;
+        else {
+          const own = box(slot);
+          const type = {
+            left: own.left + slot.type[0] * slot.w,
+            top: own.top + slot.type[1] * slot.h,
+            right: own.left + slot.type[2] * slot.w,
+            bottom: own.top + slot.type[3] * slot.h,
+          };
+          buried = order.slice(index + 1).some((other) => {
+            const cover = box(other);
+            return Math.min(type.right, cover.right) - Math.max(type.left, cover.left) > TYPE_SLACK &&
+              Math.min(type.bottom, cover.bottom) - Math.max(type.top, cover.top) > TYPE_SLACK;
+          });
+        }
+      }
       placed.set(slot.id, {
-        dy,
+        dy: lifted.get(slot.id) ?? 0,
         z: index,
         count: index === order.length - 1 && order.length > 1 ? order.length : 0,
+        front: front.id,
+        buried,
       });
-    }
+    });
   });
   return placed;
+}
+
+// ── A phone's pile as a deck ──
+// On the phone's overview Page, Zion and Bryce stand 7–12px apart: always one
+// pile, whose lifted heads (STACK_PEEK) jumbled three forms and three
+// half-numbers ("053"). Where a shield's place lies within DECK_REACH of its
+// pile's front shield's, it is laid as a deck behind that shield, as 11 mois
+// sans toi(t)'s close stops are: its box set on the front's top-left corner,
+// DECK_STEP up and left per place further back (in the pile's order), its
+// type hidden — the front's number, the edges of the shields behind, the
+// count. DECK_REACH is three-quarters of a phone shield (22px): over the
+// overview's zooms (≈2.6–2.85, 390px to a tablet) the Southwest's three lie
+// 7–14px apart and Miami–Orlando 22–27px, so the three are one deck and the
+// two Florida shields always stand on their own places.
+export const DECK_REACH = 16;
+export const DECK_STEP = 3;
+
+/** The foot point of every shield laid in a deck (see above), by id, and
+ *  how far back it lies (1 = just behind the front). */
+export function deckShields(
+  slots: readonly StackSlot[],
+  placed: ReadonlyMap<string, StackPlace>,
+  reach = DECK_REACH,
+  step = DECK_STEP,
+): Map<string, { x: number; y: number; depth: number }> {
+  const byId = new Map(slots.map((slot) => [slot.id, slot]));
+  const decks = new Map<string, Array<{ slot: StackSlot; z: number }>>();
+  slots.forEach((slot) => {
+    const place = placed.get(slot.id);
+    const front = place ? byId.get(place.front) : undefined;
+    if (!place || !front || front.id === slot.id) return;
+    if (Math.hypot(slot.x - front.x, slot.y - front.y) > reach) return;
+    const deck = decks.get(front.id);
+    if (deck) deck.push({ slot, z: place.z });
+    else decks.set(front.id, [{ slot, z: place.z }]);
+  });
+  const laid = new Map<string, { x: number; y: number; depth: number }>();
+  decks.forEach((members, frontId) => {
+    const front = byId.get(frontId);
+    if (!front) return;
+    const left = front.x - front.w / 2;
+    const top = front.y - front.h;
+    [...members].sort((a, b) => b.z - a.z).forEach(({ slot }, index) => {
+      const depth = index + 1;
+      laid.set(slot.id, {
+        x: left - step * depth + slot.w / 2,
+        y: top - step * depth + slot.h,
+        depth,
+      });
+    });
+  });
+  return laid;
 }
 
 // ── The split-flap: a stop's name arriving ──

@@ -849,6 +849,20 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   display: flex;
   align-items: center;
 }
+/* A readout's own layer: it steps back while a shield stands under it, or
+   is about to (`data-yield`, AtlasSign `clearReadouts`: the readouts sit on
+   fixed offsets from the focal point, the shields on their own places). A
+   quick step back on the fade curve — gone by the time a shield in flight
+   reaches it (YIELD_LEAD_MS) — and back in on the arrive curve. */
+.viewfinder__yield {
+  position: absolute;
+  inset: 0;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+.viewfinder__yield[data-yield] {
+  opacity: 0;
+  transition: opacity var(--dur-in) var(--ease-fade);
+}
 .viewfinder__meta .is-lime {
   color: #D2FF00;
 }
@@ -1051,6 +1065,18 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   fill: #0B0E09;
   letter-spacing: -1px;
 }
+/* A shield behind another that covers some of its type (`data-buried`,
+   stackShields) prints no number and no letters: a pile reads as a deck —
+   the front's number, the edges of the shields behind, the count — never
+   as half-numbers beside the front's ("053"). */
+.place-shield__num,
+.place-shield__code {
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+.place-shield__sign[data-buried] :is(.place-shield__num, .place-shield__code) {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
 /* A pile's front shield carries its count, as a stop sign's badge: dark ink,
    a bone rim, on the shield's shoulder. */
 .place-shield__sign[data-pile]::after {
@@ -1102,10 +1128,12 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
 }
 /* The phone's shields (RouteAtlas LivingShields): the same shields at 22px on
    the living atlas's projected points, the foot's point on the place; the
-   scroll inks each one (its scale and ink are written inline). */
+   scroll inks each one (its scale and ink are written inline). A pile whose
+   places lie a few px apart is laid as a deck behind its front shield
+   (deckShields: `--dx`, `--lift`), gliding as the front changes. */
 .place-shield--living {
   position: absolute;
-  transform: translate(-50%, -100%) translateY(var(--lift, 0px));
+  transform: translate(-50%, -100%) translate(var(--dx, 0px), var(--lift, 0px));
   pointer-events: none;
   transition: transform var(--dur-swap) var(--ease-arrive);
 }
@@ -1162,7 +1190,10 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
      loses the cascade and reduced motion silently keeps animating. */
   .place-shield,
   .place-shield__sign,
-  .place-shield__name { transition: none !important; animation: none !important; }
+  .place-shield__name,
+  .place-shield__num,
+  .place-shield__code,
+  .viewfinder__yield { transition: none !important; animation: none !important; }
 }
 
 /* Under a story the archive recedes: the atlas grows and softens behind the
