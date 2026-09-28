@@ -3,6 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import { sanityClient } from 'sanity:client';
 import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
+import IntroReel from '../components/home/IntroReel';
+import { reelCoverMarkup } from '../lib/introReelCover';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 // ─── GROQ: All collections with photos + location data ───
@@ -47,5 +49,10 @@ const collections = await fetchSanityWithRetry(() =>
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
   </Fragment>
+  {/* The opening film, pinned over the top of the page; its cover is drawn
+      here, on the server, so it is the first paint. */}
+  <IntroReel client:load>
+    <Fragment set:html={reelCoverMarkup()} />
+  </IntroReel>
   <HomePage client:load collections={collections} />
 </Layout>

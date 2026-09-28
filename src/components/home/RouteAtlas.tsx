@@ -105,6 +105,17 @@ interface Props {
   onEngage?: (chapterId: string | null) => void;
   /** An AF point is clicked: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
+  /** Create the map now, not when the atlas nears the viewport (the opening
+   *  reel covers the first screen; HomePage warms the map behind it). */
+  eager?: boolean;
+  /** Hold the globe's reveal (and its dawn) while the opening reel covers
+   *  the first screen, so they play as the reel's shutter opens on it. */
+  holdReveal?: boolean;
+  /** Count the atlas as engaged although it is below the fold: the opening
+   *  reel lies over the first screen, and the camera should hold the first
+   *  pose (its tiles loading) by the time the reel hands over — as it did
+   *  when the globe was the first thing on the page. */
+  engage?: boolean;
 }
 
 interface ProjectedPoint {
@@ -942,6 +953,9 @@ export default function RouteAtlas({
   voyage = null,
   onEngage,
   onNavigate,
+  eager = false,
+  holdReveal = false,
+  engage = false,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -1022,7 +1036,8 @@ export default function RouteAtlas({
   const [mapLoadDelayed, setMapLoadDelayed] = useState(false);
   const [viewportReady, setViewportReady] = useState(false);
   const [mapEligible, setMapEligible] = useState(false);
-  const [atlasEngaged, setAtlasEngaged] = useState(reducedMotion);
+  const [atlasSeen, setAtlasSeen] = useState(reducedMotion);
+  const atlasEngaged = atlasSeen || engage;
   const [interfaceInFrame, setInterfaceInFrame] = useState(false);
   const [layoutRevision, setLayoutRevision] = useState(0);
   const [projectedStops, setProjectedStops] = useState<Array<{ id: string; x: number; y: number }>>([]);
@@ -1403,6 +1418,11 @@ export default function RouteAtlas({
   // fades in already lit and in place. The first 90 dawn frames also decide
   // whether this machine needs the lighter light pass.
   const globeRevealPlayedRef = useRef(false);
+  // While the opening reel covers the first screen the gate keeps waiting
+  // (the tiles still load behind it), so the fade, the dawn and the settle
+  // play as the reel's shutter opens on the globe, not unseen under it.
+  const holdRevealRef = useRef(holdReveal);
+  holdRevealRef.current = holdReveal;
   useEffect(() => {
     if (!prologue) return;
     if (!mapLoaded) {
@@ -1419,7 +1439,7 @@ export default function RouteAtlas({
     globeIntro.set(fromTop ? 1 : 0);
     channel.dawn = fromTop ? 0 : 1;
     channel.veil = fromTop ? 1 : 0;
-    const start = performance.now();
+    let start = performance.now();
     let disposed = false;
     let pollTimer = 0;
     let readyPolls = 0;
@@ -1478,6 +1498,13 @@ export default function RouteAtlas({
     const poll = () => {
       pollTimer = 0;
       if (disposed) return;
+      if (holdRevealRef.current) {
+        // Held: the cap counts from the release, not from the map's load.
+        start = performance.now();
+        readyPolls = 0;
+        pollTimer = window.setTimeout(poll, 60);
+        return;
+      }
       let ready = false;
       try {
         ready = cameraSyncedRef.current && !!map &&
@@ -1544,7 +1571,7 @@ export default function RouteAtlas({
   useEffect(() => {
     if (!viewportReady || mapEligible) return;
     const atlas = routeAtlasRef.current;
-    if (!atlas || typeof IntersectionObserver === 'undefined') {
+    if (eager || !atlas || typeof IntersectionObserver === 'undefined') {
       setMapEligible(true);
       return;
     }
@@ -1559,7 +1586,7 @@ export default function RouteAtlas({
     );
     observer.observe(atlas);
     return () => observer.disconnect();
-  }, [mapEligible, mobile, viewportReady]);
+  }, [eager, mapEligible, mobile, viewportReady]);
 
   useEffect(() => {
     if (!mapEligible || mapLoaded) {
@@ -1578,7 +1605,7 @@ export default function RouteAtlas({
   useEffect(() => {
     if (!viewportReady) return;
     if (reducedMotion || typeof IntersectionObserver === 'undefined') {
-      setAtlasEngaged(true);
+      setAtlasSeen(true);
       return;
     }
     const atlas = routeAtlasRef.current;
@@ -1586,7 +1613,7 @@ export default function RouteAtlas({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setAtlasEngaged((current) => {
+        setAtlasSeen((current) => {
           const enterThreshold = mobile ? 0.10 : 0.08;
           const exitThreshold = mobile ? 0.05 : 0.04;
           const threshold = current ? exitThreshold : enterThreshold;
@@ -1758,8 +1785,17 @@ export default function RouteAtlas({
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
     // Measured once per layout (this effect re-runs on layoutRevision), never
     // per frame: the canvas box in viewport pixels, for placing the prologue
-    // globe by screen position.
-    const canvasBox = prologue ? map.getContainer().getBoundingClientRect() : null;
+    // globe by screen position. Only its size and its left edge are read —
+    // they do not depend on the scroll. Its top is derived: the prologue
+    // frames the globe for the atlas pinned, where the canvas's top is one
+    // bleed above the viewport. (Read off the rect, the top was right only
+    // while the atlas happened to be pinned at the moment of the read; with
+    // the opening reel in front the map is created a whole film further down
+    // the page, and the read put the globe's centre at the top of the screen.)
+    const canvasRect = prologue ? map.getContainer().getBoundingClientRect() : null;
+    const canvasBox = canvasRect
+      ? { left: canvasRect.left, top: -CANVAS_BLEED, width: canvasRect.width, height: canvasRect.height }
+      : null;
 
     // ── Chapter hop controller (see HOP) ──
     const lastRouteIndex = Math.max(0, chapterRoute.length - 1);

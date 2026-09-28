@@ -5,6 +5,9 @@ interface Props {
   years: string;
   /** Prologue progress 0–1 (HomePage's clock for the globe). */
   progress?: MotionValue<number>;
+  /** The opening reel lies over the first screen (IntroReel): the globe
+   *  cannot be played with, so its key is out of the tab order. */
+  covered?: boolean;
 }
 
 // The globe's easter eggs take the keyboard too, on the first screen only
@@ -26,7 +29,7 @@ const sendGlobeEgg = (type: 'spin' | 'bulb-start' | 'bulb-end') =>
  * the page. The globe itself is the RouteAtlas map (driven by
  * `prologueProgress`); this component is only the type.
  */
-export default function GlobePrologue({ years, progress }: Props) {
+export default function GlobePrologue({ years, progress, covered = false }: Props) {
   const reduce = useReducedMotion();
   // The egg's key: client-only (a mouse or a pen beside the keyboard, as the
   // eggs themselves need), in the tab order only while the globe can play.
@@ -112,7 +115,7 @@ export default function GlobePrologue({ years, progress }: Props) {
           {eggKey && (
             <button
               type="button"
-              tabIndex={eggKeyTab}
+              tabIndex={covered ? -1 : eggKeyTab}
               className="globe-egg-key sr-only pointer-events-auto whitespace-nowrap font-ui text-[10px] uppercase tracking-[0.1em] text-white/58 focus-visible:not-sr-only focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
               aria-label="Spin the globe: press Enter. Hold Space for a long exposure."
               onKeyDown={(event) => {

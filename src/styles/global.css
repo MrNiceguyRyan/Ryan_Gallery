@@ -168,6 +168,52 @@ html.lenis body {
   .prologue-hero-kicker,
   .prologue-hero-cue { animation: none; }
 }
+/* The opening reel (IntroReel) lies over this first screen until its
+   shutter opens on it (IntroReel writes <html data-reel>). Held under the
+   reel, the entrance is off — the finished screen, unseen — and when the
+   shutter opens on it the animations come back and so play from the start:
+   his name rises into the photograph the shutter has just taken. Without
+   scripts there is no data-reel, and the entrance runs from the first paint
+   as it always has. */
+html[data-reel='reel'] .globe-prologue .prologue-hero-rise,
+html[data-reel='reel'] .globe-prologue .prologue-hero-tagline,
+html[data-reel='reel'] .globe-prologue .prologue-hero-kicker,
+html[data-reel='reel'] .globe-prologue .prologue-hero-cue { animation: none; }
+
+/* The reel's pin: its height is the film's length plus the screen it
+   overlaps (IntroReel writes both lengths from src/lib/introReel.ts as custom
+   properties); reduced motion keeps only a one-screen pin for its still. */
+.intro-reel { height: var(--reel-h-phone); }
+@media (min-width: 1024px) {
+  .intro-reel { height: var(--reel-h-desktop); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-reel { height: 200svh; }
+}
+/* The reel's first paint: its cover as SVG, one per design frame. */
+.intro-reel__svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.intro-reel__svg--desktop { display: none; }
+@media (min-width: 1024px) {
+  .intro-reel__svg--desktop { display: block; }
+  .intro-reel__svg--phone { display: none; }
+}
+/* The cue sinks a little and comes back, the way the page wants to go. */
+@keyframes intro-reel-cue {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
+}
+.intro-reel__cue { animation: intro-reel-cue 2.6s var(--ease-travel) infinite; }
+/* Reduced motion keeps the still cover and cuts to the page with a short fade. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-reel__frame { transition: opacity var(--dur-out) var(--ease-fade); }
+  .intro-reel__cue { animation: none; }
+}
 /* ── Ticket ink (one set for every chapter's stock) ──────────────────────
    Paper objects print on their chapter's own card (src/lib/ticketStock.ts
    sets --stub-paper inline); the ink is the same bone at fixed alphas on
