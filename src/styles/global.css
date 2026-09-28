@@ -963,14 +963,15 @@ html[data-globe-voyage] .globe-prologue {
   transition: opacity var(--dur-in) var(--ease-leave);
 }
 /* A fifth of the ink still reads at 150px: a passing chapter's words (its
-   name, lede, stub print and plate label) step back further, to ~6% in all,
-   while its photograph keeps the fifth — the pictures stream past, only the
+   name, lede and stub print) step back further, to ~6% in all, while its
+   photograph keeps the fifth — the pictures stream past, only the
    destination's name is read. Set on the words themselves, whose wrappers'
-   opacity framer owns. */
-[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl, .archive-plate__meta > span) {
+   opacity framer owns. The plate's running head is not printed at rest at
+   all ("The instruments on demand", below), so a voyage leaves it alone. */
+[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl) {
   transition: opacity var(--dur-out) var(--ease-arrive);
 }
-[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl, .archive-plate__meta > span) {
+[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl) {
   opacity: 0.3;
   transition: opacity var(--dur-in) var(--ease-leave);
 }
@@ -1049,8 +1050,11 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-  color: rgba(244, 244, 237, 0.62);
-  text-shadow: 0 0 6px rgba(12, 15, 10, 0.55);
+  /* Printed only when they report (see "The instruments on demand" below),
+     so when they are up they are meant to be read: 0.86 ink holds ≥ 4.5:1
+     where the route or pale rock runs behind a figure (0.62 measured 3.9:1). */
+  color: rgba(244, 244, 237, 0.86);
+  text-shadow: 0 0 6px rgba(12, 15, 10, 0.62);
 }
 .viewfinder__meta {
   display: flex;
@@ -1060,7 +1064,60 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   color: #D2FF00;
 }
 .viewfinder__meta .is-dim {
-  color: rgba(244, 244, 237, 0.4);
+  color: rgba(244, 244, 237, 0.68);
+}
+/* ─── The instruments on demand ───────────────────────────────────────────
+   Owner, 2026-09-27: a chapter at rest reads as the place on the map (its
+   print mark, the route and its landmark), the ticket, the city name and the
+   lede — with OPEN STORY. The atlas's instrument type — the viewfinder's
+   readouts (the year, the coordinates, the chapter · region · frames line; in
+   flight the leg and its kilometres), the tick timeline and the header — is
+   not printed at rest. It comes up when it helps:
+   - the viewfinder REPORTS a trip, from take-off through the landing and a
+     short hold (`data-report`, written by AtlasSign), then steps back;
+   - everything comes up while a hand moves over the map (`data-atlas-look`,
+     RouteAtlas: pointer movement, stepping back 3 s after it stops), while
+     keyboard focus is inside the atlas, and for a voyage's trip;
+   - the chapter's running head repeats its stub, so on a ticket it comes up
+     only while that cover is pointed at or focused.
+   Each rule sits on a wrapper whose own opacity nothing else writes (the
+   readouts are written per frame, the header and footer by framer). In on
+   the arrive curve, out on the fade curve — fast in, slow out, and the exit
+   eases in. The desktop atlas only (the phone's has none of these). */
+.viewfinder__instruments {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.route-atlas:not(.route-atlas--mobile):not(.route-atlas--living) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks) {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.viewfinder__instruments[data-report],
+.route-atlas:is([data-atlas-look], :has(:focus-visible)) .viewfinder__instruments,
+html[data-voyage] .route-atlas .viewfinder__instruments,
+.route-atlas:not(.route-atlas--mobile):not(.route-atlas--living):is([data-atlas-look], :has(:focus-visible)) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks),
+html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--living) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks) {
+  opacity: 1;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+[data-archive-chapter]:has(.archive-plate--ticket) .archive-plate__meta > span {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+[data-archive-chapter]:has(.archive-plate--ticket) .group:is(:hover, :focus-visible) .archive-plate__meta > span {
+  opacity: 1;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The same states, cut. `!important` because the "up" rules above carry
+     their own transition at a higher specificity. */
+  .viewfinder__instruments,
+  .route-atlas :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks),
+  [data-archive-chapter] .archive-plate__meta > span {
+    transition: none !important;
+  }
 }
 /* The chapter number rolls between two lines inside a one-line window. */
 .viewfinder__ordinal {
@@ -1082,13 +1139,15 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
 @media (prefers-reduced-motion: reduce) {
   .viewfinder__ordinal-strip { transition: none !important; }
 }
+/* Bone, not lime: the line's one lime is the chapter number right after it
+   (a lime dot beside a lime figure was two marks). */
 .viewfinder__dot {
   display: inline-block;
   width: 5px;
   height: 5px;
   margin-right: 9px;
   border-radius: 50%;
-  background: #D2FF00;
+  background: #F4F4ED;
 }
 .af-point {
   display: block;
@@ -2686,7 +2745,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   transition: opacity 400ms var(--ease-fade), color 400ms var(--ease-arrive);
 }
 .atlas-ticks__frames {
-  color: rgba(244, 244, 237, 0.55);
+  color: rgba(244, 244, 237, 0.74);
 }
 .atlas-ticks__group.is-current .atlas-ticks__label {
   opacity: 1;
@@ -3943,31 +4002,34 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   align-items: center;
   gap: 8px;
   font-family: var(--font-ui);
-  font-size: 9px;
+  /* Readable at rest (owner, 2026-09-27: it was too dark — 9px at half of
+     0.7 ink, 2.8:1 on the atlas). The cue on the reading line is printed
+     whole (ArchiveChapter `plateCueOpacity`) in 0.9 bone at 10px. */
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(244, 244, 237, 0.7);
+  color: rgba(244, 244, 237, 0.9);
   pointer-events: none;
-  transition: color 360ms var(--ease-arrive);
+  transition: color var(--dur-out) var(--ease-arrive);
 }
-/* Pointed at, the cue answers in full bone ink and its arrow steps 2px on:
-   the view's one lime mark stays the viewfinder's ordinal (lime was two marks
-   here, with "● 0N"). The house hover rhythm: 200ms in, 400ms out. */
+/* Pointed at, the cue answers in full bone ink and its arrow steps 2px on.
+   The arrow is the word's own ink: it was sage (#c5d28a), which read as a
+   second lime beside the viewfinder's ordinal — the view's one lime. The
+   house hover rhythm: in over DUR.in, out over DUR.out. */
 .archive-plate__cue svg {
-  color: #c5d28a;
-  transition: color 400ms var(--ease-arrive), transform 400ms var(--ease-arrive);
+  color: inherit;
+  transition: transform var(--dur-out) var(--ease-arrive);
 }
 .group:hover .archive-plate__cue,
 .group:focus-visible .archive-plate__cue {
   color: #f4f4ed;
-  transition-duration: 200ms;
+  transition-duration: var(--dur-in);
 }
 .group:hover .archive-plate__cue svg,
 .group:focus-visible .archive-plate__cue svg {
-  color: #f4f4ed;
   transform: translateX(2px);
-  transition-duration: 200ms;
+  transition-duration: var(--dur-in);
 }
 @media (min-width: 1024px) {
   .archive-plate__cue { display: inline-flex; }
@@ -4610,14 +4672,17 @@ body.travel-workspace-active {
   background: #171b15;
 }
 
+/* The phone's one lime is the caption's chapter number (LivingAtlasStory);
+   the rail's current stop is printed like the map's places — a white-ink dot
+   with a knockout, no glow — and its number in bone. */
 .living-atlas__rail-item.is-active .living-atlas__rail-node {
-  border-color: #d2ff00;
-  background: #d2ff00;
-  box-shadow: 0 0 16px rgba(210, 255, 0, 0.72);
+  border-color: #f4f4ed;
+  background: #f4f4ed;
+  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
 }
 
 .living-atlas__rail-item.is-active > span:last-child > span:first-child {
-  color: #d2ff00;
+  color: #f4f4ed;
 }
 
 .living-atlas__rail-item.is-active > span:last-child > span:last-child {
@@ -5433,6 +5498,21 @@ html[data-travel-plate-blank]::view-transition-old(travel-plate) {
 
 .living-atlas__slash {
   font-size: clamp(30px, 3.4vw, 48px);
+}
+
+/* The phone's coordinates are instrument type: up while the reader moves
+   between chapters and for a moment after (`data-moving`, written by
+   LivingAtlasStory), down at rest — fast in, slow out, the exit easing in. */
+.living-atlas__readout {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.living-atlas__readout[data-moving] {
+  opacity: 1;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+@media (prefers-reduced-motion: reduce) {
+  .living-atlas__readout { transition: none !important; }
 }
 
 .living-atlas__lead-in {

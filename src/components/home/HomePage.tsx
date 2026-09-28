@@ -1835,11 +1835,11 @@ export default function HomePage({ collections }: Props) {
                           className="relative flex w-full items-center gap-4 py-5"
                         >
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F4F4ED]" />
-                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Region</span>
+                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">Region</span>
                           <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
                             {section.region}
                           </span>
-                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.1em] text-white/52">
+                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">
                             {section.cities.length} places · {section.frameCount} frames
                           </span>
                         </div>

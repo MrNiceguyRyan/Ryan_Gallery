@@ -273,6 +273,13 @@ function ScrubbedPhotoLayer({
   );
 }
 
+// The coordinates are instrument type: they count across while the reader
+// moves between chapters and hold this long after the page comes to rest,
+// then step back (global.css `.living-atlas__readout`) — the phone's version
+// of the desktop viewfinder reporting a trip (owner, 2026-09-27: auxiliary
+// information not all at once).
+const READOUT_HOLD_MS = 2000;
+
 function ScrubbedCoordinateReadout({
   stops,
   progress,
@@ -280,6 +287,8 @@ function ScrubbedCoordinateReadout({
   stops: RouteStop[];
   progress: MotionValue<number>;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const holdTimer = useRef(0);
   const latitudeRef = useRef<HTMLSpanElement>(null);
   const longitudeRef = useRef<HTMLSpanElement>(null);
 
@@ -298,12 +307,23 @@ function ScrubbedCoordinateReadout({
     if (longitudeRef.current) longitudeRef.current.textContent = formatCoordinate(longitude, 'E', 'W');
   };
 
-  useMotionValueEvent(progress, 'change', write);
+  useMotionValueEvent(progress, 'change', (value) => {
+    write(value);
+    // Moving: up now, and down READOUT_HOLD_MS after the last change. An
+    // attribute and a timer per change — nothing is measured.
+    const node = rootRef.current;
+    if (!node) return;
+    if (!node.hasAttribute('data-moving')) node.setAttribute('data-moving', '');
+    window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => node.removeAttribute('data-moving'), READOUT_HOLD_MS);
+  });
   useEffect(() => write(progress.get()), [progress, stops]);
+  useEffect(() => () => window.clearTimeout(holdTimer.current), []);
 
   const initial = stops[0]?.coordinates ?? [0, 0];
+  // Bone, not lime: the phone's one lime is the caption's chapter number.
   return (
-    <div className="mt-3 font-ui text-[8px] uppercase tracking-[0.1em] text-[#D2FF00]/70 md:text-[9px]">
+    <div ref={rootRef} className="living-atlas__readout mt-3 font-ui text-[8px] uppercase tracking-[0.1em] text-[#F4F4ED]/80 md:text-[9px]">
       <span ref={latitudeRef}>{formatCoordinate(initial[1], 'N', 'S')}</span>
       <span aria-hidden="true">&nbsp;&nbsp;/&nbsp;&nbsp;</span>
       <span ref={longitudeRef}>{formatCoordinate(initial[0], 'E', 'W')}</span>
@@ -730,11 +750,15 @@ export default function LivingAtlasStory({
   };
 
   const renderCaptionContent = (chapter: VisualChapter, interactive: boolean) => {
-    const countLabel = `${String(chapter.index + 1).padStart(2, '0')} / ${String(stops.length).padStart(2, '0')}`;
+    const ordinal = String(chapter.index + 1).padStart(2, '0');
+    const total = String(stops.length).padStart(2, '0');
+    // One lime on the phone, as on the desktop atlas: the chapter's number
+    // beside its name. The kicker, the slash, the total, the rail and the
+    // coordinates are bone (they were five more lime marks in one view).
     return (
       <>
-        <div className="mb-3 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#D2FF00]/82">
-          <span>Chapter {String(chapter.index + 1).padStart(2, '0')}</span>
+        <div className="mb-3 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#F4F4ED]/80">
+          <span>Chapter {ordinal}</span>
           <span className="sr-only">, {chapter.stop.frameCount} frames</span>
         </div>
         <button
@@ -751,9 +775,9 @@ export default function LivingAtlasStory({
             <span className="living-atlas__title block font-serif uppercase leading-[0.8] tracking-[-0.06em] text-[#F4F4ED] transition-colors duration-300 group-hover:text-white">
               {chapter.stop.name}
             </span>
-            <span className="living-atlas__slash font-serif text-[#D2FF00]/82" aria-hidden="true">/</span>
-            <span className="font-serif text-[clamp(22px,2.8vw,42px)] tracking-[-0.04em] text-[#D2FF00]/78">
-              {countLabel}
+            <span className="living-atlas__slash font-serif text-[#F4F4ED]/44" aria-hidden="true">/</span>
+            <span className="font-serif text-[clamp(22px,2.8vw,42px)] tracking-[-0.04em] text-[#F4F4ED]/68">
+              <span className="text-[#D2FF00]/86">{ordinal}</span> / {total}
             </span>
           </span>
         </button>
@@ -779,7 +803,7 @@ export default function LivingAtlasStory({
         <div className="living-atlas__entry-wash pointer-events-none absolute inset-x-0 top-0 z-10 h-[24svh]" aria-hidden="true" />
 
         <div className="living-atlas__running-head pointer-events-none absolute left-6 top-[5.15rem] z-30 md:left-12 md:top-[5.55rem]">
-          <p className="font-ui text-[7px] font-medium uppercase tracking-[0.1em] text-white/54 md:text-[8px] md:tracking-[0.1em]">
+          <p className="font-ui text-[8px] font-medium uppercase tracking-[0.1em] text-white/72 md:text-[9px] md:tracking-[0.1em]">
             <span className="md:hidden">Travel archive&nbsp;&nbsp;/&nbsp;&nbsp;{range}</span>
             <span className="hidden md:inline">Travel photographic documentary&nbsp;&nbsp;/&nbsp;&nbsp;{range}</span>
           </p>
@@ -788,7 +812,7 @@ export default function LivingAtlasStory({
         <button
           type="button"
           onClick={followRoute}
-          className="living-atlas__follow absolute left-1/2 top-[5.1rem] z-40 hidden min-h-11 -translate-x-1/2 items-center px-4 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#D2FF00]/78 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00] md:inline-flex"
+          className="living-atlas__follow absolute left-1/2 top-[5.1rem] z-40 hidden min-h-11 -translate-x-1/2 items-center px-4 font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-[#F4F4ED]/82 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00] md:inline-flex"
         >
           {atLastStop ? 'Enter story ↘' : 'Follow the route ↓'}
         </button>
@@ -885,7 +909,7 @@ export default function LivingAtlasStory({
             <button
               type="button"
               onClick={() => setRailExpanded((current) => !current)}
-              className="mt-2 min-h-11 pl-[1.35rem] font-ui text-[8px] uppercase tracking-[0.1em] text-white/48 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
+              className="mt-2 min-h-11 pl-[1.35rem] font-ui text-[8px] uppercase tracking-[0.1em] text-white/68 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
               aria-controls="living-atlas-chapter-list"
               aria-expanded={railExpanded}
             >

@@ -495,11 +495,21 @@ export default function ArchiveChapter({
     const distance = smoothFocus(Math.abs(delta));
     return distance * (delta < 0 ? 14 : -12);
   });
+  // A chapter the reader has passed takes its lede with it. At 0.38 of its
+  // ink (0.24 in all) the last chapter's paragraph stayed printed under the
+  // nav while the next one was being read — 2.2:1 residue over the atlas at
+  // rest (owner, 2026-09-27: at rest a chapter reads as its place, its
+  // ticket, its name and its lede). Still scroll-owned and reversible: mid-
+  // handoff the leaving lede is half there, as before.
   const fieldNoteOpacity = useTransform(chapterDelta, (delta) => {
     if (reduce) return Math.round(delta) === 0 ? 1 : 0.68;
     const distance = smoothFocus(Math.abs(delta));
-    return 1 - distance * (delta < 0 ? 0.38 : 0.62);
+    return 1 - distance * (delta < 0 ? 0.38 : 1);
   });
+  // A torn ticket's lede answers the pointer (see the torn note below) only
+  // while it is there to be seen: gone, it must not leave a hit area over the
+  // map.
+  const fieldNoteHit = useTransform(fieldNoteOpacity, (opacity) => (opacity > 0.05 ? 'auto' : 'none'));
   const fieldNoteShift = useTransform(chapterDelta, (delta) => {
     if (reduce) return 0;
     const distance = smoothFocus(Math.abs(delta));
@@ -531,6 +541,10 @@ export default function ArchiveChapter({
   // printed once per chapter down the whole column, which is not an invitation
   // but a watermark. It now belongs to the plate on the reading line, and to
   // the plate being pointed at — which are usually the same one.
+  // On the line it is printed whole (owner, 2026-09-27: the cue was too dark
+  // to read — at 0.5 of 0.7 ink it measured 2.8:1 on the atlas). The hover
+  // answers in ink and the arrow's step (global.css), and lifts a cue off a
+  // neighbouring plate.
   const plateCueOpacity = useTransform(
     [chapterDelta, interactionDepth],
     ([delta, interaction]) => {
@@ -543,7 +557,7 @@ export default function ArchiveChapter({
       // Added rather than `Math.max`ed: with a max, the hover spring has to
       // climb past 0.55 before the cue on the line moves at all, so the first
       // half of every hover is silent and the second half races.
-      return Math.min(0.9, proximity * 0.5 + Number(interaction) * 0.4);
+      return Math.min(1, proximity + Number(interaction) * 0.6);
     },
   );
 
@@ -1695,11 +1709,14 @@ export default function ArchiveChapter({
             }}
             className="archive-plate__meta pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] lg:flex"
           >
-            <span className="text-white/54">Chapter {String(index + 1).padStart(2, '0')}</span>
-            <span className="mr-[1%] text-right text-white/58">
+            <span className="text-white/80">Chapter {String(index + 1).padStart(2, '0')}</span>
+            <span className="mr-[1%] text-right text-white/80">
               {dateline}{collection.year ? ` · ${collection.year}` : ''}
             </span>
           </motion.div>
+          {/* The running head repeats the stub (chapter, place, year), so on a
+              ticket it is not printed at rest: it comes up while the cover is
+              pointed at or focused (global.css, "The instruments on demand"). */}
           {/* The plate: the photograph at its own ratio, capped so a tall one
               still fits the reading line, with the camera's focus corners on
               its own four corners instead of a film rebate. */}
@@ -1830,7 +1847,7 @@ export default function ArchiveChapter({
         <motion.div
           style={{
             ...(reduce ? null : { opacity: fieldNoteOpacity, y: fieldNoteShift }),
-            ...(ticket && torn ? { pointerEvents: 'auto' as const } : null),
+            ...(ticket && torn ? { pointerEvents: reduce ? 'auto' as const : fieldNoteHit } : null),
           }}
           className="archive-lede relative z-10 ml-[-12%] mt-[clamp(64px,6.5vw,92px)] hidden w-[88%] grid-cols-[96px_minmax(0,1fr)] items-start gap-x-8 pr-3 lg:grid"
         >
