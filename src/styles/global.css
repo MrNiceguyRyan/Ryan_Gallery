@@ -798,9 +798,13 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
    middle. The atlas writes, per camera frame and only when they move,
    `--lead` (the leader's length: the shields clear the region's northernmost
    place) and `--shift` (the row sliding to keep inside the map column, never
-   off its rail); `--rail` is the rail's length, fixed per sign. A shield
+   off its rail); `--rail` is the rail's length, fixed per sign. A place alone
+   in its region (`.route-sign--single`, New York) has no leader and no rail:
+   the atlas writes `--lead` as SIGN_SINGLE_GAP (6px), so the shield's own
+   point stands just over the place and is the pointer. A shield
    carries its state by SIZE and INK, fast in, slow out, on the house tokens:
-     ahead                  .9,   ink .74
+     ahead                  .92,  ink .86 (at .9 / .74 it read as disabled
+                                  grey on the dark ground)
      visited (is-past)      .95,  ink .92
      flown to (is-inbound)  1.12, ink 1   — comes up as the camera takes off
      pointed at / focused / its cover engaged: 1.04, ink 1, and its name
@@ -874,8 +878,8 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   cursor: pointer;
   overflow: visible;
   transform-origin: 50% 100%;
-  transform: scale(0.9);
-  opacity: 0.74;
+  transform: scale(0.92);
+  opacity: 0.86;
   filter: drop-shadow(0 1px 1.2px rgba(11, 14, 9, 0.6)) drop-shadow(0 3px 6px rgba(11, 14, 9, 0.28));
   transition:
     transform var(--dur-out) var(--ease-leave),
@@ -1128,8 +1132,10 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   --sG: clamp(12px, 1.39vw, 24px);
   --sC: calc((100vw - 2 * var(--sM) - 11 * var(--sG)) / 12);
   --story-rail: calc(3 * var(--sC) + 2 * var(--sG));
-  /* The kept stub's height: its type's (.story-stub), fixed. */
-  --story-stub-h: 138px;
+  /* The kept stub's height: its type's (.story-stub), fixed — headed by the
+     ticket's sign, 204px with a name on one line, 233px with a name on two
+     (BRYCE / CANYON, NEW / YORK): the reserve is the taller. */
+  --story-stub-h: 233px;
   /* The ladder: 173 · 60 · 26 · 20 · 15 · 12 · 11 · 10 at 1728. */
   --story-title: clamp(72px, 10vw, 190px);
   --story-lead: clamp(20px, 1.5vw, 26px);
@@ -2990,18 +2996,16 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   justify-content: space-between;
   gap: 16px;
 }
-.story-stub__admission {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+/* The ticket's sign (`.archive-ticket-sign`, below), at the ticket's own
+   measure and at the same place on the card: its box's corner 12px in from
+   the card's, as on the homepage stub (padding 20/22 less its -8/-10), so the
+   shield, "/ 06" and the name sit exactly where the ticket prints them and
+   the stub flies home onto itself. */
+.story-stub .story-stub__sign {
+  flex: none;
+  width: 166px;
+  margin: -4px 0 0 -12px;
 }
-.story-stub__no {
-  font-size: 34px;
-  font-weight: 500;
-  line-height: 0.9;
-  letter-spacing: -0.03em;
-}
-.story-stub__of,
 .story-stub__row,
 .story-stub__frame {
   font-size: 9px;
@@ -3010,22 +3014,24 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.story-stub__of {
-  margin-top: 6px;
-  color: var(--stub-muted);
-}
+/* Beside the sign, each row a label over its value, set right: the rail is
+   289px wide at 1280, where "REGION  FLORIDA" on one line no longer fits
+   beside the sign's 166. */
 .story-stub__rows {
-  margin: 0;
+  margin: 0 0 3px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  min-width: 128px;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .story-stub__row {
   display: flex;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
 }
 .story-stub__row dt {
   color: var(--stub-muted);
@@ -3040,25 +3046,15 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   margin: 14px 0 12px;
   background: var(--stub-rule);
 }
-/* The place on the left; the frame the reader is on anchored on the right,
-   its own city (only when it is not the chapter's) growing leftward from the
-   number and giving way first if the line is short. */
+/* The frame the reader is on, anchored on the right, its own city (only
+   when it is not the chapter's) growing leftward from the number and giving
+   way first if the line is short. (The place is the sign's, above.) */
 .story-stub__line {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   min-width: 0;
-}
-.story-stub__place {
-  flex: none;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--stub-strong);
 }
 .story-stub__frame {
   display: flex;
@@ -3181,11 +3177,17 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 }
 /* The three marks both stubs print are carried by one print (`is-shared`,
    slid between the two stubs' positions); each other print leaves them out,
-   so nothing is ever printed twice. */
+   so nothing is ever printed twice. The shared print carries the marks
+   alone: the sign round them (the shield's plate and state, "Stop", the
+   enamel rule) is the rail's print and then the ticket's, which sit on the
+   same place on the card. */
 .story-stub-travel__home :is(.archive-ticket-stub__no, .archive-ticket-stub__of, .archive-ticket-stub__place),
 .story-stub--print.is-kept :is(.story-stub__no, .story-stub__of, .story-stub__place),
-.story-stub--print.is-shared :is(.story-stub__rows, .story-stub__rule, .story-stub__frame, .story-stub__ticks) {
+.story-stub--print.is-shared :is(.story-stub__rows, .story-stub__rule, .story-stub__frame, .story-stub__ticks, .route-shield__plate, .route-shield__code, .archive-ticket-sign__label) {
   visibility: hidden;
+}
+.story-stub--print.is-shared .story-stub__sign {
+  box-shadow: none;
 }
 /* A figure that rolls instead of changing (the kept stub's frame number):
    the widest value set in place, invisible, holds the line's baseline and
@@ -3295,10 +3297,15 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   .route-shield__code { top: calc(30% - var(--shield) * 0.185 * 0.87); }
   .route-shield__num { top: calc(79.5% - var(--shield) * 0.44 * 0.87); }
 }
-/* ── The split-flap (FlapWord / runFlap) ──
+/* ── The split-flap (FlapWord / runFlap / primeFlap) ──
    Each character is a box of its own glyph's width, so a turning board never
    moves the line: while it turns its glyph is inked out and the flip printed
-   over it (`data-show`, written per flip by runFlap). */
+   over it (`data-show`, written per flip by runFlap). A flip is cut to its
+   own cell, as a board's flap is — a wide letter shown in a narrow cell
+   never overprints its neighbours. `clip-path`, not overflow: an
+   inline-block that clips its overflow moves its baseline, and the letters
+   would jump. The flips are chosen from the cell's own width class anyway
+   (src/lib/routeShield.ts), so the cut rarely shows. */
 .flap-w {
   white-space: nowrap;
 }
@@ -3308,6 +3315,25 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 }
 .flap-c[data-show] {
   color: transparent;
+  clip-path: inset(-0.2em 0);
+}
+/* The name being left, set whole over the new name's blanked cells until the
+   board turns (runFlap / primeFlap write its text; empty, it is not drawn).
+   Laid over the name's own block — the ticket's sign name and the phone's
+   place are its containing blocks — at the block's measure, so it breaks
+   where that name would, and cut to the block's height. */
+.flap-was {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  color: var(--flap-ink, #F4F4ED);
+  pointer-events: none;
+}
+.flap-was:empty {
+  display: none;
 }
 .flap-c[data-show]::after {
   content: attr(data-show);
@@ -3604,7 +3630,7 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   text-transform: uppercase;
   color: var(--stub-muted);
 }
-.archive-ticket-stub__of {
+.archive-ticket-sign__total {
   font-size: 17px;
   font-weight: 500;
   line-height: 1;
@@ -3616,9 +3642,10 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
    photograph is the chapter's; this is the sign's). Its size is set per name
    (ArchiveChapter `--sign-name`, from its longest word), so a long word never
    runs out of the rule. */
-.archive-ticket-stub__place.archive-ticket-sign__name {
+.archive-ticket-sign__name {
+  position: relative;
   display: block;
-  font-size: var(--sign-name, 26px);
+  font-size: var(--sign-name, 30px);
   font-weight: 700;
   line-height: 0.95;
   letter-spacing: -0.01em;
@@ -4343,6 +4370,7 @@ body.travel-workspace-active {
   white-space: nowrap;
 }
 .living-ticket__place {
+  position: relative;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 10.5px;

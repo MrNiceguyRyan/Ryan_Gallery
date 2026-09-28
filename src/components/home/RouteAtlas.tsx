@@ -29,7 +29,7 @@ import {
   type ViewfinderPlace,
 } from './AtlasSign';
 import { MapShield } from './RouteShield';
-import { pad2, regionSigns, signPose, stateCode } from '../../lib/routeShield';
+import { SIGN_SINGLE_GAP, pad2, regionSigns, screenMidpoint, signPose, stateCode } from '../../lib/routeShield';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -844,6 +844,17 @@ function ScrubbedRouteOrdinal({
   );
 }
 
+// The place the camera is committed to, told to the page on <html>
+// (`data-atlas-place`, beside `data-atlas-camera`): a ticket torn by the
+// scroll goes on to the next stop only while the camera is still on that
+// ticket's own place (ArchiveChapter, "A scroll's tear goes on").
+function writeAtlasPlace(id: string | null | undefined) {
+  if (typeof document === 'undefined') return;
+  const html = document.documentElement;
+  if (id) html.dataset.atlasPlace = id;
+  else delete html.dataset.atlasPlace;
+}
+
 // The phone's signs: the desktop's region signs (RouteSign) at the phone's
 // scale — the same shields, rail and one leader per region — on the living
 // atlas's projected points (a static overview, re-projected on a resize, not
@@ -896,16 +907,17 @@ function LivingRouteSign({
   order: number;
 }) {
   const count = places.length;
-  const anchor = {
-    x: points.reduce((sum, point) => sum + point.x, 0) / count,
-    y: points.reduce((sum, point) => sum + point.y, 0) / count,
-  };
+  // Halfway along the region's own stretch of road, as on the desktop.
+  const anchor = screenMidpoint(points);
   const bottom = Math.max(...points.map((point) => point.y));
   const width = count * LIVING_SHIELD_PX + (count - 1) * LIVING_SHIELD_GAP;
   const rail = ((count - 1) * (LIVING_SHIELD_PX + LIVING_SHIELD_GAP)) / 2;
   // Hung below: the same rule mirrored (the leader runs down past the
-  // region's southernmost place).
-  const pose = signPose({ x: anchor.x, y: -anchor.y }, -bottom, width, bounds.left, bounds.right, rail);
+  // region's southernmost place). A lone shield hangs just under its place,
+  // with no leader.
+  const pose = count === 1
+    ? { lead: SIGN_SINGLE_GAP, shift: 0 }
+    : signPose({ x: anchor.x, y: -anchor.y }, -bottom, width, bounds.left, bounds.right, rail);
   return (
     <motion.span
       aria-hidden="true"
@@ -926,7 +938,7 @@ function LivingRouteSign({
         ['--rail' as never]: `${rail * 2}px`,
       }}
     >
-      <i className="route-sign__lead" />
+      {count > 1 && <i className="route-sign__lead" />}
       <span className="route-sign__row">
         {count > 1 && <i className="route-sign__rail" />}
         {places.map((place) => (
@@ -1197,7 +1209,11 @@ export default function RouteAtlas({
         if (y < top) top = y;
       });
       const count = sign.places.length;
-      const next = signPose(anchor, top, signRowWidth(count), left, right, signRailHalf(count));
+      // A lone shield stands just over its place, its point the pointer: no
+      // leader (不需要下面的引线), and nothing to slide along.
+      const next = count === 1
+        ? { lead: SIGN_SINGLE_GAP, shift: 0 }
+        : signPose(anchor, top, signRowWidth(count), left, right, signRailHalf(count));
       if (next.lead !== pose.lead) {
         pose.lead = next.lead;
         pose.el.style.setProperty('--lead', `${next.lead}px`);
@@ -2005,6 +2021,7 @@ export default function RouteAtlas({
       committed = wholeBackTo(committedPlaceRef.current, committed);
     }
     committedPlaceRef.current = committed;
+    if (hopEnabled) writeAtlasPlace(chapterRoute[committed]?.stop.id);
     // ── Resumed on another place ──
     // A story turned (Next) and then closed sets the page on the turned
     // story's chapter while the story still covers everything (HomePage's
@@ -2114,23 +2131,30 @@ export default function RouteAtlas({
       }
     };
 
-    // A landing, told to the page (`atlas:arrive` on window): the chapter's
-    // ticket turns its sign into place — the state, the stop number and the
-    // name, from the place the camera left (ArchiveChapter, "The sign"). Only
-    // a real arrival: a flight's touchdown or the dive setting down on the
-    // first place, never a restart's snap or a settle.
+    // A trip, told to the page (on window), for the ticket's sign
+    // (ArchiveChapter, "The sign turns into place"): `atlas:depart` at every
+    // take-off (a retarget mid-air too), `atlas:arrive` at a flight's
+    // touchdown or the dive setting down — never a restart's snap or a
+    // settle. The sign of the stop flown to turns from the stop left only
+    // on the way ON (下一站同样产生位置字母跳转功能): `from` is null for a flight
+    // back, and for the dive, whose ticket the reader has been reading on
+    // the way down — turning a name already read back to another and on
+    // again reads as a glitch, not a departure board.
+    const signFrom = (index: number, from: number | null) => {
+      const left = from != null && from < index ? chapterRoute[from] : undefined;
+      return left
+        ? { name: left.stop.name, code: stateCode(left.stop.region), num: pad2(left.chapterIndex + 1) }
+        : null;
+    };
+    const announceDeparture = (index: number, from: number | null) => {
+      const to = chapterRoute[index]?.stop;
+      if (!to) return;
+      window.dispatchEvent(new CustomEvent('atlas:depart', { detail: { id: to.id, from: signFrom(index, from) } }));
+    };
     const announceArrival = (index: number, from: number | null) => {
       const to = chapterRoute[index]?.stop;
       if (!to) return;
-      const left = from != null && from !== index ? chapterRoute[from] : undefined;
-      window.dispatchEvent(new CustomEvent('atlas:arrive', {
-        detail: {
-          id: to.id,
-          from: left
-            ? { name: left.stop.name, code: stateCode(left.stop.region), num: pad2(left.chapterIndex + 1) }
-            : null,
-        },
-      }));
+      window.dispatchEvent(new CustomEvent('atlas:arrive', { detail: { id: to.id, from: signFrom(index, from) } }));
     };
 
     // A restart (first draw, resize, Story close) must not replay a flight —
@@ -2294,7 +2318,9 @@ export default function RouteAtlas({
       };
       committed = dest;
       committedPlaceRef.current = dest;
+      writeAtlasPlace(chapterRoute[dest]?.stop.id);
       setCameraState('flying');
+      announceDeparture(dest, flight.origin);
       window.clearTimeout(settleTimer);
       settleTimer = 0;
 
@@ -2321,6 +2347,7 @@ export default function RouteAtlas({
       committed = index;
       preroll = [index, 0];
       committedPlaceRef.current = index;
+      writeAtlasPlace(chapterRoute[index]?.stop.id);
       flight = null;
       hopCenter = restCenter(index);
       hopZoom = restZoom(index);
@@ -2339,6 +2366,7 @@ export default function RouteAtlas({
       committed = index;
       preroll = [index, 0];
       committedPlaceRef.current = index;
+      writeAtlasPlace(chapterRoute[index]?.stop.id);
       flight = null;
       hopTrim = restRoute(index);
       targetCenter = restCenter(index);
@@ -3148,6 +3176,7 @@ export default function RouteAtlas({
       if (typeof document !== 'undefined') {
         delete document.documentElement.dataset.atlasCamera;
         delete document.documentElement.dataset.atlasLandedAt;
+        delete document.documentElement.dataset.atlasPlace;
       }
       ['wheel', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteReaderDrove));
       disposed = true;

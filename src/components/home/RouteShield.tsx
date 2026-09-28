@@ -1,4 +1,13 @@
-import { SHIELD_BAND_RULE_Y, SHIELD_PATH, flapGlyph, flapPlan, type FlapStep } from '../../lib/routeShield';
+import {
+  FLAP,
+  SHIELD_BAND_RULE_Y,
+  SHIELD_PATH,
+  codePlan,
+  flapGlyph,
+  flapNumber,
+  flapPlan,
+  nameStep,
+} from '../../lib/routeShield';
 
 /**
  * A word that can turn like a departure board's flap (src/lib/routeShield.ts,
@@ -6,7 +15,9 @@ import { SHIELD_BAND_RULE_Y, SHIELD_PATH, flapGlyph, flapPlan, type FlapStep } f
  * the flips never move the line: while a character turns, its own glyph is
  * inked out and the flip is printed over it (`data-show`, global.css
  * "The split-flap"). `role` names the word for the flap runner, which starts
- * each word from the one it is leaving ('name', 'code', 'num').
+ * each word from the one it is leaving ('name', 'code', 'num'). A name also
+ * holds the name being left, set whole over its blanked cells until it turns
+ * (`.flap-was`, empty otherwise).
  */
 export function FlapWord({ text, role, className }: { text: string; role: string; className?: string }) {
   // Words are kept whole (`.flap-w`): between two character boxes the line
@@ -28,51 +39,149 @@ export function FlapWord({ text, role, className }: { text: string; role: string
             </span>
           )
       ))}
+      {role === 'name' && <span className="flap-was" data-flap-was="" aria-hidden="true" />}
     </span>
   );
 }
 
+/** One character of a board: what it shows at `t` ms into the flap, when it
+ *  is down, and what it is showing now (`data-show`, null = its own glyph). */
+interface FlapColumn {
+  el: HTMLElement;
+  final: string;
+  at: (t: number) => string;
+  land: number;
+  shown: string | null;
+  /** The name being left, set whole (`.flap-was`): written as its text. */
+  was?: boolean;
+}
+
 /**
- * Turns every FlapWord under `root` into place: each from the word it is
- * leaving (`from[role]`, the previous stop's), on one rAF loop that runs only
- * for the flap and writes a character only when it changes. Returns a stop
- * that puts every word straight back.
+ * Every FlapWord under `root` as columns turning from the words it is
+ * leaving (`from[role]`, the previous stop's): the name through its plan
+ * (src/lib/routeShield.ts, FLAP), the state only if it changes (CODE_FLIPS),
+ * the stop number counting through the real stops between, its last step
+ * landing with the name's last character.
  */
-export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}): () => void {
-  const columns: Array<{ el: HTMLElement; final: string; from: string; step: FlapStep; seed: number; shown: string | null }> = [];
-  root.querySelectorAll<HTMLElement>('[data-flap]').forEach((word, wordIndex) => {
+function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): FlapColumn[] {
+  const words = Array.from(root.querySelectorAll<HTMLElement>('[data-flap]')).map((word) => {
     const role = word.dataset.flap ?? '';
-    const chars = Array.from(word.querySelectorAll<HTMLElement>('[data-flap-c]'));
-    const plan = flapPlan(chars.length);
-    const leaving = Array.from((from[role] ?? '').replace(/\s+/g, '').toUpperCase());
-    chars.forEach((el, index) => {
-      columns.push({
+    return {
+      role,
+      el: word,
+      chars: Array.from(word.querySelectorAll<HTMLElement>('[data-flap-c]')),
+      text: (from[role] ?? '').trim(),
+      leaving: (from[role] ?? '').replace(/\s+/g, '').toUpperCase(),
+    };
+  });
+  let nameEnd: number = FLAP.delay;
+  words.forEach((word) => {
+    if (word.role !== 'name') return;
+    const plan = flapPlan(word.chars.length);
+    if (plan.length) nameEnd = Math.max(nameEnd, plan[plan.length - 1].land);
+  });
+  const columns: FlapColumn[] = [];
+  words.forEach((word, wordIndex) => {
+    const finalWord = word.chars.map((el) => el.dataset.flapC ?? '').join('');
+    const leaving = Array.from(word.leaving);
+    const column = (el: HTMLElement, at: (t: number) => string, land: number) => columns.push({
+      el,
+      final: el.dataset.flapC ?? '',
+      at,
+      land,
+      shown: el.getAttribute('data-show'),
+    });
+    if (word.role === 'num') {
+      word.chars.forEach((el, index) => column(
         el,
-        final: el.dataset.flapC ?? '',
-        from: leaving[index] ?? '',
-        step: plan[index],
-        seed: index + wordIndex * 5,
-        shown: null,
+        (t) => flapNumber(finalWord, word.leaving, t, FLAP.delay, nameEnd)[index] ?? (el.dataset.flapC ?? ''),
+        nameEnd,
+      ));
+      return;
+    }
+    if (word.role === 'code') {
+      // The same state stays down; with no stop left behind there is
+      // nothing for it to turn from.
+      const still = !word.leaving || word.leaving === finalWord;
+      const plan = codePlan(word.chars.length);
+      word.chars.forEach((el, index) => {
+        const final = el.dataset.flapC ?? '';
+        column(el, still ? () => final : (t) => flapGlyph(final, leaving[index] ?? '', plan[index], t, index + wordIndex * 5), still ? 0 : plan[index].land);
       });
+      return;
+    }
+    // The name: the same name stays down. Otherwise the name being left is
+    // set whole over the blanked cells until FLAP.delay, and then every
+    // cell turns until its landing.
+    if (word.leaving === finalWord) {
+      word.chars.forEach((el) => {
+        const final = el.dataset.flapC ?? '';
+        column(el, () => final, 0);
+      });
+      return;
+    }
+    const was = word.el.querySelector<HTMLElement>(':scope > [data-flap-was]');
+    if (was) {
+      columns.push({
+        el: was,
+        final: '',
+        at: (t) => (t < FLAP.delay ? word.text : ''),
+        land: FLAP.delay,
+        shown: was.textContent || null,
+        was: true,
+      });
+    }
+    const plan = flapPlan(word.chars.length);
+    word.chars.forEach((el, index) => {
+      const final = el.dataset.flapC ?? '';
+      const step = nameStep(plan[index]);
+      column(el, (t) => flapGlyph(final, '', step, t, index + wordIndex * 5), step.land);
     });
   });
+  return columns;
+}
+
+/** Writes a column's glyph, only when it changes: its own glyph clears
+ *  `data-show`. */
+function writeColumn(column: FlapColumn, glyph: string | null) {
+  const show = glyph == null || glyph === column.final ? null : glyph;
+  if (column.shown === show) return;
+  column.shown = show;
+  if (column.was) column.el.textContent = show ?? '';
+  else if (show == null) column.el.removeAttribute('data-show');
+  else column.el.setAttribute('data-show', show);
+}
+
+/**
+ * Sets the board to the stop being left, without turning (the camera has
+ * taken off toward this stop): every FlapWord under `root` shows the words
+ * `from` holds — the name whole, the state and the number in their cells —
+ * as runFlap's first frame will, so the name a ticket carries in is the one
+ * being left, and the turn on the landing starts from exactly what is on
+ * screen. Returns a clear that puts every word back.
+ */
+export function primeFlap(root: HTMLElement, from: Partial<Record<string, string>>): () => void {
+  const columns = flapColumns(root, from);
+  columns.forEach((column) => writeColumn(column, column.at(0)));
+  return () => columns.forEach((column) => writeColumn(column, null));
+}
+
+/**
+ * Turns every FlapWord under `root` into place from the words it is leaving
+ * (`from[role]`), on one rAF loop that runs only for the flap and writes a
+ * character only when it changes. Takes over a primed board where it
+ * stands. Returns a stop that puts every word straight back.
+ */
+export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}): () => void {
+  const columns = flapColumns(root, from);
   if (!columns.length) return () => {};
-  const end = Math.max(...columns.map((column) => column.step.land));
+  const end = Math.max(...columns.map((column) => column.land));
   const start = performance.now();
   let frame = 0;
-  const write = (column: (typeof columns)[number], show: string | null) => {
-    if (column.shown === show) return;
-    column.shown = show;
-    if (show == null) column.el.removeAttribute('data-show');
-    else column.el.setAttribute('data-show', show);
-  };
   const tick = () => {
     frame = 0;
     const t = performance.now() - start;
-    columns.forEach((column) => {
-      const glyph = flapGlyph(column.final, column.from, column.step, t, column.seed);
-      write(column, glyph === column.final ? null : glyph);
-    });
+    columns.forEach((column) => writeColumn(column, column.at(t)));
     if (t < end) frame = requestAnimationFrame(tick);
   };
   // The first frame is written at once: the word it is leaving is on the
@@ -81,7 +190,7 @@ export function runFlap(root: HTMLElement, from: Partial<Record<string, string>>
   return () => {
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
-    columns.forEach((column) => write(column, null));
+    columns.forEach((column) => writeColumn(column, null));
   };
 }
 

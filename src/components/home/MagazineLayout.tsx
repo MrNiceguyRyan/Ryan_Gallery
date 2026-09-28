@@ -35,6 +35,8 @@ import {
   type SlotKind,
 } from '../../lib/storyPlan';
 import { planEntrances, playEntrance, POP_EASE, SHUTTER_BLADES, type SlotEntrance } from '../../lib/storyEntrance';
+import { signNameSize, stateCode } from '../../lib/routeShield';
+import { FlapWord, RouteShield } from './RouteShield';
 
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
@@ -117,10 +119,10 @@ const STUB_TRAVEL_TILT = -1.6;
 /** Where the rail's kept stub waits while the story loads, and where it is
  *  set down once it has (KeptStub). It waits below the fold, tipped as it is
  *  when carried: the rail's foot rests the story's margin M (at most 48px)
- *  above the fold, and 145% of the card's own height (138px, so 200px) puts
- *  even its raised corner (~5px at 1.6° on the 390px rail) under the edge,
- *  where the story's scroller clips it. A share of its own height, so it is
- *  derived, never measured. */
+ *  above the fold, and 145% of the card's own height (204–233px, so ~300px)
+ *  puts even its raised corner (~5px at 1.6° on the 390px rail) under the
+ *  edge, where the story's scroller clips it. A share of its own height, so
+ *  it is derived, never measured. */
 const STUB_WAITING = { y: '145%', rotate: STUB_TRAVEL_TILT } as const;
 const STUB_SEATED = { y: '0%', rotate: 0 } as const;
 
@@ -256,7 +258,7 @@ export interface PlateOrigin {
   bare?: { ground: string };
 }
 
-/** The three marks both stubs print — ordinal, "/ TT · admission", place —
+/** The three marks both stubs print — the shield's stop number, "/ TT", the place —
  *  as text boxes relative to their stub's corner. */
 export type StubMarks = Record<'no' | 'of' | 'place', { x: number; y: number }>;
 
@@ -945,10 +947,15 @@ function printCity(element: HTMLElement | null, label: string, reduce: boolean) 
    What the stub prints, from props alone: the rail's stub prints it, and
    the copy that flies home at the close is cloned from that print. The same
    card as the homepage stub (global.css: .story-stub, just above
-   .archive-ticket-stub): the chapter's ordinal in Fraunces, then place,
-   region and year — only fields the archive holds. Under them, one tick per
-   frame of this story, inked as the reader passes it, and the frame the
-   reader is on.
+   .archive-ticket-stub), headed by the same SIGN: the route shield (its
+   state, the ticket's stop number), "Stop / 06" and the place's name at the
+   ticket's own size, in the same enamel rule, at the same place on the card
+   — so the three marks both stubs print (number, total, name) fly home like
+   for like and land on themselves (they used to fly a Fraunces "02" and
+   "/ 06 · ADMISSION" onto the shield sign, a doubled ORLANDO for half a
+   second). Beside the sign, region and year — only fields the archive
+   holds. Under them, one tick per frame of this story, inked as the reader
+   passes it, and the frame the reader is on.
    What moves on it — the ink in the ticks (`--p` against each tick's `--k`),
    the frame number (a strip of every value in a one-line window, global.css
    `.rolling-figure`), the frame's own city — is written from the shared
@@ -1012,9 +1019,29 @@ function StubFace({
   return (
     <>
       <div className="story-stub__head">
-        <div className="story-stub__admission">
-          <span className="story-stub__no font-serif">{ordinal}</span>
-          <span className="story-stub__of">/ {total} · admission</span>
+        {/* The ticket's sign (ArchiveChapter), printed as the ticket prints
+            it — its FlapWords included, so the letters are set in the same
+            boxes — but never turned here. */}
+        <div className="archive-ticket-sign story-stub__sign">
+          <div className="archive-ticket-sign__head">
+            <RouteShield
+              className="archive-ticket-sign__shield"
+              code={stateCode(chapter.region)}
+              number={ordinal}
+              numberClassName="story-stub__no"
+              flap
+            />
+            <span className="archive-ticket-sign__stop">
+              <span className="archive-ticket-sign__label">Stop</span>
+              <span className="archive-ticket-sign__total story-stub__of">/ {total}</span>
+            </span>
+          </div>
+          <span
+            className="archive-ticket-sign__name story-stub__place"
+            style={{ '--sign-name': `${signNameSize(chapter.name)}px` } as CSSProperties}
+          >
+            <FlapWord text={chapter.name.trim()} role="name" />
+          </span>
         </div>
         {stubRows.length > 0 && (
           <dl className="story-stub__rows">
@@ -1029,7 +1056,6 @@ function StubFace({
       </div>
       <span className="story-stub__rule" />
       <div className="story-stub__line">
-        <span className="story-stub__place">{chapter.name}</span>
         <span className="story-stub__frame">
           {/* The frame's own place, printed only when it is not the
               chapter's (New York's frames are Midtown and Manhattan; Miami's

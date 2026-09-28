@@ -424,10 +424,13 @@ export interface SignStop {
  * ring, halo, dot or crosshair, and no lime: bone plate, dark ink, the map's
  * white ink for the leader.
  *
- * The sign is a Mapbox marker anchored at its bottom on the region's middle.
- * How long the leader is and how far the row slides sideways are written per
- * camera frame by the atlas (`--lead`, `--shift`: RouteAtlas, "The signs"),
- * derived from the camera's projection — never read off the page.
+ * The sign is a Mapbox marker anchored at its bottom on the middle of the
+ * region's stretch of road. How long the leader is and how far the row
+ * slides sideways are written per camera frame by the atlas (`--lead`,
+ * `--shift`: RouteAtlas, "The signs"), derived from the camera's projection —
+ * never read off the page. A place alone in its region (New York) has no
+ * leader and no rail: its shield stands just over the place (SIGN_SINGLE_GAP)
+ * and its own point is the pointer, as on 11 mois's stop signs.
  *
  * Each shield is a button (the in-map navigation): it carries its state by
  * size and ink — ahead quieter, visited fuller, the one the camera is flying
@@ -457,7 +460,7 @@ export function RouteSign({ signKey, stops, initialCurrentId, engagedId, visibil
   const count = stops.length;
   return (
     <motion.span
-      className="route-sign"
+      className={`route-sign${count === 1 ? ' route-sign--single' : ''}`}
       data-route-sign={signKey}
       style={{
         opacity: visibility,
@@ -467,7 +470,7 @@ export function RouteSign({ signKey, stops, initialCurrentId, engagedId, visibil
         ['--rail' as never]: `${signRailHalf(count) * 2}px`,
       }}
     >
-      <i className="route-sign__lead" aria-hidden="true" />
+      {count > 1 && <i className="route-sign__lead" aria-hidden="true" />}
       <span className="route-sign__row">
         {count > 1 && <i className="route-sign__rail" aria-hidden="true" />}
         {stops.map((stop) => (
