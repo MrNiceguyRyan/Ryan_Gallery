@@ -6,9 +6,9 @@ import {
   FF_TAIL,
   FILM_DESKTOP,
   FILM_PHONE,
-  GLOBE_WAIT_MS,
+  FLY_ORDER,
   LANDING_A,
-  LANDING_B,
+  LANDING_TARGETS,
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
   RAIN_DIM,
@@ -29,14 +29,10 @@ import {
   focusAt,
   globeReleaseAt,
   landingAEnd,
-  landingFrom,
   morphScales,
   onScreen,
-  portalAt,
-  portalTarget,
   ruleFor,
   runProgress,
-  segment,
   slateBeats,
   type Anchor,
   type Box,
@@ -44,7 +40,6 @@ import {
   type Cut,
   type FinderKey,
   type FinderLook,
-  type Landing,
   type OpeningDetail,
   type OpeningState,
   type Vec2,
@@ -212,7 +207,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
 
     const body = document.body;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const landing: Landing = landingFrom(window.location.search);
     const look: FinderLook = finderLookFrom(window.location.search);
     const stage = overlay.querySelector<HTMLElement>('[data-stage]')!;
     const finder = overlay.querySelector<HTMLElement>('[data-finder]')!;
@@ -220,7 +214,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     const corners = Array.from(finder.querySelectorAll<HTMLElement>('.of-finder__c'));
     const rule = finder.querySelector<HTMLElement>('.of-finder__rule');
     const flightLayer = overlay.querySelector<HTMLElement>('[data-flight]')!;
-    const portal = overlay.querySelector<HTMLCanvasElement>('[data-portal]')!;
     const hud = overlay.querySelector<HTMLElement>('.of-hud');
     const grain = overlay.querySelector<HTMLElement>('.of-grain');
     const vignette = overlay.querySelector<HTMLElement>('.of-vignette');
@@ -231,8 +224,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     let phase: 'film' | 'landing' | 'done' = 'film';
     // The reader asked to hurry: the landing plays at FF_RATE.
     let hurried = false;
-    // Landing A's globe keeps its rise after the page is handed over.
-    let globeSettle = 0;
     const timers = new Set<number>();
     const later = (fn: () => void, ms: number) => {
       const id = window.setTimeout(() => {
@@ -304,11 +295,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       markSeen();
       html.removeAttribute('data-opening');
       html.removeAttribute('data-open-fly');
-      // (The globe's rise, if landing A started it, runs to its end first:
-      // dropping the attribute takes its transition away.)
-      if (html.hasAttribute('data-open-globe')) {
-        globeSettle = window.setTimeout(() => html.removeAttribute('data-open-globe'), 700);
-      }
       skip.classList.remove('is-gone');
       state = 'page';
       globe = true;
@@ -672,31 +658,17 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     onHurry = fastForward;
 
     // ── Landing ──
-    let landingWaited = 0;
+    // It lands on the entrance's opening words; the globe is not there (it
+    // comes in once the boarding pass below is torn), so nothing to wait for.
     function startLanding() {
       if (phase !== 'film') return;
-      // A moment for the globe's tiles, if they are not in yet.
-      const ready = (() => {
-        if (phone()) return true;
-        try {
-          return window.__archiveGlobeReady ? window.__archiveGlobeReady() : true;
-        } catch {
-          return true;
-        }
-      })();
-      if (!ready && landingWaited < GLOBE_WAIT_MS) {
-        landingWaited += 60;
-        later(startLanding, 60);
-        return;
-      }
       phase = 'landing';
       markSeen();
       releaseGlobe();
       state = 'landing';
       publish();
       skip.classList.add('is-gone');
-      if (landing === 'b') landB();
-      else landA();
+      landA();
     }
 
     const fadeFurniture = (ms: number) => {
@@ -709,27 +681,18 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     // A: the words fly home.
     function landA() {
       const slate = rigs[rigs.length - 1];
-      const desk = !phone();
       // Hurried (the reader wheeled, touched, pressed): every beat at FF_RATE.
       const rate = hurried ? FF_RATE : 1;
       const ms = (v: number) => v / rate;
+      // Every found word to its own span in the entrance's opening words
+      // (LANDING_TARGETS), on a phone as on the desktop: the opening words
+      // are the first screen on both.
       const pairs: { src: HTMLElement; dst: HTMLElement }[] = [];
-      const pick = (sel: string) => document.querySelector<HTMLElement>(sel);
-      if (desk) {
-        (['ryan', 'xu', 'archive', 'travel', 'thought'] as const).forEach((word) => {
-          const src = slate.scene.querySelector<HTMLElement>(`[data-fly="${word}"]`);
-          const dst = pick(`.globe-prologue [data-open-land="${word}"]`);
-          if (src && dst) pairs.push({ src, dst });
-        });
-      } else {
-        // A phone's first screen is the card: his name flies home to it; the
-        // other words go with the board (the card's own ARCHIVE is the
-        // backdrop behind it — a word landing there would pass in front of
-        // the card and then drop behind it).
-        const name = slate.scene.querySelector<HTMLElement>('.of-slate__name');
-        const nameDst = pick('[data-open-land="phone-name"]');
-        if (name && nameDst) pairs.push({ src: name, dst: nameDst });
-      }
+      FLY_ORDER.forEach((word) => {
+        const src = slate.scene.querySelector<HTMLElement>(LANDING_TARGETS[word].from);
+        const dst = document.querySelector<HTMLElement>(LANDING_TARGETS[word].to);
+        if (src && dst && dst.getClientRects().length) pairs.push({ src, dst });
+      });
 
       overlay.classList.add('is-landing');
       html.setAttribute('data-open-fly', '');
@@ -878,7 +841,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         );
       });
 
-      later(() => html.setAttribute('data-open-globe', ''), ms(LANDING_A.globe));
       later(() => {
         html.dataset.reel = 'landed';
       }, ms(LANDING_A.rest));
@@ -891,127 +853,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         detachInput();
       }, ms(landingAEnd(placed.length)));
       later(finish, ms(LANDING_A.done));
-    }
-
-    // B: through the o.
-    function landB() {
-      const slate = rigs[rigs.length - 1];
-      const o = slate.scene.querySelector<HTMLElement>('[data-portal-o] svg');
-      const sheet = slate.sheet;
-      const base = o && sheet ? camAt(rigs.length - 1, slate.cut.end) : null;
-      if (!o || !sheet || !base) {
-        landA();
-        return;
-      }
-      // Take the sheet off its clock: from here the push is drawn frame by
-      // frame, in step with the canvas.
-      // (The clap's jolt too: the portal is measured on the board at rest.)
-      filmAnims
-        .filter((a) => {
-          const target = (a.effect as KeyframeEffect | null)?.target;
-          return target === sheet || (target === slate.scene && (a.effect as KeyframeEffect).getKeyframes().some((k) => 'transform' in k));
-        })
-        .forEach((a) => a.cancel());
-      sheet.style.transform = cameraTransform(base);
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const oRect = o.getBoundingClientRect();
-      // The ring: r 42.5 of 50, stroke 12 → the counter is 36.5/50 of the
-      // half-width, the ring's outside 48.5/50.
-      const half = oRect.width / 2;
-      const c0: Vec2 = [oRect.left + half, oRect.top + oRect.height / 2];
-      const r0 = (half * 36.5) / 50;
-      const onPhone = phone();
-      const target = portalTarget(w, h, onPhone);
-      // Hurried (the reader wheeled, touched, pressed): the push at FF_RATE.
-      const rate = hurried ? FF_RATE : 1;
-      const zoomEnd = target.r / r0;
-      const pivot: Vec2 = [(zoomEnd * c0[0] - target.x) / (zoomEnd - 1), (zoomEnd * c0[1] - target.y) / (zoomEnd - 1)];
-      // Drawn afresh at every scale (not a bitmap blown up): the letters
-      // stay sharp as the camera goes in.
-      sheet.style.willChange = 'auto';
-      // The counter is a window from the first frame: a hole in the board.
-      const ox = (c0[0] - base.tx) / base.s;
-      const oy = (c0[1] - base.ty) / base.s;
-      const holeR = r0 / base.s;
-      const mask = `radial-gradient(circle at ${ox.toFixed(2)}px ${oy.toFixed(2)}px, transparent ${holeR.toFixed(2)}px, #000 ${(holeR + 0.8).toFixed(2)}px)`;
-      sheet.style.webkitMaskImage = mask;
-      sheet.style.maskImage = mask;
-      slate.scene.style.background = 'transparent';
-      overlay.classList.add('is-landing');
-      html.dataset.reel = 'portal';
-      fadeFurniture(200 / rate);
-
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      portal.width = Math.round(w * dpr);
-      portal.height = Math.round(h * dpr);
-      portal.style.visibility = 'visible';
-      const ctx = portal.getContext('2d');
-      const start = performance.now();
-      let raf = 0;
-      let risen = false;
-      // The ground round the window starts as the board's own dark and
-      // warms to the page's olive as the camera goes in.
-      const ground0 = [0x1b, 0x1e, 0x16];
-      const ground1 = [0x28, 0x2c, 0x20];
-      const frame = (now: number) => {
-        raf = 0;
-        if (disposed) return;
-        const t = (now - start) * rate;
-        const u = clamp01(t / LANDING_B.push);
-        const p = portalAt(u, c0, r0, target);
-        const zoom = p.zoom;
-        const cam: Camera = { s: base.s * zoom, tx: pivot[0] + (base.tx - pivot[0]) * zoom, ty: pivot[1] + (base.ty - pivot[1]) * zoom };
-        sheet.style.transform = cameraTransform(cam);
-        const sheetFade = segment(zoom, LANDING_B.sheetFade[0], LANDING_B.sheetFade[1]);
-        sheet.style.opacity = String(1 - sheetFade);
-        if (ctx) {
-          const surround = 1 - segment(t, LANDING_B.surround[0], LANDING_B.surround[1]);
-          const ring = sheetFade * (1 - segment(t, LANDING_B.ringOut[0], LANDING_B.ringOut[1]));
-          const warm = segment(u, 0, 0.5);
-          const ground = `rgb(${ground0.map((c, i) => Math.round(c + (ground1[i] - c) * warm)).join(',')})`;
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          ctx.clearRect(0, 0, w, h);
-          if (surround > 0) {
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.globalAlpha = surround;
-            ctx.fillStyle = ground;
-            ctx.fillRect(0, 0, w, h);
-            // A phone's window opens on its card, whose own letters would
-            // show through the O: its window stays olive until the iris.
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.globalAlpha = onPhone ? sheetFade : 1;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-          }
-          if (ring > 0) {
-            // A white-ink hairline at the counter's edge, one weight at any
-            // scale; it takes over from the O's own stroke as the board goes.
-            ctx.globalAlpha = ring;
-            ctx.strokeStyle = '#efeee4';
-            ctx.lineWidth = LANDING_B.ring;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r + LANDING_B.ring / 2, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
-        }
-        if (!risen && t >= LANDING_B.rise) {
-          risen = true;
-          html.dataset.reel = 'page';
-          unlock();
-          detachInput();
-        }
-        if (t < LANDING_B.done) raf = requestAnimationFrame(frame);
-        else {
-          portal.style.visibility = 'hidden';
-          finish();
-        }
-      };
-      raf = requestAnimationFrame(frame);
-      cleanups.push(() => cancelAnimationFrame(raf));
     }
 
     const cleanups: (() => void)[] = [];
@@ -1104,7 +945,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       detachInput();
       unlock();
       cleanups.forEach((fn) => fn());
-      window.clearTimeout(globeSettle);
       window.clearTimeout(refit);
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisible);
@@ -1112,8 +952,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       flightLayer.replaceChildren();
       html.removeAttribute('data-opening');
       html.removeAttribute('data-open-fly');
-      html.removeAttribute('data-open-globe');
-      if (html.dataset.reel === 'reel' || html.dataset.reel === 'flight' || html.dataset.reel === 'portal') html.dataset.reel = 'page';
+      if (html.dataset.reel === 'reel' || html.dataset.reel === 'flight') html.dataset.reel = 'page';
       window.__archiveOpening = undefined;
     };
   }, []);
@@ -1121,7 +960,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
   return (
     <>
       <div ref={rootRef} className="opening" aria-hidden="true">
-        <canvas className="of-portal" data-portal />
         <div className="of-stage" data-stage>
           <OpeningScenes pictures={pictures} />
         </div>

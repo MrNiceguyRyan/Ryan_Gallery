@@ -151,21 +151,21 @@ interface Props {
   /** An AF point is clicked: go to that chapter (`focus` false: a pointer's
    *  click, keyboard focus stays where it is). */
   onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
-  /** Create the map now, not when the atlas nears the viewport (the opening
-   *  reel covers the first screen; HomePage warms the map behind it). */
+  /** Create the map now, not when the atlas nears the viewport (HomePage
+   *  warms it behind the opening film and the entrance's opening words). */
   eager?: boolean;
-  /** Hold the globe's reveal (and its dawn) while the opening reel covers
-   *  the first screen, so they play as the reel's shutter opens on it. */
+  /** Hold the globe's reveal (and its dawn and settle) until the entrance's
+   *  boarding pass is torn, so they play as the page's glide brings the
+   *  globe up the screen. */
   holdReveal?: boolean;
-  /** Count the atlas as engaged although it is below the fold: the opening
-   *  reel lies over the first screen, and the camera should hold the first
-   *  pose (its tiles loading) by the time the reel hands over — as it did
-   *  when the globe was the first thing on the page. */
+  /** Count the atlas as engaged although it is below the fold: the film and
+   *  the entrance lie above it, and the camera should hold the first pose
+   *  (its tiles loading, its poses warmed) by the time the glide brings it
+   *  up — and keep it through the glide. */
   engage?: boolean;
-  /** The opening reel still lies over the globe (even with its reveal let
-   *  go): the globe's own life — the drift, the lean to the cursor — waits,
-   *  so the map does not repaint behind the reel; it starts as the shutter
-   *  opens. */
+  /** The globe is not up yet (the film, the pass still whole): its own life
+   *  — the drift, the lean to the cursor — waits, so the map does not
+   *  repaint behind the page; it starts as the globe comes in. */
   covered?: boolean;
 }
 
@@ -1903,11 +1903,10 @@ export default function RouteAtlas({
   // fades in already lit and in place. The first 90 dawn frames also decide
   // whether this machine needs the lighter light pass.
   const globeRevealPlayedRef = useRef(false);
-  // While the opening reel covers the first screen the gate keeps waiting
-  // (the tiles load behind it, and the reveal's poses are warmed), until the
-  // reel's last sphere comes on: the fade, the dawn and most of the settle
-  // then play under the reel's final stretch, and the shutter opens on a
-  // globe that is lit, loaded and all but in place.
+  // While the entrance holds it (the opening words and the boarding pass
+  // above it) the gate keeps waiting — the tiles load, and the reveal's
+  // poses are warmed — until the pass is torn: the fade, the dawn and the
+  // settle then play as the page's glide brings the globe up the screen.
   const holdRevealRef = useRef(holdReveal);
   holdRevealRef.current = holdReveal;
   const reelCoveredRef = useRef(covered);
@@ -2103,25 +2102,8 @@ export default function RouteAtlas({
     };
   }, [globeChannel, globeIntro, mapLoaded, prologue, reducedMotion, resolvedPrologueProgress]);
 
-  // The reel's shutter asks whether the globe's tiles are in: shut, it holds
-  // a moment for them (a slower shutter speed) before it opens on the globe.
-  useEffect(() => {
-    if (!prologue || !mapLoaded) return;
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-    const ready = () => {
-      try {
-        return map.isSourceLoaded('prologue-satellite') && map.areTilesLoaded();
-      } catch {
-        return true;
-      }
-    };
-    window.__archiveGlobeReady = ready;
-    return () => {
-      if (window.__archiveGlobeReady === ready) delete window.__archiveGlobeReady;
-    };
-  }, [mapLoaded, prologue]);
-  // Uncovered (the shutter open on it), the globe's own life begins.
+  // Uncovered (the entrance's pass torn, the globe on its way up), the
+  // globe's own life begins.
   useEffect(() => {
     if (!covered) globeChannel.requestDraw();
   }, [covered, globeChannel]);

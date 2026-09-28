@@ -7,6 +7,7 @@ import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
 import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
+import '../styles/entrance.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 
 // ─── GROQ: All collections with photos + location data ───
@@ -53,10 +54,10 @@ const openingPictures = pickPictures(collections ?? []);
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     {/* The opening film covers the first screen from the first paint: say so
-        before anything paints (html[data-opening] shows its layer, the first
-        screen's entrance waits under it). On a second view in the same tab
-        session it is skipped instead (data-reel="skip": the layer is not
-        shown and the page opens on the first screen), src/lib/reelVisit.ts. */}
+        before anything paints (html[data-opening] shows its layer, the
+        opening words' entrance waits under it). On a second view in the same
+        tab session it is skipped instead (data-reel="skip": the layer is not
+        shown and the page opens on the opening words), src/lib/reelVisit.ts. */}
     <script is:inline set:html={reelHeadScript()} />
   </Fragment>
   {/* The opening film: a word hunt through many texts, over the page. Its

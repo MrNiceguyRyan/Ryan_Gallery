@@ -2,8 +2,10 @@
 // The film (src/components/home/OpeningFilm.tsx) plays once a session. A
 // later homepage load in the same tab — back from /about or a story, the
 // wordmark from another page, the browser's back button — opens straight on
-// the first screen; a RELOAD plays it again (the owner reviews by reloading),
-// and so does a new tab (its sessionStorage is its own).
+// the first screen (the entrance's opening words, EntranceIntro — the globe
+// comes later, once the boarding pass is torn); a RELOAD plays it again (the
+// owner reviews by reloading), and so does a new tab (its sessionStorage is
+// its own).
 //
 // The decision is made before the first paint and written on <html>:
 // data-reel="skip" (no film), or data-reel="reel" with data-opening (the

@@ -441,8 +441,8 @@ function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undef
 // It carries every word the film found. RYAN XU is where the last run held
 // it; the line under it is the first screen's own line, and its found words
 // are chalked under before the sticks come down. The O of THOUGHT is a true
-// circle drawn in the stroke's weight, so landing B can push through its
-// counter exactly.
+// circle drawn in the stroke's weight. Its CAMERA credit (beside his name)
+// flies home too, into the entrance's opening words.
 function Chalk() {
   return (
     <svg className="of-chalk" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
@@ -461,7 +461,7 @@ function SlateScene() {
         </div>
         <div className="of-slate__board">
           <div className="of-slate__row of-slate__row--name">
-            <span className="of-slate__label">Camera</span>
+            <span className="of-slate__label" data-fly="camera">Camera</span>
             <Find word="ryanxu" className="of-slate__name">
               <span data-fly="ryan">RYAN</span> <span data-fly="xu">XU</span>
             </Find>
@@ -475,7 +475,7 @@ function SlateScene() {
               <span className="of-slate__found" data-fly="travel">TRAVEL<Chalk /></span>{' '}
               AND{' '}
               <span className="of-slate__found" data-fly="thought">
-                TH<span className="of-slate__o" data-portal-o><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
+                TH<span className="of-slate__o"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
               </span>
             </span>
           </div>

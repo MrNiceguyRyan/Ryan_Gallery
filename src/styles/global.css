@@ -93,22 +93,9 @@ html.lenis body {
   transition-duration: var(--dur-in);
 }
 
-/* Globe prologue (desktop homepage opening). Each display line rises out of
-   its own mask; the padding/negative margin pair gives the glyphs' overshoot
-   room without changing the line boxes. */
-.prologue-line {
-  display: block;
-  overflow: hidden;
-  padding: 0.04em 0 0.1em;
-  margin: -0.04em 0 -0.1em;
-}
-.prologue-display {
-  line-height: 0.84;
-  letter-spacing: -0.045em;
-  text-shadow: 0 6px 44px rgba(12, 14, 9, 0.55);
-}
-/* The scroll cue's sweep is the first screen's one lime mark (the kicker's
-   dot is bone ink). */
+/* The scroll cue's sweep is its screen's one lime mark (the kickers' dots
+   are bone ink): the globe's first pose here, the opening words in
+   entrance.css. */
 .prologue-scroll-cue::after {
   content: '';
   position: absolute;
@@ -124,17 +111,14 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .prologue-scroll-cue::after { animation: none; transform: none; opacity: 0.5; }
 }
-/* The first screen's entrance runs from the first paint, not from hydration.
-   It used to be framer-motion, whose `initial` is written into the server
-   HTML: his name shipped hidden and only rose once the scripts had loaded
-   (about 1.3 s of empty olive on a slow line). Here the base styles ARE the
-   finished screen and the hidden state lives only in each keyframe's `from`
-   (filled backwards through the delay, never forwards: once risen the type
-   is plain page again, off its animation layer), so with no animation
-   (reduced motion) the finished screen is what paints.
-   The score is the old one: the two lines rise out of their masks at 180 and
-   270 ms, the tagline follows at 520, the kicker at 680 and the scroll cue at
-   1030 ms, still inside the name's own rise. */
+/* Entrances run in CSS from the moment they are asked for, not from
+   hydration: framer's `initial` is written into the server HTML and shipped
+   type hidden until the scripts had loaded. The base styles ARE the finished
+   screen and the hidden state lives only in each keyframe's `from` (filled
+   backwards through the delay, never forwards: once risen the type is plain
+   page again, off its animation layer), so with no animation (reduced
+   motion) the finished screen is what paints. The opening words' entrance
+   (src/styles/entrance.css) uses these same keyframes. */
 @keyframes prologue-hero-rise {
   from { transform: translateY(112%); }
 }
@@ -147,100 +131,42 @@ html.lenis body {
 @keyframes prologue-hero-fade {
   from { opacity: 0; }
 }
-.prologue-hero-rise {
-  animation: prologue-hero-rise 950ms var(--ease-arrive) 180ms backwards;
+/* ── The globe's first pose (GlobePrologue) ──────────────────────────────
+   The globe is not on the first screen any more (the entrance's opening
+   words and boarding pass are, EntranceIntro): it arrives when the pass is
+   torn, rising over the lower edge with the page's glide. Its caption waits
+   out the move ('gliding') and comes up once the globe is in place
+   ('landed') — one thing at a time: the kicker at 80 ms, the line at 160,
+   the stop at 280, the cue at 420. At rest (a restored position, reduced
+   motion) the caption simply is. */
+.globe-prologue[data-arrival='gliding'] .prologue-cap { opacity: 0; }
+.globe-prologue[data-arrival='landed'] .prologue-cap--1 {
+  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 80ms backwards;
 }
-.prologue-hero-rise--late {
-  animation-delay: 270ms;
+.globe-prologue[data-arrival='landed'] .prologue-cap--2 {
+  animation: prologue-hero-lift-14 900ms var(--ease-arrive) 160ms backwards;
 }
-.prologue-hero-tagline {
-  animation: prologue-hero-lift-14 800ms var(--ease-arrive) 520ms backwards;
+.globe-prologue[data-arrival='landed'] .prologue-cap--3 {
+  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 280ms backwards;
 }
-.prologue-hero-kicker {
-  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 680ms backwards;
-}
-.prologue-hero-cue {
-  animation: prologue-hero-fade 800ms var(--ease-arrive) 1030ms backwards;
+.globe-prologue[data-arrival='landed'] .prologue-cap--4 {
+  animation: prologue-hero-fade 800ms var(--ease-arrive) 420ms backwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  .prologue-hero-rise,
-  .prologue-hero-tagline,
-  .prologue-hero-kicker,
-  .prologue-hero-cue { animation: none; }
+  .globe-prologue[data-arrival] .prologue-cap { animation: none; opacity: 1; }
 }
 /* ── The opening film (OpeningFilm; its own sheet is opening.css) ────────
-   It lies over this first screen until it lands (<html data-reel>, written
-   before the first paint by index.astro's head script and kept by the film):
-   'reel' while it plays, 'flight' while landing A's words fly home,
-   'portal' while landing B pushes through the O, then 'landed' (A) or
-   'page' (B, reduced motion). Held under the film, the entrance is off — the
-   finished screen, unseen. Without scripts there is no data-reel, and the
-   entrance runs from the first paint as it always has. */
-html[data-reel='reel'] .globe-prologue .prologue-hero-rise,
-html[data-reel='reel'] .globe-prologue .prologue-hero-tagline,
-html[data-reel='reel'] .globe-prologue .prologue-hero-kicker,
-html[data-reel='reel'] .globe-prologue .prologue-hero-cue,
-html[data-reel='flight'] .globe-prologue .prologue-hero-rise,
-html[data-reel='flight'] .globe-prologue .prologue-hero-tagline,
-html[data-reel='flight'] .globe-prologue .prologue-hero-kicker,
-html[data-reel='flight'] .globe-prologue .prologue-hero-cue,
-html[data-reel='landed'] .globe-prologue .prologue-hero-rise,
-html[data-reel='landed'] .globe-prologue .prologue-hero-tagline,
-html[data-reel='portal'] .globe-prologue .prologue-hero-rise,
-html[data-reel='portal'] .globe-prologue .prologue-hero-tagline,
-html[data-reel='portal'] .globe-prologue .prologue-hero-kicker,
-html[data-reel='portal'] .globe-prologue .prologue-hero-cue { animation: none; }
-/* Landing A: the found words fly home. While they fly their own places on
-   the page wait for them (the flight's clones are drawn there), and the rest
-   of the first screen is not there yet; then the line's other words, the
-   kicker and the scroll cue come up round them. */
+   It lies over the entrance's opening words until it lands (<html
+   data-reel>, written before the first paint by index.astro's head script
+   and kept by the film): 'reel' while it plays, 'flight' while landing A's
+   words fly home, then 'landed' (reduced motion: 'page'). The opening
+   words' own rules are in entrance.css. While the words fly, their places
+   on the page wait for them (the flight's clones are drawn there). */
 html[data-open-fly] [data-open-land] { visibility: hidden; }
-html[data-reel='flight'] .globe-prologue .open-rest,
-html[data-reel='flight'] .globe-prologue .prologue-hero-kicker,
-html[data-reel='flight'] .globe-prologue .prologue-hero-cue { opacity: 0; }
-html[data-reel='landed'] .globe-prologue .open-rest {
-  animation: prologue-hero-fade 760ms var(--ease-arrive) 60ms backwards;
-}
-html[data-reel='landed'] .globe-prologue .prologue-hero-kicker {
-  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 240ms backwards;
-}
-html[data-reel='landed'] .globe-prologue .prologue-hero-cue {
-  animation: prologue-hero-fade 700ms var(--ease-arrive) 420ms backwards;
-}
-/* …and the globe rises out of the dark behind them (html[data-open-globe],
-   a little into the flight). */
-html[data-reel='flight']:not([data-open-globe]) .opening-atlas {
-  opacity: 0;
-  transform: translate3d(0, 4vh, 0);
-}
-html[data-open-globe] .opening-atlas {
-  transition: opacity 1200ms var(--ease-arrive), transform 1600ms var(--ease-arrive);
-}
-/* Landing B: under the portal only the ground and the globe show through the
-   O; the first screen rises as the dark round the globe lifts. */
-html[data-reel='portal'] .globe-prologue { visibility: hidden; }
-html[data-reel='page'] .globe-prologue .prologue-hero-rise {
-  animation-duration: 760ms;
-  animation-delay: 0ms;
-}
-html[data-reel='page'] .globe-prologue .prologue-hero-rise--late { animation-delay: 70ms; }
-html[data-reel='page'] .globe-prologue .prologue-hero-tagline {
-  animation-duration: 640ms;
-  animation-delay: 220ms;
-}
-html[data-reel='page'] .globe-prologue .prologue-hero-kicker {
-  animation-duration: 560ms;
-  animation-delay: 320ms;
-}
-html[data-reel='page'] .globe-prologue .prologue-hero-cue {
-  animation-duration: 560ms;
-  animation-delay: 420ms;
-}
 /* The homepage nav is not over the film; it comes in last, once the film
    has landed. */
 html[data-reel='reel'] nav[data-site-nav],
-html[data-reel='flight'] nav[data-site-nav],
-html[data-reel='portal'] nav[data-site-nav] {
+html[data-reel='flight'] nav[data-site-nav] {
   opacity: 0;
   pointer-events: none;
 }

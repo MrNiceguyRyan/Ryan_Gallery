@@ -368,8 +368,46 @@ export interface TornEdge {
   stubFringe: string;
 }
 
+/** The fibres' ink: bone on the card stocks (a torn card shows its lighter
+ *  core). A white paper passes its own. */
+export const FIBRE_INK = { face: 'rgba(238,232,216,0.94)', stub: 'rgba(240,234,220,0.62)' } as const;
+
 /** The torn edge of a seam `h` px long, as four data-URI SVGs. */
-export function tornEdge(h: number, seed: number): TornEdge {
+export function tornEdge(h: number, seed: number, ink: { face: string; stub: string } = FIBRE_INK): TornEdge {
+  const { height, faceCut, stubCut, faceFringe, stubFringe } = tornEdgePaths(h, seed);
+  return {
+    faceCut: svgUrl(height, faceCut, '#000', 'xMaxYMin'),
+    stubCut: svgUrl(height, stubCut, '#000', 'xMinYMin'),
+    faceFringe: svgUrl(height, faceFringe, ink.face, 'xMaxYMin'),
+    stubFringe: svgUrl(height, stubFringe, ink.stub, 'xMinYMin'),
+  };
+}
+
+/**
+ * The same torn edge for a seam that runs ACROSS (a pass held upright, its
+ * stub below its face: the boarding pass on a phone): each strip turned
+ * about the diagonal, `w` px long and EDGE_W tall, the face's cut along its
+ * bottom edge and the stub's along its top, revealed from the left as the
+ * rip runs. The same profile, the same seed.
+ */
+export function tornEdgeAcross(w: number, seed: number, ink: { face: string; stub: string } = FIBRE_INK): TornEdge {
+  const { height, faceCut, stubCut, faceFringe, stubFringe } = tornEdgePaths(w, seed);
+  const across = (path: string, fill: string, align: 'xMinYMax' | 'xMinYMin') =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${height}' height='${EDGE_W}' viewBox='0 0 ${height} ${EDGE_W}' preserveAspectRatio='${align} slice'><path transform='matrix(0 1 1 0 0 0)' d='${path}' fill='${fill}'/></svg>`,
+    )}")`;
+  return {
+    faceCut: across(faceCut, '#000', 'xMinYMax'),
+    stubCut: across(stubCut, '#000', 'xMinYMin'),
+    faceFringe: across(faceFringe, ink.face, 'xMinYMax'),
+    stubFringe: across(stubFringe, ink.stub, 'xMinYMin'),
+  };
+}
+
+/** The torn edge's four outlines (SVG paths in an EDGE_W-wide strip `height`
+ *  tall, the seam down its length): what `tornEdge` and `tornEdgeAcross`
+ *  draw. The face keeps the cut at its right, the stub at its left. */
+export function tornEdgePaths(h: number, seed: number) {
   const random = seeded(seed);
   const points: Array<[number, number, number, number]> = [];
   let depth = 1.6;
@@ -400,10 +438,5 @@ export function tornEdge(h: number, seed: number): TornEdge {
     .reverse()
     .map(([y, d, fibre]) => `L${f(d + fibre)} ${f(y)}`)
     .join(' ')} Z`;
-  return {
-    faceCut: svgUrl(height, faceCut, '#000', 'xMaxYMin'),
-    stubCut: svgUrl(height, stubCut, '#000', 'xMinYMin'),
-    faceFringe: svgUrl(height, faceFringe, 'rgba(238,232,216,0.94)', 'xMaxYMin'),
-    stubFringe: svgUrl(height, stubFringe, 'rgba(240,234,220,0.62)', 'xMinYMin'),
-  };
+  return { height, faceCut, stubCut, faceFringe, stubFringe };
 }

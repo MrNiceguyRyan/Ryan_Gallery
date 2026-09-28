@@ -5,9 +5,17 @@ interface Props {
   years: string;
   /** Prologue progress 0–1 (HomePage's clock for the globe). */
   progress?: MotionValue<number>;
-  /** The opening film lies over the first screen (OpeningFilm): the globe
-   *  cannot be played with, so its key is out of the tab order. */
+  /** The globe is not up yet (the opening film, or the entrance's pass
+   *  still whole): it cannot be played with, so its key is out of the tab
+   *  order. */
   covered?: boolean;
+  /** The route's first stop, and how many stops there are. */
+  first?: { name: string; region?: string | null; year?: number | string | null } | null;
+  stops?: number;
+  /** The entrance's glide: 'gliding' while it brings the globe up (the
+   *  caption waits), 'landed' once the globe is in place (the caption comes
+   *  up), 'none' when there was no glide (the caption simply is). */
+  arrival?: 'none' | 'gliding' | 'landed';
 }
 
 // The globe's easter eggs take the keyboard too, on the first screen only
@@ -19,17 +27,18 @@ const sendGlobeEgg = (type: 'spin' | 'bulb-start' | 'bulb-end') =>
   window.dispatchEvent(new CustomEvent('archive:globe-egg', { detail: { type } }));
 
 /**
- * GlobePrologue — the desktop homepage's first screen, laid over the live
- * atlas.
+ * GlobePrologue — the globe's first pose on the desktop homepage, laid over
+ * the live atlas.
  *
- * After 11 mois sans toi(t): his name and what this is, over a whole, lit
- * globe half off the bottom-right corner. That is the whole opening: about a
- * screen of scroll on, the globe glides to the atlas's focal point and dives
- * straight into the first chapter, whose photograph is already coming up
- * the page. The globe itself is the RouteAtlas map (driven by
+ * His name and the opening words are the entrance's now (EntranceIntro,
+ * above): the globe arrives here once the boarding pass is torn, lit, low in
+ * the bottom-right corner, and this screen only says where the route begins
+ * — a quiet caption, never a second title. About a screen of scroll on, the
+ * globe glides to the atlas's focal point and dives straight into the first
+ * chapter. The globe itself is the RouteAtlas map (driven by
  * `prologueProgress`); this component is only the type.
  */
-export default function GlobePrologue({ years, progress, covered = false }: Props) {
+export default function GlobePrologue({ years, progress, covered = false, first = null, stops = 0, arrival = 'none' }: Props) {
   const reduce = useReducedMotion();
   // The egg's key: client-only (a mouse or a pen beside the keyboard, as the
   // eggs themselves need), in the tab order only while the globe can play.
@@ -70,51 +79,55 @@ export default function GlobePrologue({ years, progress, covered = false }: Prop
   };
 
   return (
-    <div className="globe-prologue pointer-events-none absolute inset-x-0 top-0 z-30 hidden lg:block">
-      {/* The first screen enters in CSS, from the first paint (the
-          `prologue-hero-*` classes in global.css). These are plain elements
-          on purpose: framer writes a hidden `initial` into the server HTML,
-          so his name used to wait, invisible, for the scripts. */}
+    <div
+      className="globe-prologue pointer-events-none absolute inset-x-0 top-0 z-30 hidden lg:block"
+      data-arrival={arrival === 'none' ? undefined : arrival}
+    >
+      {/* Plain elements on purpose: framer writes a hidden `initial` into
+          the server HTML. At rest these are the finished screen; the
+          caption waits while the entrance's glide brings the globe up and
+          comes up once it is in place (`data-arrival`, global.css "The
+          globe's first pose"). */}
       <div className="flex h-[100svh] flex-col justify-end pb-[11svh] pl-[6vw] pr-[40vw]">
-        {/* The kicker's dot is bone: the first screen's one lime mark is the
+        {/* The kicker's dot is bone: the screen's one lime mark is the
             scroll cue's sweep below. */}
-        <p className="prologue-hero-kicker flex items-center gap-3 font-ui text-[11px] uppercase tracking-[0.1em] text-white/60">
+        <p className="prologue-cap prologue-cap--1 flex items-center gap-3 font-ui text-[11px] uppercase tracking-[0.1em] text-white/60">
           <span className="h-1.5 w-1.5 rounded-full bg-[#F4F4ED]" aria-hidden="true" />
           <span>Visual Archive</span>
           {years && <span className="tabular-nums text-white/45">{years}</span>}
         </p>
-        <p
-          aria-hidden="true"
-          className="prologue-display mt-5 font-serif uppercase text-[#F4F4ED]"
-          style={{ fontSize: 'clamp(112px, 15.2vw, 280px)' }}
-        >
-          <span className="prologue-line"><span className="prologue-hero-rise block" data-open-land="ryan">Ryan</span></span>
-          <span className="prologue-line"><span className="prologue-hero-rise prologue-hero-rise--late block" data-open-land="xu">Xu</span></span>
-        </p>
-        {/* What this is, in his words: roman, with the two things it is an
-            archive of set in italic. The measure is in em, not ch: 30ch in the
-            metric fallback is 454px at 28px against 542px in Fraunces, so the
-            line wrapped in two until the webfont landed and then pulled the
-            whole bottom-anchored column, his name included, 38px down. 19.4em
-            is Fraunces' 30ch, in either face.
-            The words the opening film found in its texts (OpeningFilm, landing
-            A) fly home to their own spans here; the rest of the line comes up
-            round them. */}
-        <p className="prologue-hero-tagline mt-8 max-w-[19.4em] font-serif text-[clamp(20px,1.7vw,28px)] leading-snug text-white/78">
-          <span className="open-rest">A personal </span>
-          <span data-open-land="archive">archive</span>
-          <span className="open-rest"> of </span>
-          <em data-open-land="travel">travel</em>
-          <span className="open-rest"> and </span>
-          <em data-open-land="thought">thought</em>
-          <span className="open-rest">.</span>
-        </p>
-        <div className="mt-14 flex items-center gap-10">
-          {/* Last of the first screen, but inside the name's own rise: the
-              cue that says "scroll" must not arrive after the reader already has. */}
+        {first && (
+          <>
+            {/* PROPOSED copy, awaiting the owner. Data-driven: the route's
+                first stop (Miami today; Washington once it is stop 01). */}
+            <p className="prologue-cap prologue-cap--2 mt-5 max-w-[16em] font-serif text-[clamp(30px,2.9vw,50px)] leading-[1.12] text-[#F4F4ED]">
+              The route begins in <em>{first.name}</em>.
+            </p>
+            <p className="prologue-cap prologue-cap--3 mt-5 flex items-center gap-3 font-ui text-[11px] uppercase tracking-[0.1em] text-white/55">
+              <span className="tabular-nums">
+                Stop 01{stops > 0 ? ` / ${String(stops).padStart(2, '0')}` : ''}
+              </span>
+              {first.region && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{first.region}</span>
+                </>
+              )}
+              {first.year != null && String(first.year).trim() !== '' && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums">{String(first.year).trim()}</span>
+                </>
+              )}
+            </p>
+          </>
+        )}
+        <div className="mt-12 flex items-center gap-10">
+          {/* The cue that says "scroll" comes up with the caption, never
+              after the reader already has. */}
           <p
             aria-hidden="true"
-            className="prologue-hero-cue flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
+            className="prologue-cap prologue-cap--4 flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
           >
             <span className="prologue-scroll-cue relative block h-7 w-px overflow-hidden bg-white/18" />
             Scroll
