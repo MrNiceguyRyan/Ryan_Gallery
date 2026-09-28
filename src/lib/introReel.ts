@@ -1,5 +1,7 @@
 // ── The opening reel: its clock and its geometry ──
-// The homepage opens on a short, scroll-scrubbed film drawn on one canvas
+// The homepage opens on a short film drawn on one canvas, driven by the
+// scroll — each ball's hold scrubbed, each turn into the next played by the
+// film's own clock once the scroll commits it (see "The film clock")
 // (src/components/home/IntroReel.tsx paints it with src/lib/introReelPaint.ts):
 // a Picasso-like cover — a black hole in a harlequin wallpaper that its
 // gravity bends into a sphere of curves — then a run of spheres (basketball,
@@ -39,6 +41,69 @@ export const easeInQuad = (t: number) => clamp01(t) ** 2;
 /** 0 at the ends, 1 in the middle: the shape of a transition's disorder. */
 export const bump = (t: number) => Math.sin(Math.PI * clamp01(t));
 
+// ── Colour: every blend in OKLab ───────────────────────────────────────────
+// Two print colours are mixed in OKLab (perceptually even: a turn from paper
+// to night passes through the dusk between, not through sRGB's muddy grey).
+// A blend is quantised to 1/64 (a step is far under a just-noticeable
+// difference, and the painter can group equal colours into one fill).
+
+export type Lab = readonly [number, number, number];
+const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.max(0, c) ** (1 / 2.4) - 0.055);
+export function hexToOklab(hex: string): Lab {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const r = toLinear(((n >> 16) & 255) / 255), g = toLinear(((n >> 8) & 255) / 255), b = toLinear((n & 255) / 255);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+export function oklabToHex([L, A, B]: Lab) {
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+  const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+  const rgb = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+  let out = '#';
+  for (const c of rgb) out += Math.round(clamp01(toGamma(c)) * 255).toString(16).padStart(2, '0');
+  return out;
+}
+export const MIX_STEPS = 64;
+const labCache = new Map<string, Lab>();
+const mixCache = new Map<string, string>();
+const labOf = (hex: string) => {
+  let lab = labCache.get(hex);
+  if (!lab) {
+    lab = hexToOklab(hex);
+    labCache.set(hex, lab);
+  }
+  return lab;
+};
+/** `a` → `b` at t (0–1) through OKLab, quantised to 1/MIX_STEPS. The ends
+ *  are the colours themselves, exactly (so a hold and the turn that leaves
+ *  it paint the same picture). */
+export function mixOklab(a: string, b: string, t: number) {
+  if (a === b) return a;
+  const q = Math.round(clamp01(t) * MIX_STEPS);
+  if (q <= 0) return a;
+  if (q >= MIX_STEPS) return b;
+  const key = `${a}${b}${q}`;
+  let hit = mixCache.get(key);
+  if (!hit) {
+    const x = labOf(a), y = labOf(b), k = q / MIX_STEPS;
+    hit = oklabToHex([lerp(x[0], y[0], k), lerp(x[1], y[1], k), lerp(x[2], y[2], k)]);
+    mixCache.set(key, hit);
+  }
+  return hit;
+}
+
 // ── What the reel tells the page ──────────────────────────────────────────
 // IntroReel is its own island, above HomePage's. It announces whether it
 // covers the first screen ('reel') or the page is on show ('page'), and
@@ -69,45 +134,66 @@ declare global {
 }
 
 // ── The score ──────────────────────────────────────────────────────────────
+// Two clocks. The SCROLL (p, 0 → 1 over the pin) says where the reader is,
+// and scrubs each ball's own life (the bounce, the bites, the lamps, the
+// wallpaper's flow, the viewfinder's focus). The FILM (d, on the same 0 → 1
+// scale) says which ball is on the stage and how far a turn has gone: a turn
+// from one ball into the next is not scrubbed — scrolling into its short
+// window commits it, and the film plays it by itself, over TURN seconds, on
+// one ease-in-out curve (the way the atlas flies between chapters). A reader
+// who keeps scrolling is chased; one who goes back has the turn played
+// backwards; one who stops mid-turn still sees it land. The shutter, the
+// detent and the page underneath answer the scroll.
 
 export type SphereKind = 'hole' | 'basket' | 'football' | 'cookie' | 'light' | 'disco' | 'moon';
 
 export interface ReelScore {
   /** How far the page scrolls while the reel is pinned, in viewport heights. */
   screens: number;
-  /** Each sphere starts at `at` (reel progress). Between two, the first
-   *  `hold` share of the span is the sphere alone; the rest turns it into the
-   *  next. The last sphere holds to the viewfinder. */
+  /** Each sphere has fully arrived at `at` (film position). The turn into it
+   *  is the `turn`-wide window just before; between two windows the sphere
+   *  holds, its life scrubbed by the scroll. The last sphere holds to the
+   *  glide. */
   beats: readonly { kind: SphereKind; at: number }[];
-  hold: number;
-  /** The last sphere (the moon) glides to the Earth's place over this stretch. */
+  turn: number;
+  /** How long a turn plays, seconds (the phone's light → moon, which passes
+   *  through the mirror ball, takes `longTurn` times as long). */
+  turnSeconds: number;
+  longTurn: number;
+  /** The last sphere (the moon) glides to the Earth's place: a turn of its
+   *  own, over this window and `glideSeconds`… */
   glide: readonly [number, number];
-  /** The viewfinder's mask and focusing screen come in over this stretch… */
+  glideSeconds: number;
+  /** …while the viewfinder's mask and focusing screen come in over this
+   *  stretch of it; the split image then comes together over `focus`,
+   *  scrubbed by the scroll. */
   finder: readonly [number, number];
-  /** …and the split image comes together over this one. */
   focus: readonly [number, number];
-  /** The shutter fires when the reel passes `fire` going down and fires back
-   *  when it drops under `rearm` going up (the gap keeps a reader resting on
-   *  the line from firing it on every frame of Lenis' settle). */
+  /** The shutter fires when the SCROLL passes `fire` going down and fires
+   *  back when it drops under `rearm` going up (the gap keeps a reader
+   *  resting on the line from firing it on every frame of Lenis' settle). */
   fire: number;
   rearm: number;
 }
 
 export const REEL_DESKTOP: ReelScore = {
-  screens: 4.8,
+  screens: 3.9,
   beats: [
     { kind: 'hole', at: 0 },
-    { kind: 'basket', at: 0.12 },
-    { kind: 'football', at: 0.25 },
-    { kind: 'cookie', at: 0.38 },
-    { kind: 'light', at: 0.51 },
-    { kind: 'disco', at: 0.63 },
-    { kind: 'moon', at: 0.74 },
+    { kind: 'basket', at: 0.075 },
+    { kind: 'football', at: 0.195 },
+    { kind: 'cookie', at: 0.315 },
+    { kind: 'light', at: 0.435 },
+    { kind: 'disco', at: 0.555 },
+    { kind: 'moon', at: 0.675 },
   ],
-  hold: 0.22,
-  glide: [0.78, 0.86],
-  finder: [0.82, 0.88],
-  focus: [0.87, 0.94],
+  turn: 0.02,
+  turnSeconds: 0.5,
+  longTurn: 1.5,
+  glide: [0.765, 0.79],
+  glideSeconds: 0.8,
+  finder: [0.775, 0.79],
+  focus: [0.815, 0.93],
   fire: 0.975,
   rearm: 0.955,
 };
@@ -116,19 +202,22 @@ export const REEL_DESKTOP: ReelScore = {
  *  fewer (the mirror ball is only passed through, between the traffic light
  *  and the moon). */
 export const REEL_PHONE: ReelScore = {
-  screens: 3.4,
+  screens: 2.4,
   beats: [
     { kind: 'hole', at: 0 },
-    { kind: 'basket', at: 0.14 },
-    { kind: 'football', at: 0.29 },
-    { kind: 'cookie', at: 0.44 },
-    { kind: 'light', at: 0.58 },
-    { kind: 'moon', at: 0.74 },
+    { kind: 'basket', at: 0.09 },
+    { kind: 'football', at: 0.23 },
+    { kind: 'cookie', at: 0.37 },
+    { kind: 'light', at: 0.51 },
+    { kind: 'moon', at: 0.665 },
   ],
-  hold: 0.22,
-  glide: [0.78, 0.86],
-  finder: [0.82, 0.88],
-  focus: [0.87, 0.94],
+  turn: 0.025,
+  turnSeconds: 0.5,
+  longTurn: 1.5,
+  glide: [0.775, 0.805],
+  glideSeconds: 0.8,
+  finder: [0.787, 0.805],
+  focus: [0.83, 0.93],
   fire: 0.975,
   rearm: 0.955,
 };
@@ -144,30 +233,139 @@ export function reelProgressAt(scrollY: number, pinned: number) {
 export interface BeatState {
   /** Index of the sphere on screen (the outgoing one during a turn). */
   index: number;
-  /** 0 = only `index`; 1 = only `index + 1`. */
+  /** 0 = only `index`; 1 = only `index + 1`. Linear in the film position:
+   *  the film clock (filmAt) already eases each turn in and out. */
   mix: number;
   /** Progress through the current beat's whole span, 0–1. */
   local: number;
 }
 
-/** Where the score is: which sphere, and how far it has turned into the next. */
-export function beatAt(score: ReelScore, p: number): BeatState {
+/** Where the film is: which sphere, and how far it has turned into the next. */
+export function beatAt(score: ReelScore, d: number): BeatState {
   const beats = score.beats;
   const last = beats.length - 1;
-  if (p >= beats[last].at) {
-    const end = score.glide[1];
-    return { index: last, mix: 0, local: segment(p, beats[last].at, end) };
+  if (d >= beats[last].at) {
+    return { index: last, mix: 0, local: segment(d, beats[last].at, score.glide[1]) };
   }
   let index = 0;
-  while (index < last && p >= beats[index + 1].at) index += 1;
+  while (index < last && d >= beats[index + 1].at) index += 1;
   const start = beats[index].at;
   const end = beats[index + 1].at;
-  const local = segment(p, start, end);
-  // The turn eases in and out (it is a transformation, not a cut), and a
-  // sliver of hold stays at its end so the new sphere lands before it acts.
-  const mix = smootherstep(segment(local, score.hold, 0.97));
-  return { index, mix, local };
+  return { index, mix: segment(d, end - score.turn, end), local: segment(d, start, end) };
 }
+
+// ── The film clock ────────────────────────────────────────────────────────
+// The film position is carried on a clock, τ (seconds of film): a hold runs
+// one second of τ per unit of position (so the chase crosses it quickly), a
+// turn's window runs its whole duration. The film shows d = filmAt(τ); inside
+// a window the position is eased (a cubic, flat at both ends), so every turn
+// sets off from rest and lands at rest however fast the clock runs through
+// it — the ball's morph and the world round it on the one curve.
+
+export interface ReelWindow {
+  from: number;
+  to: number;
+  /** Seconds the turn plays for. */
+  seconds: number;
+  /** The beat turning out (the last beat's index for the glide). */
+  index: number;
+}
+const HOLD_RATE = 1;
+const windowCache = new WeakMap<ReelScore, ReelWindow[]>();
+export function reelWindows(score: ReelScore): ReelWindow[] {
+  const cached = windowCache.get(score);
+  if (cached) return cached;
+  const out: ReelWindow[] = [];
+  for (let i = 1; i < score.beats.length; i += 1) {
+    const long = score.beats[i - 1].kind === 'light' && score.beats[i].kind === 'moon';
+    out.push({ from: score.beats[i].at - score.turn, to: score.beats[i].at, seconds: score.turnSeconds * (long ? score.longTurn : 1), index: i - 1 });
+  }
+  out.push({ from: score.glide[0], to: score.glide[1], seconds: score.glideSeconds, index: score.beats.length - 1 });
+  windowCache.set(score, out);
+  return out;
+}
+/** The window's ease: a cubic, flat at both ends. */
+const windowEase = (t: number) => {
+  const v = clamp01(t);
+  return v * v * (3 - 2 * v);
+};
+/** Its inverse (for a position inside a window, which only a restored
+ *  scroll lands on). */
+const windowEaseInverse = (y: number) => {
+  const v = clamp01(y);
+  return 0.5 - Math.sin(Math.asin(1 - 2 * v) / 3);
+};
+/** τ at film position d. */
+export function filmClock(score: ReelScore, d: number) {
+  let tau = 0;
+  let at = 0;
+  for (const w of reelWindows(score)) {
+    if (d <= w.from) break;
+    tau += (w.from - at) * HOLD_RATE;
+    if (d < w.to) return tau + w.seconds * windowEaseInverse((d - w.from) / (w.to - w.from));
+    tau += w.seconds;
+    at = w.to;
+  }
+  return tau + (Math.max(d, at) - at) * HOLD_RATE;
+}
+/** The film position at τ (the inverse of filmClock). */
+export function filmAt(score: ReelScore, tau: number) {
+  let t = Math.max(0, tau);
+  let at = 0;
+  for (const w of reelWindows(score)) {
+    const hold = (w.from - at) * HOLD_RATE;
+    if (t <= hold) return at + t / HOLD_RATE;
+    t -= hold;
+    if (t < w.seconds) return w.from + (w.to - w.from) * windowEase(t / w.seconds);
+    t -= w.seconds;
+    at = w.to;
+  }
+  return Math.min(1, at + t / HOLD_RATE);
+}
+
+/** Where the film should go for the scroll at p. Outside the windows it is
+ *  the scroll itself. Inside one it is the window's far end once the reader
+ *  is `commit` of the way in, and its near end again once back under
+ *  `release` (the band between keeps a reader resting in a window from
+ *  flapping a turn back and forth); `previous` is the last target. */
+export const REEL_COMMIT = { commit: 0.5, release: 0.3 } as const;
+export function filmTarget(score: ReelScore, p: number, previous: number) {
+  for (const w of reelWindows(score)) {
+    if (p <= w.from) break;
+    if (p >= w.to) continue;
+    const at = (p - w.from) / (w.to - w.from);
+    const committed = previous >= w.to - 1e-9 ? at > REEL_COMMIT.release : previous <= w.from + 1e-9 ? at >= REEL_COMMIT.commit : at >= 0.5 * (REEL_COMMIT.commit + REEL_COMMIT.release);
+    return committed ? w.to : w.from;
+  }
+  return p;
+}
+
+/** The chase: the film clock runs toward the target's τ at up to one second
+ *  of film a second (faster when it has fallen behind by more than
+ *  `catchUp` seconds: in proportion, up to `fastest` times — a turn never
+ *  plays in under a quarter of a second, however hard the wheel is spun),
+ *  closing in exponentially at `follow` per second, its speed eased over
+ *  `smooth` seconds — so it never jumps and never stops dead. */
+export const REEL_CHASE = { follow: 9, smooth: 0.07, catchUp: 0.42, fastest: 2 } as const;
+export interface FilmChase {
+  tau: number;
+  /** τ per second. */
+  v: number;
+}
+export function chaseFilm(state: FilmChase, targetTau: number, dt: number): FilmChase {
+  const step = Math.max(0, Math.min(0.1, dt));
+  const lag = targetTau - state.tau;
+  const vmax = Math.min(REEL_CHASE.fastest, Math.max(1, Math.abs(lag) / REEL_CHASE.catchUp));
+  const want = Math.max(-vmax, Math.min(vmax, REEL_CHASE.follow * lag));
+  const v = state.v + (want - state.v) * (1 - Math.exp(-step / REEL_CHASE.smooth));
+  let tau = state.tau + v * step;
+  // Never past the target (the clock settles on it, it does not ring).
+  if ((lag >= 0 && tau > targetTau) || (lag <= 0 && tau < targetTau)) return { tau: targetTau, v: 0 };
+  if (Math.abs(targetTau - tau) < 1e-5 && Math.abs(v) < 1e-3) tau = targetTau;
+  return { tau, v };
+}
+/** Has the film arrived where the scroll asks it to be? */
+export const filmSettled = (state: FilmChase, targetTau: number) => Math.abs(targetTau - state.tau) < 1e-4 && Math.abs(state.v) < 1e-3;
 
 /** The shutter's latch. Returns the next state given the last one. */
 export function shutterLatch(score: ReelScore, fired: boolean, p: number) {
@@ -180,6 +378,11 @@ export function shutterLatch(score: ReelScore, fired: boolean, p: number) {
  *  (Between the two they may hold shut a moment for the globe's tiles —
  *  IntroReel pauses the clock there, at most `hold` ms.) */
 export const SHUTTER_MS = { close: 170, open: 440, hold: 450 } as const;
+/** A reader who scrolled faster than the turns play reaches the shutter
+ *  before the film has caught up: the detent starts at once (the page is
+ *  carried and held), and the blades wait at most this long for the film to
+ *  finish its glide (the moon in the corner, the finder up). */
+export const SHUTTER_WAIT_MS = 360;
 
 export interface ShutterFrame {
   /** 0 = wide open (the blade tips just outside the frame), 1 = shut. */

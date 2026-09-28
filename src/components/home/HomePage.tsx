@@ -716,6 +716,9 @@ export default function HomePage({ collections }: Props) {
   const [reelState, setReelState] = useState<ReelState | null>(null);
   const [reelFramed, setReelFramed] = useState(false);
   useEffect(() => {
+    // A second view skips the film (src/lib/reelVisit.ts): nothing covers
+    // the globe, from the first frame.
+    if (document.documentElement.dataset.reel === 'skip') return;
     const apply = (detail?: ReelDetail) => {
       if (!detail) return;
       setReelState(detail.state);
@@ -753,6 +756,7 @@ export default function HomePage({ collections }: Props) {
   // on <html> would drop the sticky atlas and move the scrollbar). A touch
   // screen has no Lenis: IntroReel jumps the page under the shut blades.
   useEffect(() => {
+    if (document.documentElement.dataset.reel === 'skip') return;
     let lastFired = window.__archiveReel?.fired ?? false;
     let holding = false;
     let pollTimer = 0;

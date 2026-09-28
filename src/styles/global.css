@@ -238,6 +238,11 @@ html[data-reel-finder] nav[data-site-nav] {
 @media (prefers-reduced-motion: reduce) {
   .intro-reel { height: 200svh; }
 }
+/* A second view in the same tab session skips the film (src/lib/reelVisit.ts
+   decides before the first paint): the pinned block and the screen it
+   overlaps are gone, and the page opens at the top on the first screen, as
+   it did before the reel existed. */
+html[data-reel='skip'] .intro-reel { display: none; }
 /* The frame is a size container: its cq units place the cue in the design
    frame's own units, fitted the way the canvas is (cover). --reel-u is one
    design pixel; --reel-hole the hole's lower rim (cy + 1.05 R) from the

@@ -13,14 +13,17 @@
 // ground — the cover's harlequin lattice, re-coloured and re-proportioned for
 // each ball from its own colours — and each ball turns into the next ON the
 // ball: the black hole's rings close onto a basketball's seams, the seams
-// slide into a football's, the football shatters into a cookie, the cookie's
-// pieces round off into lamps, the lamps multiply into a mirror ball's tiles,
-// the tiles turn over to stone. Every ball is seen twice at once — its dark
-// half, across an S, drawn from a second angle (Girl before a Mirror) — and
-// the whole picture is cut by four planes through ball and ground, each a
-// shade lighter or darker, which come apart and back into register through
-// every turn. No gradients, no neon. Lime stays in the interface: the DOM
-// scroll cue, and the viewfinder's focus lamp once the cue is gone.
+// slide into a football's, the bake sweeps over the football behind an S into
+// a cookie, the cookie's pieces round off into lamps, the lamps multiply into
+// a mirror ball's tiles, the tiles turn to stone. Every change of world is a
+// blend on the turn's one curve (colours through OKLab, the lattice easing
+// into its new proportions, a soft wave out from the ball): nothing flips.
+// Every ball is seen twice at once — its dark half, across an S, drawn from a
+// second angle (Girl before a Mirror) — and the whole picture is cut by four
+// planes through ball and ground, each a shade lighter or darker, which come
+// a little apart and back into register through every turn. No gradients, no
+// neon. Lime stays in the interface: the DOM scroll cue, and the
+// viewfinder's focus lamp once the cue is gone.
 
 import {
   type Cut,
@@ -44,6 +47,7 @@ import {
   irisBlades,
   lensed,
   lerp,
+  mixOklab,
   normalize,
   resampleClosed,
   rotation,
@@ -131,16 +135,9 @@ export type ReelCtx = Pick<
   | 'fillStyle' | 'strokeStyle' | 'lineWidth' | 'lineCap' | 'lineJoin' | 'globalAlpha'
 >;
 
-/** Two print colours mixed (sRGB), for a flat ground turning from one ball's
- *  world to the next's. */
-export function mixHex(a: string, b: string, t: number) {
-  if (t <= 0 || a === b) return a;
-  if (t >= 1) return b;
-  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-  let out = '#';
-  for (const s of [16, 8, 0]) out += Math.round(lerp((pa >> s) & 255, (pb >> s) & 255, t)).toString(16).padStart(2, '0');
-  return out;
-}
+/** Two print colours mixed (in OKLab, src/lib/introReel.ts), for a world
+ *  turning from one ball's colours to the next's. */
+export const mixHex = mixOklab;
 /** The shortest signed angle equal to x. */
 const wrapPi = (x: number) => Math.atan2(Math.sin(x), Math.cos(x));
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -468,9 +465,11 @@ export interface Env {
   phone: boolean;
   /** Idle clock, seconds. */
   t: number;
-  /** Reel progress, 0–1. */
+  /** The film's position, 0–1 (src/lib/introReel.ts' film clock: it sets
+   *  the moon's glide; the renderer reads the ball and the turn from it). */
   p: number;
-  /** The act's own progress (runs below 0 / above 1 through the turns). */
+  /** The act's own progress, scrubbed by the scroll (runs below 0 / above 1
+   *  through the turns). */
   a: number;
   /** The part of the design frame on screen (the cover fit crops it); the
    *  whole frame when absent (the server's cover). */
@@ -582,10 +581,21 @@ function warper(lens: Lens | null) {
 
 /** The harlequin lattice, laid out from the ball (`origin`) and flowing down
  *  the page; bent by the lens where there is one. Through a turn from look
- *  `A` to look `B` the lozenges re-proportion and each one turns over to its
- *  new colour in a wave out from the ball. */
+ *  `A` to look `B` (`mix`, already eased by the film clock) the lozenges
+ *  re-proportion and every colour slides through OKLab on the turn's own
+ *  curve: the ground and its plain lozenges together, the coloured ones a
+ *  little ahead near the ball and a little behind far from it — a soft wave
+ *  out from the ball, each lozenge's own change spread over most of the
+ *  turn, never a flip. */
+export const GROUND_WAVE = 0.3;
+/** A lozenge's own share of the turn: it starts `lead` × GROUND_WAVE of the
+ *  way in and takes the remaining 1 − GROUND_WAVE of it, eased. */
+export function groundWave(mix: number, lead: number) {
+  const t = clamp01((mix - GROUND_WAVE * clamp01(lead)) / (1 - GROUND_WAVE));
+  return t * t * (3 - 2 * t);
+}
 function paintGround(ctx: ReelCtx, env: Env, A: GroundLook, B: GroundLook | null, mix: number, lens: Lens | null, origin: Vec2) {
-  const k = B ? smootherstep(mix) : 0;
+  const k = B ? clamp01(mix) : 0;
   const L = B ?? A;
   const scale = env.phone ? 0.55 : 1;
   const cw = lerp(A.cw, L.cw, k) * scale;
@@ -622,16 +632,18 @@ function paintGround(ctx: ReelCtx, env: Env, A: GroundLook, B: GroundLook | null
       else if (h > 0.845) role = 5;
       else if (!odd && (((row + col) % 3) + 3) % 3 === 0) role = 2;
       else role = odd ? 1 : 0;
-      let look = A;
-      if (B && mix > 0) {
-        const at = Math.max(0.02, 0.04 + 0.72 * clamp01(Math.hypot(x - ox, y - oy) / reach) + (hash(key, 13) - 0.5) * 0.16);
-        if (mix > at) look = B;
-      }
       // The lozenge the lens sits in would be spread round the whole
       // Einstein ring (a point behind the hole is seen as a ring): it is
       // left out, or the ring would flash its colour as the paper flows.
       if (warp && lens && Math.abs(x - lens.cx) / (cw / 2) + Math.abs(y - lens.cy) / (ch / 2) <= 1.02) continue;
-      const color = cellColour(look, role, pick);
+      let color = cellColour(A, role, pick);
+      if (B && k > 0) {
+        const to = cellColour(B, role, pick);
+        // The plain lozenges keep step with the ground; the coloured ones
+        // ride the wave.
+        const t = role <= 1 ? k : groundWave(k, clamp01(Math.hypot(x - ox, y - oy) / reach) * 0.85 + hash(key, 13) * 0.15);
+        color = mixHex(color, to, t);
+      }
       const dotted = !odd && (col & 1) === 1;
       // (A lozenge the colour of the ground needs no drawing.)
       if (!dotted && color === fill) continue;
@@ -749,7 +761,7 @@ function paintPlane(ctx: ReelCtx, env: Env, from: SphereKind, to: SphereKind, mi
   if ((!a && !b) || alpha <= 0.002) return;
   const below = (q: Plane): Plane => ({ pts: q.pts.map(([x, y]) => [x, y + 0.45] as Vec2), color: q.color });
   const pa = a ?? below(b as Plane), pb = b ?? below(a as Plane);
-  const k = from === to ? 0 : smootherstep(mix);
+  const k = from === to ? 0 : clamp01(mix);
   const pts = pa.pts.map((q, i) => [lerp(q[0], pb.pts[i][0], k) * env.w, lerp(q[1], pb.pts[i][1], k) * env.h] as Vec2);
   fillPoly(ctx, pts, mixHex(pa.color, pb.color, k), alpha);
   brush(ctx, [pts[0], pts[1]], W(env, 3.4), C.ink, 0.9 * alpha, [0.02, 0.02]);
@@ -801,7 +813,7 @@ function paintFacets(ctx: ReelCtx, env: Env, cuts: readonly Cut[], amp: number, 
   // Only in a turn, when they come apart, is the cut seen — as a seam.)
 }
 function facetsFor(ctx: ReelCtx, env: Env, from: SphereKind, to: SphereKind, mix: number, alpha = 1) {
-  const k = from === to ? 0 : smootherstep(mix);
+  const k = from === to ? 0 : clamp01(mix);
   const cuts = k > 0 ? blendCuts(facetCuts(from, env), facetCuts(to, env), k) : facetCuts(from, env);
   paintFacets(ctx, env, cuts, lerp(FACET_AMP[from], FACET_AMP[to], k), alpha);
 }
@@ -1418,14 +1430,22 @@ function discoTiles(s: Sphere): Tile[] {
   }
   return out;
 }
+/** A blend for a small piece (a tile): OKLab, in sixteenths (so the pieces
+ *  of one colour are still filled together). */
+const pieceMix = (a: string, b: string, t: number) => mixHex(a, b, Math.round(clamp01(t) * 16) / 16);
+/** Each tile's own share of the ball's turn to stone: a soft wave from the
+ *  lit side, each tile taking over a third of the turn (0 at moonness 0, 1 at
+ *  moonness 1). */
+export function tileStone(tile: Pick<Tile, 'mid' | 'sparkle'>, moonness: number) {
+  const at = clamp01(0.5 - tile.mid[0] * 0.35 + tile.mid[1] * 0.2 + (tile.sparkle - 0.5) * 0.3);
+  const t = clamp01((moonness * 1.6 - at) / 0.6);
+  return t * t * (3 - 2 * t);
+}
 function tileTone(tile: Tile, dark: boolean, moonness: number): string {
-  let tone: string = dark ? DISCO_TONES_DARK[tile.level] : DISCO_TONES[tile.level];
-  if (moonness > 0) {
-    // The facets turn over to the moon's stone, in a sweep from the lit side.
-    const flipAt = clamp01(0.5 - tile.mid[0] * 0.35 + tile.mid[1] * 0.2 + (tile.sparkle - 0.5) * 0.3);
-    if (moonness > flipAt) tone = tile.level > 3 ? C.stone : tile.level > 1 ? C.paperShade : C.slatePale;
-  }
-  return tone;
+  const tone: string = dark ? DISCO_TONES_DARK[tile.level] : DISCO_TONES[tile.level];
+  if (moonness <= 0) return tone;
+  // The facets turn to the moon's stone in a soft sweep from the lit side.
+  return pieceMix(tone, tile.level > 3 ? C.stone : tile.level > 1 ? C.paperShade : C.slatePale, tileStone(tile, moonness));
 }
 function fillTiles(ctx: ReelCtx, tiles: readonly Tile[], dark: boolean, moonness: number, alpha = 1) {
   const groups = new Map<string, Vec2[][]>();
@@ -1545,7 +1565,9 @@ export function phoneMoonTarget(env: Env): MoonTarget {
  *  viewfinder's focusing circle at the centre. */
 export function moonSphere(env: Env, score: ReelScore, target: MoonTarget | null): Sphere {
   const S = stageOf(env);
-  const glide = easeInOutCubic(segment(env.p, score.glide[0], score.glide[1]));
+  // (Linear in the film position: the glide is a window of the film clock,
+  // which eases it in and out.)
+  const glide = segment(env.p, score.glide[0], score.glide[1]);
   const home = { x: S.cx, y: S.cy, r: S.r };
   let to = target ?? home;
   if (target) {
@@ -1574,11 +1596,14 @@ const MOON_SPLIT: Split = { angle: 1.1, offset: 0.28, bend: 0.3 };
 /** The moon's twin (its seas seen from a second angle across an S): full on
  *  its stage, gone as it glides toward the viewfinder, which must see one
  *  clean limb to focus on. */
-const moonTwin = (env: Env, score: ReelScore) => 1 - smootherstep(segment(env.p, score.glide[0] - 0.012, score.glide[0] + 0.025));
+const moonTwin = (env: Env, score: ReelScore) => 1 - smootherstep(segment(env.p, score.glide[0], lerp(score.glide[0], score.glide[1], 0.45)));
+/** Night deepens into the archive's own olive over the glide (linear in the
+ *  film position: the clock eases the window). */
+const moonOlive = (env: Env, score: ReelScore) => segment(env.p, score.glide[0], score.glide[1]);
 function paintMoonBackground(ctx: ReelCtx, env: Env, s: Sphere, score: ReelScore, alpha = 1) {
   // Night deepens into the archive's own olive as the moon takes its place.
   const S = stageOf(env);
-  const toOlive = smoothstep(score.glide[0], score.finder[1], env.p);
+  const toOlive = moonOlive(env, score);
   paintGround(ctx, env, GROUND.moon, null, 0, null, [S.cx, S.cy]);
   ground(ctx, env, C.olive, toOlive);
   const planes = (1 - toOlive) * alpha;
@@ -1706,7 +1731,7 @@ function paintMoonScene(ctx: ReelCtx, env: Env, score: ReelScore, target: MoonTa
   const twinK = moonTwin(env, score);
   const twinS = twinK > 0.002 ? { ...s, m: twin(-0.3 + env.a * 0.5 + env.t * 0.015, 0.12, 0) } : null;
   paintMoonBall(ctx, env, s, moonLight(env.a), 1, twinK, twinS);
-  const toOlive = smoothstep(score.glide[0], score.finder[1], env.p);
+  const toOlive = moonOlive(env, score);
   facetsFor(ctx, env, 'moon', 'moon', 0, 1 - toOlive);
 }
 
@@ -1814,15 +1839,15 @@ export function paintSphereScene(ctx: ReelCtx, kind: SphereKind, env: Env, score
   }
 }
 
-/** The act clock of beat `index` at progress p: 0 at its arrival, 1 by the
- *  middle of its turn into the next (and on either side through the turns). */
-export function actClock(score: ReelScore, index: number, p: number) {
+/** The act clock of beat `index` at film position d: 0 at its arrival, 1 by
+ *  the middle of its turn into the next (and on either side through the
+ *  turns). */
+export function actClock(score: ReelScore, index: number, d: number) {
   const beats = score.beats;
   const start = beats[index].at;
   const last = index + 1 >= beats.length;
-  const next = last ? score.glide[1] : beats[index + 1].at;
-  const end = last ? next : start + (next - start) * (score.hold + (1 - score.hold) * 0.5);
-  return (p - start) / Math.max(1e-6, end - start);
+  const end = last ? score.glide[1] : beats[index + 1].at - score.turn * 0.5;
+  return (d - start) / Math.max(1e-6, end - start);
 }
 
 /** The cover as the server paints it before any script runs (and as reduced
@@ -1951,6 +1976,46 @@ function paintBasketToFootball(ctx: ReelCtx, envA: Env, envB: Env, mix: number) 
   facetsFor(ctx, envA, 'basket', 'football', mix);
 }
 
+/** Football → cookie: the ball keeps tumbling while the bake sweeps across it
+ *  behind an S — the way the bone swept over the leather — what the S has
+ *  passed is the cookie's face, chips and all, what it has not is still the
+ *  football; the shadow, the ground and the cloth turn with it. (It was a
+ *  collage — the frame cut into planes that lifted off an ink ground and
+ *  turned over one by one — and read as a shatter: black cracks and flips.) */
+function paintFootballToCookie(ctx: ReelCtx, envA: Env, envB: Env, mix: number) {
+  const S = stageOf(envA);
+  const c = cookieState(envB);
+  paintGround(ctx, envA, GROUND.football, GROUND.cookie, mix, null, [S.cx, S.cy]);
+  paintPlane(ctx, envA, 'football', 'cookie', mix);
+  const pose = footballPose(envA);
+  castShadow(ctx, pose, S.cy + S.r * 1.04, 0.95, 0.4 * (1 - mix), 0.25);
+  castShadow(ctx, c, c.cy + c.r * 1.06, 0.9, 0.3 * mix, 0.2);
+  const sweep = smootherstep(segment(mix, 0.06, 0.94));
+  const angle = 0.62;
+  const curve = sCurve(S.cx, S.cy, angle, lerp(-1.9, 1.9, sweep) * S.r, 0.35 * S.r, S.r * 1.05, S.r * 1.6, 48);
+  if (sweep < 1) {
+    ctx.save();
+    if (sweep > 0) clipTo(ctx, sideOf(curve, angle, S.r * 3, 1));
+    paintFootballBall(ctx, envA, pose);
+    ctx.restore();
+  }
+  if (sweep > 0) {
+    ctx.save();
+    if (sweep < 1) clipTo(ctx, sideOf(curve, angle, S.r * 3, -1));
+    paintCookieBody(ctx, envB, c.cx, c.cy, c.r, c.spin, cookieBites(envB.a));
+    ctx.restore();
+  }
+  // The front itself: the S in ink, across the ball, while it passes.
+  const frontAlpha = bump(sweep);
+  if (frontAlpha > 0.002) {
+    ctx.save();
+    clipTo(ctx, limb({ cx: S.cx, cy: S.cy, r: S.r * 1.01, sx: 1, sy: 1 }, 96));
+    brush(ctx, curve, S.r * 0.022, C.ink, 0.9 * frontAlpha, [0.2, 0.2]);
+    ctx.restore();
+  }
+  facetsFor(ctx, envA, 'football', 'cookie', mix);
+}
+
 /** Cookie → traffic light: the cookie cracks into three, the pieces — still
  *  cookie, chips and all — rise and fall into a column and round off into
  *  the lamps, and the housing closes round them; all on the stage, while the
@@ -2070,7 +2135,9 @@ function paintLightToDisco(ctx: ReelCtx, envA: Env, envB: Env, mix: number) {
       const size = g.lampR * 0.16;
       const src: Vec2[] = [[sx - size, sy - size], [sx + size, sy - size], [sx + size, sy + size], [sx - size, sy + size]];
       const quad = tile.quad.map((q, i) => [lerp(src[i][0], q[0], u), lerp(src[i][1], q[1], u)] as Vec2);
-      const tone = u < 0.55 ? (levels[tile.lamp] > 0.5 ? lamp.on : lamp.rings[1]) : tileTone(tile, false, 0);
+      // Each tile leaves its lamp in the lamp's colour and takes the
+      // mirror's tone on the way (a blend, not a flip).
+      const tone = pieceMix(levels[tile.lamp] > 0.5 ? lamp.on : lamp.rings[1], tileTone(tile, false, 0), smoothstep(0.25, 0.85, u));
       const list = groups.get(tone);
       if (list) list.push(quad);
       else groups.set(tone, [quad]);
@@ -2085,7 +2152,7 @@ function paintLightToDisco(ctx: ReelCtx, envA: Env, envB: Env, mix: number) {
  *  over to stone in a sweep; the grid lets go and the moon is under it; the
  *  room goes to night. */
 function paintDiscoToMoon(ctx: ReelCtx, envA: Env, envB: Env, mix: number, score: ReelScore, target: MoonTarget | null) {
-  const flip = smootherstep(segment(mix, 0, 0.62));
+  const flip = smoothstep(0, 0.8, mix);
   const settle = smootherstep(segment(mix, 0.45, 1));
   const S = stageOf(envA);
   const pd = discoPose(envA);
@@ -2109,21 +2176,23 @@ function paintDiscoToMoon(ctx: ReelCtx, envA: Env, envB: Env, mix: number, score
   facetsFor(ctx, envA, 'disco', 'moon', mix);
 }
 
-/** The turns drawn on the ball (the rest are done as collage, by the
- *  renderer, which composites two scenes). */
-const ON_BALL = new Set(['hole>basket', 'basket>football', 'cookie>light', 'light>disco', 'disco>moon', 'light>moon']);
+/** Every turn is drawn on the ball (each begins as the hold before it and
+ *  ends as the hold after it). */
 export function paintTurn(ctx: ReelCtx, from: SphereKind, to: SphereKind, envA: Env, envB: Env, mix: number, score: ReelScore, target: MoonTarget | null) {
   switch (`${from}>${to}`) {
     case 'hole>basket': return paintHoleToBasket(ctx, envA, envB, mix);
     case 'basket>football': return paintBasketToFootball(ctx, envA, envB, mix);
+    case 'football>cookie': return paintFootballToCookie(ctx, envA, envB, mix);
     case 'cookie>light': return paintCookieToLight(ctx, envA, envB, mix);
     case 'light>disco': return paintLightToDisco(ctx, envA, envB, mix);
     case 'disco>moon': return paintDiscoToMoon(ctx, envA, envB, mix, score, target);
     case 'light>moon': {
-      // (A phone's shorter film passes through the mirror ball on the way.)
+      // (A phone's shorter film passes through the mirror ball on the way,
+      // each half eased on its own, so the ball is seen as it passes.)
       const envD: Env = { ...envB, a: 0.3 };
-      if (mix < 0.5) return paintLightToDisco(ctx, envA, envD, mix * 2);
-      return paintDiscoToMoon(ctx, envD, envB, mix * 2 - 1, score, target);
+      const half = (t: number) => t * t * (3 - 2 * t);
+      if (mix < 0.5) return paintLightToDisco(ctx, envA, envD, half(mix * 2));
+      return paintDiscoToMoon(ctx, envD, envB, half(mix * 2 - 1), score, target);
     }
   }
 }
@@ -2165,11 +2234,15 @@ export function paintBlades(ctx: ReelCtx, shutter: ShutterState) {
 
 // ── The renderer (canvas only) ─────────────────────────────────────────────
 
+/** How far the planes slide out of register at a turn's height, design px
+ *  (desktop, phone). (It was 18: every plane of a textured picture sliding
+ *  that far read as the whole frame shimmering at each turn.) */
+const DRIFT = [6, 3] as const;
+
 export class ReelRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private scratch: HTMLCanvasElement | null = null;
-  private scratchB: HTMLCanvasElement | null = null;
   private cssW = 0;
   private cssH = 0;
   private dpr = 1;
@@ -2197,11 +2270,10 @@ export class ReelRenderer {
       this.canvas.width = Wd;
       this.canvas.height = Hd;
     }
-    for (const b of [this.scratch, this.scratchB]) {
-      if (b && (b.width !== Wd || b.height !== Hd)) {
-        b.width = Wd;
-        b.height = Hd;
-      }
+    const b = this.scratch;
+    if (b && (b.width !== Wd || b.height !== Hd)) {
+      b.width = Wd;
+      b.height = Hd;
     }
   }
 
@@ -2210,20 +2282,18 @@ export class ReelRenderer {
     return viewFor(this.cover, this.cssW, this.cssH);
   }
 
-  private scratchCanvas(second = false) {
-    const make = () => {
-      const c = document.createElement('canvas');
-      c.width = this.canvas.width;
-      c.height = this.canvas.height;
-      return c;
-    };
-    if (second) return (this.scratchB ??= make());
-    return (this.scratch ??= make());
+  private scratchCanvas() {
+    if (!this.scratch) {
+      this.scratch = document.createElement('canvas');
+      this.scratch.width = this.canvas.width;
+      this.scratch.height = this.canvas.height;
+    }
+    return this.scratch;
   }
 
-  /** Paint a scene into a scratch canvas, in design units. */
-  private offscreen(second: boolean, draw: (c: CanvasRenderingContext2D) => void) {
-    const buf = this.scratchCanvas(second);
+  /** Paint a scene into the scratch canvas, in design units. */
+  private offscreen(draw: (c: CanvasRenderingContext2D) => void) {
+    const buf = this.scratchCanvas();
     const c = buf.getContext('2d') as CanvasRenderingContext2D;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
@@ -2241,61 +2311,15 @@ export class ReelRenderer {
     return [-ox / s, -oy / s, this.cssW / s, this.cssH / s];
   }
 
-  /** A turn as collage (the football shattering into the cookie): the frame
-   *  is cut into planes round the ball; each lifts off like cut paper, turns
-   *  over from the old ball's world to the new one's at its own moment, and
-   *  is laid back in register. */
-  private paintCollage(index: number, from: SphereKind, to: SphereKind, envA: Env, envB: Env, mix: number, score: ReelScore, target: MoonTarget | null) {
-    const a = this.offscreen(false, (c) => paintSphereScene(c, from, envA, score, target));
-    const b = this.offscreen(true, (c) => paintSphereScene(c, to, envB, score, target));
-    const ctx = this.ctx;
-    const [bx, by, bw, bh] = this.extent();
-    const S = stageOf(envA);
-    const reach = Math.max(envA.w, envA.h);
-    const shards = shardsFromCuts(envA.w, envA.h, cutsAround([S.cx, S.cy], S.r * 0.95, envA.phone ? 3 : 4, 211 + index * 17), reach);
-    const lift = bump(mix) ** 0.8;
-    ground(ctx, envA, C.ink);
-    shards.forEach((poly, k) => {
-      const seed = 307 + index * 31 + k;
-      const [sx, sy] = centroid(poly);
-      const dirX = sx - S.cx, dirY = sy - S.cy;
-      const dl = Math.hypot(dirX, dirY) || 1;
-      const push = (envA.phone ? 12 : 30) * (0.6 + hash(k, seed) * 0.8) * lift;
-      const dx = (dirX / dl) * push, dy = (dirY / dl) * push;
-      const rot = (hash(k + 7, seed) - 0.5) * 0.1 * lift;
-      const sc = 1 + (hash(k + 11, seed) - 0.3) * 0.05 * lift;
-      const at = 0.3 + hash(k + 13, seed) * 0.4;
-      const flip = clamp01((mix - at) / 0.07);
-      ctx.save();
-      ctx.translate(S.cx + dx, S.cy + dy);
-      ctx.rotate(rot);
-      ctx.scale(sc, sc);
-      ctx.translate(-S.cx, -S.cy);
-      // The piece's shadow on the ink below: it has come off the page.
-      fillPoly(ctx, shift(poly, (envA.phone ? 3 : 7) * lift, (envA.phone ? 4 : 9) * lift), '#000', 0.35 * lift);
-      ctx.save();
-      clipTo(ctx, poly);
-      if (flip < 1) ctx.drawImage(a, bx, by, bw, bh);
-      if (flip > 0) {
-        ctx.globalAlpha = flip;
-        ctx.drawImage(b, bx, by, bw, bh);
-        ctx.globalAlpha = 1;
-      }
-      ctx.restore();
-      line(ctx, [...poly, poly[0]], C.paper, envA.phone ? 1.4 : 2.6, 0.85 * lift);
-      ctx.restore();
-    });
-  }
-
   /** A turn on the ball, with its four planes out of register: the picture
    *  is drawn once, then each plane shows it slid a little its own way (up
-   *  to 18 design px at the turn's height), and comes back as it ends. */
+   *  to DRIFT design px at the turn's height), and comes back as it ends. */
   private paintAdrift(from: SphereKind, to: SphereKind, envA: Env, envB: Env, mix: number, drift: number, score: ReelScore, target: MoonTarget | null) {
-    const buf = this.offscreen(false, (c) => paintTurn(c, from, to, envA, envB, mix, score, target));
+    const buf = this.offscreen((c) => paintTurn(c, from, to, envA, envB, mix, score, target));
     const ctx = this.ctx;
     const [bx, by, bw, bh] = this.extent();
     ctx.drawImage(buf, bx, by, bw, bh);
-    const cuts = blendCuts(facetCuts(from, envA), facetCuts(to, envB), smootherstep(mix));
+    const cuts = blendCuts(facetCuts(from, envA), facetCuts(to, envB), clamp01(mix));
     for (const f of facetsOf(envA, cuts)) {
       const a = hash(f.code, 23) * Math.PI * 2;
       const d = drift * (0.45 + 0.55 * hash(f.code, 29));
@@ -2307,7 +2331,7 @@ export class ReelRenderer {
     const diag = Math.hypot(envA.w, envA.h);
     for (const c of cuts) {
       const dx = Math.cos(c.angle) * diag, dy = Math.sin(c.angle) * diag;
-      line(ctx, [[c.p[0] - dx, c.p[1] - dy], [c.p[0] + dx, c.p[1] + dy]], C.paper, W(envA, 1.6), 0.5 * (drift / (envA.phone ? 8 : 18)));
+      line(ctx, [[c.p[0] - dx, c.p[1] - dy], [c.p[0] + dx, c.p[1] + dy]], C.paper, W(envA, 1.6), 0.4 * (drift / DRIFT[envA.phone ? 1 : 0]));
     }
   }
 
@@ -2316,12 +2340,16 @@ export class ReelRenderer {
     ctx.setTransform(k, 0, 0, k, this.dpr * this.cover.ox, this.dpr * this.cover.oy);
   }
 
-  render(score: ReelScore, p: number, t: number, target: MoonTarget | null, shutter: ShutterState | null) {
+  /** One frame. `film`: the film clock's position (which ball, how far a
+   *  turn has played, the glide); `life`: the scroll's own progress, which
+   *  scrubs each ball's life, the wallpaper's flow and the focus — so a turn
+   *  played by the clock never leaves a ball's life to catch up in a rush. */
+  render(score: ReelScore, film: number, life: number, t: number, target: MoonTarget | null, shutter: ShutterState | null) {
     const ctx = this.ctx;
     const { w, h } = this.frame;
     const view = this.view();
-    const flow = reelFlow(score, p, t, this.phone);
-    const env = (index: number): Env => ({ w, h, phone: this.phone, t, p, a: actClock(score, index, p), view, flow });
+    const flow = reelFlow(score, life, t, this.phone);
+    const env = (index: number): Env => ({ w, h, phone: this.phone, t, p: film, a: actClock(score, index, life), view, flow });
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     if (shutter?.revealed) {
@@ -2333,11 +2361,11 @@ export class ReelRenderer {
       }
       return;
     }
-    const beat = beatAt(score, p);
+    const beat = beatAt(score, film);
     const last = score.beats.length - 1;
     const finder: Finder = {
-      in: segment(p, score.finder[0], score.finder[1]),
-      focus: segment(p, score.focus[0], score.focus[1]),
+      in: segment(film, score.finder[0], score.finder[1]),
+      focus: segment(life, score.focus[0], score.focus[1]),
     };
     ctx.save();
     this.design(ctx);
@@ -2349,13 +2377,9 @@ export class ReelRenderer {
       const from = score.beats[beat.index].kind;
       const to = score.beats[beat.index + 1].kind;
       const envA = env(beat.index), envB = env(beat.index + 1);
-      if (ON_BALL.has(`${from}>${to}`)) {
-        const drift = bump(beat.mix) ** 1.5 * (this.phone ? 8 : 18);
-        if (drift > 0.75) this.paintAdrift(from, to, envA, envB, beat.mix, drift, score, target);
-        else paintTurn(ctx, from, to, envA, envB, beat.mix, score, target);
-      } else {
-        this.paintCollage(beat.index, from, to, envA, envB, beat.mix, score, target);
-      }
+      const drift = bump(beat.mix) ** 1.5 * DRIFT[this.phone ? 1 : 0];
+      if (drift > 0.75) this.paintAdrift(from, to, envA, envB, beat.mix, drift, score, target);
+      else paintTurn(ctx, from, to, envA, envB, beat.mix, score, target);
     }
     if (shutter && shutter.closed > 0) {
       // Over the reel the blades need only clear the viewfinder's window as
@@ -2370,7 +2394,7 @@ export class ReelRenderer {
    *  focusing circle's two halves see it shifted apart — up to 4% of the
    *  width — until focus brings them together), the eyepiece's furniture. */
   private paintFinder(score: ReelScore, env: Env, target: MoonTarget | null, finder: Finder) {
-    const buf = this.offscreen(false, (c) => paintSphereScene(c, 'moon', env, score, target));
+    const buf = this.offscreen((c) => paintSphereScene(c, 'moon', env, score, target));
     const ctx = this.ctx;
     const [bx, by, bw, bh] = this.extent();
     ctx.drawImage(buf, bx, by, bw, bh);
