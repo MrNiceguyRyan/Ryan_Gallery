@@ -685,25 +685,23 @@ html[data-globe-voyage] .globe-prologue {
    it is whole as the destination lands. A reading scroll never sets it. On a
    chapter the rule sits on its inner box, so the chapter itself carries no
    opacity of its own at any time (its cover is simply there). */
-[data-archive-column] [data-voyage-pass],
 [data-archive-column] [data-archive-chapter] > * {
   transition: opacity var(--dur-out) var(--ease-arrive);
 }
-[data-archive-column][data-voyage] [data-voyage-pass],
 [data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) > * {
   opacity: 0.2;
   transition: opacity var(--dur-in) var(--ease-leave);
 }
 /* A fifth of the ink still reads at 150px: a passing chapter's words (its
-   name, lede and stub print) step back further, to ~6% in all, while its
-   photograph keeps the fifth — the pictures stream past, only the
-   destination's name is read. Set on the words themselves, whose wrappers'
+   name and lede) step back further, to ~6% in all — only the destination's
+   name is read (the covers of the places passed are not on the map at all:
+   a cover shows only where the camera is down). Set on the words themselves, whose wrappers'
    opacity framer owns. The plate's running head is not printed at rest at
    all ("The instruments on demand", below), so a voyage leaves it alone. */
-[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > .archive-ticket-sign, .archive-ticket-stub > dl) {
+[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div) {
   transition: opacity var(--dur-out) var(--ease-arrive);
 }
-[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > .archive-ticket-sign, .archive-ticket-stub > dl) {
+[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div) {
   opacity: 0.3;
   transition: opacity var(--dur-in) var(--ease-leave);
 }
@@ -741,8 +739,18 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   /* Lying on the map's ground it sits under every place's hit area: it must
      never take the pointer, or it swallows the hover on marks near the focus. */
   pointer-events: none;
-  /* A barely-there local scrim so the hairlines hold on pale ground. */
+  /* A barely-there local scrim so the hairlines hold on pale ground — only
+     while the readouts are printed (AtlasSign `report`, and the same "on
+     demand" states as the instruments): at rest it only dimmed the place. */
   background: radial-gradient(closest-side, rgba(16, 20, 13, 0.34), rgba(16, 20, 13, 0.16) 55%, rgba(16, 20, 13, 0) 100%);
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.viewfinder__scrim[data-report],
+.route-atlas:is([data-atlas-look], :has(:focus-visible)) .viewfinder__scrim,
+html[data-voyage] .route-atlas .viewfinder__scrim {
+  opacity: 1;
+  transition: opacity var(--dur-in) var(--ease-arrive);
 }
 /* The ground the atlas's places are printed on (RouteAtlas `inkGround`): a
    layer inside the map, after its canvas and before its markers. The reading
@@ -761,7 +769,7 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   top: var(--bleed, 0px);
   bottom: var(--bleed, 0px);
   left: var(--bleed, 0px);
-  right: calc(var(--bleed, 0px) + var(--atlas-ext, 0px));
+  right: var(--bleed, 0px);
   pointer-events: none;
 }
 .viewfinder__scrim-layer {
@@ -847,14 +855,8 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
 }
-[data-archive-chapter]:has(.archive-plate--ticket) .archive-plate__meta > span {
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-[data-archive-chapter]:has(.archive-plate--ticket) .group:is(:hover, :focus-visible) .archive-plate__meta > span {
-  opacity: 1;
-  transition: opacity var(--dur-in) var(--ease-arrive);
-}
+/* (A docked chapter's running head: `.archive-chapter--docked`, with the
+   dock's rules.) */
 @media (prefers-reduced-motion: reduce) {
   /* The same states, cut. `!important` because the "up" rules above carry
      their own transition at a higher specificity. */
@@ -1143,10 +1145,14 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
    Schneider Productions: 1.05 s on an in-out curve). It rides the travel
    curve; the reference's own (.645,.045,.355,1) is indistinguishable from it. */
 main .route-atlas,
+main .archive-dock-host,
 main [data-archive-column] {
   transition: transform 1.05s var(--ease-travel), filter 1.05s var(--ease-travel);
 }
-main[data-story-under="true"] .route-atlas {
+/* The covers' dock is the atlas's own box: its covers, attached to the map,
+   recede with it. */
+main[data-story-under="true"] .route-atlas,
+main[data-story-under="true"] .archive-dock-host {
   transform: scale(1.12);
   filter: blur(10px);
   transition-delay: 0.25s;
@@ -1177,8 +1183,10 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 }
 @media (prefers-reduced-motion: reduce) {
   main .route-atlas,
+  main .archive-dock-host,
   main [data-archive-column] { transition: none; }
   main[data-story-under="true"] .route-atlas,
+  main[data-story-under="true"] .archive-dock-host,
   main[data-story-under="true"] [data-archive-column] { transform: none; filter: none; }
 }
 
@@ -1358,8 +1366,16 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   height: 100svh;
   margin-bottom: -100svh;
   overflow: hidden;
-  background: var(--stub-paper, #30352a);
+  background: var(--story-spread-paper);
   color: var(--story-bone);
+}
+/* The map page is the chapter's stock lightened a fifth toward the paper
+   (2026-09-28, the owner: the story's ground read too dark): the same card,
+   a lighter printing of it, and the kept stub — the stock itself — reads as
+   the card lying on its page. */
+.story-spread,
+.story-spread__map {
+  --story-spread-paper: color-mix(in oklab, var(--stub-paper, #30352a) 80%, #efe9df);
 }
 .story-spread__map {
   position: absolute;
@@ -1367,7 +1383,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   width: var(--open-x);
   overflow: hidden;
   isolation: isolate;
-  background: var(--stub-paper, #30352a);
+  background: var(--story-spread-paper);
 }
 .story-spread__map::after {
   content: '';
@@ -1378,14 +1394,16 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   /* The type's ground: the map fades under the title and the dek (the
      place's standfirst, set on the map page whichever way frame 01 turns),
      and under the foot. */
+  /* Lifted 2026-09-28 (the owner: 在主页浏览collection story的时候，背景很暗):
+     a lighter ground under the type, which holds on the stock at these. */
   background:
-    linear-gradient(180deg, rgba(10, 10, 9, 0.4) 0%, rgba(10, 10, 9, 0.3) 30%, rgba(10, 10, 9, 0) 50%),
-    linear-gradient(0deg, rgba(10, 10, 9, 0.5) 0%, rgba(10, 10, 9, 0) 40%);
+    linear-gradient(180deg, rgba(10, 10, 9, 0.3) 0%, rgba(10, 10, 9, 0.28) 36%, rgba(10, 10, 9, 0) 54%),
+    linear-gradient(0deg, rgba(10, 10, 9, 0.32) 0%, rgba(10, 10, 9, 0) 40%);
 }
 .story[data-open="portrait"] .story-spread__map::after {
   background:
-    linear-gradient(180deg, rgba(10, 10, 9, 0.4) 0%, rgba(10, 10, 9, 0.3) 30%, rgba(10, 10, 9, 0) 50%),
-    linear-gradient(0deg, rgba(10, 10, 9, 0.6) 0%, rgba(10, 10, 9, 0) 50%);
+    linear-gradient(180deg, rgba(10, 10, 9, 0.3) 0%, rgba(10, 10, 9, 0.28) 36%, rgba(10, 10, 9, 0) 54%),
+    linear-gradient(0deg, rgba(10, 10, 9, 0.4) 0%, rgba(10, 10, 9, 0) 50%);
 }
 /* New York's poster is white line on black, far brighter under the type
    than the inverted pale posters: a deeper ground under the dek. */
@@ -1396,9 +1414,11 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
       linear-gradient(0deg, rgba(10, 10, 9, 0.5) 0%, rgba(10, 10, 9, 0) 40%);
   }
 }
+/* The poster's lines at their full light (they were held at 0.86): lighter
+   in the lines only, never under the type (owner, 2026-09-28: 背景很暗). */
 .story-terrain-ink {
   display: block;
-  filter: grayscale(1) invert(1) contrast(1.35) brightness(0.62);
+  filter: grayscale(1) invert(1) contrast(1.35) brightness(1);
   mix-blend-mode: screen;
 }
 .story[data-map="dark"] .story-terrain-ink {
@@ -2525,6 +2545,197 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     transparent 100%
   );
 }
+/* ─── The cover rides with its shield (src/lib/coverDock.ts) ─────────────
+   Owner, 2026-09-28: 封面可以跟随路牌一起走，出现在路牌的右上角或者左上角或者
+   右下角或者左下角. On the desktop a chapter's ticket is not printed in the
+   page's column: it lies on the atlas, beside its place's route shield, at the
+   corner the dock's plan gives it, a joint's gap off the shield's own corner.
+   The host is the atlas's own box (HomePage's aside), so the covers pin,
+   release and recede under a story with the map they are attached to. Every
+   camera frame the atlas publishes where each place stands and the chapter
+   writes its dock there (`translate3d`, at the shield's foot); the seat hangs
+   the plate from that point. A cover shows only while the camera is down on
+   its place (`data-at`): it appears whole, with no entrance of its own, and
+   as the camera leaves it rides away with its shield and fades on the fade
+   curve (an exit eases in). */
+.archive-dock-host {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.archive-dock {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+}
+.archive-dock[data-at] {
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+.archive-dock__seat {
+  position: absolute;
+  pointer-events: auto;
+}
+/* No name is set over a docked photograph's foot (the name is in the rail),
+   so the shades that held it are not drawn: the picture is printed clean. */
+.archive-dock :is(.archive-photo-shade-top, .archive-photo-shade-bottom) {
+  display: none;
+}
+/* The joint is the gap itself (DOCK.gap): no line crosses it — the owner
+   has struck lines off the signs twice (不需要下面的引线, 不需要白色竖干). The
+   plate's corner nearest its shield points at it instead, a caret cut from
+   the card as the reference's board points at its stop: the photograph's
+   dark edge on the face's corners, the stub's own stock on the stub's. It
+   goes with the face when the face is torn off. */
+.archive-plate__caret {
+  position: absolute;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  background: #0f120d;
+}
+.archive-plate__caret[data-half='stub'] {
+  background: var(--stub-paper, #30352a);
+}
+.archive-dock[data-quadrant='tr'] .archive-plate__caret {
+  left: -4px;
+  top: calc(100% - 8px);
+  clip-path: polygon(4px 0, 4px 8px, 12px 8px, 0 12px);
+}
+.archive-dock[data-quadrant='tl'] .archive-plate__caret {
+  left: calc(100% - 8px);
+  top: calc(100% - 8px);
+  clip-path: polygon(8px 0, 8px 8px, 0 8px, 12px 12px);
+}
+.archive-dock[data-quadrant='br'] .archive-plate__caret {
+  left: -4px;
+  top: -4px;
+  clip-path: polygon(4px 12px, 4px 4px, 12px 4px, 0 0);
+}
+.archive-dock[data-quadrant='bl'] .archive-plate__caret {
+  left: calc(100% - 8px);
+  top: -4px;
+  clip-path: polygon(8px 12px, 8px 4px, 0 4px, 12px 0);
+}
+.archive-plate.is-torn .archive-plate__caret[data-half='face'] {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+/* "Open story" goes on the plate's edge away from the shield. */
+.archive-dock[data-quadrant='tl'] .archive-plate__cue,
+.archive-dock[data-quadrant='bl'] .archive-plate__cue {
+  right: auto;
+  left: 0;
+}
+/* The region's line (owner: 保留), set as a tab on the ticket's top edge, as
+   the reference sets its STOP tabs over its board: "REGION FLORIDA · 2
+   PLACES · 32 FRAMES", on the edge away from the shield. */
+.archive-dock__tab {
+  position: absolute;
+  bottom: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 3px 3px 0 0;
+  background: rgba(15, 18, 13, 0.9);
+  color: rgba(244, 244, 237, 0.78);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.archive-dock__tab[data-side='left'] { left: 0; }
+.archive-dock__tab[data-side='right'] { right: 0; }
+.archive-dock__tab-region {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: #f4f4ed;
+}
+/* The chapter's rail: its name and lede down the right of the page, on a
+   soft ground of their own (Patterson's rule for type on a map: never
+   outline the letters, soften the ground under them) — local, feathered, a
+   pool round the type and nothing else, so the map is not dimmed anywhere
+   the words are not. Placed by the column (nothing measured): its width is
+   src/lib/coverDock.ts `RAIL`. */
+.archive-rail {
+  width: clamp(280px, 25vw, 440px);
+  pointer-events: auto;
+}
+.archive-rail::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -110px -96px -130px -128px;
+  pointer-events: none;
+  /* Lighter than it was (0.8 at its heart): on the pale rock of Page,
+     Bryce and Zion a heavier pool read as a dark cloud of smoke over the
+     land. The type carries a soft shadow of its own instead (below), which
+     keeps the lede at 5:1 and more where the ground is brightest. */
+  background: radial-gradient(
+    closest-side at 50% 50%,
+    rgba(16, 20, 14, 0.58) 0%,
+    rgba(16, 20, 14, 0.5) 40%,
+    rgba(16, 20, 14, 0.28) 68%,
+    rgba(16, 20, 14, 0.08) 88%,
+    transparent 100%
+  );
+}
+/* Under the lede a second, smaller pool: body copy keeps 4.5:1 and more
+   (worst 5% of its ground) on Zion's pale rock, where the rail's own pool
+   alone left it at 4:1. */
+.archive-rail .archive-lede::before {
+  inset: -28px -44px -36px -40px;
+  background: radial-gradient(
+    closest-side at 58% 50%,
+    rgba(16, 20, 14, 0.44) 0%,
+    rgba(16, 20, 14, 0.34) 55%,
+    rgba(16, 20, 14, 0.12) 85%,
+    transparent 100%
+  );
+}
+.archive-rail__lede {
+  color: rgba(244, 244, 237, 0.92);
+  text-shadow: 0 0 14px rgba(16, 20, 14, 0.55), 0 1px 2px rgba(16, 20, 14, 0.45);
+}
+.archive-rail .archive-cover-title {
+  text-shadow: 0 0 24px rgba(16, 20, 14, 0.35);
+}
+/* Narrower windows: the frames count over the lede rather than beside it,
+   so the lede has the rail's whole measure (at 1280 it ran 28 characters a
+   line over eleven lines). */
+@media (max-width: 1439px) {
+  .archive-rail .archive-lede {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 14px;
+  }
+}
+.archive-chapter--docked .archive-plate__meta > span {
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.archive-chapter--docked .archive-rail:is(:hover, :focus-visible) .archive-plate__meta > span {
+  opacity: 1;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-dock,
+  .archive-chapter--docked .archive-plate__meta > span {
+    transition: none !important;
+  }
+}
 /* ─── Base reset ─── */
 /* No `scroll-behavior: smooth` on html. It turned every restore of a scroll
    position — history Back, a closed Story on the phone — into a glide from
@@ -2909,9 +3120,6 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 .route-atlas__route-overlay {
   filter: drop-shadow(0 0 2px rgba(11, 14, 9, 0.55));
 }
-.route-atlas-tone {
-  background: linear-gradient(90deg, transparent 48%, rgba(40,44,32,0.025) 58%, rgba(40,44,32,0.12) 69%, rgba(40,44,32,0.37) 82%, rgba(40,44,32,0.72) 93%, #282c20 100%);
-}
 /* Reading tone. Once the camera has landed on a chapter the ground settles
    into a darker paper, so the photograph and the type are the subject and
    the map is the drawing behind them; the moment a flight starts it lifts,
@@ -2919,17 +3127,16 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
    driven by the camera state the atlas broadcasts on <html> — `locked` is
    the landing itself, so the settle begins on touchdown. Sinks slowly, lifts
    fast: the flight is the event, the rest is the reading. */
+/* Lightened 2026-09-28 (the owner: the chapters' ground was too dark): the
+   settle is a breath now, not a dimmer — the photograph and its type are the
+   subject by their own weight, and the rail has its own local ground. It
+   covers the whole canvas: the map runs to the page's edge. */
 .route-atlas-rest-tone {
-  background: rgba(9, 12, 8, 0.38);
+  background: rgba(9, 12, 8, 0.1);
   opacity: 0;
   /* Take-off clears it on the fade curve: on the arrive curve 84% of the tone
      was gone in the first 80 ms, a cut with a tail. */
   transition: opacity 0.5s var(--ease-fade);
-  /* The atlas box ends at 78vw but the map keeps going under the covers; a
-     tone with a hard right edge draws a seam exactly there. Feathered out
-     over the last stretch so the paper darkens without an edge. */
-  -webkit-mask-image: linear-gradient(90deg, #000 64%, transparent 100%);
-  mask-image: linear-gradient(90deg, #000 64%, transparent 100%);
 }
 html[data-atlas-camera='locked'] .route-atlas-rest-tone,
 html[data-atlas-camera='rest'] .route-atlas-rest-tone {
@@ -2960,15 +3167,16 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 }
 .route-atlas-interface-veil {
   width: min(360px, 40%);
-  background: radial-gradient(ellipse 110% 72% at 0% 46%, rgba(7, 9, 6, 0.28) 0%, rgba(7, 9, 6, 0.12) 42%, rgba(7, 9, 6, 0.03) 72%, transparent 100%);
+  background: radial-gradient(ellipse 110% 72% at 0% 46%, rgba(7, 9, 6, 0.16) 0%, rgba(7, 9, 6, 0.07) 42%, rgba(7, 9, 6, 0.02) 72%, transparent 100%);
 }
+/* The map's top edge under the nav: a short, soft dissolve (the nav keeps
+   its own floor), not the heavy band it was over a darker map. */
 .route-atlas-entry-dissolve {
   background: linear-gradient(
     180deg,
-    #282c20 0%,
-    rgba(40, 44, 32, 0.82) 14%,
-    rgba(40, 44, 32, 0.45) 46%,
-    rgba(40, 44, 32, 0.1) 76%,
+    rgba(40, 44, 32, 0.62) 0%,
+    rgba(40, 44, 32, 0.38) 34%,
+    rgba(40, 44, 32, 0.12) 70%,
     transparent 100%
   );
 }
@@ -3543,7 +3751,7 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   height: 10px;
   display: block;
   background: #333a2b;
-  box-shadow: 0 1px 0 rgba(8, 10, 7, 0.55);
+  box-shadow: inset 0 1px 0 rgba(244, 244, 237, 0.12), 0 1px 0 rgba(8, 10, 7, 0.55);
 }
 /* A press-drag that starts on the ticket's print, its pad or the nav lit a
    selection flashing across the page under the hand (684 characters from the
@@ -5182,12 +5390,8 @@ html[data-travel-plate-blank]::view-transition-old(travel-plate) {
   );
 }
 
-.route-atlas--living .route-atlas-tone {
-  background: rgba(40, 44, 32, 0.04);
-}
-
 .route-atlas--living .mapboxgl-map {
-  opacity: 0.92;
+  opacity: 1;
 }
 
 .route-atlas--living .route-atlas-entry-dissolve {

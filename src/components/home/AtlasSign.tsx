@@ -48,6 +48,12 @@ export interface ViewfinderHandle {
    * lock time.
    */
   hunt(to: ViewfinderPlace, lockAt: number): void;
+  /**
+   * Where the camera's focal point is (the atlas's px): each chapter's place
+   * stands where its cover fits beside it (src/lib/coverDock.ts), so the
+   * readouts follow the camera's padding as it moves from place to place.
+   */
+  focal(point: { x: number; y: number }): void;
 }
 
 // Geometry, measured from the atlas focal point (the place the camera rests on).
@@ -173,6 +179,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     legTimer: 0,
     /** The leg is up this flight (its first frame picks its line at once). */
     legShown: false,
+    /** The atlas has said where its focal point is (`focal`). */
+    focalSet: false,
   });
 
   // A readout steps back while a shield stands under it (`data-yield` on its
@@ -277,6 +285,13 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (!node) return;
     if (on && !node.hasAttribute('data-report')) node.setAttribute('data-report', '');
     if (!on && node.hasAttribute('data-report')) node.removeAttribute('data-report');
+    // The readouts' ground goes with them: at rest the place's ground is
+    // not dimmed for type that is not printed.
+    const scrim = scrimRef.current;
+    if (scrim && on !== scrim.hasAttribute('data-report')) {
+      if (on) scrim.setAttribute('data-report', '');
+      else scrim.removeAttribute('data-report');
+    }
     if (on && holdMs > 0) s.reportTimer = window.setTimeout(() => report(false), holdMs);
   };
 
@@ -459,6 +474,14 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
         s.lockAt = Math.max(lockAt, s.huntStart + MIN_HUNT_MS);
         if (!s.frame) s.frame = requestAnimationFrame(loop);
       },
+      focal(point: { x: number; y: number }) {
+        const s = state.current;
+        s.focalSet = true;
+        if (Math.abs(point.x - s.focalX) < 0.25 && Math.abs(point.y - s.focalY) < 0.25) return;
+        s.focalX = point.x;
+        s.focalY = point.y;
+        if (!s.hunting) draw(null);
+      },
     };
     // draw/stop/loop only touch refs, so reducedMotion is the only input.
   }, [reducedMotion]);
@@ -471,6 +494,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (!root) return;
     const measure = () => {
       const s = state.current;
+      // Once the atlas has said where its focal point is, it keeps it there.
+      if (s.focalSet) return;
       s.focalX = (root.clientWidth - 264) / 2;
       // DERIVED, not measured — the same correction the camera needed. This
       // read a live rect whose top is scroll-dependent (the stage sits at 0

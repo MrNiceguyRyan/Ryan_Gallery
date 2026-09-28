@@ -25,6 +25,7 @@ import { storyFrames } from '../../lib/storyPlan';
 import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
 import { activeChapters, chapterSections, issueChapters } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
+import { coverOf, coverRatioOf } from '../../lib/coverDock';
 import { DUR, DUR_MS, EASE, voyageEase, voyageSeconds } from '../../lib/motion';
 import { NOTES_LIVE } from '../../lib/notesNav';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
@@ -123,13 +124,16 @@ function documentTop(node: HTMLElement) {
 }
 
 // Navigation and the scroll timeline must meet at the same untransformed
-// photograph centre, not at the chapter's longer text-and-spacing container.
+// point. On the desktop the chapter's cover rides on the map beside its
+// shield (src/lib/coverDock.ts), so the chapter IS its rail — the name and
+// the lede — and the timeline reads the rail's centre (`data-chapter-anchor`),
+// not the section's longer box.
 function archiveChapterAnchorY(element: HTMLElement, desktop: boolean) {
-  const photoFrame = desktop
-    ? element.querySelector<HTMLElement>('.archive-photo-frame')
+  const rail = desktop
+    ? element.querySelector<HTMLElement>('[data-chapter-anchor]')
     : null;
-  const visualAnchor = photoFrame && photoFrame.offsetHeight > 0
-    ? photoFrame
+  const visualAnchor = rail && rail.offsetHeight > 0
+    ? rail
     : element;
   return documentTop(visualAnchor) + visualAnchor.offsetHeight * (desktop ? 0.5 : 0.19);
 }
@@ -399,8 +403,16 @@ export default function HomePage({ collections }: Props) {
     // The living tree has no per-chapter cover: its one photographic window
     // holds the committed frame, so the frame being looked at is the layer
     // currently carrying opacity there.
-    const chapterImage = chapter?.querySelector<HTMLImageElement>('.archive-photo-frame img')
-      ?? liveAtlasFrame();
+    // On the desktop the cover is not in its section: it rides on the atlas
+    // beside its place's shield (src/lib/coverDock.ts, `coverOf`). A story
+    // grows out of it only while it is shown there — the camera on its place
+    // (`data-at`); opened from the rail mid-flight, it opens on its own cover.
+    const dockedCover = coverOf(chapter);
+    const plateRoot: HTMLElement | null = dockedCover
+      ? (dockedCover.hasAttribute('data-at') ? dockedCover : null)
+      : chapter;
+    const chapterImage = plateRoot?.querySelector<HTMLImageElement>('.archive-photo-frame img')
+      ?? (dockedCover ? null : liveAtlasFrame());
     storySharedImageUrlRef.current = chapterImage?.currentSrc || chapterImage?.src || '';
     // The plate the story will grow out of, measured once, here, in the click
     // — before Lenis is stopped and before the body lock lands (both follow
@@ -409,14 +421,14 @@ export default function HomePage({ collections }: Props) {
     // photograph inside it (hover zoom and parallax included), so the plane's
     // first frame is the frame the reader saw. The living tree has no plate,
     // so its stories keep the cover they have.
-    const plateFrame = chapter?.querySelector<HTMLElement>('.archive-photo-frame');
+    const plateFrame = plateRoot?.querySelector<HTMLElement>('.archive-photo-frame');
     // A torn ticket (its stub, or the keyboard) opens from where the
     // photograph LAY, not from the face torn off: that face is rotated,
     // laid aside and transparent, and a rect of it is the axis-aligned bound of
     // a box nobody can see. The tear box never moves and the frame sits at
     // its top-left, so its corner plus the frame's own size is the frame at
     // rest; the photograph fills it as the plane's first frame.
-    const tornTear = chapter?.querySelector<HTMLElement>('.archive-plate.is-torn .archive-plate__tear');
+    const tornTear = plateRoot?.querySelector<HTMLElement>('.archive-plate.is-torn .archive-plate__tear');
     const tearBox = tornTear && plateFrame ? tornTear.getBoundingClientRect() : null;
     const frameBox = tearBox && plateFrame
       ? new DOMRect(tearBox.x, tearBox.y, plateFrame.offsetWidth, plateFrame.offsetHeight)
@@ -426,7 +438,7 @@ export default function HomePage({ collections }: Props) {
       : chapterImage && plateFrame?.contains(chapterImage)
         ? chapterImage.getBoundingClientRect()
         : null;
-    const plateMatte = chapter?.querySelector<HTMLElement>('.archive-photo-matte');
+    const plateMatte = plateRoot?.querySelector<HTMLElement>('.archive-photo-matte');
     plateOriginRef.current = chapterImage && frameBox && imageBox
       && frameBox.width > 0 && frameBox.height > 0 && imageBox.width > 0 && imageBox.height > 0
       && storySharedImageUrlRef.current
@@ -452,7 +464,7 @@ export default function HomePage({ collections }: Props) {
     // reduced motion nothing travels.
     const stubNode = plateOriginRef.current && !tornTear
       && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? chapter?.querySelector<HTMLElement>('.archive-ticket-stub')
+      ? plateRoot?.querySelector<HTMLElement>('.archive-ticket-stub')
       : null;
     const keptStub = stubNode ? ticketStubOf(stubNode) : null;
     if (plateOriginRef.current && keptStub) plateOriginRef.current.stub = keptStub;
@@ -463,7 +475,10 @@ export default function HomePage({ collections }: Props) {
     document.querySelectorAll<HTMLElement>('[data-story-source]').forEach((node) => {
       delete node.dataset.storySource;
     });
-    if (chapter && plateOriginRef.current) chapter.dataset.storySource = 'true';
+    if (chapter && plateOriginRef.current) {
+      chapter.dataset.storySource = 'true';
+      if (dockedCover) dockedCover.dataset.storySource = 'true';
+    }
     // Freeze the page in the same event frame as the story selection. Waiting
     // for the state effect left one residual smooth-scroll frame moving behind
     // the full-screen cover on quick trackpad clicks.
@@ -521,9 +536,13 @@ export default function HomePage({ collections }: Props) {
           // once, here, as the open reads it: after the page has been set
           // where the exit will uncover it, and nothing moves it before the
           // flight lands (an untorn ticket, motion allowed).
-          const stubNode = !desktopTarget.querySelector('.archive-plate.is-torn')
+          // (Its cover rides on the atlas: only one the camera is on — shown
+          // there, `data-at` — has a place to fly the stub home to.)
+          const turnedCover = coverOf(desktopTarget) ?? desktopTarget;
+          const stubNode = (turnedCover === desktopTarget || turnedCover.hasAttribute('data-at'))
+            && !turnedCover.querySelector('.archive-plate.is-torn')
             && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-            ? desktopTarget.querySelector<HTMLElement>('.archive-ticket-stub')
+            ? turnedCover.querySelector<HTMLElement>('.archive-ticket-stub')
             : null;
           const stub = stubNode ? ticketStubOf(stubNode) : null;
           if (stub) turnedStubRef.current = { id: current._id, stub };
@@ -779,6 +798,9 @@ export default function HomePage({ collections }: Props) {
   }, [reduce]);
 
   const desktopAtlasSectionRef = useRef<HTMLDivElement>(null);
+  // The covers' dock on the atlas (see the aside below): a state, so the
+  // chapters render their covers into it once it is on the page.
+  const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
   const desktopStageRef = useRef<HTMLDivElement>(null);
   // The page's own root: gone from the document once a navigation (the
   // browser's Back with a story open) has swapped the page out.
@@ -947,6 +969,19 @@ export default function HomePage({ collections }: Props) {
     })),
     [orderedCities],
   );
+  // A region of two or more places is headed "REGION FLORIDA · 2 PLACES · 32
+  // FRAMES" at its first place (owner, 2026-09-28: 保留). On the desktop the
+  // heading rides as a tab on that place's cover (src/lib/coverDock.ts).
+  const regionTabs = useMemo(() => {
+    const tabs = new Map<string, { region: string; places: number; frames: number }>();
+    sections.forEach((section) => {
+      const first = section.cities[0];
+      if (section.showHeader && section.region && first) {
+        tabs.set(first._id, { region: section.region, places: section.cities.length, frames: section.frameCount });
+      }
+    });
+    return tabs;
+  }, [sections]);
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
   const mobileCityDomId = (c: Collection) => `mobile-archive-item-${c._id}`;
 
@@ -990,10 +1025,15 @@ export default function HomePage({ collections }: Props) {
               region: city.region?.trim() || undefined,
               locationLabel,
               coordinateLabel: routeCoordinateLabel(coordinates),
+              // What the cover docked beside the place's shield needs to be
+              // placed: its photograph's ratio, and whether it carries its
+              // region's tab.
+              coverRatio: coverRatioOf(city.coverImageUrl ?? city.photos?.[0]?.imageUrl) ?? undefined,
+              dockTab: regionTabs.has(city._id),
             }]
           : [];
       }),
-    [orderedCities],
+    [orderedCities, regionTabs],
   );
 
   useEffect(() => {
@@ -1087,7 +1127,7 @@ export default function HomePage({ collections }: Props) {
     // from snapping the page before Lenis/native scroll performs the same
     // calibrated movement used by pointer users.
     const chapterControl = target.querySelector<HTMLElement>('[role="button"], button');
-    const chapterImage = target.querySelector<HTMLImageElement>('.archive-photo-frame img');
+    const chapterImage = (coverOf(target) ?? target).querySelector<HTMLImageElement>('.archive-photo-frame img');
     if (chapterImage) {
       chapterImage.loading = 'eager';
       chapterImage.fetchPriority = 'high';
@@ -1691,7 +1731,7 @@ export default function HomePage({ collections }: Props) {
               waits for the opening to reveal so the cover is untouched. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[clamp(5.5rem,10vh,7.75rem)] bg-[linear-gradient(180deg,rgba(40,44,32,0.94)_0%,rgba(40,44,32,0.76)_56%,transparent_100%)] transition-opacity duration-700"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[clamp(5.5rem,10vh,7.75rem)] bg-[linear-gradient(180deg,rgba(40,44,32,0.72)_0%,rgba(40,44,32,0.4)_56%,transparent_100%)] transition-opacity duration-700"
             // Not over the opening film: it would print as a band on it.
             style={{ opacity: navPillsVisible && !reelCovering ? 1 : 0 }}
           />
@@ -1855,6 +1895,12 @@ export default function HomePage({ collections }: Props) {
                 engage={atlasEager && reelCovering}
                 covered={reelCovering}
               />
+              {/* The covers' dock: each chapter's cover rides here, on the
+                  atlas, beside its place's shield (ArchiveChapter portals it
+                  in; src/lib/coverDock.ts places it every camera frame). On
+                  the atlas's own box, so it pins, releases and recedes under
+                  a story with the map it is attached to. */}
+              <div ref={setDockHost} className="archive-dock-host" />
             </aside>
 
             {/* The atlas does not stop on a section boundary. Near the end of
@@ -1866,58 +1912,27 @@ export default function HomePage({ collections }: Props) {
               className="route-atlas-release pointer-events-none absolute -bottom-px inset-x-0 z-[15] hidden h-[52svh] lg:block"
             />
 
-            {/* Exhibition Content — leans subtly with scroll velocity */}
-            <div data-archive-column className="relative z-20 flex min-w-0 flex-1 flex-col gap-14 overflow-visible px-6 md:gap-20 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+7rem)] xl:pr-16">
-              {/* Where "Selected Works" stood. The first screen says what the
-                  archive is, so the heading is gone from sight (it landed on
-                  the planet and repeated "enter"); its box stays, invisible
-                  and out of the accessibility tree, because the globe's dive
-                  ends as chapter 1's plate reaches the reading line, and the
-                  plate must keep its place on the page for the two to meet.
-                  The heading itself stays for screen readers. */}
+            {/* The chapters' rail. On the desktop a chapter is its name and
+                 its lede, set in a rail down the right of the page; its cover
+                 rides on the atlas beside its place's shield (the dock, above).
+                 The column still spans the map's right-hand part, so it lets
+                 the pointer through to the covers and shields under it: only
+                 the rails take it. */}
+            <div data-archive-column className="pointer-events-none relative z-20 flex min-w-0 flex-1 flex-col overflow-visible px-6 md:px-12 lg:-ml-[36%] lg:w-[58%] lg:flex-none lg:pl-0 lg:pr-12 lg:pt-[calc(var(--prologue-h)+46svh)] xl:pr-16">
+              {/* Where "Selected Works" stood: the first screen says what the
+                  archive is, so the heading is for screen readers only. The
+                  column's top is set so the globe's dive ends as chapter 1's
+                  rail reaches the reading line (its centre a screen below the
+                  archive's start, as the first plate's was). */}
               <h2 className="sr-only font-ui">Selected Works</h2>
-              <div aria-hidden="true" className="invisible relative max-w-2xl select-none lg:ml-[12%]">
-                <div className="space-y-5">
-                  <div className="flex items-center gap-4 font-ui text-[9px] font-medium uppercase tracking-[0.1em]">
-                    <div className="h-px w-8" />
-                    <span>Selected Works</span>
-                  </div>
-                  <p
-                    className="max-w-[12ch] font-serif uppercase leading-[0.86] tracking-[-0.055em]"
-                    style={{ fontSize: 'clamp(44px, 5.6vw, 84px)' }}
-                  >
-                    Curating the world through a distilled lens.
-                  </p>
-                  <div className="flex min-h-11 w-fit items-center gap-3 font-ui text-[9px] uppercase tracking-[0.1em]">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" />
-                    <span>Select any frame to enter its story</span>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-14 md:space-y-20 lg:pl-[2%]">
+              <div>
                 {sections.map((section) => (
                     <section
                       key={section.key}
                       aria-label={section.region ? `Region: ${section.region}` : undefined}
-                      className="space-y-8 md:space-y-12"
                     >
-                      {section.showHeader && section.region && (
-                        <div
-                          data-voyage-pass
-                          className="relative flex w-full items-center gap-4 py-5"
-                        >
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F4F4ED]" />
-                          <span className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">Region</span>
-                          <span className="font-serif text-xl uppercase tracking-[-0.02em] text-[#F4F4ED]">
-                            {section.region}
-                          </span>
-                          <span className="ml-auto font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">
-                            {section.cities.length} places · {section.frameCount} frames
-                          </span>
-                        </div>
-                      )}
-                      <div className="space-y-14 md:space-y-20">
+                      <div>
                             {section.cities.map((city) => {
                               const index = orderedCities.indexOf(city);
                               const domId = `archive-item-${city._id}`;
@@ -1946,6 +1961,8 @@ export default function HomePage({ collections }: Props) {
                                   }
                                   variant={index === FEATURE_CHAPTER_INDEX ? 'feature' : 'cover'}
                                   desktopMotion
+                                  dockHost={dockHost}
+                                  regionTab={regionTabs.get(city._id) ?? null}
                                   /* Pull to tear: never while a voyage is
                                      already under way — the cover is then
                                      only a click. */

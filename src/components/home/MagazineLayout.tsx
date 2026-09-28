@@ -1869,7 +1869,9 @@ function GrowPlaneView({ plane, reduce }: { plane: GrowPlane; reduce: boolean })
     ? { x: shown.x - plane.target.x, y: shown.y - plane.target.y, scale: shown.width / plane.target.width }
     : null;
   const transition = { duration: reduce ? 0 : plane.ms / 1000, ease: EASE.plane };
-  const stock = stockPaper(plane.story.slug);
+  // The map page's own ground (global.css `--story-spread-paper`: the stock
+  // lightened a fifth toward the paper), so the plane lands on it with no cut.
+  const stock = `color-mix(in oklab, ${stockPaper(plane.story.slug)} 80%, #efe9df)`;
   const ground = plane.onto === 'page'
     ? 'var(--story-paper)'
     : plane.split == null
@@ -2696,7 +2698,7 @@ export default function MagazineLayout({
               : 0.7,
           ease: EASE.arrive,
         }}
-        className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry || plateEntry ? 'bg-transparent' : 'bg-black/40'}`}
+        className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry || plateEntry ? 'bg-transparent' : 'bg-black/25'}`}
         role={standalone ? undefined : 'dialog'}
         aria-modal={standalone ? undefined : true}
         aria-label={`Story: ${collection.name}`}
@@ -2731,7 +2733,7 @@ export default function MagazineLayout({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.7, ease: EASE.arrive }}
-            className="pointer-events-none absolute inset-0 z-0 bg-black/40"
+            className="pointer-events-none absolute inset-0 z-0 bg-black/25"
           />
         )}
         {canMorphSharedPhoto && (

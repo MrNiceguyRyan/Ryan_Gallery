@@ -13,6 +13,7 @@ import {
   prologueNaturalLongitude,
   prologueTurnRemaining,
   silverFloorAt,
+  silverPaint,
   silverRamp,
   stockPaint,
 } from '../src/lib/globeLook.ts';
@@ -103,10 +104,14 @@ test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps t
   assert.ok(values.size <= 26);
   assert.equal(silverFloorAt(0.12), 0);
   assert.equal(silverFloorAt(0.32), 1);
-  // Stock paint resets the colour mapping and restores the archive's grade.
+  // Stock paint resets the colour mapping and restores the archive's grade —
+  // lifted 2026-09-28 (the owner found the chapters' ground too dark): its
+  // floor raised, and the silver print puts its own floor back.
   const stock = stockPaint();
   assert.equal(stock['raster-color'], undefined);
-  assert.equal(stock['raster-saturation'], -0.32);
+  assert.equal(stock['raster-saturation'], -0.14);
+  assert.ok(stock['raster-brightness-min'] > 0);
+  assert.equal(silverPaint(0)['raster-brightness-min'], 0);
 });
 
 test('graticule, channel and wiring', () => {

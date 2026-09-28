@@ -435,7 +435,10 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       viewH = window.innerHeight;
       sectionTop = documentTop(section);
       sectionH = Math.max(1, section.offsetHeight);
-      const plate = chapterSection?.querySelector<HTMLElement>('.archive-photo-frame');
+      // The last chapter's point on the timeline: its rail (its cover rides
+      // on the atlas, src/lib/coverDock.ts), as HomePage reads it.
+      const plate = chapterSection?.querySelector<HTMLElement>('[data-chapter-anchor]')
+        ?? chapterSection?.querySelector<HTMLElement>('.archive-photo-frame');
       plateCentre = plate && plate.offsetHeight > 0
         ? documentTop(plate) + plate.offsetHeight / 2
         : sectionTop - viewH;

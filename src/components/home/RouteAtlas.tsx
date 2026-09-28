@@ -42,6 +42,22 @@ import {
   type StackSlot,
 } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
+import {
+  DOCK,
+  DOCK_GATE,
+  askDock,
+  centreFor,
+  coverDock,
+  dockShown,
+  planDock,
+  poseRemainPx,
+  railBox,
+  restLean,
+  type DockAsk,
+  type DockCamera,
+  type DockChapter,
+  type DockEntry,
+} from '../../lib/coverDock';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -53,6 +69,7 @@ import {
 import {
   SILVER_EXIT_HYSTERESIS,
   SILVER_EXIT_ZOOM,
+  STOCK_PAINT,
   SILVER_FOG,
   SILVER_FOG_LITE,
   createGlobeChannel,
@@ -88,6 +105,11 @@ export interface RouteStop {
   /** State or region, shown on the place's signboard. */
   region?: string;
   coordinateLabel: string;
+  /** The cover's photograph's ratio (src/lib/coverDock.ts, coverRatioOf):
+   *  the cover docked beside the place's shield is sized from it. */
+  coverRatio?: number;
+  /** The cover carries its region's tab (the region's first place). */
+  dockTab?: boolean;
 }
 
 /** A click on a place, the globe's ticket or a torn cover: the page scrolls
@@ -213,9 +235,13 @@ const HOP = {
   prerollMaxPx: 70,
   prerollZoom: 0.12,
   // Rest zoom: close enough that neighbouring places sit ≥150px apart (the
-  // Utah canyons), never tighter than zoom 6.
+  // Utah canyons), never tighter than a hair under zoom 6. At 6 itself
+  // Mapbox swaps its globe for Mercator (GLOBE_ZOOM_THRESHOLD_MAX): every
+  // tile reloaded, and on the landing's last frame the place — its shield
+  // and the cover docked on it — jumped 15px. The archive stays on the
+  // globe (owner, 2026-09-25).
   restZoom: 5.05,
-  restZoomMax: 6,
+  restZoomMax: 5.98,
   restSpacingPx: 150,
   // Duration grows with the log of the distance: 0.95 s hops to 1.75 s crossings.
   durationBase: 850,
@@ -487,12 +513,18 @@ const GLOBE_DIVE_START = 0.32;
 const GLOBE_HANDOFF_AT = 0.84;
 const GLOBE_HANDOFF_ZOOM = HOP.restZoom;
 // The archive's air: a long flight's apex sees the planet's edge through it.
+// Owner, 2026-09-28 (背景很暗): the far land used to fog toward near-black
+// (#1B2319), so every chapter with the horizon in view — the Florida and New
+// York chapters, over the sea — was dark in its upper half and darkest by
+// the rail. The air is a lit haze now, the land going pale into distance as
+// real air takes it (atmospheric perspective), the space above the limb the
+// page's own ground.
 const GLOBE_FOG = {
-  range: [9, 20] as [number, number],
-  color: '#1B2319',
-  'high-color': '#3b4330',
+  range: [7, 18] as [number, number],
+  color: '#7a806c',
+  'high-color': '#5f6650',
   'space-color': '#282c20',
-  'horizon-blend': 0.09,
+  'horizon-blend': 0.14,
   'star-intensity': 0,
 };
 
@@ -505,8 +537,27 @@ const PROLOGUE_INK_ENTRY = 0.15;
 // planet light (src/lib/planetLight.ts) draws it on the lit side only, so the
 // atmosphere itself keeps just a whisper of paper white. The lite light draws
 // no air, and its fog carries the rim instead (see globeLook).
-const PROLOGUE_FOG = SILVER_FOG;
-const PROLOGUE_FOG_LITE = SILVER_FOG_LITE;
+// Down the dive's last zooms that air turns into the archive's own
+// (GLOBE_FOG), on the zoom itself: on a tall window the first chapter is
+// read before the atlas takes the camera (its reading line sits inside the
+// entrance's last stretch), and it was read under the prologue's clear air
+// — its sea and the space over the limb the darkest ground of any chapter —
+// with the archive's haze cutting in a scroll later.
+const DIVE_FOG_ZOOMS = [4.2, 5] as const;
+function diveFog(prologueAir: typeof SILVER_FOG) {
+  const [from, to] = DIVE_FOG_ZOOMS;
+  const ramp = <T,>(a: T, b: T) => ['interpolate', ['linear'], ['zoom'], from, a, to, b];
+  return {
+    range: ramp(['literal', prologueAir.range], ['literal', GLOBE_FOG.range]),
+    color: ramp(prologueAir.color, GLOBE_FOG.color),
+    'high-color': ramp(prologueAir['high-color'], GLOBE_FOG['high-color']),
+    'space-color': ramp(prologueAir['space-color'], GLOBE_FOG['space-color']),
+    'horizon-blend': ramp(prologueAir['horizon-blend'], GLOBE_FOG['horizon-blend']),
+    'star-intensity': 0,
+  } as unknown as typeof GLOBE_FOG;
+}
+const PROLOGUE_FOG = diveFog(SILVER_FOG);
+const PROLOGUE_FOG_LITE = diveFog(SILVER_FOG_LITE);
 
 // Back to the start (see `beginOutbound`): the share of the trip's zoom-out
 // (its first `entryShare`) over which the hop pose is carried from where the
@@ -586,14 +637,11 @@ type StillPose = 'corner' | 'planet' | 'archive';
 // this padding is taken off its top and right.
 const CANVAS_BLEED = 32;
 const FOCAL_PADDING = { top: 48, right: 264 } as const;
-// Where the covers' column starts, as a share of the atlas column: HomePage
-// sets the atlas at 78% of the stage and pulls the archive column 36% back
-// over it, so the column's left edge is at 42/78 of the atlas.
-const ARCHIVE_COLUMN_LEFT = 42 / 78;
-// A shield that would reach under the covers (its right edge this far inside
-// their edge) is under the plates and their chapter headers: printed there,
-// New York's shield read into "REGION FLORIDA" and sat on a plate's corner.
-// It is not printed, unless the camera is on its place or flying to it.
+// A shield that would reach under the chapters' rail (its right edge this
+// far inside the rail's edge, src/lib/coverDock.ts `railBox`) is under the
+// chapter's name and lede: it is not printed there, unless the camera is on
+// its place or flying to it. (The covers used to fill that column; they now
+// ride beside their shields.)
 const SIGN_UNDER = 4;
 // A place further round the planet than this from the camera's centre is
 // behind the globe: never stacked with the shields in view.
@@ -606,7 +654,9 @@ const ATLAS_KEEP_OUT = { id: 'atlas-keepout', width: 48, height: 54, offsetY: -2
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // After the dive the photography does not vanish: it stays under the graded
 // atlas at this strength, so chapters keep a little real ground.
-const PROLOGUE_SATELLITE_RESIDUAL = 0.3;
+// Owner, 2026-09-28 (在主页浏览collection story的时候，背景很暗啊): the chapters'
+// ground was a black void; the land now reads as a photograph of itself.
+const PROLOGUE_SATELLITE_RESIDUAL = 0.88;
 // The dive's veil on the way down to that residual, as [zoom, opacity] pairs.
 // It dips to 10% around SILVER_EXIT_ZOOM, where the one layer trades the
 // silver print for the archive's own paint: at the old 30% the trade was a
@@ -624,7 +674,10 @@ const PROLOGUE_SATELLITE_OPACITY: readonly number[] = [
 // In the archive: at a long flight's apex the camera climbs past the
 // prologue's zoom keys, so a modest photographic veil (more real ground from
 // higher up), never the prologue's full print.
-const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 0.62, 4.6, PROLOGUE_SATELLITE_RESIDUAL];
+const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 0.9, 4.6, PROLOGUE_SATELLITE_RESIDUAL];
+// The phone's overview carries the same photograph, a little quieter: its
+// route and shields are drawn over the whole country at once.
+const LIVING_SATELLITE_OPACITY = 0.78;
 // The fastest the veil (and the grade's exit, and the planet light's fade)
 // follow the camera's zoom, per ms: 0.075 of a zoom level a frame keeps the
 // steepest key under 0.07 of opacity a frame, about 2 L on the map. A long
@@ -1371,6 +1424,11 @@ export default function RouteAtlas({
     // Every shield still printed, for the viewfinder: those in the piles and
     // those still fading out under the covers.
     const printed: StackSlot[] = [];
+    // The cover docked beside the place the camera is on: the readouts keep
+    // off it as they keep off the shields.
+    const dockedId = dockAtRef.current;
+    const dockedEntry = dockedId ? dockPlanRef.current?.[dockedId] ?? null : null;
+    let dockedFoot: { x: number; y: number } | null = null;
     shieldPlaces.forEach((place) => {
       let pose = shieldPosesRef.current.get(place.id);
       if (!pose || !pose.el.isConnected) {
@@ -1407,6 +1465,7 @@ export default function RouteAtlas({
       const w = SHIELD_MAP_PX * drawn;
       const h = w * place.ratio;
       const point = map.project(place.coordinates);
+      if (place.id === dockedId) dockedFoot = { x: point.x - CANVAS_BLEED, y: point.y - CANVAS_BLEED };
       const under = rank === 0 && point.x + w / 2 > underAt;
       unders.set(place.id, under);
       // On screen: inside the atlas, not merely the canvas — a shield out in
@@ -1432,6 +1491,18 @@ export default function RouteAtlas({
       const x = slot.x - CANVAS_BLEED;
       boxes.push({ id: slot.id, left: x - slot.w / 2, top: foot - slot.h, right: x + slot.w / 2, bottom: foot });
     });
+    if (dockedEntry && dockedFoot) {
+      const foot = dockedFoot as { x: number; y: number };
+      const left = foot.x + dockedEntry.offset.x;
+      const top = foot.y + dockedEntry.offset.y;
+      boxes.push({
+        id: 'docked-cover',
+        left,
+        top: top - (dockedEntry.tab ? DOCK.tab : 0),
+        right: left + dockedEntry.photoW + DOCK.stub,
+        bottom: top + dockedEntry.photoH + DOCK.below,
+      });
+    }
     viewfinderRef.current?.avoid(boxes);
     shieldPlaces.forEach((place) => {
       const pose = shieldPosesRef.current.get(place.id);
@@ -1499,7 +1570,7 @@ export default function RouteAtlas({
     const atlas = routeAtlasRef.current;
     if (!signs || !atlas) return;
     const measure = () => {
-      plateLeftRef.current = atlas.clientWidth * ARCHIVE_COLUMN_LEFT;
+      plateLeftRef.current = railBox(window.innerWidth).left;
       canvasSizeRef.current = {
         width: atlas.clientWidth + 2 * CANVAS_BLEED,
         height: atlas.clientHeight + 2 * CANVAS_BLEED,
@@ -1526,6 +1597,107 @@ export default function RouteAtlas({
       map.off('render', onRender);
     };
   }, [mapLoaded, shieldPlaces, signs]);
+  // ── The covers' dock (src/lib/coverDock.ts) ──
+  // The plan — for each chapter the corner its cover takes beside its
+  // shield, where the camera sets its place, the cover's size — DERIVED once
+  // per layout from the viewport, each cover's ratio and region tab, and
+  // where its neighbours' shields stand on its resting camera. The camera
+  // reads it for where it sets each place; the chapters for their covers.
+  const dockPlanRef = useRef<Readonly<Record<string, DockEntry>> | null>(null);
+  // The place whose cover shows (decided on publish, below), and what the
+  // camera asks of it on its latest draw (`setDockAt`).
+  const dockAtRef = useRef<string | null>(null);
+  const dockAskRef = useRef<DockAsk | null>(null);
+  useLayoutEffect(() => {
+    if (!signs || !viewportReady) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const shieldOf = (region: string | undefined, scale: number) => {
+      const w = SHIELD_MAP_PX * scale;
+      return { w, h: (w * shieldForm(stateCode(region)).h) / 100 };
+    };
+    const chapters: DockChapter[] = chapterRoute.map((entry, index) => ({
+      id: entry.stop.id,
+      coordinates: entry.stop.coordinates,
+      zoom: chapterRestZooms[index] ?? HOP.restZoom,
+      ratio: entry.stop.coverRatio ?? 1.5,
+      tab: !!entry.stop.dockTab,
+      shield: shieldOf(entry.stop.region, SHIELD_SCALE.current),
+      neighbours: chapterRoute.flatMap((other, otherIndex) => (otherIndex === index
+        ? []
+        : [{
+            coordinates: other.stop.coordinates,
+            ...shieldOf(other.stop.region, otherIndex < index ? SHIELD_SCALE.past : SHIELD_SCALE.ahead),
+          }])),
+    }));
+    // The chapter camera at rest, as the camera effect sets it: its centre
+    // on the atlas's focal point (FOCAL_PADDING and the reading line, the
+    // same derivation as its `activePadding`), pinned, the canvas a bleed
+    // past the viewport each side.
+    const canvasHeight = vh + 2 * CANVAS_BLEED;
+    const camera = {
+      focal: { x: ((routeAtlasRef.current?.clientWidth ?? 0.78 * vw) - FOCAL_PADDING.right) / 2, y: ATLAS_READING_LINE * vh },
+      pitch: CHAPTER_PITCH,
+      bearing: CHAPTER_BEARING,
+      distance: 1.5 * canvasHeight,
+    };
+    const plan = planDock(chapters, vw, vh, camera);
+    dockPlanRef.current = plan;
+    coverDock.setPlan(plan);
+    mapRef.current?.getMap()?.triggerRepaint();
+  }, [chapterRestZooms, chapterRoute, layoutRevision, signs, viewportReady]);
+  useEffect(() => () => {
+    coverDock.setPlan(null);
+    coverDock.publish({ at: null, points: {} });
+  }, []);
+  // Every place's foot this frame, and the place whose cover shows: handed
+  // to the covers on the map's `move` and `render`, as the shields' markers
+  // are placed (above) — Mapbox writes a marker as a DOM task of its render,
+  // at its projected point rounded to the pixel, and the pile on `move` too —
+  // so a cover and its shield never part by a frame (on `render` alone the
+  // cover trailed its sign by one: the joint closed from 12px to 3 as the
+  // camera left).
+  //
+  // Whether a cover shows is decided here, against the camera's ask
+  // (`askDock`, `dockShown`): it APPEARS only once the camera has settled on
+  // its place (down, the entrance done, the pose within DOCK_GATE.settledPx
+  // of where it rests), so it is never seen to slide into its seat (owner:
+  // covers appear directly); once shown it STAYS while the camera is on that
+  // place, riding every move of it — the reader's pre-roll, the first
+  // chapter's entrance scrub — and goes when the camera leaves.
+  const publishDock = () => {
+    const map = mapRef.current?.getMap();
+    if (!map || !signs) return;
+    const points: Record<string, { x: number; y: number }> = {};
+    shieldPlaces.forEach((place) => {
+      const point = map.project(place.coordinates);
+      points[place.id] = { x: Math.round(point.x) - CANVAS_BLEED, y: Math.round(point.y) - CANVAS_BLEED };
+    });
+    const at = dockShown(dockAtRef.current, dockAskRef.current, (id) => !!points[id]);
+    dockAtRef.current = at;
+    coverDock.publish({ at, points });
+  };
+  const publishDockRef = useRef(publishDock);
+  publishDockRef.current = publishDock;
+  // Written by the camera (its draw), published with the next render.
+  const setDockAt = (ask: DockAsk | null) => {
+    const was = dockAskRef.current;
+    if (was === ask || (was && ask && was.id === ask.id && was.appear === ask.appear && was.stay === ask.stay)) return;
+    dockAskRef.current = ask;
+    mapRef.current?.getMap()?.triggerRepaint();
+  };
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!signs || !mapLoaded || !map) return;
+    const onRender = () => publishDockRef.current();
+    map.on('move', onRender);
+    map.on('render', onRender);
+    onRender();
+    return () => {
+      map.off('move', onRender);
+      map.off('render', onRender);
+    };
+  }, [mapLoaded, signs]);
   // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
   // this component renders (its transformer is rebuilt each render), so the
   // state write is ref-guarded and deferred to a microtask.
@@ -2205,6 +2377,97 @@ export default function RouteAtlas({
       left: 0,
     };
     const neutralPadding = { top: 0, right: 0, bottom: 0, left: 0 };
+    // ── The covers' places (src/lib/coverDock.ts) ──
+    // Each chapter's cover rides beside its place's shield at the corner the
+    // dock's plan gives it, and the camera sets each place where that corner
+    // fits: the plan's point for it. It does so by where it stands over the
+    // ground, not by moving its own centre on the screen: the centre keeps
+    // the atlas's focal point (`activePadding`, as ever), and each chapter's
+    // rest pose looks at the ground that puts its place on its point
+    // (`centreFor`, DERIVED from the plan, the rest zoom and the camera's
+    // pitch). A padding that moved the centre down the screen for a place
+    // set low tipped the horizon into the top third of the page. The canvas's
+    // box is read once per run (widths and the pinned height, never a
+    // scroll-dependent rect).
+    const canvasSize = { width: map.getContainer().clientWidth, height: map.getContainer().clientHeight };
+    const focalPoint = {
+      x: activePadding.left + (canvasSize.width - activePadding.left - activePadding.right) / 2 - CANVAS_BLEED,
+      y: activePadding.top + (canvasSize.height - activePadding.top - activePadding.bottom) / 2 - CANVAS_BLEED,
+    };
+    // The plan's centres come from a pinhole model of the camera, good to a
+    // few tens of px on the globe at the Florida zooms. Each is refined on
+    // the map's own camera (a clone of its transform, never the live one):
+    // aim again by what is still off, three or four times, until the place
+    // stands on its point to the pixel.
+    const dockCamera: DockCamera = {
+      focal: focalPoint,
+      pitch: CHAPTER_PITCH,
+      bearing: CHAPTER_BEARING,
+      distance: 1.5 * canvasSize.height,
+    };
+    type LngLatLike = { lng: number; lat: number };
+    type TransformClone = {
+      zoom: number;
+      pitch: number;
+      bearing: number;
+      padding: typeof activePadding;
+      center: LngLatLike;
+      locationPoint: (lngLat: LngLatLike) => { x: number; y: number };
+    };
+    const refineCentre = (place: GeoCoordinate, point: { x: number; y: number }, zoom: number, guess: [number, number]): [number, number] => {
+      try {
+        const live = (map as unknown as { transform?: { clone?: () => TransformClone } }).transform;
+        if (!live?.clone) return guess;
+        const tr = live.clone() as TransformClone & {
+          mercatorFromTransition?: boolean;
+          setMercatorFromTransition?: () => void;
+          setProjection?: (projection: { name: string }) => void;
+        };
+        // The clone takes the live map's projection with it; at the rest
+        // zoom the map draws the globe (below zoom 6) or Mercator (from 6).
+        if (zoom >= 6) tr.setMercatorFromTransition?.();
+        else if (tr.mercatorFromTransition) tr.setProjection?.({ name: 'globe' });
+        const LngLat = map.getCenter().constructor as new (lng: number, lat: number) => LngLatLike;
+        tr.zoom = zoom;
+        tr.pitch = CHAPTER_PITCH;
+        tr.bearing = CHAPTER_BEARING;
+        tr.padding = activePadding;
+        let aim = { x: point.x, y: point.y };
+        let centre = guess;
+        for (let step = 0; step < 5; step += 1) {
+          tr.center = new LngLat(centre[0], centre[1]);
+          const at = tr.locationPoint(new LngLat(place[0], place[1]));
+          const ex = point.x - (at.x - CANVAS_BLEED);
+          const ey = point.y - (at.y - CANVAS_BLEED);
+          if (!Number.isFinite(ex) || !Number.isFinite(ey)) return guess;
+          if (Math.hypot(ex, ey) < 0.5) break;
+          aim = { x: aim.x + ex, y: aim.y + ey };
+          centre = centreFor(place, aim, zoom, dockCamera);
+        }
+        return centre;
+      } catch {
+        return guess;
+      }
+    };
+    const dockCentres = chapterRoute.map((entry, index) => {
+      const planned = signs ? dockPlanRef.current?.[entry.stop.id] : null;
+      if (!planned) return null;
+      return refineCentre(entry.stop.coordinates, planned.point, chapterRestZooms[index] ?? HOP.restZoom, planned.centre);
+    });
+    // Where a chapter's place stands on the screen at rest (the viewfinder's
+    // readouts hang off it), the atlas's focal point without a plan.
+    const planFocal = (index: number) => dockPlanRef.current?.[chapterRoute[index]?.stop.id ?? '']?.point ?? focalPoint;
+    const lerpPoint = (from: { x: number; y: number }, to: { x: number; y: number }, k: number) => ({
+      x: from.x + (to.x - from.x) * k,
+      y: from.y + (to.y - from.y) * k,
+    });
+    let lastFocalKey = '';
+    const tellFocal = (point: { x: number; y: number }) => {
+      const key = `${point.x.toFixed(1)}|${point.y.toFixed(1)}`;
+      if (key === lastFocalKey) return;
+      lastFocalKey = key;
+      viewfinderRef.current?.focal(point);
+    };
     // Measured once per layout (this effect re-runs on layoutRevision), never
     // per frame: the canvas box in viewport pixels, for placing the prologue
     // globe by screen position. Only its size and its left edge are read —
@@ -2229,7 +2492,7 @@ export default function RouteAtlas({
       if (toIndex < 0 || toIndex === fromIndex) return fromIndex;
       return fromIndex + (toIndex - fromIndex) * sample.localProgress;
     };
-    const restCenter = (index: number): GeoCoordinate => chapterRoute[index]?.stop.coordinates ?? [US_OVERVIEW.longitude, US_OVERVIEW.latitude];
+    const restCenter = (index: number): GeoCoordinate => dockCentres[index] ?? chapterRoute[index]?.stop.coordinates ?? [US_OVERVIEW.longitude, US_OVERVIEW.latitude];
     const restZoom = (index: number) => chapterRestZooms[index] ?? HOP.restZoom;
     const restRoute = (index: number) => chapterRoute[index]?.routeProgress ?? 0;
     // ── Voyage (see AtlasVoyage) ──
@@ -2377,7 +2640,8 @@ export default function RouteAtlas({
       const section = document.querySelector<HTMLElement>(
         `[data-archive-chapter][data-chapter-index="${chapterIndex}"]`,
       );
-      const ticket = section?.querySelector('.archive-plate--ticket') ? section : null;
+      // A docked ticket (its cover rides on the atlas) says so on its section.
+      const ticket = section && (section.dataset.ticket != null || section.querySelector('.archive-plate--ticket')) ? section : null;
       ticketSections.set(chapterIndex, ticket);
       return ticket;
     };
@@ -2416,6 +2680,29 @@ export default function RouteAtlas({
     let hopTrim = restRoute(committed);
     let targetCenter: GeoCoordinate = hopCenter;
     let targetZoom = hopZoom;
+    // Where the place in view stands on the screen (see "The covers'
+    // places"): followed like the centre and the zoom, carried from place to
+    // place along a flight with the ground it covers. The viewfinder reads it.
+    let hopFocal = planFocal(committed);
+    let targetFocal = hopFocal;
+    // Whether the camera is down on the committed place (the dock shows its
+    // cover): false from a take-off until the landing's lock.
+    let dockLanded = true;
+    // How far (screen px, roughly) the drawn pose still is from the one it
+    // is heading for (a flight's landing, else the target): the dock lets a
+    // cover appear only once this is under DOCK_GATE.settledPx.
+    let hopRemainPx = 0;
+    // The entrance's camera as last drawn, and when it last moved (the dock
+    // lets the first chapter's cover appear once the scroll holds still).
+    let entryDrawn = Number.NaN;
+    let entryMovedAt = 0;
+    let entryStillTimer = 0;
+    // Where on the route the reader was when the camera last came down on
+    // its place (a landing, a snap, a settle): the pre-roll leans only past
+    // the stretch between there and the place's reading line, so a landed
+    // camera holds until the hand moves on (src/lib/coverDock.ts, restLean).
+    const leanOrigin = (index: number) => Math.min(index + HOP.forward, Math.max(index - HOP.back, routePosition(queuedSample)));
+    let leanFrom = leanOrigin(committed);
     interface Flight {
       originCenter: GeoCoordinate;
       originZoom: number;
@@ -2435,6 +2722,10 @@ export default function RouteAtlas({
       origin: number;
       /** The viewfinder has been told to lock on arrival. */
       lockCalled: boolean;
+      /** Where the place in view stands on the screen as it leaves (the
+       *  live point) and where the place flown to lands. */
+      originFocal: { x: number; y: number };
+      destFocal: { x: number; y: number };
     }
     let flight: Flight | null = null;
     // A forward commit waiting for the covers it leaves to tear free (see
@@ -2670,8 +2961,7 @@ export default function RouteAtlas({
       let duration = HOP.durationBase + HOP.durationRange * reach;
       // The visible span is the clear stage (the canvas less the focal
       // padding); the leg is measured in pixels at the starting zoom.
-      const container = map.getContainer();
-      const w0 = Math.max(160, Math.max(container.clientWidth - activePadding.right, container.clientHeight - activePadding.top));
+      const w0 = Math.max(160, Math.max(canvasSize.width - activePadding.right, canvasSize.height - activePadding.top));
       const w1 = w0 * 2 ** (originZoom - destZoom);
       const u1 = pixelsAtZoom(mercatorDegrees(originCenter, destCenter), originZoom);
       const path = flightPath(w0, w1, u1, HOP.rho);
@@ -2695,8 +2985,13 @@ export default function RouteAtlas({
         dest,
         origin: inAir && flight ? flight.origin : committed,
         lockCalled: false,
+        originFocal: { ...hopFocal },
+        destFocal: planFocal(dest),
       };
       committed = dest;
+      // In the air: the cover being left rides away with its shield as it
+      // fades; the next shows once the camera is down on its place.
+      dockLanded = false;
       committedPlaceRef.current = dest;
       writeAtlasPlace(chapterRoute[dest]?.stop.id);
       setCameraState('flying');
@@ -2734,6 +3029,10 @@ export default function RouteAtlas({
       hopTrim = restRoute(index);
       targetCenter = hopCenter;
       targetZoom = hopZoom;
+      hopFocal = planFocal(index);
+      targetFocal = hopFocal;
+      dockLanded = true;
+      leanFrom = leanOrigin(index);
       clearPlantTimers();
       settleSignOn(index);
     };
@@ -2751,6 +3050,9 @@ export default function RouteAtlas({
       hopTrim = restRoute(index);
       targetCenter = restCenter(index);
       targetZoom = restZoom(index);
+      targetFocal = planFocal(index);
+      dockLanded = true;
+      leanFrom = leanOrigin(index);
       clearPlantTimers();
       settleSignOn(index);
       wakeHop();
@@ -2821,13 +3123,14 @@ export default function RouteAtlas({
       }
       if (next === committed) {
         // Not far enough to commit: lean the resting camera toward where the
-        // scroll is heading (reversible, eased, capped).
+        // scroll is heading (reversible, eased, capped) — from the edge of
+        // the stretch the camera came down in (`leanFrom`, the reader's
+        // place at the landing, to the place's own reading line), never
+        // inside it, so a landed camera holds until the hand moves on.
         if (flight) return;
-        const lean = position - committed;
-        const neighbour = lean >= 0 ? Math.min(lastRouteIndex, committed + 1) : Math.max(0, committed - 1);
-        const amount = neighbour === committed
-          ? 0
-          : smootherstep(clamp01(lean >= 0 ? lean / HOP.forward : -lean / HOP.back));
+        const lean = restLean(position, committed, leanFrom, lastRouteIndex, HOP.forward, HOP.back);
+        leanFrom = lean.from;
+        const { neighbour, amount } = lean;
         if (neighbour !== preroll[0] || Math.abs(amount - preroll[1]) > 0.002) {
           preroll = [neighbour, amount];
           wakeHop();
@@ -2863,6 +3166,12 @@ export default function RouteAtlas({
     // plants. Called once per flight (`lockCalled`).
     const lockFlight = (landing: Flight, now: number) => {
       landing.lockCalled = true;
+      // Down: the place's cover appears beside its shield, whole, once the
+      // pose has settled (DOCK_GATE.settledPx: nothing slides it into its seat).
+      // The camera holds there: the pre-roll leans only once the reader
+      // scrolls on past where they were at this lock (`leanFrom`).
+      dockLanded = true;
+      leanFrom = leanOrigin(landing.dest);
       setCameraState('locked');
       announceArrival(landing.dest, landing.origin);
       const destPlace = viewfinderPlace(landing.dest);
@@ -2895,12 +3204,16 @@ export default function RouteAtlas({
         const k = smootherstep(clamp01((t - OUTBOUND_AIM[0]) / (OUTBOUND_AIM[1] - OUTBOUND_AIM[0])));
         targetCenter = greatCirclePoint(center, restCenter(0), k);
         targetZoom = zoom + (restZoom(0) - zoom) * k;
+        targetFocal = planFocal(0);
       } else if (flight) {
         const t = clamp01((now - flight.start) / flight.duration);
         const s = flight.ease(t);
         const along = flight.path.at(s);
         targetCenter = mercatorLerp(flight.originCenter, flight.destCenter, along.u);
         targetZoom = flight.originZoom + along.dz - flight.extraLift * Math.sin(Math.PI * s);
+        // The place in view travels with the ground covered: the place left
+        // leaves from its own point, the place flown to lands on its own.
+        targetFocal = lerpPoint(flight.originFocal, flight.destFocal, along.u);
         // Going on, the lit line is thrown ahead and arrives before the
         // camera. Coming back, it is given up under the camera instead of on
         // a schedule: `along.u` is the fraction of the leg already covered,
@@ -2921,6 +3234,7 @@ export default function RouteAtlas({
           flight = null;
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
+          targetFocal = planFocal(committed);
           hopTrim = restRoute(committed);
         }
       } else {
@@ -2936,6 +3250,7 @@ export default function RouteAtlas({
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
         }
+        targetFocal = planFocal(committed);
       }
       const follow = 1 - Math.exp(-dt / HOP.followMs);
       hopCenter = [
@@ -2943,6 +3258,7 @@ export default function RouteAtlas({
         hopCenter[1] + (targetCenter[1] - hopCenter[1]) * follow,
       ];
       hopZoom += (targetZoom - hopZoom) * follow;
+      hopFocal = lerpPoint(hopFocal, targetFocal, follow);
       if (flight && !flight.lockCalled) {
         const arrival = pixelsAtZoom(mercatorDegrees(hopCenter, flight.destCenter), hopZoom);
         if (arrival < HOP.lockPx || now - flight.start >= flight.duration) lockFlight(flight, now);
@@ -2952,7 +3268,13 @@ export default function RouteAtlas({
       if (!flight && !settling) {
         hopCenter = targetCenter;
         hopZoom = targetZoom;
+        hopFocal = targetFocal;
       }
+      // What is left to go: to a flight's landing pose while it is in the
+      // air or settling out of it, else to the target.
+      const restAt = flight ? flight.destCenter : targetCenter;
+      const restZoomAt = flight ? flight.destZoom : targetZoom;
+      hopRemainPx = poseRemainPx(pixelsAtZoom(mercatorDegrees(hopCenter, restAt), hopZoom), restZoomAt - hopZoom);
       const driven = drivenEntry(now);
       if (driven != null) voyageEntry.set(driven);
       schedule(queuedSample);
@@ -3131,6 +3453,8 @@ export default function RouteAtlas({
         padded = focused;
         map.setPadding(focused ? activePadding : neutralPadding);
       }
+      // What the camera asks of the dock this frame (see `setDockAt`).
+      let dockAsk: DockAsk | null = null;
 
       if (inPrologue && sample && canvasBox) {
         // ── Globe prologue ── the lit globe low in the bottom-right corner,
@@ -3207,9 +3531,18 @@ export default function RouteAtlas({
       } else if (sample && focused) {
         // With hops, the entrance (and every non-flying frame) aims at the
         // committed place's rest pose rather than the scrubbed route head.
+        const sampleFrom = chapterRoute.indexOf(sample.from);
+        const sampleTo = chapterRoute.indexOf(sample.to);
+        const sampleK = sampleTo >= 0 && sampleTo !== sampleFrom ? sample.easedProgress : 0;
+        // Reduced motion's timeline moves in whole chapters: on the desktop
+        // atlas its camera is cut from rest pose to rest pose, each the pose
+        // a hop lands on, so its place still stands where its cover fits.
+        const cutTo = sampleTo >= 0 && sampleK >= 0.5 ? sampleTo : Math.max(0, sampleFrom);
         const aim: ChapterSample = hopEnabled
           ? { ...sample, coordinate: hopCenter, zoom: hopZoom, pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING }
-          : sample;
+          : signs && dockCentres[cutTo]
+            ? { ...sample, coordinate: restCenter(cutTo), zoom: restZoom(cutTo), pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING }
+            : sample;
         if (prologue && prologuePaddingKey) prologuePaddingKey = '';
         // Enter The Route through geography, not through a scaled interface
         // panel. The same scroll-owned entry clock carries the camera from a
@@ -3358,6 +3691,38 @@ export default function RouteAtlas({
           lastBearing = entryBearing;
           lastOverview = false;
         }
+        // Down on its place (a landing's lock, the dive's end, a snap), the
+        // camera asks for that place's cover beside its shield: to appear
+        // once the pose has settled and the entrance is done, to stay while
+        // the entrance's camera is still most of the way down (the first
+        // chapter's reading line sits in its last stretch); in the air, and
+        // above the archive, none. Reduced motion's camera, cut from rest
+        // pose to rest pose, shows the place it is cut to at once.
+        if (hopEnabled) {
+          // The entrance's camera is the scroll's: still once the scroll has
+          // left it alone a beat (and a draw is asked for then, to see it).
+          const entryAt = entryCameraAt(entryNow);
+          const drawnAt = performance.now();
+          if (!(Math.abs(entryAt - entryDrawn) <= 1e-4)) {
+            entryDrawn = entryAt;
+            entryMovedAt = drawnAt;
+          }
+          const entryStill = drawnAt - entryMovedAt >= DOCK_GATE.entryStillMs;
+          if (!entryStill && entryAt < 1 && !entryStillTimer) {
+            entryStillTimer = window.setTimeout(() => {
+              entryStillTimer = 0;
+              schedule(queuedSample);
+            }, DOCK_GATE.entryStillMs + 16);
+          }
+          dockAsk = askDock(chapterRoute[committed]?.stop.id ?? null, dockLanded, entryAt, entryStill, hopRemainPx);
+        } else {
+          const placeId = still && still !== 'archive' ? null : chapterRoute[cutTo]?.stop.id ?? null;
+          dockAsk = placeId ? { id: placeId, appear: true, stay: true } : null;
+        }
+        // The viewfinder's readouts hang off the place in view.
+        tellFocal(hopEnabled
+          ? lerpPoint(focalPoint, hopFocal, smootherstep(clamp01(entryCameraAt(entryNow))))
+          : planFocal(cutTo));
       } else {
         if (!lastOverview) {
           map.jumpTo({
@@ -3373,6 +3738,8 @@ export default function RouteAtlas({
           lastOverview = true;
         }
       }
+
+      setDockAt(dockAsk);
 
       const routeProgress = hopEnabled
         ? chapterMode() ? hopTrim : restRoute(committed)
@@ -3560,6 +3927,7 @@ export default function RouteAtlas({
       }
       ['wheel', 'keydown', 'touchstart'].forEach((type) => window.removeEventListener(type, noteReaderDrove));
       disposed = true;
+      window.clearTimeout(entryStillTimer);
       unsubscribe();
       ticketObserver?.disconnect();
       unsubscribeEntry();
@@ -4167,7 +4535,11 @@ export default function RouteAtlas({
             // the width, so there is no hard core. The previous #11150F at
             // 0.7 / 0.5 was darker than the paper with a crisp edge — UI
             // vocabulary on a cartographic ground.
-            map.setPaintProperty(layer.id, 'text-halo-color', living ? ATLAS_PAPER.backgroundLiving : ATLAS_PAPER.background);
+            // On the desktop the ground is the land's own photograph now:
+            // a solid paper halo printed a dark smudge under every name on
+            // pale rock ("CHIHUAHUA" across the Sonoran desert), so it is
+            // the paper at half strength there.
+            map.setPaintProperty(layer.id, 'text-halo-color', living ? ATLAS_PAPER.backgroundLiving : 'rgba(27, 35, 25, 0.5)');
             map.setPaintProperty(layer.id, 'text-halo-width', 1.1);
             map.setPaintProperty(layer.id, 'text-halo-blur', 1.5);
             // Mapbox's own tracking runs to 0.25em on ocean names and 0.15em
@@ -4190,6 +4562,25 @@ export default function RouteAtlas({
           // the map, its name on its ticket), so a settlement label under the
           // sign is the page saying the same word twice in two voices.
           silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
+          // The phone's overview: the land as a photograph of itself, as the
+          // desktop's chapters now have it (owner, 2026-09-28: 背景很暗), not
+          // a black paper — the same satellite, in the archive's own stock
+          // paint, under the labels and the route. The overview holds still
+          // (re-projected on a resize only), so its tiles load once.
+          if (living && mobile && !map.getSource('living-satellite')) {
+            const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
+            map.addSource('living-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+            map.addLayer({
+              id: 'living-satellite',
+              type: 'raster',
+              source: 'living-satellite',
+              paint: {
+                'raster-opacity': LIVING_SATELLITE_OPACITY,
+                'raster-fade-duration': 240,
+                ...STOCK_PAINT,
+              } as never,
+            }, firstLabel);
+          }
           // Keep-out, the /travel technique: an invisible icon on every place,
           // placed first (the topmost symbol layer), so the basemap does not
           // set a town's name across the stretch of route a sign's leader
@@ -4365,13 +4756,10 @@ export default function RouteAtlas({
 
       </motion.div>
 
-      {prologue && (
-        <motion.div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-full bg-[#282c20]"
-          style={{ width: canvasExtension + 40, opacity: archiveFrameOpacity }}
-        />
-      )}
+      {/* (The strip that masked the canvas back to page ground under the
+          covers' column is gone: the covers ride on the map beside their
+          shields now, and the chapters' rail has its own soft ground, so the
+          map runs to the page's edge — src/lib/coverDock.ts.) */}
 
       {living && projectedStops.length === mappedStops.length && (
         <motion.div
@@ -4434,8 +4822,10 @@ export default function RouteAtlas({
 
       <motion.div
         aria-hidden="true"
-        className={`route-atlas-entry-dissolve pointer-events-none absolute inset-x-0 top-0 z-[5] ${mobile ? 'h-[18%]' : 'h-[24%]'}`}
-        style={prologue ? { opacity: archiveFrameOpacity } : undefined}
+        className={`route-atlas-entry-dissolve pointer-events-none absolute inset-x-0 top-0 z-[5] ${mobile ? 'h-[18%]' : 'h-[16%]'}`}
+        // Out to the page's edge with the canvas (the map no longer stops
+        // at the atlas box's 78%, and a tone that did would draw a seam).
+        style={prologue ? { opacity: archiveFrameOpacity, right: -canvasExtension } : undefined}
       />
 
       <motion.div
@@ -4465,15 +4855,15 @@ export default function RouteAtlas({
         )}
       </AnimatePresence>
 
-      <motion.div
-        className={`route-atlas-grade pointer-events-none absolute inset-0 ${
-          mobile
-            ? 'bg-[radial-gradient(circle_at_48%_54%,rgba(210,255,0,0.025)_0%,transparent_38%,rgba(7,9,6,0.2)_100%)]'
-            : 'shadow-[inset_0_0_120px_rgba(7,9,6,0.23)]'
-        }`}
-        style={prologue ? { opacity: archiveFrameOpacity } : undefined}
-      />
-      {!mobile && <motion.div className="route-atlas-tone pointer-events-none absolute inset-0" style={prologue ? { opacity: archiveFrameOpacity } : undefined} />}
+      {/* The desktop's vignette (an inset shadow round the atlas box) and
+          its right-edge tone into page ground went with the covers' column:
+          the map is the page's ground now, lit edge to edge. The phone keeps
+          its grade. */}
+      {mobile && (
+        <motion.div
+          className="route-atlas-grade pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_48%_54%,rgba(210,255,0,0.025)_0%,transparent_38%,rgba(7,9,6,0.12)_100%)]"
+        />
+      )}
       {/* Reading tone: keyed off the camera state on <html> (CSS, no React),
           so a landing settles the ground and a flight lifts it. */}
       {/* Held at zero through the globe prologue by the same archive-frame
