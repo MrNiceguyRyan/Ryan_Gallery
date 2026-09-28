@@ -1998,13 +1998,25 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .story-fig[data-reach="waiting"][data-arrive="shutter"] .story-fig__plate {
   opacity: 1;
 }
-.story-fig[data-reach="waiting"][data-arrive="shutter"] .story-frame {
+/* A shutter frame's photograph waits unseen and is put in behind the
+   closed curtain. The frame grid prefixes both rules: its hover dim
+   ([data-frame-grid][data-hovered] … :not([data-hovered]), 0,4,0, later in
+   this file) would otherwise lift a waiting photograph to 0.84 under a
+   resting pointer, and the reader saw it, saw it vanish, then saw the
+   shutter. The grid's 320ms opacity transition is off for as long as the
+   frame has a `data-reach`: a transition from waiting's 0 would fade the
+   photograph up below the descending curtain. */
+[data-frame-grid] .story-fig[data-reach][data-arrive="shutter"] .story-frame {
+  transition: none;
+}
+[data-frame-grid] .story-fig[data-reach="waiting"][data-arrive="shutter"] .story-frame {
   opacity: 0;
 }
-/* The shutter: two curtains of blades over the frame, a focal plane's. Each
-   is half the frame (and a pixel, so they meet without a seam) and is drawn
-   stacked away at its edge; it fans out to close by scaleY, so its blades'
-   seams close up as it opens and spread as it shuts, as blades do. */
+/* The shutter: a vertical-travel focal plane's, four blades over the frame.
+   Each is a quarter of it and a pixel (neighbours overlap, no seam of
+   picture) and waits stacked above the frame; storyEntrance.ts runs them
+   down to close and on down, off the bottom edge, to open. Each blade's
+   top edge catches a little light, so the fanned curtain reads as blades. */
 .story-shutter {
   position: absolute;
   inset: 0;
@@ -2014,25 +2026,14 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 }
 .story-shutter__blade {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
-  height: calc(50% + 1px);
-  transform: scaleY(0);
-  background:
-    linear-gradient(180deg, rgba(244, 244, 237, 0.07), rgba(244, 244, 237, 0) 22%),
-    repeating-linear-gradient(180deg, #161511 0, #161511 calc(25% - 1px), #2b2a24 calc(25% - 1px), #2b2a24 25%);
+  height: calc(25% + 1px);
+  transform: translate3d(0, -100%, 0);
+  background: linear-gradient(180deg, #2b2a24 0, #1c1b17 2px, #161511 100%);
+  box-shadow: inset 0 1px 0 rgba(244, 244, 237, 0.1);
   will-change: transform;
-}
-.story-shutter__blade--top {
-  top: 0;
-  transform-origin: 50% 0;
-}
-.story-shutter__blade--bottom {
-  bottom: 0;
-  transform-origin: 50% 100%;
-  background:
-    linear-gradient(0deg, rgba(244, 244, 237, 0.07), rgba(244, 244, 237, 0) 22%),
-    repeating-linear-gradient(0deg, #161511 0, #161511 calc(25% - 1px), #2b2a24 calc(25% - 1px), #2b2a24 25%);
 }
 
 @media (min-width: 1024px) {
@@ -2251,7 +2252,12 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   }
   .story-slot > * + * { margin-top: 28px; }
   .story-slot > .story-text + .story-text { margin-top: 24px; }
-  .story-slot[data-kind="QUOTE"] { padding-bottom: 8px; }
+  /* The pull quote keeps its own air: a slot's 52px set it tight under
+     the caption above. */
+  .story-slot[data-kind="QUOTE"] {
+    margin-top: 88px;
+    padding-bottom: 36px;
+  }
   /* Full-bleed: the screen-high landscape, the feature, the page. */
   .story-slot > :is(.story-fig--screen, .story-fig--feature, .story-fig--page) {
     width: min(100vw, var(--fit));

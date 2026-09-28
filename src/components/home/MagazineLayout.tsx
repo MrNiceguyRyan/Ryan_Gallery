@@ -33,7 +33,7 @@ import {
   type SlotBoxes,
   type SlotKind,
 } from '../../lib/storyPlan';
-import { planEntrances, playEntrance, POP_EASE, type SlotEntrance } from '../../lib/storyEntrance';
+import { planEntrances, playEntrance, POP_EASE, SHUTTER_BLADES, type SlotEntrance } from '../../lib/storyEntrance';
 
 // Heavy in-out curve for the overlay panel slide — deliberate one-off (a big
 // plane of UI entering/leaving reads better with symmetric weight than expo).
@@ -493,7 +493,11 @@ const FRAME_SETTLE = 'story-frame-settle';
  *  figure: a pair's caption hangs under its first frame only, and a taller
  *  target would reach the threshold later than its partner. So a pair's two
  *  frames, on one row on desktop, are reached in the same callback; on the
- *  phone, where they stack, each is reached on its own. */
+ *  phone, where they stack, each is reached on its own. A frame is reached
+ *  as soon as its top edge is 6% of the screen in: a share of a tall
+ *  frame's area came late, and a reader who paused left up to 226px of its
+ *  place as blank paper for two seconds. Every entrance reads from the top
+ *  or all at once, so it reads with only the frame's top on screen. */
 function useFrameReach<T extends HTMLElement>(armed: boolean, reduce: boolean) {
   const ref = useRef<T>(null);
   const [reach, setReach] = useState<Reach>('rest');
@@ -518,7 +522,7 @@ function useFrameReach<T extends HTMLElement>(armed: boolean, reduce: boolean) {
           observer.disconnect();
         }
       }
-    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.12 });
+    }, { rootMargin: '0px 0px -6% 0px', threshold: 0 });
     observer.observe(node.querySelector('.story-fig__plate') ?? node);
     const settle = () => {
       observer.disconnect();
@@ -532,6 +536,9 @@ function useFrameReach<T extends HTMLElement>(armed: boolean, reduce: boolean) {
   }, [armed, reduce]);
   return [ref, reach] as const;
 }
+
+/** The shutter's blades, top to bottom (storyEntrance.ts plays them). */
+const SHUTTER_BLADE_KEYS = Array.from({ length: SHUTTER_BLADES }, (_, blade) => blade);
 
 /** Stands a frame at rest at once, entrance or not: the viewer is about to
  *  measure it and fly home onto it. Called with the frame's button. */
@@ -719,8 +726,7 @@ function StoryFrame({
         </motion.button>
         {blades && (
           <span className="story-shutter" aria-hidden="true">
-            <span className="story-shutter__blade story-shutter__blade--top" />
-            <span className="story-shutter__blade story-shutter__blade--bottom" />
+            {SHUTTER_BLADE_KEYS.map((key) => <span key={key} className="story-shutter__blade" />)}
           </span>
         )}
       </div>
@@ -2062,8 +2068,9 @@ export default function MagazineLayout({
   const { frames: photos, ratios, slots } = useMemo(() => storyPlanFor(collection), [collection]);
   const boxes = useMemo(() => storyBoxes(slots, ratios, 1728, 1000), [slots, ratios]);
   // How each slot's frames arrive: four photographic entrances dealt in
-  // reading order (src/lib/storyEntrance.ts), aligned with `slots`.
-  const entrances = useMemo(() => planEntrances(slots), [slots]);
+  // reading order (src/lib/storyEntrance.ts), aligned with `slots`; the
+  // shutter goes only where the design window's frame is short enough.
+  const entrances = useMemo(() => planEntrances(slots, ratios), [slots, ratios]);
   // The slots as the kept stub reads them: frame indices, in reading order.
   const frameRows = useMemo(() => slotRows(slots), [slots]);
   // Where the reader is, for the kept stub. A /works page's server HTML
