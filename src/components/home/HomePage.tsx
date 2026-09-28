@@ -27,6 +27,7 @@ import { activeChapters, chapterSections, issueChapters } from '../../lib/chapte
 import { chapterPoint } from '../../lib/geo';
 import { DUR, DUR_MS, EASE, voyageEase, voyageSeconds } from '../../lib/motion';
 import { NOTES_LIVE } from '../../lib/notesNav';
+import { DETENT_HOLD_MS, DETENT_S, REEL_EVENT, detentEase, type ReelDetail, type ReelState } from '../../lib/introReel';
 import type Lenis from 'lenis';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
@@ -179,6 +180,16 @@ interface DeferredRouteAtlasProps {
   paused?: boolean;
   presentation?: 'classic' | 'living';
   onNavigate?: (chapterId: string) => void;
+  /** Mount the map now (the opening reel covers the first screen, a whole
+   *  film away), not when the atlas nears the viewport. */
+  eager?: boolean;
+  /** Hold the globe's reveal while the opening reel covers it (until its
+   *  viewfinder comes up, a little before the shutter opens on the globe). */
+  holdReveal?: boolean;
+  /** Count the atlas as engaged while the opening reel covers it. */
+  engage?: boolean;
+  /** The opening reel still lies over the globe: its life waits. */
+  covered?: boolean;
 }
 
 function RouteAtlasFallback({ mobile = false, entryProgress }: {
@@ -228,7 +239,7 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
   useEffect(() => {
     if (nearViewport) return;
     const shell = shellRef.current;
-    if (!shell || typeof IntersectionObserver === 'undefined') {
+    if (props.eager || !shell || typeof IntersectionObserver === 'undefined') {
       setNearViewport(true);
       return;
     }
@@ -246,7 +257,7 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
     );
     observer.observe(shell);
     return () => observer.disconnect();
-  }, [nearViewport, props.reducedMotion]);
+  }, [nearViewport, props.eager, props.reducedMotion]);
 
   return (
     <div
@@ -696,6 +707,27 @@ export default function HomePage({ collections }: Props) {
     return detach;
   }, []);
 
+  // ── The opening reel (IntroReel, its own island above this one) ──
+  // While it covers the first screen the globe holds its reveal — until the
+  // reel's last sphere (the moon) comes on, so the fade, the dawn and the
+  // tiles they ask for are done when the shutter opens on the globe — and
+  // the globe's key is out of the tab order; `null` means there is no reel
+  // to wait for.
+  const [reelState, setReelState] = useState<ReelState | null>(null);
+  const [reelFramed, setReelFramed] = useState(false);
+  useEffect(() => {
+    const apply = (detail?: ReelDetail) => {
+      if (!detail) return;
+      setReelState(detail.state);
+      setReelFramed(detail.framed);
+    };
+    apply(window.__archiveReel);
+    const onReel = (event: Event) => apply((event as CustomEvent<ReelDetail>).detail);
+    window.addEventListener(REEL_EVENT, onReel);
+    return () => window.removeEventListener(REEL_EVENT, onReel);
+  }, []);
+  const reelCovering = reelState === 'reel';
+
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Boots via the shared startLenis() helper (single source of truth for the
   // site's scroll feel — travel/about use the same). framer's useScroll reads
@@ -712,8 +744,72 @@ export default function HomePage({ collections }: Props) {
     };
   }, [reduce]);
 
+  // ── The shutter's detent ──
+  // When the reel's shutter fires going down, Lenis carries the page to rest
+  // on the first screen as the blades finish (DETENT_S, the input locked),
+  // and holds it there until the blades are open and DETENT_HOLD_MS more, so
+  // a brisk scroll's momentum cannot carry the reader past his name and the
+  // globe. The hold is Lenis' own input lock (not stop(), whose overflow clip
+  // on <html> would drop the sticky atlas and move the scrollbar). A touch
+  // screen has no Lenis: IntroReel jumps the page under the shut blades.
+  useEffect(() => {
+    let lastFired = window.__archiveReel?.fired ?? false;
+    let holding = false;
+    let pollTimer = 0;
+    let holdTimer = 0;
+    const lock = (on: boolean) => {
+      const lenis = lenisRef.current as unknown as { isLocked: boolean } | null;
+      if (lenis) lenis.isLocked = on;
+    };
+    const release = () => {
+      window.clearTimeout(pollTimer);
+      window.clearTimeout(holdTimer);
+      if (!holding) return;
+      holding = false;
+      lock(false);
+    };
+    const hold = () => {
+      holding = true;
+      lock(true);
+      const wait = () => {
+        if (!holding) return;
+        if (window.__archiveReel?.blades) {
+          pollTimer = window.setTimeout(wait, 40);
+          return;
+        }
+        holdTimer = window.setTimeout(release, DETENT_HOLD_MS);
+      };
+      wait();
+    };
+    const onReel = (event: Event) => {
+      const detail = (event as CustomEvent<ReelDetail>).detail;
+      if (!detail) return;
+      const rising = detail.fired && !lastFired;
+      lastFired = detail.fired;
+      if (!detail.fired) release();
+      if (!rising || reduce) return;
+      const lenis = lenisRef.current;
+      const root = pageRootRef.current;
+      if (!lenis || !root) return;
+      const target = documentTop(root);
+      // (Far past it already — a restore, a jump — is not a detent.)
+      if (Math.abs(window.scrollY - target) > window.innerHeight * 0.8) return;
+      lenis.scrollTo(target, { duration: DETENT_S, easing: detentEase, lock: true, force: true, onComplete: hold });
+    };
+    window.addEventListener(REEL_EVENT, onReel);
+    return () => {
+      window.removeEventListener(REEL_EVENT, onReel);
+      release();
+    };
+  }, [reduce]);
+
   // Warm Mapbox after the opening reveal has had its visual beat. Its WebGL
-  // canvas remains separately gated near the viewport.
+  // canvas remains separately gated near the viewport — except behind the
+  // opening reel: the first screen is a whole film away, so the map is
+  // created at once, as it was when the globe was the first thing on the
+  // page (its start-up lands on the cover, before the reader has begun to
+  // scroll), and its tiles are in long before the shutter opens on it.
+  const atlasEager = desktopLayout && reelState != null;
   useEffect(() => {
     let delay = 0;
     let idle = 0;
@@ -1178,15 +1274,18 @@ export default function HomePage({ collections }: Props) {
   const backToStart = useCallback(() => {
     const start = document.getElementById('main-content');
     const lenis = lenisRef.current;
+    // The start is the first screen — the top of this page's own content,
+    // below the opening reel — not the top of the document.
+    const startY = pageRootRef.current ? documentTop(pageRootRef.current) : 0;
     if (!lenis || reduce) {
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: startY, behavior: 'auto' });
       start?.focus({ preventScroll: true });
       return;
     }
     if (voyageActiveRef.current) return;
     start?.focus({ preventScroll: true });
     const fromY = window.scrollY;
-    const duration = voyageSeconds(fromY);
+    const duration = voyageSeconds(Math.max(0, fromY - startY));
     const token = Date.now();
     const settle = () => {
       voyageActiveRef.current = false;
@@ -1203,16 +1302,16 @@ export default function HomePage({ collections }: Props) {
     // the same offsets the scroll sampler uses — a beat early, so the
     // prologue always takes the planet from the pose the dive starts from.
     const atlasSection = desktopAtlasSectionRef.current;
-    if (atlasSection && fromY > 0) {
+    if (atlasSection && fromY > startY) {
       const prologueEnd = documentTop(atlasSection) - window.innerHeight * ARCHIVE_ENTRY_LEAD;
-      const reached = Math.max(0, Math.min(1, (fromY - prologueEnd) / fromY));
+      const reached = Math.max(0, Math.min(1, (fromY - prologueEnd) / (fromY - startY)));
       const entryShare = Math.max(0.2, Math.min(1, 0.95 * (Math.acos(1 - 2 * reached) / Math.PI)));
       setVoyage({ chapterId: '', duration: duration * 1000, token, outbound: { entryShare } });
     }
     startPassing(null, duration * 1000);
     window.clearTimeout(voyageTimerRef.current);
     voyageTimerRef.current = window.setTimeout(settle, duration * 1000 + 500);
-    lenis.scrollTo(0, {
+    lenis.scrollTo(startY, {
       duration,
       easing: voyageEase,
       lock: true,
@@ -1652,14 +1751,19 @@ export default function HomePage({ collections }: Props) {
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[clamp(5.5rem,10vh,7.75rem)] bg-[linear-gradient(180deg,rgba(40,44,32,0.94)_0%,rgba(40,44,32,0.76)_56%,transparent_100%)] transition-opacity duration-700"
-            style={{ opacity: navPillsVisible ? 1 : 0 }}
+            // Not over the reel: its paper cover would print as a dirty band.
+            style={{ opacity: navPillsVisible && !reelCovering ? 1 : 0 }}
           />
           <motion.button
             type="button"
             aria-label="Ryan Xu — back to top"
             onClick={() => {
               setSelectedCollection(null);
-              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+              // The top is the first screen (his name, the globe) — the start
+              // of the archive — not the opening reel above it; from inside
+              // the reel it is the reel's own start.
+              const start = pageRootRef.current ? documentTop(pageRootRef.current) : 0;
+              window.scrollTo({ top: window.scrollY > start + 2 ? start : 0, behavior: reduce ? 'auto' : 'smooth' });
             }}
             // No hover scale: the wordmark only fades to 0.6, as it does on
             // every other page (.nav-wordmark). A press gives 3%.
@@ -1772,7 +1876,7 @@ export default function HomePage({ collections }: Props) {
             className="relative pb-8 pt-24 lg:pt-0"
             style={{ ['--prologue-h' as never]: PROLOGUE_HEIGHT }}
           >
-          <GlobePrologue years={archiveYearSpan} progress={prologueProgress} />
+          <GlobePrologue years={archiveYearSpan} progress={prologueProgress} covered={reelCovering} />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the
               prologue was laid over the atlas. */}
@@ -1804,6 +1908,10 @@ export default function HomePage({ collections }: Props) {
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
                 onNavigate={navigateFromAtlas}
+                eager={atlasEager}
+                holdReveal={reelCovering && !reelFramed}
+                engage={atlasEager && reelCovering}
+                covered={reelCovering}
               />
             </aside>
 
