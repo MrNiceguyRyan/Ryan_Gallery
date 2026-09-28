@@ -45,6 +45,7 @@ import {
   TEAR_MS,
   TEAR_SNAP_MS,
   applyAffine,
+  mirrorAffine,
   msAtTip,
   tearPose,
   tearRate,
@@ -660,4 +661,44 @@ test('each ticket tears along its own edge, the same way every time', () => {
   assert.deepEqual(tornEdge(486, 2), a);
   assert.notEqual(tornEdge(486, 3).faceCut, a.faceCut);
   for (const key of ['faceCut', 'stubCut', 'faceFringe', 'stubFringe']) assert.match(a[key], /^url\("data:image\/svg\+xml,/);
+});
+
+test('/about\'s stub is torn on the same score, held the other way round', () => {
+  // ContactTicket imports the archive's score and turns it round; it keeps
+  // no copy of its own.
+  const ticket = source('src/components/about/ContactTicket.tsx');
+  assert.match(ticket, /import \{[^}]*\btearPose\b[^}]*\bmirrorAffine\b|import \{[^}]*\bmirrorAffine\b[^}]*\btearPose\b/);
+  assert.match(ticket, /from '\.\.\/\.\.\/lib\/ticketTear'/);
+  assert.doesNotMatch(ticket, /function tearPose|const STOPS/);
+  const STUB = { w: 164, h: 159, vw: 164 * 5 };
+  const stubCorners = (ms, options) => {
+    const m = mirrorAffine(tearPose(ms, STUB, options).m, STUB.w);
+    return [[0, 0], [STUB.w, 0], [0, STUB.h], [STUB.w, STUB.h]].map(([x, y]) => applyAffine(m, x, y));
+  };
+  // At rest, nothing moves; turned round twice is the face's own pose.
+  assert.deepEqual(mirrorAffine(tearPose(0, STUB).m, STUB.w), [1, 0, 0, 1, 0, 0]);
+  for (const ms of [40, 300, TEAR_FREE_MS + 40, TEAR_MS - 10]) {
+    const m = tearPose(ms, STUB).m;
+    mirrorAffine(mirrorAffine(m, STUB.w), STUB.w).forEach((v, i) => assert.ok(Math.abs(v - m[i]) < 1e-9));
+  }
+  // The rip: the stub hinges about the tip on its LEFT edge (the seam stays
+  // put there, but for the hand's dip), and its top-RIGHT corner drops first.
+  for (const ms of [150, 300, TEAR_FREE_MS - 1]) {
+    const pose = tearPose(ms, STUB, { smooth: true });
+    const m = mirrorAffine(pose.m, STUB.w);
+    const [x, y] = applyAffine(m, 0, pose.tip * STUB.h);
+    assert.ok(Math.abs(x) < 1e-6 && y - pose.tip * STUB.h <= 1.5 + 1e-9, `${ms}ms: the tip holds on the seam`);
+  }
+  const [tl, tr] = stubCorners(TEAR_FREE_MS - 1);
+  assert.ok(tr[1] - tl[1] > 15, `top V ${tr[1] - tl[1]}px`);
+  // Free: laid aside up and to the RIGHT, never falling.
+  for (let ms = TEAR_FREE_MS + TEAR_SNAP_MS; ms < TEAR_MS; ms += 1) {
+    const a = stubCorners(ms);
+    const b = stubCorners(ms + 1);
+    [0, 1, 2, 3].forEach((i) => assert.ok(b[i][1] <= a[i][1] + 1e-9, `${ms}ms: stub corner ${i} moves down`));
+    assert.ok(b[1][0] >= a[1][0] - 1e-9, `${ms}ms: carried right`);
+  }
+  assert.ok(stubCorners(TEAR_MS)[0][0] > 60, 'laid aside about half its width');
+  // Reduced motion: no travel at all.
+  assert.deepEqual(mirrorAffine(tearPose(TEAR_MS / 2, STUB, { reduced: true }).m, STUB.w), [1, 0, 0, 1, 0, 0]);
 });

@@ -146,6 +146,20 @@ const chain = (...steps: Affine[]) => steps.reduce(multiply, IDENTITY);
 export function applyAffine(m: Affine, x: number, y: number): [number, number] {
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
+/**
+ * The score for a ticket held the other way round: the face kept in the left
+ * hand and the STUB pulled off by the right (/about's correspondence ticket,
+ * AboutPage ContactTicket). The face's pose `m` for a box `w` wide, turned
+ * about the box's vertical axis, is the stub's pose (transform-origin 0 0):
+ * its seam is its LEFT edge, it hinges about the rip's tip there, its
+ * top-RIGHT corner drops first, and it is laid aside up and to the RIGHT.
+ * Everything else about the tear — the catches, the snap, the fade — is the
+ * same score.
+ */
+export function mirrorAffine(m: Affine, w: number): Affine {
+  const flip: Affine = [-1, 0, 0, 1, w, 0];
+  return chain(flip, m, flip);
+}
 /** The CSS for an affine. */
 export function affineCss(m: Affine) {
   return `matrix(${m[0].toFixed(5)}, ${m[1].toFixed(5)}, ${m[2].toFixed(5)}, ${m[3].toFixed(5)}, ${m[4].toFixed(2)}, ${m[5].toFixed(2)})`;

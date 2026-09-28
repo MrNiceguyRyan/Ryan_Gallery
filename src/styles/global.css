@@ -3306,27 +3306,19 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   background: var(--stub-paper, #30352a);
   box-shadow: inset 0 0 0 1px rgba(244, 244, 237, 0.1);
   color: var(--stub-ink);
-  /* Its holes and notches: .ticket-seam-left, below. */
+  /* Its holes and notches: below. */
 }
-/* ── A ticket's seam (shared) ──
-   The other half of every hole down the seam edge and a notch at each end of
-   it, punched with a mask so what lies under the paper shows through. One
-   copy for every flat ticket that shows its seam: the kept stub above (its
-   left edge) and /about's correspondence ticket (the face's right edge, the
-   stub's left). The pitch, hole and notch come from the ticket's own
-   --ticket-* properties. */
-.story-stub,
-.ticket-seam-left,
-.ticket-seam-right {
+/* The other half of every hole down its torn left edge and a notch at each
+   end of it, punched with a mask so what lies under the paper shows
+   through. The pitch, hole and notch come from the stub's own --ticket-*
+   properties. */
+.story-stub {
   -webkit-mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%;
   mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%;
   -webkit-mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat;
   mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat;
   -webkit-mask-composite: source-out, source-over, source-over, source-over;
   mask-composite: subtract, add, add, add;
-}
-.story-stub,
-.ticket-seam-left {
   -webkit-mask-image:
     linear-gradient(#000, #000),
     radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
@@ -3337,18 +3329,6 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
     radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
     radial-gradient(circle at 0 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
     radial-gradient(circle at 0 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px));
-}
-.ticket-seam-right {
-  -webkit-mask-image:
-    linear-gradient(#000, #000),
-    radial-gradient(circle at 100% calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
-    radial-gradient(circle at 100% 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
-    radial-gradient(circle at 100% 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px));
-  mask-image:
-    linear-gradient(#000, #000),
-    radial-gradient(circle at 100% calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
-    radial-gradient(circle at 100% 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
-    radial-gradient(circle at 100% 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px));
 }
 /* Everything printed on the card, in one layer, so it can develop in on the
    story's mask while the card itself is already there. */
@@ -6323,44 +6303,42 @@ html[data-closing-quiet='return'] nav[data-site-nav] {
   }
 }
 
-/* ── /about: darkroom biography ───────────────────────────────────────────
-   The monograph's end matter (AboutPage.tsx): the contributor cover lifts
-   off a page that is already set; the photographer's page, a silver-print
-   portrait and the name; the signature, drawn by the scroll over one
-   sentence; a correspondence ticket and the colophon.
+/* ── /about: the profile ──────────────────────────────────────────────────
+   The page as the owner kept it (AboutPage.tsx), on today's motion: the
+   contributor cover lifts off the profile — the droplet portrait and its
+   stacked particulars beside the name, its lime line, the lede, the bio and
+   FOCUS / METHOD / LOG — then the notes' line where the log stood (once a
+   note is published) and the closing card: the autograph, written by the
+   scroll, over "Always chasing the light.", the correspondence ticket
+   (ContactTicket.tsx, whose stub can be torn off) and the colophon. Sizes
+   and inks are the original's (Tailwind's scale, white at fixed alphas);
+   every label names Space Grotesk, never the body's Inter.
 
    Everything is set at first paint. The base styles here ARE the finished
    page and the hidden state lives only in each keyframe's `from` (filled
-   backwards through its delay, the prologue name's pattern), so no JS,
-   reduced motion and a view-transition arrival all paint the finished page
-   and nothing is server-rendered hidden. Motion only reveals what is there.
-   The state is on <html>, outside React (about.astro's inline scripts):
+   backwards through its delay), so no JS, reduced motion and a
+   view-transition arrival all paint the finished page and nothing is
+   server-rendered hidden. The state is on <html>, outside React
+   (about.astro's inline scripts):
    - data-about-entry: `full` on the first visit this session — the cover
-     plays and the page develops under its lifting edge; `brief` once seen —
-     no cover, the develop entrance; `skip` on a view-transition arrival or
-     under reduced motion — the finished page. With no JS there is no
-     attribute: the cover plays over the finished page.
+     plays and the page is set line by line under its lifting edge; `brief`
+     once seen — no cover, the quick set; `skip` on a view-transition
+     arrival or under reduced motion — the finished page. With no JS there
+     is no attribute: the cover plays over the finished page.
    - data-about-armed: blocks that began below the fold (read once at load);
    - data-about-in: armed blocks the reader has reached, each played once;
    - data-about-pen: the signature follows the scroll (--about-pen on it). */
 .about {
-  --about-ink: var(--stub-ink);
-  --about-strong: var(--stub-strong);
-  --about-muted: var(--stub-muted);
-  --about-rule: var(--stub-rule);
-  --about-hair: rgba(244, 244, 237, 0.12);
+  --about-ink: #f4f4ed;
   --about-lime: rgb(var(--accent-r), var(--accent-g), var(--accent-b));
-  /* The nav's own gutter, so the page's left edge is the wordmark's. */
-  --about-gut-l: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
-  --about-gut-r: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right));
-  --about-gap: 24px;
-  /* Three sizes: display, deck, reading. Labels and data are the UI face. */
-  --about-display: clamp(60px, 9.4vw, 168px);
-  --about-deck: clamp(20px, 1.39vw, 24px);
-  --about-read: 15px;
-  /* When the contributor cover starts to lift. The cover's own build is
-     done by ~1.2 s; the page under it is timed from this. */
+  /* When the contributor cover starts to lift (its own build is done by
+     ~1.2 s); when the page under it starts being set — the plane's edge
+     clearing the running head, half a line's ink early (the original's
+     heroSetDelayMs: 480 to 513 ms on an 800 to 1117px window); and when the
+     name's line is drawn: once the plane has gone, a beat after. */
   --about-lift-at: 1350ms;
+  --about-set-at: calc(var(--about-lift-at) + 500ms);
+  --about-draw-at: calc(var(--about-lift-at) + var(--dur-cover) + 420ms);
   position: relative;
   min-height: 100dvh;
   background: #282c20;
@@ -6369,9 +6347,15 @@ html[data-closing-quiet='return'] nav[data-site-nav] {
 }
 .about:focus { outline: none; }
 .about-page { position: relative; z-index: 10; }
-.about-wrap { padding-left: var(--about-gut-l); padding-right: var(--about-gut-r); }
 .about a { color: inherit; text-decoration: none; }
-.about a:focus-visible { outline: 2px solid var(--about-ink); outline-offset: 4px; border-radius: 2px; }
+/* Focus in bone: a view's one lime is the name's line or "light.". */
+.about a:focus-visible,
+.about button:focus-visible {
+  outline: 2px solid var(--about-ink);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+/* The cover's labels. */
 .about-label {
   font-family: var(--font-ui);
   font-size: 10px;
@@ -6379,18 +6363,8 @@ html[data-closing-quiet='return'] nav[data-site-nav] {
   line-height: 1.4;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--about-muted);
+  color: var(--stub-muted);
   font-variant-numeric: tabular-nums;
-}
-.about-data {
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.4;
-  letter-spacing: 0.01em;
-  color: var(--about-strong);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* The contributor cover: a real opening plane, built and lifted by CSS from
@@ -6498,62 +6472,90 @@ html[data-axis] .about-cover {
   .about-cover__folio-cams { display: none; }
 }
 
-/* ── The profile ── */
-.about-hero { padding-top: 112px; }
+/* ── The profile: the original's measures (a 1024px column under
+   .safe-inline-page, 144px down, the 12-column split 5 to 7) ── */
+.about-hero {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding-top: 112px;
+  padding-bottom: 40px;
+}
 .about-runhead {
-  position: relative;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 40px;
   padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
 }
-.about-runhead__rule {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--about-hair);
-  transform-origin: left center;
-}
-.about-runhead__short { display: none; }
+.about-runhead__lead { color: rgba(255, 255, 255, 0.55); }
+.about-runhead__long { display: none; }
 .about-hero__grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: var(--about-gap);
-  margin-top: 56px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
   align-items: start;
 }
-.about-portrait { grid-column: 1 / span 4; margin: 0; }
-.about-hero__text { grid-column: 6 / span 7; min-width: 0; }
-/* The droplet is the owner's (a3e2ac3): its shape and its morph. What is new
-   is the print inside it, in the globe's silver rather than a cool grey. */
+.about-hero__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+}
+.about-hero__text { min-width: 0; }
+@media (min-width: 768px) {
+  .about-hero { padding-top: 144px; padding-bottom: 56px; }
+  .about-runhead { margin-bottom: 56px; }
+  .about-runhead__short { display: none; }
+  .about-runhead__long { display: inline; }
+  .about-hero__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 48px; }
+  .about-hero__side { grid-column: span 5 / span 5; }
+  .about-hero__text { grid-column: span 7 / span 7; }
+}
+
+/* The droplet (a3e2ac3): the photograph masked in a water-drop shape that
+   slowly morphs, and a bone outline drifting on a desynced phase behind it.
+   Under a resting pointer the print pushes in, slowly, inside its shape:
+   the droplet itself never grows. Off screen it holds still (AboutPage's
+   observer). */
 .about-drop {
   position: relative;
-  width: min(420px, 100%);
-  aspect-ratio: 4 / 5;
-  /* Its own layer, and the morph at 24 fps (48 steps a keyframe span):
-     the droplet repaints for as long as it is on screen, and at its new
-     size (420px, was 240) a smooth morph cost 360 raster tasks per 3 s
-     against the 180 it cost before. Stepped, 142. */
-  will-change: transform;
+  width: 192px;
+  margin: 0 auto;
+}
+@media (min-width: 768px) {
+  .about-drop { width: 240px; margin: 0; }
 }
 .about-drop__outline {
   position: absolute;
   inset: -10px;
-  border: 1px solid rgba(244, 244, 237, 0.3);
+  border: 1px solid rgba(244, 244, 237, 0.35);
   border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
   pointer-events: none;
-  animation: blob-morph 8s steps(48, jump-none) -4s infinite;
+  animation: blob-morph 8s ease-in-out -4s infinite;
 }
 .about-drop__print {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
   overflow: hidden;
   border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-  background: #1a1e14;
-  animation: blob-morph 8s steps(48, jump-none) infinite;
+  background: rgba(255, 255, 255, 0.05);
+  animation: blob-morph 8s ease-in-out infinite;
+}
+.about-drop__print::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(40, 44, 32, 0.4), rgba(40, 44, 32, 0) 50%);
+  pointer-events: none;
 }
 .about-drop__img {
   display: block;
@@ -6561,114 +6563,199 @@ html[data-axis] .about-cover {
   height: 100%;
   object-fit: cover;
   object-position: right center;
+  filter: grayscale(0.2);
+  transition: transform var(--dur-atmos) var(--ease-arrive);
 }
-/* Off screen the droplet holds still (AboutPage's observer). */
+@media (hover: hover) and (pointer: fine) {
+  .about-drop:hover .about-drop__img { transform: scale(1.03); }
+}
 .about-drop[data-idle] > * { animation-play-state: paused; }
-.about-caption { display: flex; gap: 14px; margin-top: 26px; }
-.about-caption > span + span::before { content: '·'; margin-right: 14px; color: var(--about-rule); }
+
+/* One fact per line under the portrait. */
+.about-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.625;
+  color: rgba(255, 255, 255, 0.58);
+}
+.about-meta__lead { color: rgba(255, 255, 255, 0.7); }
+.about-meta__since {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
 
 .about-name {
-  position: relative;
-  display: inline-block;
-  margin: 0 0 0 -0.04em;
+  margin: 0;
+  padding-bottom: 8px;
   font-family: var(--font-display);
-  font-size: var(--about-display);
+  font-size: 60px;
   font-weight: 400;
-  line-height: 0.86;
+  line-height: 1.1;
   letter-spacing: -0.05em;
   text-transform: uppercase;
-  color: var(--about-ink);
+  color: #f4f4ed;
 }
-.about-mask {
-  display: block;
-  overflow: hidden;
-  padding: 0.06em 0.06em 0.03em 0.02em;
-  margin: -0.06em -0.06em -0.03em -0.02em;
+@media (min-width: 768px) {
+  .about-name { font-size: 72px; }
 }
-.about-mask > span { display: inline-block; }
-/* The first screen's one lime. */
+@media (min-width: 1024px) {
+  .about-name { font-size: 96px; }
+}
+.about-name__ink { position: relative; }
+/* The first screen's one lime: the line under the name. */
 .about-underline {
   position: absolute;
-  left: 0.02em;
-  right: 0.06em;
-  bottom: -0.1em;
-  height: max(3px, 0.045em);
+  left: 0;
+  right: 0;
+  bottom: -0.12em;
+  height: 0.07em;
   background: var(--about-lime);
   transform-origin: left center;
 }
 .about-lede {
-  margin: calc(var(--about-display) * 0.34) 0 0;
-  max-width: 30ch;
+  margin: 20px 0 0;
+  max-width: 24ch;
   font-family: var(--font-display);
-  font-size: var(--about-deck);
+  font-size: 20px;
   font-style: italic;
-  font-weight: 400;
-  line-height: 1.35;
-  color: var(--about-strong);
-  text-wrap: balance;
+  line-height: 1.375;
+  color: rgba(255, 255, 255, 0.75);
 }
-.about-hero__cols {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  column-gap: var(--about-gap);
-  margin-top: 40px;
+@media (min-width: 768px) {
+  .about-lede { font-size: 24px; }
 }
-.about-bio { grid-column: 1 / span 4; }
-.about-bio p {
-  margin: 0;
-  font-size: var(--about-read);
+/* The reading face at full contrast, its paragraphs a full line apart. */
+.about-bio {
+  margin-top: 28px;
+  max-width: 60ch;
+  font-family: var(--font-display);
+  font-size: 15px;
   line-height: 1.65;
-  color: var(--about-strong);
+  color: rgba(255, 255, 255, 0.88);
   text-wrap: pretty;
 }
-.about-bio p + p { margin-top: 1.65em; }
-.about-particulars { grid-column: 5 / span 3; margin: 0; }
-.about-particulars > div { padding: 10px 0 14px; border-top: 1px solid var(--about-hair); }
-.about-particulars > div:last-child { padding-bottom: 0; }
-.about-particulars dt { margin-bottom: 5px; }
-.about-particulars dd { margin: 0; font-size: var(--about-read); line-height: 1.45; color: var(--about-strong); }
+.about-bio > p { margin: 0 0 1.65em; }
+.about-particulars {
+  max-width: 28rem;
+  margin: 4px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.about-particulars > div { display: flex; align-items: baseline; gap: 16px; }
+.about-particulars > div + div { margin-top: 10px; }
+.about-particulars dt {
+  flex: none;
+  width: 64px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+.about-particulars dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.78);
+}
 
-/* ── The notes: the written middle ── */
-/* Where the log was, once a note is published (AboutPage NotesTeaser): the
-   running head's device (THE NOTES … the note's number and date over a
-   hairline), then one quiet statement — the note's own dek, in the lede's
-   italic a step up, linked to the note — and the way to the notes, all on
-   the hero text's axis (columns 6–12). It stands in the sign-off's gap and
-   splits it — half a screen less 260px above it and below it — so the
-   name's lime and "light." are at least as far apart as without it, plus
-   its own height. Bone only: it adds no lime. */
-.about-notes { margin-top: max(120px, calc(50lvh - 260px)); }
-.about-notes + .about-signoff { margin-top: max(120px, calc(50lvh - 260px)); }
+/* ── The middle, where the log stood ──
+   The name's line and "light." must stand a screen apart, or one view holds
+   both limes. Between them lie the profile's lower half, the card's top, the
+   autograph and the sentence's first line, and how much of that there is
+   depends on the width alone (the bio's lines, the sentence at 6.4vw, the
+   autograph at 31vw). Probed on the built page: 789px or more on a phone up
+   to 439px wide, 690 up to 767, 799 up to 1023, and from 1024 a rise from
+   794 to 879 that 530px + 22vw (held at 850) stays 16–42px under. So the
+   middle is at least a screen less that, in lvh (a phone's view grows as
+   its bar hides); on most windows it is nothing or a few lines' worth. A
+   note's line stands in it and counts toward it. */
+.about-middle {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(0px, calc(100lvh - 770px));
+}
+@media (min-width: 440px) {
+  .about-middle { min-height: max(0px, calc(100lvh - 670px)); }
+}
+@media (min-width: 768px) {
+  .about-middle { min-height: max(0px, calc(100lvh - 780px)); }
+}
+@media (min-width: 1024px) {
+  .about-middle { min-height: max(0px, calc(100lvh - min(530px + 22vw, 850px))); }
+}
+/* The notes' line: the log's own running head (THE NOTES … its number and
+   date), then the note's dek in the lede's italic on the name's column,
+   linked to the note, and the way to the rest. Bone only. */
+.about-notes {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding-top: 64px;
+}
+.about-notes__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.about-notes__title,
+.about-notes__stamp {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+  font-variant-numeric: tabular-nums;
+}
 .about-notes__grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: var(--about-gap);
-  margin-top: 40px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 28px;
 }
-.about-notes__text { grid-column: 6 / span 7; min-width: 0; }
-.about-notes__statement {
+@media (min-width: 768px) {
+  .about-notes { padding-top: 96px; }
+  .about-notes__grid { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 48px; }
+  .about-notes__body { grid-column: 6 / span 7; }
+}
+.about-notes__body { min-width: 0; }
+.about-notes__dek {
   margin: 0;
-  max-width: 24em;
+  max-width: 30ch;
   font-family: var(--font-display);
-  font-size: clamp(22px, 1.75vw, 30px);
+  font-size: 20px;
   font-style: italic;
-  font-weight: 400;
-  font-variation-settings: 'opsz' 36;
-  line-height: 1.34;
-  letter-spacing: -0.005em;
-  color: var(--about-ink);
+  line-height: 1.375;
+  color: rgba(255, 255, 255, 0.75);
   text-wrap: balance;
 }
-.about .about-notes__statement a {
-  color: inherit;
+@media (min-width: 768px) {
+  .about-notes__dek { font-size: 24px; }
+}
+.about .about-notes__dek a {
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
   text-decoration-color: transparent;
   text-underline-offset: 0.16em;
-  transition: text-decoration-color var(--dur-out) var(--ease-arrive);
+  transition: color var(--dur-out) var(--ease-arrive), text-decoration-color var(--dur-out) var(--ease-arrive);
 }
-.about .about-notes__statement a:hover {
-  text-decoration-color: var(--about-rule);
+.about .about-notes__dek a:hover {
+  color: #f4f4ed;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
   transition-duration: var(--dur-in);
 }
 .about-notes__more {
@@ -6676,131 +6763,274 @@ html[data-axis] .about-cover {
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  margin-top: 18px;
-  color: var(--about-strong);
-  text-decoration: none;
+  margin-top: 12px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
   transition: color var(--dur-out) var(--ease-arrive);
 }
-.about-notes__more:hover { color: var(--about-ink); transition-duration: var(--dur-in); }
-.about-notes__arrow {
+.about-notes__more:hover { color: rgba(255, 255, 255, 0.85); transition-duration: var(--dur-in); }
+.about-arrow-r {
   display: block;
   flex: none;
   transition: transform var(--dur-out) var(--ease-arrive);
 }
-.about-notes__more:hover .about-notes__arrow { transform: translateX(4px); transition-duration: var(--dur-in); }
+.about-notes__more:hover .about-arrow-r { transform: translateX(2px); transition-duration: var(--dur-in); }
 /* Chinese: no italic (the Song face has none, and the page never fakes
-   one) and no negative tracking; the statement upright in the Song face's
-   light weight, with Chinese leading; the eighth-em beside Latin and
-   figures. With Chinese in it the page links Noto Serif SC (about.astro),
-   first after the Latin. */
+   one) and no negative tracking; the dek upright in the Song face's light
+   weight, with Chinese leading. With Chinese in it the page links Noto
+   Serif SC (about.astro), first after the Latin. */
 .about-notes :lang(zh) { letter-spacing: 0; text-autospace: normal; }
-.about-notes[data-cjk-serif] .about-notes__statement {
+.about-notes[data-cjk-serif] .about-notes__dek {
   font-family: "Fraunces", "Fraunces Fallback", "Noto Serif SC", var(--font-display);
 }
-.about-notes__statement:lang(zh) {
+.about-notes__dek:lang(zh) {
   max-width: 22em;
   font-style: normal;
   font-weight: 300;
   line-height: 1.7;
 }
 
-/* ── The sign-off ── */
-/* Straight after the profile, now that the log is gone. The name's
-   underline and "light." must stand a screen apart, or one view holds both
-   limes. Between them lie the profile's lower half, this gap, the autograph
-   and the sentence's first line: 532 to 617px of it at 1024 to 2560 wide,
-   600 or more stacked (probed), so the gap is a screen less 520px, in lvh
-   (a phone's view grows as its bar hides). The pen writes as the reader
-   crosses it; a written middle (AboutPage) will stand in it. */
-.about-signoff { margin-top: max(176px, calc(100lvh - 520px)); text-align: center; }
+/* ── The closing card ── */
+.about-close {
+  position: relative;
+  margin-top: 56px;
+}
+.about-card {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 24px 24px;
+  border-radius: 40px 40px 0 0;
+  background: #20241a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+@media (min-width: 768px) {
+  .about-close { margin-top: 80px; }
+  .about-card { padding: 80px 56px 24px; border-radius: 80px 80px 0 0; }
+}
+.about-signoff {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+}
 .about-signature {
-  width: clamp(230px, 24vw, 400px);
-  margin: 0 auto 6px;
+  display: block;
+  width: clamp(260px, 31vw, 440px);
+  max-width: 100%;
+  margin: 0 auto 4px;
   transform: rotate(-0.75deg) translateX(1%);
+  -webkit-user-select: none;
+  user-select: none;
 }
 .about-signature svg { display: block; width: 100%; height: auto; overflow: visible; }
-.about-sentence {
+/* Space Grotesk 700; the verb and the light in Fraunces italic 500 (a real
+   instance: Layout.astro loads 400–600 italic). */
+.about-statement {
   margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(40px, 6.4vw, 96px);
+  font-weight: 700;
+  line-height: 0.96;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #f4f4ed;
+}
+.about-statement em {
   font-family: var(--font-display);
-  font-size: calc(var(--about-display) * 0.72);
-  font-weight: 400;
-  line-height: 0.94;
-  letter-spacing: -0.045em;
-  color: var(--about-ink);
+  font-style: italic;
+  font-weight: 500;
 }
-/* Room for the descenders (y, g) inside each line's mask: at .03em they
-   were cut. */
-.about-sentence .about-mask { padding: 0.04em 0.08em 0.24em; margin: -0.04em -0.08em -0.24em; }
-.about-sentence em { font-style: italic; }
-/* The view's one lime. */
-.about-sentence .about-lime { color: var(--about-lime); }
+/* The card's one lime. */
+.about-statement .about-lime { color: var(--about-lime); }
 
-/* ── End matter: correspondence and colophon ── */
-.about-end { margin-top: 150px; padding-bottom: 28px; }
-/* Where the sign-off and the end matter do not fit one screen together
-   under the nav band (up to ~1060px tall), the last screen is the end
-   matter alone: it fills the viewport below the band, its rows at the top
-   and the foot on the floor, and the sign-off is passed on the way down. At
-   the foot of the page it used to stop half under the nav's scrim — the
-   signature a smear behind it at 1728 × 1000, "Always chasing" at
-   1280 × 800. Taller screens keep the two together, as they fit. */
-@media (max-height: 1060px) {
-  .about-end {
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100svh - 112px);
-  }
-  .about-end__grid {
-    flex: 1 0 auto;
-    align-content: start;
-  }
+/* ── The correspondence ticket (ContactTicket.tsx) ──
+   Where the pill was: the homepage ticket's anatomy on the olive matte —
+   the face (the address, Instagram) and the stub (the archive's count),
+   one perforation between them, the holes punched through both halves with
+   a mask so the card shows through, a notch at each end of the seam. Each
+   half carries its own shadow, so a torn stub takes its shadow with it. */
+.about-contact {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 48px;
 }
-.about-end__grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: var(--about-gap);
-  row-gap: 56px;
-  padding-top: 14px;
-  border-top: 1px solid var(--about-hair);
+@media (min-width: 768px) {
+  .about-contact { margin-top: 64px; }
 }
-.about-end__contact { grid-column: 1 / span 6; }
-.about-end__colophon { grid-column: 8 / span 5; }
-.about-end__contact > .about-label,
-.about-end__colophon > .about-label { display: block; margin-bottom: 28px; }
-/* The correspondence ticket: the homepage ticket's anatomy on the olive
-   matte (STOCK_FALLBACK), the holes punched through both halves at the seam
-   (.ticket-seam-right / -left). */
 .about-ticket {
   --ticket-pitch: 8px;
   --ticket-hole: 2.1px;
   --ticket-notch: 8px;
-  --stub-paper: #30352a;
+  --about-stub-w: 164px;
+  position: relative;
   display: flex;
+  align-items: stretch;
+  width: 100%;
   max-width: 620px;
-  color: var(--about-ink);
-  filter: drop-shadow(0 10px 22px rgba(7, 9, 6, 0.22));
+  color: var(--stub-ink);
+  text-align: left;
+}
+.about-ticket__half {
+  position: relative;
+  z-index: 0;
+  display: flex;
+}
+.about-ticket__half--face {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* The left hand's grip: the face gives about it while the paper holds. */
+  transform-origin: 0 50%;
+}
+.about-ticket__half--stub {
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+.about-ticket__shadow,
+.about-ticket__lift {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.about-ticket__shadow { box-shadow: 0 10px 22px rgba(7, 9, 6, 0.26), 0 1px 2px rgba(7, 9, 6, 0.4); }
+/* The stub's own never spills left across the seam onto the face. */
+.about-ticket__half--stub > .about-ticket__shadow,
+.about-ticket__lift { clip-path: inset(-60px -60px -60px 0); }
+/* Off the card: the stub's shadow as it lifts (ContactTicket writes its
+   opacity and drop from the tear's clock). Nothing at rest. */
+.about-ticket__lift {
+  opacity: 0;
+  box-shadow: 0 14px 30px rgba(3, 5, 2, 0.5), 0 3px 8px rgba(3, 5, 2, 0.35);
+}
+.about-ticket__face,
+.about-ticket__stub,
+.about-ticket__under {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 .about-ticket__face,
 .about-ticket__stub {
-  position: relative;
-  background: var(--stub-paper);
+  background: var(--stub-paper, #30352a);
   box-shadow: inset 0 0 0 1px rgba(244, 244, 237, 0.1);
 }
-.about-ticket__face { flex: 1 1 auto; min-width: 0; padding: 22px 26px; }
-.about-ticket__stub {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  width: 164px;
-  padding: 22px 20px 20px 22px;
+.about-ticket__face {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: flex-start;
+  padding: 22px 26px;
+  border-radius: 2px 0 0 2px;
 }
+.about-ticket__stub,
+.about-ticket__under {
+  width: 100%;
+  padding: 22px 20px 20px 22px;
+  border-radius: 0 2px 2px 0;
+}
+/* The holes, the notches and the torn edge. Each half punches its half of
+   every hole down the seam and a notch at each end; the fifth layer is the
+   torn edge (src/lib/ticketTear.ts, `tornEdge`: --ticket-edge-face and its
+   rough complement --ticket-edge-stub, set once per layout), revealed DOWN
+   the perforation as far as the rip has run (--ticket-torn, px, written
+   from the tear's clock). Unset, the layer is nothing. */
+.about-ticket__face,
+.about-ticket__stub {
+  -webkit-mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%, 8px var(--ticket-torn, 0px);
+  mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%, 8px var(--ticket-torn, 0px);
+  -webkit-mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat, no-repeat;
+  mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat, no-repeat;
+  -webkit-mask-composite: source-out, source-over, source-over, source-over, source-over;
+  mask-composite: subtract, add, add, add, add;
+}
+.about-ticket__face {
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 100% calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 100% 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 100% 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    var(--ticket-edge-face, linear-gradient(transparent, transparent));
+  mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 100% calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 100% 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 100% 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    var(--ticket-edge-face, linear-gradient(transparent, transparent));
+  -webkit-mask-position: 0 0, 0 0, 0 0, 0 0, 100% 0;
+  mask-position: 0 0, 0 0, 0 0, 0 0, 100% 0;
+}
+.about-ticket__stub {
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    var(--ticket-edge-stub, linear-gradient(transparent, transparent));
+  mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    var(--ticket-edge-stub, linear-gradient(transparent, transparent));
+  -webkit-mask-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+  mask-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+}
+/* The torn seam, drawn: the fibres the rip pulls out of each edge (the
+   `tornEdge` fringes, bone on the face, fainter on the stub), from the top
+   notch down to the tip; below the tip, the strain while the paper still
+   holds. Inside their half's mask. Nothing shows at rest. */
+.about-ticket__fibre,
+.about-ticket__strain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 8px;
+  pointer-events: none;
+  opacity: 0;
+}
+.about-ticket__fibre {
+  background-repeat: no-repeat;
+  background-size: 8px 100%;
+  clip-path: inset(0 0 100% 0);
+}
+.about-ticket__face > .about-ticket__fibre { right: 0; background-image: var(--ticket-fringe-face, none); }
+.about-ticket__stub > .about-ticket__fibre { left: 0; background-image: var(--ticket-fringe-stub, none); }
+.about-ticket__face > .about-ticket__strain {
+  right: 0;
+  width: 3px;
+  background: linear-gradient(270deg, rgba(240, 234, 220, 0.75) 0 1px, rgba(240, 234, 220, 0.18) 1px, rgba(240, 234, 220, 0) 3px);
+}
+.about-ticket__stub > .about-ticket__strain {
+  left: 0;
+  width: 5px;
+  background: linear-gradient(90deg, rgba(6, 8, 5, 0.5), rgba(6, 8, 5, 0));
+}
+/* The face: the address (mailto) and Instagram. */
+.about-ticket__label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--stub-muted);
+}
+.about-ticket__write { display: block; max-width: 100%; margin-top: 10px; }
 .about-ticket__mail {
-  display: inline;
   font-family: var(--font-display);
-  font-size: var(--about-deck);
+  font-size: clamp(20px, 1.39vw, 24px);
   line-height: 1.3;
   letter-spacing: -0.01em;
-  color: var(--about-ink);
+  color: var(--stub-ink);
   background-image: linear-gradient(currentColor, currentColor);
   background-position: 0 100%;
   background-repeat: no-repeat;
@@ -6808,55 +7038,272 @@ html[data-axis] .about-cover {
   transition: background-size var(--dur-out) var(--ease-arrive);
 }
 .about-ticket__mail:hover { background-size: 100% 1px; transition-duration: var(--dur-in); }
-.about-ticket__write { display: block; margin-top: 10px; max-width: 100%; }
-.about-arrow {
+.about-arrow-out {
   display: inline-block;
-  font-family: var(--font-ui);
-  font-size: 14px;
+  vertical-align: 0.05em;
   transition: transform var(--dur-out) var(--ease-arrive);
 }
-.about-ticket__mail:hover .about-arrow { transform: translate(2px, -2px); transition-duration: var(--dur-in); }
-.about-ticket__rule { height: 1px; margin: 20px 0 14px; background: var(--about-rule); }
-.about-ticket__line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.about-ticket__line a { transition: color var(--dur-out) var(--ease-arrive); }
-.about-ticket__line a:hover { color: var(--about-ink); transition-duration: var(--dur-in); }
-.about-stub__no {
+.about-ticket__mail:hover .about-arrow-out,
+.about-ticket__ig:hover .about-arrow-out {
+  transform: translate(2px, -2px);
+  transition-duration: var(--dur-in);
+}
+.about-ticket__rule {
+  display: block;
+  align-self: stretch;
+  height: 1px;
+  margin: 20px 0 14px;
+  background: var(--stub-rule);
+}
+.about-ticket__line {
+  display: flex;
+  align-self: stretch;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.about-ticket__ig {
+  position: relative;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: var(--stub-strong);
+  white-space: nowrap;
+  transition: color var(--dur-out) var(--ease-arrive);
+}
+/* A finger's worth to hit, not a line's. */
+.about-ticket__ig::after { content: ''; position: absolute; inset: -13px -8px; }
+.about-ticket__ig:hover { color: var(--stub-ink); transition-duration: var(--dur-in); }
+/* The stub's place: the button. It takes the stub while there is one and
+   puts one back once it has gone. The print under the stub and the seat the
+   stub sits in share one cell; the seat is what the rip clips. */
+.about-ticket__slot {
+  position: relative;
+  flex: none;
+  display: grid;
+  width: var(--about-stub-w);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  /* A finger pulling sideways is a pull; up or down is the page's scroll. */
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.about-ticket__slot > *,
+.about-ticket__seat > * { grid-area: 1 / 1; }
+.about-ticket__seat { position: relative; z-index: 1; display: grid; }
+.about-ticket[data-phase='torn'] .about-ticket__slot { cursor: pointer; }
+.about-ticket[data-held] .about-ticket__slot { cursor: grabbing; }
+.about-ticket[data-moving] .about-ticket__slot,
+html:not([data-about-entry]) .about-ticket__slot { cursor: default; }
+.about-ticket__no {
   font-family: var(--font-display);
   font-size: 34px;
   font-weight: 500;
   line-height: 0.9;
   letter-spacing: -0.03em;
+  color: var(--stub-ink);
 }
-.about-stub__of { margin-top: 6px; font-size: 9px; }
-.about-stub__rule { height: 1px; margin: 14px 0 12px; background: var(--about-rule); }
-.about-stub__rows { display: flex; flex-direction: column; gap: 7px; margin: 0; }
-.about-stub__rows > div { display: flex; justify-content: space-between; gap: 10px; }
-.about-stub__rows dt,
-.about-stub__rows dd {
-  margin: 0;
+.about-ticket__small {
+  margin-top: 6px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--stub-muted);
+}
+.about-ticket__stub-rule {
+  display: block;
+  height: 1px;
+  margin: 14px 0 12px;
+  background: var(--stub-rule);
+}
+.about-ticket__rows { display: flex; flex-direction: column; gap: 7px; }
+.about-ticket__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
   font-family: var(--font-ui);
   font-size: 9px;
   line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.about-stub__rows dt { color: var(--about-muted); }
-.about-stub__rows dd { color: var(--about-strong); }
-/* The colophon: facts only, the particulars' rows. */
-.about-colophon { margin: 0; max-width: 46ch; }
-.about-colophon > div { padding: 10px 0 14px; border-top: 1px solid var(--about-hair); }
-.about-colophon > div:last-child { padding-bottom: 0; }
-.about-colophon dt { margin-bottom: 5px; }
-.about-colophon dd { margin: 0; font-size: var(--about-read); line-height: 1.5; color: var(--about-strong); }
+.about-ticket__row > :first-child { color: var(--stub-muted); }
+.about-ticket__row > :last-child { color: var(--stub-strong); }
+/* Printed on the card under the stub: the stub's own outline, holes and
+   notches (so nothing of it shows through them at rest), and what taking
+   the stub did. */
+.about-ticket__under {
+  z-index: 0;
+  box-shadow: inset 0 0 0 1px rgba(244, 244, 237, 0.16);
+  color: var(--stub-ink);
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px));
+  mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--ticket-pitch) / 2), #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--ticket-notch), transparent calc(var(--ticket-notch) + 0.7px));
+  -webkit-mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%;
+  mask-size: 100% 100%, 100% var(--ticket-pitch), 100% 100%, 100% 100%;
+  -webkit-mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat;
+  mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat;
+  -webkit-mask-composite: source-out, source-over, source-over, source-over;
+  mask-composite: subtract, add, add, add;
+}
+.about-ticket__word {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.about-ticket__under .about-ticket__stub-rule { margin: auto 0 10px; }
+.about-ticket__again { margin-top: 0; color: var(--stub-strong); }
+/* The hint: under a resting pointer (or keyboard focus) the stub's free
+   corner — top right, where the right hand will take it — comes up off the
+   card a hair, the homepage's own pull hint turned round. Drawn, never
+   moved: `::before` is the ground the lifted corner shades, a wedge 2px out
+   at the corner and nothing where the paper still lies flat; `::after` is
+   the corner's edge catching the light. Both scale from the corner. */
+.about-ticket__half--stub::before,
+.about-ticket__half--stub::after {
+  content: '';
+  position: absolute;
+  opacity: 0;
+  transform: scale(0);
+  pointer-events: none;
+  transition: opacity var(--dur-out) var(--ease-arrive), transform var(--dur-out) var(--ease-arrive);
+}
+.about-ticket__half--stub::before {
+  top: -2px;
+  right: -2px;
+  width: 66px;
+  height: 66px;
+  clip-path: polygon(100% 0, 0 2px, calc(100% - 2px) 2px, calc(100% - 2px) 100%);
+  background: radial-gradient(circle at calc(100% - 2px) 2px, rgba(8, 10, 7, 0.62), rgba(8, 10, 7, 0) 64px);
+  transform-origin: calc(100% - 2px) 2px;
+}
+.about-ticket__half--stub::after {
+  top: 0;
+  right: 0;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  background:
+    linear-gradient(270deg, rgba(244, 244, 237, 0.3), rgba(244, 244, 237, 0)) 0 0 / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 244, 237, 0.3), rgba(244, 244, 237, 0)) 100% 0 / 1px 100% no-repeat;
+  transform-origin: 100% 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .about-ticket[data-phase='whole']:not([data-held]):not([data-moving]) .about-ticket__slot:hover .about-ticket__half--stub::before,
+  .about-ticket[data-phase='whole']:not([data-held]):not([data-moving]) .about-ticket__slot:hover .about-ticket__half--stub::after {
+    opacity: 1;
+    transform: scale(1);
+    transition-duration: var(--dur-in);
+  }
+}
+.about-ticket[data-phase='whole']:not([data-held]):not([data-moving]) .about-ticket__slot:focus-visible .about-ticket__half--stub::before,
+.about-ticket[data-phase='whole']:not([data-held]):not([data-moving]) .about-ticket__slot:focus-visible .about-ticket__half--stub::after {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--dur-in);
+}
+.about-ticket-hint {
+  margin: 16px 0 0;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.52);
+}
+/* No script, no tear: the ticket is simply the contact. */
+html:not([data-about-entry]) .about-ticket-hint { display: none; }
+@media (max-width: 639px) {
+  .about-ticket { --about-stub-w: 112px; }
+  .about-ticket__face { padding: 18px 16px 18px 18px; }
+  .about-ticket__stub,
+  .about-ticket__under { padding: 18px 14px 16px 16px; }
+  .about-ticket__mail { font-size: 18px; }
+  /* The handle under its label when the face is narrow. */
+  .about-ticket__line { flex-wrap: wrap; row-gap: 6px; }
+  .about-ticket__word { font-size: 24px; }
+}
+
+/* ── The colophon and the foot ── */
+.about-colophon { position: relative; z-index: 10; }
+.about-colophon__rule {
+  display: block;
+  height: 1px;
+  margin-top: 48px;
+  background: rgba(255, 255, 255, 0.1);
+  transform-origin: left center;
+}
+.about-colophon__list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 24px;
+  row-gap: 10px;
+  margin: 0;
+  padding-top: 24px;
+  text-align: left;
+}
+@media (min-width: 768px) {
+  .about-colophon__list { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 32px; }
+}
+.about-colophon__list dt {
+  padding-top: 3px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+.about-colophon__list dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
+}
 .about-foot {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 96px;
-  padding-top: 16px;
-  border-top: 1px solid var(--about-hair);
+  gap: 8px;
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-ui);
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+@media (min-width: 768px) {
+  .about-foot { flex-direction: row; }
 }
 .about-foot a {
   display: inline-flex;
@@ -6864,51 +7311,18 @@ html[data-axis] .about-cover {
   min-height: 44px;
   transition: color var(--dur-out) var(--ease-arrive);
 }
-.about-foot a:hover { color: var(--about-ink); transition-duration: var(--dur-in); }
-
-/* ── Widths ── */
-@media (max-width: 1023px) {
-  .about-hero__grid { grid-template-columns: minmax(0, 1fr); row-gap: 44px; }
-  .about-portrait,
-  .about-hero__text { grid-column: 1 / -1; }
-  .about-drop { width: min(64vw, 340px); }
-  .about-hero__cols { grid-template-columns: minmax(0, 1fr); row-gap: 32px; }
-  .about-bio,
-  .about-particulars { grid-column: 1 / -1; }
-  .about-bio p { max-width: 62ch; }
-  .about-end__contact,
-  .about-end__colophon { grid-column: 1 / -1; }
-  .about-notes__text { grid-column: 1 / -1; }
-}
-@media (max-width: 639px) {
-  .about { --about-gap: 12px; }
-  .about-hero { padding-top: 96px; }
-  .about-hero__grid { margin-top: 36px; }
-  .about-runhead__long { display: none; }
-  .about-runhead__short { display: inline; }
-  /* The phone's lower half is longer (650 to 860px probed). */
-  .about-signoff { margin-top: max(120px, calc(100lvh - 620px)); }
-  .about-notes,
-  .about-notes + .about-signoff { margin-top: max(96px, calc(50lvh - 310px)); }
-  .about-notes__grid { margin-top: 28px; }
-  .about-signature { width: 64vw; }
-  .about-sentence { font-size: 52px; }
-  .about-end { margin-top: 110px; }
-  .about-ticket__stub { width: 118px; padding: 18px 14px 16px 16px; }
-  .about-ticket__face { padding: 18px 16px 18px 18px; }
-  .about-ticket__mail { font-size: 18px; }
-  .about-foot { flex-direction: column; align-items: flex-start; gap: 0; margin-top: 64px; }
-}
+.about-foot a:hover { color: rgba(255, 255, 255, 0.7); transition-duration: var(--dur-in); }
 
 /* ── Motion ── */
-@keyframes about-rise { from { transform: translateY(112%); } }
-@keyframes about-rise-deep { from { transform: translateY(140%); } }
-@keyframes about-cover-rise { from { transform: translateY(110%); } }
-@keyframes about-lift { from { opacity: 0; transform: translateY(14px); } }
+@keyframes about-set { from { opacity: 0; transform: translateY(16px); } }
+@keyframes about-set-portrait { from { opacity: 0; transform: translateY(16px) scale(0.985); } }
+@keyframes about-reveal { from { opacity: 0; transform: translateY(22px); } }
+@keyframes about-rise-s { from { opacity: 0; transform: translateY(12px); } }
 @keyframes about-lift-s { from { opacity: 0; transform: translateY(10px); } }
 @keyframes about-fade { from { opacity: 0; } }
 @keyframes about-draw { from { transform: scaleX(0); } }
 @keyframes about-grow { from { transform: scaleY(0); } }
+@keyframes about-cover-rise { from { transform: translateY(110%); } }
 @keyframes about-open-right {
   from { clip-path: inset(0 100% 0 0); }
   to { clip-path: inset(0 0 0 0); }
@@ -6926,89 +7340,76 @@ html[data-axis] .about-cover {
   from { transform: translateY(0); pointer-events: none; }
   to { transform: translateY(-100%); pointer-events: none; }
 }
-/* The site's develop mask (the 115° sweep). It lives only inside the
-   keyframes, so nothing is left masked at rest. Held hidden through its
-   delay as well: on a print taller than it is wide the sweep's leading edge
-   already grazes the top-left corner at the start, which showed as a faint
-   corner long before its turn (visibility is visible for the whole run and
-   hidden only in the backwards fill). */
-@keyframes about-develop {
-  from {
-    visibility: hidden;
-    -webkit-mask-image: linear-gradient(115deg, #000 40%, transparent 60%);
-    mask-image: linear-gradient(115deg, #000 40%, transparent 60%);
-    -webkit-mask-size: 300% 100%;
-    mask-size: 300% 100%;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: 100% 0;
-    mask-position: 100% 0;
-  }
-  to {
-    visibility: visible;
-    -webkit-mask-image: linear-gradient(115deg, #000 40%, transparent 60%);
-    mask-image: linear-gradient(115deg, #000 40%, transparent 60%);
-    -webkit-mask-size: 300% 100%;
-    mask-size: 300% 100%;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: 0% 0;
-    mask-position: 0% 0;
-  }
-}
 
-/* full: under the lifting plane, in the order its edge clears them, bottom
-   first — the portrait (its foot clears ~370 ms into the lift at
-   1728×1000), then the underline as the edge passes the name (~470 ms). The
-   develop's sweep only shows a fifth of the way through its clock, so it
-   starts that much before its edge arrives (tuned on frames). Nothing else
-   moves; the text is already set. Every animation list on the print keeps
-   its morph. */
-html[data-about-entry='full'] .about-drop__print {
-  animation: about-develop 1400ms var(--ease-develop) calc(var(--about-lift-at) + 80ms) backwards, blob-morph 8s steps(48, jump-none) infinite;
+/* full: the page is set under the lifting plane, one line at a time in
+   reading order, 70ms apart (the running head; the portrait and the name;
+   the lede; the bio and the particulars), from when its edge clears the
+   running head; the name's line is drawn once the plane has gone. */
+html[data-about-entry='full'] .about-set {
+  animation: about-set 580ms var(--ease-arrive) calc(var(--about-set-at) + var(--o, 0) * 70ms) backwards;
+}
+html[data-about-entry='full'] .about-drop {
+  animation: about-set-portrait 720ms var(--ease-arrive) calc(var(--about-set-at) + 70ms) backwards;
 }
 html[data-about-entry='full'] .about-underline {
-  animation: about-draw var(--dur-settle) var(--ease-arrive) calc(var(--about-lift-at) + 470ms) backwards;
+  animation: about-draw var(--dur-settle) var(--ease-arrive) var(--about-draw-at) backwards;
 }
-
-/* brief: the develop entrance, from the first paint, set by ~1.6 s. */
-html[data-about-entry='brief'] .about-runhead__rule { animation: about-draw 900ms var(--ease-arrive) 60ms backwards; }
-html[data-about-entry='brief'] .about-runhead .about-label { animation: about-fade 600ms var(--ease-arrive) 200ms backwards; }
-html[data-about-entry='brief'] .about-drop__print {
-  animation: about-develop 1400ms var(--ease-develop) 160ms backwards, blob-morph 8s steps(48, jump-none) infinite;
+/* brief: a repeat visit — no plane, the same set, straight away. */
+html[data-about-entry='brief'] .about-set {
+  animation: about-set 580ms var(--ease-arrive) calc(150ms + var(--o, 0) * 70ms) backwards;
 }
-html[data-about-entry='brief'] .about-drop__outline {
-  animation: about-fade 900ms var(--ease-arrive) var(--dur-scene) backwards, blob-morph 8s steps(48, jump-none) -4s infinite;
+html[data-about-entry='brief'] .about-drop {
+  animation: about-set-portrait 720ms var(--ease-arrive) 220ms backwards;
 }
-html[data-about-entry='brief'] .about-name__line { animation: about-rise 950ms var(--ease-arrive) 180ms backwards; }
-html[data-about-entry='brief'] .about-underline { animation: about-draw var(--dur-settle) var(--ease-arrive) 1020ms backwards; }
-html[data-about-entry='brief'] .about-lede { animation: about-lift 800ms var(--ease-arrive) 480ms backwards; }
-html[data-about-entry='brief'] .about-bio { animation: about-lift-s 700ms var(--ease-arrive) 620ms backwards; }
-html[data-about-entry='brief'] .about-particulars > div {
-  animation: about-lift-s 700ms var(--ease-arrive) calc(690ms + var(--i, 0) * 70ms) backwards;
+html[data-about-entry='brief'] .about-underline {
+  animation: about-draw var(--dur-settle) var(--ease-arrive) 740ms backwards;
 }
-html[data-about-entry='brief'] .about-caption { animation: about-fade 800ms var(--ease-arrive) 1100ms backwards; }
 
 /* Below the fold: hidden only while armed and not yet reached; played once
    when the reader reaches the block, never replayed on the way back up. */
-html[data-about-armed~='end']:not([data-about-in~='end']) .about-end__block {
+html[data-about-armed~='notes']:not([data-about-in~='notes']) .about-notes__block,
+html[data-about-armed~='signoff']:not([data-about-in~='signoff']) .about-statement,
+html[data-about-armed~='ticket']:not([data-about-in~='ticket']) .about-contact,
+html[data-about-armed~='colophon']:not([data-about-in~='colophon']) .about-colophon__list > *,
+html[data-about-armed~='colophon']:not([data-about-in~='colophon']) .about-foot {
   opacity: 0;
-  animation: none;
 }
-html[data-about-armed~='signoff']:not([data-about-in~='signoff']) .about-sentence__line { transform: translateY(140%); }
-html[data-about-in~='signoff'] .about-sentence__line {
-  animation: about-rise-deep 950ms var(--ease-arrive) calc(160ms + var(--i, 0) * 90ms) backwards;
-}
-/* The notes' teaser: the hairline draws and the head, the title, the dek
-   and the link set in turn. */
-html[data-about-armed~='notes']:not([data-about-in~='notes']) .about-notes__block {
-  opacity: 0;
-  animation: none;
-}
-html[data-about-armed~='notes']:not([data-about-in~='notes']) .about-notes .about-runhead__rule { transform: scaleX(0); }
-html[data-about-in~='notes'] .about-notes .about-runhead__rule { animation: about-draw 900ms var(--ease-arrive) 60ms backwards; }
+html[data-about-armed~='colophon']:not([data-about-in~='colophon']) .about-colophon__rule { transform: scaleX(0); }
 html[data-about-in~='notes'] .about-notes__block {
-  animation: about-lift-s 700ms var(--ease-arrive) calc(120ms + var(--i, 0) * 80ms) backwards;
+  animation: about-reveal 600ms var(--ease-arrive) calc(var(--i, 0) * 60ms) backwards;
+}
+html[data-about-in~='signoff'] .about-statement {
+  animation: about-reveal 600ms var(--ease-arrive) backwards;
+}
+html[data-about-in~='ticket'] .about-contact {
+  animation: about-reveal 600ms var(--ease-arrive) 60ms backwards;
+}
+/* The colophon arrives as one press run: the rule it is printed under
+   draws, then each fact by the line it lands on (two to a line from 768px,
+   `--rp`), its term fading up and its value printed open from the left;
+   the foot last. */
+html[data-about-in~='colophon'] .about-colophon__rule {
+  animation: about-draw 720ms var(--ease-arrive) backwards;
+}
+html[data-about-in~='colophon'] .about-colophon__list dt {
+  animation: about-fade 340ms var(--ease-arrive) calc(80ms + var(--r, 0) * 70ms) backwards;
+}
+html[data-about-in~='colophon'] .about-colophon__list dd {
+  animation: about-open-right 560ms var(--ease-arrive) calc(80ms + var(--r, 0) * 70ms) backwards;
+}
+html[data-about-in~='colophon'] .about-foot {
+  animation: about-rise-s 600ms var(--ease-arrive) calc(160ms + var(--r, 0) * 70ms) backwards;
+}
+@media (min-width: 768px) {
+  html[data-about-in~='colophon'] .about-colophon__list dt {
+    animation-delay: calc(80ms + var(--rp, 0) * 70ms);
+  }
+  html[data-about-in~='colophon'] .about-colophon__list dd {
+    animation-delay: calc(80ms + var(--rp, 0) * 70ms);
+  }
+  html[data-about-in~='colophon'] .about-foot {
+    animation-delay: calc(160ms + var(--rp, 0) * 70ms);
+  }
 }
 
 /* The signature follows the scroll, both ways: written as the page goes
@@ -7023,20 +7424,21 @@ html[data-about-pen] .about-pen {
      over the first 3.5% of the stroke. */
   opacity: clamp(0, calc(var(--about-pen, 1) * 28.6), 1);
 }
-html[data-about-in~='end'] .about-end__block {
-  animation: about-lift-s 700ms var(--ease-arrive) calc(var(--i, 0) * 80ms) backwards;
-}
 
 /* Reduced motion: the finished page and no cover. Values, never structure:
-   everything above is still in the page, it just does not move. */
+   everything above is still in the page, it just does not move — the
+   portrait does not push in, and a torn stub simply fades (ContactTicket). */
 @media (prefers-reduced-motion: reduce) {
   .about-cover { display: none !important; }
   .about,
   .about * { animation: none !important; }
-  html[data-about-armed] .about .about-end__block { opacity: 1 !important; }
-  html[data-about-armed] .about .about-notes__block { opacity: 1 !important; }
-  html[data-about-armed] .about .about-notes .about-runhead__rule { transform: none !important; }
-  html[data-about-armed] .about .about-sentence__line { transform: none !important; }
+  .about .about-drop__img { transform: none !important; }
+  html[data-about-armed] .about .about-notes__block,
+  html[data-about-armed] .about .about-statement,
+  html[data-about-armed] .about .about-contact,
+  html[data-about-armed] .about .about-colophon__list > *,
+  html[data-about-armed] .about .about-foot { opacity: 1 !important; }
+  html[data-about-armed] .about .about-colophon__rule { transform: none !important; }
   html[data-about-pen] .about .about-pen { stroke-dasharray: none !important; opacity: 1 !important; }
 }
 

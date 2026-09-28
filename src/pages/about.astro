@@ -7,8 +7,7 @@ import type { Collection, SiteSettings } from '../types';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 import { chapterOrder } from '../lib/chapterOrder';
 import { exposureTotals } from '../lib/exposureRecord';
-import { PORTRAIT_FALLBACK, PORTRAIT_SIZES, PORTRAIT_WIDTHS, portraitCropUrl, portraitPath } from '../lib/aboutPortrait';
-import { silverTables } from '../lib/silverPrint';
+import { PORTRAIT_FALLBACK, PORTRAIT_SIZES, PORTRAIT_WIDTHS, portraitCropUrl } from '../lib/aboutPortrait';
 import { loadNotes } from '../lib/notesData';
 import { CJK_SERIF_CSS, featuredNote, formatNoteDateShort, hasHan, langOf, noteNumbers, pad2 } from '../lib/notes';
 
@@ -51,18 +50,19 @@ const name = settings.name ?? 'Ryan Xu';
 // its count, and what their frames add up to.
 const totals = exposureTotals(chapterOrder(rawCollections ?? []));
 
-// The portrait, printed in silver at build time (about/portrait-[w].webp)
-// when it is a Sanity asset; otherwise the file itself under the live filter.
+// The portrait: the droplet's own 4:5 crop from Sanity at the widths it is
+// drawn at (src/lib/aboutPortrait.ts); a file that is not a Sanity asset is
+// drawn as it is, cropped by the droplet.
 const avatarUrl = settings.avatarUrl ?? PORTRAIT_FALLBACK;
-const portrait: AboutPortrait = portraitCropUrl(avatarUrl, 840)
+const portrait: AboutPortrait = portraitCropUrl(avatarUrl, 480)
   ? {
-      src: portraitPath(840),
-      srcSet: PORTRAIT_WIDTHS.map((w) => `${portraitPath(w)} ${w}w`).join(', '),
+      src: portraitCropUrl(avatarUrl, 480)!,
+      srcSet: PORTRAIT_WIDTHS.map((w) => `${portraitCropUrl(avatarUrl, w)} ${w}w`).join(', '),
       sizes: PORTRAIT_SIZES,
-      width: 840,
-      height: 1050,
+      width: 480,
+      height: 600,
     }
-  : { src: avatarUrl, width: 840, height: 1050, silver: silverTables() };
+  : { src: avatarUrl, width: 480, height: 600 };
 
 // Stamped when the page is built — the colophon's "Updated" line and the ©
 // year. Formatted here, in one named timezone, so the server and the client
@@ -71,9 +71,10 @@ const builtAt = new Date();
 const updatedOn = builtAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const year = builtAt.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'America/New_York' });
 
-// The middle: the notes' teaser — the note ticked "featured", else the newest
-// (the same list /notes prints, read once per build). Nothing is printed
-// until a note is published (or, in a preview build only, NOTES_SAMPLE=1).
+// Where the log stood: the notes' line — the note ticked "featured", else
+// the newest (the same list /notes prints, read once per build). Nothing is
+// printed until a note is published (or, in a preview build only,
+// NOTES_SAMPLE=1).
 const { notes } = await loadNotes();
 const teased = featuredNote(notes);
 const noteCjk = Boolean(teased && (hasHan(teased.title) || hasHan(teased.dek)));
@@ -101,12 +102,12 @@ const note: AboutNote | null = teased
     {noteCjk && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
   </Fragment>
   {/* How the page arrives, decided before its first paint and written on
-      <html> (global.css, "/about: darkroom biography"): the contributor cover
-      in full on the first visit this session; a repeat visit's develop
-      entrance; nothing on a view-transition arrival (the push carries the
-      finished page) or under reduced motion. Re-run on every ClientRouter
-      arrival. With no JS there is no attribute, and the cover plays over the
-      finished page. */}
+      <html> (global.css, "/about: the profile"): the contributor cover in
+      full on the first visit this session, the page set under its lifting
+      edge; a repeat visit's quick set; nothing on a view-transition arrival
+      (the push carries the finished page) or under reduced motion. Re-run on
+      every ClientRouter arrival. With no JS there is no attribute, and the
+      cover plays over the finished page. */}
   <script is:inline data-astro-rerun define:vars={{ sessionKey: ABOUT_SESSION_KEY }}>
     var root = document.documentElement;
     var mode = 'full';
@@ -126,7 +127,7 @@ const note: AboutNote | null = teased
     }
     root.setAttribute('data-about-entry', mode);
   </script>
-  <Nav client:load currentPath={currentPath} scrim />
+  <Nav client:load currentPath={currentPath} />
   <AboutPage
     client:load
     name={name}
