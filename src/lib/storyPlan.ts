@@ -242,10 +242,11 @@ export function storyGrid(W: number, H: number) {
     field: cols(9),
     fieldEnd: colEnd(12),
     rail: cols(3),
-    /** Between slots. */
-    gap: most(px(96), vhShare(0.14)),
-    /** Between the two frames of a pair. */
-    pairGap: most(px(48), vwShare(0.045)),
+    /** Between slots: a tenth of the screen (it was 0.14, 140px at 1000;
+     *  the owner asked for the photographs a little closer together). */
+    gap: most(px(68), vhShare(0.1)),
+    /** Between the two frames of a pair (was 0.045 of the width). */
+    pairGap: most(px(36), vwShare(0.034)),
   };
 }
 
@@ -316,9 +317,9 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
         const w = capped(g.cols(isLandscape(r[0]) ? 3 : 2), r[0]);
         return {
           slot,
-          frames: [frame(0, right(w), w, g.vhShare(0.16))],
+          frames: [frame(0, right(w), w, g.vhShare(0.11))],
           text: [{ role: 'lede', x: g.colX(4), w: g.cols(5), y: ZERO }],
-          top: g.vhShare(0.2),
+          top: g.vhShare(0.14),
         };
       }
       case 'LEDE2': {
@@ -331,7 +332,7 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
             { role: 'band1', x: g.colX(4), w: g.cols(4), y: ZERO },
             { role: 'band2', x: g.colX(9), w: g.cols(4), y: ZERO },
           ],
-          top: g.vhShare(0.2),
+          top: g.vhShare(0.14),
         };
       }
       case 'SCREEN': {
@@ -378,8 +379,8 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
         return {
           slot,
           frames: r.length ? [frame(0, right(w), w)] : [],
-          text: [{ role: 'part', x: g.colX(4), w: g.cols(4), y: px(56) }],
-          top: add(g.gap, px(40)),
+          text: [{ role: 'part', x: g.colX(4), w: g.cols(4), y: px(40) }],
+          top: add(g.gap, px(28)),
         };
       }
       case 'QUOTE':

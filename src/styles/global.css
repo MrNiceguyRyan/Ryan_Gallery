@@ -1946,7 +1946,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 12px;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.35;
   font-weight: 400;
@@ -1981,6 +1981,59 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   text-transform: uppercase;
   color: var(--story-ink-3);
 }
+/* How an inside frame arrives (src/lib/storyEntrance.ts): zoom, shutter,
+   advance or develop, dealt by the plan and played with the Web Animations
+   API. CSS holds only the waiting state, which the story takes below the
+   fold once it has hydrated: the server's HTML never carries `data-reach`,
+   so every photograph is painted at rest before a line of script runs. A
+   shutter frame waits as bare paper (its plate stays, for the blades); the
+   others wait unprinted. */
+.story-fig__plate {
+  position: relative;
+}
+.story-fig[data-reach="waiting"] .story-fig__plate,
+.story-fig[data-reach="waiting"] .story-cap {
+  opacity: 0;
+}
+.story-fig[data-reach="waiting"][data-arrive="shutter"] .story-fig__plate {
+  opacity: 1;
+}
+.story-fig[data-reach="waiting"][data-arrive="shutter"] .story-frame {
+  opacity: 0;
+}
+/* The shutter: two curtains of blades over the frame, a focal plane's. Each
+   is half the frame (and a pixel, so they meet without a seam) and is drawn
+   stacked away at its edge; it fans out to close by scaleY, so its blades'
+   seams close up as it opens and spread as it shuts, as blades do. */
+.story-shutter {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.story-shutter__blade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(50% + 1px);
+  transform: scaleY(0);
+  background:
+    linear-gradient(180deg, rgba(244, 244, 237, 0.07), rgba(244, 244, 237, 0) 22%),
+    repeating-linear-gradient(180deg, #161511 0, #161511 calc(25% - 1px), #2b2a24 calc(25% - 1px), #2b2a24 25%);
+  will-change: transform;
+}
+.story-shutter__blade--top {
+  top: 0;
+  transform-origin: 50% 0;
+}
+.story-shutter__blade--bottom {
+  bottom: 0;
+  transform-origin: 50% 100%;
+  background:
+    linear-gradient(0deg, rgba(244, 244, 237, 0.07), rgba(244, 244, 237, 0) 22%),
+    repeating-linear-gradient(0deg, #161511 0, #161511 calc(25% - 1px), #2b2a24 calc(25% - 1px), #2b2a24 25%);
+}
 
 @media (min-width: 1024px) {
   /* The spread's right page: a screen tall, paper right of the map page,
@@ -2006,7 +2059,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
      and the dek (the place's standfirst, never set under the picture). */
   .story-open__under {
     position: absolute;
-    top: calc(var(--open-h) + 12px);
+    top: calc(var(--open-h) + 10px);
     left: calc(var(--open-x) + var(--sG) / 2);
     right: var(--sM);
     z-index: 1;
@@ -2017,7 +2070,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   }
   .story-open__under .story-open__cap {
     grid-column: 1 / -1;
-    margin: 0 0 22px;
+    margin: 0 0 16px;
   }
   .story-open__under .story-credits { grid-column: 2; }
   .story[data-open="portrait"] .story-open__under,
@@ -2081,7 +2134,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     grid-area: 2 / 1;
   }
   .story-slot[data-kind="QUOTE"] {
-    min-height: 72svh;
+    min-height: 52svh;
     align-items: center;
   }
   /* The screen-high landscape: flush left, over the rail (a full-bleed page
@@ -2101,7 +2154,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     width: var(--fw);
   }
   .story-slot[data-kind="SCREEN"] .story-cap {
-    margin: 10px var(--sM) 0;
+    margin: 8px var(--sM) 0;
   }
   /* The rail: columns 1–3, the kept stub's alone, from the spread to the
      end page. Its foot is pinned a screen tall, the stub at the bottom. */
@@ -2179,25 +2232,25 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     width: min(100vw, var(--fit));
     margin: 0 auto;
   }
-  .story-open__cap--side { margin: 10px var(--sM) 0; }
+  .story-open__cap--side { margin: 8px var(--sM) 0; }
   .story-slot {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    margin-top: 72px;
+    margin-top: 52px;
     padding: 0 var(--sM);
   }
   .story-slot[data-kind="LEDE"],
   .story-slot[data-kind="LEDE2"] {
     margin-top: 0;
-    padding-top: 48px;
+    padding-top: 36px;
   }
   .story-slot > .story-fig,
   .story-slot > .story-text {
     width: 100%;
   }
-  .story-slot > * + * { margin-top: 40px; }
-  .story-slot > .story-text + .story-text { margin-top: 32px; }
+  .story-slot > * + * { margin-top: 28px; }
+  .story-slot > .story-text + .story-text { margin-top: 24px; }
   .story-slot[data-kind="QUOTE"] { padding-bottom: 8px; }
   /* Full-bleed: the screen-high landscape, the feature, the page. */
   .story-slot > :is(.story-fig--screen, .story-fig--feature, .story-fig--page) {
@@ -2224,7 +2277,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   }
   .story-slot[data-kind="PAIR"][data-pp] > .story-fig + .story-fig {
     align-self: flex-start;
-    margin: 24px 0 0 calc(4 * (var(--sC) + var(--sG)));
+    margin: 16px 0 0 calc(4 * (var(--sC) + var(--sG)));
   }
   /* A diptych touches, full-bleed, at one height. */
   .story-slot[data-kind="DIPTYCH"] {
@@ -2255,7 +2308,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .story-end {
   position: relative;
   box-sizing: border-box;
-  margin-top: max(96px, 14svh);
+  margin-top: max(68px, 10svh);
   background: var(--stub-paper, #30352a);
   color: var(--stub-ink);
 }
@@ -2518,7 +2571,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 }
 @media (max-width: 1023.98px) {
   .story-end {
-    margin-top: 72px;
+    margin-top: 52px;
     padding: 64px var(--sM) 72px;
   }
   .story-plates { margin-top: 14px; }
