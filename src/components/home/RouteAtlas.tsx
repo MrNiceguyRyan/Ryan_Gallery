@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../../lib/atlasBasemap';
 import { MAP_BURN, MAP_INK, MAP_INK_RGB } from '../../lib/mapInk';
@@ -158,6 +158,11 @@ const CHAPTER_BEARING = -2;
 // time-based flight (after 11 mois sans toi(t)): lift off, pull back far
 // enough to see the whole leg, set down on the next place. The map rests while
 // a place's cover is read. Pitch and bearing never change — only distance.
+/** How long the atlas's instruments stay up after a hand stops moving over
+ *  the map (see "The instruments on demand" in the component). Long enough to
+ *  read a coordinate pair and a readout line; any move brings them back. */
+const ATLAS_LOOK_IDLE_MS = 3000;
+
 const HOP = {
   // Commit hysteresis in route-leg units: forward at 32% of the way to the
   // next place (so the map lands about as the next cover arrives), back at
@@ -1053,6 +1058,46 @@ export default function RouteAtlas({
   const hopEnabled = signs && classicEntrance && !reducedMotion && !!chapterProgress;
   const chapterRestZooms = useMemo(() => hopRestZooms(chapterRoute), [chapterRoute]);
   const viewfinderRef = useRef<ViewfinderHandle>(null);
+  // ── The instruments on demand ── The atlas's instrument type — the
+  // viewfinder's readouts, the tick timeline, the header — is not printed at
+  // rest (owner, 2026-09-27: at rest a chapter reads as the place on the map,
+  // the ticket, the city name and the lede). It comes up when it helps: the
+  // viewfinder reports a flight and its landing on its own (AtlasSign), and
+  // everything comes up while a hand is moving over the map. `data-atlas-look`
+  // on this section says so (global.css, "The instruments on demand"); it is
+  // written on pointer movement, not hover, so a pointer parked on the map
+  // while the reader scrolls does not keep the whole panel lit — the panel
+  // steps back ATLAS_LOOK_IDLE_MS after the hand stops, unless it rests on a
+  // place or a tick. No layout is read: an attribute and a timer per move.
+  const lookTimerRef = useRef(0);
+  const lookArmedAtRef = useRef(0);
+  const endAtlasLook = () => {
+    window.clearTimeout(lookTimerRef.current);
+    lookTimerRef.current = 0;
+    lookArmedAtRef.current = 0;
+    routeAtlasRef.current?.removeAttribute('data-atlas-look');
+  };
+  const noteAtlasLook = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'touch') return;
+    const atlas = event.currentTarget;
+    if (!atlas.hasAttribute('data-atlas-look')) atlas.setAttribute('data-atlas-look', '');
+    const now = event.timeStamp;
+    // Re-armed at most every 200ms: the idle only needs to be roughly 3 s.
+    if (lookTimerRef.current && now - lookArmedAtRef.current < 200) return;
+    lookArmedAtRef.current = now;
+    window.clearTimeout(lookTimerRef.current);
+    const idle = () => {
+      // A hand resting on a place or a tick is still using the instruments.
+      if (atlas.querySelector('.af-point__mark:hover, .atlas-ticks__group:hover')) {
+        lookTimerRef.current = window.setTimeout(idle, ATLAS_LOOK_IDLE_MS);
+        return;
+      }
+      lookTimerRef.current = 0;
+      atlas.removeAttribute('data-atlas-look');
+    };
+    lookTimerRef.current = window.setTimeout(idle, ATLAS_LOOK_IDLE_MS);
+  };
+  useEffect(() => () => window.clearTimeout(lookTimerRef.current), []);
   const viewfinderPlace = (index: number): ViewfinderPlace | null => {
     const entry = chapterRoute[index];
     if (!entry) return null;
@@ -2438,6 +2483,20 @@ export default function RouteAtlas({
       launch(dest, now);
     };
 
+    // Touchdown: the camera state says so, the viewfinder locks and the place
+    // plants. Called once per flight (`lockCalled`).
+    const lockFlight = (landing: Flight, now: number) => {
+      landing.lockCalled = true;
+      setCameraState('locked');
+      const destPlace = viewfinderPlace(landing.dest);
+      if (destPlace) viewfinderRef.current?.hunt(destPlace, now + HOP.lockSnapMs);
+      const destId = destPlace?.id ?? null;
+      if (plantedLocal !== destId) {
+        clearPlantTimers();
+        plantTimers.push(window.setTimeout(() => plant(destId), HOP.lockSnapMs));
+      }
+    };
+
     // There used to be an idle sway here: left alone over a chapter for 30s the
     // resting camera drifted ±11px on an 11-second sine with a 0.01 zoom
     // breath. It was deliberate and it was the wrong instinct for this page —
@@ -2474,6 +2533,14 @@ export default function RouteAtlas({
           : along.u;
         hopTrim = flight.trimFrom + (flight.trimTo - flight.trimFrom) * routeT;
         if (t >= 1) {
+          // One long frame — a GC pause, or the tab left in the background
+          // (rAF stops) — can carry the clock past the end before the camera
+          // is within lockPx. The lock check below only runs for a flight still
+          // in the air, so without this the arrival was never called: the
+          // camera state stayed 'flying' for good (measured: reproduced with a
+          // 2.2 s stall mid-flight), the reading tone never settled, the
+          // tickets' landing gate stayed shut and the sign never reported.
+          if (!flight.lockCalled) lockFlight(flight, now);
           flight = null;
           targetCenter = restCenter(committed);
           targetZoom = restZoom(committed);
@@ -2501,17 +2568,7 @@ export default function RouteAtlas({
       hopZoom += (targetZoom - hopZoom) * follow;
       if (flight && !flight.lockCalled) {
         const arrival = pixelsAtZoom(mercatorDegrees(hopCenter, flight.destCenter), hopZoom);
-        if (arrival < HOP.lockPx || now - flight.start >= flight.duration) {
-          flight.lockCalled = true;
-          setCameraState('locked');
-          const destPlace = viewfinderPlace(flight.dest);
-          if (destPlace) viewfinderRef.current?.hunt(destPlace, now + HOP.lockSnapMs);
-          const destId = destPlace?.id ?? null;
-          if (plantedLocal !== destId) {
-            clearPlantTimers();
-            plantTimers.push(window.setTimeout(() => plant(destId), HOP.lockSnapMs));
-          }
-        }
+        if (arrival < HOP.lockPx || now - flight.start >= flight.duration) lockFlight(flight, now);
       }
       const gap = pixelsAtZoom(mercatorDegrees(hopCenter, targetCenter), hopZoom);
       const settling = gap > 0.3 || Math.abs(targetZoom - hopZoom) > 0.0008;
@@ -3311,6 +3368,8 @@ export default function RouteAtlas({
       aria-label={living ? undefined : 'Scroll-driven photographic route'}
       role={living ? 'presentation' : undefined}
       data-atlas-engaged={atlasEngaged ? 'true' : 'false'}
+      onPointerMove={signs ? noteAtlasLook : undefined}
+      onPointerLeave={signs ? endAtlasLook : undefined}
       className={`route-atlas relative w-full ${prologue ? 'overflow-visible' : 'overflow-hidden'} bg-transparent ${living ? '' : 'isolate'} ${mobile ? 'route-atlas--mobile' : ''} ${living ? 'route-atlas--living' : ''} ${
         mobile ? 'h-full min-h-[100svh]' : 'h-full'
       }`}
@@ -3973,15 +4032,18 @@ export default function RouteAtlas({
         >
           {projectedRoute.length > 1 && (
             <svg className="route-atlas__route-overlay absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+              {/* The route still ahead: white ink at a whisper, under the
+                  travelled line — not olive, which read as a second lime on
+                  the phone's map (marks on the map are white ink). */}
               <motion.path
                 d={projectedRoutePath}
                 fill="none"
-                stroke="#8FA52D"
+                stroke={MAP_INK}
                 strokeWidth={mobile ? 1.05 : 1.2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 initial={false}
-                animate={{ pathLength: interfaceVisible ? 1 : 0, opacity: interfaceVisible ? (mobile ? 0.32 : 0.34) : 0 }}
+                animate={{ pathLength: interfaceVisible ? 1 : 0, opacity: interfaceVisible ? (mobile ? 0.22 : 0.24) : 0 }}
                 transition={{ duration: reducedMotion ? 0 : 1.05, ease: EASE.arrive }}
               />
               <motion.path
@@ -4144,15 +4206,15 @@ export default function RouteAtlas({
             {/* Bone ink, and no glow: the atlas's one lime is the viewfinder's
                 chapter number (plus the corners' flash on a landing). */}
             <span className="h-1.5 w-1.5 rounded-full bg-[#F4F4ED]" />
-            <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/72">The Route</p>
+            <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/84">The Route</p>
           </div>
-          <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/54">Photographic coordinates</p>
+          <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">Photographic coordinates</p>
         </div>
         <ScrubbedRouteOrdinal
           sample={chapterSample}
           route={chapterRoute}
           includeTotal
-          className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/56"
+          className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/72"
         />
       </motion.header>}
 

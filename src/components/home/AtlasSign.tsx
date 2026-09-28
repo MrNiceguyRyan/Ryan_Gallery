@@ -46,6 +46,10 @@ export const ATLAS_READING_LINE = 0.48;
 /** The lock settles (readouts typing in, lime cooling) over this long. */
 const SETTLE_MS = 510;
 const MIN_HUNT_MS = 600;
+/** After the readout has typed back in, the report holds this long and then
+ *  steps back (global.css, "The instruments on demand"): landed, the chapter
+ *  reads as the place, the ticket, the name and the lede. */
+const REPORT_HOLD_MS = 1700;
 
 const BONE: [number, number, number] = [244, 244, 237];
 const LIME: [number, number, number] = [210, 255, 0];
@@ -83,6 +87,15 @@ const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}
  * leg's distance in kilometres as it goes, and at touchdown everything types
  * back in behind a single lime confirmation. All drawing is imperative inside
  * one rAF loop that runs only while something moves; React renders once.
+ *
+ * It is instrument type, so it is not printed at rest (owner, 2026-09-27: a
+ * chapter at rest reads as the place, the ticket, the city name and the lede).
+ * The readouts sit in one layer, `.viewfinder__instruments`, which REPORTS a
+ * trip — from take-off, through the landing, for REPORT_HOLD_MS after the
+ * readout has typed back in — and then steps back. A settle onto a different
+ * place (reduced motion, a restart) is an arrival too and reports the same
+ * way; a settle on the place already shown stays quiet. The atlas brings the
+ * layer up as well while a hand moves over the map (`data-atlas-look`).
  */
 export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   initial: ViewfinderPlace | null;
@@ -99,6 +112,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   const latRef = useRef<HTMLSpanElement>(null);
   const lonRef = useRef<HTMLSpanElement>(null);
   const metaRef = useRef<HTMLSpanElement>(null);
+  const instrumentsRef = useRef<HTMLSpanElement>(null);
   const scrimRef = useRef<HTMLSpanElement>(null);
   // draw() reads the scrim's offset from here: it only moves when the scrim
   // does (into the map's ground), and draw runs from a rAF loop.
@@ -121,7 +135,22 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     legKm: null as HTMLSpanElement | null,
     metaChars: [] as HTMLSpanElement[],
     metaDot: null as HTMLElement | null,
+    /** Ends the landing's report (see REPORT_HOLD_MS). */
+    reportTimer: 0,
   });
+
+  // The report: an attribute on the instruments layer, written only when it
+  // changes; CSS does the fading.
+  const report = (on: boolean, holdMs = 0) => {
+    const s = state.current;
+    window.clearTimeout(s.reportTimer);
+    s.reportTimer = 0;
+    const node = instrumentsRef.current;
+    if (!node) return;
+    if (on && !node.hasAttribute('data-report')) node.setAttribute('data-report', '');
+    if (!on && node.hasAttribute('data-report')) node.removeAttribute('data-report');
+    if (on && holdMs > 0) s.reportTimer = window.setTimeout(() => report(false), holdMs);
+  };
 
   const setMeta = (place: ViewfinderPlace | null) => {
     const s = state.current;
@@ -326,6 +355,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       s.from = s.to;
       s.shown = s.to;
       draw(null);
+      // Landed and typed back in: hold the report, then step back.
+      report(true, REPORT_HOLD_MS);
       return;
     }
     draw(u);
@@ -335,6 +366,11 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   useImperativeHandle(forwardedRef, () => {
     const settle = (place: ViewfinderPlace) => {
       const s = state.current;
+      // Arriving somewhere without a flight (reduced motion's scrubbed
+      // camera, a restart that snaps) reports like a landing; settling on the
+      // place already shown (first draw, a Story closing) stays quiet.
+      const arrived = !!s.shown && s.shown.id !== place.id;
+      report(arrived, SETTLE_MS + REPORT_HOLD_MS);
       stop();
       s.hunting = false;
       s.from = place;
@@ -355,6 +391,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
           s.huntStart = performance.now();
           s.hunting = true;
         }
+        // The trip is on the instruments from take-off to the landing's hold.
+        report(true);
         s.to = to;
         s.lockAt = Math.max(lockAt, s.huntStart + MIN_HUNT_MS);
         if (!s.frame) s.frame = requestAnimationFrame(loop);
@@ -396,7 +434,10 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrimHost, bleed]);
 
-  useEffect(() => () => stop(), []);
+  useEffect(() => () => {
+    stop();
+    window.clearTimeout(state.current.reportTimer);
+  }, []);
 
   return (
     <motion.div ref={rootRef} aria-hidden="true" className="viewfinder" style={{ opacity: visibility }}>
@@ -422,10 +463,13 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
           scrimHost,
         )
         : <span ref={scrimRef} className="viewfinder__scrim" />}
-      <span ref={yearRef} className="viewfinder__readout" />
-      <span ref={latRef} className="viewfinder__readout" />
-      <span ref={lonRef} className="viewfinder__readout" />
-      <span ref={metaRef} className="viewfinder__readout viewfinder__meta" />
+      {/* The readouts: instrument type, reported on demand (see above). */}
+      <span ref={instrumentsRef} className="viewfinder__instruments">
+        <span ref={yearRef} className="viewfinder__readout" />
+        <span ref={latRef} className="viewfinder__readout" />
+        <span ref={lonRef} className="viewfinder__readout" />
+        <span ref={metaRef} className="viewfinder__readout viewfinder__meta" />
+      </span>
     </motion.div>
   );
 });
