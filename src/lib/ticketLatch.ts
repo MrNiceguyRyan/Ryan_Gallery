@@ -41,6 +41,13 @@ export const ATLAS_HOME_LINE = 1 - 0.78;
 export const TEAR_TOP_VH = 0.25;
 export const TEAR_LINE_MIN = 0.03;
 export const TEAR_LINE_MAX = 0.2;
+/** A cover docked beside its shield on the atlas (src/lib/coverDock.ts)
+ *  never leaves the screen while its chapter is read: there is no top edge
+ *  to catch before it goes, so its line is one fixed step past the chapter's
+ *  centre — the rail's name and lede have begun to go up, a reader resting
+ *  on the chapter never tears it — and the gate decides from there. Its
+ *  corner line is TEAR_LINE_MAX. */
+export const TEAR_LINE_DOCKED = 0.08;
 /** How far back from the furthest point reached a torn ticket re-seats when
  *  the atlas never left its place. Also the fling guard: a small reversal
  *  (a trackpad's wobble, a Lenis overshoot) never re-seats a ticket. */

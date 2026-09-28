@@ -38,10 +38,14 @@ export const FLOOR_Q: [number, number] = [0.12, 0.32];
 // The archive's own paint for the same layer (what it had before the grade):
 // below SILVER_EXIT_ZOOM the satellite is only a residual veil under the dark
 // atlas, and the chapters must look exactly as they did.
+// Lifted 2026-09-28 with the residual (RouteAtlas): the owner found the
+// chapters' ground too dark. Less desaturated, the whites let through, the
+// deep water's floor raised a touch so the Gulf reads as sea, not a hole.
 export const STOCK_PAINT = {
-  'raster-saturation': -0.32,
-  'raster-contrast': 0.08,
-  'raster-brightness-max': 0.86,
+  'raster-saturation': -0.14,
+  'raster-contrast': -0.04,
+  'raster-brightness-min': 0.12,
+  'raster-brightness-max': 1,
 } as const;
 export const SILVER_EXIT_ZOOM = 4.5;
 export const SILVER_EXIT_HYSTERESIS = 0.1;
@@ -83,6 +87,8 @@ export function silverPaint(k: number): Record<string, unknown> {
     'raster-color': silverRamp(k),
     'raster-saturation': 0,
     'raster-contrast': 0,
+    // The stock paint lifts the floor; the silver print keeps its own.
+    'raster-brightness-min': 0,
     'raster-brightness-max': 1,
   };
 }
