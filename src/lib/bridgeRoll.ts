@@ -255,6 +255,38 @@ export function litWhenSeen(
   return lit;
 }
 
+/** Whether a place is on the face of the planet as the lighting reckons it:
+ *  under `seenDeg` of the camera's centre (false while there is no centre). */
+export function onFace(
+  centre: readonly [number, number] | null,
+  at: readonly [number, number],
+  seenDeg: number = ROLL.seenDeg,
+) {
+  return !!centre && arcDegrees(centre, at) < seenDeg;
+}
+
+/** The one mark the planet prints while the bridge runs (RouteAtlas's
+ *  prologue marks). The place under the pointer (its roll label) prints
+ *  whether the roll has lit it yet or not, so a pointer always gets its
+ *  answer, and the lit mark comes back when the pointer leaves. The only
+ *  exception is a place whose mark would not show (`shows`: round the back
+ *  or over the limb of the planet), where the pointer would only have taken
+ *  the lit mark away. Otherwise the place lit last prints, when `lastLit`
+ *  allows it (reduced motion lights every place at once, so there is no
+ *  last). `places` lists each place's id and [lng, lat] in the roll's order,
+ *  and `lit` is how many of them are lit (99: all). */
+export function prologueMark<Place extends { id: string; at: readonly [number, number] }>(
+  pointed: string | null,
+  places: ReadonlyArray<Place>,
+  lit: number,
+  shows: (place: Place) => boolean,
+  lastLit = true,
+): string | null {
+  const place = pointed == null ? null : places.find((candidate) => candidate.id === pointed);
+  if (place && shows(place)) return place.id;
+  return lastLit && lit > 0 ? places[Math.min(lit, places.length) - 1]?.id ?? null : null;
+}
+
 /** Where the drawn route ends (its `line-trim-offset` end, on a line from the
  *  first chapter at 0 to the last at 1): back from the last chapter to the
  *  last place lit, running on toward the next one while the roll carries its

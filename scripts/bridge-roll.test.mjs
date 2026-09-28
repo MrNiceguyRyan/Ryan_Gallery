@@ -17,6 +17,8 @@ import {
   gatePassed,
   landingPose,
   litWhenSeen,
+  onFace,
+  prologueMark,
   rollCuts,
   rollFrames,
   rollTravel,
@@ -192,6 +194,56 @@ test('a place lights once its select has passed and it faces the reader, in roll
   assert.ok(Math.abs(routeTail(1, 1, 0.5, progress) - 0.758) < 1e-9);
   assert.equal(routeTail(1, 3, 0.5, progress), 1, 'held on New York while Bryce is round the back');
   assert.equal(routeTail(6, 6, 0, progress), 0);
+});
+
+test('a pointer on the roll never leaves the planet without a mark', () => {
+  // The places in roll order, as RouteAtlas lists them (06 New York first).
+  const places = [...CHAPTERS].sort((a, b) => b.order - a.order)
+    .map((chapter) => ({ id: `c${chapter.order}`, at: chapter.place }));
+  const facing = (centre) => (place) => onFace(centre, place.at);
+  const america = facing([-80.19, 21]);
+  // 06, 05, 04, 03 lit (Page last); nothing pointed at: Page prints.
+  assert.equal(prologueMark(null, places, 4, america), 'c3');
+  // Pointing at 02 Orlando, which the roll has not lit yet (the recheck's
+  // case at 1728, y1729): Orlando prints, where it used to print nothing.
+  assert.equal(prologueMark('c2', places, 4, america), 'c2');
+  // Pointing at a lit place prints it, as before.
+  assert.equal(prologueMark('c5', places, 4, america), 'c5');
+  // A place round the back of the planet would be hidden by its marker:
+  // the lit mark stays (facing Africa, New York lit, Miami pointed at).
+  assert.ok(arcDegrees([10, 20], places[5].at) >= ROLL.seenDeg);
+  assert.equal(prologueMark('c1', places, 1, facing([10, 20])), 'c6');
+  // Over the limb Mapbox's own horizon hides a marker that is still under
+  // seenDeg (at 1728, y1250: Zion 69° out, hidden; Bryce, lit, 68.7°):
+  // pointing at it keeps Bryce's mark.
+  const centre = [-37.52, 15.28];
+  assert.ok(onFace(centre, places[2].at) && onFace(centre, places[1].at));
+  const mapboxHides = (id) => (place) => onFace(centre, place.at) && place.id !== id;
+  assert.equal(prologueMark('c4', places, 2, mapboxHides('c4')), 'c5');
+  // Before the camera has centred the planet there is no face to print on.
+  assert.equal(onFace(null, places[0].at), false);
+  assert.equal(prologueMark('c2', places, 4, facing(null)), 'c3');
+  // Every place lit (99) and none pointed at: the last in the roll.
+  assert.equal(prologueMark(null, places, 99, america), 'c1');
+  // Reduced motion (no "last lit"): only a pointer prints.
+  assert.equal(prologueMark(null, places, 99, america, false), null);
+  assert.equal(prologueMark('c4', places, 99, america, false), 'c4');
+  // Nothing lit and nothing pointed at: nothing, and an unknown id is no
+  // pointer at all.
+  assert.equal(prologueMark(null, places, 0, america), null);
+  assert.equal(prologueMark('nowhere', places, 4, america), 'c3');
+  // Whatever is lit and wherever the camera faces, a pointer on a place
+  // that faces the reader always gets that place, and never takes the lit
+  // mark away for one that does not.
+  for (let lng = -180; lng <= 180; lng += 9) {
+    for (let lit = 0; lit <= places.length; lit += 1) {
+      for (const place of places) {
+        const on = prologueMark(place.id, places, lit, facing([lng, 21]));
+        if (arcDegrees([lng, 21], place.at) < ROLL.seenDeg) assert.equal(on, place.id);
+        else assert.equal(on, lit > 0 ? places[lit - 1].id : null);
+      }
+    }
+  }
 });
 
 test('the prologue turns west, one way, onto the first chapter; the first screen keeps its face', () => {

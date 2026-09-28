@@ -17,6 +17,7 @@ import { fileDims } from '../../lib/lightboxImage';
 import { CSS_EASE, DUR, DUR_MS, EASE, STAGGER } from '../../lib/motion';
 import { travelPlateLeft } from '../../lib/travelPlate';
 import { chapterOrdinal } from '../../lib/chapterOrder';
+import { plateRows, type PlateRows } from '../../lib/plateRows';
 import {
   css,
   formatPosition,
@@ -222,6 +223,11 @@ export interface MagazineLayoutProps {
    *  — under the plate's own grade — flies to its place on the opening
    *  spread as frame 01 (`GrowPlane`). */
   entryOrigin?: PlateOrigin;
+  /** Homepage desktop only, asked once at the close: the homepage ticket of
+   *  the story on screen when that story was turned to (Next), read by the
+   *  Homepage after it has set the page on that story's chapter. The rail's
+   *  stub, the story's own, flies home into it. */
+  homeStubFor?: (collectionId: string) => PlateStub | null;
 }
 
 /** What the Homepage read off the plate in the click, before any scroll lock. */
@@ -1588,32 +1594,94 @@ function EndPage({
   const nextDims = nextCollection?.coverImageUrl ? fileDims(nextCollection.coverImageUrl) : null;
   const coverWaiting = { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' };
   const coverRest = { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' };
+  // ── The Plates, in even rows (src/lib/plateRows.ts) ──
+  // Measured when the strip's box changes — the column's width, the house
+  // plate height, the gap — never per frame; until then (and in the server
+  // HTML) the plates simply wrap. Keyed to the story, since a turn keeps
+  // this component and changes its photographs.
+  const platesRef = useRef<HTMLOListElement>(null);
+  const photosRef = useRef(photos);
+  photosRef.current = photos;
+  const platesKey = photos.map((photo) => photo._id).join('|');
+  const [plateSet, setPlateSet] = useState<(PlateRows & { key: string }) | null>(null);
+  useEffect(() => {
+    const strip = platesRef.current;
+    if (!strip || typeof ResizeObserver === 'undefined') return;
+    const measure = () => {
+      const image = strip.querySelector('img');
+      if (!image) return;
+      const style = getComputedStyle(strip);
+      const width = Number.parseFloat(style.width);
+      const gap = Number.parseFloat(style.columnGap) || 0;
+      // The house height, whatever fit is printed now (to 1/8 px, so the
+      // plates' own rounding never moves it).
+      const fit = Number.parseFloat(strip.style.getPropertyValue('--story-plate-fit')) || 1;
+      const height = Math.round((Number.parseFloat(getComputedStyle(image).height) / fit) * 8) / 8;
+      if (!(width > 0) || !(height > 0)) return;
+      const ratios = photosRef.current.map((photo) => {
+        if (photo.width && photo.height) return photo.width / photo.height;
+        const dims = fileDims(photo.imageUrl);
+        return dims ? dims.width / dims.height : 1.5;
+      });
+      const next = plateRows(ratios, height, width, gap);
+      const scale = Math.floor(next.scale * 1e4) / 1e4;
+      setPlateSet((current) => (
+        current && current.key === platesKey && current.rows.join() === next.rows.join()
+          && Math.abs(current.scale - scale) < 1e-3
+          ? current
+          : { rows: next.rows, scale, key: platesKey }
+      ));
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [platesKey]);
+  const plateLayout = plateSet && plateSet.key === platesKey ? plateSet : null;
+  // The plates after which a row ends (every row but the last).
+  const rowEnds = new Set<number>();
+  if (plateLayout && plateLayout.rows.length > 1) {
+    let end = -1;
+    plateLayout.rows.slice(0, -1).forEach((count) => {
+      end += count;
+      rowEnds.add(end);
+    });
+  }
   return (
     <footer className="story-end" style={stockStyle(collection.slug)}>
       <div className="story-end__plates">
         <p className="story-label font-ui">Plates</p>
-        <ol className="story-plates">
+        <ol
+          ref={platesRef}
+          className="story-plates"
+          data-rows={rowEnds.size ? '' : undefined}
+          style={plateLayout && plateLayout.scale < 1
+            ? { ['--story-plate-fit' as never]: String(plateLayout.scale) }
+            : undefined}
+        >
           {photos.map((photo, index) => (
-            <li key={photo._id}>
-              <button
-                type="button"
-                className="story-plate story-focus"
-                data-plate-index={index}
-                aria-label={`Open frame ${pad2(index + 1)}`}
-                onClick={(event) => onOpenPlate(index, event.currentTarget)}
-              >
-                <img
-                  src={`${photo.imageUrl}?auto=format&h=200&q=70`}
-                  alt=""
-                  width={photo.width}
-                  height={photo.height}
-                  loading="lazy"
-                  decoding="async"
-                  draggable={false}
-                />
-                <span className="story-plate__no font-ui">{pad2(index + 1)}</span>
-              </button>
-            </li>
+            <React.Fragment key={photo._id}>
+              <li>
+                <button
+                  type="button"
+                  className="story-plate story-focus"
+                  data-plate-index={index}
+                  aria-label={`Open frame ${pad2(index + 1)}`}
+                  onClick={(event) => onOpenPlate(index, event.currentTarget)}
+                >
+                  <img
+                    src={`${photo.imageUrl}?auto=format&h=200&q=70`}
+                    alt=""
+                    width={photo.width}
+                    height={photo.height}
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                  />
+                  <span className="story-plate__no font-ui">{pad2(index + 1)}</span>
+                </button>
+              </li>
+              {rowEnds.has(index) && <li className="story-plates__break" aria-hidden="true" />}
+            </React.Fragment>
           ))}
         </ol>
       </div>
@@ -1836,6 +1904,7 @@ export default function MagazineLayout({
   sharedImageUrl,
   onEntryReady,
   entryOrigin,
+  homeStubFor,
 }: MagazineLayoutProps) {
   const reduce = useReducedMotion();
   const isPresent = useIsPresent();
@@ -2495,21 +2564,26 @@ export default function MagazineLayout({
   }, [plateStub, stubArrived, isPresent]);
   // At the close the kept half flies back onto its ticket (`flyStubHome`) —
   // from the story that grew out of that ticket, once the stub has reached
-  // the rail. Every other close (a turned story, a close during the entry,
-  // reduced motion, a resized window) keeps the close it had, and the ticket
-  // simply has its stub again under the leaving story. A layout effect, so
-  // the rail's stub and its copy swap in the exit's first paint.
+  // the rail. A story turned to (Next) flies its own kept half into its own
+  // chapter's ticket, which the Homepage has set on screen under it by now
+  // (`homeStubFor`). Every other close (a close during the entry, reduced
+  // motion, a resized window, a ticket off screen or torn) keeps the close it
+  // had, and the ticket simply has its stub again under the leaving story. A
+  // layout effect, so the rail's stub and its copy swap in the exit's first
+  // paint.
   useLayoutEffect(() => {
     if (isPresent) return;
-    const home = entryOriginRef.current?.stub;
-    if (!home) return;
+    const opened = entryOriginRef.current?.stub ?? null;
+    const home = plateStub ?? homeStubFor?.(collection._id) ?? null;
     const rail = keptStubRef.current;
-    const flown = !!plateStub && stubArrived && !reduce && !!rail && rail.offsetParent !== null
+    const flown = !!home && stubArrived && !reduce && !!rail && rail.offsetParent !== null
       && home.node.isConnected
       && home.view.width === window.innerWidth
       && home.view.height === window.innerHeight
       && flyStubHome(rail, home, collection.slug);
-    if (!flown) delete home.node.dataset.keptAway;
+    // The ticket the story grew out of has its stub back, unless it is the
+    // one being flown home (that one is seated by the flight).
+    if (opened && !(flown && home === opened)) delete opened.node.dataset.keptAway;
   }, [isPresent]);
 
   const StoryShell = standalone ? motion.main : motion.div;

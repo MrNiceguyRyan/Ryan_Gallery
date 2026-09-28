@@ -1539,7 +1539,8 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     --story-quote: 30px;
     --story-text: 17px;
     --story-lead: 20px;
-    --story-plate-h: 40px;
+    /* At 40px a plate was a coloured chip: 64 reads as a photograph. */
+    --story-plate-h: 64px;
   }
 }
 @media (min-width: 768px) and (max-width: 1023.98px) {
@@ -2269,13 +2270,24 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   color: var(--stub-muted);
 }
 .story-plates {
+  --story-plates-row-gap: 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 14px 8px;
+  gap: var(--story-plates-row-gap) 8px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+/* Set in even rows (src/lib/plateRows.ts, measured by EndPage): each row but
+   the last ends in a break, a whole-width item that is also the gap to the
+   next row. Until the column has been measured the plates simply wrap. */
+.story-plates[data-rows] {
+  row-gap: 0;
+}
+.story-plates__break {
+  flex: 0 0 100%;
+  height: var(--story-plates-row-gap);
 }
 .story-plate {
   display: flex;
@@ -2295,10 +2307,12 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   opacity: 1;
   transition-duration: var(--dur-in);
 }
+/* `--story-plate-fit` (set on the strip by EndPage) is under 1 only when a
+   slightly smaller plate saves the strip a row. */
 .story-plate img {
   display: block;
   width: auto;
-  height: var(--story-plate-h);
+  height: calc(var(--story-plate-h) * var(--story-plate-fit, 1));
 }
 .story-plate__no {
   font-size: 11px;

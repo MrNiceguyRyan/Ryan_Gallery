@@ -46,7 +46,7 @@ import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight'
 import { createEggExposure, setEggMarks } from '../../lib/eggExposure';
 import { wrap180 } from '../../lib/globeEgg';
 import { CSS_EASE, DUR_MS, EASE, bezierFn, smootherstep, voyageEase } from '../../lib/motion';
-import { ROLL, gatePassed, litWhenSeen, routeTail } from '../../lib/bridgeRoll';
+import { ROLL, gatePassed, litWhenSeen, onFace, prologueMark, routeTail } from '../../lib/bridgeRoll';
 
 // The globe's easter eggs (desk spin, BULB): their own chunk, fetched only
 // where the prologue globe can be played with (desktop, motion allowed).
@@ -1189,6 +1189,9 @@ export default function RouteAtlas({
   // The committed place survives camera-effect restarts (Story close, resize),
   // so a restart re-applies hysteresis from it instead of re-deriving it.
   const committedPlaceRef = useRef<number | null>(null);
+  // Set while a story covers the atlas (`paused`), and read by the camera's
+  // next run, when the story is closing: see "Resumed on another place".
+  const coveredRef = useRef(false);
 
   const livingTravelProgress = useTransform(
     chapterSample,
@@ -1251,32 +1254,46 @@ export default function RouteAtlas({
     const next = prologue && progress < 1;
     setPrologueStage((current) => (current === next ? current : next));
   });
-  const engagedOnGlobe = prologueStage ? engagedChapterId : null;
   // How many places are lit on the prologue globe, in the roll's order (the
   // last chapter first): written by the camera ("The roll's places"), on a
   // change only, for the prologue marks below. The dots themselves are
   // painted by the camera. Outside the prologue every place is lit.
   const [litStops, setLitStops] = useState(() => (prologue ? 0 : 99));
   // The places in the roll's order, as the camera lights them.
-  const rollOrderIds = useMemo(
-    () => [...chapterRoute].sort((a, b) => b.chapterIndex - a.chapterIndex).map((entry) => entry.stop.id),
+  const rollOrderPlaces = useMemo(
+    () => [...chapterRoute]
+      .sort((a, b) => b.chapterIndex - a.chapterIndex)
+      .map((entry) => ({ id: entry.stop.id, at: entry.stop.coordinates })),
     [chapterRoute],
   );
+  // Where the prologue camera last centred the planet, written by the camera
+  // on every prologue frame (no re-render), and each prologue mark's node: a
+  // pointed place prints its mark only where it will show (`prologueMark`).
+  const prologueCentreRef = useRef<GeoCoordinate | null>(null);
+  const prologueMarkNodes = useRef(new Map<string, HTMLElement>());
+  // Shows: on the planet's face as the lighting reckons it, and not hidden by
+  // Mapbox. Its own horizon test is stricter near the limb than `seenDeg`
+  // (at 1728, y1250 Zion sits 69° from the centre, over the limb, hidden),
+  // and it writes its verdict on the marker's own element as an opacity, when
+  // the camera moves. Read at the pointer's render, not per frame.
+  const prologueMarkShows = (place: { id: string; at: GeoCoordinate }) =>
+    onFace(prologueCentreRef.current, place.at) &&
+    prologueMarkNodes.current.get(place.id)?.parentElement?.style.opacity !== '0';
   // The prologue marks (in the JSX): the atlas's own print mark, a 7px dot
-  // keyed by the chapter number, printed over a lit place's dot on the globe.
+  // keyed by the chapter number, printed over a place's dot on the globe.
   // A DOM mark, because GL paint keyed on the pointer cannot ease. One is on
   // at a time, so the canyon places never print their numbers into each
-  // other: the place pointed at on the roll, else the place lit last — the
-  // chapter whose frames just passed the gate, so the one link between the
-  // roll and the planet reads without a pointer. Each place keeps its own
-  // mark, so the one going off fades where it stood as the next prints in.
-  // Reduced motion lights every place at once on the still planet, while its
-  // roll cuts between windows: there is no "last lit", so only a pointer
-  // prints a mark there.
-  const rollMarkId = prologueStage && litStops > 0 && !reducedMotion
-    ? rollOrderIds[Math.min(litStops, rollOrderIds.length) - 1] ?? null
+  // other: the place pointed at on the roll, lit yet or not (the pointer
+  // always gets its answer, never a planet with no mark on it), else the
+  // place lit last — the chapter whose frames just passed the gate, so the
+  // one link between the roll and the planet reads without a pointer. Each
+  // place keeps its own mark, so the one going off fades where it stood as
+  // the next prints in. Reduced motion lights every place at once on the
+  // still planet, while its roll cuts between windows: there is no "last
+  // lit", so only a pointer prints a mark there.
+  const globeMarkOn = prologueStage
+    ? prologueMark(engagedChapterId, rollOrderPlaces, litStops, prologueMarkShows, !reducedMotion)
     : null;
-  const globeMarkOn = engagedOnGlobe ?? rollMarkId;
   const rollGatesRef = useRef<number[] | null>(rollGates ?? null);
   rollGatesRef.current = rollGates ?? null;
   const prologueStops = useMemo(() => ({
@@ -1681,10 +1698,13 @@ export default function RouteAtlas({
     if (living) return;
     if (!mapLoaded || !atlasEngaged || paused) {
       mapRef.current?.stop();
+      if (paused) coveredRef.current = true;
       return;
     }
     const map = mapRef.current?.getMap();
     if (!map) return;
+    const covered = coveredRef.current;
+    coveredRef.current = false;
     let disposed = false;
     let queuedSample = chapterSample.get();
     let queuedEntry = sampledEntryProgress.get();
@@ -1984,6 +2004,7 @@ export default function RouteAtlas({
       return dest;
     };
     const restartPosition = routePosition(queuedSample);
+    const resumedFrom = committedPlaceRef.current;
     let committed = committedPlaceRef.current != null
       ? hysteresisFrom(committedPlaceRef.current, restartPosition)
       : Math.max(0, Math.min(lastRouteIndex, Math.floor(restartPosition + (1 - HOP.forward))));
@@ -1993,6 +2014,15 @@ export default function RouteAtlas({
       committed = wholeBackTo(committedPlaceRef.current, committed);
     }
     committedPlaceRef.current = committed;
+    // ── Resumed on another place ──
+    // A story turned (Next) and then closed sets the page on the turned
+    // story's chapter while the story still covers everything (HomePage's
+    // close sets the chapter clock with it). The camera resumes on another
+    // place than the one it stopped on. It cuts there on its first frame,
+    // under the story, with the readout and the current mark: a glide from
+    // where the map froze would carry the old place out from under the story
+    // as it lifts, beside the new chapter's plate.
+    const cutUnderCover = covered && hopEnabled && resumedFrom != null && committed !== resumedFrom;
     let hopCenter: GeoCoordinate = restCenter(committed);
     let hopZoom = restZoom(committed);
     let hopTrim = restRoute(committed);
@@ -2100,7 +2130,9 @@ export default function RouteAtlas({
     ['wheel', 'keydown', 'touchstart'].forEach((type) => window.addEventListener(type, noteReaderDrove, { passive: true }));
     let settleTimer = 0;
     let sidesTimer = 0;
-    const settleSignOn = (index: number) => {
+    // `atOnce`: the place is certain (a cut under a story), so its point is
+    // marked current now rather than when the restart window closes.
+    const settleSignOn = (index: number, atOnce = false) => {
       setCameraState('rest');
       const place = viewfinderPlace(index);
       if (place) viewfinderRef.current?.settle(place);
@@ -2110,9 +2142,9 @@ export default function RouteAtlas({
       settleTimer = window.setTimeout(() => {
         settleTimer = 0;
         if (!disposed) markCurrentStop(settledId);
-      }, Math.max(HOP.settleStateMs, snapUntil - performance.now() + HOP.settleStateMs));
+      }, atOnce ? 0 : Math.max(HOP.settleStateMs, snapUntil - performance.now() + HOP.settleStateMs));
     };
-    if (hopEnabled) settleSignOn(committed);
+    if (hopEnabled) settleSignOn(committed, cutUnderCover);
 
     // ── The silver print (see src/lib/globeLook.ts) ──
     // One layer carries it: `prologue-satellite` is printed in silver through
@@ -2623,7 +2655,11 @@ export default function RouteAtlas({
     //
     // (`prologue` is a capability — "this atlas HAS an opening" — and stays true
     // deep in the archive. Whether the opening has FINISHED is queuedPrologue.)
-    if (chapterMode() && queuedPrologue >= 1 && !voyageState && queuedEntry > 0.98) {
+    //
+    // Not after a cut under a story (see "Resumed on another place"): the hop
+    // pose is already the new place's rest pose, and the first frame jumps the
+    // map onto it exactly.
+    if (!cutUnderCover && chapterMode() && queuedPrologue >= 1 && !voyageState && queuedEntry > 0.98) {
       const live = map.getCenter();
       hopCenter = [live.lng, live.lat];
       hopZoom = map.getZoom();
@@ -2708,6 +2744,7 @@ export default function RouteAtlas({
             pointerY * PROLOGUE_GLOBE.pointerLatitude * life,
         ];
         handoffLongitude = center[0];
+        prologueCentreRef.current = center;
         const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
         // The corner globe keeps its share of the screen on wider displays
         // (radius doubles per zoom level), then settles to the entrance pose.
@@ -3854,11 +3891,10 @@ export default function RouteAtlas({
         )}
         {/* The prologue marks (see `globeMarkOn`): the atlas's own mark (a
             7px dot with its knockout, keyed by its chapter number), upright
-            to the viewer, over each place's dot; one prints at a time, and
-            only on a place that is lit. */}
+            to the viewer, over each place's dot; one prints at a time, on a
+            place that is lit or pointed at. */}
         {prologue && chapterRoute.map((entry) => {
-          const rollIndex = rollOrderIds.indexOf(entry.stop.id);
-          const on = globeMarkOn === entry.stop.id && rollIndex >= 0 && rollIndex < litStops;
+          const on = globeMarkOn === entry.stop.id;
           return (
             <Marker
               key={`prologue-mark-${entry.stop.id}`}
@@ -3868,7 +3904,14 @@ export default function RouteAtlas({
               pitchAlignment="viewport"
               rotationAlignment="viewport"
             >
-              <span aria-hidden="true" className={`prologue-mark${on ? ' is-on' : ''}`}>
+              <span
+                ref={(node) => {
+                  if (node) prologueMarkNodes.current.set(entry.stop.id, node);
+                  else prologueMarkNodes.current.delete(entry.stop.id);
+                }}
+                aria-hidden="true"
+                className={`prologue-mark${on ? ' is-on' : ''}`}
+              >
                 <i className="prologue-mark__dot" />
                 <span className="prologue-mark__num font-ui">{String(entry.chapterIndex + 1).padStart(2, '0')}</span>
               </span>

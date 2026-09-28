@@ -16,7 +16,7 @@ import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveClosing, { type ClosingStoryRequest } from './ArchiveClosing';
 import GlobePrologue from './GlobePrologue';
-import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin } from './MagazineLayout';
+import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin, type PlateStub } from './MagazineLayout';
 import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
 import { startLenis } from '../../lib/smoothScroll';
@@ -129,6 +129,31 @@ function archiveChapterAnchorY(element: HTMLElement, desktop: boolean) {
     ? photoFrame
     : element;
   return documentTop(visualAnchor) + visualAnchor.offsetHeight * (desktop ? 0.5 : 0.19);
+}
+
+/** A ticket's stub as the story's rail keeps it (MagazineLayout, PlateStub):
+ *  its box and where its ordinal, "/ TT · admission" and place are printed,
+ *  read once, where it lies now. Null when it is not on screen. */
+function ticketStubOf(stubNode: HTMLElement): PlateStub | null {
+  const box = stubNode.getBoundingClientRect();
+  const marks = box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < window.innerHeight
+    ? readStubMarks(stubNode, 'archive-ticket-stub')
+    : null;
+  if (!marks) return null;
+  // What this ticket prints — its place in the homepage's run — so the
+  // half the reader keeps carries the same number into the story.
+  const ordinal = stubNode.querySelector('.archive-ticket-stub__no')?.textContent?.trim();
+  const total = stubNode.querySelector('.archive-ticket-stub__of')?.textContent?.match(/\d+/)?.[0];
+  return {
+    box: { x: box.x, y: box.y, width: box.width, height: box.height },
+    marks,
+    node: stubNode,
+    // The window, not the client width: the site's scrollbar comes and goes
+    // with Lenis, and the close compared 1724 with 1728 and never flew the
+    // stub home.
+    view: { width: window.innerWidth, height: window.innerHeight },
+    print: ordinal && total ? { ordinal, total } : undefined,
+  };
 }
 
 function useDesktopLayout() {
@@ -421,27 +446,8 @@ export default function HomePage({ collections }: Props) {
       && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? chapter?.querySelector<HTMLElement>('.archive-ticket-stub')
       : null;
-    const stubBox = stubNode?.getBoundingClientRect();
-    const stubMarks = stubNode && stubBox && stubBox.width > 0 && stubBox.height > 0
-      && stubBox.bottom > 0 && stubBox.top < window.innerHeight
-      ? readStubMarks(stubNode, 'archive-ticket-stub')
-      : null;
-    if (plateOriginRef.current && stubNode && stubBox && stubMarks) {
-      // What this ticket prints — its place in the homepage's run — so the
-      // half the reader keeps carries the same number into the story.
-      const ordinal = stubNode.querySelector('.archive-ticket-stub__no')?.textContent?.trim();
-      const total = stubNode.querySelector('.archive-ticket-stub__of')?.textContent?.match(/\d+/)?.[0];
-      plateOriginRef.current.stub = {
-        box: { x: stubBox.x, y: stubBox.y, width: stubBox.width, height: stubBox.height },
-        marks: stubMarks,
-        node: stubNode,
-        // The window, not the client width: the site's scrollbar comes and
-        // goes with Lenis, and the close compared 1724 with 1728 and never
-        // flew the stub home.
-        view: { width: window.innerWidth, height: window.innerHeight },
-        print: ordinal && total ? { ordinal, total } : undefined,
-      };
-    }
+    const keptStub = stubNode ? ticketStubOf(stubNode) : null;
+    if (plateOriginRef.current && keptStub) plateOriginRef.current.stub = keptStub;
     // The plate's title, corners and cue hang past its edges; they go with the
     // plate in the same paint the plane arrives in (global.css,
     // `[data-story-source]`). An attribute set here rather than React state,
@@ -467,7 +473,15 @@ export default function HomePage({ collections }: Props) {
     lenisRef.current?.stop();
     setSelectedCollection(collection);
   }, [commitActiveArchiveId, holdStoryGutter]);
+  // A turned story's own chapter ticket, read at the close for the story's
+  // kept stub to fly home into (MagazineLayout asks for it: `homeStubFor`).
+  const turnedStubRef = useRef<{ id: string; stub: PlateStub } | null>(null);
+  const homeStubFor = useCallback(
+    (collectionId: string) => (turnedStubRef.current?.id === collectionId ? turnedStubRef.current.stub : null),
+    [],
+  );
   const closeCollection = useCallback(() => {
+    turnedStubRef.current = null;
     // A story turned (Next) away from the chapter it opened on closes onto
     // the chapter of the story on screen: the page is set at that chapter's
     // anchor (derived from the offset chain, as a voyage aims) under the
@@ -484,8 +498,28 @@ export default function HomePage({ collections }: Props) {
         const desktop = !!desktopTarget;
         const y = Math.max(0, Math.round(archiveChapterAnchorY(target, desktop) - window.innerHeight * (desktop ? 0.48 : 0.56)));
         storyScrollYRef.current = y;
-        if (desktop) window.scrollTo({ top: y, behavior: 'instant' });
-        else document.body.style.inset = `-${y}px 0 auto`;
+        if (desktopTarget) {
+          window.scrollTo({ top: y, behavior: 'instant' });
+          // The chapter clock goes with the page. Its sampler is off while a
+          // story is open, and the page now sits on this chapter's anchor,
+          // which is this chapter on the clock. So the atlas resumes here
+          // under the story, not on the chapter the story opened from, and
+          // cuts to it before the story lifts (RouteAtlas, "Resumed on
+          // another place").
+          const chapterIndex = Number(desktopTarget.dataset.chapterIndex);
+          if (Number.isFinite(chapterIndex)) archiveProgress.set(chapterIndex);
+          // This chapter's own ticket takes the turned story's kept stub
+          // home, as a ticket a story grew out of does. The stub is read
+          // once, here, as the open reads it: after the page has been set
+          // where the exit will uncover it, and nothing moves it before the
+          // flight lands (an untorn ticket, motion allowed).
+          const stubNode = !desktopTarget.querySelector('.archive-plate.is-torn')
+            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? desktopTarget.querySelector<HTMLElement>('.archive-ticket-stub')
+            : null;
+          const stub = stubNode ? ticketStubOf(stubNode) : null;
+          if (stub) turnedStubRef.current = { id: current._id, stub };
+        } else document.body.style.inset = `-${y}px 0 auto`;
         storySourceChapterIdRef.current = target.id;
         storyReturnFocusRef.current = target.querySelector<HTMLElement>('[role="button"], button');
         commitActiveArchiveId(chapterId);
@@ -495,7 +529,7 @@ export default function HomePage({ collections }: Props) {
     // completed their exit. The map timeline resumes only after AnimatePresence.
     setStoryClosing(true);
     setSelectedCollection(null);
-  }, [commitActiveArchiveId]);
+  }, [archiveProgress, commitActiveArchiveId]);
   const selectCollectionWithinStory = useCallback((collection: Collection) => {
     setSelectedCollection(collection);
   }, []);
@@ -1996,6 +2030,7 @@ export default function HomePage({ collections }: Props) {
                and locks the body differently; its route cards keep the cover
                they have. */
             entryOrigin={desktopLayout ? plateOriginRef.current ?? undefined : undefined}
+            homeStubFor={desktopLayout ? homeStubFor : undefined}
           />
         )}
       </AnimatePresence>
