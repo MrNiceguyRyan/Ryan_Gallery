@@ -2688,7 +2688,6 @@ export default function RouteAtlas({
             pointerY * PROLOGUE_GLOBE.pointerLatitude * life,
         ];
         handoffLongitude = center[0];
-        prologueCentreRef.current = center;
         const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
         // The corner globe's size, handed to the entrance exactly (the
         // entrance's copy is set per layout from the same width).
