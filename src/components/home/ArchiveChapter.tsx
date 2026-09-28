@@ -17,7 +17,7 @@ import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import { usePressGive } from '../../lib/usePressGive';
-import { stockStyle } from '../../lib/ticketStock';
+import { stockPaper, stockStyle } from '../../lib/ticketStock';
 import { EASE, SPRING, smootherstep } from '../../lib/motion';
 import {
   LATCH_WHOLE,
@@ -104,7 +104,7 @@ interface ArchiveChapterProps {
   onTearAway?: (options?: { focus?: boolean }) => void;
   /** The stop after this one, printed on the stub's "Next stop" (null: this
    *  is the last, and the stub goes on to the end of the route). */
-  nextStop?: { name: string; number: number; region?: string } | null;
+  nextStop?: { name: string; number: number; region?: string; slug?: string } | null;
 }
 
 // Fraunces is served as a variable font (wght 400–900). The title racks on two
@@ -1973,6 +1973,7 @@ export default function ArchiveChapter({
                     <RouteShield
                       className="archive-ticket-sign__shield"
                       code={stateCode(collection.region)}
+                      accent={stockPaper(collection.slug)}
                       number={pad2(index + 1)}
                       numberClassName="archive-ticket-stub__no"
                       flap
@@ -2023,6 +2024,7 @@ export default function ArchiveChapter({
                           className="archive-ticket-next__shield"
                           code={stateCode(nextStop.region)}
                           number={pad2(nextStop.number)}
+                          accent={stockPaper(nextStop.slug)}
                         />
                         <span className="archive-ticket-next__name">{nextStop.name}</span>
                         <ArrowRight size={12} strokeWidth={1.6} aria-hidden="true" />

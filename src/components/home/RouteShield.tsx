@@ -1,12 +1,13 @@
+import type { CSSProperties } from 'react';
 import {
   FLAP,
-  SHIELD_BAND_RULE_Y,
-  SHIELD_PATH,
+  type ShieldForm,
   codePlan,
   flapGlyph,
   flapNumber,
   flapPlan,
   nameStep,
+  shieldForm,
 } from '../../lib/routeShield';
 
 /**
@@ -83,7 +84,6 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
   const columns: FlapColumn[] = [];
   words.forEach((word, wordIndex) => {
     const finalWord = word.chars.map((el) => el.dataset.flapC ?? '').join('');
-    const leaving = Array.from(word.leaving);
     const column = (el: HTMLElement, at: (t: number) => string, land: number) => columns.push({
       el,
       final: el.dataset.flapC ?? '',
@@ -101,12 +101,15 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
     }
     if (word.role === 'code') {
       // The same state stays down; with no stop left behind there is
-      // nothing for it to turn from.
+      // nothing for it to turn from. A new state's letters turn in from a
+      // blank band: the shield already wears the new state's form (the
+      // stock and the outline are the ticket's own print), and the old
+      // state's letters on it — FL on Arizona's outline — read as a misprint.
       const still = !word.leaving || word.leaving === finalWord;
       const plan = codePlan(word.chars.length);
       word.chars.forEach((el, index) => {
         const final = el.dataset.flapC ?? '';
-        column(el, still ? () => final : (t) => flapGlyph(final, leaving[index] ?? '', plan[index], t, index + wordIndex * 5), still ? 0 : plan[index].land);
+        column(el, still ? () => final : (t) => flapGlyph(final, '', plan[index], t, index + wordIndex * 5), still ? 0 : plan[index].land);
       });
       return;
     }
@@ -194,40 +197,62 @@ export function runFlap(root: HTMLElement, from: Partial<Record<string, string>>
   };
 }
 
-/** The shield's plate: the outline in bone, the 1926 border ring inside it
- *  and the rule closing the state's band, all in dark ink. */
-function ShieldPlate() {
+/** A shield's drawing (src/lib/routeShield.ts, SHIELD_FORMS): its state's
+ *  form as a bone plate, the band printed in the place's stock
+ *  (`--shield-accent`, else the paper it is printed on), and the form's dark
+ *  ink over them. */
+function ShieldDrawing({ form }: { form: ShieldForm }) {
   return (
     <>
-      <path d={SHIELD_PATH} className="route-shield__paper" />
-      <path
-        d={SHIELD_PATH}
-        className="route-shield__border"
-        transform="translate(50 50) scale(0.84) translate(-50 -50)"
-      />
-      <line x1="12.5" x2="87.5" y1={SHIELD_BAND_RULE_Y} y2={SHIELD_BAND_RULE_Y} className="route-shield__rule" />
+      <path d={form.plate} className="route-shield__paper" />
+      <path d={form.band} className="route-shield__band" />
+      {form.rim && (
+        <path
+          d={form.plate}
+          className="route-shield__ink"
+          style={{ strokeWidth: form.inkWidth }}
+          transform={`translate(50 50) scale(${form.rim}) translate(-50 -50)`}
+        />
+      )}
+      {form.ink && <path d={form.ink} className="route-shield__ink" style={{ strokeWidth: form.inkWidth }} />}
     </>
   );
 }
 
+const percent = (value: number) => `${Math.round(value * 1000) / 1000}%`;
+
 /**
- * The route shield as printed on paper (the ticket's head, the phone stub):
- * the plate is drawn, the state and the stop number are type over it, so
- * they can turn on a landing (`flap`) and be read like any other print.
- * `numberClassName` lets the ticket name its ordinal for the story's kept
- * stub (.archive-ticket-stub__no).
+ * The route shield as printed on paper (the ticket's head, the phone stub,
+ * the story's kept stub): its state's form drawn, the state and the stop
+ * number set over it as type, on the form's own lines, so they can turn on a
+ * landing (`flap`) and be read like any other print. `accent` is the
+ * place's stock (src/lib/ticketStock.ts): the band is printed in it, so the
+ * ticket's shield is the map's. `numberClassName` lets the ticket name its
+ * ordinal for the story's kept stub (.archive-ticket-stub__no).
  */
-export function RouteShield({ code, number, className = '', numberClassName = '', flap = false }: {
+export function RouteShield({ code, number, accent, className = '', numberClassName = '', flap = false }: {
   code: string;
   number: string;
+  accent?: string;
   className?: string;
   numberClassName?: string;
   flap?: boolean;
 }) {
+  const form = shieldForm(code);
+  const style = {
+    '--shield-ratio': form.h / 100,
+    '--code-x': percent(form.code.x),
+    '--code-y': percent((form.code.y / form.h) * 100),
+    '--code-size': form.code.size / 100,
+    '--num-x': percent(form.num.x),
+    '--num-y': percent((form.num.y / form.h) * 100),
+    '--num-size': form.num.size / 100,
+    ...(accent ? { '--shield-accent': accent } : null),
+  } as CSSProperties;
   return (
-    <span className={`route-shield ${className}`}>
-      <svg className="route-shield__plate" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-        <ShieldPlate />
+    <span className={`route-shield ${className}`} data-shield-form={form.key} style={style}>
+      <svg className="route-shield__plate" viewBox={`0 0 100 ${form.h}`} aria-hidden="true" focusable="false">
+        <ShieldDrawing form={form} />
       </svg>
       <span className="route-shield__code">
         {flap && code ? <FlapWord text={code} role="code" /> : code}
@@ -240,15 +265,35 @@ export function RouteShield({ code, number, className = '', numberClassName = ''
 }
 
 /** The route shield as the map prints it: small, all of it drawn (SVG type
- *  holds its place exactly at 30px, where HTML type rounds). */
-export function MapShield({ code, number }: { code: string; number: string }) {
+ *  holds its place exactly at map sizes, where HTML type rounds), its band
+ *  in the place's stock. Sized by its box (`width` × the form's ratio). */
+export function MapShield({ code, number, accent, width }: {
+  code: string;
+  number: string;
+  accent?: string;
+  width: number;
+}) {
+  const form = shieldForm(code);
   return (
-    <svg className="route-sign__plate" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-      <ShieldPlate />
+    <svg
+      className="place-shield__plate"
+      viewBox={`0 0 100 ${form.h}`}
+      width={width}
+      height={Math.round(((width * form.h) / 100) * 100) / 100}
+      style={accent ? ({ '--shield-accent': accent } as CSSProperties) : undefined}
+      data-shield-form={form.key}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <ShieldDrawing form={form} />
       {code && (
-        <text x="50" y="30.2" className="route-sign__code" textAnchor="middle">{code}</text>
+        <text x={form.code.x} y={form.code.y} fontSize={form.code.size} className="place-shield__code" textAnchor="middle">
+          {code}
+        </text>
       )}
-      <text x="50" y="79.5" className="route-sign__num" textAnchor="middle">{number}</text>
+      <text x={form.num.x} y={form.num.y} fontSize={form.num.size} className="place-shield__num" textAnchor="middle">
+        {number}
+      </text>
     </svg>
   );
 }

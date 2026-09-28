@@ -1,44 +1,43 @@
 // Run offline: node --experimental-strip-types --test scripts/route-shield.test.mjs
 //
 // The homepage's route shields (src/lib/routeShield.ts): the state code each
-// shield carries, the one-sign-per-region rule on the map, where a sign
-// stands, and the split-flap a stop's name lands with.
+// shield carries, a form per state, one shield per place standing on it and
+// how shields stack where they meet, and the split-flap a stop's name lands
+// with.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CODE_FLIPS,
   FLAP,
-  REGION_REACH_KM,
-  SIGN_CLEAR,
-  SIGN_LEAD_MAX,
-  SIGN_LEAD_MIN,
+  SHIELD_FORMS,
+  SHIELD_MAP_PX,
+  SHIELD_SCALE,
   SIGN_NAME_MAX,
   SIGN_NAME_MEASURE,
+  STACK_PEEK,
   codePlan,
   flapGlyph,
   flapNumber,
   flapPlan,
   nameStep,
-  regionSigns,
-  routeMidpoint,
-  screenMidpoint,
+  shieldForm,
   signNameSize,
-  signPose,
+  stackShields,
   stateCode,
 } from '../src/lib/routeShield.ts';
-import { haversineKm } from '../src/lib/geo.ts';
+import { TICKET_STOCK } from '../src/lib/ticketStock.ts';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 // Today's six stops, in the homepage's order, at their map points.
 const STOPS = [
-  { id: 'miami', number: 1, region: 'Florida', coordinates: [-80.1918, 25.7617] },
-  { id: 'orlando', number: 2, region: 'Florida', coordinates: [-81.3789, 28.5384] },
-  { id: 'page', number: 3, region: 'Arizona', coordinates: [-111.4558, 36.9147] },
-  { id: 'zion', number: 4, region: 'Utah', coordinates: [-113.0263, 37.2982] },
-  { id: 'bryce', number: 5, region: 'Utah', coordinates: [-112.1871, 37.593] },
-  { id: 'new-york', number: 6, region: 'New York', coordinates: [-73.9856, 40.7484] },
+  { id: 'miami', slug: 'miami', number: 1, region: 'Florida', coordinates: [-80.1918, 25.7617] },
+  { id: 'orlando', slug: 'orlando', number: 2, region: 'Florida', coordinates: [-81.3789, 28.5384] },
+  { id: 'page', slug: 'page', number: 3, region: 'Arizona', coordinates: [-111.4558, 36.9147] },
+  { id: 'zion', slug: 'zion-national-park', number: 4, region: 'Utah', coordinates: [-113.0263, 37.2982] },
+  { id: 'bryce', slug: 'bryce-canyon-national-park', number: 5, region: 'Utah', coordinates: [-112.1871, 37.593] },
+  { id: 'new-york', slug: 'new-york-stories', number: 6, region: 'New York', coordinates: [-73.9856, 40.7484] },
 ];
 
 test('the shield carries the state its region names (derived, not stored)', () => {
@@ -51,35 +50,107 @@ test('the shield carries the state its region names (derived, not stored)', () =
   assert.equal(stateCode('Kyoto'), 'KY');
 });
 
-test('one sign per stretch of the route, its shields in stop order', () => {
-  const signs = regionSigns([...STOPS].reverse());
-  assert.deepEqual(signs.map((sign) => sign.places.map((place) => place.number)), [[1, 2], [3, 4, 5], [6]]);
-  // Arizona's Page and Utah's Zion and Bryce are one corner of the map.
-  assert.deepEqual(signs[1].places.map((place) => place.region), ['Arizona', 'Utah', 'Utah']);
-  assert.ok(REGION_REACH_KM > 400 && REGION_REACH_KM < 2000, 'Miami–Orlando joins, Orlando–Page does not');
+test('every state the route visits has its own form; every place its own band', () => {
+  const forms = STOPS.map((stop) => shieldForm(stateCode(stop.region)));
+  assert.deepEqual(forms.map((form) => form.key), ['FL', 'FL', 'AZ', 'UT', 'UT', 'NY']);
+  // Four states, four outlines: no two regions share a plate.
+  const plates = new Set(['FL', 'AZ', 'UT', 'NY'].map((key) => SHIELD_FORMS[key].plate));
+  assert.equal(plates.size, 4);
+  assert.ok(!plates.has(SHIELD_FORMS.US.plate), 'none of them is the generic US shield');
+  // A state the archive has not been to yet is signed with the US shield.
+  assert.equal(shieldForm('OR').key, 'US');
+  assert.equal(shieldForm('').key, 'US');
+  assert.equal(shieldForm('ut').key, 'UT');
+  // Places sharing a state differ by their stock, printed in the band.
+  const stocks = STOPS.map((stop) => TICKET_STOCK[stop.slug]);
+  assert.ok(stocks.every(Boolean));
+  assert.equal(new Set(stocks).size, STOPS.length);
 });
 
-test('the leader lands on the region\'s own road, halfway along it', () => {
-  const [florida, southwest, newYork] = regionSigns(STOPS);
-  // Florida: the middle of the Miami–Orlando leg.
-  const miami = STOPS[0].coordinates;
-  const orlando = STOPS[1].coordinates;
-  assert.ok(Math.abs(haversineKm(miami, florida.anchor) - haversineKm(florida.anchor, orlando)) < 0.5);
-  assert.ok(Math.abs(haversineKm(miami, florida.anchor) + haversineKm(florida.anchor, orlando) - haversineKm(miami, orlando)) < 0.5, 'on the leg, not beside it');
-  // The Southwest: half the Page–Zion–Bryce length, which falls on the
-  // Page–Zion leg (145 of 225 km) — on the road, not on bare ground between
-  // the legs (the mean of the three places lay near Kanab, on neither).
-  const [page, zion, bryce] = STOPS.slice(2, 5).map((stop) => stop.coordinates);
-  const total = haversineKm(page, zion) + haversineKm(zion, bryce);
-  const along = haversineKm(page, southwest.anchor);
-  assert.ok(Math.abs(along - total / 2) < 0.5);
-  assert.ok(Math.abs(along + haversineKm(southwest.anchor, zion) - haversineKm(page, zion)) < 0.5, 'on the Page–Zion leg');
-  // A place alone is its own anchor.
-  assert.deepEqual(newYork.anchor, STOPS[5].coordinates);
-  assert.deepEqual(routeMidpoint([[1, 2]]), [1, 2]);
-  // The phone's projected overview: the same rule in px.
-  assert.deepEqual(screenMidpoint([{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 10 }]), { x: 20, y: 0 });
-  assert.deepEqual(screenMidpoint([{ x: 4, y: 5 }]), { x: 4, y: 5 });
+test('a form stands on its point: the foot at the bottom middle, the type inside', () => {
+  for (const form of Object.values(SHIELD_FORMS)) {
+    assert.deepEqual([...form.tip], [50, form.h], `${form.key}: the foot is the box's bottom middle`);
+    // The marker anchors the box's bottom middle on the place.
+    assert.ok(form.h >= 90 && form.h <= 112, `${form.key} is a shield, not a post`);
+    for (const text of [form.code, form.num]) {
+      const cap = text.size * 0.7;
+      assert.ok(text.y - cap > 0 && text.y < form.h, `${form.key}: type inside the plate`);
+      assert.ok(text.x > 15 && text.x < 85);
+    }
+    // The stop number is the shield's big mark, the state's letters its label.
+    assert.ok(form.num.size > form.code.size * 1.8, form.key);
+    // Nothing is drawn below the foot: no stem, post or leader.
+    const ys = [...`${form.plate} ${form.band} ${form.ink}`.matchAll(/-?\d+(?:\.\d+)?/g)].map(Number);
+    assert.ok(Math.max(...ys) <= form.h + 0.01, `${form.key}: nothing below the point`);
+  }
+});
+
+// The six places projected at each chapter's resting camera (measured on the
+// homepage at 1728 × 1000, 2026-09-28): the foot points in css px.
+const REST = [
+  { current: 'miami', pts: { miami: [542, 480], orlando: [496, 387] } },
+  { current: 'orlando', pts: { orlando: [542, 480], miami: [598, 595] } },
+  { current: 'page', pts: { page: [542, 480], zion: [405, 447], bryce: [481, 427] } },
+  { current: 'zion', pts: { zion: [542, 480], bryce: [618, 459], page: [687, 515] } },
+  { current: 'bryce', pts: { bryce: [542, 480], zion: [463, 502], page: [609, 538] } },
+  { current: 'new-york', pts: { 'new-york': [542, 456] } },
+];
+const slotsAt = (points, current, inbound = null) => Object.entries(points).map(([id, [x, y]]) => {
+  const stop = STOPS.find((candidate) => candidate.id === id);
+  const rank = id === current ? 2 : id === inbound ? 1 : 0;
+  const scale = rank === 2 ? SHIELD_SCALE.current : rank === 1 ? SHIELD_SCALE.inbound : SHIELD_SCALE.ahead;
+  const w = SHIELD_MAP_PX * scale;
+  return { id, number: stop.number, x, y, w, h: (w * shieldForm(stateCode(stop.region)).h) / 100, rank };
+});
+
+test('at every chapter\'s resting camera the shields stand apart, each on its place', () => {
+  for (const { current, pts } of REST) {
+    const placed = stackShields(slotsAt(pts, current));
+    for (const [id, value] of placed) {
+      assert.equal(value.dy, 0, `${current}: ${id} is not lifted`);
+      assert.equal(value.count, 0, `${current}: ${id} is in no pile`);
+    }
+  }
+});
+
+test('where shields meet they stack: stop order, the current on top, a buried head lifted', () => {
+  // Orlando → Page, zoomed out over the Southwest (z 3.7): Page, Zion and
+  // Bryce stand a few px apart; the camera is flying to Page.
+  const flight = stackShields(slotsAt({ page: [400, 500], zion: [377, 496], bryce: [393, 491] }, 'orlando', 'page'));
+  const page = flight.get('page');
+  const zion = flight.get('zion');
+  const bryce = flight.get('bryce');
+  assert.equal(page.count, 3, 'the front shield counts the pile');
+  assert.ok(page.z > bryce.z && bryce.z > zion.z, 'Page (inbound) on top, then stop order');
+  assert.equal(zion.count + bryce.count, 0);
+  // Bryce stands 7px from Page, almost wholly behind it: its head is lifted
+  // STACK_PEEK above Page's. Zion, 23px across, shows its side: not moved.
+  assert.equal(page.dy, 0);
+  assert.equal(zion.dy, 0);
+  const pageTop = 500 - (SHIELD_MAP_PX * SHIELD_SCALE.inbound * SHIELD_FORMS.AZ.h) / 100;
+  const bryceTop = 491 + bryce.dy - (SHIELD_MAP_PX * SHIELD_SCALE.ahead * SHIELD_FORMS.UT.h) / 100;
+  assert.ok(bryceTop <= pageTop - STACK_PEEK + 0.5, 'Bryce\'s head shows above Page');
+  assert.ok(bryce.dy < 0 && bryce.dy > -20, 'a small lift, not a move');
+  // The same three on one point (a phone's overview): every head shows,
+  // each above the one in front.
+  const pile = stackShields(slotsAt({ page: [90, 440], zion: [89, 439], bryce: [91, 438] }, 'zion'));
+  assert.equal(pile.get('zion').count, 3);
+  assert.equal(pile.get('zion').dy, 0, 'the chapter being read stays on its place');
+  assert.ok(pile.get('bryce').dy < 0 && pile.get('page').dy < pile.get('bryce').dy, 'a cascade');
+  // Miami under Orlando on a phone's overview: shields that only touch are
+  // two signs, no pile, no count.
+  const touching = stackShields(slotsAt({ miami: [328, 565], orlando: [319, 532] }, 'page'));
+  assert.equal(touching.get('orlando').count + touching.get('miami').count, 0);
+  // Overlapping, they are one pile; Miami's foot still shows below
+  // Orlando's, so neither is moved off its place.
+  const florida = stackShields(slotsAt({ miami: [328, 545], orlando: [319, 532] }, 'page'));
+  assert.equal(florida.get('orlando').count, 2);
+  assert.equal(florida.get('miami').dy, 0);
+  assert.equal(florida.get('orlando').dy, 0);
+  // Two piles on one map are two piles.
+  const two = stackShields(slotsAt({ miami: [300, 560], orlando: [296, 548], page: [90, 440], bryce: [92, 437] }, 'miami'));
+  assert.equal(two.get('miami').count, 2);
+  assert.equal(two.get('bryce').count, 2);
 });
 
 test('every name on the ticket\'s sign is one size, inside the enamel rule', () => {
@@ -93,24 +164,6 @@ test('every name on the ticket\'s sign is one size, inside the enamel rule', () 
   assert.ok(signNameSize('Massachusetts') * 13 * 0.66 <= SIGN_NAME_MEASURE);
 });
 
-test('a sign clears its region and keeps inside the map column', () => {
-  // The leader runs up past the northernmost place by SIGN_CLEAR.
-  const clear = signPose({ x: 400, y: 450 }, 390, 106, 48, 750, 38);
-  assert.equal(clear.lead, 60 + SIGN_CLEAR);
-  assert.equal(clear.shift, 0);
-  // Never shorter than its minimum, never longer than its maximum.
-  assert.equal(signPose({ x: 400, y: 450 }, 450, 30, 48, 750, 0).lead, Math.max(SIGN_LEAD_MIN, SIGN_CLEAR));
-  assert.equal(signPose({ x: 400, y: 900 }, 100, 30, 48, 750, 0).lead, SIGN_LEAD_MAX);
-  // Near the covers the row slides left, but never off its rail.
-  const edge = signPose({ x: 740, y: 450 }, 420, 106, 48, 750, 38);
-  assert.equal(edge.shift, -38);
-  const room = signPose({ x: 720, y: 450 }, 420, 106, 48, 750, 38);
-  assert.equal(room.shift, 750 - (720 + 53));
-  // A single shield has no rail: its leader meets its own point.
-  assert.equal(signPose({ x: 745, y: 450 }, 450, 30, 48, 750, 0).shift, 0);
-  // And on the left edge it slides right.
-  assert.equal(signPose({ x: 80, y: 450 }, 440, 106, 48, 750, 38).shift, 48 - (80 - 53));
-});
 
 test('the split-flap lands left to right, inside DUR.scene', () => {
   const plan = flapPlan('BRYCE CANYON'.length);
@@ -187,17 +240,57 @@ test('only what changes turns', () => {
   assert.ok(plan[1].land <= FLAP.delay + FLAP.budget);
 });
 
-test('the map marks are signs, the ticket prints the sign, no corners are drawn', () => {
+
+test('the map stands a shield on each place, the ticket prints that shield', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const sign = source('src/components/home/AtlasSign.tsx');
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   const story = source('src/components/home/MagazineLayout.tsx');
   const home = source('src/components/home/HomePage.tsx');
+  const living = source('src/components/home/LivingAtlasStory.tsx');
   const shield = source('src/components/home/RouteShield.tsx');
   const css = source('src/styles/global.css');
-  // A lone shield has no post: no leader, no rail, its point the pointer.
-  assert.match(sign, /\{count > 1 && <i className="route-sign__lead"/);
-  assert.match(atlas, /count === 1\s*\?\s*\{ lead: SIGN_SINGLE_GAP, shift: 0 \}/);
+  const lib = source('src/lib/routeShield.ts');
+  // One marker per place, at the place's own coordinates, anchored at the
+  // bottom: the foot's point is the place. No region grouping is left.
+  assert.match(atlas, /shieldPlaces\.map\(\(place\) => \(\s*<Marker\s+key=\{`shield-\$\{place\.id\}`\}\s+longitude=\{place\.coordinates\[0\]\}\s+latitude=\{place\.coordinates\[1\]\}\s+anchor="bottom"/);
+  for (const gone of ['regionSigns', 'RegionSign', 'routeMidpoint', 'screenMidpoint', 'signPose', 'SignPose', 'REGION_REACH_KM', 'SIGN_SINGLE_GAP', 'SIGN_LEAD', 'SIGN_CLEAR', 'RouteSign', 'LivingRouteSign', 'regionSignList', 'signRowWidth', 'signRailHalf', 'SIGN_SHIELD_PX']) {
+    assert.doesNotMatch(atlas + sign + lib + chapter + home, new RegExp(`\\b${gone}\\b`), gone);
+  }
+  // No stem, post, leader or rail anywhere a shield is drawn.
+  const shieldCss = css.slice(css.indexOf('/* ─── The place shields'), css.indexOf('.af-place__body'));
+  assert.ok(shieldCss.length > 500);
+  assert.doesNotMatch(atlas + sign + css, /route-sign/);
+  assert.doesNotMatch(atlas + sign + shieldCss, /__(?:lead|rail|stem|post)(?![\w-])/);
+  // Placed from the camera's projection on each map render, no rects.
+  const place = atlas.slice(atlas.indexOf('const placeShields = () => {'), atlas.indexOf('const placeShieldsRef'));
+  assert.ok(place.length > 200);
+  assert.doesNotMatch(place, /getBoundingClientRect|clientWidth|offsetWidth|offsetTop/);
+  assert.match(place, /map\.project\(place\.coordinates\)/);
+  assert.match(place, /stackShields\(slots\)/);
+  assert.match(atlas, /map\.on\('render', onRender\)/);
+  // The CSS sizes are the ones the atlas stacks with.
+  const scaleOf = (selector) => Number(css.match(new RegExp(`\\.place-shield__sign${selector} \\{[^}]*transform: scale\\(([\\d.]+)\\)`))?.[1]);
+  assert.equal(scaleOf(''), SHIELD_SCALE.ahead);
+  assert.equal(scaleOf('\\.is-past'), SHIELD_SCALE.past);
+  assert.equal(scaleOf('\\.is-inbound'), SHIELD_SCALE.inbound);
+  assert.equal(scaleOf('\\.is-current'), SHIELD_SCALE.current);
+  // Scaled about the foot's point, which never leaves the place.
+  assert.match(css, /\.place-shield__sign \{[^}]*transform-origin: 50% 100%;/);
+  // The phone: the same shields on its overview's points, stacked the same way.
+  assert.match(atlas, /<LivingShields/);
+  assert.match(atlas, /stackShields\(places\.map/);
+  assert.match(css, /\.place-shield--living \{[^}]*transform: translate\(-50%, -100%\)/);
+  // No lime on the map's shields (the keyboard ring aside).
+  assert.doesNotMatch(shieldCss.replace(/:focus-visible \{[^}]*\}/g, ''), /#D2FF00|210,\s*255,\s*0/i);
+  // Every printed shield is the place's: the band in its stock.
+  assert.match(chapter, /code=\{stateCode\(collection\.region\)\}\s+accent=\{stockPaper\(collection\.slug\)\}/);
+  assert.match(chapter, /accent=\{stockPaper\(nextStop\.slug\)\}/);
+  assert.match(home, /slug: orderedCities\[index \+ 1\]\.slug/);
+  assert.match(story, /accent=\{stockPaper\(chapter\.slug\)\}/);
+  assert.match(living, /accent=\{stockPaper\(stop\.slug\)\}/);
+  assert.match(sign, /accent=\{stockPaper\(stop\.slug\)\}/);
+  assert.match(css, /\.route-shield__band \{\s*fill: var\(--shield-accent, var\(--stub-paper/);
   // The board is set at take-off and turned at the landing, only on the way
   // on, and waits for a voyage still gliding the ticket in.
   assert.match(atlas, /new CustomEvent\('atlas:depart'/);
@@ -206,6 +299,9 @@ test('the map marks are signs, the ticket prints the sign, no corners are drawn'
   assert.match(chapter, /'archive:voyage-end'/);
   assert.match(home, /new CustomEvent\('archive:voyage-end'/);
   assert.match(shield, /export function primeFlap/);
+  // A new state's letters turn in from a blank band, never the old state's
+  // letters printed on the new state's form (FL on Arizona's outline).
+  assert.match(shield, /flapGlyph\(final, '', plan\[index\], t,/);
   // The name being left is set whole, never cut into the new name's cells.
   assert.match(shield, /role === 'name' && <span className="flap-was"/);
   assert.match(css, /\.archive-ticket-sign__name \{\s*position: relative;/);
@@ -225,12 +321,7 @@ test('the map marks are signs, the ticket prints the sign, no corners are drawn'
   assert.match(story, /archive-ticket-sign__total story-stub__of/);
   assert.match(story, /archive-ticket-sign__name story-stub__place/);
   assert.doesNotMatch(story, /· admission/);
-  assert.match(atlas, /regionSignList\.map\(\(sign\) => \(\s*<Marker/);
   assert.doesNotMatch(atlas + sign, /AfPoint|af-point/);
-  // Placed from the camera's projection on each map render, no rects.
-  const place = atlas.slice(atlas.indexOf('const placeSigns = () => {'), atlas.indexOf('const placeSignsRef'));
-  assert.doesNotMatch(place, /getBoundingClientRect|clientWidth|offsetWidth/);
-  assert.match(atlas, /map\.on\('render', onRender\)/);
   // The ticket's stub carries the shield and the name, and the three marks
   // the story's kept stub flies between.
   for (const mark of ['archive-ticket-stub__no', 'archive-ticket-stub__of', 'archive-ticket-stub__place']) {
@@ -239,7 +330,4 @@ test('the map marks are signs, the ticket prints the sign, no corners are drawn'
   assert.match(chapter, /<RouteShield/);
   assert.doesNotMatch(chapter, /archive-focus/);
   assert.doesNotMatch(css, /\.archive-focus/);
-  // No lime on the map's signs.
-  const signCss = css.slice(css.indexOf('/* ─── The route signs'), css.indexOf('.af-place__body'));
-  assert.doesNotMatch(signCss.replace(/:focus-visible \{[^}]*\}/g, ''), /#D2FF00|210,\s*255,\s*0/i);
 });

@@ -5,6 +5,7 @@ import { EASE } from '../../lib/motion';
 // The leg's distance: the one rule /about's route figure also reads.
 import { formatKm, haversineKm } from '../../lib/geo';
 import { pad2, stateCode } from '../../lib/routeShield';
+import { stockPaper } from '../../lib/ticketStock';
 import { MapShield } from './RouteShield';
 
 /** Everything the sign prints for a place. */
@@ -68,8 +69,8 @@ const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}
  * leg — where from, where to, and the kilometres covered.
  *
  * It does not name the place. The place is signed twice already, and both
- * signs are the same route shield: on the map, where its region's sign stands
- * (RouteSign), and on the chapter's ticket, whose stub IS the place's sign —
+ * signs are the same route shield: on the map, where it stands on the place
+ * (PlaceShield), and on the chapter's ticket, whose stub IS the place's sign —
  * its state, its stop number and its name, turning into place on the landing
  * (owner, 2026-09-28: 将右侧的大号封面和路牌上方的州名缩写+地名和第几站结合在一起).
  * So the year and the "03 / 06 · REGION · FRAMES" line this used to print on
@@ -398,101 +399,80 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
 }
 
 
-/** A map shield's size and the gap between two in one sign, css px. */
-export const SIGN_SHIELD_PX = 30;
-export const SIGN_SHIELD_GAP = 8;
-/** A sign's row: its shields side by side. */
-export const signRowWidth = (count: number) => count * SIGN_SHIELD_PX + Math.max(0, count - 1) * SIGN_SHIELD_GAP;
-/** How far the leader may sit off the row's middle and still meet the rail
- *  the shields stand on (a single shield has no rail: its own point). */
-export const signRailHalf = (count: number) => (Math.max(0, count - 1) * (SIGN_SHIELD_PX + SIGN_SHIELD_GAP)) / 2;
-
-export interface SignStop {
+export interface ShieldStop {
   id: string;
   /** 1-based stop number. */
   number: number;
   name: string;
   region?: string;
+  /** The chapter's slug: its ticket stock, printed in the shield's band. */
+  slug?: string;
 }
 
 /**
- * RouteSign — one region's sign on the map (owner, 2026-09-28: 甲，我喜欢路盾
- * 这样). The places of a stretch of the route stand as US-route shields side
- * by side, in stop order (按照数字排序即可), on one rail, and ONE leader runs
- * from the rail down to the middle of the region they share (引线指向一段区域
- * 即可，同一块区域不需要反复指引). No post under a shield (不需要下面的引线), no
- * ring, halo, dot or crosshair, and no lime: bone plate, dark ink, the map's
- * white ink for the leader.
+ * PlaceShield — one place's shield on the map (owner, 2026-09-28: 完全和这个
+ * 网站对齐 11moissanstoit.com/etape/paris-1). Every place stands on its own:
+ * the shield is a Mapbox marker anchored at its bottom on the place, and its
+ * foot's point IS the place — no post, stem or leader (不需要白色竖干). Its
+ * form is its state's (src/lib/routeShield.ts, SHIELD_FORMS), its band the
+ * place's ticket stock, so no two regions share a style (每个地区的路牌盾风格
+ * 不能一样) and each shield is the one its ticket prints.
  *
- * The sign is a Mapbox marker anchored at its bottom on the middle of the
- * region's stretch of road. How long the leader is and how far the row
- * slides sideways are written per camera frame by the atlas (`--lead`,
- * `--shift`: RouteAtlas, "The signs"), derived from the camera's projection —
- * never read off the page. A place alone in its region (New York) has no
- * leader and no rail: its shield stands just over the place (SIGN_SINGLE_GAP)
- * and its own point is the pointer, as on 11 mois's stop signs.
+ * Where shields meet at a camera's zoom they stack like a pile of stop signs
+ * (`stackShields`): the atlas writes a buried shield's lift (`--lift`), its
+ * place in the pile (the marker's z-index) and, on a pile's front shield, the
+ * pile's count (`data-pile`) — derived per camera frame from the camera's
+ * projection (RouteAtlas, "The shields"), never read off the page.
  *
  * Each shield is a button (the in-map navigation): it carries its state by
  * size and ink — ahead quieter, visited fuller, the one the camera is flying
  * to comes up at take-off, the one it is on stands tallest and gives a small
  * landing accent. The atlas toggles is-current / is-inbound / is-past on the
- * shields directly (no re-render mid-flight). Pointed at, a shield brings its
- * chapter's cover up and prints the place's name over itself.
+ * button directly (no re-render mid-flight). Pointed at, a shield comes to the
+ * top of its pile, brings its chapter's cover up and prints the place's name
+ * over itself.
  */
-export function RouteSign({ signKey, stops, initialCurrentId, engagedId, visibility, onEngage, onNavigate }: {
-  signKey: string;
-  stops: SignStop[];
+export function PlaceShield({ stop, width, initialCurrentId, engaged, visibility, onEngage, onNavigate }: {
+  stop: ShieldStop;
+  /** The shield's box width at its resting size, css px (SHIELD_MAP_PX). */
+  width: number;
   /** Only the first render reads this. */
   initialCurrentId: string | null;
-  engagedId: string | null;
+  engaged: boolean;
   visibility: MotionValue<number>;
-  /** Pointer or focus on a shield (null when it leaves). */
+  /** Pointer or focus on the shield (null when it leaves). */
   onEngage?: (chapterId: string | null) => void;
   /** A click: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
 }) {
   const [initialCurrent] = useState(initialCurrentId);
-  // Invisible signs (the prologue, the entrance) must not be hit targets, nor
-  // stops in the tab order: `visibility` removes both, off the same value,
-  // with no re-render.
+  // Invisible shields (the prologue, the entrance) must not be hit targets,
+  // nor stops in the tab order: `visibility` removes both, off the same
+  // value, with no re-render.
   const pointerEvents = useTransform(visibility, (value) => (value > 0.5 ? 'auto' : 'none'));
   const reachable = useTransform(visibility, (value) => (value > 0.5 ? 'visible' : 'hidden'));
-  const count = stops.length;
   return (
     <motion.span
-      className={`route-sign${count === 1 ? ' route-sign--single' : ''}`}
-      data-route-sign={signKey}
-      style={{
-        opacity: visibility,
-        pointerEvents,
-        visibility: reachable,
-        width: signRowWidth(count),
-        ['--rail' as never]: `${signRailHalf(count) * 2}px`,
-      }}
+      className="place-shield"
+      data-place-shield={stop.id}
+      style={{ opacity: visibility, pointerEvents, visibility: reachable }}
     >
-      {count > 1 && <i className="route-sign__lead" aria-hidden="true" />}
-      <span className="route-sign__row">
-        {count > 1 && <i className="route-sign__rail" aria-hidden="true" />}
-        {stops.map((stop) => (
-          <button
-            key={stop.id}
-            type="button"
-            data-af-stop={stop.id}
-            data-chapter={stop.number}
-            data-engaged={engagedId === stop.id ? '' : undefined}
-            className={`route-sign__shield${stop.id === initialCurrent ? ' is-current' : ''}`}
-            aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
-            onPointerEnter={() => onEngage?.(stop.id)}
-            onPointerLeave={() => onEngage?.(null)}
-            onFocus={() => onEngage?.(stop.id)}
-            onBlur={() => onEngage?.(null)}
-            onClick={() => onNavigate?.(stop.id)}
-          >
-            <MapShield code={stateCode(stop.region)} number={pad2(stop.number)} />
-            <span className="route-sign__name font-ui" aria-hidden="true">{stop.name}</span>
-          </button>
-        ))}
-      </span>
+      <button
+        type="button"
+        data-af-stop={stop.id}
+        data-chapter={stop.number}
+        data-engaged={engaged ? '' : undefined}
+        className={`place-shield__sign${stop.id === initialCurrent ? ' is-current' : ''}`}
+        aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
+        onPointerEnter={() => onEngage?.(stop.id)}
+        onPointerLeave={() => onEngage?.(null)}
+        onFocus={() => onEngage?.(stop.id)}
+        onBlur={() => onEngage?.(null)}
+        onClick={() => onNavigate?.(stop.id)}
+      >
+        <MapShield code={stateCode(stop.region)} number={pad2(stop.number)} accent={stockPaper(stop.slug)} width={width} />
+        <span className="place-shield__name font-ui" aria-hidden="true">{stop.name}</span>
+      </button>
     </motion.span>
   );
 }

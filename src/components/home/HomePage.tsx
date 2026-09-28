@@ -2013,6 +2013,7 @@ export default function HomePage({ collections }: Props) {
                                         name: orderedCities[index + 1].name.trim(),
                                         number: index + 2,
                                         region: orderedCities[index + 1].region?.trim() || undefined,
+                                        slug: orderedCities[index + 1].slug,
                                       }
                                     : null}
                                 />

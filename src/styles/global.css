@@ -781,8 +781,8 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
 /* ─── Atlas viewfinder ────────────────────────────────────────────────────
    A trip's reading, drawn by AtlasViewfinder around the atlas focal point:
    the coordinates at the ends of the reading line and, for a flight, the leg
-   below it. The places themselves are signed by their route shields (the
-   region signs below, and the ticket's stub). */
+   below it. The places themselves are signed by their route shields (one
+   per place, "The place shields" below, and the ticket's stub). */
 .viewfinder {
   position: absolute;
   inset: 0;
@@ -923,90 +923,53 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   border-radius: 50%;
   background: #F4F4ED;
 }
-/* ─── The route signs (RouteSign, src/lib/routeShield.ts) ────────────────
-   Owner, 2026-09-28 (甲，我喜欢路盾这样): a place on the map is a US-route
-   shield — bone plate, dark ink, the 1926 border ring and the state's band —
-   and a stretch of neighbouring places is ONE sign: their shields side by
-   side in stop order on a rail, one leader from the rail down to the middle
-   of the region (引线指向一段区域即可，同一块区域不需要反复指引，按照数字排序
-   即可). No post under a shield (不需要下面的引线), no ring, halo, dot,
+/* ─── The place shields (PlaceShield, src/lib/routeShield.ts) ────────────
+   Owner, 2026-09-28 (完全和这个网站对齐 11moissanstoit.com/etape/paris-1): one
+   shield per place, the point of its foot ON the place — no post, stem or
+   leader of any kind (不需要白色竖干) — and each state its own form, each place
+   its own stock in the form's band (每个地区的路牌盾风格不能一样，要差异化).
+   Bone plate, dark ink, the stock as the band's accent; no ring, halo, dot,
    crosshair or lime.
 
-   The sign is a zero-height marker box, its bottom-centre on the region's
-   middle. The atlas writes, per camera frame and only when they move,
-   `--lead` (the leader's length: the shields clear the region's northernmost
-   place) and `--shift` (the row sliding to keep inside the map column, never
-   off its rail); `--rail` is the rail's length, fixed per sign. A place alone
-   in its region (`.route-sign--single`, New York) has no leader and no rail:
-   the atlas writes `--lead` as SIGN_SINGLE_GAP (6px), so the shield's own
-   point stands just over the place and is the pointer. A shield
-   carries its state by SIZE and INK, fast in, slow out, on the house tokens:
-     ahead                  .92,  ink .86 (at .9 / .74 it read as disabled
+   `.place-shield` is the marker's content and exactly the shield's box, so
+   the marker's bottom anchor stands the foot's point on the place. The atlas
+   writes, per camera frame and only when they move, `--lift` (where shields
+   pile up at a zoom, a buried shield's head lifted into view), the marker's
+   z-index (the pile's order; the stop the camera is on above everything) and
+   `data-pile` on a pile's front shield (how many it holds). A shield carries
+   its state by SIZE and INK, fast in, slow out, on the house tokens, scaled
+   about the foot's point, which never leaves the place:
+     ahead                  .90,  ink .86 (at .9 / .74 it read as disabled
                                   grey on the dark ground)
-     visited (is-past)      .95,  ink .92
-     flown to (is-inbound)  1.12, ink 1   — comes up as the camera takes off
+     visited (is-past)      .94,  ink .92
+     flown to (is-inbound)  1.10, ink 1   — comes up as the camera takes off
      pointed at / focused / its cover engaged: 1.04, ink 1, and its name
-     the camera is on       1.22, ink 1, with a landing accent — no name (the
-                            ticket beside the map names it). */
-.route-sign {
+     the camera is on       1.20, ink 1, with a landing accent — no name (the
+                            ticket beside the map names it).
+   SHIELD_SCALE (src/lib/routeShield.ts) is this table: the atlas stacks the
+   shields at these sizes. */
+.place-shield {
   position: relative;
   display: block;
-  height: 0;
+  transform: translateY(var(--lift, 0px));
+  transition: transform 160ms var(--ease-arrive);
 }
-.route-sign > * {
-  transition: opacity var(--dur-in) var(--ease-arrive), visibility 0s;
+/* Pointed at, focused or its cover engaged, a shield comes to the top of
+   its pile (over the inline order the atlas writes). */
+.mapboxgl-marker:has(> .place-shield > .place-shield__sign:is(:hover, :focus-visible, [data-engaged])) {
+  z-index: 60 !important;
 }
-/* Its region lies under the covers (`data-under`, written with the pose):
-   not printed there, unless the camera is on one of its places or flying to
-   one. Out on the fade, and out of reach once it has gone. */
-.route-sign[data-under] > * {
+/* Its place lies under the covers (`data-under`, written with the pile):
+   not printed there, unless the camera is on it or flying to it. Out on the
+   fade, and out of reach once it has gone. */
+.place-shield[data-under] > .place-shield__sign {
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
 }
-/* The leader: the map's white ink, trapped by a hairline of burn, soft only
-   in its last few pixels, where it goes into the ground — it points at a
-   stretch of country, not at a pin. */
-.route-sign__lead {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 1px;
-  height: var(--lead, 24px);
-  margin-left: -0.5px;
-  background: linear-gradient(0deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.92) 9px);
-  box-shadow: 0 0 0 0.5px rgba(11, 14, 9, 0.4);
-  pointer-events: none;
-}
-.route-sign__row {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  transform: translate(var(--shift, 0px), calc(-1 * var(--lead, 24px)));
-}
-/* The rail the shields stand on: shield point to shield point, bone. */
-.route-sign__rail {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: var(--rail, 0px);
-  height: 1.5px;
-  margin: 0 0 -0.75px calc(var(--rail, 0px) / -2);
-  border-radius: 1px;
-  background: #F4F4ED;
-  box-shadow: 0 0 0 0.5px rgba(11, 14, 9, 0.45);
-  pointer-events: none;
-}
-.route-sign__shield {
+.place-shield__sign {
   position: relative;
   display: block;
-  flex: none;
-  width: 30px;
-  height: 30px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -1016,34 +979,35 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   cursor: pointer;
   overflow: visible;
   transform-origin: 50% 100%;
-  transform: scale(0.92);
+  transform: scale(0.9);
   opacity: 0.86;
   filter: drop-shadow(0 1px 1.2px rgba(11, 14, 9, 0.6)) drop-shadow(0 3px 6px rgba(11, 14, 9, 0.28));
   transition:
     transform var(--dur-out) var(--ease-leave),
-    opacity var(--dur-out) var(--ease-fade);
+    opacity var(--dur-out) var(--ease-fade),
+    visibility 0s;
 }
-/* A 42px hit area round the 30px shield. */
-.route-sign__shield::before {
+/* A hit area 5px round the shield. */
+.place-shield__sign::before {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -5px;
 }
-.route-sign__shield:focus-visible {
+.place-shield__sign:focus-visible {
   outline: 2px solid #D2FF00;
   outline-offset: 4px;
 }
-.route-sign__shield.is-past {
-  transform: scale(0.95);
+.place-shield__sign.is-past {
+  transform: scale(0.94);
   opacity: 0.92;
 }
-.route-sign__shield.is-inbound {
-  transform: scale(1.12);
+.place-shield__sign.is-inbound {
+  transform: scale(1.1);
   opacity: 1;
   transition-duration: var(--dur-swap);
   transition-timing-function: var(--ease-arrive);
 }
-.route-sign__shield:is(:hover, :focus-visible, [data-engaged]):not(.is-current):not(.is-inbound) {
+.place-shield__sign:is(:hover, :focus-visible, [data-engaged]):not(.is-current):not(.is-inbound) {
   transform: scale(1.04);
   opacity: 1;
   transition-duration: var(--dur-in);
@@ -1053,47 +1017,65 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
    landing an accent — up a tenth and back (after 11 mois's landing accent),
    on the individual `scale`, so it stacks on the state's transform and never
    stops it transitioning. */
-.route-sign__shield.is-current {
-  transform: scale(1.22);
+.place-shield__sign.is-current {
+  transform: scale(1.2);
   opacity: 1;
   cursor: default;
   transition:
     transform var(--dur-swap) var(--ease-arrive),
     opacity var(--dur-in) var(--ease-arrive);
-  animation: route-sign-land 460ms var(--ease-arrive) 1 both;
+  animation: place-shield-land 460ms var(--ease-arrive) 1 both;
 }
-@keyframes route-sign-land {
+@keyframes place-shield-land {
   0% { scale: 1; }
   38% { scale: 1.09; }
   100% { scale: 1; }
 }
-.route-sign__plate {
+.place-shield__plate {
   display: block;
-  width: 100%;
-  height: 100%;
   overflow: visible;
 }
-.route-sign__code,
-.route-sign__num {
+.place-shield__code,
+.place-shield__num {
   font-family: var(--font-ui);
-  fill: #0B0E09;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-/* In the plate's own units (a 100-unit box): the band's letters ~0.185 of
-   the shield, the number ~0.45 and bold, as the 1926 shields set them. */
-.route-sign__code {
-  font-size: 18.5px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
+/* The state's letters are bone on the band (the place's stock); the stop
+   number dark ink on the plate. In the form's own units (100 = the width). */
+.place-shield__code {
+  fill: #F4F4ED;
+  letter-spacing: 1px;
 }
-.route-sign__num {
-  font-size: 45px;
-  font-weight: 700;
+.place-shield__num {
+  fill: #0B0E09;
   letter-spacing: -1px;
+}
+/* A pile's front shield carries its count, as a stop sign's badge: dark ink,
+   a bone rim, on the shield's shoulder. */
+.place-shield__sign[data-pile]::after {
+  content: attr(data-pile);
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: #0B0E09;
+  box-shadow: 0 0 0 1.25px #F4F4ED;
+  color: #F4F4ED;
+  font-family: var(--font-ui);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 /* Pointed at, a shield prints its place's name over itself, on a small bone
    plaque. */
-.route-sign__name {
+.place-shield__name {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 5px);
@@ -1114,47 +1096,33 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   pointer-events: none;
   transition: opacity var(--dur-out) var(--ease-fade);
 }
-.route-sign__shield:is(:hover, :focus-visible, [data-engaged]):not(.is-current) .route-sign__name {
+.place-shield__sign:is(:hover, :focus-visible, [data-engaged]):not(.is-current) .place-shield__name {
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
 }
-/* The phone's signs (RouteAtlas LivingRouteSign): the same sign at 22px, set
-   on the living atlas's projected points; the scroll inks each shield. */
-.route-sign--living {
+/* The phone's shields (RouteAtlas LivingShields): the same shields at 22px on
+   the living atlas's projected points, the foot's point on the place; the
+   scroll inks each one (its scale and ink are written inline). */
+.place-shield--living {
   position: absolute;
-  transform: translateX(-50%);
+  transform: translate(-50%, -100%) translateY(var(--lift, 0px));
   pointer-events: none;
+  transition: transform var(--dur-swap) var(--ease-arrive);
 }
-.route-sign--living .route-sign__shield {
-  width: 22px;
-  height: 22px;
+.place-shield--living .place-shield__sign {
   cursor: default;
-  filter: drop-shadow(0 1px 1px rgba(11, 14, 9, 0.6));
+  opacity: 1;
   transition: none;
 }
-.route-sign--living .route-sign__lead {
-  background: linear-gradient(0deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.8) 7px);
-}
-/* Hung below the region: the leader runs down from it to the rail, and the
-   shields hang from the rail by their ears. */
-.route-sign--below .route-sign__lead {
-  top: 0;
-  bottom: auto;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.8) 7px);
-}
-.route-sign--below .route-sign__row {
-  top: 0;
-  bottom: auto;
-  align-items: flex-start;
-  transform: translate(var(--shift, 0px), var(--lead, 24px));
-}
-.route-sign--below .route-sign__rail {
-  top: 0;
-  bottom: auto;
-  margin: -0.75px 0 0 calc(var(--rail, 0px) / -2);
-}
-.route-sign--below .route-sign__shield {
-  transform-origin: 50% 0;
+.place-shield--living .place-shield__sign[data-pile]::after {
+  top: -4px;
+  right: -5px;
+  min-width: 10px;
+  height: 10px;
+  padding: 0 2px;
+  box-shadow: 0 0 0 1px #F4F4ED;
+  font-size: 6.5px;
+  line-height: 10px;
 }
 .af-place__body {
   fill: rgba(11, 14, 9, 0.46);
@@ -1192,9 +1160,9 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
      `!important`, because every state rule sets its own transition-duration
      at up to four classes of specificity — a plain `transition: none` here
      loses the cascade and reduced motion silently keeps animating. */
-  .route-sign > *,
-  .route-sign__shield,
-  .route-sign__name { transition: none !important; animation: none !important; }
+  .place-shield,
+  .place-shield__sign,
+  .place-shield__name { transition: none !important; animation: none !important; }
 }
 
 /* Under a story the archive recedes: the atlas grows and softens behind the
@@ -2768,7 +2736,7 @@ h1, h2, h3 {
    `border-radius: 4px` squared off every round mark and pill it landed on
    while rounding anything with a background. In `@layer base` the utilities
    win again, and the two components that set their own ring
-   (`.route-sign__shield`, `.atlas-ticks__group`) still beat both, being
+   (`.place-shield__sign`, `.atlas-ticks__group`) still beat both, being
    unlayered themselves. */
 @layer base {
   *:focus-visible {
@@ -2963,8 +2931,8 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 .route-atlas-print-label--gulf { right: 23%; top: 78%; }
 /* The living tree's route overlay is white ink (MAP_INK): it is seated on a
    burn shadow like the desktop's travelled line, not lit by a lime glow. */
-/* The living tree's places are its region signs (.route-sign--living,
-   under "The route signs"). */
+/* The living tree's places are its shields (.place-shield--living, under
+   "The place shields"). */
 .route-atlas__route-overlay {
   filter: drop-shadow(0 0 2px rgba(11, 14, 9, 0.55));
 }
@@ -3353,11 +3321,13 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   will-change: transform;
 }
 /* ── The route shield, printed (RouteShield) ────────────────────────────
-   The map's shield on paper: the plate drawn (bone, the 1926 border ring and
-   the band's rule in dark ink), the state and the stop number set over it as
-   type, so they can turn on a landing. Sized by `--shield`; the type sits on
-   the plate's own lines — the band's letters' baseline at 30% of the shield,
-   the number's at 79.5% — trimmed to their caps so nothing else moves them. */
+   The map's shield on paper: its state's form drawn (a bone plate, the band
+   in the place's stock, the form's dark ink), the state and the stop number
+   set over it as type, so they can turn on a landing. Sized by `--shield`
+   (its width; the form's ratio sets the height). The type sits on the
+   form's own lines (src/lib/routeShield.ts, SHIELD_FORMS), written inline as
+   `--code-*` / `--num-*`: the centre across, the baseline down, the size as
+   a share of the width — trimmed to the caps so nothing else moves them. */
 .route-shield {
   --shield: 44px;
   --flap-ink: #0B0E09;
@@ -3365,7 +3335,7 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   display: inline-block;
   flex: none;
   width: var(--shield);
-  height: var(--shield);
+  height: calc(var(--shield) * var(--shield-ratio, 1));
   color: #0B0E09;
 }
 .route-shield__plate {
@@ -3376,51 +3346,56 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   overflow: visible;
   filter: drop-shadow(0 1px 1px rgba(8, 10, 7, 0.35));
 }
+/* The drawing, shared by the printed shield and the map's. The band falls
+   back to the card it is printed on. */
 .route-shield__paper {
   fill: #F4F4ED;
 }
-.route-shield__border {
+.route-shield__band {
+  fill: var(--shield-accent, var(--stub-paper, #35383e));
+}
+.route-shield__ink {
   fill: none;
   stroke: #0B0E09;
-  stroke-width: 4.4;
-}
-.route-shield__rule {
-  stroke: #0B0E09;
-  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .route-shield__code,
 .route-shield__num {
   position: absolute;
-  left: 0;
-  right: 0;
   display: block;
   font-family: var(--font-ui);
+  font-weight: 700;
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   text-box: trim-both cap alphabetic;
+  transform: translateX(-50%);
 }
+/* Bone on the band. */
 .route-shield__code {
-  top: 17.1%;
-  font-size: calc(var(--shield) * 0.185);
-  font-weight: 600;
+  --flap-ink: #F4F4ED;
+  left: var(--code-x, 50%);
+  top: calc(var(--code-y, 30%) - var(--shield) * var(--code-size, 0.185) * 0.7);
+  font-size: calc(var(--shield) * var(--code-size, 0.185));
   letter-spacing: 0.06em;
   text-indent: 0.06em;
+  color: #F4F4ED;
 }
 .route-shield__num {
-  top: 48.7%;
-  font-size: calc(var(--shield) * 0.44);
-  font-weight: 700;
+  left: var(--num-x, 50%);
+  top: calc(var(--num-y, 79.5%) - var(--shield) * var(--num-size, 0.44) * 0.7);
+  font-size: calc(var(--shield) * var(--num-size, 0.44));
   letter-spacing: -0.02em;
 }
 /* Where the caps cannot be trimmed, the line box is placed from Space
    Grotesk's own metrics instead (its baseline sits 0.87 of the em below the
    top of a 1.0 line box; the caps are 0.70 tall). */
 @supports not (text-box: trim-both cap alphabetic) {
-  .route-shield__code { top: calc(30% - var(--shield) * 0.185 * 0.87); }
-  .route-shield__num { top: calc(79.5% - var(--shield) * 0.44 * 0.87); }
+  .route-shield__code { top: calc(var(--code-y, 30%) - var(--shield) * var(--code-size, 0.185) * 0.87); }
+  .route-shield__num { top: calc(var(--num-y, 79.5%) - var(--shield) * var(--num-size, 0.44) * 0.87); }
 }
 /* ── The split-flap (FlapWord / runFlap / primeFlap) ──
    Each character is a box of its own glyph's width, so a turning board never

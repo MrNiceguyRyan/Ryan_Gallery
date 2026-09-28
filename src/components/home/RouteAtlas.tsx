@@ -22,14 +22,22 @@ import {
   AtlasTicks,
   AtlasViewfinder,
   ATLAS_READING_LINE,
-  RouteSign,
-  signRailHalf,
-  signRowWidth,
+  PlaceShield,
   type ViewfinderHandle,
   type ViewfinderPlace,
 } from './AtlasSign';
 import { MapShield } from './RouteShield';
-import { SIGN_SINGLE_GAP, pad2, regionSigns, screenMidpoint, signPose, stateCode } from '../../lib/routeShield';
+import {
+  SHIELD_FORMS,
+  SHIELD_MAP_PX,
+  SHIELD_SCALE,
+  pad2,
+  shieldForm,
+  stackShields,
+  stateCode,
+  type StackSlot,
+} from '../../lib/routeShield';
+import { stockPaper } from '../../lib/ticketStock';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -577,18 +585,19 @@ const FOCAL_PADDING = { top: 48, right: 264 } as const;
 // sets the atlas at 78% of the stage and pulls the archive column 36% back
 // over it, so the column's left edge is at 42/78 of the atlas.
 const ARCHIVE_COLUMN_LEFT = 42 / 78;
-// A region's sign keeps this far inside the map column: clear of the covers'
-// edge on the right, clear of the atlas's own edge on the left.
-const SIGN_EDGE = { left: 16, right: 12 } as const;
-// A sign whose region's middle lies under the covers (this far inside their
-// edge) is under the plates and their chapter headers: printed there, New
-// York's shield read into "REGION FLORIDA" and sat on a plate's corner. It is
-// not printed, unless the camera is on one of its places or flying to one.
+// A shield that would reach under the covers (its right edge this far inside
+// their edge) is under the plates and their chapter headers: printed there,
+// New York's shield read into "REGION FLORIDA" and sat on a plate's corner.
+// It is not printed, unless the camera is on its place or flying to it.
 const SIGN_UNDER = 4;
+// A place further round the planet than this from the camera's centre is
+// behind the globe: never stacked with the shields in view.
+const SHIELD_HORIZON = 1.3;
 // A transparent image round each place that the basemap's names keep out of,
-// so the ground under a region's sign and its leader reads as the route, not
-// as town names (64 × 38 css px, its centre 12px above the place).
-const ATLAS_KEEP_OUT = { id: 'atlas-keepout', width: 64, height: 38, offsetY: -12 } as const;
+// so the ground a shield stands on reads as the route, not as town names
+// (48 × 54 css px round the current stop's shield: its centre 24px above
+// the place).
+const ATLAS_KEEP_OUT = { id: 'atlas-keepout', width: 48, height: 54, offsetY: -24 } as const;
 const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // After the dive the photography does not vanish: it stays under the graded
 // atlas at this strength, so chapters keep a little real ground.
@@ -871,97 +880,157 @@ function writeAtlasPlace(id: string | null | undefined) {
   else delete html.dataset.atlasPlace;
 }
 
-// The phone's signs: the desktop's region signs (RouteSign) at the phone's
-// scale — the same shields, rail and one leader per region — on the living
-// atlas's projected points (a static overview, re-projected on a resize, not
-// per frame). They HANG below their regions: the phone's upper half is the
-// photograph and its stub (New York's sign stood behind the stub), its lower
-// half open sea. Each shield takes its chapter's nearness from the scroll:
-// far shields sit small and quiet, the chapter being read full size and ink.
+// The phone's shields: the desktop's (PlaceShield) at the phone's scale, one
+// per place, its foot's point on the place, on the living atlas's projected
+// points (a static overview, re-projected on a resize, not per frame). Each
+// takes its chapter's nearness from the scroll: far shields sit small and
+// quiet, the chapter being read full size and ink. The overview's scale piles
+// them (Page, Zion and Bryce stand a few px apart on a phone), so they stack
+// as on the desktop (stackShields): in stop order, the chapter being read on
+// top, a buried shield's head lifted into view, the pile's count on its front.
 const LIVING_SHIELD_PX = 22;
-const LIVING_SHIELD_GAP = 5;
-const LIVING_SIGN_EDGE = 12;
+const LIVING_SCALE = { rest: 0.86, read: 1.16 } as const;
+// The phone's overview stands its shields clear of the photograph's stub
+// (New York's stood behind it): no place lies higher on the screen than the
+// stub's bottom edge plus the tallest shield (the chapter being read, the
+// tallest form). DERIVED from the stub's own layout (global.css, "The ticket
+// stub (phone)": it hangs from the photo window, top 17% + 50.25vw and 48px
+// tall below 640px wide, 14% + 37.5vw from 640), never measured.
+const LIVING_STUB_PX = 48;
+const LIVING_OVERVIEW_ZOOM = 2.35;
+function livingShieldClearance(width: number, height: number) {
+  const stubBottom = width < 640
+    ? 0.17 * height + 0.5025 * width + LIVING_STUB_PX
+    : 0.14 * height + 0.375 * width + LIVING_STUB_PX;
+  const tallest = Math.max(...Object.values(SHIELD_FORMS).map((form) => form.h)) / 100;
+  return Math.ceil(stubBottom + LIVING_SHIELD_PX * LIVING_SCALE.read * tallest + 8);
+}
+const mercatorY = (latitude: number) => Math.log(Math.tan(Math.PI / 4 + (latitude * Math.PI) / 360));
+const mercatorLatitude = (y: number) => (360 / Math.PI) * Math.atan(Math.exp(y)) - 90;
+/** The phone overview's centre latitude: LIVING_OVERVIEW's, or far enough
+ *  north that the northernmost place stands clear of the stub (a flat map at
+ *  LIVING_OVERVIEW_ZOOM: 512 · 2^z / 2π px per Mercator unit). */
+function livingOverviewLatitude(north: number, width: number, height: number) {
+  const perUnit = (512 * 2 ** LIVING_OVERVIEW_ZOOM) / (2 * Math.PI);
+  const needed = mercatorLatitude(mercatorY(north) - (height / 2 - livingShieldClearance(width, height)) / perUnit);
+  return Number.isFinite(needed) ? Math.max(LIVING_OVERVIEW.latitude, needed) : LIVING_OVERVIEW.latitude;
+}
+
+interface LivingPlace {
+  id: string;
+  number: number;
+  name: string;
+  region?: string;
+  slug?: string;
+}
 
 function LivingShield({
   place,
+  point,
+  lift,
+  z,
+  count,
   chapterProgress,
 }: {
-  place: { id: string; number: number; name: string; region?: string };
+  place: LivingPlace;
+  point: { x: number; y: number };
+  lift: number;
+  z: number;
+  count: number;
   chapterProgress: MotionValue<number>;
 }) {
   const index = place.number - 1;
   const emphasis = useTransform(chapterProgress, (chapterPosition) =>
     smootherstep(Math.max(0, Math.min(1, 1 - Math.abs(chapterPosition - index)))),
   );
-  const scale = useTransform(emphasis, (strength) => 0.86 + 0.3 * strength);
-  const opacity = useTransform(emphasis, (strength) => 0.62 + 0.38 * strength);
+  const scale = useTransform(emphasis, (strength) => LIVING_SCALE.rest + (LIVING_SCALE.read - LIVING_SCALE.rest) * strength);
+  // Quieter by ink, not by alpha: a pile of see-through plates read as one
+  // grey smudge.
+  const filter = useTransform(
+    emphasis,
+    (strength) => `drop-shadow(0 1px 1px rgba(11, 14, 9, 0.6)) brightness(${(0.66 + 0.34 * strength).toFixed(3)})`,
+  );
   return (
-    <motion.span className="route-sign__shield" data-route-stop={place.id} style={{ scale, opacity }}>
-      <MapShield code={stateCode(place.region)} number={pad2(place.number)} />
-    </motion.span>
+    <span
+      className="place-shield place-shield--living"
+      data-place-shield={place.id}
+      style={{ left: point.x, top: point.y, zIndex: 1 + z, ['--lift' as never]: `${lift}px` }}
+    >
+      <motion.span className="place-shield__sign" data-pile={count || undefined} style={{ scale, filter }}>
+        <MapShield
+          code={stateCode(place.region)}
+          number={pad2(place.number)}
+          accent={stockPaper(place.slug)}
+          width={LIVING_SHIELD_PX}
+        />
+      </motion.span>
+    </span>
   );
 }
 
-function LivingRouteSign({
+function LivingShields({
   places,
   points,
-  bounds,
   chapterProgress,
   interfaceVisible,
   reducedMotion,
   playInterfaceIntro,
-  order,
 }: {
-  places: Array<{ id: string; number: number; name: string; region?: string }>;
+  places: LivingPlace[];
   /** The places' projected points, in `places` order. */
   points: Array<{ x: number; y: number }>;
-  bounds: { left: number; right: number };
   chapterProgress: MotionValue<number>;
   interfaceVisible: boolean;
   reducedMotion: boolean;
   playInterfaceIntro: boolean;
-  order: number;
 }) {
-  const count = places.length;
-  // Halfway along the region's own stretch of road, as on the desktop.
-  const anchor = screenMidpoint(points);
-  const bottom = Math.max(...points.map((point) => point.y));
-  const width = count * LIVING_SHIELD_PX + (count - 1) * LIVING_SHIELD_GAP;
-  const rail = ((count - 1) * (LIVING_SHIELD_PX + LIVING_SHIELD_GAP)) / 2;
-  // Hung below: the same rule mirrored (the leader runs down past the
-  // region's southernmost place). A lone shield hangs just under its place,
-  // with no leader.
-  const pose = count === 1
-    ? { lead: SIGN_SINGLE_GAP, shift: 0 }
-    : signPose({ x: anchor.x, y: -anchor.y }, -bottom, width, bounds.left, bounds.right, rail);
+  // The chapter being read, for the pile's order: a state change only when
+  // the reader crosses into another chapter.
+  const [reading, setReading] = useState(() => Math.round(chapterProgress.get()));
+  useMotionValueEvent(chapterProgress, 'change', (value) => {
+    const next = Math.round(value);
+    setReading((current) => (current === next ? current : next));
+  });
+  const stack = useMemo(() => stackShields(places.map((place, index): StackSlot => {
+    const read = place.number - 1 === reading;
+    const width = LIVING_SHIELD_PX * (read ? LIVING_SCALE.read : LIVING_SCALE.rest);
+    return {
+      id: place.id,
+      number: place.number,
+      x: points[index].x,
+      y: points[index].y,
+      w: width,
+      h: (width * shieldForm(stateCode(place.region)).h) / 100,
+      rank: read ? 2 : 0,
+    };
+  })), [places, points, reading]);
   return (
-    <motion.span
+    <motion.div
       aria-hidden="true"
-      className="route-sign route-sign--living route-sign--below"
+      className="absolute inset-0"
       initial={false}
       animate={interfaceVisible ? { opacity: 1 } : { opacity: 0 }}
       transition={{
         duration: reducedMotion ? 0 : playInterfaceIntro ? 0.56 : 0.32,
-        delay: reducedMotion || !playInterfaceIntro ? 0 : 0.18 + order * 0.06,
+        delay: reducedMotion || !playInterfaceIntro ? 0 : 0.18,
         ease: EASE.arrive,
       }}
-      style={{
-        left: anchor.x,
-        top: anchor.y,
-        width,
-        ['--lead' as never]: `${Math.min(pose.lead, 44)}px`,
-        ['--shift' as never]: `${pose.shift}px`,
-        ['--rail' as never]: `${rail * 2}px`,
-      }}
     >
-      {count > 1 && <i className="route-sign__lead" />}
-      <span className="route-sign__row">
-        {count > 1 && <i className="route-sign__rail" />}
-        {places.map((place) => (
-          <LivingShield key={place.id} place={place} chapterProgress={chapterProgress} />
-        ))}
-      </span>
-    </motion.span>
+      {places.map((place, index) => {
+        const placed = stack.get(place.id);
+        return (
+          <LivingShield
+            key={place.id}
+            place={place}
+            point={points[index]}
+            lift={placed?.dy ?? 0}
+            z={(placed?.z ?? 0) + (place.number - 1 === reading ? 10 : 0)}
+            count={placed?.count ?? 0}
+            chapterProgress={chapterProgress}
+          />
+        );
+      })}
+    </motion.div>
   );
 }
 
@@ -1125,7 +1194,7 @@ export default function RouteAtlas({
     window.clearTimeout(lookTimerRef.current);
     const idle = () => {
       // A hand resting on a place or a tick is still using the instruments.
-      if (atlas.querySelector('.route-sign__shield:hover, .atlas-ticks__group:hover')) {
+      if (atlas.querySelector('.place-shield__sign:hover, .atlas-ticks__group:hover')) {
         lookTimerRef.current = window.setTimeout(idle, ATLAS_LOOK_IDLE_MS);
         return;
       }
@@ -1183,67 +1252,136 @@ export default function RouteAtlas({
       element.classList.toggle('is-past', reached > 0 && Number(element.dataset.chapter) < reached);
     });
   };
-  // ── The signs ── (RouteSign, src/lib/routeShield.ts)
-  // One sign per stretch of neighbouring places, its shields in stop order,
-  // one leader down to the middle of their region.
-  const regionSignList = useMemo(() => regionSigns(chapterRoute.map((entry) => ({
+  // ── The shields ── (PlaceShield, src/lib/routeShield.ts)
+  // One shield per place, standing on it: a marker at the place's own
+  // coordinates, anchored at the bottom, the foot's point on the place.
+  const shieldPlaces = useMemo(() => chapterRoute.map((entry) => ({
     id: entry.stop.id,
     number: entry.chapterIndex + 1,
     name: entry.stop.name,
     region: entry.stop.region,
+    slug: entry.stop.slug,
     coordinates: entry.stop.coordinates,
-  }))), [chapterRoute]);
+    ratio: shieldForm(stateCode(entry.stop.region)).h / 100,
+  })), [chapterRoute]);
+  // The phone's shields stand on the living overview's projected points.
+  const livingPoints = useMemo(() => {
+    const points = shieldPlaces.map((place) => projectedStops.find((projected) => projected.id === place.id));
+    return points.every(Boolean) ? (points as Array<{ x: number; y: number }>) : null;
+  }, [projectedStops, shieldPlaces]);
   // The covers' column edge in the atlas's own px (its width × the layout's
-  // constant), written on a resize, never per frame: the signs are placed on
-  // every camera frame and must not read layout there.
+  // constant) and the canvas's size (the atlas plus a bleed each side),
+  // written on a resize, never per frame: the shields are placed on every
+  // camera frame and must not read layout there.
   const plateLeftRef = useRef(0);
-  const signPosesRef = useRef(new Map<string, { lead: number; shift: number; under: boolean; el: HTMLElement }>());
-  // Where each sign stands this camera frame: how long its leader is (the
-  // shields clear the region's northernmost place), how far its row slides to
-  // keep inside the map column, and whether its region lies under the
-  // covers. DERIVED from the camera's own projection against the layout's
-  // constant — a handful of `project` calls, no layout read — and written only
-  // when a value moves. Runs on the map's `render`, so a sign rides the camera
-  // exactly, and not at all while the map rests.
-  const placeSigns = () => {
+  const canvasSizeRef = useRef({ width: 0, height: 0 });
+  const shieldPosesRef = useRef(new Map<string, {
+    el: HTMLElement;
+    marker: HTMLElement | null;
+    sign: HTMLElement | null;
+    lift: number;
+    z: number;
+    count: number;
+    under: boolean;
+    /** The state's scale, the one it is leaving and when it changed: a
+     *  shield shrinks over --dur-out, and is stacked at its larger size
+     *  until it has. */
+    scale: number;
+    was: number;
+    since: number;
+  }>());
+  // Where each shield stands this camera frame: its place projected by the
+  // camera (the marker puts the foot's point there), whether it would reach
+  // under the covers, and — where shields meet at this zoom — its place in
+  // their pile (stackShields: the lift of a buried shield, the order, the
+  // front shield's count). DERIVED from the camera's own projection and the
+  // shields' known sizes (SHIELD_MAP_PX × the state's SHIELD_SCALE × the
+  // form's ratio) — six `project` calls, no layout read — and written only
+  // when a value moves. Runs on the map's `render`, so the shields ride the
+  // camera exactly, and not at all while the map rests.
+  const placeShields = () => {
     const atlas = routeAtlasRef.current;
     const map = mapRef.current?.getMap();
     const plateLeft = plateLeftRef.current;
     if (!atlas || !map || !(plateLeft > 0)) return;
     // Canvas px: the canvas bleeds CANVAS_BLEED past the atlas on the left.
-    const left = CANVAS_BLEED + SIGN_EDGE.left;
-    const right = CANVAS_BLEED + plateLeft - SIGN_EDGE.right;
     const underAt = CANVAS_BLEED + plateLeft - SIGN_UNDER;
-    const held = new Set([currentStopRef.current, inboundStopRef.current]);
-    regionSignList.forEach((sign) => {
-      let pose = signPosesRef.current.get(sign.key);
+    const { width, height } = canvasSizeRef.current;
+    const centre = map.getCenter();
+    const current = currentStopRef.current;
+    const inbound = inboundStopRef.current;
+    // The stop the archive has reached (flown to, else on): the places
+    // before it are visited.
+    const reached = shieldPlaces.find((place) => place.id === (inbound ?? current))?.number ?? 0;
+    const now = performance.now();
+    const slots: StackSlot[] = [];
+    const unders = new Map<string, boolean>();
+    shieldPlaces.forEach((place) => {
+      let pose = shieldPosesRef.current.get(place.id);
       if (!pose || !pose.el.isConnected) {
-        const el = atlas.querySelector<HTMLElement>(`[data-route-sign="${CSS.escape(sign.key)}"]`);
+        const el = atlas.querySelector<HTMLElement>(`[data-place-shield="${CSS.escape(place.id)}"]`);
         if (!el) return;
-        pose = { lead: Number.NaN, shift: Number.NaN, under: false, el };
-        signPosesRef.current.set(sign.key, pose);
+        pose = {
+          el,
+          marker: el.parentElement,
+          sign: el.querySelector<HTMLElement>('.place-shield__sign'),
+          lift: 0,
+          z: -1,
+          count: 0,
+          under: false,
+          scale: 0,
+          was: 0,
+          since: 0,
+        };
+        shieldPosesRef.current.set(place.id, pose);
       }
-      const anchor = map.project(sign.anchor);
-      let top = anchor.y;
-      sign.places.forEach((place) => {
-        const y = map.project(place.coordinates).y;
-        if (y < top) top = y;
-      });
-      const count = sign.places.length;
-      // A lone shield stands just over its place, its point the pointer: no
-      // leader (不需要下面的引线), and nothing to slide along.
-      const next = count === 1
-        ? { lead: SIGN_SINGLE_GAP, shift: 0 }
-        : signPose(anchor, top, signRowWidth(count), left, right, signRailHalf(count));
-      if (next.lead !== pose.lead) {
-        pose.lead = next.lead;
-        pose.el.style.setProperty('--lead', `${next.lead}px`);
+      const rank = place.id === current ? 2 : place.id === inbound ? 1 : 0;
+      const scale = rank === 2
+        ? SHIELD_SCALE.current
+        : rank === 1
+          ? SHIELD_SCALE.inbound
+          : place.number < reached ? SHIELD_SCALE.past : SHIELD_SCALE.ahead;
+      if (scale !== pose.scale) {
+        pose.was = pose.scale;
+        pose.scale = scale;
+        pose.since = now;
       }
-      if (next.shift !== pose.shift) {
-        pose.shift = next.shift;
-        pose.el.style.setProperty('--shift', `${next.shift}px`);
+      const drawn = now - pose.since < DUR_MS.out ? Math.max(scale, pose.was) : scale;
+      const w = SHIELD_MAP_PX * drawn;
+      const h = w * place.ratio;
+      const point = map.project(place.coordinates);
+      const under = rank === 0 && point.x + w / 2 > underAt;
+      unders.set(place.id, under);
+      const inView = !under &&
+        point.x + w / 2 > 0 && point.x - w / 2 < width && point.y > 0 && point.y - h < height &&
+        angularDistance([centre.lng, centre.lat], place.coordinates) < SHIELD_HORIZON;
+      if (inView) slots.push({ id: place.id, number: place.number, x: point.x, y: point.y, w, h, rank });
+    });
+    const stack = stackShields(slots);
+    shieldPlaces.forEach((place) => {
+      const pose = shieldPosesRef.current.get(place.id);
+      if (!pose) return;
+      const placed = stack.get(place.id);
+      const lift = placed?.dy ?? 0;
+      // The stop the camera is on is above every shield, the one it is
+      // flying to above the rest; within a pile, its order.
+      const rank = place.id === current ? 2 : place.id === inbound ? 1 : 0;
+      const z = 1 + (placed?.z ?? 0) + rank * 10;
+      const count = placed?.count ?? 0;
+      const under = unders.get(place.id) ?? false;
+      if (lift !== pose.lift) {
+        pose.lift = lift;
+        pose.el.style.setProperty('--lift', `${lift}px`);
       }
-      const under = anchor.x > underAt && !sign.places.some((place) => held.has(place.id));
+      if (z !== pose.z && pose.marker) {
+        pose.z = z;
+        pose.marker.style.zIndex = String(z);
+      }
+      if (count !== pose.count && pose.sign) {
+        pose.count = count;
+        if (count > 1) pose.sign.dataset.pile = String(count);
+        else delete pose.sign.dataset.pile;
+      }
       if (under !== pose.under) {
         pose.under = under;
         if (under) pose.el.dataset.under = '';
@@ -1251,15 +1389,15 @@ export default function RouteAtlas({
       }
     });
   };
-  const placeSignsRef = useRef(placeSigns);
-  placeSignsRef.current = placeSigns;
+  const placeShieldsRef = useRef(placeShields);
+  placeShieldsRef.current = placeShields;
   const markInboundStop = (id: string | null) => {
     inboundStopRef.current = id;
     routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
       element.classList.toggle('is-inbound', !!id && element.dataset.afStop === id);
     });
     markPast();
-    placeSigns();
+    placeShields();
   };
   const markCurrentStop = (id: string | null) => {
     if (id) markInboundStop(null);
@@ -1271,16 +1409,20 @@ export default function RouteAtlas({
       element.classList.toggle('is-current', element.dataset.tickGroup === id);
     });
     markPast();
-    placeSigns();
+    placeShields();
   };
-  // The signs ride the camera: placed on every frame the map draws, and once
-  // whenever the signs or the layout change under a resting map.
+  // The shields ride the camera: placed on every frame the map draws, and
+  // once whenever the shields or the layout change under a resting map.
   useLayoutEffect(() => {
     const atlas = routeAtlasRef.current;
     if (!signs || !atlas) return;
     const measure = () => {
       plateLeftRef.current = atlas.clientWidth * ARCHIVE_COLUMN_LEFT;
-      placeSignsRef.current();
+      canvasSizeRef.current = {
+        width: atlas.clientWidth + 2 * CANVAS_BLEED,
+        height: atlas.clientHeight + 2 * CANVAS_BLEED,
+      };
+      placeShieldsRef.current();
     };
     measure();
     window.addEventListener('resize', measure, { passive: true });
@@ -1289,14 +1431,14 @@ export default function RouteAtlas({
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
-    signPosesRef.current.clear();
-    const onRender = () => placeSignsRef.current();
+    shieldPosesRef.current.clear();
+    const onRender = () => placeShieldsRef.current();
     map.on('render', onRender);
     onRender();
     return () => {
       map.off('render', onRender);
     };
-  }, [mapLoaded, regionSignList, signs]);
+  }, [mapLoaded, shieldPlaces, signs]);
   // Scrubbed mode: follow the nearest place. chapterSample can re-emit while
   // this component renders (its transformer is rebuilt each render), so the
   // state write is ref-guarded and deferred to a microtask.
@@ -1852,7 +1994,7 @@ export default function RouteAtlas({
     map?.stop();
     map?.fitBounds(routeBounds, {
       padding: mobile
-        ? { top: 240, right: 18, bottom: 174, left: 18 }
+        ? { top: Math.max(240, livingShieldClearance(window.innerWidth, window.innerHeight)), right: 18, bottom: 174, left: 18 }
         : { top: 88, right: 62, bottom: 64, left: 238 },
       maxZoom: mobile ? 2.85 : 4.05,
       bearing: 0,
@@ -3626,7 +3768,15 @@ export default function RouteAtlas({
             projection={{ name: classicGlobe ? 'globe' : 'mercator' }}
             initialViewState={living
               ? mobile
-                ? { ...LIVING_OVERVIEW, zoom: 2.35, latitude: 37.5 }
+                ? {
+                    ...LIVING_OVERVIEW,
+                    zoom: LIVING_OVERVIEW_ZOOM,
+                    latitude: livingOverviewLatitude(
+                      Math.max(...chapterRoute.map((entry) => entry.stop.coordinates[1])),
+                      window.innerWidth,
+                      window.innerHeight,
+                    ),
+                  }
                 : LIVING_OVERVIEW
               : mobile
                 ? { ...US_OVERVIEW, zoom: 2.3, pitch: 0 }
@@ -4089,25 +4239,24 @@ export default function RouteAtlas({
           </Source>
         )}
 
-        {/* The places: one route sign per region (RouteSign), upright to
-            the camera, standing on its leader over the middle of the region
-            its shields share. The camera still sets the current place
-            exactly on the reading line; the sign says which stretch of the
-            route that is, and its shield says which stop. */}
-        {signs && regionSignList.map((sign) => (
+        {/* The places: one shield per place (PlaceShield), upright to the
+            camera, the point of its foot on the place itself. The camera
+            still sets the current place exactly on the reading line; its
+            shield stands on it. */}
+        {signs && shieldPlaces.map((place) => (
           <Marker
-            key={`sign-${sign.key}`}
-            longitude={sign.anchor[0]}
-            latitude={sign.anchor[1]}
+            key={`shield-${place.id}`}
+            longitude={place.coordinates[0]}
+            latitude={place.coordinates[1]}
             anchor="bottom"
             pitchAlignment="viewport"
             rotationAlignment="viewport"
           >
-            <RouteSign
-              signKey={sign.key}
-              stops={sign.places}
+            <PlaceShield
+              stop={place}
+              width={SHIELD_MAP_PX}
               initialCurrentId={currentStopRef.current}
-              engagedId={engagedChapterId}
+              engaged={engagedChapterId === place.id}
               visibility={classicInterfaceOpacity}
               onEngage={onEngage}
               onNavigate={onNavigate}
@@ -4173,23 +4322,16 @@ export default function RouteAtlas({
               />
             </svg>
           )}
-          {regionSignList.map((sign, order) => {
-            const points = sign.places.map((place) => projectedStops.find((projected) => projected.id === place.id));
-            if (points.some((point) => !point)) return null;
-            return (
-              <LivingRouteSign
-                key={sign.key}
-                places={sign.places}
-                points={points as Array<{ x: number; y: number }>}
-                bounds={{ left: LIVING_SIGN_EDGE, right: (viewportWidthRef.current || 390) - LIVING_SIGN_EDGE }}
-                chapterProgress={resolvedChapterProgress}
-                interfaceVisible={interfaceVisible}
-                reducedMotion={reducedMotion}
-                playInterfaceIntro={playInterfaceIntro}
-                order={order}
-              />
-            );
-          })}
+          {livingPoints && (
+            <LivingShields
+              places={shieldPlaces}
+              points={livingPoints}
+              chapterProgress={resolvedChapterProgress}
+              interfaceVisible={interfaceVisible}
+              reducedMotion={reducedMotion}
+              playInterfaceIntro={playInterfaceIntro}
+            />
+          )}
         </motion.div>
       )}
 
