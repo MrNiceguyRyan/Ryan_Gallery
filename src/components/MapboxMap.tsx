@@ -1,118 +1,261 @@
-import { useState, useMemo, useRef, useCallback, useEffect, Component } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, useId, Component } from 'react';
 import type { ReactNode, ErrorInfo, MouseEvent as ReactMouseEvent } from 'react';
 import MapGL, { Marker, NavigationControl, AttributionControl } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
+import Supercluster from 'supercluster';
 import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'framer-motion';
 import { RotateCcw, X } from 'lucide-react';
-import { silenceArchivePlaceLabels } from '../lib/atlasBasemap';
+import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../lib/atlasBasemap';
 import { greatCircle } from '../lib/routeGeometry';
 import { CSS_EASE, DUR_MS, EASE, bezierFn } from '../lib/motion';
 import { TRAVEL_PLATE_HOLD_MS, TRAVEL_PLATE_RELEASE_MS, clearTravelPlate, markTravelPlate } from '../lib/travelPlate';
-import { MAP_BURN, MAP_INK } from '../lib/mapInk';
-import { landmarkFor } from '../lib/placeLandmarks';
-import {
-  HAIRLINES,
-  LABEL,
-  LABEL_MINZOOM,
-  LABEL_OPACITY,
-  LABEL_PAINT,
-  LABEL_SIZE,
-  TRAVEL_FOG,
-  TRAVEL_GROUND,
-  TRAVEL_SATELLITE,
-  calloutGroups,
-  flightMs,
-  greatCircleKm,
-  groundRole,
-  landingCamera,
-  leadOf,
-  metresPerPixel,
-  niceScale,
-  placeGrade,
-  placeLabels,
-  projectAround,
-  routeKm,
-  scaleLabel,
-  sheetHeight,
-  travelSatellitePaint,
-} from '../lib/travelSilver';
-import type { LabelPlacement, ScreenPoint, SheetMode, TravelChapter, TravelViewport } from '../lib/travelSilver';
+import { MAP_BURN, MAP_INK, MAP_INK_RGB } from '../lib/mapInk';
+import { LANDMARK_VIEWBOX, landmarkFor } from '../lib/placeLandmarks';
+import { flightMs, greatCircleKm, landingCamera, leadOf, routeKm, sheetHeight } from '../lib/travelSilver';
+import type { SheetMode, TravelChapter, TravelViewport } from '../lib/travelSilver';
 import TravelIndex, { TravelRows } from './travel/TravelIndex';
 import type { TravelFlight } from './travel/TravelIndex';
 import TravelTicket, { warmPlate } from './travel/TravelTicket';
-import TravelMark, { LANDMARK_CLEARANCE, chooseLandmarkSide, landmarkBox } from './travel/TravelMark';
-import type { LandmarkSide } from './travel/TravelMark';
 
-// ─── The atlas in silver ───
-// /travel is the homepage's silver planet laid flat as a working atlas: the
-// same satellite photograph printed through an olive-to-bone ramp, marks in
-// the homepage's white ink (src/lib/mapInk.ts), the index numbered the way
-// the homepage numbers its chapters, and a chosen chapter's ticket printed in
-// its own stock. The values live in src/lib/travelSilver.ts; this file owns
-// the map instance and every write.
+// ─── The map ───
+// /travel's map is the original atlas (owner, 2026-09-27: 只需要中间的地图这样
+// 即可): dark-v11 graded into the site's olive emulsion on a globe, every
+// place a white-ink mark with its name set beside it, places that stand close
+// together gathered into a bone disc carrying their count and their region's
+// name, and the archive's route a dashed white hairline. Around it the page is
+// today's: the chapters' index and tickets in the rail (TravelIndex), the
+// phone sheet, and the ticket's plate grown into its story. Choosing on the
+// map chooses the chapter in the rail; choosing a row flies the map.
+
+// ─── Ink ───
+// Marks ON the map are white ink seated on a dark burn — the homepage atlas's
+// language (src/lib/mapInk.ts). The owner turned lime and yellow on the map
+// down twice ("太奇怪"). Lime stays in the INTERFACE — focus outlines, the
+// masthead's one accent word — never on the canvas.
+const MAP_BURN_RGB = '11, 14, 9';
+/** A mark dimmed while another chapter is selected. Dimmed by COLOUR — the ink
+ *  at 35% over the atlas ground, mixed solid — not by opacity: a see-through
+ *  dot let the route's dashes run through it. */
+const MAP_INK_DIM = '#6B706A';
+/** A place's landmark is detail for a close look: below this zoom the whole
+ *  archive is on screen and a drawing would crowd its neighbours. */
+const LANDMARK_MIN_ZOOM = 5;
+
+/** Which side of its mark a place's landmark stands on. */
+type LandmarkSide = 'above' | 'right' | 'left' | 'below';
+/** px per viewBox unit: `.travel-landmark` draws the 44-unit box at 72px. */
+const LANDMARK_UNIT = 72 / 44;
+/** The drawings span about ±13 units across. */
+const LANDMARK_HALF_WIDTH = 13 * LANDMARK_UNIT;
+
+/** Which side of its mark a place's name is set on — the left east of 82°W.
+ *  The landmark never takes that side. */
+const nameSitsLeft = (lng: number) => lng > -82;
+
+/**
+ * Where a landmark's ground line (its viewBox origin, the box's middle) sits
+ * relative to the centre of its mark. `clearance` clears the mark's ring.
+ * Above: standing over the place. Beside: standing level with it, clear of the
+ * ring. Below: hung under it.
+ */
+function landmarkOrigin(side: LandmarkSide, height: number, clearance: number) {
+  const tall = height * LANDMARK_UNIT;
+  if (side === 'below') return { x: 0, y: clearance + tall };
+  if (side === 'right') return { x: clearance + 2 + LANDMARK_HALF_WIDTH, y: tall / 2 };
+  if (side === 'left') return { x: -(clearance + 2 + LANDMARK_HALF_WIDTH), y: tall / 2 };
+  return { x: 0, y: -clearance };
+}
+
+/**
+ * The first side, in order of preference, whose drawing no leg of the route
+ * runs through. The route is canvas and the drawing is a DOM mark over it, so
+ * a leg that crossed the drawing did not pass behind it — it read as a line
+ * that stopped dead at the picture. `paths` are the place's legs in screen px,
+ * each starting at the mark's centre.
+ */
+function chooseLandmarkSide(
+  paths: Array<Array<{ x: number; y: number }>>,
+  height: number,
+  clearance: number,
+  sides: LandmarkSide[],
+): LandmarkSide {
+  const tall = height * LANDMARK_UNIT;
+  const pad = 6;
+  const crossed = (side: LandmarkSide) => {
+    const origin = landmarkOrigin(side, height, clearance);
+    const x0 = origin.x - LANDMARK_HALF_WIDTH - pad;
+    const x1 = origin.x + LANDMARK_HALF_WIDTH + pad;
+    const y0 = origin.y - tall - pad;
+    const y1 = origin.y + pad;
+    return paths.some((path) => path.some((point, index) => {
+      if (index === 0) return false;
+      const from = path[index - 1];
+      const steps = Math.max(1, Math.ceil(Math.hypot(point.x - from.x, point.y - from.y) / 2));
+      for (let step = 0; step <= steps; step += 1) {
+        const x = from.x + ((point.x - from.x) * step) / steps;
+        const y = from.y + ((point.y - from.y) * step) / steps;
+        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return true;
+      }
+      return false;
+    }));
+  };
+  return sides.find((side) => !crossed(side)) ?? sides[0];
+}
+
+/**
+ * The chapter's own landmark, drawn beside its mark once the camera has come
+ * to rest on it — the drawing the homepage atlas gives a place at close range,
+ * from the same shared source (`placeLandmarks.tsx`) and the same
+ * `.af-place__*` inks, so the two maps draw a place with one hand.
+ *
+ * Always mounted when the place has a drawing, so it can fade OUT as well as
+ * in: visibility is a class, not a mount. The body (the dark mass under the
+ * ink) is feathered out towards its edges, so it is a burn under the ink
+ * rather than a hard rectangle on this map's darker ground.
+ */
+function TravelLandmark({
+  slug,
+  shown,
+  side,
+  clearance,
+}: {
+  slug?: string | null;
+  shown: boolean;
+  side: LandmarkSide;
+  clearance: number;
+}) {
+  const uid = useId().replace(/[^A-Za-z0-9_-]/g, '');
+  const landmark = landmarkFor(slug);
+  if (!landmark) return null;
+  const origin = landmarkOrigin(side, landmark.height, clearance);
+  return (
+    <svg
+      className={`travel-landmark${shown ? ' is-shown' : ''}`}
+      viewBox={LANDMARK_VIEWBOX}
+      aria-hidden="true"
+      style={{
+        ['--landmark-x' as never]: `${origin.x}px`,
+        ['--landmark-y' as never]: `${origin.y}px`,
+      }}
+    >
+      {landmark.body && (
+        <>
+          <defs>
+            <radialGradient id={`${uid}-feather`} cx="0.5" cy="0.55" r="0.5">
+              <stop offset="0.42" stopColor="#fff" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0" />
+            </radialGradient>
+            <mask id={`${uid}-body`} maskContentUnits="objectBoundingBox">
+              <rect width="1" height="1" fill={`url(#${uid}-feather)`} />
+            </mask>
+          </defs>
+          <path className="af-place__body" d={landmark.body} mask={`url(#${uid}-body)`} />
+        </>
+      )}
+      <g dangerouslySetInnerHTML={{ __html: landmark.full }} />
+    </svg>
+  );
+}
 
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
 
 /**
- * Print dark-v11 in silver. Everything the vector style drew on land
- * (landcover, parks, roads, buildings) is the photograph's job now, and the
- * map's own type says less than the archive: nothing below z5, towns and
- * states as context once the camera is down on a place. The vector ground
- * stays under the photograph as a dark print, so loading tiles never show a
- * wireframe.
+ * Grade dark-v11 into the same olive emulsion the homepage atlas uses, so the
+ * same geography does not look like it came from a different product, and the
+ * basemap's own type sits a clear step below the page's labels. This map IS
+ * the interface here, so place names stay readable — one step below the UI,
+ * not hidden.
  */
-function applySilverGround(map: any) {
-  const layers: Array<{ id: string; type: string }> = map.getStyle()?.layers ?? [];
-  layers.forEach((layer) => {
-    const role = groundRole(layer);
-    if (role === 'hide') map.setLayoutProperty(layer.id, 'visibility', 'none');
-    else if (role === 'ground') map.setPaintProperty(layer.id, 'background-color', TRAVEL_GROUND);
-    else if (role === 'water') {
-      map.setPaintProperty(layer.id, 'fill-color', TRAVEL_GROUND);
-      map.setPaintProperty(layer.id, 'fill-opacity', 1);
-    } else if (role === 'hairline') {
-      Object.entries(HAIRLINES[layer.id] ?? HAIRLINES['admin-1-boundary']).forEach(([key, value]) => map.setPaintProperty(layer.id, key, value));
-    } else if (role === 'label') {
-      Object.entries(LABEL_PAINT).forEach(([key, value]) => map.setPaintProperty(layer.id, key, value));
-      map.setPaintProperty(layer.id, 'text-opacity', LABEL_OPACITY[layer.id]);
-      const own = map.getLayer(layer.id) as { minzoom?: number; maxzoom?: number } | undefined;
-      if (LABEL_MINZOOM[layer.id] != null) {
-        map.setLayerZoomRange(layer.id, Math.max(own?.minzoom ?? 0, LABEL_MINZOOM[layer.id]), own?.maxzoom ?? 24);
-      }
-      if (LABEL_SIZE[layer.id]) {
-        try {
-          map.setLayoutProperty(layer.id, 'text-size', LABEL_SIZE[layer.id]);
-        } catch {
-          // A style whose labels cannot take the size keeps its own.
-        }
-      }
-      // Uppercase tracking is capped at 0.1em site-wide, the basemap's too.
-      const tracking = map.getLayoutProperty(layer.id, 'text-letter-spacing');
-      if (typeof tracking === 'number' ? tracking > 0.1 : Array.isArray(tracking)) {
-        try {
-          map.setLayoutProperty(layer.id, 'text-letter-spacing', typeof tracking === 'number' ? 0.1 : ['min', 0.1, tracking]);
-        } catch {
-          // A style whose tracking cannot be composed keeps its own.
-        }
-      }
+function gradeAtlasBasemap(map: any) {
+  map.getStyle()?.layers?.forEach((layer: any) => {
+    const id = layer.id.toLowerCase();
+
+    if (layer.type === 'fill-extrusion') {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+      return;
     }
+
+    if (layer.type === 'background') {
+      map.setPaintProperty(layer.id, 'background-color', ATLAS_PAPER.background);
+      return;
+    }
+
+    if (layer.type === 'fill') {
+      if (id.includes('water')) {
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
+      } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.34);
+      } else if (id.includes('building')) {
+        map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
+        map.setPaintProperty(layer.id, 'fill-opacity', 0.12);
+      }
+      return;
+    }
+
+    if (layer.type === 'line') {
+      if (id.includes('admin') || id.includes('boundary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#AEB6A9');
+        map.setPaintProperty(layer.id, 'line-width', 0.74);
+        map.setPaintProperty(layer.id, 'line-opacity', 0.42);
+      } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#8C9588');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.4);
+      } else if (id.includes('secondary') || id.includes('tertiary')) {
+        map.setPaintProperty(layer.id, 'line-color', '#737D6D');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.26);
+      } else if (id.includes('road') || id.includes('street')) {
+        map.setPaintProperty(layer.id, 'line-color', '#667064');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.15);
+      } else if (id.includes('waterway')) {
+        map.setPaintProperty(layer.id, 'line-color', '#657168');
+        map.setPaintProperty(layer.id, 'line-opacity', 0.3);
+      }
+      return;
+    }
+
+    if (layer.type !== 'symbol' || !layer.layout?.['text-field']) return;
+
+    if (
+      id.includes('poi')
+      || id.includes('transit')
+      || id.includes('airport')
+      || id.includes('building-number')
+    ) {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+      return;
+    }
+
+    const isPlaceLabel =
+      id.includes('settlement')
+      || id.includes('place')
+      || id.includes('city')
+      || id.includes('town')
+      || id.includes('village');
+    const isAtlasLabel = id.includes('state-label') || id.includes('country-label');
+    const isRoadLabel = id.includes('road') || id.includes('street');
+
+    map.setPaintProperty(
+      layer.id,
+      'text-opacity',
+      isPlaceLabel ? 0.6 : isAtlasLabel ? 0.38 : isRoadLabel ? 0.2 : 0.24,
+    );
+    map.setPaintProperty(layer.id, 'text-color', '#C2C8B8');
+    map.setPaintProperty(layer.id, 'text-halo-color', '#11150F');
+    map.setPaintProperty(layer.id, 'text-halo-width', 0.7);
+    map.setPaintProperty(layer.id, 'text-halo-blur', 0.5);
   });
-  if (!map.getSource(TRAVEL_SATELLITE.source)) {
-    map.addSource(TRAVEL_SATELLITE.source, { type: 'raster', url: TRAVEL_SATELLITE.url, tileSize: 256 });
-  }
-  if (!map.getLayer(TRAVEL_SATELLITE.layer)) {
-    // Above every fill, below the boundaries, the route, the rings and the type.
-    const before = map.getLayer('admin-1-boundary')
-      ? 'admin-1-boundary'
-      : layers.find((layer) => layer.type === 'symbol')?.id;
-    map.addLayer({ id: TRAVEL_SATELLITE.layer, type: 'raster', source: TRAVEL_SATELLITE.source, paint: travelSatellitePaint() }, before);
-  }
-  map.setFog(TRAVEL_FOG);
 }
 
-/** A transparent image as big as a mark, its name and its landmark. */
-const KEEP_OUT = { id: 'travel-keepout', width: 200, height: 112, offsetY: -39 } as const;
-
+/** The olive-black air around the globe, the homepage atlas's. */
+const ATLAS_FOG = {
+  color: 'rgb(30, 36, 28)',
+  'high-color': 'rgb(49, 58, 45)',
+  'horizon-blend': 0.08,
+  'space-color': 'rgb(9, 12, 9)',
+  'star-intensity': 0.18,
+};
 
 // ─── Error Boundary ───
 interface ErrorBoundaryState { hasError: boolean; error: Error | null }
@@ -135,6 +278,79 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
   }
 }
 
+// ─── The places ───
+// One point per place (a city a chapter's frames were made in), in the
+// chapters' reading order. New York is one chapter of two places, Manhattan
+// and Midtown; they share its number and its selection.
+interface MapPlace {
+  city: string;
+  lng: number;
+  lat: number;
+  frames: number;
+  slug: string;
+  /** 1-based, the homepage's chapter number. */
+  chapterNo: number;
+  /** The chapter's mark place (the cover's): it carries the landmark and the
+   *  arrival ring. */
+  lead: boolean;
+  /** The chapter's region (Florida, Utah, Arizona…), for a cluster's name. */
+  region: string;
+}
+
+type AtlasClusterFeature = {
+  id?: number | string;
+  properties: {
+    cluster?: boolean;
+    cluster_id?: number;
+    point_count?: number;
+    placeIndex?: number;
+  };
+  geometry: { type: 'Point'; coordinates: number[] };
+};
+
+type ClusterMorphRole = 'stable' | 'parent' | 'child';
+
+type ClusterMorphTopologyNode = {
+  key: string;
+  feature: AtlasClusterFeature;
+  role: ClusterMorphRole;
+  from: [number, number];
+  to: [number, number];
+  siblingCount: number;
+};
+
+type ClusterRenderNode = ClusterMorphTopologyNode & {
+  coordinates: [number, number];
+  opacity: number;
+  scale: number;
+  interactive: boolean;
+};
+
+const CLUSTER_WORLD_BOUNDS: [number, number, number, number] = [-180, -85, 180, 85];
+
+function clampUnit(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function smoothZoomMorph(value: number) {
+  const t = clampUnit(value);
+  return t * t * (3 - 2 * t);
+}
+
+function atlasFeatureKey(feature: AtlasClusterFeature) {
+  return feature.properties.cluster
+    ? `cluster-${String(feature.id ?? feature.properties.cluster_id)}`
+    : `city-${String(feature.properties.placeIndex)}`;
+}
+
+/** A cluster names its region; the Southwest's three canyons are Utah and
+ *  Arizona together. */
+function clusterName(regions: string[]) {
+  if (regions.length === 1) return regions[0];
+  if (regions.length > 0 && regions.every((region) => region === 'Utah' || region === 'Arizona')) return 'Southwest';
+  return 'Locations';
+}
+
 // ─── Camera ───
 // The map opens settled on the archive — no dive from space (dropped in
 // 2026-07: the whole-globe zoom was heavy and the owner chose to lose it).
@@ -149,34 +365,15 @@ const SHEET_REFRAME_MS = 620;
 // A flight whose moveend comes within a frame of its own full clock landed;
 // an earlier one was stopped (a drag, a wheel zoom, a resize).
 const FLIGHT_LANDED_SLACK_MS = 17;
-/** A place's landmark is detail for a close look: below this zoom the whole
- *  archive is on screen and a drawing would crowd its neighbours. */
-const LANDMARK_MIN_ZOOM = 5;
 /** The ticket-to-story hand-off waiting for its page change (its listeners'
  *  remover), so a second click replaces it rather than adding another. It
  *  outlives this component: the hand-off runs as the page is swapped. */
 let pendingPlateHandoff: (() => void) | null = null;
 
-const REST_PLACEMENT: LabelPlacement = { mode: 'right', dx: LABEL.gap, dy: 0, leader: null, group: null };
-interface LabelState {
-  placements: LabelPlacement[];
-  hidden: boolean[];
-}
-const sameLabels = (a: LabelState, placements: LabelPlacement[], hidden: boolean[]) =>
-  a.placements.length === placements.length
-  && a.placements.every((p, i) => {
-    const q = placements[i];
-    return p.mode === q.mode && p.dx === q.dx && p.dy === q.dy && p.group === q.group
-      && JSON.stringify(p.leader) === JSON.stringify(q.leader);
-  })
-  && a.hidden.every((value, i) => value === hidden[i]);
-const groupKeyOf = (groups: readonly number[][] | null, index: number) =>
-  groups?.find((group) => group.includes(index))?.join('-') ?? String(index);
-
 function slugifyPlace(value: string) {
   return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
@@ -186,36 +383,38 @@ function slugifyPlace(value: string) {
 function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; mapboxToken: string }) {
   const mapRef = useRef<MapRef>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const collarRef = useRef<HTMLDivElement>(null);
   const atlasStyleReadyRef = useRef(false);
   const atlasReadySignaledRef = useRef(false);
   const initialPlaceAppliedRef = useRef(false);
+  const clusterZoomFrameRef = useRef(0);
+  const pendingClusterZoomRef = useRef(FINAL_VIEW.zoom);
   const sheetDragControls = useDragControls();
   const mobileSheetHeaderRef = useRef<HTMLButtonElement>(null);
   const prefersReduced = !!useReducedMotion();
   const reduceRef = useRef(prefersReduced);
   reduceRef.current = prefersReduced;
+  const coarsePointer = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
+    [],
+  );
 
   const [mobileLayout, setMobileLayout] = useState(false);
-  // The chapter chosen (the index row, the ticket, the URL) and the chapter
-  // the camera has come to rest on. They differ for the length of a flight.
+  const [viewState, setViewState] = useState(FINAL_VIEW);
+  const [clusterZoom, setClusterZoom] = useState(FINAL_VIEW.zoom);
+  const [clusterMorphing, setClusterMorphing] = useState(false);
+  // The chapter chosen (a mark, the index row, the ticket, the URL) and the
+  // chapter the camera has come to rest on. They differ for a flight's length.
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [landedSlug, setLandedSlug] = useState<string | null>(null);
   const [hoveredSlug, setHoveredSlug] = useState<string | null>(null);
-  // Arrival: one thin ring at the focal point, only when a flight ran its
-  // full clock. It plays once on mount and ends invisible (animation fill),
-  // so it is left in place until the next choice rather than costing the
-  // landing a second render to take away. Every flight carries a token in its eventData and only the
+  // Arrival: one thin ring round the chapter's mark, only when a flight ran
+  // its full clock. Every flight carries a token in its eventData and only the
   // newest flight's own moveend can land — a second selection interrupts the
   // first with stop(), which fires the FIRST flight's moveend while the
   // second is already in the air.
   const [arrivedSlug, setArrivedSlug] = useState<string | null>(null);
   const [landmarkSlug, setLandmarkSlug] = useState<string | null>(null);
   const [flight, setFlight] = useState<TravelFlight | null>(null);
-  const [labels, setLabels] = useState<LabelState>(() => ({
-    placements: chapters.map(() => REST_PLACEMENT),
-    hidden: chapters.map(() => false),
-  }));
   const [layersReady, setLayersReady] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
@@ -224,8 +423,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   // Mirrors for the map's own event handlers, which outlive any one render.
   const selectedRef = useRef<string | null>(null);
   const landedRef = useRef<string | null>(null);
-  const labelsRef = useRef(labels);
-  labelsRef.current = labels;
   const mobileSheetRef = useRef<SheetMode>('peek');
   mobileSheetRef.current = mobileSheet;
   // The sheet height the camera last framed for, so a sheet change the
@@ -235,11 +432,8 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   const flightStartRef = useRef(0);
   const flightDurationRef = useRef(0);
   const flightSlugRef = useRef<string | null>(null);
-  // The callouts: the groups as they stand, and as they stood the last time
-  // the camera framed the whole archive (where a reset is going back to).
-  const groupsRef = useRef<number[][] | null>(null);
-  const overviewGroupsRef = useRef<number[][] | null>(null);
-  const atOverviewRef = useRef(true);
+  // The side each chapter's landmark stands on, chosen once at its landing
+  // and kept, so a drawing fading OUT leaves from where it stood.
   const landmarkSideRef = useRef<Record<string, LandmarkSide>>({});
   const litRef = useRef<{ chapters: [number, number]; live: 0 | 1 }>({ chapters: [-1, -1], live: 0 });
 
@@ -247,8 +441,17 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   const leads = useMemo(() => chapters.map(leadOf), [chapters]);
   const totalKm = useMemo(() => routeKm(leads), [leads]);
   const frameCount = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
+  const places = useMemo<MapPlace[]>(() => chapters.flatMap((chapter, index) => chapter.places.map((place, placeIndex) => ({
+    city: place.city,
+    lng: place.lng,
+    lat: place.lat,
+    frames: place.frames,
+    slug: chapter.slug,
+    chapterNo: index + 1,
+    lead: placeIndex === chapter.lead,
+    region: chapter.region || chapter.name,
+  }))), [chapters]);
   const archiveBounds = useMemo(() => {
-    const places = chapters.flatMap((chapter) => chapter.places);
     if (!places.length) return null;
     const lngs = places.map((place) => place.lng);
     const lats = places.map((place) => place.lat);
@@ -256,38 +459,42 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       [Math.min(...lngs), Math.min(...lats)],
       [Math.max(...lngs), Math.max(...lats)],
     ] as [[number, number], [number, number]];
-  }, [chapters]);
+  }, [places]);
   // A place on this map is named once, by the archive: the basemap is asked
   // not to set its own label for a place (or a chapter) the archive names.
   const archiveNames = useMemo(
-    () => [...new Set([...chapters.flatMap((chapter) => chapter.places.map((place) => place.city)), ...chapters.map((chapter) => chapter.name)])],
-    [chapters],
+    () => [...new Set([...places.map((place) => place.city), ...chapters.map((chapter) => chapter.name)])],
+    [chapters, places],
   );
-  // Every place, for the rings and the keep-out. A chapter's mark stands on
-  // its lead place; its other places (New York's second corner) are rings.
-  const placesGeo = useMemo(() => ({
-    type: 'FeatureCollection' as const,
-    features: chapters.flatMap((chapter, index) => chapter.places.map((place, placeIndex) => ({
-      type: 'Feature' as const,
-      id: index * 100 + placeIndex + 1,
-      properties: { chapter: index + 1, lead: placeIndex === chapter.lead },
-      geometry: { type: 'Point' as const, coordinates: [place.lng, place.lat] },
-    }))),
-  }), [chapters]);
-  // THE ROUTE — one great-circle leg per consecutive CHAPTER, lead to lead,
-  // tagged with the chapter at each end so a chosen chapter lights its own.
+  // THE ROUTE — the archive's path through its places in reading order,
+  // drawn as the homepage atlas draws it: great-circle legs from the same
+  // geometry source, one feature per leg, tagged with the chapter at each end
+  // so a chosen chapter lights exactly its own legs (New York's short inner
+  // leg has the chapter at both ends, so it lights with it).
   const routeGeo = useMemo(() => ({
     type: 'FeatureCollection' as const,
-    features: leads.slice(1).map((to, index) => ({
-      type: 'Feature' as const,
-      properties: { from: index + 1, to: index + 2 },
-      geometry: { type: 'LineString' as const, coordinates: greatCircle(leads[index], to) },
-    })),
-  }), [leads]);
+    features: places.slice(1).map((to, index) => {
+      const from = places[index];
+      return {
+        type: 'Feature' as const,
+        properties: { from: from.chapterNo, to: to.chapterNo },
+        geometry: { type: 'LineString' as const, coordinates: greatCircle([from.lng, from.lat], [to.lng, to.lat]) },
+      };
+    }),
+  }), [places]);
 
   useEffect(() => () => {
+    if (clusterZoomFrameRef.current) window.cancelAnimationFrame(clusterZoomFrameRef.current);
     delete document.documentElement.dataset.atlasReady;
   }, []);
+
+  // The arrival ring plays once; it is taken away after it has gone, so a
+  // mark remounted by the cluster morph does not ring a second time.
+  useEffect(() => {
+    if (!arrivedSlug) return;
+    const timer = window.setTimeout(() => setArrivedSlug(null), 760);
+    return () => window.clearTimeout(timer);
+  }, [arrivedSlug]);
 
   // Keep interaction behaviour aligned with the CSS breakpoint.
   useEffect(() => {
@@ -311,6 +518,186 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     requestAnimationFrame(() => mobileSheetHeaderRef.current?.focus({ preventScroll: true }));
   }, [selectedSlug, mobileSheet]);
 
+  // ── Clusters ──
+  // Supercluster works at the index's level: one point per place.
+  const points = useMemo(() => places.map((place, placeIndex) => ({
+    type: 'Feature' as const,
+    properties: { cluster: false, placeIndex },
+    geometry: { type: 'Point' as const, coordinates: [place.lng, place.lat] },
+  })), [places]);
+
+  const clusterIndex = useMemo(() => {
+    const index = new Supercluster({ radius: 50, maxZoom: 16 });
+    index.load(points as any);
+    return index;
+  }, [points]);
+
+  const settledClusterZoom = Math.round(clusterZoom);
+  const lowerClusterZoom = Math.max(0, Math.min(16,
+    prefersReduced || !clusterMorphing ? settledClusterZoom : Math.floor(clusterZoom),
+  ));
+  const upperClusterZoom = prefersReduced || !clusterMorphing
+    ? lowerClusterZoom
+    : Math.min(16, lowerClusterZoom + 1);
+
+  // Build the cluster family only when an integer zoom boundary changes. The
+  // far cheaper render pass below then morphs that stable topology on every
+  // zoom frame, so children have a real path out of their parent instead of
+  // one DOM tree replacing another after the camera has already stopped.
+  const clusterMorphTopology = useMemo<ClusterMorphTopologyNode[]>(() => {
+    const lower = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, lowerClusterZoom) as AtlasClusterFeature[];
+    if (lowerClusterZoom === upperClusterZoom) {
+      return lower.map((feature) => {
+        const coordinates = feature.geometry.coordinates as [number, number];
+        return {
+          key: atlasFeatureKey(feature),
+          feature,
+          role: 'stable' as const,
+          from: coordinates,
+          to: coordinates,
+          siblingCount: 1,
+        };
+      });
+    }
+
+    const upper = clusterIndex.getClusters(CLUSTER_WORLD_BOUNDS, upperClusterZoom) as AtlasClusterFeature[];
+    const lowerByKey = new Map(lower.map((feature) => [atlasFeatureKey(feature), feature]));
+    const upperKeys = new Set(upper.map(atlasFeatureKey));
+    const placeParent = new Map<number, AtlasClusterFeature>();
+
+    lower.forEach((feature) => {
+      if (feature.properties.cluster) {
+        try {
+          clusterIndex.getLeaves(feature.id as number, Infinity).forEach((leaf: any) => {
+            const placeIndex = leaf.properties.placeIndex;
+            if (Number.isInteger(placeIndex)) placeParent.set(placeIndex, feature);
+          });
+        } catch {
+          // A malformed cluster degrades to the upper node's own position.
+        }
+      } else if (Number.isInteger(feature.properties.placeIndex)) {
+        placeParent.set(feature.properties.placeIndex as number, feature);
+      }
+    });
+
+    const parentForUpper = new Map<string, AtlasClusterFeature>();
+    const siblingCountByParent = new Map<string, number>();
+    upper.forEach((feature) => {
+      const key = atlasFeatureKey(feature);
+      if (lowerByKey.has(key)) return;
+      let representative: number | undefined;
+      if (feature.properties.cluster) {
+        try {
+          representative = clusterIndex.getLeaves(feature.id as number, 1)[0]?.properties?.placeIndex;
+        } catch {
+          representative = undefined;
+        }
+      } else {
+        representative = feature.properties.placeIndex;
+      }
+      if (!Number.isInteger(representative)) return;
+      const parent = placeParent.get(representative as number);
+      if (!parent) return;
+      const parentKey = atlasFeatureKey(parent);
+      parentForUpper.set(key, parent);
+      siblingCountByParent.set(parentKey, (siblingCountByParent.get(parentKey) ?? 0) + 1);
+    });
+
+    const outgoing = lower
+      .filter((feature) => !upperKeys.has(atlasFeatureKey(feature)))
+      .map((feature) => {
+        const coordinates = feature.geometry.coordinates as [number, number];
+        return {
+          key: atlasFeatureKey(feature),
+          feature,
+          role: 'parent' as const,
+          from: coordinates,
+          to: coordinates,
+          siblingCount: siblingCountByParent.get(atlasFeatureKey(feature)) ?? 1,
+        };
+      });
+
+    const incoming = upper.map((feature) => {
+      const key = atlasFeatureKey(feature);
+      const coordinates = feature.geometry.coordinates as [number, number];
+      const stable = lowerByKey.has(key);
+      const parent = parentForUpper.get(key);
+      const parentCoordinates = parent?.geometry.coordinates as [number, number] | undefined;
+      return {
+        key,
+        feature,
+        role: stable ? 'stable' as const : 'child' as const,
+        from: stable ? coordinates : parentCoordinates ?? coordinates,
+        to: coordinates,
+        siblingCount: parent ? siblingCountByParent.get(atlasFeatureKey(parent)) ?? 1 : 1,
+      };
+    });
+
+    return [...outgoing, ...incoming];
+  }, [clusterIndex, lowerClusterZoom, upperClusterZoom]);
+
+  const clusters = useMemo<ClusterRenderNode[]>(() => {
+    const rawFraction = prefersReduced || lowerClusterZoom === upperClusterZoom
+      ? 1
+      : clusterZoom - lowerClusterZoom;
+    // A tiny quiet zone at each integer boundary absorbs trackpad
+    // micro-jitter, keeping a reversible continuous curve in between.
+    const progress = smoothZoomMorph((rawFraction - 0.035) / 0.93);
+    const map = mapRef.current?.getMap();
+
+    return clusterMorphTopology.map((node) => {
+      let coordinates = node.to;
+      if (node.role === 'child' && progress < 1) {
+        if (map) {
+          const fromPoint = map.project(node.from);
+          const toPoint = map.project(node.to);
+          const point = map.unproject([
+            fromPoint.x + (toPoint.x - fromPoint.x) * progress,
+            fromPoint.y + (toPoint.y - fromPoint.y) * progress,
+          ]);
+          coordinates = [point.lng, point.lat];
+        } else {
+          coordinates = [
+            node.from[0] + (node.to[0] - node.from[0]) * progress,
+            node.from[1] + (node.to[1] - node.from[1]) * progress,
+          ];
+        }
+      }
+
+      if (node.role === 'parent') {
+        return {
+          ...node,
+          coordinates,
+          opacity: Math.pow(1 - progress, 1.35),
+          scale: 1 - progress * 0.2,
+          interactive: progress < 0.46,
+        };
+      }
+      if (node.role === 'child') {
+        const energyFloor = 1 / Math.sqrt(Math.max(1, node.siblingCount));
+        return {
+          ...node,
+          coordinates,
+          opacity: progress * (energyFloor + (1 - energyFloor) * progress),
+          scale: 0.64 + progress * 0.36,
+          interactive: progress > 0.54,
+        };
+      }
+      return { ...node, coordinates, opacity: 1, scale: 1, interactive: true };
+    });
+  }, [clusterMorphTopology, clusterZoom, lowerClusterZoom, prefersReduced, upperClusterZoom]);
+
+  const handleMapZoom = useCallback((event: { viewState: { zoom: number } }) => {
+    setClusterMorphing(true);
+    pendingClusterZoomRef.current = event.viewState.zoom;
+    if (clusterZoomFrameRef.current) return;
+    clusterZoomFrameRef.current = window.requestAnimationFrame(() => {
+      clusterZoomFrameRef.current = 0;
+      const next = pendingClusterZoomRef.current;
+      setClusterZoom((current) => (Math.abs(current - next) < 0.0001 ? current : next));
+    });
+  }, []);
+
   // What the camera is framing for: which layout, and on the phone how much
   // of the map the sheet leaves.
   const viewportFor = useCallback((sheet: SheetMode): TravelViewport => {
@@ -319,132 +706,12 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     return { compact, feather: window.innerWidth >= 1280 ? 80 : 48, sheet: sheetHeight(sheet, window.innerHeight, mapHeight) };
   }, []);
 
-  // The basemap's context type (towns, states) sits out a flight and comes
-  // back as the camera settles, with Mapbox's own symbol fade. Placing it on
-  // every frame of a flight was, with the photograph, the flights' whole cost
-  // on a slow machine (4× CPU: 16 frames over 20ms per flight with it, 4
-  // without); and a town name streaming past is not something anyone reads.
-  const contextTypeRef = useRef(true);
-  const setContextType = useCallback((visible: boolean) => {
-    const map = mapRef.current?.getMap();
-    if (!map || contextTypeRef.current === visible) return;
-    contextTypeRef.current = visible;
-    Object.keys(LABEL_OPACITY).forEach((id) => {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
-    });
-  }, []);
-
   const beginFlight = useCallback((slug: string | null, duration: number) => {
     flightTokenRef.current += 1;
     flightStartRef.current = performance.now();
     flightDurationRef.current = duration;
     flightSlugRef.current = slug;
-    if (duration > 0) setContextType(false);
     return flightTokenRef.current;
-  }, [setContextType]);
-
-  // ── The names on the map ──
-  // Laid out when the camera is at rest (never per frame): each name beside
-  // its mark, or stacked in a callout with the marks it stands among.
-  const labelWidths = useCallback((container: HTMLElement) => chapters.map((chapter) => {
-    const label = container.querySelector<HTMLElement>(`[data-travel-label="${CSS.escape(chapter.slug)}"]`);
-    return label?.offsetWidth || 80;
-  }), [chapters]);
-
-  const layoutLabels = useCallback((map: any) => {
-    const container: HTMLElement = map.getContainer();
-    const points: ScreenPoint[] = leads.map((lngLat) => {
-      const point = map.project(lngLat);
-      return { x: point.x, y: point.y };
-    });
-    const groups = calloutGroups(points, groupsRef.current);
-    groupsRef.current = groups;
-    if (atOverviewRef.current) overviewGroupsRef.current = groups;
-    const widths = labelWidths(container);
-    const legs = routeGeo.features.map((leg) => leg.geometry.coordinates.map((coordinate) => {
-      const point = map.project(coordinate as [number, number]);
-      return { x: point.x, y: point.y };
-    }));
-    const placements = placeLabels(points, groups, widths, container.clientWidth, legs);
-    // A dimmed name that would lie across the landed place's landmark waits
-    // until the camera leaves (Zion's name under Page's canyon on the phone).
-    const hidden = chapters.map(() => false);
-    const landed = landedRef.current;
-    const landedIndex = landed ? chapters.findIndex((chapter) => chapter.slug === landed) : -1;
-    if (landedIndex >= 0 && map.getZoom() >= LANDMARK_MIN_ZOOM) {
-      const box = landmarkBox(landed, landmarkSideRef.current[landed as string] ?? 'above');
-      if (box) {
-        const origin = points[landedIndex];
-        chapters.forEach((_, j) => {
-          if (j === landedIndex) return;
-          const x0 = points[j].x + placements[j].dx - origin.x;
-          const x1 = x0 + widths[j];
-          const y0 = points[j].y + placements[j].dy - 8 - origin.y;
-          const y1 = y0 + 16;
-          if (x1 > box.x0 && x0 < box.x1 && y1 > box.y0 && y0 < box.y1) hidden[j] = true;
-        });
-      }
-    }
-    setLabels((current) => (sameLabels(current, placements, hidden) ? current : { placements, hidden }));
-  }, [chapters, labelWidths, leads, routeGeo]);
-
-  /** Where a flight is going, decided as it takes off. Names that will
-   *  gather into a callout there, or leave one, wait unseen until the camera
-   *  lands and they can be set where they will stand — except the name of
-   *  the chapter being flown to, which is set beside its mark at once (the
-   *  trio's three names side by side collided for the first half-second). */
-  const prepareLabels = useCallback((destination: { points: ScreenPoint[] | null; groups: number[][] | null; focus?: number; legs?: ScreenPoint[][] }) => {
-    const map = mapRef.current?.getMap();
-    const destGroups = destination.groups;
-    if (!map || !destGroups) return;
-    const current = groupsRef.current;
-    const container: HTMLElement = map.getContainer();
-    const destPlacements = destination.points
-      ? placeLabels(destination.points, destGroups, labelWidths(container), container.clientWidth, destination.legs)
-      : null;
-    setLabels((state) => {
-      const placements = [...state.placements];
-      const hidden = [...state.hidden];
-      let changed = false;
-      chapters.forEach((_, i) => {
-        if (groupKeyOf(current, i) === groupKeyOf(destGroups, i)) return;
-        const joining = (destGroups.find((group) => group.includes(i))?.length ?? 1) > 1;
-        if (joining || i !== destination.focus) {
-          if (!hidden[i]) { hidden[i] = true; changed = true; }
-          return;
-        }
-        placements[i] = destPlacements?.[i] ?? REST_PLACEMENT;
-        hidden[i] = false;
-        changed = true;
-      });
-      return changed ? { placements, hidden } : state;
-    });
-    groupsRef.current = destGroups;
-  }, [chapters, labelWidths]);
-
-  // ── The scale collar ──
-  // Measured on the map itself at the bar's own height — the globe is not
-  // Mercator below z5 — from two points 100px apart, after every move.
-  const updateCollar = useCallback((map: any) => {
-    const collar = collarRef.current;
-    if (!collar || !window.matchMedia('(min-width: 1024px)').matches) return;
-    const container: HTMLElement = map.getContainer();
-    const y = container.clientHeight - 67;
-    let mpp = Number.NaN;
-    try {
-      const a = map.unproject([22, y]);
-      const b = map.unproject([122, y]);
-      const back = map.project(b);
-      if (Math.hypot(back.x - 122, back.y - y) < 1) mpp = (greatCircleKm([a.lng, a.lat], [b.lng, b.lat]) * 1000) / 100;
-    } catch {
-      mpp = Number.NaN;
-    }
-    if (!(mpp > 0) || !Number.isFinite(mpp)) mpp = metresPerPixel(map.getZoom(), map.getCenter().lat);
-    const metres = niceScale(110 * mpp);
-    collar.style.setProperty('--collar-w', `${Math.round(metres / mpp)}px`);
-    const label = collar.querySelector('.travel-collar__label');
-    const text = scaleLabel(metres);
-    if (label && label.textContent !== text) label.textContent = text;
   }, []);
 
   // ── The landmark ──
@@ -452,11 +719,12 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   // default, else level with it on the side its name does not take, else
   // under it — the first no leg of the route runs through, read from the
   // camera it is about to be shown under, once per landing.
-  const landmarkSideFor = useCallback((map: any, index: number): LandmarkSide => {
-    const chapter = chapters[index];
-    const landmark = landmarkFor(chapter.slug);
-    if (!landmark) return 'above';
-    const origin = map.project(leads[index]);
+  const landmarkSideFor = useCallback((map: any, slug: string): LandmarkSide => {
+    const landmark = landmarkFor(slug);
+    const index = places.findIndex((place) => place.slug === slug && place.lead);
+    if (!landmark || index < 0) return 'above';
+    const place = places[index];
+    const origin = map.project([place.lng, place.lat]);
     const paths: Array<Array<{ x: number; y: number }>> = [];
     const trace = (coordinates: number[][]) => {
       const path: Array<{ x: number; y: number }> = [];
@@ -471,29 +739,28 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       }
       paths.push(path);
     };
+    // Leg `i` runs from place `i` to place `i + 1`.
     const outgoing = routeGeo.features[index];
     const incoming = routeGeo.features[index - 1];
     if (outgoing) trace(outgoing.geometry.coordinates);
     if (incoming) trace([...incoming.geometry.coordinates].reverse());
-    const nameSide = labelsRef.current.placements[index]?.mode;
-    return chooseLandmarkSide(paths, landmark.height, LANDMARK_CLEARANCE, [
+    return chooseLandmarkSide(paths, landmark.height, 21, [
       'above',
-      nameSide === 'left' ? 'right' : 'left',
+      nameSitsLeft(place.lng) ? 'right' : 'left',
       'below',
     ]);
-  }, [chapters, leads, routeGeo]);
+  }, [places, routeGeo]);
 
   // ── Framing ──
   const frameArchiveOverview = useCallback((duration = 0, token?: number, sheet: SheetMode = 'peek') => {
     const map = mapRef.current?.getMap();
     if (!map || !archiveBounds) return;
     const viewport = viewportFor(sheet);
-    atOverviewRef.current = true;
     map.fitBounds(archiveBounds, {
       padding: viewport.compact
-        ? { top: 56, right: 40, bottom: (viewport.sheet ?? 78) + 44, left: 48 }
-        : { top: 58, right: 108, bottom: 58, left: 68 },
-      maxZoom: viewport.compact ? 3.6 : 3.7,
+        ? { top: 42, right: 46, bottom: (viewport.sheet ?? 78) + 40, left: 46 }
+        : { top: 58, right: 68, bottom: 58, left: 68 },
+      maxZoom: viewport.compact ? 4.15 : 3.7,
       duration: reduceRef.current ? 0 : duration,
       easing: TRAVEL_EASE,
       essential: true,
@@ -505,20 +772,13 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   const flyToChapter = useCallback((chapter: TravelChapter, jump = false) => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const viewport = viewportFor('detail');
-    const camera = landingCamera(chapter, viewport);
+    const camera = landingCamera(chapter, viewportFor('detail'));
     const centre = map.getCenter();
     const duration = jump || reduceRef.current ? 0 : flightMs(greatCircleKm([centre.lng, centre.lat], camera.center));
-    atOverviewRef.current = false;
-    const container: HTMLElement = map.getContainer();
-    const size = { width: container.clientWidth, height: container.clientHeight };
-    const points = leads.map((lngLat) => projectAround(lngLat, camera, size));
-    const legs = routeGeo.features.map((leg) => leg.geometry.coordinates.map((coordinate) => projectAround(coordinate as [number, number], camera, size)));
-    prepareLabels({ points, groups: calloutGroups(points, groupsRef.current), focus: chapters.indexOf(chapter), legs });
     const token = beginFlight(chapter.slug, duration);
     if (duration === 0) map.jumpTo({ ...camera, retainPadding: false }, { travelFlight: token });
     else map.flyTo({ ...camera, duration, curve: FLIGHT_CURVE, easing: TRAVEL_EASE, essential: true, retainPadding: false }, { travelFlight: token });
-  }, [beginFlight, chapters, leads, prepareLabels, routeGeo, viewportFor]);
+  }, [beginFlight, viewportFor]);
 
   const updatePlaceUrl = useCallback((chapter: TravelChapter | null) => {
     const url = new URL(window.location.href);
@@ -548,8 +808,8 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     flyToChapter(chapter, jump);
   }, [bySlug, flyToChapter, updatePlaceUrl]);
 
-  const deselect = useCallback((focusMap = false) => {
-    if (!selectedRef.current) return;
+  /** Puts the chosen chapter back without moving the camera. */
+  const clearSelection = useCallback(() => {
     selectedRef.current = null;
     landedRef.current = null;
     setSelectedSlug(null);
@@ -560,11 +820,15 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     sheetFramedRef.current = 'peek';
     setMobileSheet('peek');
     updatePlaceUrl(null);
-    prepareLabels({ points: null, groups: overviewGroupsRef.current });
+  }, [updatePlaceUrl]);
+
+  const deselect = useCallback((focusMap = false) => {
+    if (!selectedRef.current) return;
+    clearSelection();
     frameArchiveOverview(OVERVIEW_MS, beginFlight(null, OVERVIEW_MS));
     // A lime focus ring never lingers on a row that is no longer chosen.
     if (focusMap) workspaceRef.current?.focus({ preventScroll: true });
-  }, [beginFlight, frameArchiveOverview, prepareLabels, updatePlaceUrl]);
+  }, [beginFlight, clearSelection, frameArchiveOverview]);
 
   // A chapter chosen again from the index is put back (on the phone, its
   // ticket comes back up instead).
@@ -574,40 +838,35 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     else deselect();
   }, [deselect, selectChapter]);
 
-  /** Marks standing together in a callout open as a group, in one click:
-   *  the camera fits them so the next view shows them apart. */
-  const fitGroup = useCallback((members: number[]) => {
-    const map = mapRef.current?.getMap();
-    if (!map || members.length < 2) return;
-    const points = members.map((index) => leads[index]);
-    const bounds: [[number, number], [number, number]] = [
-      [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1]))],
-      [Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))],
-    ];
-    const compact = window.matchMedia('(max-width: 1023px)').matches;
-    const centre = map.getCenter();
-    const mid: [number, number] = [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2];
-    const duration = reduceRef.current ? 0 : flightMs(greatCircleKm([centre.lng, centre.lat], mid));
-    atOverviewRef.current = false;
-    const token = beginFlight(null, duration);
-    map.fitBounds(bounds, {
-      padding: compact ? { top: 90, right: 70, bottom: 150, left: 70 } : { top: 150, right: 200, bottom: 150, left: 160 },
-      maxZoom: 7.4,
-      duration,
-      easing: TRAVEL_EASE,
-      essential: true,
-      retainPadding: false,
-    }, { travelFlight: token });
-  }, [beginFlight, leads]);
-
-  const handleMark = useCallback((slug: string) => {
-    const index = chapters.findIndex((chapter) => chapter.slug === slug);
-    const group = groupsRef.current?.find((members) => members.includes(index));
-    if (group && group.length > 1 && selectedRef.current !== slug) fitGroup(group);
-    else selectChapter(slug);
-  }, [chapters, fitGroup, selectChapter]);
-  const handleName = useCallback((slug: string) => selectChapter(slug), [selectChapter]);
   const handleHover = useCallback((slug: string | null) => setHoveredSlug(slug), []);
+
+  // A cluster that stands for one chapter (New York's two places, merged
+  // until street scale) is that chapter's selection. A cluster of several
+  // chapters has no single destination: it opens toward the zoom where it
+  // comes apart, and earns no arrival ring.
+  const handleClusterClick = useCallback((clusterId: number, lng: number, lat: number) => {
+    let leaves: any[] = [];
+    try { leaves = clusterIndex.getLeaves(clusterId, Infinity); } catch { leaves = []; }
+    const slugs = Array.from(new Set(leaves.map((leaf) => places[leaf.properties.placeIndex]?.slug).filter(Boolean))) as string[];
+    if (slugs.length === 1) {
+      selectChapter(slugs[0]);
+      return;
+    }
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const zoom = map.getZoom();
+    let target = zoom + 2;
+    try {
+      target = Math.min(clusterIndex.getClusterExpansionZoom(clusterId), zoom + 3.5, 16);
+    } catch {
+      target = zoom + 2;
+    }
+    clearSelection();
+    const centre = map.getCenter();
+    const duration = reduceRef.current ? 0 : flightMs(greatCircleKm([centre.lng, centre.lat], [lng, lat]));
+    const token = beginFlight(null, duration);
+    map.flyTo({ center: [lng, lat], zoom: target, duration, curve: FLIGHT_CURVE, easing: TRAVEL_EASE, essential: true, retainPadding: false }, { travelFlight: token });
+  }, [beginFlight, clearSelection, clusterIndex, places, selectChapter]);
 
   // ── Into the story ──
   // The ticket's photograph grows into the story across the page change (a
@@ -618,14 +877,11 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   // focus or press), in a box of the photograph's own ratio that covers the
   // viewport: the ticket's print and the plate are the same picture at the
   // same ratio, so the grow is one uniform scale and the sharp plate comes
-  // up over the ticket's print pixel for pixel in the first part of it. It
-  // used to carry the ticket's 171px print alone, blown up ten times to the
-  // screen with its perforation, fading out before it got there, over a
-  // page that had already cut to the story. When the full-size cover is not
-  // in yet, the stand-in plane is transparent and the ticket's print gives
-  // way to the story as before (html[data-travel-plate-blank]). The stub is
-  // not carried: a story's kept stub arrives only once the story has loaded
-  // (owner, 2026-09-27).
+  // up over the ticket's print pixel for pixel in the first part of it. When
+  // the full-size cover is not in yet, the stand-in plane is transparent and
+  // the ticket's print gives way to the story (html[data-travel-plate-blank]).
+  // The stub is not carried: a story's kept stub arrives only once the story
+  // has loaded (owner, 2026-09-27).
   const handleOpenTicket = useCallback((photo: HTMLElement, event: ReactMouseEvent<HTMLAnchorElement>, chapter: TravelChapter) => {
     if (reduceRef.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     photo.style.viewTransitionName = 'travel-plate';
@@ -711,8 +967,6 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   // ── The map's own events ──
   const handleMoveEnd = useCallback((event: any) => {
     const map = event.target;
-    setContextType(true);
-    updateCollar(map);
     const tagged = event.travelFlight;
     let landedNow: string | null = null;
     if (tagged !== undefined && tagged === flightTokenRef.current) {
@@ -729,31 +983,30 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     if (landedNow) {
       landedRef.current = landedNow;
       setLandedSlug(landedNow);
-      const index = chapters.findIndex((chapter) => chapter.slug === landedNow);
-      if (index >= 0) landmarkSideRef.current[landedNow] = landmarkSideFor(map, index);
+      landmarkSideRef.current[landedNow] = landmarkSideFor(map, landedNow);
     }
     const landed = landedRef.current && landedRef.current === selectedRef.current ? landedRef.current : null;
     const shown = landed && map.getZoom() >= LANDMARK_MIN_ZOOM ? landed : null;
     setLandmarkSlug((current) => (current === shown ? current : shown));
-    layoutLabels(map);
-  }, [chapters, landmarkSideFor, layoutLabels, setContextType, updateCollar]);
+  }, [landmarkSideFor]);
   const moveEndRef = useRef(handleMoveEnd);
   moveEndRef.current = handleMoveEnd;
 
-  // The archive's own layers: the route under the rings, the rings, and the
-  // keep-out that stops the basemap setting a word on a mark.
-  const addArchiveLayers = useCallback((map: any) => {
+  // The route: the homepage atlas's dashed white leg, [3, 4], on a soft burn
+  // casing so it reads over land and water alike. Quiet at rest (it is the
+  // archive's shape, not a call to action) and quieter still while a chapter
+  // is chosen, when that chapter's own legs are overdrawn at full ink on two
+  // layers that take turns (a constant opacity transitions; a data-driven one
+  // would snap). The lit layers repeat the base line's width and dash, so
+  // they land dash-for-dash on it. Under the basemap's type and, being
+  // canvas, under every DOM mark.
+  const addRouteLayers = useCallback((map: any) => {
     const firstSymbol = map.getStyle()?.layers?.find((layer: any) => layer.type === 'symbol' && layer.layout?.visibility !== 'none')?.id;
     const fade = { duration: reduceRef.current ? 0 : 520, delay: 0 };
     if (!map.getSource('travel-route')) map.addSource('travel-route', { type: 'geojson', data: routeGeo });
-    if (!map.getSource('travel-places')) map.addSource('travel-places', { type: 'geojson', data: placesGeo });
-    // The route: the homepage atlas's dashed white leg, [3, 4], on a burn
-    // casing so it reads over bright rock as well as water. A chosen
-    // chapter's legs are overdrawn at full ink on two layers that take turns
-    // (a constant opacity transitions; a data-driven one would snap).
     const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
     const add = (layer: any) => { if (!map.getLayer(layer.id)) map.addLayer(layer, firstSymbol); };
-    add({ id: 'travel-route-casing', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_BURN, 'line-width': 4, 'line-blur': 3, 'line-opacity': 0.34 } });
+    add({ id: 'travel-route-casing', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_BURN, 'line-width': 4, 'line-blur': 3, 'line-opacity': 0.2 } });
     ([0, 1] as const).forEach((slot) => add({
       id: `travel-route-lit-casing-${slot}`,
       type: 'line',
@@ -762,7 +1015,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       layout: lineLayout,
       paint: { 'line-color': MAP_BURN, 'line-width': 4.5, 'line-blur': 3, 'line-opacity': 0, 'line-opacity-transition': fade },
     }));
-    add({ id: 'travel-route-line', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0.62, 'line-opacity-transition': fade } });
+    add({ id: 'travel-route-line', type: 'line', source: 'travel-route', layout: lineLayout, paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0.44, 'line-opacity-transition': fade } });
     ([0, 1] as const).forEach((slot) => add({
       id: `travel-route-lit-${slot}`,
       type: 'line',
@@ -771,78 +1024,27 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       layout: lineLayout,
       paint: { 'line-color': MAP_INK, 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0, 'line-opacity-transition': fade },
     }));
-    // The rings: every place a small hollow ring in the homepage's ink, on a
-    // soft burn, upright to the viewer. The chosen chapter's lead place hands
-    // its ring to the DOM mark (focus point and ring); its other places keep
-    // theirs at full ink while the rest of the field dims by alpha, never to
-    // a grey disc.
-    const ring = {
-      'circle-radius': 3.9,
-      'circle-color': '#1b1f16',
-      'circle-opacity': 0.86,
-      'circle-stroke-color': MAP_INK,
-      'circle-stroke-width': 1.25,
-      'circle-stroke-opacity': 0.96,
-      'circle-stroke-opacity-transition': { duration: reduceRef.current ? 0 : 320, delay: 0 },
-      'circle-pitch-alignment': 'viewport',
-      'circle-emissive-strength': 1,
-    };
-    add({ id: 'travel-rings-burn', type: 'circle', source: 'travel-places', paint: { 'circle-radius': 6.2, 'circle-color': MAP_BURN, 'circle-opacity': 0.42, 'circle-blur': 0.9, 'circle-pitch-alignment': 'viewport' } });
-    add({ id: 'travel-rings', type: 'circle', source: 'travel-places', paint: ring });
-    add({ id: 'travel-rings-own', type: 'circle', source: 'travel-places', filter: ['==', ['get', 'chapter'], -1], paint: ring });
-    // Keep-out: an invisible icon as big as a mark, its name and its
-    // landmark, placed first (the topmost symbol layer), so the basemap can
-    // no longer set "Hialeah" under Miami's name or "Kayenta" on Page.
-    if (!map.hasImage(KEEP_OUT.id)) {
-      map.addImage(KEEP_OUT.id, { width: KEEP_OUT.width, height: KEEP_OUT.height, data: new Uint8Array(KEEP_OUT.width * KEEP_OUT.height * 4) });
-    }
-    if (!map.getLayer(KEEP_OUT.id)) {
-      map.addLayer({
-        id: KEEP_OUT.id,
-        type: 'symbol',
-        source: 'travel-places',
-        layout: { 'icon-image': KEEP_OUT.id, 'icon-allow-overlap': true, 'icon-ignore-placement': false, 'icon-offset': [0, KEEP_OUT.offsetY] },
-        paint: { 'icon-opacity': 0 },
-      });
-    }
-  }, [placesGeo, routeGeo]);
+  }, [routeGeo]);
 
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
     const finish = () => {
+      // The same olive-black cartographic language as the homepage atlas.
+      // No 3D terrain: the atlas is framed face-on, so relief is never seen
+      // and only costs GPU and DEM tiles.
       map.setProjection('globe');
+      map.setFog(ATLAS_FOG);
       if (window.matchMedia('(pointer: coarse)').matches) map.touchZoomRotate.disableRotation();
-      applySilverGround(map);
+      gradeAtlasBasemap(map);
       silenceArchivePlaceLabels(map, archiveNames);
-      addArchiveLayers(map);
-      // The key light: the print lit from the upper left, like the globe —
-      // over the canvas, under every DOM mark, at no GPU cost.
-      const canvas = map.getCanvas();
-      if (!canvas.parentElement?.querySelector('.travel-key-light')) {
-        const light = document.createElement('div');
-        light.className = 'travel-key-light';
-        light.setAttribute('aria-hidden', 'true');
-        canvas.after(light);
-      }
-      // The place grade, written as plain numbers when they change.
-      let lastBrightness = -1;
-      const grade = () => {
-        const { brightness, contrast } = placeGrade(map.getZoom());
-        if (brightness === lastBrightness) return;
-        lastBrightness = brightness;
-        map.setPaintProperty(TRAVEL_SATELLITE.layer, 'raster-brightness-max', brightness);
-        map.setPaintProperty(TRAVEL_SATELLITE.layer, 'raster-contrast', contrast);
-      };
-      grade();
-      map.on('zoom', grade);
+      addRouteLayers(map);
       map.on('moveend', (event: any) => moveEndRef.current(event));
       // A hand on the map takes the camera: the flight it stopped lands nowhere.
-      map.on('dragstart', () => { flightSlugRef.current = null; atOverviewRef.current = false; });
+      map.on('dragstart', () => { flightSlugRef.current = null; });
       map.on('zoomstart', (event: any) => {
         if (!event.originalEvent) return;
         flightSlugRef.current = null;
-        atOverviewRef.current = false;
       });
       frameArchiveOverview(0);
       atlasStyleReadyRef.current = true;
@@ -851,7 +1053,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     };
     if (map.isStyleLoaded()) finish();
     else map.once('style.load', finish);
-  }, [addArchiveLayers, archiveNames, frameArchiveOverview]);
+  }, [addRouteLayers, archiveNames, frameArchiveOverview]);
 
   const handleMapIdle = useCallback(() => {
     if (!atlasStyleReadyRef.current || atlasReadySignaledRef.current) return;
@@ -860,37 +1062,16 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     setMapReady(true);
     document.documentElement.dataset.atlasReady = 'true';
     window.dispatchEvent(new CustomEvent('gallery:atlas-ready'));
-    const map = mapRef.current?.getMap();
-    if (map) {
-      layoutLabels(map);
-      updateCollar(map);
-    }
-  }, [layoutLabels, updateCollar]);
+  }, []);
 
-  // The names are measured in their own faces: once the webfonts are in,
-  // lay them out again.
-  useEffect(() => {
-    if (!mapReady || !document.fonts) return;
-    let live = true;
-    document.fonts.ready.then(() => {
-      const map = mapRef.current?.getMap();
-      if (live && map && !map.isMoving()) layoutLabels(map);
-    });
-    return () => { live = false; };
-  }, [layoutLabels, mapReady]);
-
-  // The chosen chapter on the canvas: its lead ring handed to the DOM mark,
-  // its other places at full ink, the rest of the field dimmed by alpha, and
-  // its legs of the route lit.
+  // The chosen chapter on the canvas: the route quietens and its own legs
+  // light.
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !layersReady) return;
     const index = chapters.findIndex((chapter) => chapter.slug === selectedSlug);
     const chapterNo = index >= 0 ? index + 1 : -1;
-    map.setFilter('travel-rings', chapterNo > 0 ? ['!=', ['get', 'chapter'], chapterNo] : null);
-    map.setFilter('travel-rings-own', ['all', ['==', ['get', 'chapter'], chapterNo], ['!', ['get', 'lead']]]);
-    map.setPaintProperty('travel-rings', 'circle-stroke-opacity', chapterNo > 0 ? 0.5 : 0.96);
-    map.setPaintProperty('travel-route-line', 'line-opacity', chapterNo > 0 ? 0.4 : 0.62);
+    map.setPaintProperty('travel-route-line', 'line-opacity', chapterNo > 0 ? 0.3 : 0.44);
     const lit = litRef.current;
     if (lit.chapters[lit.live] === chapterNo) return;
     const next: 0 | 1 = lit.live === 0 ? 1 : 0;
@@ -939,9 +1120,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   }, [bySlug, frameArchiveOverview, mapReady, viewportFor]);
 
   // Phone: every change of the sheet frames what it leaves of the map — the
-  // chosen chapter over the sheet's edge, or the whole archive above it. The
-  // camera used to stay put, and closing the detail sheet left the place
-  // pinned under the masthead over an empty map.
+  // chosen chapter over the sheet's edge, or the whole archive above it.
   useEffect(() => {
     if (!mapReady || !mobileLayout) return;
     if (sheetFramedRef.current === mobileSheet) return;
@@ -990,11 +1169,11 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       if (Number.isNaN(lat) || Number.isNaN(lng)) return;
       let closest = -1;
       let minDist = Infinity;
-      leads.forEach(([placeLng, placeLat], index) => {
-        const distance = Math.abs(placeLat - lat) + Math.abs(placeLng - lng);
+      places.forEach((entry, index) => {
+        const distance = Math.abs(entry.lat - lat) + Math.abs(entry.lng - lng);
         if (distance < minDist) { minDist = distance; closest = index; }
       });
-      if (closest >= 0 && minDist < 2) selectChapter(chapters[closest].slug);
+      if (closest >= 0 && minDist < 2) selectChapter(places[closest].slug);
     };
     goToRequestedPlace();
     window.addEventListener('hashchange', goToRequestedPlace);
@@ -1003,7 +1182,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       window.removeEventListener('hashchange', goToRequestedPlace);
       window.removeEventListener('popstate', goToRequestedPlace);
     };
-  }, [chapters, leads, mapReady, selectChapter]);
+  }, [chapters, mapReady, places, selectChapter]);
 
   const resetView = useCallback(() => {
     if (selectedRef.current) deselect();
@@ -1021,51 +1200,39 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     return () => window.removeEventListener('keydown', onKey);
   }, [deselect]);
 
-  // The marks, rendered only when something they show changes — never per
-  // frame: Mapbox moves the marker elements itself.
-  const markers = useMemo(() => chapters.map((chapter, index) => {
-    const [lng, lat] = leads[index];
-    const selected = selectedSlug === chapter.slug;
-    const hovered = hoveredSlug === chapter.slug;
-    const placement = labels.placements[index] ?? REST_PLACEMENT;
-    const members = placement.group ? placement.group.split('-').map(Number) : null;
-    const groupLabel = members && !selected
-      ? `Show ${members.map((member) => chapters[member]?.name).filter(Boolean).join(', ')}`
-      : null;
-    return (
-      <Marker
-        key={chapter.slug}
-        longitude={lng}
-        latitude={lat}
-        anchor="center"
-        style={{ zIndex: selected ? 3 : hovered ? 2 : 1 }}
-      >
-        <TravelMark
-          chapter={chapter}
-          total={chapters.length}
-          selected={selected}
-          hovered={hovered}
-          dimmed={!!selectedSlug && !selected && !hovered}
-          arrived={arrivedSlug === chapter.slug}
-          landmarkShown={landmarkSlug === chapter.slug}
-          landmarkSide={landmarkSideRef.current[chapter.slug] ?? 'above'}
-          placement={placement}
-          labelHidden={labels.hidden[index] ?? false}
-          groupLabel={groupLabel}
-          reduce={prefersReduced}
-          onMark={handleMark}
-          onName={handleName}
-          onHover={handleHover}
-        />
-      </Marker>
-    );
-  }), [arrivedSlug, chapters, handleHover, handleMark, handleName, hoveredSlug, labels, landmarkSlug, leads, prefersReduced, selectedSlug]);
+  // A mark is only a target where it can be seen: on the canvas, and on the
+  // phone above the sheet.
+  const isMarkerAvailable = useCallback((lng: number, lat: number) => {
+    const map = mapRef.current?.getMap();
+    if (!mapReady || !map) return false;
+    const container = map.getContainer();
+    const point = map.project([lng, lat]);
+    const insideViewport = map.getBounds()?.contains([lng, lat])
+      && point.x >= 0
+      && point.x <= container.clientWidth
+      && point.y >= 0
+      && point.y <= container.clientHeight;
+    if (!insideViewport) return false;
+    if (!mobileLayout) return true;
+    return point.y < container.clientHeight - sheetHeight(mobileSheet, window.innerHeight, container.clientHeight) - 8;
+    // viewState and clusterZoom: the camera the answer is read under.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clusterZoom, mapReady, mobileLayout, mobileSheet, viewState]);
 
   const selectedChapter = selectedSlug ? bySlug.get(selectedSlug) ?? null : null;
+  const landedChapter = landedSlug && landedSlug === selectedSlug ? bySlug.get(landedSlug) ?? null : null;
   const years = useMemo(() => {
     const values = [...new Set(chapters.map((chapter) => chapter.year).filter(Boolean))].sort();
     return values.length > 1 ? `${values[0]}–${values[values.length - 1]}` : values[0] ?? '';
   }, [chapters]);
+
+  // The status pill: every state it can say (sized together), and the one it
+  // says now — named only once the camera has landed there.
+  const statusLabels = useMemo(
+    () => Array.from(new Set(['Select a city or marker', ...chapters.map((chapter) => `Viewing ${chapter.name}`)])),
+    [chapters],
+  );
+  const statusLabel = landedChapter ? `Viewing ${landedChapter.name}` : 'Select a city or marker';
 
   if (!mapboxToken) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
@@ -1101,6 +1268,13 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
           <MapGL
             initialViewState={FINAL_VIEW}
             ref={mapRef}
+            onZoom={handleMapZoom}
+            onMoveEnd={(event) => {
+              setViewState(event.viewState);
+              pendingClusterZoomRef.current = event.viewState.zoom;
+              setClusterZoom(event.viewState.zoom);
+              setClusterMorphing(false);
+            }}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLE}
             style={{ width: '100%', height: '100%' }}
@@ -1122,7 +1296,300 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
           >
             <NavigationControl position="bottom-right" showCompass={false} />
             <AttributionControl position="bottom-left" compact />
-            {markers}
+
+            {clusters.map((clusterNode) => {
+              const feature = clusterNode.feature;
+              const [lng, lat] = clusterNode.coordinates;
+              const [featureLng, featureLat] = feature.geometry.coordinates;
+              const props = feature.properties;
+              const markerInteractive = clusterNode.interactive && isMarkerAvailable(lng, lat);
+
+              // ── Cluster ──
+              if (props.cluster) {
+                const count = props.point_count ?? 0;
+                const baseSize = count < 3 ? 38 : count < 6 ? 42 : 46;
+                const size = baseSize + (coarsePointer ? 4 : 0);
+                let members: MapPlace[] = [];
+                try {
+                  members = clusterIndex
+                    .getLeaves(feature.id as number, Infinity)
+                    .map((leaf: any) => places[leaf.properties.placeIndex])
+                    .filter(Boolean);
+                } catch {
+                  members = [];
+                }
+                const memberSlugs = Array.from(new Set(members.map((member) => member.slug)));
+                const label = clusterName(Array.from(new Set(members.map((member) => member.region))));
+                const isActiveCluster = !!selectedSlug && memberSlugs.includes(selectedSlug);
+                const isHoveredCluster = !!hoveredSlug && memberSlugs.includes(hoveredSlug);
+                const engagedCluster = isActiveCluster || isHoveredCluster;
+                // The rest of the field recedes while a chapter is chosen — by
+                // colour, so the disc stays solid over the route.
+                const dimmedCluster = !!selectedSlug && !engagedCluster;
+                // A cluster of one chapter wears that chapter's landmark once
+                // it has been landed on; a cluster of several has no single
+                // drawing and wears none. Its name hangs under it, so the
+                // drawing never stands below.
+                const clusterSlug = memberSlugs.length === 1 ? memberSlugs[0] : null;
+                const clusterLandmarkShown = !!clusterSlug && landmarkSlug === clusterSlug && clusterZoom >= LANDMARK_MIN_ZOOM;
+                const chosenSide = clusterSlug ? landmarkSideRef.current[clusterSlug] ?? 'above' : 'above';
+                const clusterLandmarkSide: LandmarkSide = chosenSide === 'below' ? 'above' : chosenSide;
+                return (
+                  <Marker
+                    key={clusterNode.key}
+                    longitude={lng}
+                    latitude={lat}
+                    anchor="center"
+                    style={{ zIndex: clusterNode.role === 'child' ? 3 : 2 }}
+                  >
+                    <div
+                      data-atlas-marker-morph={clusterNode.role}
+                      aria-hidden={!markerInteractive}
+                      style={{
+                        opacity: clusterNode.opacity,
+                        transform: `scale(${clusterNode.scale})`,
+                        transformOrigin: 'center',
+                        pointerEvents: markerInteractive ? 'auto' : 'none',
+                        willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
+                      }}
+                    >
+                      <motion.button
+                        type="button"
+                        aria-label={`Explore ${label} cluster, ${count} locations`}
+                        tabIndex={markerInteractive ? 0 : -1}
+                        onClick={(event) => { event.stopPropagation(); handleClusterClick(feature.id as number, featureLng, featureLat); }}
+                        className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+                        style={{ width: size + 18, height: size + 18 }}
+                        initial={false}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 22 }}
+                      >
+                        <TravelLandmark
+                          slug={clusterSlug}
+                          shown={clusterLandmarkShown}
+                          side={clusterLandmarkSide}
+                          clearance={size / 2 + 11}
+                        />
+                        {/* Engaged, a cluster is ringed the way a chosen place
+                            is: one thin white ring at a gap. Hovering the
+                            cluster draws the same ring; its count and name are
+                            type, which is not scaled while it is read. */}
+                        <div
+                          className={`absolute rounded-full transition-[opacity,transform] ease-(--ease-arrive) ${
+                            engagedCluster
+                              ? 'opacity-100 [transform:scale(1)] duration-[280ms]'
+                              : 'opacity-0 [transform:scale(1.12)] duration-[420ms] group-hover:opacity-100 group-hover:[transform:scale(1)] group-hover:duration-[280ms]'
+                          }`}
+                          style={{
+                            width: size + 14,
+                            height: size + 14,
+                            border: `1px solid rgba(${MAP_INK_RGB},0.92)`,
+                            boxShadow: `0 0 0 1px rgba(${MAP_BURN_RGB},0.22)`,
+                          }}
+                        />
+                        {/* The seat: a dark burn collar under the disc, so the
+                            ink stands off pale ground and deepens when engaged. */}
+                        <div
+                          className="absolute rounded-full transition-colors duration-300"
+                          style={{
+                            width: size + 6,
+                            height: size + 6,
+                            backgroundColor: `rgba(${MAP_BURN_RGB},${engagedCluster ? 0.66 : 0.42})`,
+                          }}
+                        />
+                        {/* The count is the interface object here, so it keeps
+                            its solid disc and dark numerals. */}
+                        <div
+                          className="relative flex items-center justify-center rounded-full font-bold transition-[background-color] duration-500 ease-(--ease-arrive)"
+                          style={{
+                            width: size,
+                            height: size,
+                            fontSize: count < 10 ? 12 : 13,
+                            backgroundColor: dimmedCluster ? MAP_INK_DIM : MAP_INK,
+                            color: '#20241a',
+                            boxShadow: `0 1px 2px rgba(${MAP_BURN_RGB},0.9)`,
+                          }}
+                        >
+                          <AnimatePresence mode="wait">
+                            <motion.span
+                              key={count}
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: prefersReduced ? 0 : 0.2 }}
+                            >
+                              {count}
+                            </motion.span>
+                          </AnimatePresence>
+                        </div>
+                        {/* The cluster's name, set as the marks' names are:
+                            ink on the ground, not a chip. */}
+                        <span
+                          className="pointer-events-none absolute left-1/2 top-full mt-1.5 block -translate-x-1/2 whitespace-nowrap font-ui font-medium uppercase"
+                          style={{
+                            fontSize: engagedCluster ? 10 : 9,
+                            letterSpacing: engagedCluster ? '0.1em' : '0.12em',
+                            color: engagedCluster ? '#F4F4ED' : dimmedCluster ? 'rgba(244,244,237,0.3)' : 'rgba(244,244,237,0.72)',
+                            textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
+                            transition: engagedCluster
+                              ? `color 200ms ${CSS_EASE.arrive}, font-size 200ms ${CSS_EASE.arrive}, letter-spacing 200ms ${CSS_EASE.arrive}`
+                              : `color 420ms ${CSS_EASE.arrive}, font-size 420ms ${CSS_EASE.arrive}, letter-spacing 420ms ${CSS_EASE.arrive}`,
+                          }}
+                        >
+                          {label}
+                        </span>
+                      </motion.button>
+                    </div>
+                  </Marker>
+                );
+              }
+
+              // ── A single place ──
+              const place = places[props.placeIndex ?? -1];
+              if (!place) return null;
+              const isActive = selectedSlug === place.slug;
+              const isHovered = hoveredSlug === place.slug;
+              const markerZ = isActive ? 3 : isHovered ? 2 : 1;
+              const visualContainerSize = isActive ? 52 : isHovered ? 48 : 44;
+              const containerSize = coarsePointer ? Math.max(48, visualContainerSize) : visualContainerSize;
+              const markerCoreSize = isActive ? 22 : isHovered ? 19 : 16;
+              const labelOnLeft = nameSitsLeft(place.lng);
+              const engagedMark = isActive || isHovered;
+              // The rest of the field recedes while a chapter is chosen — by
+              // colour, so the dot stays solid over the route's dashes.
+              const dimmedMark = !!selectedSlug && !engagedMark;
+
+              return (
+                <Marker
+                  key={clusterNode.key}
+                  longitude={lng}
+                  latitude={lat}
+                  anchor="center"
+                  style={{ zIndex: markerZ }}
+                >
+                  <div
+                    data-atlas-marker-morph={clusterNode.role}
+                    aria-hidden={!markerInteractive}
+                    style={{
+                      opacity: clusterNode.opacity,
+                      transform: `scale(${clusterNode.scale})`,
+                      transformOrigin: 'center',
+                      pointerEvents: markerInteractive ? 'auto' : 'none',
+                      willChange: clusterNode.role === 'stable' ? 'auto' : 'opacity, transform',
+                    }}
+                  >
+                    <motion.button
+                      type="button"
+                      aria-label={`Explore ${place.city}, ${place.frames} frames`}
+                      tabIndex={markerInteractive ? 0 : -1}
+                      onClick={(event) => { event.stopPropagation(); selectChapter(place.slug); }}
+                      className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
+                      style={{ width: containerSize, height: containerSize }}
+                      initial={false}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={prefersReduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 24, opacity: { duration: 0.5 } }}
+                      onMouseEnter={() => setHoveredSlug(place.slug)}
+                      onMouseLeave={() => setHoveredSlug(null)}
+                      onFocus={() => setHoveredSlug(place.slug)}
+                      onBlur={() => setHoveredSlug(null)}
+                    >
+                      {/* Arrival — one thin ring, snapped in and eased out, the
+                          same confirm the homepage atlas gives a landed flight. */}
+                      {!prefersReduced && place.lead && arrivedSlug === place.slug && (
+                        <span aria-hidden="true" className="atlas-arrival-ring" />
+                      )}
+                      {/* The seat — not a glow: a dark burn under the place, so
+                          the white dot and its name stand off the ground. Always
+                          mounted, so it eases out as well as in; hover sets it,
+                          selection deepens it. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                        style={{
+                          background: `radial-gradient(circle, rgba(${MAP_BURN_RGB},0.6) 0%, rgba(${MAP_BURN_RGB},0.24) 34%, transparent 72%)`,
+                          opacity: isActive ? 1 : isHovered ? 0.55 : 0,
+                          transition: `opacity ${isActive || isHovered ? 200 : 420}ms ${CSS_EASE.arrive}`,
+                        }}
+                      />
+                      {/* Chosen: one thin white ring at a gap, the ring the
+                          homepage atlas puts round an engaged place. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-1/2 top-1/2 -ml-[17px] -mt-[17px] h-[34px] w-[34px] rounded-full"
+                        style={{
+                          border: `1px solid rgba(${MAP_INK_RGB},0.95)`,
+                          boxShadow: `0 0 0 1px rgba(${MAP_BURN_RGB},0.22)`,
+                          opacity: isActive ? 1 : 0,
+                          transform: `scale(${isActive ? 1 : 1.35})`,
+                          transition: isActive
+                            ? `opacity 280ms ${CSS_EASE.arrive}, transform 280ms ${CSS_EASE.arrive}`
+                            : `opacity 420ms ${CSS_EASE.arrive}, transform 420ms ${CSS_EASE.arrive}`,
+                        }}
+                      />
+                      {place.lead && (
+                        <TravelLandmark
+                          slug={place.slug}
+                          shown={landmarkSlug === place.slug && clusterZoom >= LANDMARK_MIN_ZOOM}
+                          side={landmarkSideRef.current[place.slug] ?? 'above'}
+                          clearance={21}
+                        />
+                      )}
+                      <div
+                        className="relative rounded-full transition-[width,height,box-shadow,background-color,border-color] duration-300 ease-(--ease-arrive)"
+                        style={{
+                          width: markerCoreSize,
+                          height: markerCoreSize,
+                          backgroundColor: dimmedMark ? MAP_INK_DIM : MAP_INK,
+                          border: `1px solid ${dimmedMark ? MAP_INK_DIM : `rgba(${MAP_INK_RGB},${isActive ? 0.95 : 0.72})`}`,
+                          boxShadow: isActive
+                            ? `0 0 0 2.5px rgba(${MAP_BURN_RGB},0.82), 0 1px 2px rgba(${MAP_BURN_RGB},0.9)`
+                            : `0 0 0 1.5px rgba(${MAP_BURN_RGB},0.5), 0 1px 2px rgba(${MAP_BURN_RGB},0.9)`,
+                        }}
+                      />
+                      {/* A place says its name in ink, bare type over the
+                          ground, as the homepage atlas sets its names. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 block -translate-y-1/2 truncate whitespace-nowrap font-ui font-medium uppercase"
+                        style={{
+                          left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 16}px)`,
+                          right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 16}px)` : 'auto',
+                          fontSize: engagedMark ? 10 : 9,
+                          letterSpacing: engagedMark ? '0.1em' : '0.12em',
+                          color: engagedMark ? '#F4F4ED' : dimmedMark ? 'rgba(244,244,237,0.3)' : 'rgba(244,244,237,0.72)',
+                          textShadow: '0 0 5px rgba(12,15,10,0.7), 0 0 12px rgba(12,15,10,0.45)',
+                          maxWidth: coarsePointer ? 96 : 140,
+                          transition: engagedMark
+                            ? `color 200ms ${CSS_EASE.arrive}, font-size 200ms ${CSS_EASE.arrive}, letter-spacing 200ms ${CSS_EASE.arrive}`
+                            : `color 420ms ${CSS_EASE.arrive}, font-size 420ms ${CSS_EASE.arrive}, letter-spacing 420ms ${CSS_EASE.arrive}`,
+                          zIndex: 10,
+                        }}
+                      >
+                        {place.city}
+                      </span>
+                      {/* The leader: one hairline drawn from the mark towards
+                          its name, undrawn at rest. */}
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 block h-px"
+                        style={{
+                          left: labelOnLeft ? 'auto' : `calc(50% + ${markerCoreSize / 2 + 3}px)`,
+                          right: labelOnLeft ? `calc(50% + ${markerCoreSize / 2 + 3}px)` : 'auto',
+                          width: 10,
+                          background: 'rgba(244,244,237,0.5)',
+                          transformOrigin: labelOnLeft ? 'right center' : 'left center',
+                          transform: `translateY(-50%) scaleX(${engagedMark ? 1 : 0})`,
+                          transition: engagedMark
+                            ? `transform 220ms ${CSS_EASE.arrive}`
+                            : `transform 380ms ${CSS_EASE.arrive}`,
+                          zIndex: 10,
+                        }}
+                      />
+                    </motion.button>
+                  </div>
+                </Marker>
+              );
+            })}
           </MapGL>
 
           <AnimatePresence initial={false}>
@@ -1178,11 +1645,36 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
             </button>
           </div>
 
-          {/* The scale collar, as a surveyor prints it (updated after every
-              move, from the map itself). */}
-          <div ref={collarRef} className="travel-collar font-ui" aria-hidden="true">
-            <span className="travel-collar__bar" />
-            <span className="travel-collar__label" />
+          {/* A legible first-use cue, so the map never looks like a passive
+              background. Its dot is the map's mark in miniature — white ink
+              on a burn collar. Every state it can say sits in one grid cell,
+              so the pill never changes width; a change crosses over in the
+              house's `in` time, arriving on the house curve and leaving on
+              the fade. */}
+          <div
+            className="pointer-events-none absolute left-1/2 top-5 z-10 hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-[#11150f]/78 px-4 py-2 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 shadow-[0_12px_34px_rgba(7,9,6,0.22)] backdrop-blur-xl lg:flex"
+            aria-hidden="true"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_0_1.5px_rgba(11,14,9,0.5)]" />
+            <span className="grid">
+              {statusLabels.map((label) => {
+                const current = label === statusLabel;
+                return (
+                  <span
+                    key={label}
+                    className="col-start-1 row-start-1 whitespace-nowrap"
+                    style={{
+                      opacity: current ? 1 : 0,
+                      transition: `opacity ${prefersReduced ? 0 : DUR_MS.in}ms ${current ? CSS_EASE.arrive : CSS_EASE.fade}`,
+                    }}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </span>
+            <span className="h-3 w-px bg-white/14" />
+            <span className="text-white/54">Drag to move · Scroll to zoom</span>
           </div>
 
           {/* Phone: the map owns the viewport and the index becomes one

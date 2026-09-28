@@ -1,11 +1,10 @@
 // Run offline: node --experimental-strip-types --test scripts/travel-silver.test.mjs
 //
-// /travel's atlas in silver (src/lib/travelSilver.ts): the print's ramp and
-// its place grade, the chapters in the homepage's order and numbering, the
-// one landing every path uses, the flight clock, the route's length, the
-// scale collar and the callout that sets the Southwest's three names. The
-// module imports its siblings without extensions (Vite's way), so it is
-// bundled first.
+// /travel's chapters (src/lib/travelSilver.ts): the chapters in the
+// homepage's order and numbering, the one landing every path uses, the
+// flight clock, the route's length and the phone sheet's height. The module
+// imports its siblings without extensions (Vite's way), so it is bundled
+// first.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
@@ -23,14 +22,7 @@ const bundle = async (entry) => {
 };
 const T = await bundle('../src/lib/travelSilver.ts');
 const { bezierFn, EASE } = await bundle('../src/lib/motion.ts');
-const { SILVER_RAMP } = await bundle('../src/lib/globeLook.ts');
 const { TICKET_STOCK } = await bundle('../src/lib/ticketStock.ts');
-
-const luminance = (hex) => {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
 
 // The archive as it stands: six chapters, New York in two places.
 const place = (city, lat, lng, n) => Array.from({ length: n }, (_, i) => ({
@@ -52,35 +44,6 @@ const COLLECTIONS = [
   collection('bryce-canyon-national-park', 'Bryce Canyon', 'Utah', 2026, 50, place('Bryce Canyon', 37.593, -112.1871, 5)),
 ];
 const chapters = T.travelChapters(COLLECTIONS);
-
-test('the print: the top of the ramp stays below paper and below the homepage print', () => {
-  const top = T.TRAVEL_RAMP[T.TRAVEL_RAMP.length - 1][1];
-  assert.ok(luminance(top) < luminance('#F4F4ED'), 'bone ink stands above the brightest rock');
-  assert.ok(luminance(top) < luminance(SILVER_RAMP[SILVER_RAMP.length - 1][1]), 'one step below the globe\'s paper');
-  for (let i = 1; i < T.TRAVEL_RAMP.length; i += 1) {
-    assert.ok(T.TRAVEL_RAMP[i][0] > T.TRAVEL_RAMP[i - 1][0], 'stops ascend');
-    assert.ok(luminance(T.TRAVEL_RAMP[i][1]) > luminance(T.TRAVEL_RAMP[i - 1][1]), 'and so does their ink');
-  }
-  const ramp = T.travelRamp();
-  assert.deepEqual(ramp.slice(0, 3), ['interpolate', ['linear'], ['raster-value']], 'a constant expression, never on zoom');
-  assert.ok(!JSON.stringify(T.travelSatellitePaint()).includes('"zoom"'), 'no zoom expression on raster paint');
-});
-
-test('the place grade: 1/0 over the overview, 0.70/0.16 at a place, monotonic and quantised', () => {
-  assert.deepEqual(T.placeGrade(3), { brightness: 1, contrast: 0 });
-  assert.deepEqual(T.placeGrade(7), { brightness: 0.7, contrast: 0.16 });
-  let last = T.placeGrade(3.5);
-  const seen = new Set();
-  for (let z = 3.5; z <= 7.5; z += 0.01) {
-    const g = T.placeGrade(z);
-    assert.ok(g.brightness <= last.brightness + 1e-12, `brightness never rises with zoom (z ${z.toFixed(2)})`);
-    assert.ok(g.contrast >= last.contrast - 1e-12, 'contrast never falls');
-    assert.equal(Math.round(g.brightness * 40), g.brightness * 40, 'brightness is quantised to 1/40');
-    seen.add(g.brightness);
-    last = g;
-  }
-  assert.ok(seen.size <= 13, `a flight makes a dozen writes at most (${seen.size})`);
-});
 
 test('the chapters: homepage order, numbers, stocks, frames numbered across the issue', () => {
   assert.deepEqual(chapters.map((c) => c.slug), ['miami', 'orlando', 'page', 'zion-national-park', 'bryce-canyon-national-park', 'new-york-stories']);
@@ -135,97 +98,6 @@ test('the flight clock and the route', () => {
   assert.ok(Math.abs(travel(0.5) - 0.5) < 1e-6, 'symmetric curve crosses the middle');
   let prev = 0;
   for (let x = 0; x <= 1; x += 0.01) { const y = travel(x); assert.ok(y >= prev - 1e-9); prev = y; }
-});
-
-test('the scale collar: the largest 1 / 2 / 5 × 10ⁿ that fits', () => {
-  assert.equal(T.niceScale(1100), 1000);
-  assert.equal(T.niceScale(560000), 500000);
-  assert.equal(T.niceScale(210000), 200000);
-  assert.equal(T.niceScale(99), 50);
-  assert.equal(T.scaleLabel(500000), '500 km');
-  assert.equal(T.scaleLabel(2000000), '2 000 km');
-  assert.equal(T.scaleLabel(50), '50 m');
-  const mpp = T.metresPerPixel(7, 37);
-  assert.ok(mpp > 480 && mpp < 500, `${mpp} m/px at z7, 37°N`);
-});
-
-test('the callout: groups join at 58px and part only past 74px', () => {
-  const pts = (d) => [{ x: 100, y: 100 }, { x: 100 + d, y: 100 }, { x: 600, y: 400 }];
-  assert.deepEqual(T.calloutGroups(pts(57)), [[0, 1], [2]]);
-  assert.deepEqual(T.calloutGroups(pts(60)), [[0], [1], [2]], 'apart past the join');
-  const joined = T.calloutGroups(pts(50));
-  assert.deepEqual(T.calloutGroups(pts(70), joined), [[0, 1], [2]], 'held together until the part');
-  assert.deepEqual(T.calloutGroups(pts(76), joined), [[0], [1], [2]]);
-});
-
-test('the names: beside the mark, flipped at an edge or a neighbour, stacked for a group', () => {
-  const widths = [80, 80, 80];
-  // A lone mark: right. At the right edge: left. A neighbour just right: left.
-  const lone = T.placeLabels([{ x: 300, y: 300 }], [[0]], [80], 1340);
-  assert.equal(lone[0].mode, 'right');
-  assert.equal(lone[0].dx, T.LABEL.gap);
-  assert.equal(T.placeLabels([{ x: 1300, y: 300 }], [[0]], [80], 1340)[0].mode, 'left');
-  const pair = T.placeLabels([{ x: 300, y: 300 }, { x: 420, y: 310 }], [[0], [1]], [80, 80], 1340);
-  assert.equal(pair[0].mode, 'left', 'crowded on the right');
-  assert.equal(pair[1].mode, 'right');
-  // The Southwest: three marks within 58px → one callout, names in screen order.
-  const sw = [{ x: 400, y: 330 }, { x: 380, y: 320 }, { x: 395, y: 305 }];
-  const groups = T.calloutGroups(sw);
-  assert.deepEqual(groups, [[0, 1, 2]]);
-  const placed = T.placeLabels(sw, groups, widths, 1340);
-  assert.ok(placed.every((p) => p.mode === 'stack' && p.leader), 'stacked with leaders');
-  const labelY = placed.map((p, i) => sw[i].y + p.dy);
-  const order = [0, 1, 2].sort((a, b) => sw[a].y - sw[b].y);
-  for (let k = 1; k < 3; k += 1) assert.equal(Math.round(labelY[order[k]] - labelY[order[k - 1]]), T.LABEL.step, '22px apart, top to bottom');
-  const rightEdge = placed.map((p, i) => sw[i].x + p.dx + widths[i]);
-  assert.ok(rightEdge.every((x) => Math.abs(x - (380 - T.LABEL.stackGap)) < 0.2), 'right-aligned 40px left of the group');
-  // The phone's overview above the open index (measured): New York's name,
-  // set left of its mark, ran on from the Southwest's stack as one line.
-  const phone = [{ x: 299, y: 301 }, { x: 288, y: 281 }, { x: 85, y: 228 }, { x: 77, y: 226 }, { x: 82, y: 224 }, { x: 313, y: 207 }];
-  const phoneW = [50, 68, 45, 44, 96, 72];
-  const phonePlaced = T.placeLabels(phone, T.calloutGroups(phone), phoneW, 390);
-  const boxes = phonePlaced.map((p, i) => ({ x0: phone[i].x + p.dx, x1: phone[i].x + p.dx + phoneW[i], y: phone[i].y + p.dy }));
-  for (let a = 0; a < boxes.length; a += 1) {
-    for (let b = a + 1; b < boxes.length; b += 1) {
-      const apart = Math.abs(boxes[a].y - boxes[b].y) >= 14 || boxes[a].x1 + 8 <= boxes[b].x0 || boxes[b].x1 + 8 <= boxes[a].x0;
-      assert.ok(apart, `names ${a} and ${b} keep apart`);
-    }
-  }
-  assert.ok(boxes.every((b) => b.x0 >= 0 && b.x1 <= 390), 'every name on the canvas');
-  // No room on the left: the callout goes right.
-  const near = sw.map((p) => ({ x: p.x - 330, y: p.y }));
-  const edge = T.placeLabels(near, groups, widths, 1340);
-  const maxX = Math.max(...near.map((p) => p.x));
-  assert.ok(edge.every((p, i) => Math.abs(near[i].x + p.dx - (maxX + T.LABEL.stackGap)) < 0.2), 'left-aligned 40px right of the group');
-});
-
-test('the names keep off the route: a callout moves out along its side, a name to its other side', () => {
-  // The Southwest at 1280 × 800: the marks sit too near the left edge for
-  // the callout, so it goes right — where Bryce's leg to New York leaves up
-  // and Orlando's leg into Page comes in from below, and the stack set level
-  // with the group had a leg through "05 Bryce Canyon" and "03 Page".
-  const sw = [{ x: 118, y: 393 }, { x: 99, y: 382 }, { x: 111, y: 379 }];
-  const widths = [45, 44, 96];
-  const toNewYork = [{ x: 111, y: 379 }, { x: 391, y: 330 }, { x: 671, y: 300 }];
-  const intoPage = [{ x: 597, y: 576 }, { x: 330, y: 500 }, { x: 118, y: 393 }];
-  const legs = [intoPage, toNewYork];
-  const groups = T.calloutGroups(sw);
-  const level = T.placeLabels(sw, groups, widths, 1000);
-  const box = (p, i) => ({ x0: sw[i].x + p.dx - 3, x1: sw[i].x + p.dx + widths[i] + 3, y0: sw[i].y + p.dy - 8, y1: sw[i].y + p.dy + 8 });
-  assert.ok(level.some((p, i) => T.legsCross(legs, box(p, i))), 'without the legs, a leg runs through the stack');
-  const placed = T.placeLabels(sw, groups, widths, 1000, legs);
-  assert.ok(placed.every((p) => p.mode === 'stack' && p.leader), 'still one stacked callout with leaders');
-  assert.ok(placed.every((p, i) => sw[i].x + p.dx > Math.max(...sw.map((q) => q.x))), 'on the right, the side that fits');
-  assert.ok(placed.every((p, i) => !T.legsCross(legs, box(p, i))), 'no leg through any name');
-  const labelY = placed.map((p, i) => sw[i].y + p.dy);
-  const order = [0, 1, 2].sort((a, b) => sw[a].y - sw[b].y);
-  for (let k = 1; k < 3; k += 1) assert.equal(Math.round(labelY[order[k]] - labelY[order[k - 1]]), T.LABEL.step, 'still 22px apart, in screen order');
-  // A lone name with a leg running out to its right goes left.
-  const lone = T.placeLabels([{ x: 400, y: 300 }], [[0]], [80], 1340, [[{ x: 400, y: 300 }, { x: 700, y: 302 }]]);
-  assert.equal(lone[0].mode, 'left');
-  // Nothing clear anywhere: set as without the route.
-  const walled = [[{ x: 0, y: 290 }, { x: 1340, y: 290 }], [{ x: 0, y: 300 }, { x: 1340, y: 300 }], [{ x: 0, y: 310 }, { x: 1340, y: 310 }]];
-  assert.equal(T.placeLabels([{ x: 400, y: 300 }], [[0]], [80], 1340, walled)[0].mode, 'right');
 });
 
 test('the sheet: one height rule', () => {

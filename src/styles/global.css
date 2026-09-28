@@ -4687,42 +4687,32 @@ body.travel-workspace-active {
    the column can be translated by whole cells and the window shows exactly one
    name at a time. Each cell sets its own type on the window's bottom edge — the
    name's baseline must not move as the column rolls past it. */
-/* Arrival ring — the /travel map's confirm that a flight has landed on the
-   chapter it promised. One 1px ring, snapped open on the house curve and let
-   go on the fade curve (a fade-out eases in), then gone: 700ms in all. Two
-   animations rather than per-keyframe curves, because a var() inside a
-   @keyframes rule is not resolved (see Layout.astro's fall). It plays once,
-   on mount. White ink like every mark on the map: a lime ring here would put
-   the one remaining lime on the confirmation gesture itself. */
-@keyframes atlas-arrival-in {
-  from {
+/* Arrival ring — the /travel map's confirm that a flight has landed on the city
+   it promised. One ring, snapped open and eased out (the asymmetry the focus
+   frame uses: fast in, slow out), then gone. It plays once, on mount.
+   White ink like every mark on the map: a lime ring here would put the one
+   remaining lime on the confirmation gesture itself. */
+@keyframes atlas-arrival-ring {
+  0% {
     opacity: 0;
-    transform: scale(0.5);
+    transform: scale(0.62);
   }
-  to {
-    opacity: 0.9;
+  22% {
+    opacity: 0.92;
     transform: scale(1);
   }
-}
-@keyframes atlas-arrival-out {
-  from {
-    opacity: 0.9;
-    transform: scale(1);
-  }
-  to {
+  100% {
     opacity: 0;
-    transform: scale(1.7);
+    transform: scale(1.92);
   }
 }
 
 .atlas-arrival-ring {
   position: absolute;
-  inset: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.78);
+  inset: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.78);
   border-radius: 9999px;
-  animation:
-    atlas-arrival-in 168ms var(--ease-arrive) both,
-    atlas-arrival-out 532ms var(--ease-fade) 168ms forwards;
+  animation: atlas-arrival-ring 620ms var(--ease-arrive) forwards;
   pointer-events: none;
 }
 
@@ -4737,13 +4727,12 @@ body.travel-workspace-active {
   position: absolute;
   left: 50%;
   top: 50%;
-  /* 58px for the 44-unit box: at 72px beside the old 22px disc the drawings
-     read as pictograms (Bryce's hoodoos a bar chart); a size down, standing
-     12px over a 7px ring, they read as the place. Strokes are non-scaling,
-     so they stay 1px. */
-  width: 58px;
-  height: 58px;
-  margin: calc(-29px + var(--landmark-y, -12px)) 0 0 calc(-29px + var(--landmark-x, 0px));
+  /* 72px for the 44-unit box: the drawings are ~26 units wide, and at the
+     homepage's 1:1 they measured ~25px here — too small to tell a facade from
+     a cart beside a 22px mark. Strokes are non-scaling, so they stay 1px. */
+  width: 72px;
+  height: 72px;
+  margin: calc(-36px + var(--landmark-y, -21px)) 0 0 calc(-36px + var(--landmark-x, 0px));
   overflow: visible;
   fill: none;
   pointer-events: none;
@@ -4768,27 +4757,14 @@ body.travel-workspace-active {
   }
 }
 
-/* ── /travel: the atlas in silver ─────────────────────────────────────────
-   The map page is the homepage's silver planet laid flat as a working atlas
-   (MapboxMap.tsx; the values in src/lib/travelSilver.ts). Everything below is
-   its DOM: the marks' names and focus point, the key light, the scale collar,
-   the index and the chapter's ticket. Marks ON the map are white ink and
-   bone; lime is the interface's (focus outlines, the masthead's "Archive."). */
+/* ── /travel: the index and the tickets ──────────────────────────────────
+   The map itself is the original atlas (MapboxMap.tsx: dark-v11 graded
+   olive, white-ink marks and bone cluster discs, their styles inline). What
+   follows is the page around it: the masthead's legend, the index and the
+   chapter's ticket. Lime is the interface's (focus outlines, the masthead's
+   "Archive."), never the map's. */
 
-/* The key light: the print lit from the upper left, like the globe, and
-   falling off to the lower right. Over the canvas, under every DOM mark;
-   static, so it costs the GPU nothing per frame. */
-.travel-key-light {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(120% 95% at 16% 4%, rgba(233, 230, 216, 0.075), rgba(233, 230, 216, 0) 52%),
-    radial-gradient(110% 120% at 104% 104%, rgba(11, 14, 9, 0.46), rgba(11, 14, 9, 0) 58%);
-}
-
-/* The masthead's legend: the map's hollow ring in miniature. */
+/* The masthead's legend: a hollow ring in the map's white ink. */
 .travel-legend-ring {
   display: inline-block;
   width: 7px;
@@ -4796,220 +4772,6 @@ body.travel-workspace-active {
   border-radius: 50%;
   border: 1.25px solid rgba(244, 244, 237, 0.9);
   box-sizing: border-box;
-}
-
-/* ── A chapter's mark (TravelMark.tsx) ──
-   The ring is the map's own (the `travel-rings` circle layers); the DOM holds
-   what has to be DOM. A 44px hit area (48 on a finger), centred on the place. */
-.travel-mark {
-  position: relative;
-  width: 44px;
-  height: 44px;
-}
-@media (pointer: coarse) {
-  .travel-mark {
-    width: 48px;
-    height: 48px;
-  }
-}
-.travel-mark__hit {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  cursor: pointer;
-}
-.travel-mark__hit:focus-visible {
-  outline: 2px solid #d2ff00;
-  outline-offset: -8px;
-}
-/* The seat: a dark burn under an engaged place, so its ink stands off pale
-   rock. Hover sets it, selection deepens it. */
-.travel-mark__seat {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 44px;
-  height: 44px;
-  margin: -22px 0 0 -22px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(11, 14, 9, 0.6) 0%, rgba(11, 14, 9, 0.24) 34%, rgba(11, 14, 9, 0) 72%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-.travel-mark[data-hover] .travel-mark__seat {
-  opacity: 0.55;
-  transition: opacity var(--dur-in) var(--ease-arrive);
-}
-.travel-mark[data-selected] .travel-mark__seat {
-  opacity: 1;
-  transition: opacity var(--dur-in) var(--ease-arrive);
-}
-/* The chosen chapter: a 21px ring round a 5px focus point, where the canvas
-   ring was — the homepage atlas's old `.af-point__ring`, which /travel keeps
-   as its own now that the homepage prints its places as dots (owner,
-   2026-09-27: Map里面的地点的球型我更喜欢以前的). */
-.travel-mark__ring {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 21px;
-  height: 21px;
-  margin: -10.5px 0 0 -10.5px;
-  border-radius: 50%;
-  border: 1px solid rgba(244, 244, 237, 0.95);
-  box-shadow: 0 0 0 1px rgba(11, 14, 9, 0.22);
-  opacity: 0;
-  transform: scale(1.35);
-  pointer-events: none;
-  transition: opacity 420ms var(--ease-arrive), transform 420ms var(--ease-arrive);
-}
-.travel-mark[data-selected] .travel-mark__ring {
-  opacity: 1;
-  transform: scale(1);
-  transition-duration: 280ms;
-}
-.travel-mark__focus {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 5px;
-  height: 5px;
-  margin: -2.5px 0 0 -2.5px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.55);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-in) var(--ease-fade);
-}
-.travel-mark[data-selected] .travel-mark__focus {
-  opacity: 1;
-  transition-timing-function: var(--ease-arrive);
-}
-/* The name: the chapter's number in the display face, the place in the label
-   face, set beside the mark (or stacked in a callout) at --lx / --ly from its
-   centre. Only its colour ever changes; size and tracking never move while it
-   is read. A name that changes side comes back in rather than sliding. */
-.travel-mark__label {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 3;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 0;
-  border: 0;
-  background: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transform: translate(var(--lx, 17px), calc(var(--ly, 0px) - 50%));
-  text-shadow: 0 0 5px rgba(12, 15, 10, 0.72), 0 0 12px rgba(12, 15, 10, 0.4);
-  animation: travel-name-in 180ms var(--ease-arrive) both;
-  transition: opacity 90ms var(--ease-fade);
-}
-.travel-mark__label[data-hidden] {
-  opacity: 0;
-  pointer-events: none;
-}
-@keyframes travel-name-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-.travel-mark__ord {
-  font-family: var(--font-display);
-  font-size: 12px;
-  line-height: 1;
-  color: rgba(244, 244, 237, 0.62);
-  transition: color var(--dur-out) var(--ease-arrive);
-}
-.travel-mark__name {
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(244, 244, 237, 0.84);
-  transition: color var(--dur-out) var(--ease-arrive);
-}
-.travel-mark[data-dimmed] .travel-mark__name {
-  color: rgba(244, 244, 237, 0.58);
-}
-.travel-mark[data-dimmed] .travel-mark__ord {
-  color: rgba(244, 244, 237, 0.44);
-}
-.travel-mark[data-hover] .travel-mark__name,
-.travel-mark[data-selected] .travel-mark__name,
-.travel-mark[data-hover] .travel-mark__ord,
-.travel-mark[data-selected] .travel-mark__ord {
-  color: #f4f4ed;
-  transition-duration: var(--dur-in);
-}
-/* A callout's leader: a dashed hairline from the mark to its stacked name. */
-.travel-mark__leader {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 1px;
-  height: 1px;
-  overflow: visible;
-  pointer-events: none;
-  transition: opacity 90ms var(--ease-fade);
-}
-.travel-mark__leader[data-hidden] {
-  opacity: 0;
-}
-.travel-mark__leader line {
-  stroke: rgba(244, 244, 237, 0.5);
-  stroke-width: 0.75;
-  stroke-dasharray: 2 2.5;
-}
-@media (prefers-reduced-motion: reduce) {
-  .travel-mark__label { animation: none; transition: none; }
-  .travel-mark__seat,
-  .travel-mark__focus,
-  .travel-mark__ring,
-  .travel-mark__ord,
-  .travel-mark__name { transition: none !important; }
-}
-
-/* ── The scale collar: bottom left, as a surveyor prints it. Its length is
-   the largest 1 / 2 / 5 × 10ⁿ that fits 110px, measured on the map. ── */
-.travel-collar {
-  position: absolute;
-  left: 22px;
-  bottom: 64px;
-  z-index: 5;
-  pointer-events: none;
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  color: rgba(244, 244, 237, 0.62);
-}
-.travel-collar__bar {
-  display: block;
-  width: var(--collar-w, 0px);
-  height: 5px;
-  border: 1px solid rgba(244, 244, 237, 0.55);
-  border-top: 0;
-  transition: width var(--dur-swap) var(--ease-arrive);
-}
-.travel-collar__label {
-  display: block;
-  margin-top: 6px;
-}
-@media (max-width: 1023px) {
-  .travel-collar { display: none; }
 }
 
 /* ── The index (TravelIndex.tsx) ──

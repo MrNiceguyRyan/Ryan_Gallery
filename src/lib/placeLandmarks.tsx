@@ -1,8 +1,8 @@
 /**
  * The landmark each place stands up on the map.
  *
- * Every place on both maps is printed the same way — a dot of white ink keyed
- * by its chapter number (AtlasSign's AfPoint, /travel's TravelMark). The
+ * Every place on both maps is printed the same way — a dot of white ink
+ * (AtlasSign's AfPoint, /travel's place marks in MapboxMap). The
  * landmark is the one thing a place gets of its own, and it gets it only when
  * it is looked at properly: the homepage atlas stands the current place's
  * landmark just above its dot, /travel the chosen place's beside its mark.
