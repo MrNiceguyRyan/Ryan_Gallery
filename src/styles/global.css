@@ -620,10 +620,10 @@ html[data-globe-voyage] .globe-prologue {
    destination's name is read. Set on the words themselves, whose wrappers'
    opacity framer owns. The plate's running head is not printed at rest at
    all ("The instruments on demand", below), so a voyage leaves it alone. */
-[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl) {
+[data-archive-column] [data-archive-chapter] :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > .archive-ticket-sign, .archive-ticket-stub > dl) {
   transition: opacity var(--dur-out) var(--ease-arrive);
 }
-[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > span, .archive-ticket-stub > dl) {
+[data-archive-column][data-voyage] [data-archive-chapter]:not([data-voyage-dest]) :is(.archive-cover-title, .archive-lede > div, .archive-ticket-stub > .archive-ticket-sign, .archive-ticket-stub > dl) {
   opacity: 0.3;
   transition: opacity var(--dur-in) var(--ease-leave);
 }
@@ -641,11 +641,10 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   display: none;
 }
 /* ─── Atlas viewfinder ────────────────────────────────────────────────────
-   The current place, named like a camera would: focus brackets, a level with
-   the coordinates, the year, the name and one readout line — all drawn by
-   AtlasViewfinder around the atlas focal point. Other places carry inactive
-   AF points (small hollow squares with their chapter number); the current
-   place's collapses to a white focus point. */
+   A trip's reading, drawn by AtlasViewfinder around the atlas focal point:
+   the coordinates at the ends of the reading line and, for a flight, the leg
+   below it. The places themselves are signed by their route shields (the
+   region signs below, and the ticket's stub). */
 .viewfinder {
   position: absolute;
   inset: 0;
@@ -771,28 +770,13 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
     transition: none !important;
   }
 }
-/* The chapter number rolls between two lines inside a one-line window. */
-.viewfinder__ordinal {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-  vertical-align: top;
-  line-height: 1;
-}
-.viewfinder__ordinal-strip {
-  display: block;
-}
-.viewfinder__ordinal-strip > span,
 .rolling-figure__strip > span {
   display: block;
   height: 1em;
   line-height: 1;
 }
-@media (prefers-reduced-motion: reduce) {
-  .viewfinder__ordinal-strip { transition: none !important; }
-}
-/* Bone, not lime: the line's one lime is the chapter number right after it
-   (a lime dot beside a lime figure was two marks). */
+/* Bone, not lime: the line's one lime is the name of the place being left,
+   in the air (a lime dot beside it was two marks). */
 .viewfinder__dot {
   display: inline-block;
   width: 5px;
@@ -801,14 +785,90 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   border-radius: 50%;
   background: #F4F4ED;
 }
-.af-point {
-  display: block;
-}
-.af-point__mark {
+/* ─── The route signs (RouteSign, src/lib/routeShield.ts) ────────────────
+   Owner, 2026-09-28 (甲，我喜欢路盾这样): a place on the map is a US-route
+   shield — bone plate, dark ink, the 1926 border ring and the state's band —
+   and a stretch of neighbouring places is ONE sign: their shields side by
+   side in stop order on a rail, one leader from the rail down to the middle
+   of the region (引线指向一段区域即可，同一块区域不需要反复指引，按照数字排序
+   即可). No post under a shield (不需要下面的引线), no ring, halo, dot,
+   crosshair or lime.
+
+   The sign is a zero-height marker box, its bottom-centre on the region's
+   middle. The atlas writes, per camera frame and only when they move,
+   `--lead` (the leader's length: the shields clear the region's northernmost
+   place) and `--shift` (the row sliding to keep inside the map column, never
+   off its rail); `--rail` is the rail's length, fixed per sign. A place alone
+   in its region (`.route-sign--single`, New York) has no leader and no rail:
+   the atlas writes `--lead` as SIGN_SINGLE_GAP (6px), so the shield's own
+   point stands just over the place and is the pointer. A shield
+   carries its state by SIZE and INK, fast in, slow out, on the house tokens:
+     ahead                  .92,  ink .86 (at .9 / .74 it read as disabled
+                                  grey on the dark ground)
+     visited (is-past)      .95,  ink .92
+     flown to (is-inbound)  1.12, ink 1   — comes up as the camera takes off
+     pointed at / focused / its cover engaged: 1.04, ink 1, and its name
+     the camera is on       1.22, ink 1, with a landing accent — no name (the
+                            ticket beside the map names it). */
+.route-sign {
   position: relative;
   display: block;
-  width: 12px;
-  height: 12px;
+  height: 0;
+}
+.route-sign > * {
+  transition: opacity var(--dur-in) var(--ease-arrive), visibility 0s;
+}
+/* Its region lies under the covers (`data-under`, written with the pose):
+   not printed there, unless the camera is on one of its places or flying to
+   one. Out on the fade, and out of reach once it has gone. */
+.route-sign[data-under] > * {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+}
+/* The leader: the map's white ink, trapped by a hairline of burn, soft only
+   in its last few pixels, where it goes into the ground — it points at a
+   stretch of country, not at a pin. */
+.route-sign__lead {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  height: var(--lead, 24px);
+  margin-left: -0.5px;
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.92) 9px);
+  box-shadow: 0 0 0 0.5px rgba(11, 14, 9, 0.4);
+  pointer-events: none;
+}
+.route-sign__row {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  transform: translate(var(--shift, 0px), calc(-1 * var(--lead, 24px)));
+}
+/* The rail the shields stand on: shield point to shield point, bone. */
+.route-sign__rail {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: var(--rail, 0px);
+  height: 1.5px;
+  margin: 0 0 -0.75px calc(var(--rail, 0px) / -2);
+  border-radius: 1px;
+  background: #F4F4ED;
+  box-shadow: 0 0 0 0.5px rgba(11, 14, 9, 0.45);
+  pointer-events: none;
+}
+.route-sign__shield {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 30px;
+  height: 30px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -817,231 +877,146 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   font: inherit;
   cursor: pointer;
   overflow: visible;
-}
-/* A 36px hit area around the 12px mark. */
-.af-point__mark::before {
-  content: '';
-  position: absolute;
-  inset: -12px;
-}
-.af-point__mark:focus-visible {
-  outline: 2px solid #D2FF00;
-  outline-offset: 6px;
-}
-.af-point__mark.is-current {
-  cursor: default;
-}
-/* A place on the map, printed: one 7px dot of white ink with a hard knockout
-   of ground round it (no blur, so it reads as paper cut away, not a glow —
-   the route stops short of the dot), keyed by its chapter number in the label
-   face. No ring, no halo, no crosshair, no corners and no lime: the owner
-   called the rings ugly (地图上对应的小标志太丑了, 2026-09-27) and turned down
-   aiming marks three times before that. Geometry is measured from the dot's
-   centre, which is the button's centre, which is the coordinate.
-
-   It carries its state by SIZE and INK, on one 7px element scaled (the
-   knockout scales with it on purpose):
-     far / ahead           .64, ink .62, numeral .56
-     visited (is-past)     .72, ink .86, numeral .70
-     flown to (is-inbound) .86, ink 1,   numeral 1
-     pointed at / focused / its cover engaged: as flown to, plus the name
-     the camera is on      1,   ink 1,   numeral 1 in 600, no name (the cover
-                           names it), and its landmark standing over it.
-   Fast in, slow out, on the house tokens. */
-.af-point__dot {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  margin: -3.5px 0 0 -3.5px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
-  transform: scale(0.64);
-  opacity: 0.62;
+  transform-origin: 50% 100%;
+  transform: scale(0.92);
+  opacity: 0.86;
+  filter: drop-shadow(0 1px 1.2px rgba(11, 14, 9, 0.6)) drop-shadow(0 3px 6px rgba(11, 14, 9, 0.28));
   transition:
     transform var(--dur-out) var(--ease-leave),
     opacity var(--dur-out) var(--ease-fade);
 }
-/* The key: set like a superscript to the dot, upper right, so it keeps off a
-   route that leaves the place level. Bone in Space Grotesk (named here and by
-   the element's own `font-ui`: unnamed, it falls to Inter), trapped by a hard
-   stroke of ground painted UNDER the glyphs — a print trap, not a glow, and
-   never wider than 1.5px (at 2.5 it read as sticker type). */
-.af-point__type {
+/* A 42px hit area round the 30px shield. */
+.route-sign__shield::before {
+  content: '';
   position: absolute;
-  left: calc(50% + 7px);
-  top: 50%;
-  transform: translateY(calc(-50% - 6px));
-  white-space: nowrap;
-  pointer-events: none;
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  color: #F4F4ED;
-  -webkit-text-stroke: 1.5px rgba(11, 14, 9, 0.8);
-  paint-order: stroke fill;
+  inset: -6px;
 }
-/* Past the covers' edge the key is set on the left instead, name first
-   ("ZION 04"), so a place near the plate never prints under it. The atlas
-   writes `data-side` when the camera comes to rest (never per frame). */
-.af-point__mark[data-side='left'] .af-point__type {
-  left: auto;
-  right: calc(50% + 7px);
-  display: flex;
-  flex-direction: row-reverse;
+.route-sign__shield:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 4px;
 }
-/* Both inline-blocks: an inline box ignores its own transform, and the print
-   settle below would silently never play. */
-.af-point__num {
-  display: inline-block;
-  opacity: 0.56;
-  transition: opacity var(--dur-out) var(--ease-fade);
+.route-sign__shield.is-past {
+  transform: scale(0.95);
+  opacity: 0.92;
 }
-.af-point__name {
-  display: inline-block;
-  margin-left: 0.5em;
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-.af-point__mark[data-side='left'] .af-point__name {
-  margin-left: 0;
-  margin-right: 0.55em;
-}
-/* A place whose dot lands inside the covers' column (`data-under`, written
-   with `data-side`) is under the plates and their headers: it is not printed
-   there — its number read into the chapter header and its dot sat on the
-   plate's corner — unless the camera is on it or on its way to it. */
-.af-point__mark[data-under]:not(.is-current):not(.is-inbound) :is(.af-point__dot, .af-point__type) {
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-/* Visited: a little fuller than the places still ahead. */
-.af-point__mark.is-past .af-point__dot {
-  transform: scale(0.72);
-  opacity: 0.86;
-}
-.af-point__mark.is-past .af-point__num {
-  opacity: 0.7;
-}
-/* The camera is on its way here: the destination comes up as it takes off,
-   so the one mark the reader is watching is the one that says so. */
-.af-point__mark.is-inbound .af-point__dot {
-  transform: scale(0.86);
+.route-sign__shield.is-inbound {
+  transform: scale(1.12);
   opacity: 1;
   transition-duration: var(--dur-swap);
   transition-timing-function: var(--ease-arrive);
 }
-/* Pointed at, focused, or its chapter's cover pointed at in the archive. */
-.af-point__mark:hover .af-point__dot,
-.af-point__mark:focus-visible .af-point__dot,
-.af-point__mark[data-engaged] .af-point__dot {
-  transform: scale(0.86);
+.route-sign__shield:is(:hover, :focus-visible, [data-engaged]):not(.is-current):not(.is-inbound) {
+  transform: scale(1.04);
   opacity: 1;
   transition-duration: var(--dur-in);
   transition-timing-function: var(--ease-arrive);
 }
-.af-point__mark.is-inbound .af-point__num,
-.af-point__mark:hover .af-point__num,
-.af-point__mark:focus-visible .af-point__num,
-.af-point__mark[data-engaged] .af-point__num {
+/* The place the camera is on: the tallest shield, full ink, and on the
+   landing an accent — up a tenth and back (after 11 mois's landing accent),
+   on the individual `scale`, so it stacks on the state's transform and never
+   stops it transitioning. */
+.route-sign__shield.is-current {
+  transform: scale(1.22);
   opacity: 1;
-  transition-duration: var(--dur-in);
-  transition-timing-function: var(--ease-arrive);
+  cursor: default;
+  transition:
+    transform var(--dur-swap) var(--ease-arrive),
+    opacity var(--dur-in) var(--ease-arrive);
+  animation: route-sign-land 460ms var(--ease-arrive) 1 both;
 }
-.af-point__mark:hover .af-point__name,
-.af-point__mark:focus-visible .af-point__name,
-.af-point__mark[data-engaged] .af-point__name {
-  opacity: 1;
-  transition-duration: var(--dur-in);
-  transition-timing-function: var(--ease-arrive);
+@keyframes route-sign-land {
+  0% { scale: 1; }
+  38% { scale: 1.09; }
+  100% { scale: 1; }
 }
-/* The place the camera is on. These come last and beat [data-engaged]: after
-   a voyage the cover takes focus, and the current place must not grow or
-   print its name — that is the state the owner sees most.
-   ARRIVAL is the strike: the dot is pressed down (on the leave curve) and
-   rebounds to full size (on the arrive curve), like a stamp, and then the
-   numeral prints — to 600 at once, settling 1.5px as the stamp lifts. The
-   whole press is over by lock + ~435ms, inside the viewfinder's settle. */
-.af-point__mark.is-current .af-point__dot {
-  transform: scale(1);
-  opacity: 1;
-  /* The size is handed straight to the strike, which runs on `scale` (the
-     individual property), not `transform`: an animation on a property stops
-     that property transitioning when it ends (measured: the place the camera
-     left snapped to its small size instead of easing down). Two moves, each
-     on its own curve — a var() in a keyframe's own timing function is not
-     resolved (measured: the press ran linear), the shorthand's is. Down in
-     the first 30% of the swap, back in the rest. */
-  transition: opacity var(--dur-in) var(--ease-arrive), transform 0s;
-  animation:
-    af-strike-down calc(var(--dur-swap) * 0.3) var(--ease-leave) 1 both,
-    af-strike-up calc(var(--dur-swap) * 0.7) var(--ease-arrive) calc(var(--dur-swap) * 0.3) 1 forwards;
+.route-sign__plate {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
-.af-point__mark.is-current .af-point__num {
-  opacity: 1;
+.route-sign__code,
+.route-sign__num {
+  font-family: var(--font-ui);
+  fill: #0B0E09;
+  font-variant-numeric: tabular-nums;
+}
+/* In the plate's own units (a 100-unit box): the band's letters ~0.185 of
+   the shield, the number ~0.45 and bold, as the 1926 shields set them. */
+.route-sign__code {
+  font-size: 18.5px;
   font-weight: 600;
-  animation: af-print var(--dur-in) var(--ease-arrive) 90ms 1 both;
+  letter-spacing: 1.2px;
 }
-.af-point__mark.is-current .af-point__name {
-  opacity: 0;
+.route-sign__num {
+  font-size: 45px;
+  font-weight: 700;
+  letter-spacing: -1px;
 }
-/* Where the place stands a landmark, the key steps out beside the drawing's
-   foot as it stands up, so the number never prints across it. */
-.af-point__mark[data-landmark] .af-point__type {
-  transition: transform var(--dur-out) var(--ease-leave);
-}
-.af-point__mark.is-current[data-landmark] .af-point__type {
-  transform: translate(7px, calc(-50% - 6px));
-  transition: transform var(--dur-swap) var(--ease-arrive) 90ms;
-}
-.af-point__mark.is-current[data-landmark][data-side='left'] .af-point__type {
-  transform: translate(-7px, calc(-50% - 6px));
-}
-@keyframes af-strike-down {
-  from { scale: 0.86; }
-  to { scale: 0.55; }
-}
-@keyframes af-strike-up {
-  from { scale: 0.55; }
-  to { scale: 1; }
-}
-@keyframes af-print {
-  0% { transform: translateY(1.5px); }
-  100% { transform: none; }
-}
-/* The current place's landmark stands on the map just above its dot: its
-   ground line (the viewBox origin, the box's middle) sits --landmark-lift over
-   the dot's centre, clear of the dot and its knockout. It stands up after the
-   strike, on the house curve, and leaves on the fade, settling as it goes. */
-.af-point__landmark {
-  --landmark-lift: 9px;
+/* Pointed at, a shield prints its place's name over itself, on a small bone
+   plaque. */
+.route-sign__name {
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 44px;
-  height: 44px;
-  margin: -22px 0 0 -22px;
-  overflow: visible;
-  fill: none;
-  pointer-events: none;
+  bottom: calc(100% + 5px);
+  padding: 4px 5px 3px;
+  border-radius: 2px;
+  background: #F4F4ED;
+  color: #0B0E09;
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 1px 1.5px rgba(11, 14, 9, 0.55);
+  transform: translateX(-50%);
   opacity: 0;
-  transform: translateY(calc(2px - var(--landmark-lift)));
-  transition:
-    opacity var(--dur-out) var(--ease-fade),
-    transform var(--dur-out) var(--ease-leave);
+  pointer-events: none;
+  transition: opacity var(--dur-out) var(--ease-fade);
 }
-.af-point__mark.is-current .af-point__landmark {
+.route-sign__shield:is(:hover, :focus-visible, [data-engaged]):not(.is-current) .route-sign__name {
   opacity: 1;
-  transform: translateY(calc(0px - var(--landmark-lift)));
-  transition:
-    opacity var(--dur-settle) var(--ease-arrive) 160ms,
-    transform var(--dur-settle) var(--ease-arrive) 160ms;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+/* The phone's signs (RouteAtlas LivingRouteSign): the same sign at 22px, set
+   on the living atlas's projected points; the scroll inks each shield. */
+.route-sign--living {
+  position: absolute;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.route-sign--living .route-sign__shield {
+  width: 22px;
+  height: 22px;
+  cursor: default;
+  filter: drop-shadow(0 1px 1px rgba(11, 14, 9, 0.6));
+  transition: none;
+}
+.route-sign--living .route-sign__lead {
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.8) 7px);
+}
+/* Hung below the region: the leader runs down from it to the rail, and the
+   shields hang from the rail by their ears. */
+.route-sign--below .route-sign__lead {
+  top: 0;
+  bottom: auto;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.8) 7px);
+}
+.route-sign--below .route-sign__row {
+  top: 0;
+  bottom: auto;
+  align-items: flex-start;
+  transform: translate(var(--shift, 0px), var(--lead, 24px));
+}
+.route-sign--below .route-sign__rail {
+  top: 0;
+  bottom: auto;
+  margin: -0.75px 0 0 calc(var(--rail, 0px) / -2);
+}
+.route-sign--below .route-sign__shield {
+  transform-origin: 50% 0;
 }
 .af-place__body {
   fill: rgba(11, 14, 9, 0.46);
@@ -1077,14 +1052,11 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
 @media (prefers-reduced-motion: reduce) {
   /* The same end states, arrived at without moving (values, not structure).
      `!important`, because every state rule sets its own transition-duration
-     at four classes of specificity — a plain `transition: none` here loses
-     the cascade and reduced motion silently keeps animating. Same reason
-     `.viewfinder__ordinal-strip` above carries it. */
-  .af-point__dot,
-  .af-point__type,
-  .af-point__num,
-  .af-point__name,
-  .af-point__landmark { transition: none !important; animation: none !important; }
+     at up to four classes of specificity — a plain `transition: none` here
+     loses the cascade and reduced motion silently keeps animating. */
+  .route-sign > *,
+  .route-sign__shield,
+  .route-sign__name { transition: none !important; animation: none !important; }
 }
 
 /* Under a story the archive recedes: the atlas grows and softens behind the
@@ -1106,13 +1078,12 @@ main[data-story-under="true"] [data-archive-column] {
 }
 /* The plate a story grew out of (`data-story-source`, set by the Homepage in
    the click). The story's cover plane starts as exactly that plate's window,
-   but the plate's title, focus corners and cue hang past its edges — for the
+   but the plate's title and cue hang past its edges — for the
    first frames of the grow they would show sliced along the window's edge.
    They go with the plate, in the same paint the plane arrives in; the page
    around them is covered by the growing window as it always would have been.
    No transition: a fade would be a fade of half a letter. */
 main[data-story-under="true"] [data-story-source] .archive-cover-title-wrap,
-main[data-story-under="true"] [data-story-source] .archive-focus,
 main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   visibility: hidden;
 }
@@ -1161,8 +1132,10 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   --sG: clamp(12px, 1.39vw, 24px);
   --sC: calc((100vw - 2 * var(--sM) - 11 * var(--sG)) / 12);
   --story-rail: calc(3 * var(--sC) + 2 * var(--sG));
-  /* The kept stub's height: its type's (.story-stub), fixed. */
-  --story-stub-h: 138px;
+  /* The kept stub's height: its type's (.story-stub), fixed — headed by the
+     ticket's sign, 204px with a name on one line, 233px with a name on two
+     (BRYCE / CANYON, NEW / YORK): the reserve is the taller. */
+  --story-stub-h: 233px;
   /* The ladder: 173 · 60 · 26 · 20 · 15 · 12 · 11 · 10 at 1728. */
   --story-title: clamp(72px, 10vw, 190px);
   --story-lead: clamp(20px, 1.5vw, 26px);
@@ -2652,12 +2625,13 @@ h1, h2, h3 {
 /* One ring, and it lets the element it is on decide its own shape and distance.
    Unlayered, this blanket rule beat all 73 `focus-visible:outline-offset-*`
    utilities in the app (utilities are layered; an unlayered declaration wins),
-   so every carefully-set offset — 4px on the plates, 6px on the AF points,
+   so every carefully-set offset — 4px on the plates and the map's shields,
    8px on the tick groups — was silently overruled to 2px, and the
    `border-radius: 4px` squared off every round mark and pill it landed on
    while rounding anything with a background. In `@layer base` the utilities
-   win again, and the two components that set their own ring (`.af-point__mark`,
-   `.atlas-ticks__group`) still beat both, being unlayered themselves. */
+   win again, and the two components that set their own ring
+   (`.route-sign__shield`, `.atlas-ticks__group`) still beat both, being
+   unlayered themselves. */
 @layer base {
   *:focus-visible {
     outline: 2px solid rgb(var(--accent-r), var(--accent-g), var(--accent-b));
@@ -2851,29 +2825,8 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 .route-atlas-print-label--gulf { right: 23%; top: 78%; }
 /* The living tree's route overlay is white ink (MAP_INK): it is seated on a
    burn shadow like the desktop's travelled line, not lit by a lime glow. */
-/* The living tree's places are the atlas's print marks: a 7px dot of white
-   ink with a hard knockout (scale and ink are scroll-owned, in RouteAtlas),
-   and the chapter's number keyed in the label face under the same print trap
-   — a stroke of ground painted under the glyphs, never a glow. */
-.living-mark__dot {
-  position: relative;
-  display: block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
-}
-.living-mark__label {
-  -webkit-text-stroke: 1.5px rgba(11, 14, 9, 0.8);
-  paint-order: stroke fill;
-}
-.living-mark__num {
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  font-variant-numeric: tabular-nums;
-}
+/* The living tree's places are its region signs (.route-sign--living,
+   under "The route signs"). */
 .route-atlas__route-overlay {
   filter: drop-shadow(0 0 2px rgba(11, 14, 9, 0.55));
 }
@@ -3030,18 +2983,16 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   justify-content: space-between;
   gap: 16px;
 }
-.story-stub__admission {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+/* The ticket's sign (`.archive-ticket-sign`, below), at the ticket's own
+   measure and at the same place on the card: its box's corner 12px in from
+   the card's, as on the homepage stub (padding 20/22 less its -8/-10), so the
+   shield, "/ 06" and the name sit exactly where the ticket prints them and
+   the stub flies home onto itself. */
+.story-stub .story-stub__sign {
+  flex: none;
+  width: 166px;
+  margin: -4px 0 0 -12px;
 }
-.story-stub__no {
-  font-size: 34px;
-  font-weight: 500;
-  line-height: 0.9;
-  letter-spacing: -0.03em;
-}
-.story-stub__of,
 .story-stub__row,
 .story-stub__frame {
   font-size: 9px;
@@ -3050,22 +3001,24 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.story-stub__of {
-  margin-top: 6px;
-  color: var(--stub-muted);
-}
+/* Beside the sign, each row a label over its value, set right: the rail is
+   289px wide at 1280, where "REGION  FLORIDA" on one line no longer fits
+   beside the sign's 166. */
 .story-stub__rows {
-  margin: 0;
+  margin: 0 0 3px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  min-width: 128px;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .story-stub__row {
   display: flex;
-  justify-content: space-between;
-  gap: 14px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
 }
 .story-stub__row dt {
   color: var(--stub-muted);
@@ -3080,25 +3033,15 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   margin: 14px 0 12px;
   background: var(--stub-rule);
 }
-/* The place on the left; the frame the reader is on anchored on the right,
-   its own city (only when it is not the chapter's) growing leftward from the
-   number and giving way first if the line is short. */
+/* The frame the reader is on, anchored on the right, its own city (only
+   when it is not the chapter's) growing leftward from the number and giving
+   way first if the line is short. (The place is the sign's, above.) */
 .story-stub__line {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   min-width: 0;
-}
-.story-stub__place {
-  flex: none;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--stub-strong);
 }
 .story-stub__frame {
   display: flex;
@@ -3221,11 +3164,17 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 }
 /* The three marks both stubs print are carried by one print (`is-shared`,
    slid between the two stubs' positions); each other print leaves them out,
-   so nothing is ever printed twice. */
+   so nothing is ever printed twice. The shared print carries the marks
+   alone: the sign round them (the shield's plate and state, "Stop", the
+   enamel rule) is the rail's print and then the ticket's, which sit on the
+   same place on the card. */
 .story-stub-travel__home :is(.archive-ticket-stub__no, .archive-ticket-stub__of, .archive-ticket-stub__place),
 .story-stub--print.is-kept :is(.story-stub__no, .story-stub__of, .story-stub__place),
-.story-stub--print.is-shared :is(.story-stub__rows, .story-stub__rule, .story-stub__frame, .story-stub__ticks) {
+.story-stub--print.is-shared :is(.story-stub__rows, .story-stub__rule, .story-stub__frame, .story-stub__ticks, .route-shield__plate, .route-shield__code, .archive-ticket-sign__label) {
   visibility: hidden;
+}
+.story-stub--print.is-shared .story-stub__sign {
+  box-shadow: none;
 }
 /* A figure that rolls instead of changing (the kept stub's frame number):
    the widest value set in place, invisible, holds the line's baseline and
@@ -3265,6 +3214,123 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 .archive-plate__stage {
   will-change: transform;
 }
+/* ── The route shield, printed (RouteShield) ────────────────────────────
+   The map's shield on paper: the plate drawn (bone, the 1926 border ring and
+   the band's rule in dark ink), the state and the stop number set over it as
+   type, so they can turn on a landing. Sized by `--shield`; the type sits on
+   the plate's own lines — the band's letters' baseline at 30% of the shield,
+   the number's at 79.5% — trimmed to their caps so nothing else moves them. */
+.route-shield {
+  --shield: 44px;
+  --flap-ink: #0B0E09;
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--shield);
+  height: var(--shield);
+  color: #0B0E09;
+}
+.route-shield__plate {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgba(8, 10, 7, 0.35));
+}
+.route-shield__paper {
+  fill: #F4F4ED;
+}
+.route-shield__border {
+  fill: none;
+  stroke: #0B0E09;
+  stroke-width: 4.4;
+}
+.route-shield__rule {
+  stroke: #0B0E09;
+  stroke-width: 3.4;
+}
+.route-shield__code,
+.route-shield__num {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: block;
+  font-family: var(--font-ui);
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-box: trim-both cap alphabetic;
+}
+.route-shield__code {
+  top: 17.1%;
+  font-size: calc(var(--shield) * 0.185);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-indent: 0.06em;
+}
+.route-shield__num {
+  top: 48.7%;
+  font-size: calc(var(--shield) * 0.44);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+/* Where the caps cannot be trimmed, the line box is placed from Space
+   Grotesk's own metrics instead (its baseline sits 0.87 of the em below the
+   top of a 1.0 line box; the caps are 0.70 tall). */
+@supports not (text-box: trim-both cap alphabetic) {
+  .route-shield__code { top: calc(30% - var(--shield) * 0.185 * 0.87); }
+  .route-shield__num { top: calc(79.5% - var(--shield) * 0.44 * 0.87); }
+}
+/* ── The split-flap (FlapWord / runFlap / primeFlap) ──
+   Each character is a box of its own glyph's width, so a turning board never
+   moves the line: while it turns its glyph is inked out and the flip printed
+   over it (`data-show`, written per flip by runFlap). A flip is cut to its
+   own cell, as a board's flap is — a wide letter shown in a narrow cell
+   never overprints its neighbours. `clip-path`, not overflow: an
+   inline-block that clips its overflow moves its baseline, and the letters
+   would jump. The flips are chosen from the cell's own width class anyway
+   (src/lib/routeShield.ts), so the cut rarely shows. */
+.flap-w {
+  white-space: nowrap;
+}
+.flap-c {
+  position: relative;
+  display: inline-block;
+}
+.flap-c[data-show] {
+  color: transparent;
+  clip-path: inset(-0.2em 0);
+}
+/* The name being left, set whole over the new name's blanked cells until the
+   board turns (runFlap / primeFlap write its text; empty, it is not drawn).
+   Laid over the name's own block — the ticket's sign name and the phone's
+   place are its containing blocks — at the block's measure, so it breaks
+   where that name would, and cut to the block's height. */
+.flap-was {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  color: var(--flap-ink, #F4F4ED);
+  pointer-events: none;
+}
+.flap-was:empty {
+  display: none;
+}
+.flap-c[data-show]::after {
+  content: attr(data-show);
+  position: absolute;
+  top: 0;
+  left: 50%;
+  color: var(--flap-ink, #F4F4ED);
+  transform: translateX(-50%);
+}
+
 /* ── The ticket ─────────────────────────────────────────────────────────
    The cover is a ticket: the photograph on the left, the stub on the right,
    one perforation between them. The holes are punched through both halves
@@ -3512,31 +3578,67 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   transform: var(--tear-stf, none);
   opacity: var(--tear-sop, 1);
 }
-.archive-ticket-stub__no {
-  font-size: 34px;
-  font-weight: 500;
-  line-height: 0.9;
-  letter-spacing: -0.03em;
+/* ── The ticket's sign (ArchiveChapter) ──
+   The stub is the place's sign (owner, 2026-09-28): at its head the route
+   shield — the map's own, larger — with "Stop / 06" beside it, and the
+   place's name set big in the label face inside an enamel rule, the way a
+   highway guide sign borders its panel; the card under it is the chapter's
+   own stock. Bone ink throughout; the shield is bone with dark ink. No lime. */
+.archive-ticket-sign {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: -8px -6px 0 -10px;
+  padding: 12px 12px 15px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1.5px rgba(244, 244, 237, 0.86);
 }
-.archive-ticket-stub__of {
-  margin-top: 6px;
+.archive-ticket-sign__head {
+  display: flex;
+  align-items: flex-end;
+  gap: 11px;
+}
+.archive-ticket-sign__shield {
+  --shield: 46px;
+}
+/* "Stop" over "/ 06", the total set on the shield number's line, so the two
+   read across as "01 / 06". */
+.archive-ticket-sign__stop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.archive-ticket-sign__label {
   font-size: 9px;
+  line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--stub-muted);
 }
-.archive-ticket-stub__rule {
-  display: block;
-  height: 1px;
-  margin: 14px 0 12px;
-  background: var(--stub-rule);
-}
-.archive-ticket-stub__place {
-  font-size: 11px;
+.archive-ticket-sign__total {
+  font-size: 17px;
   font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
   color: var(--stub-strong);
+}
+/* The name: the stop, big, in the label face (the Fraunces title under the
+   photograph is the chapter's; this is the sign's). Its size is set per name
+   (ArchiveChapter `--sign-name`, from its longest word), so a long word never
+   runs out of the rule. */
+.archive-ticket-sign__name {
+  position: relative;
+  display: block;
+  font-size: var(--sign-name, 30px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--stub-ink);
+  --flap-ink: var(--stub-ink);
 }
 .archive-ticket-stub__rows {
   margin: auto 0 0;
@@ -3560,59 +3662,6 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 .archive-ticket-stub__row dd {
   margin: 0;
   color: var(--stub-strong);
-}
-.archive-focus {
-  position: absolute;
-  inset: -9px;
-  z-index: 11;
-  display: block;
-  pointer-events: none;
-}
-/* The corners are driven from ONE place: `--focus-splay` and `--focus-glow`,
-   written per frame by the plate's own distance from the reading line. No
-   transition lives here — the values already arrive eased, and a transition on
-   a per-frame value would only ever be chasing a target that has already
-   moved. The camera's own states below are the exception: they are discrete,
-   so they bring their own timing. */
-.archive-focus i {
-  position: absolute;
-  width: 30px;
-  height: 30px;
-  border: 0 solid rgba(244, 244, 237, 0.82);
-  filter: drop-shadow(0 1px 2px rgba(12, 15, 10, 0.55));
-  opacity: var(--focus-glow, 0.4);
-  transform: translate(
-    calc(var(--focus-x) * var(--focus-splay, 7px)),
-    calc(var(--focus-y) * var(--focus-splay, 7px))
-  );
-  /* Only `border-color` is eased here, and only because it is the one property
-     on this element that is never written per frame: it changes once when the
-     camera lands and once more when the lock lapses. */
-  transition: border-color 620ms var(--ease-arrive);
-}
-/* Per-corner data, all of it in one place: which corner this is, and which way
-   it points — the sign pair the shared `--focus-splay` is multiplied by. */
-.archive-focus i:nth-child(1) { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; --focus-x: -1; --focus-y: -1; }
-.archive-focus i:nth-child(2) { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; --focus-x: 1; --focus-y: -1; }
-.archive-focus i:nth-child(3) { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; --focus-x: 1; --focus-y: 1; }
-.archive-focus i:nth-child(4) { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; --focus-x: -1; --focus-y: 1; }
-/* The camera never touches the corners' GEOMETRY. A flight begins on the same
-   commit that puts this plate on the reading line and lasts up to 1.85s, so a
-   flight that splayed the corners would blow them open at the exact instant
-   the rack is closing them — the binary snap this rack exists to remove,
-   wearing a different attribute. The hunt is already drawn where it belongs,
-   on the map. What the plate answers is the landing, and it answers in ink
-   rather than in position: the corners confirm the place in lime without ever
-   leaving the photograph's edges.
-
-   `--focus-glow` is set on the corner ITSELF. The rack's value reaches it only
-   by inheritance from the span, and a declaration always beats an inherited
-   value, so for the length of the lock this one wins — which keeps `opacity`
-   and `transform` each declared in exactly one rule in the stylesheet. */
-[data-atlas-camera="locked"] [data-archive-chapter][data-active="true"] .archive-focus i {
-  --focus-glow: 1;
-  border-color: #D2FF00;
-  transition: border-color 180ms var(--ease-arrive);
 }
 .archive-plate__cue {
   position: absolute;
@@ -3655,16 +3704,101 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 @media (min-width: 1024px) {
   .archive-plate__cue { display: inline-flex; }
 }
+/* ── "Next stop" (the stub's foot) ──
+   Live only on the ticket being read, while it is whole: a click tears it as
+   the reader's push does, and the page goes on once the face is free. The
+   next stop's shield and name, and an arrow that steps on under the hand. */
+.archive-ticket-next {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 44px;
+  margin: 16px 0 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--stub-rule);
+  background: none;
+  color: var(--stub-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out), color var(--dur-out) var(--ease-arrive);
+}
+.archive-ticket-next[data-ready] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-in) var(--ease-arrive), visibility 0s, color var(--dur-out) var(--ease-arrive);
+}
+.archive-ticket-next__label {
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--stub-muted);
+}
+.archive-ticket-next__stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.archive-ticket-next__shield {
+  --shield: 22px;
+}
+.archive-ticket-next__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-ticket-next svg {
+  flex: none;
+  transition: transform var(--dur-out) var(--ease-arrive);
+}
+.archive-ticket-next__down {
+  transform: rotate(90deg);
+}
+.archive-ticket-next[data-ready]:is(:hover, :focus-visible) {
+  color: var(--stub-ink);
+  transition-duration: var(--dur-in);
+}
+.archive-ticket-next[data-ready]:is(:hover, :focus-visible) .archive-ticket-next__stop svg {
+  transform: translateX(2px);
+  transition-duration: var(--dur-in);
+}
 @media (prefers-reduced-motion: reduce) {
-  .archive-focus i,
   .archive-plate__cue,
-  .archive-plate__cue svg { transition: none; }
-  /* The lock rule is (0,4,1) against the (0,1,1) above, so it has to be
-     answered at its own weight or the lime keeps easing here. Under reduce the
-     confirmation still happens; it just cuts. */
-  [data-atlas-camera="locked"] [data-archive-chapter][data-active="true"] .archive-focus i {
-    transition: none;
-  }
+  .archive-plate__cue svg,
+  .archive-ticket-next,
+  .archive-ticket-next svg { transition: none; }
+}
+/* A short ticket (a wide cover on a narrow desktop) keeps its sign whole and
+   gives up the rest from the bottom of the list: the admission rows first
+   (the running head and the lede say them too), then the "Next stop" label,
+   then the control itself (the map's shields go on). The stub is the height
+   of the photograph beside it, so it is its own size container: its height
+   comes from the row, never from what it prints. */
+.archive-ticket-stub {
+  container-type: size;
+}
+@container (max-height: 290px) {
+  .archive-ticket-stub__rows { display: none; }
+  .archive-ticket-next { margin-top: auto; }
+}
+@container (max-height: 215px) {
+  .archive-ticket-next__label { display: none; }
+}
+@container (max-height: 180px) {
+  .archive-ticket-next { display: none; }
 }
 .route-atlas--mobile .route-atlas-fallback__art {
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.42) 4%, #000 9%, #000 100%);
@@ -4186,11 +4320,17 @@ body.travel-workspace-active {
   -webkit-mask-repeat: no-repeat, no-repeat;
   mask-repeat: no-repeat, no-repeat;
 }
-.living-ticket__no {
-  font-size: 24px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: -0.03em;
+/* The phone stub is the place's sign too: its route shield (the state, the
+   stop) where the ordinal was, then the name and the admission line. */
+.living-ticket__sign {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.living-ticket__no.route-shield {
+  --shield: 30px;
 }
 /* A stub arriving in place of a torn one: the card is under the falling
    stub already, and its print is inked in a beat later (house expo), so the
@@ -4217,11 +4357,13 @@ body.travel-workspace-active {
   white-space: nowrap;
 }
 .living-ticket__place {
+  position: relative;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 10.5px;
   font-weight: 500;
   color: var(--stub-strong);
+  --flap-ink: var(--stub-strong);
 }
 .living-ticket__facts {
   overflow: hidden;

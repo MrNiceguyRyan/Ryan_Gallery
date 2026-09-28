@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cubicBezier, motion, useTransform, type MotionValue } from 'framer-motion';
-import { CSS_EASE, EASE } from '../../lib/motion';
+import { EASE } from '../../lib/motion';
 // The leg's distance: the one rule /about's route figure also reads.
 import { formatKm, haversineKm } from '../../lib/geo';
-import { LANDMARK_VIEWBOX, landmarkFor } from '../../lib/placeLandmarks';
+import { pad2, stateCode } from '../../lib/routeShield';
+import { MapShield } from './RouteShield';
 
 /** Everything the sign prints for a place. */
 export interface ViewfinderPlace {
@@ -33,8 +34,6 @@ export interface ViewfinderHandle {
 }
 
 // Geometry, measured from the atlas focal point (the place the camera rests on).
-const HALF_W = 52;
-const HALF_H = 36;
 const ARM = 168;
 const META_TOP = 84;
 /** Where the archive reads: the line a chapter's cover photograph sits on
@@ -43,59 +42,47 @@ const META_TOP = 84;
  *  40-odd pixels below the photograph it belongs to. */
 export const ATLAS_READING_LINE = 0.48;
 
-/** The lock settles (readouts typing in, lime cooling) over this long. */
+/** The lock settles (the leg's distance landing) over this long. */
 const SETTLE_MS = 510;
 const MIN_HUNT_MS = 600;
-/** After the readout has typed back in, the report holds this long and then
- *  steps back (global.css, "The instruments on demand"): landed, the chapter
- *  reads as the place, the ticket, the name and the lede. */
+/** After the landing the report holds this long and then steps back
+ *  (global.css, "The instruments on demand"): landed, the chapter reads as
+ *  the place's sign on the map, the ticket, the name and the lede. */
 const REPORT_HOLD_MS = 1700;
-
-const BONE: [number, number, number] = [244, 244, 237];
-const LIME: [number, number, number] = [210, 255, 0];
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const progress = (a: number, b: number, value: number) => clamp((value - a) / (b - a));
-const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
-const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
 /** A to B on a clock: the coordinates count across (and the leg's distance
  *  with them) on the site's travel curve, as the needle and the closing's
  *  square travel. */
 const travelEase = cubicBezier(...EASE.travel);
-const mixColor = (t: number) =>
-  `rgb(${BONE.map((channel, index) => Math.round(lerp(channel, LIME[index], t))).join(',')})`;
-
-const pad2 = (value: number) => String(value).padStart(2, '0');
 
 const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
 const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
 
 /**
- * AtlasSign — what the map says about the place it is resting on, set around
- * the focal point in the plainest instrument type it can: the year above, the
- * latitude and longitude out at the ends of the reading line, and one line
- * below carrying the chapter, the region and the frame count.
+ * AtlasSign — what the map says about a trip, set around the focal point in
+ * the plainest instrument type it can: the latitude and longitude out at the
+ * ends of the reading line, and, for a flight, one line below it carrying the
+ * leg — where from, where to, and the kilometres covered.
  *
- * It does not mark the place. The place marks itself — every place on this map
- * is a printed dot keyed by its chapter number (see AfPoint), and the camera
- * lands the current one exactly on this focal point, so the sign has nothing
- * left to aim with.
+ * It does not name the place. The place is signed twice already, and both
+ * signs are the same route shield: on the map, where its region's sign stands
+ * (RouteSign), and on the chapter's ticket, whose stub IS the place's sign —
+ * its state, its stop number and its name, turning into place on the landing
+ * (owner, 2026-09-28: 将右侧的大号封面和路牌上方的州名缩写+地名和第几站结合在一起).
+ * So the year and the "03 / 06 · REGION · FRAMES" line this used to print on
+ * landing are gone: the ticket prints them, a few centimetres away.
  *
- * When the atlas flies to the next place the sign reads the flight rather than
- * performing it: the coordinates count across, the readout blanks and gives the
- * leg's distance in kilometres as it goes, and at touchdown everything types
- * back in behind a single lime confirmation. All drawing is imperative inside
- * one rAF loop that runs only while something moves; React renders once.
- *
- * It is instrument type, so it is not printed at rest (owner, 2026-09-27: a
- * chapter at rest reads as the place, the ticket, the city name and the lede).
- * The readouts sit in one layer, `.viewfinder__instruments`, which REPORTS a
- * trip — from take-off, through the landing, for REPORT_HOLD_MS after the
- * readout has typed back in — and then steps back. A settle onto a different
- * place (reduced motion, a restart) is an arrival too and reports the same
- * way; a settle on the place already shown stays quiet. The atlas brings the
- * layer up as well while a hand moves over the map (`data-atlas-look`).
+ * All drawing is imperative inside one rAF loop that runs only while something
+ * moves; React renders once. It is instrument type, so it is not printed at
+ * rest: the readouts sit in one layer, `.viewfinder__instruments`, which
+ * REPORTS a trip — from take-off, through the landing, for REPORT_HOLD_MS —
+ * and then steps back. A settle onto a different place (reduced motion, a
+ * restart) is an arrival too and reports the same way; a settle on the place
+ * already shown stays quiet. The atlas brings the layer up as well while a
+ * hand moves over the map (`data-atlas-look`).
  */
 export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   initial: ViewfinderPlace | null;
@@ -108,7 +95,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   bleed?: number;
 }>(function AtlasViewfinder({ initial, visibility, reducedMotion, scrimHost = null, bleed = 0 }, forwardedRef) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const yearRef = useRef<HTMLSpanElement>(null);
   const latRef = useRef<HTMLSpanElement>(null);
   const lonRef = useRef<HTMLSpanElement>(null);
   const metaRef = useRef<HTMLSpanElement>(null);
@@ -130,11 +116,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     hunting: false,
     frame: 0,
     metaFor: '',
-    /** The chapter number last shown in the readout, for the roll. */
-    ordinalShown: null as number | null,
     legKm: null as HTMLSpanElement | null,
-    metaChars: [] as HTMLSpanElement[],
-    metaDot: null as HTMLElement | null,
     /** Ends the landing's report (see REPORT_HOLD_MS). */
     reportTimer: 0,
   });
@@ -152,64 +134,9 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (on && holdMs > 0) s.reportTimer = window.setTimeout(() => report(false), holdMs);
   };
 
-  const setMeta = (place: ViewfinderPlace | null) => {
-    const s = state.current;
-    const node = metaRef.current;
-    if (!node || !place || s.metaFor === place.id) return;
-    const parts: Array<[string, string]> = [
-      ['is-dim', ` / ${pad2(place.total)}`],
-      ['', '   '],
-      ['', place.region ?? ''],
-      ['', place.region ? '   ' : ''],
-      ['', `${place.frames} frames`],
-    ];
-    node.textContent = '';
-    const dot = document.createElement('i');
-    dot.className = 'viewfinder__dot';
-    node.appendChild(dot);
-    const chars: HTMLSpanElement[] = [];
-    // The chapter number rolls like a counter: up when the archive moves on,
-    // down when it turns back — the letters shuffle, the figures roll.
-    const ordinal = document.createElement('span');
-    ordinal.className = 'is-lime viewfinder__ordinal';
-    const strip = document.createElement('span');
-    strip.className = 'viewfinder__ordinal-strip';
-    const previous = s.ordinalShown;
-    if (previous != null && previous !== place.number) {
-      const up = place.number > previous;
-      [up ? previous : place.number, up ? place.number : previous].forEach((value) => {
-        const line = document.createElement('span');
-        line.textContent = pad2(value);
-        strip.appendChild(line);
-      });
-      strip.style.transform = up ? 'translateY(0)' : 'translateY(-1em)';
-      requestAnimationFrame(() => {
-        strip.style.transition = `transform 360ms ${CSS_EASE.arrive}`;
-        strip.style.transform = up ? 'translateY(-1em)' : 'translateY(0)';
-      });
-    } else {
-      strip.textContent = pad2(place.number);
-    }
-    ordinal.appendChild(strip);
-    node.appendChild(ordinal);
-    chars.push(ordinal);
-    s.ordinalShown = place.number;
-    parts.forEach(([className, text]) => {
-      for (const character of text) {
-        const span = document.createElement('span');
-        if (className) span.className = className;
-        span.textContent = character === ' ' ? ' ' : character;
-        node.appendChild(span);
-        chars.push(span);
-      }
-    });
-    s.metaChars = chars;
-    s.metaDot = dot;
-    s.metaFor = place.id;
-  };
-
-  // In flight the readout is the leg: where from, where to, and the distance
-  // covered so far.
+  // The leg: where from, where to, and the distance covered so far. It stays
+  // up through the landing's report with the whole distance, so the trip is
+  // read back as it ends, then goes with the layer.
   const setLegMeta = (from: ViewfinderPlace, to: ViewfinderPlace) => {
     const s = state.current;
     const node = metaRef.current;
@@ -220,11 +147,12 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     dot.className = 'viewfinder__dot';
     node.appendChild(dot);
     // Non-breaking spaces: ordinary ones collapse at the span boundaries.
+    // The place being left is the atlas's one lime, and only in the air.
     const parts: Array<[string, string]> = [
       ['is-lime', from.name],
-      ['is-dim', '\u00a0\u00a0→\u00a0\u00a0'],
+      ['is-dim', '  →  '],
       ['', to.name],
-      ['', '\u00a0\u00a0\u00a0'],
+      ['', '   '],
     ];
     parts.forEach(([className, text]) => {
       const span = document.createElement('span');
@@ -237,8 +165,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     km.textContent = '0 KM';
     node.appendChild(km);
     s.legKm = km;
-    s.metaChars = [];
-    s.metaDot = dot;
     s.metaFor = key;
   };
 
@@ -254,25 +180,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const to = s.to;
     const switching = moving && from?.id !== to?.id;
     const huntingNow = moving && t > 120 && t < lock;
-    let lime = 0;
-    if (moving && t >= lock - 10) {
-      lime = t < lock + 6
-        ? progress(lock - 10, lock + 6, t)
-        : t < lock + 160
-          ? 1
-          : 1 - easeInOutSine(progress(lock + 160, lock + SETTLE_MS, t));
-    }
-    const color = mixColor(lime);
-    // Nothing is drawn around the place any more — no brackets, no cross, no
-    // level. The place draws itself: its dot is the focal mark, and the camera
-    // puts it exactly here.
-    //
-    // So the readouts hang off the focal point on FIXED offsets, which is a
-    // correction, not a tidy-up: they used to be pinned to the reticle's live
-    // scale, and with the reticle gone the year was still swinging 37px
-    // outward on every flight, tracking a bracket nobody could see.
-    const topRightX = cx + HALF_W;
-    const topRightY = cy - HALF_H;
+    // The readouts hang off the focal point on FIXED offsets: nothing is
+    // drawn round the place (the camera puts it exactly here).
     const leftEnd = cx - ARM;
     const rightEnd = cx + ARM;
 
@@ -290,49 +199,19 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       lonRef.current.style.opacity = String(coordinateOpacity);
     }
 
-    // Year rides the top-right bracket; blanks while hunting, blinks back on.
-    if (yearRef.current && to) {
-      yearRef.current.textContent = to.year != null ? String(to.year) : '';
-      yearRef.current.style.transform = `translate(${topRightX.toFixed(1)}px, ${(topRightY - 16).toFixed(1)}px) translateX(-100%)`;
-      let yearOpacity = 1;
-      if (switching) {
-        yearOpacity = t < 200
-          ? 1 - progress(40, 120, t)
-          : t < lock + 110
-            ? 0
-            : Math.floor((t - lock - 110) / 55) % 2 === 0 || t > lock + 290 ? 1 : 0;
-      }
-      yearRef.current.style.opacity = String(yearOpacity);
-    }
-
-    // Readout line: blanks right to left on take-off, shows the leg and the
-    // distance covered while the camera flies, types back in after the lock.
+    // The leg: up from 300ms into a flight, counting its kilometres to the
+    // lock; after that it holds the whole distance until the report ends.
     if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${cy + META_TOP}px) translateX(-50%)`;
-    const inFlight = switching && !!from && !!to && t >= 300 && t < lock;
-    if (inFlight) {
+    if (switching && from && to && t >= 300) {
       setLegMeta(from, to);
-      if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(from.coordinates, to.coordinates) * travel)} KM`;
+      const covered = t < lock ? travel : 1;
+      if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(from.coordinates, to.coordinates) * covered)} KM`;
       if (metaRef.current) metaRef.current.style.opacity = progress(300, 520, t).toFixed(3);
-    } else {
-      setMeta(switching && t < 300 ? from : to);
-      if (metaRef.current) metaRef.current.style.opacity = '1';
-    }
-    const count = s.metaChars.length;
-    s.metaChars.forEach((span, index) => {
-      let on = 1;
-      if (switching) on = t < 300 ? (t < 30 + (count - index) * 5 ? 1 : 0) : t >= lock + 30 + index * 10 ? 1 : 0;
-      span.style.opacity = String(on);
-    });
-    if (s.metaDot) {
-      if (!switching || t >= lock) {
-        s.metaDot.style.opacity = '1';
-        s.metaDot.style.transform = switching
-          ? `scale(${(1 + 0.8 * (1 - easeOutCubic(progress(lock, lock + 260, t)))).toFixed(3)})`
-          : 'none';
-      } else {
-        s.metaDot.style.opacity = t < 40 ? '1' : '0';
-        s.metaDot.style.transform = 'none';
-      }
+    } else if (switching && metaRef.current) {
+      // The first 300ms of a flight: the last trip's line is not this one's.
+      metaRef.current.style.opacity = '0';
+    } else if (metaRef.current) {
+      metaRef.current.style.opacity = '1';
     }
 
     const offset = scrimOffsetRef.current;
@@ -355,7 +234,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       s.from = s.to;
       s.shown = s.to;
       draw(null);
-      // Landed and typed back in: hold the report, then step back.
+      // Landed: hold the report, then step back.
       report(true, REPORT_HOLD_MS);
       return;
     }
@@ -367,9 +246,14 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const settle = (place: ViewfinderPlace) => {
       const s = state.current;
       // Arriving somewhere without a flight (reduced motion's scrubbed
-      // camera, a restart that snaps) reports like a landing; settling on the
-      // place already shown (first draw, a Story closing) stays quiet.
+      // camera, a restart that snaps) reports like a landing, with the leg it
+      // made; settling on the place already shown (first draw, a Story
+      // closing) stays quiet.
       const arrived = !!s.shown && s.shown.id !== place.id;
+      if (arrived && s.shown) {
+        setLegMeta(s.shown, place);
+        if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(s.shown.coordinates, place.coordinates))} KM`;
+      }
       report(arrived, SETTLE_MS + REPORT_HOLD_MS);
       stop();
       s.hunting = false;
@@ -441,17 +325,12 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
 
   return (
     <motion.div ref={rootRef} aria-hidden="true" className="viewfinder" style={{ opacity: visibility }}>
-      {/* The reticle is gone: no cross, no electronic level, no arrival ring,
-          and no place name. A crosshair aims at something, and this map is not
-          aiming — it is showing where a photograph was made. The place's own
-          dot now marks the point (see AfPoint below), and since the camera
-          centres the current place exactly here, that dot IS the focal
-          mark. The name went with it because the chapter's cover already sets
-          it three times larger, forty-nine pixels away: the page was saying the
-          same word twice in two voices.
-          What stays is the reading — year, coordinates, chapter, frame count —
-          because that is the documentary register this page is written in, and
-          it is the one thing a crosshair was never needed for. */}
+      {/* No reticle, no cross, no level and no name: a crosshair aims at
+          something, and this map is not aiming — it is showing where a
+          photograph was made. The place is signed by its route shield (on
+          the map and on its ticket); what stays here is the reading of a
+          trip — coordinates and the leg — the documentary register this page
+          is written in. */}
       {/* The scrim darkens the ground round the focal point so the readouts
           hold on pale rock. Once the map is up it lies on the map's own
           ground, under the places' ink, fading with the sign. */}
@@ -465,7 +344,6 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
         : <span ref={scrimRef} className="viewfinder__scrim" />}
       {/* The readouts: instrument type, reported on demand (see above). */}
       <span ref={instrumentsRef} className="viewfinder__instruments">
-        <span ref={yearRef} className="viewfinder__readout" />
         <span ref={latRef} className="viewfinder__readout" />
         <span ref={lonRef} className="viewfinder__readout" />
         <span ref={metaRef} className="viewfinder__readout viewfinder__meta" />
@@ -519,88 +397,102 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
   );
 }
 
-/**
- * A place, printed the way a map prints one: a dot of white ink with the
- * ground cut away round it, keyed by its chapter number — the same 01–06 the
- * index, the ticket stub and the viewfinder's readout carry. No ring, no
- * crosshair, no halo: it says where it stands by SIZE and INK alone. Far
- * places sit small and quiet, places already visited a little fuller, the
- * place being flown to comes up as the camera takes off, and the place the
- * camera is on is the largest and whitest dot on the map, struck like a stamp
- * as the camera lands, with its landmark standing just above it.
- * (Owner, 2026-09-27: 地图上对应的小标志太丑了 — the benchmark disc and the
- * ringed medal it wore when pointed at are gone. The landmark drawings stay,
- * as he asked for them on 09-21, but only the current place stands one up,
- * and nothing is drawn round it.)
- */
-export function AfPoint({ stopId, slug, number, name, initiallyCurrent, engaged, visibility, onEngage, onNavigate }: {
-  stopId: string;
-  /** The collection slug, which is how a place finds its own landmark. */
-  slug?: string;
+
+/** A map shield's size and the gap between two in one sign, css px. */
+export const SIGN_SHIELD_PX = 30;
+export const SIGN_SHIELD_GAP = 8;
+/** A sign's row: its shields side by side. */
+export const signRowWidth = (count: number) => count * SIGN_SHIELD_PX + Math.max(0, count - 1) * SIGN_SHIELD_GAP;
+/** How far the leader may sit off the row's middle and still meet the rail
+ *  the shields stand on (a single shield has no rail: its own point). */
+export const signRailHalf = (count: number) => (Math.max(0, count - 1) * (SIGN_SHIELD_PX + SIGN_SHIELD_GAP)) / 2;
+
+export interface SignStop {
+  id: string;
+  /** 1-based stop number. */
   number: number;
   name: string;
-  /** Its chapter's cover photograph is hovered or focused in the archive. */
-  engaged: boolean;
-  /** Only the first render reads this; afterwards the atlas toggles
-   *  `is-current` on the element directly (no re-render mid-flight). */
-  initiallyCurrent: boolean;
+  region?: string;
+}
+
+/**
+ * RouteSign — one region's sign on the map (owner, 2026-09-28: 甲，我喜欢路盾
+ * 这样). The places of a stretch of the route stand as US-route shields side
+ * by side, in stop order (按照数字排序即可), on one rail, and ONE leader runs
+ * from the rail down to the middle of the region they share (引线指向一段区域
+ * 即可，同一块区域不需要反复指引). No post under a shield (不需要下面的引线), no
+ * ring, halo, dot or crosshair, and no lime: bone plate, dark ink, the map's
+ * white ink for the leader.
+ *
+ * The sign is a Mapbox marker anchored at its bottom on the middle of the
+ * region's stretch of road. How long the leader is and how far the row
+ * slides sideways are written per camera frame by the atlas (`--lead`,
+ * `--shift`: RouteAtlas, "The signs"), derived from the camera's projection —
+ * never read off the page. A place alone in its region (New York) has no
+ * leader and no rail: its shield stands just over the place (SIGN_SINGLE_GAP)
+ * and its own point is the pointer, as on 11 mois's stop signs.
+ *
+ * Each shield is a button (the in-map navigation): it carries its state by
+ * size and ink — ahead quieter, visited fuller, the one the camera is flying
+ * to comes up at take-off, the one it is on stands tallest and gives a small
+ * landing accent. The atlas toggles is-current / is-inbound / is-past on the
+ * shields directly (no re-render mid-flight). Pointed at, a shield brings its
+ * chapter's cover up and prints the place's name over itself.
+ */
+export function RouteSign({ signKey, stops, initialCurrentId, engagedId, visibility, onEngage, onNavigate }: {
+  signKey: string;
+  stops: SignStop[];
+  /** Only the first render reads this. */
+  initialCurrentId: string | null;
+  engagedId: string | null;
   visibility: MotionValue<number>;
-  /** Pointer or focus on the point (null when it leaves). */
+  /** Pointer or focus on a shield (null when it leaves). */
   onEngage?: (chapterId: string | null) => void;
   /** A click: go to that chapter. */
   onNavigate?: (chapterId: string) => void;
 }) {
-  const landmark = landmarkFor(slug);
-  // The atlas owns the class list from here on (is-current, is-inbound,
-  // is-past, and data-side for which side the key is set on).
-  const [initialClass] = useState(() => `af-point__mark${initiallyCurrent ? ' is-current' : ''}`);
-  // Invisible points (the prologue, the entrance) must not be hit targets —
-  // and `pointer-events: none` alone leaves the button in the tab order and
-  // in the accessibility tree, so a keyboard visitor tabs through six
-  // invisible chapter buttons on the way in. `visibility` removes both, off
-  // the same value, with no re-render.
+  const [initialCurrent] = useState(initialCurrentId);
+  // Invisible signs (the prologue, the entrance) must not be hit targets, nor
+  // stops in the tab order: `visibility` removes both, off the same value,
+  // with no re-render.
   const pointerEvents = useTransform(visibility, (value) => (value > 0.5 ? 'auto' : 'none'));
   const reachable = useTransform(visibility, (value) => (value > 0.5 ? 'visible' : 'hidden'));
+  const count = stops.length;
   return (
-    <motion.span className="af-point" style={{ opacity: visibility, pointerEvents, visibility: reachable }}>
-      {/* `data-engaged`, not a class: React owns the attribute, the atlas
-          owns the class list. The point is a real button — with the route
-          rail gone it is the archive's in-map navigation. */}
-      <button
-        type="button"
-        data-af-stop={stopId}
-        data-chapter={number}
-        data-landmark={landmark ? '' : undefined}
-        data-engaged={engaged ? '' : undefined}
-        className={initialClass}
-        aria-label={`Go to chapter ${number}: ${name}`}
-        onPointerEnter={() => onEngage?.(stopId)}
-        onPointerLeave={() => onEngage?.(null)}
-        onFocus={() => onEngage?.(stopId)}
-        onBlur={() => onEngage?.(null)}
-        onClick={() => onNavigate?.(stopId)}
-      >
-        {/* The place's own landmark, stood on the map just above its dot —
-            only while the camera is on it, and with nothing drawn round it.
-            Authored standing on y = 0, so its ground line is the viewBox
-            origin; the CSS lifts that line clear of the dot. Its lines carry
-            their own burn trap; the closed dark body under them is left out
-            here, where standing clear of the dot it only printed as a box. */}
-        {landmark && (
-          <svg className="af-point__landmark" viewBox={LANDMARK_VIEWBOX} aria-hidden="true">
-            <g dangerouslySetInnerHTML={{ __html: landmark.full }} />
-          </svg>
-        )}
-        {/* The dot: white ink with a hard knockout of ground round it, so the
-            route stops short of the place instead of running through it. */}
-        <span className="af-point__dot" />
-        {/* The key: the chapter number, set like a superscript to the dot, and
-            the place's name after it while the place is pointed at. */}
-        <span className="af-point__type font-ui" aria-hidden="true">
-          <span className="af-point__num">{pad2(number)}</span>
-          <span className="af-point__name">{name}</span>
-        </span>
-      </button>
+    <motion.span
+      className={`route-sign${count === 1 ? ' route-sign--single' : ''}`}
+      data-route-sign={signKey}
+      style={{
+        opacity: visibility,
+        pointerEvents,
+        visibility: reachable,
+        width: signRowWidth(count),
+        ['--rail' as never]: `${signRailHalf(count) * 2}px`,
+      }}
+    >
+      {count > 1 && <i className="route-sign__lead" aria-hidden="true" />}
+      <span className="route-sign__row">
+        {count > 1 && <i className="route-sign__rail" aria-hidden="true" />}
+        {stops.map((stop) => (
+          <button
+            key={stop.id}
+            type="button"
+            data-af-stop={stop.id}
+            data-chapter={stop.number}
+            data-engaged={engagedId === stop.id ? '' : undefined}
+            className={`route-sign__shield${stop.id === initialCurrent ? ' is-current' : ''}`}
+            aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
+            onPointerEnter={() => onEngage?.(stop.id)}
+            onPointerLeave={() => onEngage?.(null)}
+            onFocus={() => onEngage?.(stop.id)}
+            onBlur={() => onEngage?.(null)}
+            onClick={() => onNavigate?.(stop.id)}
+          >
+            <MapShield code={stateCode(stop.region)} number={pad2(stop.number)} />
+            <span className="route-sign__name font-ui" aria-hidden="true">{stop.name}</span>
+          </button>
+        ))}
+      </span>
     </motion.span>
   );
 }

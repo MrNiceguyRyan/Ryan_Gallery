@@ -11,6 +11,8 @@ import {
   type MotionValue,
 } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import { FlapWord, RouteShield, primeFlap, runFlap } from './RouteShield';
+import { pad2, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
 import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
@@ -94,11 +96,15 @@ interface ArchiveChapterProps {
    *  focus-driven title weight. The cover itself has no entrance anywhere: it
    *  is simply there, whole, and scrolls in with the page. */
   desktopMotion?: boolean;
-  /** Desktop tickets: the cover torn away by hand (see PULL_*) goes on to the
-   *  next place. Called once the face is free; HomePage starts the voyage.
-   *  Left undefined while a voyage is under way — the cover is then only a
-   *  click, never a pull. */
-  onTearAway?: () => void;
+  /** Desktop tickets: the cover torn away by hand (see PULL_*), or by its
+   *  stub's "Next stop", goes on to the next place. Called once the face is
+   *  free; HomePage starts the voyage. Left undefined while a voyage is under
+   *  way — the cover is then only a click, never a pull. `focus: false`
+   *  (a scroll's tear) leaves keyboard focus where it is. */
+  onTearAway?: (options?: { focus?: boolean }) => void;
+  /** The stop after this one, printed on the stub's "Next stop" (null: this
+   *  is the last, and the stub goes on to the end of the route). */
+  nextStop?: { name: string; number: number; region?: string } | null;
 }
 
 // Fraunces is served as a variable font (wght 400–900). The title racks on two
@@ -218,8 +224,8 @@ const RESEAT_S = 0.65;
 // stub dims.
 const REDUCED_TEAR_S = TEAR_REDUCED_MS / 1000;
 // While the rip runs, nothing of the face may cross the seam (see the JSX):
-// only the band beside the stub is cut away — above and below it the focus
-// corners keep their overhang.
+// only the band beside the stub is cut away — above and below it the cue
+// keeps its overhang.
 const SEAM_CLIP = 'polygon(-100vw -100vh, calc(100% + 100vw) -100vh, calc(100% + 100vw) 0%, 100% 0%, 100% 100%, calc(100% + 100vw) 100%, calc(100% + 100vw) calc(100% + 100vh), -100vw calc(100% + 100vh))';
 // ── Pull to tear ──
 // The owner's own gesture: the right hand holds the stub, the left pulls the
@@ -283,13 +289,19 @@ const PULL_GO_AFTER_MS = TEAR_BEFORE_FLIGHT_MS;
 // past its line (where the scroll's own verdict agrees), or this long after
 // the voyage was asked for — a voyage refused leaves the scroll to decide.
 const PULL_HOLD_MS = 4000;
+// The sign's flap ("The sign turns into place"): a board set to the stop
+// being left at take-off is put back if no landing follows this soon (a
+// flight lasts 850–1850ms), and the turn waits for a voyage still gliding
+// this ticket in no longer than this after the landing.
+const FLAP_PRIME_MAX_MS = 2500;
+const FLAP_VOYAGE_WAIT_MS = 900;
 // While a hand holds a face, nothing on the page starts a text selection.
 // Module-level so the same function is added and removed.
 const preventPullSelection = (event: Event) => event.preventDefault();
 /** The section's stamp for a scroll's tear (ticketTear.ts, `tearStampAt`). */
 const tearStamp = (now: number, fromMs: number, rate: number) => String(Math.round(tearStampAt(now, fromMs, rate)));
 // The shared quintic smootherstep (src/lib/motion.ts), the one RouteAtlas
-// uses. The plate's matte, corners and copy accelerate and settle on the same
+// uses. The plate's matte, cue and copy accelerate and settle on the same
 // curve as the map halo, route head and left-hand directory.
 const smoothFocus = smootherstep;
 
@@ -322,6 +334,7 @@ export default function ArchiveChapter({
   variant = 'cover',
   desktopMotion = false,
   onTearAway,
+  nextStop,
 }: ArchiveChapterProps) {
   const chapterRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -471,7 +484,7 @@ export default function ArchiveChapter({
   // The photograph itself takes no part in it (直接出现就好): it is never
   // cropped, zoomed, faded or moved on its way in — it is simply there, whole,
   // and the page's own scroll carries it. Only its grade (the matte), its
-  // corners and cue, and the type answer the timeline.
+  // cue, and the type answer the timeline.
   const chapterDelta = useTransform(resolvedChapterProgress, (position) =>
     Math.max(-1, Math.min(1, position - resolvedChapterIndex)),
   );
@@ -515,27 +528,6 @@ export default function ArchiveChapter({
     return distance * (delta < 0 ? 18 : -10);
   });
 
-  // The focus corners rack on the same distance everything else on this plate
-  // rides. They used to flip on `data-focused` — a binary React state governed
-  // by a 36px hysteresis window and a 0.18–0.86vh valid band, so the corners
-  // could be fully closed while the photograph was nowhere near the reading
-  // line, and they snapped at a moment with no visual relationship to it. Now
-  // they close as the photograph rises onto the line and splay as it leaves,
-  // on the same quintic curve as the map halo and the route head.
-  //
-  // Two custom properties, not four transforms: a single translate on the
-  // container cannot splay four corners outward, and animating each corner's
-  // inset would put layout on every scroll frame. `--focus-x/--focus-y` are
-  // already the per-corner signs, so one shared distance is all that is
-  // missing, and the work stays on the compositor.
-  const focusSplay = useTransform(chapterDelta, (delta) => {
-    const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
-    return `${(distance * 7).toFixed(2)}px`;
-  });
-  const focusGlow = useTransform(chapterDelta, (delta) => {
-    const distance = reduce ? (Math.round(delta) === 0 ? 0 : 1) : smoothFocus(Math.min(1, Math.abs(delta)));
-    return (0.95 - distance * 0.55).toFixed(3);
-  });
   // One cue lit at a time. Resting at 0.42 on every plate, "OPEN STORY" was
   // printed once per chapter down the whole column, which is not an invitation
   // but a watermark. It now belongs to the plate on the reading line, and to
@@ -634,6 +626,10 @@ export default function ArchiveChapter({
   const tearModeRef = useRef<'scroll' | 'hand' | 'reseat' | 'reduced'>('scroll');
   // Who tore it: the scroll (its rate follows the push) or a hand (rate 1).
   const tearOriginRef = useRef<'scroll' | 'hand'>('scroll');
+  // A scroll's tear goes on to the next stop once its face is free (see
+  // "A scroll's tear goes on"): the pending check, armed by the latch.
+  const scrollGoTimerRef = useRef(0);
+  const armScrollGoRef = useRef<() => void>(() => {});
   // The scroll tear's rate (ticketTear.ts, `tearRate`), fixed at the trigger
   // and only ever raised before the face is free.
   const tearRateRef = useRef(1);
@@ -803,6 +799,8 @@ export default function ArchiveChapter({
       // to wait for.
       if (!next) {
         delete section.dataset.ticketTornAt;
+        window.clearTimeout(scrollGoTimerRef.current);
+        scrollGoTimerRef.current = 0;
         forget();
         if (!snap && !reduce) reseatTear();
       } else if (snap) {
@@ -813,8 +811,12 @@ export default function ArchiveChapter({
         section.dataset.ticketTornAt = tearStamp(performance.now(), tearClock.get() * TEAR_MS, tearRateRef.current);
         // Started here, on the scroll's frame, rather than a render later:
         // the stamp and the clock agree to the frame. (Reduced motion's fade
-        // is played by the clock effect.)
-        if (gate) playTear();
+        // is played by the clock effect.) A push's tear then goes on to the
+        // next stop once its face is free, as "Next stop" does.
+        if (gate) {
+          playTear();
+          armScrollGoRef.current();
+        }
       }
       setTorn(next);
     };
@@ -833,6 +835,8 @@ export default function ArchiveChapter({
       tornRef.current = false;
       tearSnapRef.current = null;
       delete section.dataset.ticketTornAt;
+      window.clearTimeout(scrollGoTimerRef.current);
+      scrollGoTimerRef.current = 0;
       forget();
       if (!reduce) reseatTear();
       setTorn(false);
@@ -1009,6 +1013,7 @@ export default function ArchiveChapter({
   useEffect(() => () => {
     window.clearTimeout(pullTimersRef.current.go);
     window.clearTimeout(pullTimersRef.current.hold);
+    window.clearTimeout(scrollGoTimerRef.current);
     if (pullRef.current) document.removeEventListener('selectstart', preventPullSelection, true);
   }, []);
 
@@ -1172,6 +1177,210 @@ export default function ArchiveChapter({
       }, PULL_HOLD_MS);
     }, Math.max(0, tornAt + PULL_GO_AFTER_MS - now));
   };
+
+  // ── Next stop: the tear, asked for by a click ──
+  // The stub's "Next stop", or the next place's shield on the map (HomePage
+  // sends `archive:tear-then` to the chapter being read), tears this ticket
+  // exactly as the reader's push does — the paper's own stick-slip, the
+  // hinge, the snap, both hands — at the score's own rate, and only once the
+  // face is free does the page go on (`go`): 撕开票根，然后前往下一站. The
+  // section is stamped as a push's tear is, so the atlas holds its flight to
+  // the face like any other; the latch then waits, as after a pull, until the
+  // voyage has carried the reader past the line. False when there is nothing
+  // to tear here (torn already, mid re-seat, a hand on it, the camera in the
+  // air, reduced motion): the caller simply goes.
+  const tearThen = (go: () => void) => {
+    const section = chapterRef.current as HTMLElement | null;
+    if (!ticket || reduce || !section) return false;
+    if (tornRef.current || pullHoldRef.current !== 'none' || pullRef.current) return false;
+    if (tearClock.get() > 0.001) return false;
+    if (document.documentElement.dataset.atlasCamera === 'flying') return false;
+    const now = performance.now();
+    pullHintTarget.set(0);
+    pullHoldRef.current = 'away';
+    tornRef.current = true;
+    tearSnapRef.current = null;
+    tearOriginRef.current = 'scroll';
+    tearRateRef.current = 1;
+    section.dataset.ticketTornAt = tearStamp(now, 0, 1);
+    // Started here, so the stamp and the clock agree to the frame; the clock
+    // effect finds it already on its way.
+    playTear();
+    setTorn(true);
+    const timers = pullTimersRef.current;
+    window.clearTimeout(timers.go);
+    window.clearTimeout(timers.hold);
+    timers.go = window.setTimeout(() => {
+      timers.go = 0;
+      go();
+      timers.hold = window.setTimeout(() => {
+        releasePullHold();
+        latchNowRef.current?.();
+      }, PULL_HOLD_MS);
+    }, PULL_GO_AFTER_MS);
+    return true;
+  };
+  const tearThenRef = useRef(tearThen);
+  tearThenRef.current = tearThen;
+  useEffect(() => {
+    if (!ticket) return;
+    const section = chapterRef.current as HTMLElement | null;
+    if (!section) return;
+    const onTearThen = (event: Event) => {
+      const detail = (event as CustomEvent<{ go: () => void; handled?: boolean }>).detail;
+      if (detail && !detail.handled) detail.handled = tearThenRef.current(detail.go);
+    };
+    section.addEventListener('archive:tear-then', onTearThen);
+    return () => section.removeEventListener('archive:tear-then', onTearThen);
+  }, [ticket]);
+  // ── A scroll's tear goes on ──
+  // 当移走…的时候将会和之前一样撕开票根，然后前往下一站: a ticket the reader's
+  // own push tore goes on to the next stop exactly as "Next stop" does — the
+  // same score, then, once the face is free (the section's stamp plus
+  // PULL_GO_AFTER_MS, re-read so a harder push's re-stamp brings it
+  // forward), the voyage HomePage takes (`onTearAway`), then the flight and
+  // the sign's turn. It used to stop there: torn ~100px past rest, the
+  // atlas committing only at ~300px, a push that came to rest in between
+  // left a torn ticket over a map that never moved. It goes only while the
+  // tear still stands (a reader who turned back has re-seated it), no hand
+  // holds the ticket (a pull, Next stop and a shield have their own go),
+  // the camera is not already in the air (a fling that carried the scroll
+  // past the atlas's own commit: the atlas flies and the reader's scroll
+  // carries the page, as before), and the camera is still on this ticket's
+  // place (`data-atlas-place`, RouteAtlas). Never on a snap or under
+  // reduced motion, whose timeline already moves in whole chapters.
+  armScrollGoRef.current = () => {
+    window.clearTimeout(scrollGoTimerRef.current);
+    const check = () => {
+      scrollGoTimerRef.current = 0;
+      const section = chapterRef.current as HTMLElement | null;
+      if (!section || !tornRef.current || tearOriginRef.current !== 'scroll') return;
+      if (pullHoldRef.current !== 'none' || pullRef.current) return;
+      const stamp = Number(section.dataset.ticketTornAt);
+      if (!(stamp > 0)) return;
+      const wait = stamp + PULL_GO_AFTER_MS - performance.now();
+      if (wait > 1) {
+        scrollGoTimerRef.current = window.setTimeout(check, wait);
+        return;
+      }
+      const html = document.documentElement;
+      if (html.dataset.atlasCamera === 'flying' || html.dataset.atlasPlace !== collection._id) return;
+      // Focus goes on with the page only if it was on this chapter (a
+      // keyboard reader scrolling with the keys): handed on after a wheel,
+      // with no press before it, the browser draws it as keyboard focus — a
+      // lime ring round the next cover.
+      onTearAwayRef.current?.({ focus: section.contains(document.activeElement) });
+    };
+    scrollGoTimerRef.current = window.setTimeout(check, PULL_GO_AFTER_MS);
+  };
+
+  // The stub's own "Next stop": live on the ticket being read, while it is
+  // whole and the page can go on.
+  const nextReady = ticket && isActive && !torn && Boolean(onTearAway);
+  const goNext = () => {
+    if (!nextReady) return;
+    const go = () => onTearAwayRef.current?.();
+    if (!tearThen(go)) go();
+  };
+
+  // ── The sign turns into place ──
+  // 下一站同样产生位置字母跳转功能: the stub's shield and name run a departure
+  // board's flap (src/lib/routeShield.ts, FLAP) on a landing further along
+  // the route, from the stop the camera left. RouteAtlas tells the page at
+  // take-off (`atlas:depart`) and at touchdown (`atlas:arrive`), with the
+  // stop left as `from` only on the way on:
+  //  - At take-off the board is SET to the stop being left (`primeFlap`), so
+  //    the ticket the voyage carries in reads "MIAMI" until it turns — the
+  //    name it lands with is never shown settled first and turned back (it
+  //    was: ORLANDO settled on screen for ~350ms, then MIAMI, then ORLANDO).
+  //    A take-off anywhere else puts this board back; so does a landing
+  //    elsewhere, and FLAP_PRIME_MAX_MS with no landing at all.
+  //  - It turns once the ticket has come to rest: at the landing, or, while
+  //    the page is still gliding on a voyage to this chapter (short hops
+  //    land ~400px before the page does), at the voyage's end
+  //    (`archive:voyage-end`, HomePage), never more than FLAP_VOYAGE_WAIT_MS
+  //    after the landing.
+  // Never on a first paint, a restore, a snap, a flight back or the dive
+  // (whose ticket the reader has read on the way down), and never under
+  // reduced motion, where the sign is simply printed.
+  const signRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ticket || reduce) return;
+    const id = collection._id;
+    type SignTrip = { id: string; from: Partial<Record<string, string>> | null };
+    let stopFlap: (() => void) | null = null;
+    let clearPrime: (() => void) | null = null;
+    let primeTimer = 0;
+    let waitTimer = 0;
+    let onVoyageEnd: ((event: Event) => void) | null = null;
+    const unprime = () => {
+      window.clearTimeout(primeTimer);
+      primeTimer = 0;
+      clearPrime?.();
+      clearPrime = null;
+    };
+    const cancelWait = () => {
+      window.clearTimeout(waitTimer);
+      waitTimer = 0;
+      if (onVoyageEnd) window.removeEventListener('archive:voyage-end', onVoyageEnd);
+      onVoyageEnd = null;
+    };
+    const reset = () => {
+      cancelWait();
+      stopFlap?.();
+      stopFlap = null;
+      unprime();
+    };
+    const onDepart = (event: Event) => {
+      const detail = (event as CustomEvent<SignTrip>).detail;
+      reset();
+      const root = signRef.current;
+      if (!detail || detail.id !== id || !detail.from || !root) return;
+      clearPrime = primeFlap(root, detail.from);
+      primeTimer = window.setTimeout(unprime, FLAP_PRIME_MAX_MS);
+    };
+    const onArrive = (event: Event) => {
+      const detail = (event as CustomEvent<SignTrip>).detail;
+      if (!detail) return;
+      if (detail.id !== id) {
+        if (clearPrime) unprime();
+        return;
+      }
+      const root = signRef.current;
+      const from = detail.from;
+      if (!from || !root) {
+        reset();
+        return;
+      }
+      cancelWait();
+      window.clearTimeout(primeTimer);
+      primeTimer = 0;
+      const start = () => {
+        cancelWait();
+        stopFlap?.();
+        // runFlap takes the primed board over where it stands.
+        clearPrime = null;
+        stopFlap = runFlap(root, from);
+      };
+      if (document.documentElement.dataset.voyageTo === id) {
+        onVoyageEnd = (ended: Event) => {
+          const endedId = (ended as CustomEvent<{ id?: string }>).detail?.id;
+          if (!endedId || endedId === id) start();
+        };
+        window.addEventListener('archive:voyage-end', onVoyageEnd);
+        waitTimer = window.setTimeout(start, FLAP_VOYAGE_WAIT_MS);
+      } else {
+        start();
+      }
+    };
+    window.addEventListener('atlas:depart', onDepart);
+    window.addEventListener('atlas:arrive', onArrive);
+    return () => {
+      window.removeEventListener('atlas:depart', onDepart);
+      window.removeEventListener('atlas:arrive', onArrive);
+      reset();
+    };
+  }, [collection._id, reduce, ticket]);
 
   const handlePullStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pullable || pullRef.current) return;
@@ -1391,6 +1600,10 @@ export default function ArchiveChapter({
     }
     return rows;
   }, [collection]);
+  // The sign's name size (src/lib/routeShield.ts, signNameSize): 30px for
+  // every name the archive has today, smaller only for a word that could not
+  // fit the enamel rule. Derived from the letters, never measured.
+  const signNameSize = useMemo(() => nameSizeFor(collection.name), [collection.name]);
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
   const coverSrcSet = coverBase
     ? `${coverBase}?auto=format&w=1000&q=82 1000w, ${coverBase}?auto=format&w=1600&q=82 1600w, ${coverBase}?auto=format&w=2000&q=78 2000w`
@@ -1514,6 +1727,9 @@ export default function ArchiveChapter({
   // handlers — and whether or not they run.
   const interactive = {
     onPointerDownCapture: (event: ReactPointerEvent<HTMLDivElement>) => {
+      // The stub's "Next stop" is its own control: the ticket does not give
+      // under it, and it is never the start of a click on the cover.
+      if ((event.target as Element | null)?.closest?.('.archive-ticket-next')) return;
       dragReleaseRef.current = 0;
       pressGive.onPointerDown(event);
       pressRef.current = event.pointerType === 'touch'
@@ -1639,21 +1855,12 @@ export default function ArchiveChapter({
   }
 
   // ── COVER (default) — full-bleed magazine cover ──
-  // One stage holds the photograph, the corners that declare its edges and
-  // its cue, so the frame can never be somewhere the picture is not.
+  // One stage holds the photograph and its cue. No frame is drawn round it
+  // (owner, 2026-09-28: 删掉封面旁边四个角的折角框): the photograph's own edge,
+  // and the ticket's perforation, are the only edges it has.
   const plateStage = (
     <div className="archive-plate__stage">
       {imageBlock}
-      <motion.span
-        aria-hidden="true"
-        className="archive-focus"
-        style={{
-          ['--focus-splay' as never]: focusSplay,
-          ['--focus-glow' as never]: focusGlow,
-        }}
-      >
-        <i /><i /><i /><i />
-      </motion.span>
       <motion.span
         aria-hidden="true"
         className="archive-plate__cue"
@@ -1703,8 +1910,7 @@ export default function ArchiveChapter({
               ticket it is not printed at rest: it comes up while the cover is
               pointed at or focused (global.css, "The instruments on demand"). */}
           {/* The plate: the photograph at its own ratio, capped so a tall one
-              still fits the reading line, with the camera's focus corners on
-              its own four corners instead of a film rebate. */}
+              still fits the reading line, with nothing drawn round it. */}
           {/* A ticket is printed on its chapter's own card stock: set once on
               the plate, inherited by the stub (and its torn, dimmed state). */}
           <div
@@ -1738,9 +1944,21 @@ export default function ArchiveChapter({
               </div>
             ) : plateStage}
 
-            {/* The stub: the plate's own matte, printed like an admission
-                line. It is not announced to a screen reader — every field on
-                it is already read out by the running head and the lede. */}
+            {/* The stub is the place's sign (owner, 2026-09-28: 将右侧的大号
+                封面和路牌上方的州名缩写+地名和第几站结合在一起): the route
+                shield the map signs this place with — its state's two
+                letters, its stop number — beside "Stop / 06", and the
+                place's name set big inside a guide sign's enamel rule, on the
+                chapter's own card. The same sign, one voice: the map points
+                at the region, the ticket names the stop. On the landing the
+                shield and the name turn into place like a departure board
+                (`atlas:arrive`, below). Below the sign, the admission rows;
+                at the foot, the way on: "Next stop", which tears this ticket
+                exactly as the reader's push does and then goes on.
+                The stub is not announced to a screen reader — every field on
+                it is read out by the running head, the lede and the map's own
+                chapter buttons; "Next stop" is the map's next shield again,
+                for a pointer. */}
             {ticket && (
               <aside
                 className="archive-ticket-stub font-ui"
@@ -1750,14 +1968,29 @@ export default function ArchiveChapter({
                 {/* The stub's half of the torn seam. */}
                 <i className="archive-ticket-fibre" aria-hidden="true" />
                 <i className="archive-ticket-strain" aria-hidden="true" />
-                <span className="archive-ticket-stub__no font-serif">
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <span className="archive-ticket-stub__of">
-                  / {String(chapterTotal ?? index + 1).padStart(2, '0')} · admission
-                </span>
-                <span className="archive-ticket-stub__rule" />
-                <span className="archive-ticket-stub__place">{collection.name}</span>
+                <div ref={signRef} className="archive-ticket-sign">
+                  <div className="archive-ticket-sign__head">
+                    <RouteShield
+                      className="archive-ticket-sign__shield"
+                      code={stateCode(collection.region)}
+                      number={pad2(index + 1)}
+                      numberClassName="archive-ticket-stub__no"
+                      flap
+                    />
+                    <span className="archive-ticket-sign__stop">
+                      <span className="archive-ticket-sign__label">Stop</span>
+                      <span className="archive-ticket-sign__total archive-ticket-stub__of">
+                        / {pad2(chapterTotal ?? index + 1)}
+                      </span>
+                    </span>
+                  </div>
+                  <span
+                    className="archive-ticket-sign__name archive-ticket-stub__place"
+                    style={{ ['--sign-name' as never]: `${signNameSize}px` }}
+                  >
+                    <FlapWord text={collection.name.trim()} role="name" />
+                  </span>
+                </div>
                 {stubRows.length > 0 && (
                   <dl className="archive-ticket-stub__rows">
                     {stubRows.map(([label, value]) => (
@@ -1767,6 +2000,37 @@ export default function ArchiveChapter({
                       </div>
                     ))}
                   </dl>
+                )}
+                {nextStop !== undefined && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="archive-ticket-next"
+                    data-ready={nextReady ? '' : undefined}
+                    disabled={!nextReady}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      goNext();
+                    }}
+                  >
+                    <span className="archive-ticket-next__label">
+                      {nextStop ? 'Next stop' : 'End of the route'}
+                    </span>
+                    {nextStop ? (
+                      <span className="archive-ticket-next__stop">
+                        <RouteShield
+                          className="archive-ticket-next__shield"
+                          code={stateCode(nextStop.region)}
+                          number={pad2(nextStop.number)}
+                        />
+                        <span className="archive-ticket-next__name">{nextStop.name}</span>
+                        <ArrowRight size={12} strokeWidth={1.6} aria-hidden="true" />
+                      </span>
+                    ) : (
+                      <ArrowRight className="archive-ticket-next__down" size={12} strokeWidth={1.6} aria-hidden="true" />
+                    )}
+                  </button>
                 )}
               </aside>
             )}

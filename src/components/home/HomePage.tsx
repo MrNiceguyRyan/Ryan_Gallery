@@ -134,7 +134,7 @@ function archiveChapterAnchorY(element: HTMLElement, desktop: boolean) {
 }
 
 /** A ticket's stub as the story's rail keeps it (MagazineLayout, PlateStub):
- *  its box and where its ordinal, "/ TT · admission" and place are printed,
+ *  its box and where its stop number, "/ TT" and place are printed,
  *  read once, where it lies now. Null when it is not on screen. */
 function ticketStubOf(stubNode: HTMLElement): PlateStub | null {
   const box = stubNode.getBoundingClientRect();
@@ -433,7 +433,7 @@ export default function HomePage({ collections }: Props) {
     // handed into the foot of the story's rail once the story has loaded,
     // and flies back onto the ticket at the close (MagazineLayout, KeptStub
     // / flyStubHome). Read in the same pass as the plate — its box and where
-    // its ordinal, "/ TT · admission" and place are printed. It stays on the
+    // its stop number, "/ TT" and place are printed. It stays on the
     // ticket while the plate grows over it: MagazineLayout hides it
     // (`data-kept-away`) only once its kept half is in the rail, under the
     // opaque story. A torn ticket has already given its stub up; under
@@ -1043,7 +1043,7 @@ export default function HomePage({ collections }: Props) {
 
   // `passing` false: the trip does not step the page back (pull to tear,
   // whose torn face is still being laid aside when the page sets off).
-  const navigateLivingChapter = useCallback((anchorId: string, passing = true) => {
+  const navigateLivingChapter = useCallback((anchorId: string, passing = true, moveFocus = true) => {
     // One trip at a time: a second click mid-voyage would retarget the dive.
     if (voyageActiveRef.current) return;
     const target = document.getElementById(anchorId);
@@ -1059,7 +1059,7 @@ export default function HomePage({ collections }: Props) {
       chapterImage.fetchPriority = 'high';
       if (typeof chapterImage.decode === 'function') void chapterImage.decode().catch(() => {});
     }
-    chapterControl?.focus({ preventScroll: true });
+    if (moveFocus) chapterControl?.focus({ preventScroll: true });
 
     const readingLine = window.innerHeight * (desktopLayout ? 0.48 : 0.56);
     const targetY = archiveChapterAnchorY(target, desktopLayout) - readingLine;
@@ -1075,12 +1075,23 @@ export default function HomePage({ collections }: Props) {
         const distance = Math.abs(targetY - window.scrollY);
         const duration = voyageSeconds(distance);
         const token = Date.now();
+        // The page gliding in, told to the destination's ticket (<html>
+        // `data-voyage-to`, then `archive:voyage-end` as it comes to rest):
+        // its sign turns into place once the ticket has stopped, not while
+        // it still slides under the landing (ArchiveChapter, "The sign
+        // turns into place").
+        const html = document.documentElement;
         const settle = () => {
           voyageActiveRef.current = false;
           setVoyage((current) => (current?.token === token ? null : current));
           endPassing();
+          if (html.dataset.voyageTo === chapterId) {
+            delete html.dataset.voyageTo;
+            window.dispatchEvent(new CustomEvent('archive:voyage-end', { detail: { id: chapterId } }));
+          }
         };
         voyageActiveRef.current = true;
+        html.dataset.voyageTo = chapterId;
         setVoyage({ chapterId, duration: duration * 1000, token });
         if (passing) startPassing(target, duration * 1000);
         window.clearTimeout(voyageTimerRef.current);
@@ -1111,10 +1122,12 @@ export default function HomePage({ collections }: Props) {
   // asked for only once the face is free. The last ticket goes on to the
   // closing, the page it tears on when scrolled (its top on the viewport's
   // top is where the closing counts as arrived).
-  const tearAwayFrom = useCallback((index: number) => {
+  // `focus: false` (a scroll's tear): the page goes on without taking
+  // keyboard focus with it.
+  const tearAwayFrom = useCallback((index: number, options?: { focus?: boolean }) => {
     const next = orderedCities[index + 1];
     if (next) {
-      navigateLivingChapter(`archive-item-${next._id}`, false);
+      navigateLivingChapter(`archive-item-${next._id}`, false, options?.focus !== false);
       return;
     }
     const closing = document.querySelector<HTMLElement>('[data-archive-closing]');
@@ -1132,6 +1145,28 @@ export default function HomePage({ collections }: Props) {
     }
     window.scrollTo({ top: targetY, behavior: 'auto' });
   }, [navigateLivingChapter, orderedCities, reduce]);
+
+  // A stop chosen on the atlas (a shield on the map, a group in the tick
+  // strip). Going on, the ticket being read is torn first — exactly as the
+  // reader's push tears it — and the page sets off only once its face is
+  // free (owner, 2026-09-28: 当移走或者点击下一站的时候将会和之前一样撕开票根，
+  // 然后前往下一站); ArchiveChapter answers `archive:tear-then` when it has a
+  // whole ticket to tear. Going back, or with nothing to tear, the voyage goes
+  // at once, as before.
+  const navigateFromAtlas = useCallback((chapterId: string) => {
+    const anchorId = `archive-item-${chapterId}`;
+    const target = orderedCities.findIndex((city) => city._id === chapterId);
+    const from = activeRouteIndex;
+    if (desktopLayout && !reduce && !voyageActiveRef.current && from >= 0 && target > from) {
+      const section = document.querySelector<HTMLElement>(`[data-archive-chapter][data-chapter-index="${from}"]`);
+      const detail: { go: () => void; handled?: boolean } = {
+        go: () => navigateLivingChapter(anchorId, false),
+      };
+      section?.dispatchEvent(new CustomEvent('archive:tear-then', { detail }));
+      if (detail.handled) return;
+    }
+    navigateLivingChapter(anchorId);
+  }, [activeRouteIndex, desktopLayout, navigateLivingChapter, orderedCities, reduce]);
 
   // Back to the start: a voyage up the page to the first screen, the same
   // trip a place on the atlas takes down it (a beat longer the further it
@@ -1768,7 +1803,7 @@ export default function HomePage({ collections }: Props) {
                 paused={atlasPaused}
                 voyage={voyage}
                 onEngage={setEngagedChapterId}
-                onNavigate={(chapterId) => navigateLivingChapter(`archive-item-${chapterId}`)}
+                onNavigate={navigateFromAtlas}
               />
             </aside>
 
@@ -1864,7 +1899,14 @@ export default function HomePage({ collections }: Props) {
                                   /* Pull to tear: never while a voyage is
                                      already under way — the cover is then
                                      only a click. */
-                                  onTearAway={voyage ? undefined : () => tearAwayFrom(index)}
+                                  onTearAway={voyage ? undefined : (options) => tearAwayFrom(index, options)}
+                                  nextStop={orderedCities[index + 1]
+                                    ? {
+                                        name: orderedCities[index + 1].name.trim(),
+                                        number: index + 2,
+                                        region: orderedCities[index + 1].region?.trim() || undefined,
+                                      }
+                                    : null}
                                 />
                               );
                             })}
