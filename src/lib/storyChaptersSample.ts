@@ -5,12 +5,14 @@
 // chapters, so he can see the contents list, the openers and the jump before
 // he writes a word:
 //
-//   STORY_CHAPTERS_SAMPLE=1 npm run build
+//   npm run build:sample   (NOTES_SAMPLE=1 STORY_CHAPTERS_SAMPLE=1 astro build)
 //
 // Production builds never set it (`npm run build` alone, the deploy flow): the
-// flag is read here, at build time, on the server, and nothing of it reaches
-// a production page. It changes nothing in Sanity. A story that already has
-// chapters of its own is left as he wrote it, flag or not.
+// flag is read here, at build time, on the server. A sample build stamps
+// <html data-story-sample>, and wrangler refuses to deploy such a dist/ to
+// production (wrangler.jsonc `build.command`, scripts/assert-no-sample.mjs);
+// the preview worker takes it. It changes nothing in Sanity. A story that
+// already has chapters of its own is left as he wrote it, flag or not.
 //
 // The sample splits Miami's frames after frame 01 (the cover, which stays on
 // the opening spread) into chapters of about 40%, 35% and 25%, and leaves the
@@ -21,6 +23,12 @@ import type { ChapterInput } from './storyChapters.ts';
 import { storyFrames, type StoryPhotoLike } from './storyPlan.ts';
 
 export const SAMPLE_CHAPTERS_SLUG = 'miami';
+
+/** Whether this is a STORY_CHAPTERS_SAMPLE=1 build. Such a build stamps
+ *  <html data-story-sample> (src/layouts/Layout.astro), and
+ *  scripts/assert-no-sample.mjs, which wrangler runs before every deploy,
+ *  refuses to send its dist/ to production. Server only. */
+export const isStorySampleBuild = () => process.env.STORY_CHAPTERS_SAMPLE === '1';
 
 interface SampleStory {
   slug?: string;
@@ -71,7 +79,7 @@ let announced = false;
  *  is a STORY_CHAPTERS_SAMPLE=1 build and the story is the sample's and has
  *  none of its own; otherwise exactly as Sanity sent it. Server only. */
 export function withSampleChapters<T extends SampleStory | null | undefined>(collection: T): T {
-  if (process.env.STORY_CHAPTERS_SAMPLE !== '1') return collection;
+  if (!isStorySampleBuild()) return collection;
   if (!collection || collection.slug !== SAMPLE_CHAPTERS_SLUG) return collection;
   if (Array.isArray(collection.chapters) && collection.chapters.length > 0) return collection;
   const chapters = sampleChapters(collection);

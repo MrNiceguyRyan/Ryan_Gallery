@@ -42,6 +42,7 @@ const [fetchedCollection, collectionIndex] = await Promise.all([
     "chapters": chapters[defined(title)] {
       _key,
       title,
+      shortTitle,
       kicker,
       intro,
       "photoIds": photos[]._ref

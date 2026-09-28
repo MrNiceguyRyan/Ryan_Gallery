@@ -5,6 +5,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 import { reelRouterScript } from '../lib/reelVisit';
+import { isStorySampleBuild } from '../lib/storyChaptersSample';
 
 // When this build was made, in the build machine's local time. Printed ONLY on
 // the preview worker (the inline script before </body> checks the hostname),
@@ -72,9 +73,14 @@ const allJsonLd = [personSchema, websiteSchema, ...pageJsonLd];
 const hubUrl = import.meta.env.PUBLIC_HUB_URL || '';
 const showGlobalSkipLink = Astro.url.pathname !== '/';
 const travelWorkspaceActive = Astro.url.pathname.replace(/\/+$/, '') === '/travel';
+// A build that prints a preview-only sample (npm run build:sample) says so
+// on every page's <html>; wrangler refuses to deploy such a dist/ to
+// production (scripts/assert-no-sample.mjs, wrangler.jsonc).
+const storySample = isStorySampleBuild() || undefined;
+const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
 ---
 
-<html lang="en" class:list={[travelWorkspaceActive && 'travel-workspace-active']}>
+<html lang="en" class:list={[travelWorkspaceActive && 'travel-workspace-active']} data-story-sample={storySample} data-notes-sample={notesSample}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

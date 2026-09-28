@@ -14,12 +14,18 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   MORE_FRAMES_TITLE,
+  PART_LABEL,
   chapterAnchor,
+  contentsLabelOpacity,
+  contentsOpacity,
   currentSection,
   frameSpan,
   glideSeconds,
   groupChapters,
   jumpTop,
+  roman,
+  sectionFromHash,
+  titleLang,
 } from '../src/lib/storyChapters.ts';
 import { frameRatio, isLandscape, planStory, slotRows, storyBoxes, storyFrames, storyGrid } from '../src/lib/storyPlan.ts';
 import { planEntrances } from '../src/lib/storyEntrance.ts';
@@ -230,4 +236,128 @@ test('the preview sample: Miami in three placeholder chapters, off unless asked 
     if (saved === undefined) delete process.env.STORY_CHAPTERS_SAMPLE;
     else process.env.STORY_CHAPTERS_SAMPLE = saved;
   }
+});
+
+test('parts are numbered in Roman numerals, never like the frames', () => {
+  assert.equal(PART_LABEL, 'Part');
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 9, 10, 14, 19, 40, 49, 90, 400, 1994].map(roman),
+    ['I', 'II', 'III', 'IV', 'V', 'VI', 'IX', 'X', 'XIV', 'XIX', 'XL', 'XLIX', 'XC', 'CD', 'MCMXCIV']);
+  assert.equal(roman(null), '');
+  assert.equal(roman(0), '');
+  assert.equal(roman(-3), '');
+  assert.equal(roman(Number.NaN), '');
+  // A frame span is always Arabic figures: no numeral in it.
+  assert.doesNotMatch(frameSpan({ start: 1, count: 5 }), /[IVX]/);
+});
+
+test('a short title for the contents, and a Chinese title marked as such', () => {
+  const frames = storyFrames(miami.photos, miami.coverImageUrl);
+  const f = ids(frames);
+  const { sections } = groupChapters(frames, [
+    { _key: 'a', title: 'A very long title for the first part of the story', shortTitle: '  Ocean  Drive ', photoIds: [f[1]] },
+    { _key: 'b', title: '海边的夜', shortTitle: '', photoIds: [f[2]] },
+    { _key: 'c', title: 'Third', shortTitle: null, photoIds: [f[3]] },
+  ]);
+  assert.deepEqual(sections.map((s) => [s.title, s.short]), [
+    ['A very long title for the first part of the story', 'Ocean Drive'],
+    ['海边的夜', '海边的夜'],
+    ['Third', 'Third'],
+    [MORE_FRAMES_TITLE, MORE_FRAMES_TITLE],
+  ]);
+  assert.equal(titleLang('海边的夜'), 'zh');
+  assert.equal(titleLang('Night 海边'), 'zh');
+  assert.equal(titleLang('Night on Ocean Drive'), undefined);
+  assert.equal(titleLang(''), undefined);
+});
+
+test('a part is a real pause; the frames no part holds a quieter one; a portrait sets the words at its foot', () => {
+  for (const [W, H] of [[1728, 1000], [1280, 800], [390, 844]]) {
+    const g = storyGrid(W, H);
+    const ratios = [1.5, 2 / 3, 1.5, 1.5, 0.8, 1.5];
+    const sections = [{ start: 1, count: 2, no: 1 }, { start: 3, count: 1, no: 2 }, { start: 4, count: 2, no: null }];
+    const slots = planStory(ratios, { sections });
+    const openers = slots.filter((slot) => slot.kind === 'CHAPTER');
+    assert.deepEqual(openers.map((slot) => slot.more ?? false), [false, false, true]);
+    const boxes = storyBoxes(slots, ratios, W, H).filter((box) => box.slot.kind === 'CHAPTER');
+    const [portrait, landscape, more] = boxes;
+    // 2.4 gaps above a part (240px at 1000 high), a gap and a half above the rest.
+    assert.ok(Math.abs(portrait.top.v - g.gap.v * 2.4) < 1e-6, `${W}`);
+    assert.ok(Math.abs(landscape.top.v - g.gap.v * 2.4) < 1e-6, `${W}`);
+    assert.ok(Math.abs(more.top.v - g.gap.v * 1.5) < 1e-6, `${W}`);
+    assert.ok(portrait.top.v > more.top.v && more.top.v > g.gap.v);
+    // Beside a portrait the words are the frame's height; beside a landscape
+    // they are set from the top.
+    assert.ok(Math.abs(portrait.text[0].h.v - portrait.frames[0].h.v) < 1e-6, `${W}`);
+    assert.ok(portrait.text[0].h.c.length > 0);
+    assert.equal(landscape.text[0].h, undefined);
+    assert.ok(Math.abs(more.text[0].h.v - more.frames[0].h.v) < 1e-6);
+  }
+  // A plan from groupChapters marks its remainder.
+  const frames = storyFrames(miami.photos, miami.coverImageUrl);
+  const { sections } = groupChapters(frames, [{ _key: 'a', title: 'A', photoIds: [frames[1]._id] }]);
+  const slots = planStory(frames.map(frameRatio), { sections });
+  assert.deepEqual(slots.filter((slot) => slot.kind === 'CHAPTER').map((slot) => slot.more ?? false), [false, true]);
+});
+
+test('a chapter address lands on its chapter', () => {
+  const sections = [{ key: 'sample-one' }, { key: 'sample-two' }, { key: 'more' }];
+  assert.equal(sectionFromHash('#story-miami-sample-two', 'miami', sections), 1);
+  assert.equal(sectionFromHash('story-miami-more', 'miami', sections), 2);
+  assert.equal(sectionFromHash('#story-miami-sample-two', 'orlando', sections), -1);
+  assert.equal(sectionFromHash('#', 'miami', sections), -1);
+  assert.equal(sectionFromHash('', 'miami', sections), -1);
+  assert.equal(sectionFromHash(null, 'miami', sections), -1);
+  assert.equal(sectionFromHash('#%E0%A4%A', 'miami', sections), -1);
+  // Every anchor the page prints is found again from its address.
+  for (const [index, section] of sections.entries()) {
+    assert.equal(sectionFromHash(`#${chapterAnchor('new-york-stories', section.key)}`, 'new-york-stories', sections), index);
+  }
+});
+
+test('the contents fades in only once clear of the kept stub, and is whole when it pins', () => {
+  // 1728×1000: pinned at 72, the stub's top at 719, a list 205 tall.
+  const at = (naturalTop) => contentsOpacity({ naturalTop, stickyTop: 72, height: 205, stubTop: 719 });
+  // Under the stub: nothing shows.
+  assert.equal(at(900), 0);
+  assert.equal(at(719 - 16 - 205), 0);
+  // Clear of it, fading over 96px of travel.
+  assert.ok(Math.abs(at(719 - 16 - 205 - 48) - 0.5) < 1e-9);
+  assert.equal(at(719 - 16 - 205 - 96), 1);
+  assert.equal(at(80), 1);
+  // Pinned, or carried off at the end: whole.
+  assert.equal(at(72), 1);
+  assert.equal(at(-400), 1);
+  // Monotonic as it rises.
+  let last = -1;
+  for (let top = 1000; top >= 72; top -= 7) {
+    const value = at(top);
+    assert.ok(value >= last - 1e-12, `${top}`);
+    last = value;
+  }
+  // A long list with little room under the head: still whole as it pins,
+  // with no step at the pin.
+  const tall = (naturalTop) => contentsOpacity({ naturalTop, stickyTop: 72, height: 600, stubTop: 719 });
+  assert.equal(tall(72), 1);
+  assert.ok(tall(72.5) > 0.95);
+  assert.ok(tall(72 + 20) < 1);
+  assert.equal(tall(72 + 40), 0);
+  assert.equal(contentsOpacity({ naturalTop: 500, stickyTop: 72, height: 200, stubTop: Number.NaN }), 1);
+});
+
+test('the contents label goes with the list under a screen-high photograph', () => {
+  const listTop = 97;
+  // No screen, or one far off: whole.
+  assert.equal(contentsLabelOpacity([], listTop), 1);
+  assert.equal(contentsLabelOpacity([[900, 1800]], listTop), 1);
+  assert.equal(contentsLabelOpacity([[-1800, -900]], listTop), 1);
+  // Its top edge 12px short of the list's rule: half; on it and past it,
+  // covering the rule: gone.
+  assert.ok(Math.abs(contentsLabelOpacity([[listTop + 12, listTop + 900]], listTop) - 0.5) < 1e-9);
+  assert.equal(contentsLabelOpacity([[listTop, listTop + 900]], listTop), 0);
+  assert.equal(contentsLabelOpacity([[listTop - 20, listTop + 880]], listTop), 0);
+  // Its foot risen past the rule: whole again (the photograph still covers
+  // the label, and uncovers it as it goes).
+  assert.equal(contentsLabelOpacity([[listTop - 900, listTop]], listTop), 1);
+  // Two screens: the nearer rules.
+  assert.equal(contentsLabelOpacity([[listTop - 20, listTop + 880], [2000, 2900]], listTop), 0);
 });

@@ -1,4 +1,4 @@
-import {defineArrayMember, defineField, defineType} from 'sanity'
+import {defineArrayMember, defineField, defineType, type ValidationContext} from 'sanity'
 
 /** 章节里同一张照片出现在两个章节时：网站只放在第一个章节里，这里给出提醒。 */
 function repeatedPhotos(chapters: unknown): string | true {
@@ -17,6 +17,32 @@ function repeatedPhotos(chapters: unknown): string | true {
   return repeated.size === 0
     ? true
     : `有 ${repeated.size} 张照片被放进了不止一个章节；网站上它只会出现在第一个章节里`
+}
+
+/**
+ * 分好章节之后，这个 Collection 还有几张照片不在任何章节里（封面除外）。
+ * 它们不会消失，会排在故事最后的「More frames」里；这里只是让他知道还剩几张。
+ * 只数已发布的照片，和网站上看到的一致。
+ */
+async function unplacedPhotos(chapters: unknown, context: ValidationContext): Promise<string | true> {
+  if (!Array.isArray(chapters) || chapters.length === 0) return true
+  const id = String(context.document?._id ?? '').replace(/^drafts\./, '')
+  if (!id) return true
+  const placed = chapters.flatMap((chapter) => {
+    const photos = (chapter as {photos?: Array<{_ref?: string}>} | null)?.photos
+    return Array.isArray(photos) ? photos.map((photo) => photo?._ref).filter(Boolean) : []
+  })
+  const cover = (context.document as {coverImage?: {asset?: {_ref?: string}}} | undefined)?.coverImage?.asset?._ref ?? ''
+  try {
+    const count = await context.getClient({apiVersion: '2025-04-01'}).fetch<number>(
+      `count(*[_type == "photo" && references($id) && !(_id in path("drafts.**")) && !(_id in $placed) && image.asset._ref != $cover])`,
+      {id, placed, cover},
+    )
+    return count > 0 ? `还有 ${count} 张照片没有放进任何章节，会排在最后的「More frames」里` : true
+  } catch {
+    // 查询失败（离线等）时不提示，不妨碍编辑。
+    return true
+  }
 }
 
 /**
@@ -128,7 +154,7 @@ export default defineType({
       title: '小章节 / Chapters (可选)',
       type: 'array',
       description:
-        '可选。把这个故事分成几个小章节（主题），每章有标题、可选的小标签和导语，以及属于这一章的照片（按这里拖动的顺序显示）。打开故事后，开篇页和导语之后会有一个带编号的小目录（01、02……），点一下就滑到那一章。' +
+        '可选。把这个故事分成几个小章节（主题），每章有标题、可选的小标签和导语，以及属于这一章的照片（按这里拖动的顺序显示）。打开故事后，开篇页和导语之后会有一个小目录，章节用罗马数字编号（Part I、II、III……，和照片的 01、02 编号区分开），点一下就滑到那一章。' +
         '封面照片固定是开篇页的第 01 帧，不会在章节里重复出现。没放进任何章节的照片不会消失，会排在最后，归在「More frames」里。一张照片都没有的章节不会显示。不填章节时，故事和现在完全一样。',
       of: [
         defineArrayMember({
@@ -153,6 +179,14 @@ export default defineType({
               ],
             }),
             defineField({
+              name: 'shortTitle',
+              title: '目录短标题 / Short title (可选)',
+              type: 'string',
+              description:
+                '可选。目录和手机上那一排章节标签用的短标题；不填就用上面的章节标题。标题较长时建议填一个，例如「Ocean Drive」。',
+              validation: (rule) => rule.max(24),
+            }),
+            defineField({
               name: 'kicker',
               title: '小标签 / Kicker (可选)',
               type: 'string',
@@ -172,7 +206,9 @@ export default defineType({
               title: '这一章的照片 / Photos',
               type: 'array',
               description:
-                '从这个 Collection 自己的照片里选（只列出属于这个 Collection 的照片）。拖动可以调整顺序，网站按这个顺序显示。第一张会挂在章节标题旁边。',
+                '从这个 Collection 自己的照片里选（只列出属于这个 Collection 的照片）。以缩略图排列，拖动可以调整顺序，网站按这个顺序显示。第一张会挂在章节标题旁边。',
+              // 缩略图网格：照片标题都是自动生成的（Miami #24），只能靠缩略图认出是哪一张。
+              options: {layout: 'grid'},
               of: [
                 defineArrayMember({
                   type: 'reference',
@@ -192,19 +228,24 @@ export default defineType({
             }),
           ],
           preview: {
-            select: {title: 'title', kicker: 'kicker', photos: 'photos', media: 'photos.0.image'},
-            prepare({title, kicker, photos, media}) {
+            select: {title: 'title', shortTitle: 'shortTitle', kicker: 'kicker', photos: 'photos', media: 'photos.0.image'},
+            prepare({title, shortTitle, kicker, photos, media}) {
               const count = Array.isArray(photos) ? photos.length : 0
               return {
                 title: title || '（无标题章节）',
-                subtitle: [kicker, `${count} 张照片`].filter(Boolean).join(' · '),
+                subtitle: [shortTitle && shortTitle !== title ? `目录：${shortTitle}` : '', kicker, `${count} 张照片`]
+                  .filter(Boolean)
+                  .join(' · '),
                 media,
               }
             },
           },
         }),
       ],
-      validation: (rule) => rule.custom(repeatedPhotos).warning(),
+      validation: (rule) => [
+        rule.custom(repeatedPhotos).warning(),
+        rule.custom(unplacedPhotos).warning(),
+      ],
     }),
     defineField({
       name: 'featured',

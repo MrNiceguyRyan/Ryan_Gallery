@@ -93,13 +93,17 @@ export interface Slot {
   side?: 1 | -1;
   /** A CHAPTER's section, as an index into the story's sections. */
   section?: number;
+  /** A CHAPTER that opens the frames no part holds ("More frames"). */
+  more?: true;
 }
 
 /** A sub-chapter's frames in the story's reading order: [start, start +
- *  count) (src/lib/storyChapters.ts groups them). */
+ *  count) (src/lib/storyChapters.ts groups them). `no` null: the group of
+ *  frames no part holds, which opens with a shorter pause. */
 export interface PlanSection {
   start: number;
   count: number;
+  no?: number | null;
 }
 
 const SIDED: ReadonlySet<SlotKind> = new Set(['FEATURE', 'PAIR', 'COLUMN', 'SMALL']);
@@ -194,7 +198,7 @@ function planChapters(ratios: readonly number[], hasQuote: boolean, sections: re
   let quoted = false;
   sections.forEach((section, at) => {
     const end = section.start + section.count;
-    slots.push({ kind: 'CHAPTER', frames: [section.start], section: at });
+    slots.push({ kind: 'CHAPTER', frames: [section.start], section: at, ...(section.no === null ? { more: true as const } : null) });
     state.history.push('CHAPTER');
     let index = section.start + 1;
     while (index < end) {
@@ -391,6 +395,9 @@ export interface TextBox {
   x: Q;
   w: Q;
   y: Q;
+  /** A height the words fill (a part's opener beside a portrait: its title
+   *  and intro stand at the foot, level with the photograph's). */
+  h?: Q;
 }
 
 export interface SlotBoxes {
@@ -481,15 +488,26 @@ export function storyBoxes(slots: readonly Slot[], ratios: readonly number[], W:
         };
       }
       case 'CHAPTER': {
-        // The opener's words in columns 4–7 and the chapter's first frame
-        // hung at the right edge beside them, as Part II's. A chapter is a
-        // longer pause than a slot: half a gap more above it.
+        // The opener's words in columns 4–7 and the part's first frame hung
+        // at the right edge beside them, as Part II's. A part is a real
+        // pause, 2.4 gaps above it (240px at 1000 high, against 100 between
+        // slots); the frames no part holds follow a shorter one, a gap and a
+        // half, so the remainder stays quieter than the parts. Beside a
+        // portrait the words are as tall as the frame, so the title and intro
+        // can stand at its foot (global.css) instead of leaving a column of
+        // blank paper under a title set at the top.
         const w = capped(g.cols(isLandscape(r[0]) ? 5 : 4), r[0]);
         return {
           slot,
           frames: [frame(0, right(w), w)],
-          text: [{ role: 'chapter', x: g.colX(4), w: g.cols(4), y: ZERO }],
-          top: add(g.gap, over(g.gap, 2)),
+          text: [{
+            role: 'chapter',
+            x: g.colX(4),
+            w: g.cols(4),
+            y: ZERO,
+            ...(isLandscape(r[0]) ? null : { h: over(w, r[0]) }),
+          }],
+          top: slot.more ? add(g.gap, over(g.gap, 2)) : times(g.gap, 2.4),
         };
       }
       case 'QUOTE':

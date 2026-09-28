@@ -2027,11 +2027,14 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   padding-top: 16px;
   border-top: 1px solid var(--story-rule);
 }
-.story-chapter__label {
+/* Two classes: `.story-text p { margin: 0 }` (0,1,1) would otherwise zero
+   the label's and the intro's margins. The kicker hugs the title tighter
+   than the standfirst stands off it. */
+.story-chapter .story-chapter__label {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin: 0 0 22px;
+  margin: 0 0 18px;
   font-size: 11px;
   font-weight: 500;
   line-height: 1.2;
@@ -2058,9 +2061,13 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .story-chapter__title:focus {
   outline: none;
 }
-.story-chapter__intro {
+/* Han characters are not tightened (a title he writes in Chinese). */
+.story-chapter__title:lang(zh) {
+  letter-spacing: 0;
+}
+.story-chapter .story-chapter__intro {
   max-width: 36ch;
-  margin: 26px 0 0;
+  margin: 24px 0 0;
   font-size: var(--story-text);
   line-height: 1.55;
   font-variation-settings: "opsz" 18;
@@ -2091,7 +2098,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 .story-toc__link {
   position: relative;
   display: grid;
-  grid-template-columns: 2.2em minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   column-gap: 12px;
   align-items: baseline;
   color: var(--story-ink-3);
@@ -2110,15 +2117,24 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     transition-duration: var(--dur-in);
   }
 }
-.story-toc__no,
+/* A part's number: Fraunces Roman, the story's own "II" at reading size.
+   The frames it holds stay Space Grotesk figures, like the captions'. */
+.story-toc__no {
+  font-size: 15px;
+  font-weight: 400;
+  font-variation-settings: "opsz" 18;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--story-ink-3);
+}
 .story-toc__frames {
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  color: var(--story-ink-3);
 }
-.story-toc__frames { color: var(--story-ink-3); }
 .story-toc__title {
   font-variation-settings: "opsz" 18;
   font-size: 17px;
@@ -2126,6 +2142,8 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   text-wrap: balance;
 }
 .story-toc__link[aria-current] .story-toc__title { font-style: italic; }
+.story-toc__link[aria-current] .story-toc__no { color: var(--story-ink); }
+.story-toc__title:lang(zh) { font-style: normal; }
 @media (min-width: 1024px) {
   /* The rail's columns, from the introduction's top to the end page: the
      list rides up with the paper, then holds under the running head, kept
@@ -2181,6 +2199,36 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
     opacity: 1;
     transition: opacity var(--dur-swap) var(--ease-arrive);
   }
+  /* Rising under the kept stub it is faded out by the scroll
+     (MagazineLayout, contentsOpacity) and not clickable through the stub;
+     a keyboard focus brings it back whole. */
+  .story-toc[data-faint] { pointer-events: none; }
+  .story-toc:focus-within,
+  .story-toc:focus-within .story-toc__label {
+    opacity: 1 !important;
+  }
+  /* A part opened by a portrait: the rule and its number stay at the top,
+     the title and intro stand at the foot, the intro's last line level with
+     the photograph's bottom edge (--th, its height), as a screen-high
+     frame's caption stands at its foot. A landscape's opener stays set from
+     the top. */
+  .story-slot[data-kind="CHAPTER"][data-pp] > .story-chapter {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-height: var(--th);
+  }
+  .story-slot[data-kind="CHAPTER"][data-pp] .story-chapter__title {
+    margin-top: auto;
+    /* Clear of the label when the words fill the frame's height. */
+    padding-top: 40px;
+  }
+}
+/* Between 1024 and 1279 the rail is narrow: the titles take the frames'
+   column rather than folding onto two lines each. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .story-toc__frames { display: none; }
+  .story-toc__link { grid-template-columns: 34px minmax(0, 1fr); }
 }
 @media (max-width: 1023.98px) {
   /* A row under the running head, from the introduction's end to the end
@@ -2232,12 +2280,21 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   }
   .story-toc__no:empty { display: none; }
   .story-toc__frames { display: none; }
-  .story-toc__title { font-size: 15px; }
-  .story-slot[data-kind="CHAPTER"] { margin-top: 72px; }
+  .story-toc__title {
+    /* A long title never makes one chip the width of the screen (the short
+       title in Sanity is the fix; this is the guard). */
+    max-width: 62vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 15px;
+  }
+  /* A part is a real pause; the frames no part holds, a quieter one. */
+  .story-slot[data-kind="CHAPTER"] { margin-top: 112px; }
+  .story-slot[data-kind="CHAPTER"][data-more] { margin-top: 72px; }
   .story-slot[data-kind="CHAPTER"] > .story-fig { margin-top: 32px; }
   .story-chapter__title { font-size: 30px; }
-  .story-chapter__label { margin-bottom: 16px; }
-  .story-chapter__intro { margin-top: 20px; }
+  .story-chapter .story-chapter__label { margin-bottom: 14px; }
+  .story-chapter .story-chapter__intro { margin-top: 16px; }
   .story-chapter--more .story-chapter__title { font-size: var(--story-lead); }
 }
 @media (prefers-reduced-motion: reduce) {
