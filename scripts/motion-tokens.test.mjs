@@ -164,14 +164,18 @@ test('the voyage\'s sine is the explorer\'s: its flights and its entry\'s descen
   const sine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
   for (let t = 0; t <= 1; t += 0.0625) assert.equal(voyageEase(t), sine(t));
   // The page no longer scrolls on a voyage (the explorer is a map to roam):
-  // the voyage's clock went with it. Only the entrance above it scrolls —
-  // the rest of the pass's glide on to the globe, and the wordmark back up
-  // to the opening words — on the pass's own glide curve.
+  // the voyage's clock went with it. Only the entrance's glide moves the
+  // page — the torn pass's glide on to the globe (EntranceIntro), and the
+  // rest of it if a hand-over finds it short (HomePage) — on the glide's
+  // own curve, and with no Lenis (nothing scrolls by hand).
   const home = readFileSync(join(ROOT, 'src/components/home/HomePage.tsx'), 'utf8');
+  const entrance = readFileSync(join(ROOT, 'src/components/home/EntranceIntro.tsx'), 'utf8');
   assert.doesNotMatch(home, /voyageSeconds/);
-  const scrolls = home.match(/lenis\.scrollTo\([^)]*\)/g) ?? [];
-  assert.equal(scrolls.length, 2);
-  for (const call of scrolls) assert.match(call, /easing: arrivalCurve/);
+  assert.equal((home.match(/lenis\.scrollTo\(/g) ?? []).length, 0);
+  for (const text of [home, entrance]) {
+    const scrolls = text.match(/window\.scrollTo\(\{ top: from \+ \([^)]*\) \* arrivalCurve\(k\)/g) ?? [];
+    assert.equal(scrolls.length, 1);
+  }
   const camera = readFileSync(join(ROOT, 'src/lib/explorerCamera.ts'), 'utf8');
   assert.match(camera, /import \{ DUR_MS, voyageEase \} from '\.\/motion\.ts';/);
   const atlas = readFileSync(join(ROOT, 'src/components/home/RouteAtlas.tsx'), 'utf8');

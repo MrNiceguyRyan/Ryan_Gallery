@@ -2281,9 +2281,21 @@ export default function RouteAtlas({
     // onto the entry's place then). A restart in the reader's hands starts
     // handed over.
     let cutDown = !prologue || queuedEntry >= 0.999;
+    // A frame is being drawn. A move the draw makes itself (a padding set, a
+    // jump) fires the map's 'move' at once, and its handler asks for a draw
+    // (`onFreeMove`, the map in the reader's hands): asked from inside the
+    // draw, the next one goes to the NEXT frame. An `immediate` ask would go
+    // to Motion's current render batch, which still holds this very draw —
+    // dropped as a duplicate, it left classicMapFrameRef set with nothing
+    // queued, every later ask refused and the loop dead (seen 2026-09-29: a
+    // story closed over the reader's map, then Back to the start — the globe
+    // never came back, the entry never came down, the stub hand-off never
+    // heard it land).
+    let drawing = false;
     const draw: Process = () => {
       if (disposed) return;
       classicMapFrameRef.current = null;
+      drawing = true;
       const still = reducedMotion && prologue ? stillPose() : null;
       // The globe the page brings up, and the descent from it, until the
       // entry's clock is at its end (reduced motion: the planet, then a cut).
@@ -2436,12 +2448,13 @@ export default function RouteAtlas({
         map.once('render', stillReturn);
         map.triggerRepaint();
       }
+      drawing = false;
     };
     const schedule = () => {
       if (disposed) return;
       if (classicMapFrameRef.current) return;
       classicMapFrameRef.current = draw;
-      frame.render(draw, false, true);
+      frame.render(draw, false, !drawing);
     };
     const unsubscribeEntry = sampledEntryProgress.on('change', (progress) => {
       queuedEntry = progress;

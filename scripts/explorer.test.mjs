@@ -434,6 +434,63 @@ test('the map holds its tone while it moves, and its veil never dips', () => {
   assert.equal(silverExitAt(SILVER_EXIT[1]), 1);
 });
 
+test('the atlas\'s draw loop never dies: a draw asked for from inside a draw goes to the next frame', async () => {
+  // Found joining the entrance v2 (2026-09-29): a story closed over the
+  // reader's map restarts the atlas's frame loop, and its first draw sets the
+  // map's padding — a 'move', whose handler asks for a draw from INSIDE the
+  // draw. Motion's render step puts an `immediate` ask into the batch it is
+  // running, which still holds that very draw: the ask was dropped, the
+  // guard (classicMapFrameRef) stayed set, and every later ask was refused —
+  // Back to the start then left the camera down on Miami, the entry never
+  // came down again, and the stub hand-off never heard it land. Motion's own
+  // frame loop, driven here by a stand-in for requestAnimationFrame:
+  globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(performance.now()), 2);
+  const { frame } = await import('motion-dom');
+  const loop = (immediateInside) => {
+    let queued = null;
+    let drawing = false;
+    let draws = 0;
+    let moved = false;
+    const schedule = () => {
+      if (queued) return;
+      queued = draw;
+      frame.render(draw, false, immediateInside ? true : !drawing);
+    };
+    function draw() {
+      queued = null;
+      drawing = true;
+      draws += 1;
+      // The first draw's own move (the padding set) asks for a draw.
+      if (!moved) {
+        moved = true;
+        schedule();
+      }
+      drawing = false;
+    }
+    return { schedule, count: () => draws };
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+  const broken = loop(true);
+  broken.schedule();
+  await settle();
+  broken.schedule(); // the entry's clock back to 0 (Back to the start)
+  await settle();
+  assert.equal(broken.count(), 1, 'the old way: the loop is dead after its first draw');
+  const fixed = loop(false);
+  fixed.schedule();
+  await settle();
+  fixed.schedule();
+  await settle();
+  assert.equal(fixed.count(), 3, 'the self-ask draws next frame, and a later ask still draws');
+  // The atlas schedules that way.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /classicMapFrameRef\.current = draw;\s+frame\.render\(draw, false, !drawing\);/);
+  const draw = atlas.slice(atlas.indexOf('const draw: Process = () => {'), atlas.indexOf('const schedule = () => {'));
+  assert.match(draw, /^const draw: Process = \(\) => \{\s+if \(disposed\) return;\s+classicMapFrameRef\.current = null;\s+drawing = true;/);
+  assert.match(draw, /drawing = false;\s+\};\s+$/);
+  assert.equal((draw.match(/return;/g) || []).length, 1, 'one way out of a draw: its end (drawing is cleared)');
+});
+
 test('the homepage hands the entrance a seam: an event, a function, a record', () => {
   const lib = source('src/lib/explorer.ts');
   assert.match(lib, /export const EXPLORE_EVENT = 'archive:explore'/);
@@ -442,10 +499,12 @@ test('the homepage hands the entrance a seam: an event, a function, a record', (
   assert.match(home, /EXPLORE_EVENT/);
   assert.match(home, /__archiveExploreAsked/, 'an ask made before the page mounted is kept');
   // The boarding pass, torn, asks once the glide has brought the globe up —
-  // and nothing synthetic follows the ask (a real key, press or new wheel
-  // cuts the entry short).
-  assert.match(home, /const onEntranceArrived = useCallback\(\(\) => requestExplore\(\{ from: 'boarding-pass' \}\), \[\]\);/);
-  assert.match(home, /onArrived=\{onEntranceArrived\}/);
+  // itself, with its stub's hand-off (entrance v2) — and nothing synthetic
+  // follows the ask (a real key, press or new wheel cuts the entry short).
+  const entrance = source('src/components/home/EntranceIntro.tsx');
+  assert.match(entrance, /requestExplore\(\{ from: 'boarding-pass', stubHandoff \}\)/);
+  assert.match(lib, /stubHandoff\?: boolean;/);
+  assert.doesNotMatch(home, /onEntranceArrived|onArrived=/);
   const handOver = home.slice(home.indexOf('handOverRef.current = (enter'), home.indexOf('// ── The seam: anyone may ask'));
   assert.doesNotMatch(handOver, /dispatchEvent|new (Wheel|Keyboard|Pointer|Mouse)Event/);
   // The explorer's first screen no longer listens for a first wheel or key:

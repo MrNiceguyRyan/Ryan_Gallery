@@ -22,7 +22,8 @@
 // ── The seam ──
 // The entrance in front of the explorer hands the page over once the globe
 // is on screen: the boarding pass, torn, asks as the page's glide lands with
-// the globe risen (HomePage, `onEntranceArrived`), and nothing synthetic
+// the globe risen (EntranceIntro, with `stubHandoff`: its torn stub is on
+// its way to stop 01's cover — src/lib/boardingPass.ts), and nothing synthetic
 // follows the ask. Anyone can ask for it:
 //   import { requestExplore } from '../lib/explorer';
 //   requestExplore();            // or: window.dispatchEvent(new CustomEvent('archive:explore'))
@@ -74,6 +75,9 @@ export const ENTRY_LANDED_EVENT = 'archive:entry-landed';
 export const STUB_LANDED_EVENT = 'archive:stub-landed';
 export const STUB_WAIT_MS = 4000;
 
+/** (x, y) the top-left of the UNROTATED box, in viewport px (like a DOMRect
+ *  of the box before its turn); `rotate` in degrees, clockwise, about the
+ *  box's centre. The entrance reads it as its StubRect (boardingPass.ts). */
 export interface CoverStubTarget {
   x: number;
   y: number;

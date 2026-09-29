@@ -45,10 +45,14 @@ test('the entry goes straight down onto stop 01: its cover is simply there, whol
   // corner globe facing India, then "The route begins in …" beside it): the
   // torn pass brings the globe up already facing stop 01, and the explorer's
   // rail says the place once the camera is down on it — one line, not two.
+  // (Entrance v2: the cover of words — src/lib/boardingPass.ts coverBlocks —
+  // renders each of the film's words as its own [data-open-land] span.)
   const entrance = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
-  assert.match(entrance, /data-open-land="ryan"/);
-  assert.match(entrance, /data-open-land="xu"/);
-  for (const word of ['camera', 'travel', 'archive', 'thought']) assert.match(entrance, new RegExp(`\\{ land: '${word}' \\}`));
+  const cover = readFileSync(new URL('../src/lib/boardingPass.ts', import.meta.url), 'utf8');
+  assert.match(entrance, /data-open-land=\{part\.land\}/);
+  assert.match(cover, /\{ land: 'ryan', text: 'Ryan' \}/);
+  assert.match(cover, /\{ land: 'xu', text: 'Xu' \}/);
+  for (const word of ['camera', 'travel', 'archive', 'thought', 'you']) assert.match(cover, new RegExp(`\\{ land: '${word}' \\}`));
   assert.equal(existsSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url)), false);
   assert.doesNotMatch(home, /GlobePrologue|The route begins in|data-open-land/);
   assert.doesNotMatch(css, /globe-prologue|prologue-cap/);
@@ -92,11 +96,12 @@ test('the fallback and the live map share the entry\'s clock, which is time, not
   assert.match(home, /entrancePhase\(p, \.\.\.ARCHIVE_ENTRANCE_PHASES\.mapVisibility\)/);
   // The entry runs on time (src/lib/explorerCamera.ts ENTRY), never on the
   // page's scroll: the descent alone (no turn before it), and the explorer's
-  // page does not scroll. The entrance above it does, on Lenis, until the
-  // explorer has the page: then Lenis goes and the body is clipped.
+  // page does not scroll. Nor does the entrance above it (entrance v2: one
+  // screen, the pass the one way on, its glide the only move of the page):
+  // the body is clipped from the first frame, and there is no Lenis.
   assert.match(home, /animate\(entryProgress, 1, \{\s*duration: ENTRY\.diveMs \/ 1000/);
   assert.doesNotMatch(home, /prologueProgress|entryQ|turnMs|archiveEntryProgress/);
-  assert.match(home, /if \(!entranceOn\) return;\s*const \{ lenis, destroy \} = startLenis\(\);/);
-  assert.match(home, /if \(entranceOn\) return;\s*document\.body\.style\.overflow = 'clip';/);
+  assert.doesNotMatch(home, /startLenis|lenisRef/);
+  assert.match(home, /useEffect\(\(\) => \{\s*document\.body\.style\.overflow = 'clip';/);
   assert.match(map, /entrancePhase\(Number\(entry\), \.\.\.ARCHIVE_ENTRANCE_PHASES\.interface\)/);
 });

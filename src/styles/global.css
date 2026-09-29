@@ -97,22 +97,9 @@ html.lenis body {
    hydration: framer's `initial` is written into the server HTML and shipped
    type hidden until the scripts had loaded. The base styles ARE the finished
    screen and the hidden state lives only in each keyframe's `from` (filled
-   backwards through the delay, never forwards: once risen the type is plain
-   page again, off its animation layer), so with no animation (reduced
-   motion) the finished screen is what paints. The opening words' entrance
-   (src/styles/entrance.css) uses these same keyframes. */
-@keyframes prologue-hero-rise {
-  from { transform: translateY(112%); }
-}
-@keyframes prologue-hero-lift-14 {
-  from { opacity: 0; transform: translateY(14px); }
-}
-@keyframes prologue-hero-lift-10 {
-  from { opacity: 0; transform: translateY(10px); }
-}
-@keyframes prologue-hero-fade {
-  from { opacity: 0; }
-}
+   backwards through the delay, never forwards), so with no animation
+   (reduced motion) the finished screen is what paints — the entrance's
+   cover of words sets itself this way (src/styles/entrance.css, ec-rise). */
 /* ── The opening film (OpeningFilm; its own sheet is opening.css) ────────
    It lies over the entrance's opening words until it lands (<html
    data-reel>, written before the first paint by index.astro's head script
