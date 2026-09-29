@@ -542,38 +542,71 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 // 什么的. The pass glows a little (entrance.css: a slow breath of bone light
 // round the paper once it has assembled, a touch more under the pointer,
 // gone once the stub is torn; still under reduced motion), and the reader
-// can pick it up and move it anywhere on the screen: it follows the hand
-// 1:1, tilts a little toward where it was taken, lifts (its shadow
-// deepens), and let go it drifts on a little and stays where it was put —
-// never off the screen. Tearing is still only a click (a tap, Enter,
-// Space) on the stub: a press on the stub that travels more than
-// `threshold` px moves the pass instead, and is not a click. The arrow keys
-// move it a little when the stub has the focus. The torn stub's arc sets
-// off from wherever the pass was put (its rect is read as it comes free).
+// can pick it up and move it anywhere on the screen. Tearing is still only
+// a click (a tap, Enter, Space) on the stub: a press on the stub that
+// travels more than `threshold` px moves the pass instead, and is not a
+// click. The arrow keys move it a little when the stub has the focus. The
+// torn stub's arc sets off from wherever the pass was put (its rect is read
+// as it comes free).
+// Then (the same day, after trying it: 移动这个票太僵硬了 — it moved 1:1,
+// stiff as a card on a rail) it moves like paper held in the hand
+// (`paperStep`, PAPER): it follows the hand on a spring (a hair behind on a
+// quick move, caught up in ~0.1 s, no lag to feel on a slow one), swings
+// about the point it is held by as the hand moves (a pendulum, spring-
+// damped, the paper hanging a little below the fingers), leans into its
+// travel in depth (rotateX / rotateY under a perspective), lifts when taken
+// up (larger, higher, its shadow wider and softer) and, let go, slides on,
+// settles with a small overshoot, swings back to square and lands (its
+// shadow tightening). At the screen's edges it gives a little (a rubber
+// band) and comes back inside. Transform and opacity only, on the pass's
+// one rAF loop; every spring is integrated in fixed small steps, so 60 Hz
+// and 120 Hz move alike. Reduced motion: it follows the hand directly — no
+// spring, no swing, no lean.
 export const PASS_DRAG = {
   /** A press that travels further than this is a drag, never a click, px. */
   threshold: 6,
   /** Kept this far inside the screen's edges, px. */
   margin: 8,
-  /** Held: the turn toward where it was taken (deg at its far edge), the
-   *  sway with the hand's pace (deg per 1000 px/s, at most `swayMax`), and
-   *  how quickly the turn follows (per second). */
-  tiltDeg: 1.6,
-  sway: 1.2,
-  swayMax: 1.8,
-  tiltRate: 12,
-  /** …and it lifts off the page by this much. */
-  liftScale: 1.015,
-  /** Let go: the hand's pace (from its last `sampleMs`) carried on and
-   *  slowed at `friction` per second, never more than `maxSpeed` px/s, and
-   *  stopped under `stopSpeed`. At 1000 px/s it drifts ~110 px on. */
+  /** The hand's pace at the let-go: from its last `sampleMs`, never more
+   *  than `maxSpeed` px/s. */
   sampleMs: 90,
-  friction: 9,
   maxSpeed: 1600,
-  stopSpeed: 12,
   /** An arrow key moves it this far (with Shift, `nudgeFar`), px. */
   nudge: 16,
   nudgeFar: 64,
+} as const;
+
+export const PAPER = {
+  /** Following the hand: a spring a touch under critical damping. At
+   *  ω 42 / ζ 0.8 a step is 90% caught up in ~70 ms and settled (2%) by
+   *  ~120 ms, with a 1.5% overshoot; a steady hand is trailed by 2ζ/ω ≈
+   *  38 ms of its own travel (8 px at a slow 200 px/s). */
+  follow: { omega: 42, zeta: 0.8 },
+  /** The swing about the held point: its angle leans toward the drag the
+   *  hand's travel puts on the paper hanging off the fingers (deg per px/s
+   *  per unit of lever, at most `max`), on a springy pendulum. The paper
+   *  hangs `hang` (a share of its half-width) below the point it is held
+   *  by, so a hold on its middle still swings. With its overshoot it
+   *  never passes ~9° (`limit`, a hard stop at 10°). */
+  sway: { perPxS: 0.0085, max: 7.5, omega: 11, zeta: 0.5, hang: 0.35, limit: 10 },
+  /** The lean in depth, toward the travel (deg per px/s, at most `max`),
+   *  under a perspective of `perspective` px. */
+  lean: { perPxS: 0.0045, max: 7, omega: 20, zeta: 0.8, perspective: 1100 },
+  /** Taken up: this much larger and `hop` px higher, on a springy lift
+   *  (it overshoots a little on the way up and as it lands). */
+  lift: { scale: 0.035, hop: 5, omega: 26, zeta: 0.55 },
+  /** Let go: the hand's pace carried on and slowed at `friction` per
+   *  second (1000 px/s slides ~110 px on; the hand's pace is capped at
+   *  PASS_DRAG.maxSpeed, so a throw never slides past ~180 px), stopped
+   *  under `stopSpeed`. */
+  friction: 9,
+  stopSpeed: 12,
+  /** At an edge the pass gives up to `rubber` px past it, then comes back. */
+  rubber: 64,
+  /** Squared up for the tear: a quick, critically damped return. */
+  square: { omega: 24, zeta: 1 },
+  /** The springs' fixed step, s. */
+  step: 1 / 480,
 } as const;
 
 /** Whether a press that has travelled `dx`, `dy` is (now) a drag. */
@@ -581,16 +614,36 @@ export function isDrag(dx: number, dy: number) {
   return Math.hypot(dx, dy) > PASS_DRAG.threshold;
 }
 
-/** The offset `off` held so that the box — its rect at no offset, `home`
- *  (viewport px) — stays whole inside a `vw` × `vh` screen, PASS_DRAG.margin
- *  in from each edge. A box larger than the screen keeps its top-left in. */
-export function clampOffset(off: Point2, home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number): Point2 {
+export interface Bounds { lo: Point2; hi: Point2 }
+
+/** The offsets that keep the box — its rect at no offset, `home` (viewport
+ *  px) — whole inside a `vw` × `vh` screen, PASS_DRAG.margin in from each
+ *  edge. A box larger than the screen keeps its top-left in. */
+export function offsetBounds(home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number): Bounds {
   const m = PASS_DRAG.margin;
-  const axis = (value: number, lo: number, hi: number) => (lo > hi ? lo : clamp(value, lo, hi));
-  return {
-    x: axis(off.x, m - home.left, vw - m - home.right),
-    y: axis(off.y, m - home.top, vh - m - home.bottom),
-  };
+  const lo = { x: m - home.left, y: m - home.top };
+  const hi = { x: Math.max(lo.x, vw - m - home.right), y: Math.max(lo.y, vh - m - home.bottom) };
+  return { lo, hi };
+}
+
+/** `off` held inside the bounds. */
+export function clampOffset(off: Point2, home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number): Point2 {
+  const { lo, hi } = offsetBounds(home, vw, vh);
+  return { x: clamp(off.x, lo.x, hi.x), y: clamp(off.y, lo.y, hi.y) };
+}
+
+/** A soft edge: inside [lo, hi] as it is, past it giving less and less,
+ *  never more than `reach` px. */
+export function rubber(value: number, lo: number, hi: number, reach: number = PAPER.rubber) {
+  if (value < lo) {
+    const e = lo - value;
+    return lo - (reach * e) / (reach + e);
+  }
+  if (value > hi) {
+    const e = value - hi;
+    return hi + (reach * e) / (reach + e);
+  }
+  return value;
 }
 
 /** The hand's pace at the let-go, px/s: from its samples ([t ms, x, y]) of
@@ -612,32 +665,132 @@ export function releaseVelocity(samples: ReadonlyArray<readonly [number, number,
   return { x: vx * k, y: vy * k };
 }
 
-/** The drift after the let-go, one step of `dt` s: the pace slowed by the
- *  friction (exactly: the step moves v·(1 − e^(−f·dt))/f), and held on the
- *  screen (an edge stops its axis). */
-export function driftStep(off: Point2, v: Point2, dt: number, home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number) {
-  const f = PASS_DRAG.friction;
-  const decay = Math.exp(-f * dt);
-  const reach = (1 - decay) / f;
-  const moved = { x: off.x + v.x * reach, y: off.y + v.y * reach };
-  const held = clampOffset(moved, home, vw, vh);
-  let vx = v.x * decay;
-  let vy = v.y * decay;
-  if (held.x !== moved.x) vx = 0;
-  if (held.y !== moved.y) vy = 0;
-  if (Math.hypot(vx, vy) < PASS_DRAG.stopSpeed) {
-    vx = 0;
-    vy = 0;
-  }
-  return { off: held, v: { x: vx, y: vy } };
+/** The paper's state: where it is (`p`, its offset, px) and its pace, where
+ *  the hand (or its slide) asks it to be (`target`), the slide after a
+ *  let-go (`drift`, px/s), the swing (deg), the lean (deg about x and y),
+ *  the lift (0 → 1), each with its pace. */
+export interface PaperState {
+  p: Point2;
+  v: Point2;
+  target: Point2;
+  drift: Point2;
+  sway: number;
+  swayV: number;
+  leanX: number;
+  leanXV: number;
+  leanY: number;
+  leanYV: number;
+  lift: number;
+  liftV: number;
+}
+export const paperRest = (at: Point2 = { x: 0, y: 0 }): PaperState => ({
+  p: { ...at }, v: { x: 0, y: 0 }, target: { ...at }, drift: { x: 0, y: 0 },
+  sway: 0, swayV: 0, leanX: 0, leanXV: 0, leanY: 0, leanYV: 0, lift: 0, liftV: 0,
+});
+
+export interface PaperInput {
+  /** In the hand (the target is the hand's), or let go (it slides). */
+  held: boolean;
+  /** Where the paper hangs from the held point: its centre less the held
+   *  point, over its half-width (the swing's lever). */
+  lever: Point2;
+  /** Where it may rest (a let-go slide stops at these). */
+  bounds: Bounds;
+  /** Squared up for the tear: no swing, no lean, no lift, no slide. */
+  square?: boolean;
+  reduced?: boolean;
 }
 
-/** Held: the pass's turn (deg), from where it was taken across it (`grab`,
- *  −1 at its left edge … 1 at its right) and the hand's pace (px/s across). */
-export function heldTilt(grab: number, vx: number) {
-  const g = clamp(grab, -1, 1);
-  const sway = clamp((vx / 1000) * PASS_DRAG.sway, -PASS_DRAG.swayMax, PASS_DRAG.swayMax);
-  return g * PASS_DRAG.tiltDeg + sway;
+const springTo = (x: number, v: number, to: number, omega: number, zeta: number, h: number): [number, number] => {
+  const a = -omega * omega * (x - to) - 2 * zeta * omega * v;
+  const nv = v + a * h;
+  return [x + nv * h, nv];
+};
+
+/** One frame of `dt` s. Pure: the same input moves the paper the same way
+ *  at any frame rate (fixed PAPER.step substeps). `moving` says whether
+ *  anything is still under way. */
+export function paperStep(state: PaperState, input: PaperInput, dt: number): { state: PaperState; moving: boolean } {
+  const s: PaperState = { ...state, p: { ...state.p }, v: { ...state.v }, target: { ...state.target }, drift: { ...state.drift } };
+  const { lo, hi } = input.bounds;
+  if (input.reduced) {
+    // Direct: where the hand is; let go, where it was left (inside).
+    const at = input.held ? s.target : { x: clamp(s.target.x, lo.x, hi.x), y: clamp(s.target.y, lo.y, hi.y) };
+    return { state: { ...paperRest(at), lift: input.held && !input.square ? 1 : 0 }, moving: false };
+  }
+  if (input.square) {
+    s.drift = { x: 0, y: 0 };
+    s.target = { x: clamp(s.p.x, lo.x, hi.x), y: clamp(s.p.y, lo.y, hi.y) };
+  } else if (!input.held && (s.drift.x !== 0 || s.drift.y !== 0)) {
+    // The slide: the target runs on and slows; an edge stops its axis.
+    const f = PAPER.friction;
+    const decay = Math.exp(-f * dt);
+    const reach = (1 - decay) / f;
+    const moved = { x: s.target.x + s.drift.x * reach, y: s.target.y + s.drift.y * reach };
+    s.target = { x: clamp(moved.x, lo.x, hi.x), y: clamp(moved.y, lo.y, hi.y) };
+    s.drift = { x: s.target.x === moved.x ? s.drift.x * decay : 0, y: s.target.y === moved.y ? s.drift.y * decay : 0 };
+    if (Math.hypot(s.drift.x, s.drift.y) < PAPER.stopSpeed) s.drift = { x: 0, y: 0 };
+  } else if (!input.held) {
+    // At rest it rests inside (a rubber-banded let-go comes back).
+    s.target = { x: clamp(s.target.x, lo.x, hi.x), y: clamp(s.target.y, lo.y, hi.y) };
+  }
+  // What the swing, the lean and the lift ask for this frame (from the
+  // paper's own pace, not the raw hand: no jitter).
+  const held = input.held && !input.square;
+  const vx = s.v.x;
+  const vy = s.v.y;
+  const SW = PAPER.sway;
+  const lever = { x: input.lever.x, y: input.lever.y + SW.hang };
+  // The drag on paper hanging off the fingers: r × (−v), clockwise +.
+  const torque = lever.x * -vy - lever.y * -vx;
+  const swayTo = held ? clamp(SW.perPxS * torque, -SW.max, SW.max) : 0;
+  const LE = PAPER.lean;
+  const leanYTo = held ? clamp(LE.perPxS * vx, -LE.max, LE.max) : 0;
+  const leanXTo = held ? clamp(-LE.perPxS * vy, -LE.max, LE.max) : 0;
+  const liftTo = held ? 1 : 0;
+  const sq = input.square ? PAPER.square : null;
+  const n = Math.max(1, Math.ceil(dt / PAPER.step - 1e-9));
+  const h = dt / n;
+  const F = PAPER.follow;
+  for (let i = 0; i < n; i += 1) {
+    [s.p.x, s.v.x] = springTo(s.p.x, s.v.x, s.target.x, sq ? sq.omega : F.omega, sq ? sq.zeta : F.zeta, h);
+    [s.p.y, s.v.y] = springTo(s.p.y, s.v.y, s.target.y, sq ? sq.omega : F.omega, sq ? sq.zeta : F.zeta, h);
+    [s.sway, s.swayV] = springTo(s.sway, s.swayV, swayTo, sq ? sq.omega : SW.omega, sq ? sq.zeta : SW.zeta, h);
+    [s.leanX, s.leanXV] = springTo(s.leanX, s.leanXV, leanXTo, sq ? sq.omega : LE.omega, sq ? sq.zeta : LE.zeta, h);
+    [s.leanY, s.leanYV] = springTo(s.leanY, s.leanYV, leanYTo, sq ? sq.omega : LE.omega, sq ? sq.zeta : LE.zeta, h);
+    [s.lift, s.liftV] = springTo(s.lift, s.liftV, liftTo, sq ? sq.omega : PAPER.lift.omega, sq ? sq.zeta : PAPER.lift.zeta, h);
+    if (Math.abs(s.sway) > SW.limit) {
+      s.sway = Math.sign(s.sway) * SW.limit;
+      s.swayV = 0;
+    }
+  }
+  const still = (x: number, v: number, to: number, e = 0.02) => Math.abs(x - to) < e && Math.abs(v) < e * 10;
+  const moving = !(
+    s.drift.x === 0 && s.drift.y === 0 &&
+    still(s.p.x, s.v.x, s.target.x, 0.05) && still(s.p.y, s.v.y, s.target.y, 0.05) &&
+    still(s.sway, s.swayV, swayTo) && still(s.leanX, s.leanXV, leanXTo) && still(s.leanY, s.leanYV, leanYTo) &&
+    still(s.lift, s.liftV, liftTo, 0.002)
+  );
+  if (!moving) {
+    // Settled: exactly where it was asked to be.
+    s.p = { ...s.target };
+    s.v = { x: 0, y: 0 };
+    s.sway = swayTo; s.swayV = 0;
+    s.leanX = leanXTo; s.leanXV = 0;
+    s.leanY = leanYTo; s.leanYV = 0;
+    s.lift = liftTo; s.liftV = 0;
+  }
+  return { state: s, moving };
+}
+
+/** The pass's own transform for the paper's state: lifted, then turned and
+ *  leaned about the held point (`grab`, px from the pass's centre), null at
+ *  rest. */
+export function paperTransform(s: PaperState, grab: Point2): string | null {
+  const L = PAPER.lift;
+  if (Math.abs(s.sway) < 0.005 && Math.abs(s.leanX) < 0.005 && Math.abs(s.leanY) < 0.005 && Math.abs(s.lift) < 0.0005) return null;
+  const f = (n: number, d = 3) => n.toFixed(d);
+  return `translate3d(0, ${f(-L.hop * s.lift, 2)}px, 0) translate(${f(grab.x, 1)}px, ${f(grab.y, 1)}px) perspective(${PAPER.lean.perspective}px) rotateX(${f(s.leanX)}deg) rotateY(${f(s.leanY)}deg) rotate(${f(s.sway)}deg) scale(${f(1 + L.scale * s.lift, 4)}) translate(${f(-grab.x, 1)}px, ${f(-grab.y, 1)}px)`;
 }
 
 export const centreOf = (rect: StubRect): Point2 => ({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });

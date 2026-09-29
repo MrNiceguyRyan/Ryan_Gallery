@@ -12,10 +12,13 @@ import {
   barcodeBars,
   clampOffset,
   destinationScale,
-  driftStep,
-  heldTilt,
   isDrag,
+  offsetBounds,
+  paperRest,
+  paperStep,
+  paperTransform,
   releaseVelocity,
+  rubber,
   passResponse,
   peekAngle,
   type FreeStub,
@@ -46,12 +49,13 @@ import {
 // perforation; a click on the main part peels the stub at its top notch and
 // lays it back (that is the way in). Nothing else tears it: no drag, no
 // scroll, no timer. The pass can be picked up and moved (boardingPass.ts,
-// PASS_DRAG): held anywhere — the stub too — it follows the hand once the
-// press has travelled past the threshold (then it is not a click), and let
-// go it drifts a little and stays, whole on the screen; the arrow keys move
-// it while the stub has the focus. Reduced motion: values, not structure —
-// the stub fades where it is; the pass moves with the hand, no drift, no
-// turn.
+// PASS_DRAG, PAPER): held anywhere — the stub too — it goes with the hand
+// once the press has travelled past the threshold (then it is not a
+// click), like paper: on a spring, swinging about the held point, leaning
+// into its travel, lifted; let go it slides on, settles and lands, whole on
+// the screen (a soft edge); the arrow keys move it while the stub has the
+// focus. Reduced motion: values, not structure — the stub fades where it
+// is; the pass follows the hand directly, nothing swings.
 //
 // One writer, off one clock: every pose is written straight onto the nodes
 // in a rAF loop that runs only while something moves, never through React
@@ -118,6 +122,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
   const stubRef = useRef<HTMLDivElement>(null);
   const stubLiftRef = useRef<HTMLSpanElement>(null);
   const tearRef = useRef<HTMLButtonElement>(null);
+  const liftRef = useRef<HTMLSpanElement>(null);
   const [phase, setPhase] = useState<'whole' | 'torn'>('whole');
   const interactiveRef = useRef(interactive);
   interactiveRef.current = interactive;
@@ -196,36 +201,49 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
     let last = 0;
     let disposed = false;
     let lifted = false;
-    // ── Carried (PASS_DRAG) ──
-    // What moves (the pass with its hint), its offset from where the page
-    // laid it, and its rect at no offset (`home`: read once per grab and
-    // per resize, never per frame).
+    // ── Carried (PASS_DRAG, PAPER) ──
+    // What moves (the pass with its hint: translated), the pass itself
+    // (lifted, swung and leaned about the held point), the paper's state,
+    // and the rect of what moves at no offset (`home`: read once per grab
+    // and per resize, never per frame).
     const body = root.querySelector<HTMLElement>('.bp-body') ?? root;
+    const liftShade = liftRef.current;
     const carried = () => carryRef.current?.current ?? root;
-    let off = { x: 0, y: 0 };
-    let vel = { x: 0, y: 0 };
-    let home = { left: 0, top: 0, right: 0, bottom: 0 };
-    let tilt = 0;
-    let tiltTarget = 0;
+    let paper = paperRest();
+    let drawn = { x: 0, y: 0 };
+    let home: { left: number; top: number; right: number; bottom: number } | null = null;
     let held = false;
+    let squaring = false;
+    // The held point from the pass's centre (px), and the swing's lever
+    // (the centre less the held point, over the half-width).
+    let grab = { x: 0, y: 0 };
+    let lever = { x: 0, y: 0 };
+    // The pass's centre from the top-left of what moves, px (read at rest).
+    let centreIn: { x: number; y: number } | null = null;
     // A press: where it began, whether it has become a drag, the hand's
-    // last positions (for the pace at the let-go), where across the pass it
-    // was taken.
-    let press: { id: number; x: number; y: number; from: { x: number; y: number }; grab: number; drag: boolean; samples: [number, number, number][] } | null = null;
+    // last positions (for the pace at the let-go), where the paper was.
+    let press: { id: number; x: number; y: number; from: { x: number; y: number }; drag: boolean; samples: [number, number, number][] } | null = null;
     // The click that ends a drag is not a click.
     let swallowClick = false;
     let swallowTimer = 0;
     const readHome = () => {
       const r = carried().getBoundingClientRect();
-      home = { left: r.left - off.x, top: r.top - off.y, right: r.right - off.x, bottom: r.bottom - off.y };
+      home = { left: r.left - drawn.x, top: r.top - drawn.y, right: r.right - drawn.x, bottom: r.bottom - drawn.y };
     };
     const vw = () => document.documentElement.clientWidth || window.innerWidth;
     const vh = () => window.innerHeight;
+    // Unbounded until it has been taken up (its home is read then).
+    const FREE = { lo: { x: -Infinity, y: -Infinity }, hi: { x: Infinity, y: Infinity } };
+    const bounds = () => (home ? offsetBounds(home, vw(), vh()) : FREE);
     const drawCarry = () => {
-      const moved = Math.abs(off.x) > 0.01 || Math.abs(off.y) > 0.01;
-      put(carried(), 'transform', moved ? `translate3d(${off.x.toFixed(2)}px, ${off.y.toFixed(2)}px, 0)` : null);
-      const turned = Math.abs(tilt) > 0.005;
-      put(root, 'transform', turned || held ? `rotate(${tilt.toFixed(3)}deg)${held ? ` scale(${PASS_DRAG.liftScale})` : ''}` : null);
+      const moved = Math.abs(paper.p.x) > 0.01 || Math.abs(paper.p.y) > 0.01;
+      put(carried(), 'transform', moved ? `translate3d(${paper.p.x.toFixed(2)}px, ${paper.p.y.toFixed(2)}px, 0)` : null);
+      drawn = moved ? { ...paper.p } : { x: 0, y: 0 };
+      put(root, 'transform', paperTransform(paper, grab));
+      // The lifted shadow: wider, softer and further down the higher it is.
+      const lift = Math.max(0, Math.min(1.2, paper.lift));
+      put(liftShade, 'opacity', lift > 0.002 ? Math.min(1, lift).toFixed(3) : null);
+      put(liftShade, 'transform', lift > 0.002 ? `translate3d(0, ${(10 * lift).toFixed(2)}px, 0) scale(${(1 + 0.02 * lift).toFixed(4)})` : null);
     };
 
     // ── Layout: read once per resize, never per frame ──
@@ -337,17 +355,10 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
         if (performance.now() - peekStart >= PEEK_MS || tearPhase !== 'whole') peekStart = -1;
         else moving = true;
       }
-      // Let go: the drift, held on the screen; the turn back to square.
-      if (!held && (vel.x !== 0 || vel.y !== 0)) {
-        const step = driftStep(off, vel, dt, home, vw(), vh());
-        off = step.off;
-        vel = step.v;
-        moving = true;
-      }
-      const tiltTo = reduced() ? 0 : tiltTarget;
-      tilt = approach(tilt, tiltTo, PASS_DRAG.tiltRate, dt);
-      if (Math.abs(tilt - tiltTo) < 0.004) tilt = tiltTo;
-      else moving = true;
+      // The paper (held, sliding, settling, squared for the tear).
+      const step = paperStep(paper, { held, lever, bounds: bounds(), square: squaring, reduced: reduced() }, dt);
+      paper = step.state;
+      if (step.moving) moving = true;
       drawCarry();
       drawTear();
       if (moving) raf = requestAnimationFrame(tick);
@@ -369,6 +380,10 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       clock = TEAR_FREE_MS;
       peekStart = -1;
       peel = 0;
+      // Square where it lies (the tear's own spring has all but done it):
+      // the stub's box is read off the pass as it is laid.
+      paper = paperRest(paper.p);
+      drawCarry();
       const m = turned(tearPose(TEAR_FREE_MS, canonFrame(), { smooth: false, hinge: PASS_HINGE }).m);
       const box = seat.getBoundingClientRect();
       const hx = L.seatW / 2;
@@ -417,11 +432,11 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       tearPhase = 'tearing';
       root.dataset.stub = 'tearing';
       peekStart = -1;
-      // Torn where it lies: no drift on, and square (the stub's rect is
+      // Torn where it lies: no slide on, squared up (the stub's rect is
       // read as it comes free, TEAR_FREE_MS on).
       endPress();
-      vel = { x: 0, y: 0 };
-      tiltTarget = 0;
+      squaring = true;
+      wake();
       callbacks.current.onTear?.();
       if (reduced()) {
         // Values, not structure: the stub fades where it is.
@@ -494,23 +509,28 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
         held = false;
         delete root!.dataset.held;
       }
-      tiltTarget = 0;
       wake();
     }
     const onPressDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0 || !canCarry() || press) return;
       window.clearTimeout(swallowTimer);
       swallowClick = false;
-      // A drift still going stops in the hand.
-      vel = { x: 0, y: 0 };
+      // A slide still going stops in the hand.
+      paper = { ...paper, drift: { x: 0, y: 0 } };
       readHome();
-      const r = root.getBoundingClientRect();
+      // The pass's centre within what moves, read while it lies square.
+      if (!centreIn || !paperTransform(paper, grab)) {
+        if (!paperTransform(paper, grab)) {
+          const r = root.getBoundingClientRect();
+          const c = carried().getBoundingClientRect();
+          centreIn = { x: r.left + r.width / 2 - c.left, y: r.top + r.height / 2 - c.top };
+        }
+      }
       press = {
         id: event.pointerId,
         x: event.clientX,
         y: event.clientY,
-        from: { ...off },
-        grab: r.width > 0 ? ((event.clientX - r.left) / r.width) * 2 - 1 : 0,
+        from: { ...paper.p },
         drag: false,
         samples: [[event.timeStamp, event.clientX, event.clientY]],
       };
@@ -529,16 +549,24 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
         root!.dataset.held = '';
         // Taken up: the stub's own lift lets go (it is the pass that moves).
         pressed = false;
-        // Turned about where it was taken.
-        const r = root!.getBoundingClientRect();
-        put(root, 'transform-origin', `${(event.clientX - r.left).toFixed(1)}px ${(event.clientY - r.top).toFixed(1)}px`);
+        press.from = { ...paper.p };
+        // Held where it was taken (a pass still swinging from the last hold
+        // keeps that point: a new one would shift it under the hand).
+        const swinging = Math.abs(paper.sway) > 0.3 || Math.abs(paper.leanX) > 0.3 || Math.abs(paper.leanY) > 0.3;
+        if (centreIn && !swinging) {
+          const at = { x: home!.left + drawn.x + centreIn.x, y: home!.top + drawn.y + centreIn.y };
+          const half = Math.max(1, root!.offsetWidth / 2);
+          grab = { x: press.x - at.x, y: press.y - at.y };
+          lever = { x: -grab.x / half, y: -grab.y / half };
+        }
       }
       event.preventDefault();
-      press.samples.push([event.timeStamp, event.clientX, event.clientY]);
-      if (press.samples.length > 12) press.samples.shift();
-      off = clampOffset({ x: press.from.x + dx, y: press.from.y + dy }, home, vw(), vh());
-      const pace = releaseVelocity(press.samples);
-      tiltTarget = reduced() ? 0 : heldTilt(press.grab, pace.x);
+      const all = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+      (all.length ? all : [event]).forEach((e) => press!.samples.push([e.timeStamp, e.clientX, e.clientY]));
+      while (press.samples.length > 16) press.samples.shift();
+      // The hand's place, softly held back at the screen's edges.
+      const b = bounds();
+      paper = { ...paper, target: { x: rubber(press.from.x + dx, b.lo.x, b.hi.x), y: rubber(press.from.y + dy, b.lo.y, b.hi.y) } };
       wake();
     }
     function onPressUp(event: PointerEvent) {
@@ -550,7 +578,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
         swallowTimer = window.setTimeout(() => {
           swallowClick = false;
         }, 400);
-        vel = reduced() ? { x: 0, y: 0 } : releaseVelocity(press.samples);
+        paper = { ...paper, drift: reduced() ? { x: 0, y: 0 } : releaseVelocity(press.samples) };
       }
       endPress();
     }
@@ -561,16 +589,16 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       const by = ({ ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] } as Record<string, [number, number]>)[event.key];
       if (!by) return;
       event.preventDefault();
-      vel = { x: 0, y: 0 };
       readHome();
-      off = clampOffset({ x: off.x + by[0], y: off.y + by[1] }, home, vw(), vh());
+      paper = { ...paper, drift: { x: 0, y: 0 }, target: clampOffset({ x: paper.target.x + by[0], y: paper.target.y + by[1] }, home!, vw(), vh()) };
       wake();
     };
     // A new screen size: the pass is kept whole on it.
     const onResize = () => {
-      if (off.x === 0 && off.y === 0) return;
+      centreIn = null;
+      if (paper.target.x === 0 && paper.target.y === 0 && drawn.x === 0 && drawn.y === 0) return;
       readHome();
-      off = clampOffset(off, home, vw(), vh());
+      paper = { ...paper, target: clampOffset(paper.target, home!, vw(), vh()) };
       wake();
     };
 
@@ -636,6 +664,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       style={{ ['--bp-to-scale' as string]: String(toScale) }}
       data-stub={torn ? 'free' : undefined}
     >
+      <span ref={liftRef} className="bp-lift" aria-hidden="true" />
       <div className="bp-body" role="group" aria-roledescription="boarding pass" aria-label={label}>
         <div className="bp-half bp-half--main" data-asm="paper">
           <span className="bp-shadow" aria-hidden="true" />

@@ -369,10 +369,21 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
   }
 }
 
-/* ── Carried (BoardingPass, PASS_DRAG) ──
-   The pass can be picked up anywhere and moved; held, it lifts (its shadow
-   deepens). Its own pointer: a hand over the paper, a finger over the
-   stub. A touch on it moves it, never the page. */
+/* ── Carried (BoardingPass, PASS_DRAG, PAPER) ──
+   The pass can be picked up anywhere and moved like paper; held, it lifts
+   and its shadow widens and softens (.bp-lift: its opacity and drop are
+   written from the lift's spring, transform and opacity only), tightening
+   again as it lands. Its own pointer: a hand over the paper, a finger over
+   the stub. A touch on it moves it, never the page. */
+.bp-lift {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 30px 64px rgba(5, 7, 3, 0.44), 0 12px 24px rgba(5, 7, 3, 0.2);
+}
 .ec-pass .bp-body {
   touch-action: none;
   cursor: grab;
@@ -380,10 +391,6 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
 .bp[data-held] .bp-body,
 .bp[data-held] .bp-tear { cursor: grabbing; }
 .bp[data-stub] .bp-body { cursor: default; }
-.bp-half > .bp-shadow { transition: box-shadow 260ms var(--ease-arrive, ease); }
-.bp[data-held] .bp-half > .bp-shadow:not(.bp-shadow--tear) {
-  box-shadow: 0 2px 4px rgba(5, 7, 3, 0.3), 0 26px 48px rgba(5, 7, 3, 0.36);
-}
 .bp-body {
   position: relative;
   display: flex;

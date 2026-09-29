@@ -690,19 +690,86 @@ test('the pass in the hand: carried, never torn by it, kept on the screen', () =
   const fast = P.releaseVelocity([[0, 0, 0], [16, 400, 0]]);
   assert.ok(Math.abs(Math.hypot(fast.x, fast.y) - D.maxSpeed) < 1e-6);
   assert.deepEqual(P.releaseVelocity([[0, 0, 0]]), { x: 0, y: 0 });
-  // The drift: light (1000 px/s carries ~110 px), stops, and an edge stops it.
-  let off = { x: 0, y: 0 };
-  let vel = { x: 1000, y: 0 };
-  const open = { left: 400, top: 300, right: 800, bottom: 500 };
-  for (let i = 0; i < 240 && (vel.x || vel.y); i += 1) ({ off, v: vel } = P.driftStep(off, vel, 1 / 60, open, 1728, 1000));
-  assert.ok(off.x > 90 && off.x < 125, off.x.toFixed(1));
-  assert.deepEqual(vel, { x: 0, y: 0 });
-  const edge = P.driftStep({ x: 0, y: 0 }, { x: 0, y: 8000 }, 0.5, open, 1728, 1000);
-  assert.equal(edge.off.y, 1000 - D.margin - 500);
-  assert.equal(edge.v.y, 0);
-  // Held, it turns a little toward where it was taken (and with the hand).
-  assert.ok(Math.abs(P.heldTilt(1, 0)) <= 2 && P.heldTilt(-1, 0) < 0 && P.heldTilt(1, 0) > 0);
-  assert.ok(Math.abs(P.heldTilt(1, 99999)) <= D.tiltDeg + D.swayMax + 1e-9);
+  // Like paper (owner, 2026-09-29: 移动这个票太僵硬了). A frame-rate-free
+  // simulation: the same hand at 60 Hz and 120 Hz moves it alike.
+  const Q = P.PAPER;
+  const open = P.offsetBounds({ left: 400, top: 300, right: 800, bottom: 500 }, 1728, 1000);
+  const hold = (hz, ms, hand, extra = {}) => {
+    let st = P.paperRest();
+    const trace = [];
+    const dt = 1 / hz;
+    for (let t = 0; t <= ms / 1000 + 1e-9; t += dt) {
+      const h = hand(t);
+      if (h) st = { ...st, target: h };
+      st = P.paperStep(st, { held: !!h, lever: { x: 0, y: 1 }, bounds: open, ...extra }, dt).state;
+      trace.push([t + dt, st]);
+    }
+    return trace;
+  };
+  // A step of the hand (100 px): caught up in ~0.1 s, a hair of overshoot.
+  const step = (hz) => hold(hz, 400, () => ({ x: 100, y: 0 }));
+  for (const hz of [60, 120]) {
+    const tr = step(hz);
+    const caught = tr.find(([, st]) => st.p.x >= 95)[0];
+    assert.ok(caught >= 0.05 && caught <= 0.12, `${hz} Hz: 95% at ${(caught * 1000).toFixed(0)} ms`);
+    const over = Math.max(...tr.map(([, st]) => st.p.x)) - 100;
+    assert.ok(over >= 0 && over <= 3, `${hz} Hz: overshoot ${over.toFixed(2)} px`);
+  }
+  const at = (tr, t) => tr.reduce((best, cur) => (Math.abs(cur[0] - t) < Math.abs(best[0] - t) ? cur : best))[1];
+  const s60 = step(60);
+  const s120 = step(120);
+  for (const t of [0.05, 0.1, 0.2]) assert.ok(Math.abs(at(s60, t).p.x - at(s120, t).p.x) < 1.5, `${t}s: 60 vs 120 Hz`);
+  // A steady hand (300 px/s): trailed by well under 20 px (no lag to feel).
+  const slow = hold(120, 1000, (t) => ({ x: 300 * t, y: 0 }));
+  const lag = 300 * 1 - at(slow, 1).p.x;
+  assert.ok(lag > 0 && lag < 16, `lag ${lag.toFixed(1)} px`);
+  // It swings with the hand (held above its middle, moving right: clockwise),
+  // within its limit, and leans into its travel.
+  assert.ok(at(slow, 1).sway > 0.5 && at(slow, 1).sway <= Q.sway.max, `sway ${at(slow, 1).sway.toFixed(2)}`);
+  assert.ok(at(slow, 1).leanY > 0 && at(slow, 1).leanY <= Q.lean.max);
+  const quick = hold(120, 600, (t) => ({ x: 4000 * t, y: -1500 * t }));
+  for (const [, st] of quick) {
+    assert.ok(Math.abs(st.sway) <= 10, `sway ${st.sway.toFixed(2)}`);
+    assert.ok(Math.abs(st.leanX) <= 8 && Math.abs(st.leanY) <= 8, `lean ${st.leanX.toFixed(2)} ${st.leanY.toFixed(2)}`);
+  }
+  // Let go at 1000 px/s: it slides ~140 px on, settles (a small overshoot),
+  // swings back to square and lands.
+  let st = { ...P.paperRest(), sway: 5, leanY: 4, lift: 1, drift: { x: 1000, y: 0 } };
+  let peak = 0;
+  let steps = 0;
+  for (let moving = true; moving && steps < 600; steps += 1) {
+    ({ state: st, moving } = P.paperStep(st, { held: false, lever: { x: 0, y: 1 }, bounds: open }, 1 / 120));
+    peak = Math.max(peak, st.p.x);
+  }
+  assert.ok(st.p.x > 95 && st.p.x < 125, `slid ${st.p.x.toFixed(1)} px`);
+  assert.ok(peak - st.p.x <= 3, `settle overshoot ${(peak - st.p.x).toFixed(2)}`);
+  assert.equal(st.sway, 0);
+  assert.equal(st.leanX + st.leanY + st.lift, 0);
+  assert.ok(steps < 300, `at rest in ${(steps / 120).toFixed(2)} s`);
+  // An edge gives a little (never more than the rubber's reach) and the
+  // paper comes back inside when let go.
+  assert.equal(P.rubber(50, 0, 100), 50);
+  assert.ok(P.rubber(1e6, 0, 100) < 100 + Q.rubber && P.rubber(1e6, 0, 100) > 100 + Q.rubber * 0.99);
+  assert.ok(P.rubber(-40, 0, 100) > -Q.rubber && P.rubber(-40, 0, 100) < 0);
+  let back = { ...P.paperRest({ x: open.hi.x + 50, y: 0 }), target: { x: open.hi.x + 50, y: 0 } };
+  for (let i = 0; i < 240; i += 1) back = P.paperStep(back, { held: false, lever: { x: 0, y: 0 }, bounds: open }, 1 / 60).state;
+  assert.equal(back.p.x, open.hi.x);
+  // Squared for the tear: square within the tear's 530 ms.
+  let sq = { ...P.paperRest(), sway: 8, swayV: 40, leanX: 6, leanY: -6, lift: 1 };
+  for (let t = 0; t < 0.5; t += 1 / 60) sq = P.paperStep(sq, { held: false, lever: { x: 0, y: 1 }, bounds: open, square: true }, 1 / 60).state;
+  assert.ok(Math.abs(sq.sway) < 0.02 && Math.abs(sq.leanX) < 0.02 && Math.abs(sq.lift) < 0.01, JSON.stringify(sq));
+  // Reduced motion: direct, nothing swings.
+  const direct = P.paperStep(P.paperRest(), { held: true, lever: { x: 0, y: 1 }, bounds: open, reduced: true }, 1 / 60);
+  assert.equal(direct.moving, false);
+  const rd = P.paperStep({ ...P.paperRest(), target: { x: 80, y: 20 } }, { held: true, lever: { x: 0, y: 1 }, bounds: open, reduced: true }, 1 / 60).state;
+  assert.deepEqual([rd.p, rd.sway, rd.leanX, rd.leanY], [{ x: 80, y: 20 }, 0, 0, 0]);
+  // Its transform: none at rest; lifted, turned and leaned about the held point.
+  assert.equal(P.paperTransform(P.paperRest(), { x: 10, y: 5 }), null);
+  const tf = P.paperTransform({ ...P.paperRest(), sway: 3, leanY: 2, lift: 1 }, { x: 10, y: 5 });
+  assert.match(tf, /^translate3d\(0, -5\.00px, 0\) translate\(10\.0px, 5\.0px\) perspective\(1100px\) rotateX\(0\.000deg\) rotateY\(2\.000deg\) rotate\(3\.000deg\) scale\(1\.0350\) translate\(-10\.0px, -5\.0px\)$/);
+  const pass2 = source('src/components/home/BoardingPass.tsx');
+  assert.match(pass2, /const step = paperStep\(paper, \{ held, lever, bounds: bounds\(\), square: squaring, reduced: reduced\(\) \}, dt\);/);
+  assert.match(pass2, /getCoalescedEvents/);
   // The page: the carry moves the pass with its hint (EntranceIntro), the
   // pass takes no touch scroll, and the glow is bone light, never lime, a
   // slow breath put out by the tear, still under reduced motion.
