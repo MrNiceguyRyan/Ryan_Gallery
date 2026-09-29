@@ -96,11 +96,11 @@ export function StepCount({ value, pad, run }: { value: number; pad: number; run
 }
 
 // ── The ending ───────────────────────────────────────────────────────────────
-// The last ticket tears; the ending opens on the face that came off it — the
-// last chapter's cover, sharp, at 80% of the height, captioned — and the
-// camera pulls back at once, in one unbroken move, until that frame is one
-// cell of an editor's proof sheet of the whole issue. As the sheet settles the
-// kept stubs are dealt onto the heads of their rows (the one just torn first),
+// The archive's Index (the explorer's contact sheet, opened over the map,
+// HomePage): it opens on the last place's cover, sharp, at 80% of the height,
+// captioned — and the camera pulls back at once, in one unbroken move, until
+// that frame is one cell of an editor's proof sheet of the whole archive. As
+// the sheet settles the kept stubs are dealt onto the heads of their rows,
 // each row admitting its frames one tick at a time; the editor's china marker
 // rings the covers, the atlas's route threads them, and the frames not chosen
 // step back. Geometry and score: lib/proofSheet. Styles: global.css, "The
@@ -108,9 +108,6 @@ export function StepCount({ value, pad, run }: { value: number; pad: number; run
 // ARMS the pre-play state (`data-ending` on the section) and removes it when
 // the ending settles, so nothing hidden is ever server-rendered.
 
-// Mirrors ArchiveChapter's ARCHIVE_READING_LINE (and HomePage's desktop
-// reading line): the line a chapter's photograph centre crosses.
-const READING_LINE = 0.48;
 // The closing ARRIVES (it is never scrubbed): its top within 2% of the
 // viewport's top. Arrived, the ending waits for the page to come to a stop
 // (ARRIVE_STILL_PX between two frames, or all the way in, or ARRIVE_STILL_MS
@@ -131,11 +128,6 @@ const PREPARE_AT = -2.5;
 // scroll, a deep link, Back to the start under reduced motion): shown, never
 // played.
 const JUMP = 0.5;
-// The face free plus a beat — src/lib/ticketTear.ts's TEAR_FREE_MS (530) +
-// TEAR_BEAT_MS (60), the same rule as RouteAtlas's TEAR_BEFORE_FLIGHT_MS: the
-// camera does not move until the face is free. The stamp is back-dated for a
-// faster rip, so this holds at any rate.
-const TEAR_BEFORE_ENDING_MS = 590;
 // At the arrival, wait this long at most for the sheet's files to decode.
 const DECODE_WAIT_MS = 600;
 
@@ -407,22 +399,16 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
   }, [prepared, geo]);
 
   // ── The trigger ─────────────────────────────────────────────────────────
-  // Read off the scroll with offsets measured once per layout change — no
-  // rect per frame. Two jobs: carry the last chapter on to the closing (its
-  // own timeline stops at its centre, so the closing sends it its delta and
-  // the ticket tears on it as every other ticket does), and start the ending
-  // when the reader has arrived and that ticket's face is free.
-  const lastChapterId = chapters[chapters.length - 1]?.id;
+  // Read with offsets measured once per layout change — no rect per frame:
+  // start the ending when the sheet has arrived (opened over the map it is
+  // there at once, and plays as it opens).
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    const chapterSection = lastChapterId ? document.getElementById(`archive-item-${lastChapterId}`) : null;
     let sectionTop = 0;
     let sectionH = 1;
     let viewH = 1;
-    let plateCentre = 0;
     let lastP: number | null = null;
-    let lastDelta = -Infinity;
     let preparedOnce = false;
     // The arrival's wait for a still page (see ARRIVE): one rAF watch, 0 when
     // none runs.
@@ -435,25 +421,15 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       viewH = window.innerHeight;
       sectionTop = documentTop(section);
       sectionH = Math.max(1, section.offsetHeight);
-      // The last chapter's point on the timeline: its rail (its cover rides
-      // on the atlas, src/lib/coverDock.ts), as HomePage reads it.
-      const plate = chapterSection?.querySelector<HTMLElement>('[data-chapter-anchor]')
-        ?? chapterSection?.querySelector<HTMLElement>('.archive-photo-frame');
-      plateCentre = plate && plate.offsetHeight > 0
-        ? documentTop(plate) + plate.offsetHeight / 2
-        : sectionTop - viewH;
     };
     const begin = () => {
       const engine = engineRef.current;
       if (!engine) return;
       phaseRef.current = 'waiting';
       const token = ++pendingRef.current;
-      const stamp = chapterSection?.dataset.ticketTornAt;
-      const tornAt = stamp && stamp !== '0' ? Number(stamp) : 0;
-      const gate = reduce || !tornAt ? 0 : Math.max(0, tornAt + TEAR_BEFORE_ENDING_MS - performance.now());
       const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
       const decoded = decodedRef.current ?? wait(DECODE_WAIT_MS);
-      void Promise.all([Promise.race([decoded, wait(DECODE_WAIT_MS)]), wait(gate)]).then(() => {
+      void Promise.race([decoded, wait(DECODE_WAIT_MS)]).then(() => {
         if (token !== pendingRef.current || phaseRef.current !== 'waiting') return;
         const current = engineRef.current;
         if (!current) return;
@@ -499,20 +475,6 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       const p = (y + viewH - sectionTop) / sectionH;
       const jump = lastP != null && Math.abs(p - lastP) > JUMP;
       lastP = p;
-
-      // The last chapter's way on, in its own units: 0 with its photograph
-      // centred on the reading line, 1 with the closing arrived.
-      const span = sectionTop + READING_LINE * viewH - plateCentre;
-      if (chapterSection && span > 0) {
-        const delta = Math.max(-1, Math.min(1, (y + READING_LINE * viewH - plateCentre) / span));
-        if ((delta > -1 || lastDelta > -1) && Math.abs(delta - lastDelta) > 0.0005) {
-          const stepped = Number.isFinite(lastDelta) ? Math.abs(delta - lastDelta) : Infinity;
-          lastDelta = delta;
-          chapterSection.dispatchEvent(new CustomEvent('archive:onward', {
-            detail: { delta, jump: !reduce && stepped > JUMP },
-          }));
-        }
-      }
 
       if (!preparedOnce && p > PREPARE_AT) {
         preparedOnce = true;
@@ -565,7 +527,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       stopStill();
       pendingRef.current += 1;
     };
-  }, [lastChapterId, reduce]);
+  }, [reduce]);
 
   const layout = geo?.layout;
   const zoom = geo?.zoom;

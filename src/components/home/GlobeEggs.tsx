@@ -58,8 +58,8 @@ import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 //    camera for a frame; nothing here calls jumpTo or writes paint.
 //  • While a hand is on the globe NOTHING else on the page moves: the press is
 //    captured (no text selection, no drag), every egg node is position: fixed
-//    inside an overflow: clip layer (no scroll width), the cursor lean and the
-//    idle drift are frozen, and no wheel is ever prevented or eaten here —
+//    inside an overflow: clip layer (no scroll width), the idle drift is
+//    frozen, and no wheel is ever prevented or eaten here —
 //    the reader's scroll always wins and hands the globe back.
 // The mode is written to <html data-globe-egg> on transitions only (CSS and
 // probes read it); nothing here sets React state per frame.
@@ -574,7 +574,6 @@ export default function GlobeEggs({
       channel.pin = Number.NaN;
       channel.offset = 0;
       channel.driftFrozen = false;
-      channel.leanFrozen = false;
       channel.spin = 0;
       stop('coast', 'return', 'dragspin');
       setMode('idle');
@@ -610,7 +609,6 @@ export default function GlobeEggs({
       channel.pin = Number.NaN;
       channel.offset = 0;
       channel.driftFrozen = true;
-      channel.leanFrozen = true;
       lastScrollY = window.scrollY;
       markCaptionSeen();
       warm();
@@ -647,7 +645,6 @@ export default function GlobeEggs({
       setSpin(0);
       restoreMarks();
       if (channel.exposure.phase === 'motion') channel.exposure.phase = 'off';
-      channel.leanFrozen = false;
       setMode('parked');
     };
     const spin = (velocity: number) => {
@@ -959,7 +956,6 @@ export default function GlobeEggs({
         // cursor lean comes back, the drift waits.
         channel.pin = natural + decision.d;
         channel.offset = 0;
-        channel.leanFrozen = false;
         setMode('pinned');
         channel.requestDraw();
         coolLater();
@@ -1500,7 +1496,6 @@ export default function GlobeEggs({
       channel.pool.index = -1;
       channel.pool.amount = 0;
       channel.driftFrozen = false;
-      channel.leanFrozen = false;
       restoreMarks();
       if (mode !== 'idle') setMode('idle');
       coolLater();

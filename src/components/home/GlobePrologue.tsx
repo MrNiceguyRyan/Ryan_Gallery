@@ -8,6 +8,11 @@ interface Props {
   /** The opening film lies over the first screen (OpeningFilm): the globe
    *  cannot be played with, so its key is out of the tab order. */
   covered?: boolean;
+  /** The explorer has been entered: the first screen's type steps aside as
+   *  the globe turns and glides (and comes back with the globe). */
+  leaving?: boolean;
+  /** The cue, pressed: enter the explorer (src/lib/explorer.ts). */
+  onEnter?: () => void;
 }
 
 // The globe's easter eggs take the keyboard too, on the first screen only
@@ -23,13 +28,13 @@ const sendGlobeEgg = (type: 'spin' | 'bulb-start' | 'bulb-end') =>
  * atlas.
  *
  * After 11 mois sans toi(t): his name and what this is, over a whole, lit
- * globe half off the bottom-right corner. That is the whole opening: about a
- * screen of scroll on, the globe glides to the atlas's focal point and dives
- * straight into the first chapter, whose photograph is already coming up
- * the page. The globe itself is the RouteAtlas map (driven by
+ * globe half off the bottom-right corner. The reader's first move enters the
+ * explorer (src/lib/explorer.ts): this type steps aside, the globe turns to
+ * the Americas as it glides to the atlas's focal point and the camera goes
+ * down onto stop 01. The globe itself is the RouteAtlas map (driven by
  * `prologueProgress`); this component is only the type.
  */
-export default function GlobePrologue({ years, progress, covered = false }: Props) {
+export default function GlobePrologue({ years, progress, covered = false, leaving = false, onEnter }: Props) {
   const reduce = useReducedMotion();
   // The egg's key: client-only (a mouse or a pen beside the keyboard, as the
   // eggs themselves need), in the tab order only while the globe can play.
@@ -70,7 +75,12 @@ export default function GlobePrologue({ years, progress, covered = false }: Prop
   };
 
   return (
-    <div className="globe-prologue pointer-events-none absolute inset-x-0 top-0 z-30 hidden lg:block">
+    <div
+      className="globe-prologue pointer-events-none absolute inset-x-0 top-0 z-30 hidden lg:block"
+      data-leaving={leaving ? '' : undefined}
+      aria-hidden={leaving || undefined}
+      inert={leaving}
+    >
       {/* The first screen enters in CSS, from the first paint (the
           `prologue-hero-*` classes in global.css). These are plain elements
           on purpose: framer writes a hidden `initial` into the server HTML,
@@ -111,14 +121,19 @@ export default function GlobePrologue({ years, progress, covered = false }: Prop
         </p>
         <div className="mt-14 flex items-center gap-10">
           {/* Last of the first screen, but inside the name's own rise: the
-              cue that says "scroll" must not arrive after the reader already has. */}
-          <p
-            aria-hidden="true"
-            className="prologue-hero-cue flex items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50"
+              cue that says "scroll" must not arrive after the reader already
+              has. The wheel, a key or a press of it enters the map (the page
+              itself does not scroll: src/lib/explorer.ts). */}
+          <button
+            type="button"
+            aria-label="Enter the map"
+            tabIndex={covered ? -1 : 0}
+            onClick={onEnter}
+            className="prologue-hero-cue pointer-events-auto flex min-h-11 items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50 transition-colors hover:text-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           >
             <span className="prologue-scroll-cue relative block h-7 w-px overflow-hidden bg-white/18" />
             Scroll
-          </p>
+          </button>
           {/* The globe's easter eggs by keyboard. Out of sight until focused;
               focused, one quiet line says what the keys do. */}
           {eggKey && (

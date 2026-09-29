@@ -39,13 +39,21 @@ export const FLOOR_Q: [number, number] = [0.12, 0.32];
 // below SILVER_EXIT_ZOOM the satellite is only a residual veil under the dark
 // atlas, and the chapters must look exactly as they did.
 // Lifted 2026-09-28 with the residual (RouteAtlas): the owner found the
-// chapters' ground too dark. Less desaturated, the whites let through, the
-// deep water's floor raised a touch so the Gulf reads as sea, not a hole.
+// chapters' ground too dark. Then, the same day, the lift glared (到主页的时候，
+// 我感觉从视觉上来看有点晃眼，有点晕): a mean luma of 86/255 at rest, the
+// Bahamas' shallows and the Sonoran desert blowing out, the saturation of a
+// travel brochure. Settled between the two: a quieter colour, a softer
+// contrast, the whites capped short of paper (no blown highlight), the deep
+// water's floor kept a touch above black so the sea still reads as sea.
+// Measured in headless Chrome at every place's rest, 1728×1000, the
+// interface hidden (Rec. 709 luma, 0–255, mean over the six places): the
+// old dark paint 36, the lift 86, now 63; saturation 0.26 → 0.22; the
+// 99th-percentile highlight 149 → 110; the spread (sd) 26 → 18.
 export const STOCK_PAINT = {
-  'raster-saturation': -0.14,
-  'raster-contrast': -0.04,
-  'raster-brightness-min': 0.12,
-  'raster-brightness-max': 1,
+  'raster-saturation': -0.3,
+  'raster-contrast': -0.1,
+  'raster-brightness-min': 0.07,
+  'raster-brightness-max': 0.8,
 } as const;
 export const SILVER_EXIT_ZOOM = 4.5;
 export const SILVER_EXIT_HYSTERESIS = 0.1;
@@ -239,7 +247,7 @@ export function prologueTurnRemaining(q: number, drift: number) {
   return (A * u * u * u + B * u) * (1 - drift / (A + B));
 }
 
-/** The prologue globe's longitude before the cursor lean and any egg: the
+/** The prologue globe's longitude before any egg: the
  *  target plus the turn still to come and the load-in settle, both of which
  *  it turns off westward. */
 export function prologueNaturalLongitude(targetLongitude: number, q: number, drift: number, settle = 0) {
@@ -300,9 +308,8 @@ export interface GlobeChannel {
   pin: number;
   /** A small give added outside everything else (the hint, a click's reply). */
   wobble: number;
-  /** Freezes the idle drift and the cursor lean while a hand is on the globe. */
+  /** Freezes the idle drift while a hand is on the globe. */
   driftFrozen: boolean;
-  leanFrozen: boolean;
   /** The pointer's hover glow (0..1). */
   hover: number;
   /** The globe's spin under an egg (°/s), written from the KNOWN motion — the
@@ -325,7 +332,7 @@ export interface GlobeChannel {
    *  the dodge finds. */
   places: ReadonlyArray<readonly [number, number]>;
   /** Written by the camera each prologue frame: the natural longitude (the
-   *  scroll's turn, the drift, the settle and the cursor lean) and the degrees
+   *  scroll's turn, the drift and the settle) and the degrees
    *  of turn the scroll still has to make. */
   natural: number;
   remaining: number;
@@ -351,7 +358,6 @@ export function createGlobeChannel(): GlobeChannel {
     pin: Number.NaN,
     wobble: 0,
     driftFrozen: false,
-    leanFrozen: false,
     hover: 0,
     spin: 0,
     exposure: { phase: 'off', openedAt: 0, closedAt: 0, target: -1, u: 0, still: false },

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
+import { motion, useMotionValue, useTransform, useReducedMotion } from 'framer-motion';
 import { CSS_EASE, EASE } from '../../lib/motion';
 
 /**
@@ -13,7 +13,8 @@ import { CSS_EASE, EASE } from '../../lib/motion';
  *    darkens to olive in one breath while the hourglass OPENS OUT into the solid
  *    lime X (overshoot bloom + spin decelerate), the card develops from the X,
  *    and the nav slides down.
- *  Then scroll grows the card to full and dims into the archive.
+ *  Then the reader's first swipe or tap hands the screen to the map (the
+ *  phone's explorer, src/lib/explorer.ts): the opener fades over it.
  *
  * Pointer: the card tilts gently while the inner material drifts. Tilt is
  * damped away well before the card reaches the viewport edges.
@@ -147,8 +148,12 @@ export default function WalkIn({
     return () => window.clearTimeout(timeout);
   }, [instantReveal, revealed]);
 
-  // ── Scroll scrub ──
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
+  // ── The card's pose (was the scroll scrub) ──
+  // The card holds its opening pose: the page no longer scrolls it into the
+  // archive (the homepage is a map to roam, src/lib/explorer.ts; the reader's
+  // first swipe or tap hands the screen over). A one-screen section read by
+  // useScroll reports its end (1), which dimmed the card to nothing.
+  const scrollYProgress = useMotionValue(0);
   // Mobile begins closer to the viewer so the card stays legible without
   // becoming edge-to-edge; both layouts retain the full-bleed overscan guard.
   const scale = useTransform(
@@ -557,17 +562,12 @@ export default function WalkIn({
     </>
   );
 
-  if (reduce) {
-    return (
-      <section ref={ref} className="relative h-[100dvh] min-h-[100svh] overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">{stage}</div>
-      </section>
-    );
-  }
-
+  // One screen, over the phone's map: the page does not scroll any more (the
+  // homepage is a map to roam, src/lib/explorer.ts), and the reader's first
+  // swipe or tap hands it over. The card holds its opening pose.
   return (
-    <section ref={ref} className="walkin-scroll-stage relative h-[195svh] lg:h-[210vh]">
-      <div className="sticky top-0 h-[100dvh] min-h-[100svh] overflow-hidden flex items-center justify-center">{stage}</div>
+    <section ref={ref} className="relative h-[100dvh] min-h-[100svh] overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">{stage}</div>
     </section>
   );
 }

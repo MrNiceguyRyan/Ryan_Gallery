@@ -21,12 +21,12 @@ const bundle = async (entry) => {
   });
   return import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 };
-const { HOME_CHAPTER_LIMIT, activeChapters, chapterOrder, chapterOrdinal, chapterSections, issueChapters } = await bundle('../src/lib/chapterOrder.ts');
+const { activeChapters, chapterOrder, chapterOrdinal, chapterSections } = await bundle('../src/lib/chapterOrder.ts');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
 
 test('today: Miami, Orlando, Page, Zion, Bryce Canyon, New York', () => {
   assert.deepEqual(chapterOrder(collections).map((c) => c.name), ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce Canyon', 'New York']);
-  const sections = chapterSections(issueChapters(activeChapters(collections)));
+  const sections = chapterSections(activeChapters(collections));
   assert.deepEqual(sections.map((s) => s.region), ['Florida', null, 'Utah', null]);
   assert.deepEqual(sections.map((s) => s.frameCount), [32, 11, 13, 2]);
 });
@@ -40,11 +40,19 @@ test('route order decides only once every chapter has one', () => {
   assert.deepEqual(activeChapters([a, b, c]).map((x) => x._id), ['a', 'b', 'c'], 'a partial rollout keeps the published order');
 });
 
-test('the issue keeps the most recent chapters in reading order', () => {
-  const many = Array.from({ length: HOME_CHAPTER_LIMIT + 1 }, (_, i) => ({ _id: `c${i}`, year: 2020 + i, routeOrder: i, photos: [1] }));
-  const issue = issueChapters(activeChapters(many));
-  assert.equal(issue.length, HOME_CHAPTER_LIMIT);
-  assert.deepEqual(issue.map((x) => x._id), many.slice(1).map((x) => x._id));
+test('every chapter with photographs is read, in route order: no limit', () => {
+  // The homepage is a map to roam (src/lib/explorer.ts): a seventh place no
+  // longer pushes the oldest off the front.
+  const many = Array.from({ length: 9 }, (_, i) => ({ _id: `c${i}`, year: 2020 + i, routeOrder: i, photos: [1] }));
+  assert.deepEqual(chapterOrder(many).map((x) => x._id), many.map((x) => x._id));
+  // Washington, DC first by route order is stop 01, and /about's numbering is
+  // the same list.
+  const dc = { _id: 'dc', name: 'Washington, DC', region: 'District of Columbia', year: 2024, routeOrder: 5, photos: [1] };
+  const seven = [...collections, dc];
+  assert.equal(chapterOrder(seven)[0].name, 'Washington, DC');
+  assert.deepEqual([chapterOrdinal(seven, 'dc').index, chapterOrdinal(seven, 'dc').total], [0, 7]);
+  const byName = (name) => collections.find((c) => c.name === name);
+  assert.equal(chapterOrdinal(seven, byName('Miami')._id).index, 1, 'Miami becomes 02');
 });
 
 test("a region's members read together", () => {

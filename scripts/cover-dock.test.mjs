@@ -13,10 +13,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DOCK,
-  DOCK_GATE,
   QUADRANT_ORDER,
   RAIL,
-  askDock,
   awaySide,
   centreFor,
   coverDock,
@@ -27,14 +25,12 @@ import {
   placeAt,
   planDock,
   plateRect,
-  poseRemainPx,
   projectAt,
   railBox,
-  restLean,
   stageBox,
 } from '../src/lib/coverDock.ts';
-import { TEAR_HARD_LINE, TEAR_LINE_DOCKED, TEAR_LINE_MAX, TEAR_LINE_MIN } from '../src/lib/ticketLatch.ts';
-import { activeChapters, chapterSections, issueChapters } from '../src/lib/chapterOrder.ts';
+import { activeChapters, chapterSections } from '../src/lib/chapterOrder.ts';
+import { EXPLORE_PITCH } from '../src/lib/explorerCamera.ts';
 import { chapterPoint } from '../src/lib/geo.ts';
 import { SHIELD_MAP_PX, SHIELD_SCALE, shieldForm, stateCode } from '../src/lib/routeShield.ts';
 
@@ -46,15 +42,16 @@ const inside = (box, stage) => box.left >= stage.left - 0.5 && box.right <= stag
 const overlap = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
 const shieldBox = (point, shield) => ({ left: point.x - shield.w / 2, top: point.y - shield.h, right: point.x + shield.w / 2, bottom: point.y });
 
-// The atlas's chapter camera as RouteAtlas derives it (the atlas 78% of the
+// The atlas's resting camera as RouteAtlas derives it (the atlas 78% of the
 // page, its focal point 264px in from its right edge, on the reading line;
-// the canvas a 32px bleed past the viewport each side).
-const cameraFor = (vw, vh) => ({ focal: { x: (0.78 * vw - 264) / 2, y: 0.48 * vh }, pitch: 46, bearing: -2, distance: 1.5 * (vh + 64) });
+// the canvas a 32px bleed past the viewport each side; the explorer's
+// pitch, 40° since the owner found the page dizzying).
+const cameraFor = (vw, vh) => ({ focal: { x: (0.78 * vw - 264) / 2, y: 0.48 * vh }, pitch: EXPLORE_PITCH.rest, bearing: -2, distance: 1.5 * (vh + 64) });
 
 // The archive as the homepage reads it, with each chapter's rest zoom
 // (RouteAtlas hopRestZooms: neighbours ≥150px apart, 5.05 to 5.98).
 function archiveChapters() {
-  const sections = chapterSections(issueChapters(activeChapters(collections)));
+  const sections = chapterSections(activeChapters(collections));
   const cities = sections.flatMap((section) => section.cities);
   const tabs = new Set(sections.filter((s) => s.showHeader && s.region).map((s) => s.cities[0]._id));
   const places = cities.map((city) => ({ city, coords: chapterPoint(city) }));
@@ -242,13 +239,13 @@ test('the channel keeps the last plan and frame for a cover that mounts late', (
   coverDock.publish({ at: null, points: {} });
 });
 
-test('a docked ticket tears on its own line, before the atlas leaves', () => {
-  assert.ok(TEAR_LINE_DOCKED >= TEAR_LINE_MIN && TEAR_LINE_DOCKED <= TEAR_LINE_MAX);
-  assert.ok(TEAR_LINE_DOCKED < TEAR_HARD_LINE);
+test('a ticket tears only while its cover is up, and is put back whole once it has gone', () => {
   const chapter = source('src/components/home/ArchiveChapter.tsx');
-  assert.match(chapter, /tearLineRef\.current = TEAR_LINE_DOCKED;/);
-  // Seen whole exactly while the camera is on its place.
-  assert.match(chapter, /\? \(dockShownRef\.current \? 1 : 0\)/);
+  // Nothing tears a cover no one can see (the explorer then simply goes on).
+  assert.match(chapter, /const tearThen = \(go: \(\) => void\) => \{\s+const section = chapterRef\.current as HTMLElement \| null;\s+if \(!ticket \|\| !section \|\| !dockShownRef\.current\) return false;/);
+  assert.match(chapter, /const tearStubThen = \(go: \(\) => void\) => \{\s+if \(!ticket \|\| !dockShownRef\.current\) return false;/);
+  // Gone (its fade done), it is whole again for the next visit.
+  assert.match(chapter, /reseatTimer = window\.setTimeout\(\(\) => reseatRef\.current\(\), DOCK_FADE_MS \+ 60\);/);
 });
 
 test('wiring: the atlas publishes on its render, the chapters ride it', () => {
@@ -261,21 +258,20 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   // markers are drawn in — at the projected point rounded as a marker's is.
   const publish = atlas.slice(atlas.indexOf('const publishDock = () => {'), atlas.indexOf('const publishDockRef'));
   assert.match(publish, /map\.project\(place\.coordinates\)/);
-  assert.match(publish, /Math\.round\(point\.x\) - CANVAS_BLEED/);
+  assert.match(publish, /Math\.round\(point\.x\) - bleed/);
   assert.doesNotMatch(publish, /getBoundingClientRect|offsetTop|clientWidth/);
   // On `move` too, as the shields' markers are placed: on `render` alone the
   // cover trailed its sign by a frame (the joint closed from 12px to 3).
   assert.match(atlas, /const onRender = \(\) => publishDockRef\.current\(\);\s+map\.on\('move', onRender\);\s+map\.on\('render', onRender\);/);
-  // Shown or not is the gate's decision, on the camera's ask.
+  // Shown or not is the gate's decision, on the camera's ask: the place in
+  // hand, down at it (never in flight), near its zoom.
   assert.match(publish, /dockShown\(dockAtRef\.current, dockAskRef\.current,/);
-  assert.match(atlas, /dockAsk = askDock\(chapterRoute\[committed\]\?\.stop\.id \?\? null, dockLanded, entryAt, entryStill, hopRemainPx\);/);
-  // The resting camera's lean is restLean's, from where it came down.
-  assert.match(atlas, /const lean = restLean\(position, committed, leanFrom, lastRouteIndex, HOP\.forward, HOP\.back\);/);
-  assert.match(atlas, /dockLanded = true;\s+leanFrom = leanOrigin\(landing\.dest\);/);
+  assert.match(atlas, /const askFor = \(\) => \{\s+const held = currentRef\.current;\s+if \(!held \|\| flying\) return null;/);
+  assert.match(atlas, /return \{ id: held, appear: out <= HOP\.appearOut, stay: out <= HOP\.stayOut \};/);
   // The camera moves a place by where it stands over the ground; its centre
   // on the screen stays the atlas's focal point.
   assert.match(atlas, /const restCenter = \(index: number\): GeoCoordinate => dockCentres\[index\] \?\?/);
-  assert.match(atlas, /map\.setPadding\(focused \? activePadding : neutralPadding\);/);
+  assert.match(atlas, /map\.setPadding\(activePadding\);/);
   // Off the globe's swap to Mercator at zoom 6.
   assert.match(atlas, /restZoomMax: 5\.98,/);
   // The cover is written at its place's foot, into the atlas's dock.
@@ -283,9 +279,10 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(chapter, /data-cover-for=\{id\}/);
   assert.match(chapter, /createPortal\(/);
   assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host" \/>/);
-  // The chapter's point on the timeline is its rail.
-  assert.match(home, /querySelector<HTMLElement>\('\[data-chapter-anchor\]'\)/);
-  assert.match(closing, /querySelector<HTMLElement>\('\[data-chapter-anchor\]'\)/);
+  // The place in hand's rail shows with its cover (the dock's frame).
+  assert.match(home, /coverDock\.subscribe\(\(frame\) => \{/);
+  assert.match(home, /railShown=\{dockAt === city\._id\}/);
+  assert.doesNotMatch(closing, /archive:onward/);
   // It appears whole (no transition in) and fades out on the fade curve.
   assert.match(css, /\.archive-dock\[data-at\] \{\s*opacity: 1;\s*visibility: visible;\s*transition: none;/);
   assert.match(css, /\.archive-dock \{[^}]*transition: opacity var\(--dur-out\) var\(--ease-fade\)/);
@@ -332,116 +329,37 @@ test('a portrait cover keeps most of the height it had in the column', () => {
   assert.ok(portrait.photoH + DOCK.tab + DOCK.below + DOCK.gap + 56 <= stage.bottom - stage.top);
 });
 
-test('a cover appears once its camera has settled, and stays while it is on its place', () => {
-  const { settledPx, entryHold, entryAppear } = DOCK_GATE;
-  assert.ok(entryHold < entryAppear && entryAppear < 1, 'a band between hold and appear: no flicker at its edge');
-  // In the air: nothing asked.
-  assert.equal(askDock('miami', false, 1, true, 0), null);
-  assert.equal(askDock(null, true, 1, true, 0), null);
-  // Down but still settling: it may stay (were it shown) but not appear.
-  assert.deepEqual(askDock('orlando', true, 1, true, settledPx + 0.5), { id: 'orlando', appear: false, stay: true });
-  assert.deepEqual(askDock('orlando', true, 1, true, settledPx), { id: 'orlando', appear: true, stay: true });
-  // In the archive the entrance is done: its stillness is not asked.
-  assert.equal(askDock('orlando', true, 1, false, 0).appear, true);
-  // The first chapter in the entrance's last stretch: it appears once the
-  // scroll holds still there, stays down to the hold while it moves, and
-  // below the hold neither.
-  assert.deepEqual(askDock('miami', true, 0.9, false, 0), { id: 'miami', appear: false, stay: true });
-  assert.deepEqual(askDock('miami', true, 0.9, true, 0), { id: 'miami', appear: true, stay: true });
-  assert.deepEqual(askDock('miami', true, entryAppear - 0.01, true, 0), { id: 'miami', appear: false, stay: true });
-  assert.deepEqual(askDock('miami', true, entryHold - 0.01, true, 0), { id: 'miami', appear: false, stay: false });
-  // The dock: a landing that has not settled shows nothing yet …
-  let shown = null;
-  shown = dockShown(shown, askDock('orlando', true, 1, true, 29));
+test('a cover appears once its place is in hand and the camera is down, and stays while it is', () => {
+  // Nothing asked: nothing shown; a place asked for appears at once (it is
+  // asked only once the camera is down on it, RouteAtlas's `askFor`) …
+  let shown = dockShown(null, null);
   assert.equal(shown, null);
-  // … the settled frame shows it whole where it rests …
-  shown = dockShown(shown, askDock('orlando', true, 1, true, 1.2));
+  shown = dockShown(shown, { id: 'orlando', appear: true, stay: true });
   assert.equal(shown, 'orlando');
-  // … and it rides the reader's pre-roll after that (the pose moving again).
-  shown = dockShown(shown, askDock('orlando', true, 1, true, 40));
+  // … it stays while the reader roams the map with it in hand (zoomed out a
+  // little it may no longer appear, but it stays) …
+  shown = dockShown(shown, { id: 'orlando', appear: false, stay: true });
   assert.equal(shown, 'orlando');
-  // Take-off: gone at once.
-  shown = dockShown(shown, askDock('orlando', false, 1, true, 0));
-  assert.equal(shown, null);
+  // … far out, or in flight, or let go: gone.
+  assert.equal(dockShown(shown, { id: 'orlando', appear: false, stay: false }), null);
+  assert.equal(dockShown(shown, null), null);
+  // A new place asked while another shows: the old goes (in practice the
+  // camera asks for nothing in flight, so the two never meet).
+  assert.equal(dockShown('page', { id: 'zion', appear: true, stay: true }), 'zion');
   // A place with no point this frame never appears.
-  assert.equal(dockShown(null, askDock('page', true, 1, true, 0), () => false), null);
-  // A new place asked while another shows: the old goes, the new waits for
-  // its own settle.
-  assert.equal(dockShown('page', askDock('zion', true, 1, true, 12)), null);
-  // Scrolling up out of Miami: shown through the hold, then gone …
-  shown = 'miami';
-  for (const entry of [0.97, 0.9, 0.82]) shown = dockShown(shown, askDock('miami', true, entry, false, 0));
-  assert.equal(shown, 'miami');
-  shown = dockShown(shown, askDock('miami', true, 0.78, false, 0));
-  assert.equal(shown, null);
-  // … back down while the scroll still moves: not yet …
-  shown = dockShown(shown, askDock('miami', true, 0.9, false, 0));
-  assert.equal(shown, null);
-  // … and where the scroll stops, whole (a reader back from Orlando who
-  // stopped short of Miami's line had no cover at all).
-  shown = dockShown(shown, askDock('miami', true, 0.9, true, 0));
-  assert.equal(shown, 'miami');
-  // What is left to settle counts the zoom to come across the dock's reach.
-  assert.equal(poseRemainPx(0, 0), 0);
-  assert.ok(Math.abs(poseRemainPx(1, 0.004) - (1 + DOCK_GATE.reachPx * (2 ** 0.004 - 1))) < 1e-9);
-  assert.ok(poseRemainPx(0, 0.01) > settledPx, 'a hundredth of a zoom still to go is still settling');
+  assert.equal(dockShown(null, { id: 'page', appear: true, stay: true }, () => false), null);
 });
 
-test('a landed camera holds until the hand moves on (the lean)', () => {
-  const forward = 0.32;
-  const back = 0.78;
-  // At the place's reading line, as ever: no lean, then the whole lean at
-  // the commit lines either way.
-  assert.deepEqual(restLean(1, 1, 1, 5, forward, back), { from: 1, neighbour: 1, amount: 0 });
-  assert.equal(restLean(1 + forward, 1, 1, 5, forward, back).amount, 1);
-  assert.equal(restLean(1 + forward, 1, 1, 5, forward, back).neighbour, 2);
-  assert.equal(restLean(1 - back, 1, 1, 5, forward, back).amount, 1);
-  assert.equal(restLean(1 - back, 1, 1, 5, forward, back).neighbour, 0);
-  // Landed on Orlando with the wheel stopped at 0.59: nothing moves (it
-  // leaned 26px back toward Miami).
-  const landed = restLean(0.59, 1, 0.59, 5, forward, back);
-  assert.deepEqual(landed, { from: 0.59, neighbour: 1, amount: 0 });
-  // On toward the reading line: still nothing, all the way.
-  for (const position of [0.7, 0.85, 0.99]) assert.equal(restLean(position, 1, 0.59, 5, forward, back).amount, 0);
-  // Crossing it ends the stretch: from there it leans on as ever.
-  const crossed = restLean(1.1, 1, 0.59, 5, forward, back);
-  assert.equal(crossed.from, 1);
-  assert.equal(crossed.neighbour, 2);
-  assert.ok(Math.abs(crossed.amount - restLean(1.1, 1, 1, 5, forward, back).amount) < 1e-12);
-  // Back from where it landed: it leans home, from 0 at the landing to the
-  // whole lean at the back line — continuous.
-  assert.equal(restLean(0.59, 1, 0.59, 5, forward, back).amount, 0);
-  const home = restLean(0.4, 1, 0.59, 5, forward, back);
-  assert.equal(home.neighbour, 0);
-  assert.ok(home.amount > 0 && home.amount < 1);
-  assert.equal(restLean(1 - back, 1, 0.59, 5, forward, back).amount, 1);
-  // Continuous along the whole leg, wherever it can have landed: on the way
-  // on at or past the commit line (1 − 0.68), on the way back at or before
-  // the back line (2 − 0.78).
-  for (const from of [1 - (1 - forward), 0.59, 1, 2 - back]) {
-    let prev = null;
-    for (let p = 1 - back; p <= 1 + forward + 1e-9; p += 0.001) {
-      const lean = restLean(p, 1, from, 5, forward, back);
-      const signed = lean.neighbour === 1 ? 0 : lean.neighbour > 1 ? lean.amount : -lean.amount;
-      if (prev != null) assert.ok(Math.abs(signed - prev) < 0.02, `from ${from} at ${p.toFixed(3)}`);
-      prev = signed;
-    }
-  }
-  // The ends of the route lean nowhere they cannot go.
-  assert.deepEqual(restLean(-0.2, 0, 0, 5, forward, back), { from: 0, neighbour: 0, amount: 0 });
-  assert.equal(restLean(5.2, 5, 5, 5, forward, back).amount, 0);
-});
-
-test('the rail clears the nav, and the sign turns when its cover appears', () => {
+test('the rail shows with its cover, and the sign turns when its cover appears', () => {
   const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const home = source('src/components/home/HomePage.tsx');
   const css = source('src/styles/global.css');
-  // The rail fades on its own scroll before its top reaches the nav's band,
-  // derived from its rest (its centre on the reading line), once per layout.
-  assert.match(chapter, /const restTop = ARCHIVE_READING_LINE \* geometry\.vh - own\.offsetHeight \/ 2;/);
-  assert.match(chapter, /\{ span, from: Math\.max\(0, restTop - 240\), to: Math\.max\(1, restTop - 120\) \}/);
-  assert.match(chapter, /return \(1 - distance \* \(delta < 0 \? 0\.3 : 0\.52\)\) \* railClear\(delta\);/);
-  assert.match(chapter, /return \(1 - distance \* \(delta < 0 \? 0\.38 : 1\)\) \* railClear\(delta\);/);
-  // Docked, the flap waits for the cover to appear, not the voyage's end.
+  // The explorer's rail: the place whose cover is up (never while a ticket
+  // tears or the camera flies); with none up, the archive's own line.
+  assert.match(chapter, /data-shown=\{railShown \? '' : undefined\}/);
+  assert.match(css, /\.explorer-place\[data-shown\] \{\s*opacity: 1;/);
+  assert.match(home, /className="explorer-idle" data-shown=\{free && !dockAt \? '' : undefined\}/);
+  // The flap waits for the cover to appear.
   assert.match(chapter, /if \(dockShownRef\.current\) start\(\);\s+else \{\s+dockAppearRef\.current = start;/);
   // Narrow windows stack the frames count over the lede.
   assert.match(css, /@media \(max-width: 1439px\) \{\s+\.archive-rail \.archive-lede \{\s+grid-template-columns: minmax\(0, 1fr\);/);

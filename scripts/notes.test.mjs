@@ -201,7 +201,7 @@ test('the nav reads MAP · NOTES · ABOUT, and NOTES only once a note is live', 
   assert.ok(map > 0 && notes > map && about > notes);
   assert.match(nav, /\.\.\.\(NOTES_LIVE \? \[\{ href: '\/notes', label: 'Notes' \}\] : \[\]\)/);
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  const homeMap = home.indexOf('>\n                Map\n');
+  const homeMap = home.indexOf('>\n              Map\n');
   const homeNotes = home.indexOf('{NOTES_LIVE && (');
   const homeAbout = home.indexOf('href="/about"');
   assert.ok(homeMap > 0 && homeNotes > homeMap && homeAbout > homeNotes);

@@ -105,12 +105,17 @@ test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps t
   assert.equal(silverFloorAt(0.12), 0);
   assert.equal(silverFloorAt(0.32), 1);
   // Stock paint resets the colour mapping and restores the archive's grade —
-  // lifted 2026-09-28 (the owner found the chapters' ground too dark): its
-  // floor raised, and the silver print puts its own floor back.
+  // lifted 2026-09-28 (the owner found the chapters' ground too dark), then
+  // calmed the same day (有点晃眼): a quieter colour and contrast, the whites
+  // capped short of paper, the floor kept above black; the silver print puts
+  // its own floor back. Measured at every place's rest, the map's mean luma
+  // went 86 → 63 (the target band 60–65), its 99th percentile 149 → 110.
   const stock = stockPaint();
   assert.equal(stock['raster-color'], undefined);
-  assert.equal(stock['raster-saturation'], -0.14);
-  assert.ok(stock['raster-brightness-min'] > 0);
+  assert.equal(stock['raster-saturation'], -0.3);
+  assert.equal(stock['raster-contrast'], -0.1);
+  assert.ok(stock['raster-brightness-min'] > 0 && stock['raster-brightness-min'] < 0.1);
+  assert.ok(stock['raster-brightness-max'] <= 0.8, 'no blown highlight');
   assert.equal(silverPaint(0)['raster-brightness-min'], 0);
 });
 

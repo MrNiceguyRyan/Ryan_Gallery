@@ -9,8 +9,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   CODE_FLIPS,
-  DECK_REACH,
-  DECK_STEP,
   FLAP,
   SHIELD_FORMS,
   SHIELD_MAP_PX,
@@ -19,7 +17,6 @@ import {
   SIGN_NAME_MEASURE,
   STACK_PEEK,
   codePlan,
-  deckShields,
   flapGlyph,
   flapNumber,
   flapPlan,
@@ -52,6 +49,36 @@ test('the shield carries the state its region names (derived, not stored)', () =
   // Not a US state: its own initials, never a guess at a code.
   assert.equal(stateCode('British Columbia'), 'BC');
   assert.equal(stateCode('Kyoto'), 'KY');
+});
+
+test('Washington, DC: however its region is written, a DC shield of its own', () => {
+  for (const name of ['District of Columbia', 'Washington, DC', 'Washington D.C.', 'washington, d.c.', 'DC', 'D.C.']) {
+    assert.equal(stateCode(name), 'DC', name);
+  }
+  // Plain "Washington" is the state.
+  assert.equal(stateCode('Washington'), 'WA');
+  const dc = shieldForm('DC');
+  assert.equal(dc.key, 'DC');
+  assert.notEqual(dc.plate, SHIELD_FORMS.US.plate, 'not the generic US shield');
+  for (const key of ['FL', 'AZ', 'UT', 'NY']) assert.notEqual(dc.plate, SHIELD_FORMS[key].plate);
+  // The flag's three stars over two bars, in the place's stock: three star
+  // sub-paths (ten points each) and two bars.
+  const subpaths = dc.band.split('M').filter(Boolean);
+  assert.equal(subpaths.length, 5);
+  assert.equal(subpaths.filter((path) => (path.match(/L/g) ?? []).length === 9).length, 3);
+  // A seventh place, stop 01, stands on its own among the six (a synthetic
+  // Washington, DC at its map point, measured as the others are).
+  const withDc = [{ id: 'dc', number: 1, region: 'District of Columbia', coordinates: [-77.0369, 38.9072] }, ...STOPS.map((stop) => ({ ...stop, number: stop.number + 1 }))];
+  assert.deepEqual(withDc.map((stop) => shieldForm(stateCode(stop.region)).key), ['DC', 'FL', 'FL', 'AZ', 'UT', 'UT', 'NY']);
+  const [x0, y0] = [542, 480];
+  const box = typeBox(dc);
+  assert.ok(box[0] > 0 && box[2] < 1 && box[1] > 0 && box[3] < 1, 'its type inside its plate');
+  const slots = [
+    { id: 'dc', number: 1, x: x0, y: y0, w: SHIELD_MAP_PX * SHIELD_SCALE.current, h: (SHIELD_MAP_PX * SHIELD_SCALE.current * dc.h) / 100, rank: 2, type: box },
+    { id: 'new-york', number: 7, x: x0 + 150, y: y0 - 90, w: SHIELD_MAP_PX * SHIELD_SCALE.ahead, h: SHIELD_MAP_PX * SHIELD_SCALE.ahead, rank: 0, type: typeBox(SHIELD_FORMS.NY) },
+  ];
+  const placed = stackShields(slots);
+  assert.equal(placed.get('dc').count, 0, 'DC and New York stand apart at a resting zoom');
 });
 
 test('every state the route visits has its own form; every place its own band', () => {
@@ -252,7 +279,6 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   const story = source('src/components/home/MagazineLayout.tsx');
   const home = source('src/components/home/HomePage.tsx');
-  const living = source('src/components/home/LivingAtlasStory.tsx');
   const shield = source('src/components/home/RouteShield.tsx');
   const css = source('src/styles/global.css');
   const lib = source('src/lib/routeShield.ts');
@@ -282,28 +308,26 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.equal(scaleOf('\\.is-current'), SHIELD_SCALE.current);
   // Scaled about the foot's point, which never leaves the place.
   assert.match(css, /\.place-shield__sign \{[^}]*transform-origin: 50% 100%;/);
-  // The phone: the same shields on its overview's points, stacked the same way.
-  assert.match(atlas, /<LivingShields/);
-  assert.match(atlas, /const stacked = stackShields\(slots\);/);
-  assert.match(atlas, /deck: deckShields\(slots, stacked\)/);
-  assert.match(css, /\.place-shield--living \{[^}]*transform: translate\(-50%, -100%\)/);
+  // The phone: the same shields on the same map (its explorer), a little
+  // smaller, stacked the same way.
+  assert.match(atlas, /const shieldPx = mobile \? SHIELD_PHONE_PX : SHIELD_MAP_PX;/);
+  assert.doesNotMatch(atlas, /LivingShields|deckShields/);
   // No lime on the map's shields (the keyboard ring aside).
   assert.doesNotMatch(shieldCss.replace(/:focus-visible \{[^}]*\}/g, ''), /#D2FF00|210,\s*255,\s*0/i);
   // Every printed shield is the place's: the band in its stock.
   assert.match(chapter, /code=\{stateCode\(collection\.region\)\}\s+accent=\{stockPaper\(collection\.slug\)\}/);
   assert.match(chapter, /accent=\{stockPaper\(nextStop\.slug\)\}/);
-  assert.match(home, /slug: orderedCities\[index \+ 1\]\.slug/);
+  assert.match(home, /\{ name: next\.name, number: next\.number, region: next\.region, slug: next\.slug \}/);
   assert.match(story, /accent=\{stockPaper\(chapter\.slug\)\}/);
-  assert.match(living, /accent=\{stockPaper\(stop\.slug\)\}/);
   assert.match(sign, /accent=\{stockPaper\(stop\.slug\)\}/);
   assert.match(css, /\.route-shield__band \{\s*fill: var\(--shield-accent, var\(--stub-paper/);
-  // The board is set at take-off and turned at the landing, only on the way
-  // on, and waits for a voyage still gliding the ticket in.
-  assert.match(atlas, /new CustomEvent\('atlas:depart'/);
-  assert.match(atlas, /from != null && from < index/);
+  // The board is set at take-off and turned at the landing, from the place
+  // left (none from the open map, none on the entry), once the cover is up.
+  assert.match(atlas, /window\.dispatchEvent\(new CustomEvent\(type, \{ detail: \{ id: to\.id, from: signFrom\(from\) \} \}\)\)/);
+  assert.match(atlas, /announce\('atlas:depart', index, flying\.from\)/);
+  assert.match(atlas, /from: next\.kind === 'entry' \? -1 : from,/);
   assert.match(chapter, /primeFlap\(root, detail\.from\)/);
-  assert.match(chapter, /'archive:voyage-end'/);
-  assert.match(home, /new CustomEvent\('archive:voyage-end'/);
+  assert.doesNotMatch(chapter + home, /archive:voyage-end/);
   assert.match(shield, /export function primeFlap/);
   // A new state's letters turn in from a blank band, never the old state's
   // letters printed on the new state's form (FL on Arizona's outline).
@@ -313,13 +337,11 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(css, /\.archive-ticket-sign__name \{\s*position: relative;/);
   // A flip is cut to its own cell, by a clip (overflow would move the baseline).
   assert.match(css, /\.flap-c\[data-show\] \{[^}]*clip-path: inset\(-0\.2em 0\)/);
-  // A push's tear goes on to the next stop, as Next stop does.
-  assert.match(chapter, /armScrollGoRef\.current\(\);/);
-  assert.match(chapter, /html\.dataset\.atlasPlace !== collection\._id/);
-  // …without handing keyboard focus on after a wheel (a lime ring on the next
-  // cover), unless focus was already on the torn chapter.
-  assert.match(chapter, /onTearAwayRef\.current\?\.\(\{ focus: section\.contains\(document\.activeElement\) \}\)/);
-  assert.match(home, /if \(moveFocus\) chapterControl\?\.focus/);
+  // Every move lets the ticket in hand go first: the explorer tears it and
+  // goes on once the face is free (src/lib/explorer.ts); the scroll's tear
+  // went with the scroll.
+  assert.match(home, /case 'tear':\s+tearTicket\(effect\.id, 'tear-then', next\);/);
+  assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.
   assert.match(story, /className="archive-ticket-sign story-stub__sign"/);
@@ -381,41 +403,6 @@ test('in a pile, a shield whose type is covered prints none; the front prints it
   assert.deepEqual({ ...alone.get('new-york') }, { dy: 0, z: 0, count: 0, front: 'new-york', buried: false });
 });
 
-test('on the phone, places a few px apart are laid as a deck behind the front', () => {
-  const phone = { px: 22, scales: { current: 1.16, inbound: 1.16, ahead: 0.86 } };
-  // The feet as the phone's overview projects them (390 × 844, 2026-09-28).
-  for (const reading of ['miami', 'page', 'zion', 'bryce']) {
-    const slots = slotsAt({ page: [101, 476], zion: [89.7, 472.6], bryce: [95.8, 470] }, reading, null, phone);
-    const pile = stackShields(slots);
-    const deck = deckShields(slots, pile);
-    const frontId = pile.get('page').front;
-    const front = slots.find((slot) => slot.id === frontId);
-    assert.equal(front.id, reading === 'miami' ? 'bryce' : reading, 'the chapter being read is the front');
-    assert.equal(deck.size, 2, `${reading}: the two behind are a deck`);
-    assert.ok(!deck.has(frontId), 'the front stands on its own place');
-    // Each behind shows DECK_STEP more of its head and left edge than the
-    // one in front of it, in the pile's order (depth 1 just behind).
-    const behind = slots.filter((slot) => slot.id !== frontId)
-      .sort((a, b) => deck.get(a.id).depth - deck.get(b.id).depth);
-    behind.forEach((slot, index) => {
-      const laid = deck.get(slot.id);
-      assert.equal(laid.depth, index + 1);
-      const left = laid.x - slot.w / 2;
-      const top = laid.y - slot.h;
-      assert.ok(Math.abs(left - (front.x - front.w / 2 - DECK_STEP * laid.depth)) < 1e-9);
-      assert.ok(Math.abs(top - (front.y - front.h - DECK_STEP * laid.depth)) < 1e-9);
-      // Never far off its place: a deck, not a move.
-      assert.ok(Math.hypot(laid.x - slot.x, laid.y - slot.y) < 3 * DECK_REACH);
-      assert.ok(pile.get(slot.id).z < pile.get(frontId).z);
-    });
-  }
-  // Miami and Orlando, 22–27px apart on a phone, stand on their own places,
-  // never a deck, even while one is read at full size over the other.
-  const florida = slotsAt({ miami: [327.8, 554.7], orlando: [319.2, 533.9] }, 'miami', null, phone);
-  assert.equal(deckShields(florida, stackShields(florida)).size, 0);
-  assert.ok(DECK_REACH < 22 && DECK_REACH > 14);
-});
-
 test('the readouts step back from the shields; a pointer\'s click keeps focus', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const sign = source('src/components/home/AtlasSign.tsx');
@@ -425,7 +412,7 @@ test('the readouts step back from the shields; a pointer\'s click keeps focus', 
   // px, from the same projection it stacks with.
   const place = atlas.slice(atlas.indexOf('const placeShields = () => {'), atlas.indexOf('const placeShieldsRef'));
   assert.match(place, /boxes\.push\(\{ id: slot\.id,/);
-  assert.match(place, /- CANVAS_BLEED/);
+  assert.match(place, /- bleed/);
   assert.match(place, /viewfinderRef\.current\?\.avoid\(boxes\)/);
   assert.match(atlas, /map\.on\('move', onRender\)/);
   // The readouts' boxes are derived from their text, never measured.
@@ -435,17 +422,15 @@ test('the readouts step back from the shields; a pointer\'s click keeps focus', 
   assert.match(clear, /READOUT_CHAR_PX \* latChars/);
   assert.match(sign, /className="viewfinder__yield"/);
   assert.match(css, /\.viewfinder__yield\[data-yield\] \{\s*opacity: 0;/);
-  // Buried type is not printed, on the map and the phone.
+  // Buried type is not printed (the phone's map is the same map).
   assert.match(atlas, /pose\.sign\.dataset\.buried = ''/);
-  assert.match(atlas, /data-buried=\{buried \? '' : undefined\}/);
   assert.match(css, /\.place-shield__sign\[data-buried\] :is\(\.place-shield__num, \.place-shield__code\) \{\s*opacity: 0;/);
-  // The phone's overview keeps the read shield's half inside the gutter.
-  assert.match(atlas, /const LIVING_SIDE_PAD = 18 \+ Math\.ceil\(\(LIVING_SHIELD_PX \* LIVING_SCALE\.read\) \/ 2\);/);
-  assert.match(atlas, /right: LIVING_SIDE_PAD,/);
-  assert.match(atlas, /longitude: livingOverviewLongitude\(/);
+  // The phone sets a place in the clear band above its card (derived).
+  assert.match(atlas, /const phoneFocal = mobile \? phoneFocalY\(viewportH, phoneCardH\) : 0;/);
+  // Up in the nav's band no shield is printed.
+  assert.match(place, /point\.y - bleed - h < NAV_BAND_PX/);
   // A mouse's click on a shield or a tick leaves focus where it is; a
   // keyboard's (detail 0) takes it to the chapter, torn or not.
   assert.equal((sign.match(/onNavigate\?\.\([^)]*\{ focus: event\.detail === 0 \}\)/g) ?? []).length, 2);
-  assert.match(home, /go: \(\) => navigateLivingChapter\(anchorId, false, moveFocus\)/);
-  assert.match(home, /navigateLivingChapter\(anchorId, true, moveFocus\);/);
+  assert.match(home, /onSelect=\{select\}/);
 });

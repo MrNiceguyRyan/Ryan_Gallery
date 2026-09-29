@@ -140,21 +140,24 @@ test('ready maps do not create more timers; mobile and reduced motion share the 
   assert.equal(isAtlasInterfaceReady({ ...ready, loaded: false }), false);
 });
 
-test('RouteAtlas wiring keeps scroll, camera and network-warning lifecycles separate', () => {
+test('RouteAtlas wiring keeps the camera, the reader and network-warning lifecycles separate', () => {
   const source = readFileSync(new URL('../src/components/home/RouteAtlas.tsx', import.meta.url), 'utf8');
   assert.match(source, /isAtlasInterfaceReady\(mapReadiness\)/);
   assert.doesNotMatch(source, /\(mapSettled \|\| mapLoadDelayed\)/);
-  // Scroll samples must not restart the readiness timer while travelling.
-  assert.match(source, /\[living, mapCameraSynced, mapIdleFallback, mapLoaded, mapSettled\]/);
+  // Camera moves must not restart the readiness timer while travelling.
+  assert.match(source, /\[mapCameraSynced, mapIdleFallback, mapLoaded, mapSettled\]/);
   // One synchronization state update, after camera and route writes, never per frame.
   const drawStart = source.indexOf('const draw: Process =');
   const syncStart = source.indexOf('if (!cameraSyncedRef.current)', drawStart);
   const scheduleStart = source.indexOf('const schedule =', drawStart);
   assert.ok(drawStart >= 0 && syncStart > drawStart && scheduleStart > syncStart);
   assert.ok(source.indexOf('map.jumpTo({', drawStart) < syncStart);
-  assert.ok(source.indexOf("map.setPaintProperty(layerId, 'line-trim-offset'", drawStart) < syncStart);
+  assert.ok(source.indexOf('writeRouteTrim(', drawStart) < syncStart);
   assert.match(source.slice(syncStart, scheduleStart), /cameraSyncedRef\.current = true;\s+setMapCameraSynced\(true\);/);
-  // Late load / Story close still samples the real current chapter, not index 0.
-  assert.match(source, /schedule\(chapterSample\.get\(\)\);/);
+  // A late load or a story's close resumes on the place in hand (never a
+  // replayed flight), and a move asked for before the map could move is
+  // taken up when it can.
+  assert.match(source, /const held = currentRef\.current;\s+if \(held && !flying\) \{\s+plant\(held\);/);
+  assert.match(source, /const pending = flightRef\.current;\s+if \(pending && pending\.token !== answeredFlightRef\.current\)/);
   assert.match(source, /mapEligible && !mapLoaded && mapLoadDelayed/);
 });
