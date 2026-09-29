@@ -45,8 +45,7 @@ import {
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
 // the anchor, the printed matter's own words (but the dictionary, Webster's
-// 1913, and the book, Stevenson's Travels with a Donkey, 1879: both public
-// domain), the layers' captions, notes, stamps and receipts, the leader
+// 1913: public domain), the layers' captions, notes, stamps and receipts, the leader
 // cards, the credit, the YOU line. No place is named but in two tiny easter
 // eggs (EGGS in src/lib/openingFilm.ts).
 
@@ -508,41 +507,6 @@ function Dictionary() {
   );
 }
 
-function Catalogue() {
-  const c = SHEETS.catalogue;
-  return (
-    <>
-      <div className="of-card__call of-mono">
-        {c.call.map((x) => (
-          <span key={x}>{x}</span>
-        ))}
-      </div>
-      <div className="of-card__above of-mono">
-        {c.above.map((x) => (
-          <p key={x}>{x}</p>
-        ))}
-      </div>
-      <Row side="r" className="of-card__row of-mono">
-        {c.row[1]}
-      </Row>
-      <div className="of-card__below of-mono" data-clear="[data-base]">
-        {c.below.map((x) => (
-          <p key={x}>{x}</p>
-        ))}
-      </div>
-      <div className="of-card__stamp of-inkc--blue">
-        <span className="font-ui">{c.stamp[0]}</span>
-        <span className="font-ui of-card__stamp-s">{c.stamp[1]}</span>
-      </div>
-      <p className="of-card__pencil font-serif">{c.pencil}</p>
-      <div className="of-card__code">
-        <Bars seed={417} />
-        <span className="of-mono">{c.code}</span>
-      </div>
-    </>
-  );
-}
-
 function Magazine({ picture }: { picture?: OpeningPicture }) {
   const c = SHEETS.magazine;
   return (
@@ -622,43 +586,6 @@ function Slate() {
   );
 }
 
-const PERFS = Array.from({ length: 22 }, (_, i) => <i key={i} />);
-
-function Edge({ pictures }: { pictures: readonly OpeningPicture[] }) {
-  const c = SHEETS.edge;
-  return (
-    <>
-      <div className="of-edge__strip of-edge__strip--ghost" aria-hidden="true">
-        <span className="of-edge__perfs of-edge__perfs--b">{PERFS}</span>
-      </div>
-      <div className="of-edge__strip" aria-hidden="true">
-        <span className="of-edge__perfs of-edge__perfs--t">{PERFS}</span>
-        <span className="of-edge__frame of-edge__frame--l">
-          <Picture picture={pictures[2]} className="of-pic--frame" />
-        </span>
-        <span className="of-edge__frame of-edge__frame--r">
-          <Picture picture={pictures[1]} className="of-pic--frame" />
-        </span>
-        <span className="of-edge__perfs of-edge__perfs--b">{PERFS}</span>
-      </div>
-      <p className="of-edge__label font-ui">
-        <span>{c.label[0]}</span>
-        <span>{c.label[1]}</span>
-      </p>
-      <p className="of-edge__print of-edge__print--l of-mono">{c.row[0]}</p>
-      <p className="of-edge__print of-edge__print--r of-mono">{c.row[1]}</p>
-      <p className="of-edge__note of-edge__note--a font-serif">
-        {c.notes[0]}
-        <Ring className="of-edge__ring" />
-      </p>
-      <p className="of-edge__note of-edge__note--b font-serif">{c.notes[1]}</p>
-      <svg className="of-edge__loupe" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="44" />
-        <circle cx="50" cy="50" r="38" />
-      </svg>
-    </>
-  );
-}
 
 function Ticket() {
   const c = SHEETS.ticket;
@@ -710,55 +637,6 @@ function Ticket() {
           <span key={x}>{x}</span>
         ))}
       </div>
-    </>
-  );
-}
-
-function Book() {
-  const c = SHEETS.book;
-  const mark = 'I travel for travel’s sake.';
-  return (
-    <>
-      <p className="of-book__chapter font-ui">{c.chapter}</p>
-      <div className="of-book__above font-serif">
-        {c.above.map((x) => (
-          <span key={x} className="of-book__line">
-            {x}{' '}
-          </span>
-        ))}
-      </div>
-      <Row side="l" className="of-book__row font-serif">
-        {c.row[0]}
-      </Row>
-      <Row side="r" className="of-book__row font-serif">
-        {c.row[1]}
-      </Row>
-      <div className="of-book__below font-serif">
-        {c.below.map((x) => {
-          const at = x.indexOf(mark);
-          return (
-            <span key={x} className="of-book__line">
-              {/* Flowed (the phone), a line's end is a space — or nothing
-                  after a hyphen. */}
-              {at < 0 ? (
-                x
-              ) : (
-                <>
-                  {x.slice(0, at)}
-                  <span className="of-book__pencil">{mark}</span>
-                  {x.slice(at + mark.length)}
-                </>
-              )}
-              {x.endsWith('-') ? '' : ' '}
-            </span>
-          );
-        })}
-      </div>
-      <p className="of-book__note font-serif">{c.note}</p>
-      <p className="of-book__folio font-ui">
-        <span>{c.head[0]}</span>
-        <span>{c.head[1]}</span>
-      </p>
     </>
   );
 }
@@ -840,41 +718,6 @@ function Telegram() {
   );
 }
 
-function Notebook({ picture }: { picture?: OpeningPicture }) {
-  const c = SHEETS.notebook;
-  return (
-    <>
-      <i className="of-note__ring" aria-hidden="true" />
-      <figure className="of-note__print">
-        <span className="of-print__img">
-          <Picture picture={picture} className="of-pic--print" />
-        </span>
-        <i className="of-tape" />
-      </figure>
-      <p className="of-note__hand of-note__above font-serif">{c.above}</p>
-      <Row side="l" className="of-note__hand font-serif">
-        {c.row[0]}
-      </Row>
-      <Row side="r" className="of-note__hand font-serif">
-        {c.row[1]}
-      </Row>
-      <div className="of-note__below font-serif">
-        <p className="of-note__hand font-serif">{c.below[0]}</p>
-        <p className="of-note__hand of-note__aside font-serif">{c.below[1]}</p>
-      </div>
-      <div className="of-note__list">
-        {c.list.map((x, k) => (
-          <p key={x} className="of-note__item">
-            <Circled n={String(k + 1)} />
-            <span className="of-note__hand font-serif">{x}</span>
-          </p>
-        ))}
-      </div>
-      <Arrow dir="u" className="of-note__arrow" />
-    </>
-  );
-}
-
 function Postcard({ picture }: { picture?: OpeningPicture }) {
   const c = SHEETS.postcard;
   return (
@@ -912,23 +755,11 @@ function Postcard({ picture }: { picture?: OpeningPicture }) {
   );
 }
 
-/** What a sheet's paper carries under its words (the card, the spread's
- *  pages, the ticket, the form, the rules): printed ink goes over it. */
+/** What a sheet's paper carries under its words (the spread's pages, the
+ *  ticket, the passport's cover, the form, the border): printed ink goes
+ *  over it. */
 function SheetBack({ kind }: { kind: SheetKind }) {
   switch (kind) {
-    case 'catalogue':
-      return (
-        <>
-          <div className="of-card of-card--under" aria-hidden="true" />
-          <div className="of-card" aria-hidden="true">
-            <span className="of-card__rule" />
-            <span className="of-card__hole" />
-          </div>
-          <svg className="of-card__clip" viewBox="0 0 30 80" aria-hidden="true">
-            <path d="M9 72 V14 C 9 6, 21 6, 21 14 V64 C 21 70, 14 70, 14 64 V20" />
-          </svg>
-        </>
-      );
     case 'magazine':
       return (
         <div className="of-mag__pages" aria-hidden="true">
@@ -946,13 +777,6 @@ function SheetBack({ kind }: { kind: SheetKind }) {
           </div>
         </>
       );
-    case 'book':
-      return (
-        <>
-          <div className="of-book__gutter" aria-hidden="true" />
-          <div className="of-book__ribbon" aria-hidden="true" />
-        </>
-      );
     case 'passport':
       return (
         <div className="of-pass__cover" aria-hidden="true">
@@ -961,8 +785,6 @@ function SheetBack({ kind }: { kind: SheetKind }) {
       );
     case 'telegram':
       return <div className="of-wire__form" aria-hidden="true" />;
-    case 'notebook':
-      return <div className="of-note__ruled" aria-hidden="true" />;
     case 'postcard':
       return <div className="of-post__border" aria-hidden="true" />;
     default:
@@ -976,24 +798,16 @@ function Sheet({ kind, pictures }: { kind: SheetKind; pictures: readonly Opening
       return <Newspaper />;
     case 'dictionary':
       return <Dictionary />;
-    case 'catalogue':
-      return <Catalogue />;
     case 'magazine':
       return <Magazine picture={pictures[1]} />;
     case 'slate':
       return <Slate />;
-    case 'edge':
-      return <Edge pictures={pictures} />;
     case 'ticket':
       return <Ticket />;
-    case 'book':
-      return <Book />;
     case 'passport':
       return <Passport />;
     case 'telegram':
       return <Telegram />;
-    case 'notebook':
-      return <Notebook picture={pictures[0]} />;
     case 'postcard':
       return <Postcard picture={pictures[2]} />;
     default:
@@ -1233,7 +1047,7 @@ const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
  * canvas and — past its foot — the frame line and perforations a slip
  * shows), the dark of the burn with its leader and lit perforations, and the
  * dark of the end with the title. `pictures`: his photographs (the prints,
- * the magazine's plate, the strips' frames).
+ * the magazine's plate, the lightbox's frames).
  */
 export default function OpeningScenes({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   return (

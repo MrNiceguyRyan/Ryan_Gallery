@@ -1305,8 +1305,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       });
       // The lit perforations climb the screen, a frame at a time, fading.
       const perfs = q('[data-perfrow]')!;
-      const perfY = [0.8, 0.54, 0.29, 0.06];
-      const perfO = [0.95, 0.85, 0.62, 0.34];
+      const { perfY, perfO } = BURN;
       steps(perfs, 'transform', tx(0, perfY[0] * H), perfY.map((y, k) => [frameT(BURN.perfs[0] + k), tx(0, y * H)] as [number, string]));
       steps(perfs, 'opacity', 0, [...perfO.map((o, k) => [frameT(BURN.perfs[0] + k), o] as [number, number]), [acts.dark.start, 0]]);
       live(perfs, frameT(BURN.perfs[0]), acts.dark.start);

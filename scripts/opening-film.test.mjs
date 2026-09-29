@@ -4,8 +4,8 @@
 // 2026-09-28 ("复古编辑部动态排版") and his changes of 2026-09-29: no place
 // names (suspense; two tiny easter eggs allowed); the single words FIRST —
 // ~25 match cuts on a sixth of a second through editorial pages and printed
-// matter round a fixed lime anchor, the first of them the server's first
-// paint — then the lime block handed off into the cursor of a typewriter
+// matter round a fixed lime anchor (17 since the owner's "缩短3-4秒", the
+// film 3–4 s shorter), the first of them the server's first paint — then the lime block handed off into the cursor of a typewriter
 // relay across eight machines, each in its own face; richer, layered pages;
 // black-and-white pages and colour in runs; no limit on the length. Held
 // here: the act order; every cut on its act's grid (the match cuts the
@@ -42,6 +42,10 @@ const onGrid = (t, unit, from = 0) => close((t - from) / unit, Math.round((t - f
 const PLANS = { desktop: F.filmPlan('desktop'), phone: F.filmPlan('phone') };
 const SOURCES = ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css'];
 
+// The film as it stood before the owner's "缩短3-4秒" (2026-09-29): 11 625 ms
+// to the landing, 12 325 ms to the page.
+const BEFORE_MS = 11625 + 700;
+
 test('the acts: contiguous from 0, the single words first, then the relay; the landing inside 0.7 s', () => {
   assert.deepEqual([...F.ACT_ORDER], ['cuts', 'hand', 'type', 'burn', 'dark', 'title']);
   for (const [layout, plan] of Object.entries(PLANS)) {
@@ -52,17 +56,21 @@ test('the acts: contiguous from 0, the single words first, then the relay; the l
     }
     assert.ok(close(at, plan.length));
     assert.equal(plan.acts.cuts.start, 0, 'the match cuts open the film (the first page is the first paint)');
-    // The match cuts about five and a half seconds (the guidance's 30 × a
-    // sixth, the sheets meant to be read held for two).
+    // The match cuts about three and a third seconds (twenty sixths: the
+    // first page two, the last three, every other one).
     const cuts = plan.acts.cuts.end - plan.acts.cuts.start;
-    assert.ok(cuts >= 4000 && cuts <= 6500, `act 1 ${cuts} ms`);
+    assert.ok(cuts >= 3000 && cuts <= 4000, `act 1 ${cuts} ms`);
     // The hand-off: four twelfths.
     assert.ok(close(plan.acts.hand.end - plan.acts.hand.start, F.HAND.frames * F.FRAME12_MS));
     // The relay is the owner's two to three seconds.
     const relay = plan.acts.type.end - plan.acts.type.start;
     assert.ok(relay >= 2000 && relay <= 3000, `relay ${relay} ms`);
-    assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, 1000), 'the burn: 24 frames at 24 fps');
-    assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, 1000));
+    assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, F.BURN.frames * F.FRAME24_MS), 'the burn: its frames at 24 fps');
+    assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, 7 * F.BEAT_MS));
+    // The owner: "缩短3-4秒" — the whole of it, to the page, 3–4 s shorter
+    // than it was (and every act still there).
+    const total = plan.length + F.LANDING_A.done;
+    assert.ok(BEFORE_MS - total >= 3000 && BEFORE_MS - total <= 4000, `${layout}: ${total} ms, ${BEFORE_MS - total} ms shorter`);
   }
   assert.ok(F.landingAEnd(F.FLY_ORDER.length) <= F.LANDING_A.done, 'every word home inside the landing');
 });
@@ -98,7 +106,7 @@ test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th,
     // And every act starts on the 24th and the twelfth from the clock's
     // start (a sixth is two twelfths, an eighth three 24ths).
     for (const a of Object.values(plan.acts)) assert.ok(onGrid(a.start, F.FRAME24_MS), `act at ${a.start}`);
-    assert.ok(F.hardCuts(plan).length >= 35);
+    assert.ok(F.hardCuts(plan).length >= 28);
   }
 });
 
@@ -141,7 +149,7 @@ test('act 3: the relay — eight machines, each its own face, slow to fast, the 
     const paper = plan.styles.at(-1);
     assert.ok(times.at(-1) >= paper.start && times.at(-1) < plan.acts.burn.start, 'the last letter on the paper, before the burn');
     const cps = ((times.length - 1) * 1000) / (times.at(-1) - times[0]);
-    assert.ok(cps >= 7.5 && cps <= 10, `${cps.toFixed(1)} a second`);
+    assert.ok(cps >= 7.5 && cps <= 11, `${cps.toFixed(1)} a second`);
     // The cursor: solid while it types, blinking after the last letter.
     const steps = F.cursorSteps(plan);
     for (const [t, v] of steps) assert.ok(!(t > times[0] && t < times.at(-1) && v === 0), `off while typing at ${t}`);
@@ -235,24 +243,28 @@ test('one ink box, letter by letter: a letter fitted into its own box is itself;
   assert.ok(close(F.morphAt(0.4, [0.2, 0.6]), 0.5));
 });
 
-test('act 1: the keywords in the owner\'s order, a new face at every cut, 24–30 scenes', () => {
+test('act 1: the keywords in the owner\'s order, a new face at every cut, 15–20 scenes', () => {
   const S = F.SCENES;
-  assert.ok(S.length >= 24 && S.length <= 30, `${S.length} scenes`);
+  assert.ok(S.length >= 15 && S.length <= 20, `${S.length} scenes`);
   const groups = [];
   S.forEach((s) => (groups.at(-1) === s.word ? null : groups.push(s.word)));
   assert.deepEqual(groups, ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']);
+  // Three or four pages a keyword; YOU two (a short hold, but read).
+  const count = (w) => S.filter((s) => s.word === w).length;
+  for (const w of ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT']) assert.ok(count(w) >= 3 && count(w) <= 4, `${w} ${count(w)}`);
+  assert.equal(count('YOU'), 2);
   for (const plan of Object.values(PLANS)) {
     assert.equal(plan.cuts.at(-1).word, 'YOU', 'YOU is the last page before the hand-off');
     assert.equal(plan.cuts[0].word, 'ARCHIVE');
     for (let i = 1; i < plan.cuts.length; i += 1) assert.notEqual(plan.cuts[i].face, plan.cuts[i - 1].face, 'every cut changes the face');
     for (const face of F.FACE_ORDER) assert.ok(plan.cuts.some((c) => c.face === face), face);
   }
-  // Slow to fast, and YOU holds longest before the burn; in between, an
-  // editorial page holds one sixth, a sheet meant to be read two.
+  // The first page (the first paint) holds two sixths, YOU's last three —
+  // the longest, before the hand-off; every page between them one.
   const slots = S.map((s) => s.slots);
-  assert.ok(slots[0] >= 2);
-  S.slice(2, -1).forEach((s, k) => assert.ok(s.sheet ? s.slots <= 2 : s.slots === 1, `${k + 2}: ${s.slots}`));
-  for (const kind of ['magazine', 'ticket', 'telegram', 'postcard']) assert.equal(S.find((s) => s.sheet === kind).slots, 2, `${kind} held to be read`);
+  assert.equal(slots[0], 2);
+  S.slice(1, -1).forEach((s, k) => assert.equal(s.slots, 1, `${k + 1}: ${s.slots}`));
+  assert.equal(slots.at(-1), 3);
   assert.equal(Math.max(...slots), slots.at(-1));
   assert.equal(F.faceText('ARCHIVE', 'fit'), 'Archive');
   assert.equal(F.faceText('YOU', 'sg700'), 'YOU');
@@ -269,10 +281,13 @@ test('act 1: the keywords in the owner\'s order, a new face at every cut, 24–3
 test('act 1: editorial pages alternate with printed matter; at least four type tiers and layered print on every page', () => {
   const S = F.SCENES;
   const sheets = S.filter((s) => s.sheet).map((s) => s.sheet);
-  assert.ok(sheets.length >= 10, `${sheets.length} pieces of printed matter`);
+  assert.ok(sheets.length >= 8, `${sheets.length} pieces of printed matter`);
   assert.equal(new Set(sheets).size, sheets.length, 'each kind once');
-  for (const kind of ['newspaper', 'dictionary', 'magazine', 'ticket', 'telegram', 'notebook', 'catalogue', 'edge']) assert.ok(sheets.includes(kind), kind);
-  assert.ok(S.filter((s) => !s.sheet).length >= 10, 'editorial pages');
+  for (const kind of ['newspaper', 'dictionary', 'magazine', 'slate', 'ticket', 'passport', 'telegram', 'postcard']) assert.ok(sheets.includes(kind), kind);
+  // Every kind of sheet the film draws is played (none left behind).
+  assert.deepEqual(Object.keys(F.SHEETS).sort(), [...sheets].sort());
+  assert.deepEqual(Object.keys(F.SHEET_TONE).sort(), [...sheets].sort());
+  assert.ok(S.filter((s) => !s.sheet).length >= 8, 'editorial pages');
   for (let i = 1; i < S.length; i += 1) assert.ok(!(S[i].sheet && S[i - 1].sheet), `two sheets in a row at ${i}`);
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   let dense = 0;
@@ -395,22 +410,28 @@ test('act 1: the drift runs on across every cut (the same way, or a quarter turn
 });
 
 test('act 4: the burn — frames in the spec\'s order, the slip, the leader one frame a card', () => {
-  assert.equal(F.BURN.frames, 24);
+  // 22 frames (it was 24): one black frame, three of lit perforations.
+  assert.equal(F.BURN.frames, 22);
   assert.deepEqual([...F.BURN.flicker], [0, 3]);
   assert.equal(F.BURN.slip, 3);
   assert.deepEqual([...F.BURN.burn], [4, 9]);
   assert.deepEqual([...F.BURN.out], [9, 12]);
-  assert.deepEqual([...F.BURN.black], [12, 14]);
-  assert.deepEqual([...F.BURN.leader], [14, 20]);
-  assert.deepEqual([...F.BURN.perfs], [20, 24]);
+  assert.deepEqual([...F.BURN.black], [12, 13]);
+  assert.deepEqual([...F.BURN.leader], [13, 19]);
+  assert.deepEqual([...F.BURN.perfs], [19, 22]);
+  assert.equal(F.BURN.perfs[1], F.BURN.frames, 'the perforations end the burn');
   assert.equal(F.LEADER.length, F.BURN.leader[1] - F.BURN.leader[0], 'one card a frame');
+  const perfN = F.BURN.perfs[1] - F.BURN.perfs[0];
+  assert.equal(F.BURN.perfY.length, perfN);
+  assert.equal(F.BURN.perfO.length, perfN);
+  for (let k = 1; k < perfN; k += 1) assert.ok(F.BURN.perfY[k] < F.BURN.perfY[k - 1] && F.BURN.perfO[k] < F.BURN.perfO[k - 1], 'climbing, fading');
   assert.ok(close(F.frameAt(3).y, -0.25));
   assert.equal(F.frameAt(2).y, 0);
   assert.equal(F.frameAt(4).y, 0);
   assert.ok(close(F.frameAt(11).rot, 6));
   for (let f = 0; f < 12; f += 1) assert.ok(Math.abs(F.frameAt(f).x) <= 1 && Math.abs(F.frameAt(f).weaveY) <= 1);
   for (let f = 0; f < 3; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) > 0, `flicker f${f}`);
-  for (let f = 3; f < 24; f += 1) assert.equal(F.burnFrame(f).flick, 0, `no flicker f${f}`);
+  for (let f = 3; f < F.BURN.frames; f += 1) assert.equal(F.burnFrame(f).flick, 0, `no flicker f${f}`);
   for (let f = 9; f < 12; f += 1) assert.ok(F.frameAt(f).y < 0, `slide f${f} up`);
   assert.ok(F.frameAt(12).y <= -1, 'gone off the top');
   for (let f = 5; f < 12; f += 1) assert.ok(F.burnRadius(f) > F.burnRadius(f - 1));
@@ -458,7 +479,7 @@ test('acts 5–6: the dark typed with one lime cursor, then the line turns into 
     assert.equal(t.length, F.DARK_TYPED.length);
     assert.equal(t[0], plan.acts.dark.start + F.DARK_TYPE_AT);
     const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
-    assert.ok(cps > 10.5 && cps < 13.5, `${cps.toFixed(1)} a second`);
+    assert.ok(cps > 10.5 && cps < 14.5, `${cps.toFixed(1)} a second`);
     assert.ok(plan.blink.start > t.at(-1));
     assert.ok(close(plan.blink.end - plan.blink.start, F.CURSOR_MS / 2));
     assert.equal(plan.blink.end, plan.acts.title.start);

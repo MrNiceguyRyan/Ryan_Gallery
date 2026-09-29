@@ -436,8 +436,7 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   height: calc(100% + 1.1em);
   overflow: visible;
 }
-.of-ring path,
-.of-edge__ring path {
+.of-ring path {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6px;
@@ -1197,145 +1196,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   color: rgba(23, 27, 21, 0.72);
 }
 
-/* A catalogue card on an olive desk: a second card under it, ruled card
-   stock, its call number, the entry typed round the anchor, the tracings,
-   the rod's hole, a library's stamp, a pencilled note, a barcode, a clip. */
-.of-sheet--catalogue { --sheet-bg: #282c20; }
-.of-card {
-  position: absolute;
-  left: 7vw;
-  right: 7vw;
-  top: 7vh;
-  bottom: 7vh;
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(180deg, transparent 0 34px, rgba(34, 59, 85, 0.1) 34px 35px),
-    #f5f0e2;
-  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.3), 0 18px 40px rgba(10, 12, 9, 0.45);
-}
-.of-card--under {
-  left: 5vw;
-  right: 9vw;
-  top: 4vh;
-  bottom: 10vh;
-  background: #e6dfcc;
-  rotate: -2.2deg;
-  box-shadow: 0 10px 30px rgba(10, 12, 9, 0.4);
-}
-.of-card__rule {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 13%;
-  height: 2px;
-  background: #562f2e;
-}
-.of-card__hole {
-  position: absolute;
-  left: 50%;
-  bottom: 5%;
-  width: 3.4vmin;
-  height: 3.4vmin;
-  margin-left: -1.7vmin;
-  border-radius: 50%;
-  background: #282c20;
-  box-shadow: inset 0 1px 3px rgba(10, 12, 9, 0.5);
-}
-.of-card__clip {
-  position: absolute;
-  right: 16vw;
-  top: calc(7vh - 26px);
-  width: 30px;
-  height: 80px;
-  overflow: visible;
-  fill: none;
-  stroke: #8c8f86;
-  stroke-width: 2.4px;
-  stroke-linecap: round;
-}
-.of-card__call {
-  position: absolute;
-  left: 10vw;
-  top: calc(7vh + 86vh * 0.13 + 22px);
-  display: flex;
-  flex-direction: column;
-  font-size: clamp(13px, 0.95vw, 17px);
-  line-height: 1.3;
-}
-.of-card__above,
-.of-card__below {
-  position: absolute;
-  left: 22vw;
-  right: 12vw;
-  font-size: clamp(13px, 1vw, 18px);
-  line-height: 1.5;
-}
-.of-card__above { bottom: calc(100% - var(--za) + 22px); }
-.of-card__below { top: calc(var(--zb) + 22px); }
-.of-card__above p,
-.of-card__below p { margin: 0; }
-.of-card__above p + p,
-.of-card__below p { text-indent: 2em; }
-.of-card__row {
-  font-size: clamp(13px, 1vw, 18px);
-  white-space: normal;
-  max-width: calc(88vw - var(--br, 70vw) - var(--gap));
-}
-.of-card__stamp {
-  position: absolute;
-  right: 12vw;
-  bottom: 14vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 128px;
-  height: 128px;
-  border: 2.5px solid var(--sc);
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 6px transparent, inset 0 0 0 7.5px var(--sc);
-  color: var(--sc);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: 0.1em;
-  text-align: center;
-  text-transform: uppercase;
-  opacity: 0.8;
-  rotate: -14deg;
-}
-.of-card__stamp-s {
-  max-width: 80px;
-  font-size: 8px;
-  font-weight: 600;
-}
-.of-card__pencil {
-  position: absolute;
-  left: 10vw;
-  bottom: 12vh;
-  margin: 0;
-  font-size: clamp(16px, 1.3vw, 22px);
-  font-style: italic;
-  font-weight: 400;
-  color: rgba(53, 56, 62, 0.8);
-  rotate: -3deg;
-}
-.of-card__code {
-  position: absolute;
-  right: 10vw;
-  top: calc(7vh + 18px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 6px 8px 4px;
-  background: #fbf8ee;
-  box-shadow: 0 0 0 1px rgba(23, 27, 21, 0.12);
-  font-size: 8px;
-  letter-spacing: 0.1em;
-}
-
 /* A magazine spread, in black and white: his photograph as a coarse
    halftone on the left page, the running heads, the feature's kicker and
    deck on the right, CAMERA (the anchor) across the gutter, obscura on its
@@ -1583,131 +1443,10 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   text-transform: uppercase;
   color: rgba(233, 230, 220, 0.72);
 }
-
-/* A strip of negatives on the dark, as a contact sheet's: a second strip
-   cropped at the head, the perforations, two of his frames reversed either
-   side of the anchor, the edge print, the sheet's label, a china marker's
-   notes and a loupe's ring. */
-.of-sheet--edge {
-  --sheet-bg: #1b1f19;
-  --fg: #ebe7dc;
-}
-.of-edge__strip {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--za) - 8.5vh);
-  bottom: calc(100% - var(--zb) - 8.5vh);
-  background: #4b4e45;
-}
-.of-edge__strip--ghost {
-  top: -6vh;
-  bottom: auto;
-  height: 17vh;
-  rotate: 1.2deg;
-  background: #3d4038;
-}
-.of-edge__perfs {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-around;
-}
-.of-edge__perfs--t { top: 1.4vh; }
-.of-edge__perfs--b { bottom: 1.4vh; }
-.of-edge__perfs i {
-  width: 1.6vw;
-  height: 2.8vh;
-  border-radius: 0.35vw;
-  background: #1b1f19;
-}
-.of-edge__frame {
-  position: absolute;
-  top: 6.8vh;
-  bottom: 6.8vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: #5a5d53;
-}
-.of-edge__frame--l {
-  left: 2vw;
-  right: calc(100% - var(--bl, 30vw) + 3vw);
-}
-.of-edge__frame--r {
-  left: calc(var(--br, 70vw) + 3vw);
-  right: 2vw;
-}
 .of-pic--frame {
   height: 100%;
   width: auto;
   filter: grayscale(1) invert(1) contrast(1.05) brightness(0.92);
-}
-.of-edge__print {
-  position: absolute;
-  margin: 0;
-  top: calc(var(--zb) + 8.5vh - 6.4vh);
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  white-space: pre;
-  color: rgba(235, 231, 220, 0.72);
-}
-.of-edge__print--l { left: 3vw; }
-.of-edge__print--r { left: calc(var(--br, 70vw) + 3vw); }
-.of-edge__label {
-  position: absolute;
-  left: 4vw;
-  top: calc(var(--za) - 8.5vh - 10vh);
-  display: flex;
-  gap: 18px;
-  margin: 0;
-  padding: 6px 12px;
-  background: #d9d3c2;
-  color: #1d211b;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  rotate: -1.5deg;
-}
-.of-edge__note {
-  position: absolute;
-  margin: 0;
-  font-size: clamp(20px, 1.8vw, 32px);
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1;
-  color: #e7dccd;
-}
-.of-edge__note--a {
-  left: 8vw;
-  top: calc(var(--zb) + 8.5vh + 6vh);
-}
-.of-edge__note--b {
-  right: 12vw;
-  top: calc(var(--zb) + 8.5vh + 8vh);
-}
-.of-edge__ring {
-  position: absolute;
-  left: -0.5em;
-  top: -0.5em;
-  width: calc(100% + 1em);
-  height: calc(100% + 1em);
-  overflow: visible;
-}
-.of-edge__loupe {
-  position: absolute;
-  right: 6vw;
-  top: calc(var(--za) - 8.5vh - 16vh);
-  width: 13vh;
-  height: 13vh;
-  overflow: visible;
-  fill: none;
-  stroke: rgba(235, 231, 220, 0.55);
-  stroke-width: 2px;
 }
 
 /* A ticket on a brown desk: a second, torn stub under it, pale stock with a
@@ -1890,93 +1629,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   color: rgba(23, 27, 21, 0.8);
   box-shadow: 0 6px 16px rgba(10, 12, 9, 0.4);
   rotate: 4deg;
-}
-
-/* A book: a page of Stevenson's, its gutter's shadow, a ribbon, the chapter
-   at its head, the line the anchor sits in, a pencil under one sentence and
-   "yes." in the margin, the running foot. */
-.of-sheet--book { --sheet-bg: #efe7d3; }
-.of-book__gutter {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 9vw;
-  background: linear-gradient(90deg, rgba(23, 27, 21, 0.22), transparent);
-}
-.of-book__ribbon {
-  position: absolute;
-  left: 18vw;
-  top: 0;
-  width: 1.4vw;
-  height: 72vh;
-  background: linear-gradient(90deg, #4a2725, #562f2e 45%, #6a3a38);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 96%, 0 100%);
-  box-shadow: 2px 0 4px rgba(23, 27, 21, 0.2);
-}
-.of-book__chapter {
-  position: absolute;
-  left: 29vw;
-  right: 29vw;
-  top: calc(var(--za) - 22vh);
-  margin: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-align: center;
-  color: rgba(23, 27, 21, 0.7);
-}
-.of-book__above,
-.of-book__below {
-  position: absolute;
-  left: 29vw;
-  right: 29vw;
-}
-.of-book__above { bottom: calc(100% - var(--za) + 8px); }
-.of-book__below { top: calc(var(--zb) + 8px); }
-.of-book__line,
-.of-book__row {
-  font-size: clamp(16px, 1.7vw, 30px);
-  font-weight: 400;
-  line-height: 1.55;
-  color: rgba(23, 27, 21, 0.88);
-}
-.of-book__line {
-  display: block;
-  text-align: justify;
-  text-align-last: justify;
-}
-.of-book__above .of-book__line { text-align-last: right; }
-.of-book__pencil {
-  text-decoration: underline 2px rgba(53, 56, 62, 0.55);
-  text-underline-offset: 4px;
-}
-.of-book__note {
-  position: absolute;
-  left: 21vw;
-  top: calc(var(--zb) + 8px);
-  margin: 0;
-  font-size: clamp(20px, 1.7vw, 30px);
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1.55;
-  color: rgba(53, 56, 62, 0.72);
-  rotate: -4deg;
-}
-.of-sheet--book .of-row { --gap: 0.5em; }
-.of-book__folio {
-  position: absolute;
-  left: 26vw;
-  right: 26vw;
-  bottom: 5vh;
-  display: flex;
-  justify-content: space-between;
-  margin: 0;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 /* A passport open on its maroon cover: the cover's inside with its foil
@@ -2240,96 +1892,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
 }
 .of-wire__boxes span:first-child { border-left-width: 1px; }
 
-/* A notebook: ruled, a margin line in the maroon ink, a hand (Fraunces's
-   italic) round the anchor, a print of his taped in, a numbered list, an
-   arrow and a cup's ring. */
-.of-sheet--notebook { --sheet-bg: #f3f1e8; }
-.of-note__ruled {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent calc(10vw - 3px), rgba(86, 47, 46, 0.5) calc(10vw - 3px) calc(10vw - 2px), transparent calc(10vw - 2px) 10vw, rgba(86, 47, 46, 0.5) 10vw calc(10vw + 1px), transparent calc(10vw + 1px)),
-    repeating-linear-gradient(180deg, transparent 0 43px, rgba(34, 59, 85, 0.16) 43px 44px);
-}
-.of-note__ring {
-  position: absolute;
-  left: 58vw;
-  top: calc(var(--zb) + 5vh);
-  width: 17vh;
-  height: 17vh;
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 3px rgba(89, 61, 27, 0.18),
-    inset 0 0 0 7px rgba(89, 61, 27, 0.05),
-    0 0 0 1px rgba(89, 61, 27, 0.1);
-}
-.of-note__print {
-  position: absolute;
-  right: 7vw;
-  top: 8vh;
-  width: 17vw;
-  margin: 0;
-  padding: 0.5vw 0.5vw 1.8vw;
-  background: #f7f5ee;
-  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.22), 0 10px 22px rgba(23, 27, 21, 0.14);
-  rotate: 4deg;
-}
-.of-note__print .of-pic { filter: grayscale(1) contrast(1.1); }
-.of-note__hand {
-  margin: 0;
-  font-size: clamp(20px, 2.1vw, 36px);
-  font-style: italic;
-  font-weight: 400;
-  color: #1f2621;
-}
-.of-note__above {
-  position: absolute;
-  left: 13vw;
-  bottom: calc(100% - var(--za) + 16px);
-}
-.of-note__below {
-  position: absolute;
-  left: 13vw;
-  right: 44vw;
-  top: calc(var(--zb) + 14px);
-}
-.of-note__aside {
-  margin-top: 10px;
-  font-size: 0.72em;
-  opacity: 0.75;
-}
-.of-note__list {
-  position: absolute;
-  left: 13vw;
-  bottom: 5vh;
-  display: flex;
-  gap: 2.4vw;
-  color: #2b4a6a;
-}
-.of-note__item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-.of-note__item .of-note__hand {
-  font-size: clamp(17px, 1.4vw, 24px);
-  color: #2b4a6a;
-}
-.of-note__arrow {
-  position: absolute;
-  right: 22vw;
-  top: calc(var(--zb) + 18vh);
-  width: 70px;
-  height: 35px;
-  overflow: visible;
-  fill: none;
-  stroke: #2b4a6a;
-  stroke-width: 1.8px;
-  stroke-linecap: round;
-  rotate: -40deg;
-}
-
 /* A postcard's back: an airmail border, POST CARD cropped at its head, two
    stamps (one a frame of his) and a postmark, the air mail label, the
    address lines, the message round the anchor. */
@@ -2534,35 +2096,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   .of-dict__tabs,
   .of-dict__key { display: none; }
 
-  .of-card {
-    left: 4vw;
-    right: 4vw;
-  }
-  .of-card--under {
-    left: 2vw;
-    right: 8vw;
-  }
-  .of-card__call { left: 8vw; }
-  .of-card__above,
-  .of-card__below {
-    left: 9vw;
-    right: 9vw;
-    font-size: 12px;
-  }
-  .of-card__above { bottom: calc(100% - var(--bt, 40vh) + 20px); }
-  .of-card__below { top: calc(var(--bb, 60vh) + 60px); }
-  .of-card__row { font-size: 12px; }
-  .of-card__code,
-  .of-card__pencil,
-  .of-card__clip { display: none; }
-  .of-card__stamp {
-    right: 9vw;
-    bottom: 11vh;
-    width: 92px;
-    height: 92px;
-    font-size: 10px;
-  }
-
   .of-mag__page--l { width: 100%; }
   .of-mag__page--r { display: none; }
   .of-mag__runs,
@@ -2615,41 +2148,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
     bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 60px);
   }
   .of-slate__wedge i { width: 5vw; height: 2.4vh; }
-
-  /* A narrow strip: the perforations and the edge print only (a band of
-     film a third of a tall frame would darken it all at once). */
-  .of-edge__strip {
-    top: calc(var(--bt, 40vh) - 7vh);
-    bottom: calc(100% - var(--bb, 60vh) - 7vh);
-  }
-  .of-edge__strip--ghost,
-  .of-edge__loupe { display: none; }
-  .of-edge__perfs--t { top: 0.9vh; }
-  .of-edge__perfs--b { bottom: 0.9vh; }
-  .of-edge__perfs i {
-    width: 3.2vw;
-    height: 1.8vh;
-  }
-  .of-edge__frame { display: none; }
-  .of-edge__label {
-    left: 6vw;
-    top: calc(var(--bt, 40vh) - 7vh - 9vh);
-  }
-  .of-edge__print--l {
-    left: 6vw;
-    top: calc(var(--bt, 40vh) - 4.1vh);
-  }
-  .of-edge__print--r {
-    left: auto;
-    right: 6vw;
-    top: calc(var(--bb, 60vh) + 2.4vh);
-  }
-  .of-edge__note--a {
-    left: 10vw;
-    top: calc(var(--bb, 60vh) + 16vh);
-  }
-  .of-edge__note--b { display: none; }
-
   .of-ticket {
     left: 5vw;
     right: 5vw;
@@ -2705,33 +2203,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
     width: 70px;
     height: 70px;
     font-size: 10px;
-  }
-
-  .of-book__above,
-  .of-book__below,
-  .of-book__folio,
-  .of-book__chapter {
-    left: 7vw;
-    right: 7vw;
-  }
-  .of-book__ribbon { left: auto; right: 8vw; width: 4vw; height: 22vh; }
-  .of-book__note { display: none; }
-  .of-book__chapter { top: calc(var(--bt, 40vh) - 18vh); }
-  .of-book__above { bottom: calc(100% - var(--bt, 40vh) + 44px); }
-  .of-book__below { top: calc(var(--bb, 60vh) + 44px); }
-  .of-book__line,
-  .of-book__row { font-size: 15px; }
-  /* The page's lines flow on a narrow frame (a line set for the desktop's
-     measure would break twice). */
-  .of-book__line {
-    display: inline;
-    text-align-last: auto;
-  }
-  .of-book__above,
-  .of-book__below {
-    text-align: justify;
-    font-size: 15px;
-    line-height: 1.55;
   }
 
   .of-pass__cover {
@@ -2805,30 +2276,6 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
     font-size: 10px;
   }
   .of-wire__stamp-t { font-size: 13px; }
-
-  .of-note__above {
-    left: 14vw;
-    right: 6vw;
-    bottom: calc(100% - var(--bt, 40vh) + 50px);
-    font-size: 18px;
-  }
-  .of-note__below {
-    left: 14vw;
-    right: 6vw;
-    top: calc(var(--bb, 60vh) + 52px);
-  }
-  .of-note__hand { font-size: 18px; }
-  .of-note__print {
-    right: 6vw;
-    top: 6vh;
-    width: 40vw;
-  }
-  .of-note__ring,
-  .of-note__arrow { display: none; }
-  .of-note__list {
-    left: 14vw;
-    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 60px);
-  }
 
   .of-post__address,
   .of-post__stamp--b,
