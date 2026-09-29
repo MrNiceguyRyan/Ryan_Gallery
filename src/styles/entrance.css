@@ -314,9 +314,75 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
 
 .bp {
   position: relative;
+  /* Its glow (::before, ::after) lies behind its papers. */
+  isolation: isolate;
   flex: none;
   width: var(--bp-w);
   height: var(--bp-h);
+}
+
+/* ── The glow: the pass calls a little (owner, 2026-09-29: 机票可以稍微发光
+   一下，提示用户读者) ──
+   Bone light round the paper, never lime, never a flash: once the pass has
+   assembled it breathes slowly (a 2.8 s breath, its light between 55% and
+   100% of a soft halo), a pointer over it lifts a second, closer layer, and
+   the tear puts both out. Reduced motion: the halo is simply there. */
+.bp::before,
+.bp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 600ms var(--ease-fade, ease);
+}
+.bp::before {
+  box-shadow: 0 0 26px 5px rgba(244, 236, 214, 0.2), 0 0 64px 16px rgba(244, 236, 214, 0.08);
+}
+.bp::after {
+  box-shadow: 0 0 16px 3px rgba(244, 236, 214, 0.22), 0 0 40px 8px rgba(244, 236, 214, 0.1);
+}
+@keyframes bp-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.entrance:not([data-compose='wait']):not([data-compose='play']) .ec-pass:not([data-assembling]) .bp:not([data-stub])::before {
+  opacity: 0.55;
+  animation: bp-breathe 2.8s ease-in-out 0.4s infinite;
+}
+.entrance:not([data-compose='wait']):not([data-compose='play']) .ec-pass:not([data-assembling]) .bp:not([data-stub]):is(:hover, [data-held], :focus-within)::after {
+  opacity: 1;
+  transition-duration: 320ms;
+}
+.bp[data-stub]::before,
+.bp[data-stub]::after {
+  animation: none;
+  opacity: 0;
+  transition-duration: 280ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .entrance:not([data-compose='wait']):not([data-compose='play']) .ec-pass:not([data-assembling]) .bp:not([data-stub])::before {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* ── Carried (BoardingPass, PASS_DRAG) ──
+   The pass can be picked up anywhere and moved; held, it lifts (its shadow
+   deepens). Its own pointer: a hand over the paper, a finger over the
+   stub. A touch on it moves it, never the page. */
+.ec-pass .bp-body {
+  touch-action: none;
+  cursor: grab;
+}
+.bp[data-held] .bp-body,
+.bp[data-held] .bp-tear { cursor: grabbing; }
+.bp[data-stub] .bp-body { cursor: default; }
+.bp-half > .bp-shadow { transition: box-shadow 260ms var(--ease-arrive, ease); }
+.bp[data-held] .bp-half > .bp-shadow:not(.bp-shadow--tear) {
+  box-shadow: 0 2px 4px rgba(5, 7, 3, 0.3), 0 26px 48px rgba(5, 7, 3, 0.36);
 }
 .bp-body {
   position: relative;

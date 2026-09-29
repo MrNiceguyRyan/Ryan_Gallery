@@ -41,6 +41,12 @@ import { bezierFn } from '../../lib/motion';
 // and the glide's `arrivingMs`: the camera comes down under the glide), and
 // once it has landed HomePage takes the entrance off the page.
 //
+// Owner, 2026-09-29 (机票可以稍微发光一下，提示用户读者，做到可以手动挪来挪去):
+// the pass glows a little once it has assembled (entrance.css), and it can
+// be carried anywhere on the screen with its hint (`carry`: the stage moves;
+// BoardingPass, PASS_DRAG). Tearing is still the stub's click alone; torn
+// where it was put, the stub's arc sets off from there.
+//
 // A second view (the film skipped: src/lib/reelVisit.ts) and Back to the
 // start open on the cover already composed and the pass ready: nothing
 // replays. Reduced motion: values, not structure — the words are simply
@@ -361,6 +367,7 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
               onTear={onTear}
               onFree={onFree}
               onLift={setLifted}
+              carry={stageRef}
             />
             <p className="ec-hint" data-asm="hint" aria-hidden="true">
               <span className="ec-hint__dot" />

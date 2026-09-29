@@ -30,7 +30,7 @@ const camera = await bundle('../src/lib/explorerCamera.ts');
 const look = await bundle('../src/lib/globeLook.ts');
 const order = await bundle('../src/lib/chapterOrder.ts');
 const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, phoneStubRect, PHONE_CARD, ENTRY_LANDED_EVENT, STUB_LANDED_EVENT, STUB_WAIT_MS } = explorer;
-const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, SWITCH, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, planFlight, switchLift, switchMs } = camera;
+const { ENTRY, ENTRY_PEAK, EXPLORE_PITCH, FLIGHT, READER_ZOOM, SWITCH, entryEase, entryEaseRate, entryEaseInverse, entryFrame, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, phoneEntryMs, planFlight, switchLift, switchMs } = camera;
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
 
@@ -295,11 +295,15 @@ test('the globe rises already facing stop 01, and the entry is the descent alone
   assert.doesNotMatch(atlas, /prologueGlide|prologueRoll|prologueTurnRemaining|prologueNaturalLongitude|PROLOGUE_GLOBE|cornerZoomFor|prologueProgress/);
   assert.equal('prologueTurnRemaining' in look, false);
   assert.equal('turnMs' in ENTRY, false);
-  // The descent holds its centre (nothing turns or slides: the planet only
-  // comes closer), its zoom on the house's sine, its tip over the last 70%.
+  // The descent: its zoom on the entry's clock, its tip over the last 80%
+  // (from GLOBE_TIP_FROM), its frame from entryFrame (the planet risen in
+  // the middle facing the place, the place on one line to the dock).
   const pose = atlas.slice(atlas.indexOf('function globeEntryPose('), atlas.indexOf('function isValidCoordinate('));
-  assert.match(pose, /center: target\.coordinate,/);
-  assert.match(pose, /startZoom \+ \(target\.zoom - startZoom\) \* voyageEase\(clamp01\(progress\)\)/);
+  assert.match(pose, /const share = entryEase\(clamp01\(progress\)\);\s*const zoom = startZoom \+ \(target\.zoom - startZoom\) \* share;/);
+  assert.match(atlas, /const GLOBE_TIP_FROM = 0\.2;/);
+  assert.match(atlas, /const frame = entryFrame\(\{/);
+  assert.match(atlas, /rise: \{ x: document\.documentElement\.clientWidth \/ 2, y: focalPoint\.y \},/);
+  assert.match(atlas, /dock: planFocal\(entryIndex\),/);
   assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(document\.documentElement\.clientWidth, viewportH\), aim\.zoom\);/);
   // The rise's planet is whole on screen (DERIVED from the viewport, never
   // measured): its limb's apparent radius clears the top by 7% of the height
@@ -322,7 +326,7 @@ test('the globe rises already facing stop 01, and the entry is the descent alone
     // (a tall, narrow window's planet rises a little larger for it).
     const start = entryStartZoom(z, 5.05);
     const rate = entryZoomRate(start, 5.05);
-    assert.ok(rate <= FLIGHT.zoomPerS + 1e-9, `${vw}×${vh}: from ${start.toFixed(2)} at ${rate.toFixed(2)} levels/s`);
+    assert.ok(rate <= ENTRY.zoomPerS + 1e-9, `${vw}×${vh}: from ${start.toFixed(2)} at ${rate.toFixed(2)} levels/s`);
     if (process.env.EXPLORER_NUMBERS) console.log(`rise ${vw}×${vh}: zoom ${z.toFixed(3)} (starts ${start.toFixed(3)}), descent ${rate.toFixed(2)} levels/s over ${ENTRY.diveMs} ms`);
   }
   // Measured on the built page at 1728 × 1000: a limb of 408.8 px for 410.
@@ -436,7 +440,7 @@ test('the entry cut short plays its rest quickly, never a jump', () => {
   // whole-planet descent within ENTRY_FINISH.maxMs).
   const { ENTRY_FINISH, ENTRY_SPAN, finishEntry } = camera;
   assert.ok(Math.abs(ENTRY_SPAN - entryZoomRate(0, 1) * 0 - (5.05 - entryStartZoom(0, 5.05))) < 1e-9);
-  const sine = (p) => -(Math.cos(Math.PI * p) - 1) / 2;
+  const sine = entryEase;
   for (const p0 of [0, 0.08, 0.2, 0.4, 0.6, 0.8, 0.95]) {
     const v0 = 1000 / ENTRY.diveMs;
     const plan = finishEntry(p0, v0, ENTRY_SPAN);
@@ -454,7 +458,7 @@ test('the entry cut short plays its rest quickly, never a jump', () => {
     // (no lurch), and it lands at rest.
     const dt = plan.ms / 1000 / 100;
     const first = (ENTRY_SPAN * (sine(plan.at(0.01)) - sine(plan.at(0)))) / dt;
-    const before = ENTRY_SPAN * (Math.PI / 2) * Math.sin(Math.PI * p0) * v0;
+    const before = ENTRY_SPAN * entryEaseRate(p0) * v0;
     assert.ok(Math.abs(first - before) <= 0.35, `${p0}: ${first.toFixed(2)} vs ${before.toFixed(2)} levels/s`);
     const last = (ENTRY_SPAN * (sine(plan.at(1)) - sine(plan.at(0.99)))) / dt;
     assert.ok(last <= 0.1, `${p0}: lands at rest (${last.toFixed(3)})`);
@@ -628,10 +632,13 @@ test('the fall from the whole planet onto a place stays near the zoom cap', () =
   // The entry's descent is long enough for its own zoom and tip (see ENTRY):
   // it starts under the entrance's glide and has ENTRY.afterGlideMs left
   // once the page has landed.
+  // Owner, 2026-09-29 (飞入地球的速度可以快一点): quicker than the 3.9 s it
+  // was, under the cap the entry keeps (planned 1.6 levels/s; ~1.7 traced).
   assert.equal(ENTRY.diveMs, ENTRY.glideMs + ENTRY.afterGlideMs);
-  assert.ok(ENTRY.diveMs >= 3600 && ENTRY.afterGlideMs >= 2400);
-  assert.ok(entryZoomRate(entryStartZoom(0, 5.05), 5.05) <= FLIGHT.zoomPerS + 1e-9);
-  assert.ok((Math.PI / 2) * (24 / ((ENTRY.diveMs / 1000) * 0.7)) <= 15, 'the tip over its last 70% stays under 15°/s');
+  assert.ok(ENTRY.diveMs >= 2200 && ENTRY.diveMs <= 2600 && ENTRY.glideMs <= 1100);
+  assert.ok(ENTRY.zoomPerS <= 1.65);
+  assert.ok(entryZoomRate(entryStartZoom(0, 5.05), 5.05) <= ENTRY.zoomPerS + 1e-9);
+  assert.ok((Math.PI / 2) * (24 / ((ENTRY.diveMs / 1000) * 0.8)) <= 21, 'the tip over its last 80% stays under 21°/s');
 });
 
 test('a drag never turns the map; a camera set square tips only once it is down', () => {
@@ -643,4 +650,83 @@ test('a drag never turns the map; a camera set square tips only once it is down'
   assert.match(atlas, /\.\.\.\(flying\.tip \? \{ pitch: pitchNow, bearing: bearingNow \} : null\)/);
   assert.match(atlas, /arrived && flying\.tip && !flying\.tipping/);
   assert.match(atlas, /token != null && token !== flying\.token/);
+});
+
+test("the entry's clock: a cruise between two soft ramps, quicker than the sine at its peak", () => {
+  assert.equal(entryEase(0), 0);
+  assert.ok(Math.abs(entryEase(1) - 1) < 1e-12);
+  assert.ok(Math.abs(entryEase(0.5) - 0.5) < 1e-12);
+  let prev = 0;
+  let peak = 0;
+  const N = 2000;
+  for (let i = 1; i <= N; i += 1) {
+    const y = entryEase(i / N);
+    assert.ok(y >= prev - 1e-12, 'never back');
+    peak = Math.max(peak, (y - prev) * N);
+    prev = y;
+  }
+  // Its peak is 1 / (1 − ramp) of the mean: under the sine's π/2.
+  assert.ok(Math.abs(peak - ENTRY_PEAK) < 0.01, peak.toFixed(3));
+  assert.ok(ENTRY_PEAK < Math.PI / 2);
+  // At rest at both ends, and its pace is its slope.
+  assert.equal(entryEaseRate(0), 0);
+  assert.ok(entryEaseRate(1) < 1e-12);
+  for (const t of [0.1, 0.3, 0.5, 0.8, 0.97]) {
+    const slope = (entryEase(t + 1e-5) - entryEase(t - 1e-5)) / 2e-5;
+    assert.ok(Math.abs(slope - entryEaseRate(t)) < 1e-4, `${t}`);
+    assert.ok(Math.abs(entryEaseInverse(entryEase(t)) - t) < 1e-6);
+  }
+});
+
+test("the entry's frame: the planet rises in the middle facing the place, and lands on the rest pose", () => {
+  // 1728 × 1000 at Miami, as the built page plans it: the focal point
+  // (542, 480), the dock's point (1074, 200).
+  const input = {
+    place: [-80.19, 25.77],
+    restCentre: [-91.3, 21.2],
+    startZoom: 2.2,
+    restZoom: 5.05,
+    rise: { x: 864, y: 480 },
+    dock: { x: 1074, y: 200 },
+    focal: { x: 542, y: 480 },
+    pitch: 0,
+    bearing: 0,
+    restPitch: 24,
+    restBearing: -2,
+    distance: 1.5 * 1064,
+  };
+  // Risen: the camera on the place, its focal point in the middle.
+  const start = entryFrame(input, 0);
+  assert.deepEqual(start.centre, input.place);
+  assert.ok(Math.hypot(start.focal.x - 864, start.focal.y - 480) < 1e-6);
+  assert.equal(start.zoom, 2.2);
+  // Down: the chapters' resting camera, exactly.
+  const end = entryFrame({ ...input, pitch: 24, bearing: -2 }, 1);
+  assert.deepEqual(end.centre, input.restCentre);
+  assert.deepEqual(end.focal, input.focal);
+  assert.equal(end.zoom, 5.05);
+  // …and a hair before, all but there (no snap at the end).
+  const near = entryFrame({ ...input, pitch: 24, bearing: -2 }, 0.999);
+  assert.ok(Math.hypot(near.focal.x - 542, near.focal.y - 480) < 3, JSON.stringify(near.focal));
+  // On the way the place is drawn on the line from the middle to the dock,
+  // never back.
+  let prevX = 864;
+  for (let k = 0.1; k < 1; k += 0.1) {
+    const f = entryFrame({ ...input, pitch: 24 * k, bearing: -2 * k }, k);
+    assert.ok(f.placeAt.x >= prevX - 1e-9 && f.placeAt.x <= 1074 && f.placeAt.y <= 480 && f.placeAt.y >= 200);
+    prevX = f.placeAt.x;
+  }
+});
+
+test("the phone's entry: under the glide, on the desktop's clock", () => {
+  // From PHONE_APPROACH_ZOOM (3.2) onto a place at 5.05: the desktop's
+  // diveMs from the glide's start (it was the glide plus 2.4 s).
+  assert.equal(phoneEntryMs(1.85, 2530, 1000), ENTRY.diveMs);
+  assert.ok((Math.PI / 2) * 1.85 / (phoneEntryMs(1.85, 2530, 1000) / 1000) <= ENTRY.zoomPerS);
+  // A long way down still keeps the cap.
+  assert.ok((Math.PI / 2) * 5 / (phoneEntryMs(5, 4000, 1000) / 1000) <= ENTRY.zoomPerS + 1e-9);
+  // Nothing gliding first: at least phoneMinMs.
+  assert.equal(phoneEntryMs(1.85, 1000, 0), ENTRY.phoneMinMs);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /durationMs = next\.kind === 'entry' \? phoneEntryMs\(dest\.zoom - zoomNow, plan\.durationMs, Math\.max\(0, next\.leadMs \?\? 0\)\) : plan\.durationMs;/);
 });

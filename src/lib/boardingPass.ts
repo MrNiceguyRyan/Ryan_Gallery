@@ -431,16 +431,19 @@ export function approach(value: number, target: number, rate: number, dt: number
 // Torn, the page goes on by itself (no scroll asked of the reader), a beat
 // after the stub is free: down one screen, the pass and the words going up
 // and away as the globe rises over the lower edge, already facing stop 01.
-/** The beat between the stub coming free and the page setting off, ms. */
-export const GLIDE_AFTER_FREE_MS = 140;
+/** The beat between the stub coming free and the page setting off, ms (it
+ *  was 140: review of 2026-09-29, 飞入地球的速度可以快一点). */
+export const GLIDE_AFTER_FREE_MS = 100;
 /** The glide: one length, s — the explorer's entry rides under it
  *  (explorerCamera.ts ENTRY.glideMs: one number for both). It was 1.6 s,
- *  then the whole descent after it (review of 2026-09-29: 7.2 s from the
- *  click to the cover). */
+ *  then 1.3 s (review of 2026-09-29: 4.9 s from the click to the cover; now
+ *  ~3.3 s). */
 export const ARRIVAL_SECONDS = ENTRY.glideMs / 1000;
-/** Its curve: a soft start and a long, soft landing. Its peak is 2.56× the
- *  mean speed — about 1970 px/s over a 1000 px glide. */
-export const ARRIVAL_EASE = [0.3, 0, 0.2, 1] as const;
+/** Its curve: the house's sine in and out. The old [0.3, 0, 0.2, 1] peaked
+ *  at 2.56× its mean (about 1970 px/s over a 1000 px glide of 1.3 s; over
+ *  the shorter glide it would be 2560); this one peaks at 1.59× — about
+ *  1590 px/s over 1000 px in 1.0 s, calmer than before as well as sooner. */
+export const ARRIVAL_EASE = [0.37, 0, 0.63, 1] as const;
 
 // ── The stub, kept ──────────────────────────────────────────────────────
 // Free, the stub stays with the reader (a fixed layer: the page glides on
@@ -533,6 +536,109 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** 0 → 1 across [a, b] of `k`, clamped. */
 export const span01 = (k: number, [a, b]: readonly [number, number]) => clamp01((k - a) / Math.max(1e-6, b - a));
 const smooth = (t: number) => t * t * (3 - 2 * t);
+
+// ── The pass in the hand: it can be picked up and moved ─────────────────
+// Owner, 2026-09-29: 机票可以稍微发光一下，提示用户读者，做到可以手动挪来挪去
+// 什么的. The pass glows a little (entrance.css: a slow breath of bone light
+// round the paper once it has assembled, a touch more under the pointer,
+// gone once the stub is torn; still under reduced motion), and the reader
+// can pick it up and move it anywhere on the screen: it follows the hand
+// 1:1, tilts a little toward where it was taken, lifts (its shadow
+// deepens), and let go it drifts on a little and stays where it was put —
+// never off the screen. Tearing is still only a click (a tap, Enter,
+// Space) on the stub: a press on the stub that travels more than
+// `threshold` px moves the pass instead, and is not a click. The arrow keys
+// move it a little when the stub has the focus. The torn stub's arc sets
+// off from wherever the pass was put (its rect is read as it comes free).
+export const PASS_DRAG = {
+  /** A press that travels further than this is a drag, never a click, px. */
+  threshold: 6,
+  /** Kept this far inside the screen's edges, px. */
+  margin: 8,
+  /** Held: the turn toward where it was taken (deg at its far edge), the
+   *  sway with the hand's pace (deg per 1000 px/s, at most `swayMax`), and
+   *  how quickly the turn follows (per second). */
+  tiltDeg: 1.6,
+  sway: 1.2,
+  swayMax: 1.8,
+  tiltRate: 12,
+  /** …and it lifts off the page by this much. */
+  liftScale: 1.015,
+  /** Let go: the hand's pace (from its last `sampleMs`) carried on and
+   *  slowed at `friction` per second, never more than `maxSpeed` px/s, and
+   *  stopped under `stopSpeed`. At 1000 px/s it drifts ~110 px on. */
+  sampleMs: 90,
+  friction: 9,
+  maxSpeed: 1600,
+  stopSpeed: 12,
+  /** An arrow key moves it this far (with Shift, `nudgeFar`), px. */
+  nudge: 16,
+  nudgeFar: 64,
+} as const;
+
+/** Whether a press that has travelled `dx`, `dy` is (now) a drag. */
+export function isDrag(dx: number, dy: number) {
+  return Math.hypot(dx, dy) > PASS_DRAG.threshold;
+}
+
+/** The offset `off` held so that the box — its rect at no offset, `home`
+ *  (viewport px) — stays whole inside a `vw` × `vh` screen, PASS_DRAG.margin
+ *  in from each edge. A box larger than the screen keeps its top-left in. */
+export function clampOffset(off: Point2, home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number): Point2 {
+  const m = PASS_DRAG.margin;
+  const axis = (value: number, lo: number, hi: number) => (lo > hi ? lo : clamp(value, lo, hi));
+  return {
+    x: axis(off.x, m - home.left, vw - m - home.right),
+    y: axis(off.y, m - home.top, vh - m - home.bottom),
+  };
+}
+
+/** The hand's pace at the let-go, px/s: from its samples ([t ms, x, y]) of
+ *  the last PASS_DRAG.sampleMs, capped at maxSpeed. */
+export function releaseVelocity(samples: ReadonlyArray<readonly [number, number, number]>): Point2 {
+  if (samples.length < 2) return { x: 0, y: 0 };
+  const last = samples[samples.length - 1];
+  let first = samples[samples.length - 2];
+  for (let i = samples.length - 2; i >= 0; i -= 1) {
+    if (last[0] - samples[i][0] > PASS_DRAG.sampleMs) break;
+    first = samples[i];
+  }
+  const dt = (last[0] - first[0]) / 1000;
+  if (!(dt > 0.004)) return { x: 0, y: 0 };
+  const vx = (last[1] - first[1]) / dt;
+  const vy = (last[2] - first[2]) / dt;
+  const speed = Math.hypot(vx, vy);
+  const k = speed > PASS_DRAG.maxSpeed ? PASS_DRAG.maxSpeed / speed : 1;
+  return { x: vx * k, y: vy * k };
+}
+
+/** The drift after the let-go, one step of `dt` s: the pace slowed by the
+ *  friction (exactly: the step moves v·(1 − e^(−f·dt))/f), and held on the
+ *  screen (an edge stops its axis). */
+export function driftStep(off: Point2, v: Point2, dt: number, home: { left: number; top: number; right: number; bottom: number }, vw: number, vh: number) {
+  const f = PASS_DRAG.friction;
+  const decay = Math.exp(-f * dt);
+  const reach = (1 - decay) / f;
+  const moved = { x: off.x + v.x * reach, y: off.y + v.y * reach };
+  const held = clampOffset(moved, home, vw, vh);
+  let vx = v.x * decay;
+  let vy = v.y * decay;
+  if (held.x !== moved.x) vx = 0;
+  if (held.y !== moved.y) vy = 0;
+  if (Math.hypot(vx, vy) < PASS_DRAG.stopSpeed) {
+    vx = 0;
+    vy = 0;
+  }
+  return { off: held, v: { x: vx, y: vy } };
+}
+
+/** Held: the pass's turn (deg), from where it was taken across it (`grab`,
+ *  −1 at its left edge … 1 at its right) and the hand's pace (px/s across). */
+export function heldTilt(grab: number, vx: number) {
+  const g = clamp(grab, -1, 1);
+  const sway = clamp((vx / 1000) * PASS_DRAG.sway, -PASS_DRAG.swayMax, PASS_DRAG.swayMax);
+  return g * PASS_DRAG.tiltDeg + sway;
+}
 
 export const centreOf = (rect: StubRect): Point2 => ({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
 

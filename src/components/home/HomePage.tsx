@@ -555,7 +555,7 @@ export default function HomePage({ collections }: Props) {
   }, []);
 
   // The desktop's entry: the camera goes down from the globe the page
-  // brought up (facing stop 01 already, on the atlas's focal point) onto the
+  // brought up (facing stop 01, in the middle of the screen) onto the
   // place, on the entry's clock (src/lib/explorerCamera.ts ENTRY). Nothing
   // turns first: the turn from the first screen's corner globe went with it.
   // The torn pass asks as its glide sets off, so the clock starts under the

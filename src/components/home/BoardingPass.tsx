@@ -1,15 +1,21 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
 import { encodeQr, qrPath } from '../../lib/qrCode';
 import {
   HOVER_PEEL_DEG,
   HOVER_RATE,
+  PASS_DRAG,
   PASS_HINGE,
   PASS_URL,
   PEEK_MS,
   PEEK_PIVOT,
   approach,
   barcodeBars,
+  clampOffset,
   destinationScale,
+  driftStep,
+  heldTilt,
+  isDrag,
+  releaseVelocity,
   passResponse,
   peekAngle,
   type FreeStub,
@@ -39,8 +45,13 @@ import {
 // 01's cover. Hovered (or focused, or pressed) the stub lifts a hair on its
 // perforation; a click on the main part peels the stub at its top notch and
 // lays it back (that is the way in). Nothing else tears it: no drag, no
-// scroll, no timer. Reduced motion: values, not structure — the stub fades
-// where it is.
+// scroll, no timer. The pass can be picked up and moved (boardingPass.ts,
+// PASS_DRAG): held anywhere — the stub too — it follows the hand once the
+// press has travelled past the threshold (then it is not a click), and let
+// go it drifts a little and stays, whole on the screen; the arrow keys move
+// it while the stub has the focus. Reduced motion: values, not structure —
+// the stub fades where it is; the pass moves with the hand, no drift, no
+// turn.
 //
 // One writer, off one clock: every pose is written straight onto the nodes
 // in a rAF loop that runs only while something moves, never through React
@@ -72,6 +83,9 @@ interface Props {
   onFree?: (stub: StubHandover) => void;
   /** The stub is lifted (hovered, focused, pressed): the hint answers. */
   onLift?: (lifted: boolean) => void;
+  /** What moves when the pass is carried (the pass and what goes with it:
+   *  its hint); the pass itself when not given. */
+  carry?: RefObject<HTMLElement | null>;
 }
 
 // The seed of this pass's torn edge (the same profile every time).
@@ -96,7 +110,7 @@ const mulAffine = (A: Affine, B: Affine): Affine => [
   A[1] * B[4] + A[3] * B[5] + A[5],
 ];
 
-export default function BoardingPass({ fields, handle, interactive, onTear, onFree, onLift }: Props) {
+export default function BoardingPass({ fields, handle, interactive, onTear, onFree, onLift, carry }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const seatRef = useRef<HTMLDivElement>(null);
@@ -109,6 +123,8 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
   interactiveRef.current = interactive;
   const callbacks = useRef({ onTear, onFree, onLift });
   callbacks.current = { onTear, onFree, onLift };
+  const carryRef = useRef(carry);
+  carryRef.current = carry;
   // The imperative side, filled in by the effect below.
   const api = useRef<PassHandle>({ tear: () => {}, torn: () => false });
   useImperativeHandle(handle, () => ({
@@ -180,6 +196,37 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
     let last = 0;
     let disposed = false;
     let lifted = false;
+    // ── Carried (PASS_DRAG) ──
+    // What moves (the pass with its hint), its offset from where the page
+    // laid it, and its rect at no offset (`home`: read once per grab and
+    // per resize, never per frame).
+    const body = root.querySelector<HTMLElement>('.bp-body') ?? root;
+    const carried = () => carryRef.current?.current ?? root;
+    let off = { x: 0, y: 0 };
+    let vel = { x: 0, y: 0 };
+    let home = { left: 0, top: 0, right: 0, bottom: 0 };
+    let tilt = 0;
+    let tiltTarget = 0;
+    let held = false;
+    // A press: where it began, whether it has become a drag, the hand's
+    // last positions (for the pace at the let-go), where across the pass it
+    // was taken.
+    let press: { id: number; x: number; y: number; from: { x: number; y: number }; grab: number; drag: boolean; samples: [number, number, number][] } | null = null;
+    // The click that ends a drag is not a click.
+    let swallowClick = false;
+    let swallowTimer = 0;
+    const readHome = () => {
+      const r = carried().getBoundingClientRect();
+      home = { left: r.left - off.x, top: r.top - off.y, right: r.right - off.x, bottom: r.bottom - off.y };
+    };
+    const vw = () => document.documentElement.clientWidth || window.innerWidth;
+    const vh = () => window.innerHeight;
+    const drawCarry = () => {
+      const moved = Math.abs(off.x) > 0.01 || Math.abs(off.y) > 0.01;
+      put(carried(), 'transform', moved ? `translate3d(${off.x.toFixed(2)}px, ${off.y.toFixed(2)}px, 0)` : null);
+      const turned = Math.abs(tilt) > 0.005;
+      put(root, 'transform', turned || held ? `rotate(${tilt.toFixed(3)}deg)${held ? ` scale(${PASS_DRAG.liftScale})` : ''}` : null);
+    };
 
     // ── Layout: read once per resize, never per frame ──
     const L = { w: 0, h: 0, seatW: 0, seatH: 0, edgeKey: '' };
@@ -290,6 +337,18 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
         if (performance.now() - peekStart >= PEEK_MS || tearPhase !== 'whole') peekStart = -1;
         else moving = true;
       }
+      // Let go: the drift, held on the screen; the turn back to square.
+      if (!held && (vel.x !== 0 || vel.y !== 0)) {
+        const step = driftStep(off, vel, dt, home, vw(), vh());
+        off = step.off;
+        vel = step.v;
+        moving = true;
+      }
+      const tiltTo = reduced() ? 0 : tiltTarget;
+      tilt = approach(tilt, tiltTo, PASS_DRAG.tiltRate, dt);
+      if (Math.abs(tilt - tiltTo) < 0.004) tilt = tiltTo;
+      else moving = true;
+      drawCarry();
       drawTear();
       if (moving) raf = requestAnimationFrame(tick);
     };
@@ -358,6 +417,11 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       tearPhase = 'tearing';
       root.dataset.stub = 'tearing';
       peekStart = -1;
+      // Torn where it lies: no drift on, and square (the stub's rect is
+      // read as it comes free, TEAR_FREE_MS on).
+      endPress();
+      vel = { x: 0, y: 0 };
+      tiltTarget = 0;
       callbacks.current.onTear?.();
       if (reduced()) {
         // Values, not structure: the stub fades where it is.
@@ -404,15 +468,111 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       focused = false;
       wake();
     };
-    const onClick = () => tear();
+    const onClick = () => {
+      if (swallowClick) return;
+      tear();
+    };
     const onMainClick = (event: MouseEvent) => {
       if (tearButton.contains(event.target as Node)) return;
+      if (swallowClick) return;
       if (!interactiveRef.current || reduced()) return;
       if (passResponse('main', 'click', tearPhase !== 'whole') !== 'peek') return;
       peekStart = performance.now();
       wake();
     };
     const noDrag = (event: Event) => event.preventDefault();
+
+    // ── Carried: a press anywhere on the pass (the stub too) ──
+    const canCarry = () => interactiveRef.current && tearPhase === 'whole';
+    function endPress() {
+      if (!press) return;
+      press = null;
+      window.removeEventListener('pointermove', onPressMove);
+      window.removeEventListener('pointerup', onPressUp);
+      window.removeEventListener('pointercancel', onPressUp);
+      if (held) {
+        held = false;
+        delete root!.dataset.held;
+      }
+      tiltTarget = 0;
+      wake();
+    }
+    const onPressDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0 || !canCarry() || press) return;
+      window.clearTimeout(swallowTimer);
+      swallowClick = false;
+      // A drift still going stops in the hand.
+      vel = { x: 0, y: 0 };
+      readHome();
+      const r = root.getBoundingClientRect();
+      press = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        from: { ...off },
+        grab: r.width > 0 ? ((event.clientX - r.left) / r.width) * 2 - 1 : 0,
+        drag: false,
+        samples: [[event.timeStamp, event.clientX, event.clientY]],
+      };
+      window.addEventListener('pointermove', onPressMove);
+      window.addEventListener('pointerup', onPressUp);
+      window.addEventListener('pointercancel', onPressUp);
+    };
+    function onPressMove(event: PointerEvent) {
+      if (!press || event.pointerId !== press.id) return;
+      const dx = event.clientX - press.x;
+      const dy = event.clientY - press.y;
+      if (!press.drag) {
+        if (!isDrag(dx, dy) || !canCarry()) return;
+        press.drag = true;
+        held = true;
+        root!.dataset.held = '';
+        // Taken up: the stub's own lift lets go (it is the pass that moves).
+        pressed = false;
+        // Turned about where it was taken.
+        const r = root!.getBoundingClientRect();
+        put(root, 'transform-origin', `${(event.clientX - r.left).toFixed(1)}px ${(event.clientY - r.top).toFixed(1)}px`);
+      }
+      event.preventDefault();
+      press.samples.push([event.timeStamp, event.clientX, event.clientY]);
+      if (press.samples.length > 12) press.samples.shift();
+      off = clampOffset({ x: press.from.x + dx, y: press.from.y + dy }, home, vw(), vh());
+      const pace = releaseVelocity(press.samples);
+      tiltTarget = reduced() ? 0 : heldTilt(press.grab, pace.x);
+      wake();
+    }
+    function onPressUp(event: PointerEvent) {
+      if (!press || event.pointerId !== press.id) return;
+      if (press.drag) {
+        // The click this press ends is not one (the stub is not torn).
+        swallowClick = true;
+        window.clearTimeout(swallowTimer);
+        swallowTimer = window.setTimeout(() => {
+          swallowClick = false;
+        }, 400);
+        vel = reduced() ? { x: 0, y: 0 } : releaseVelocity(press.samples);
+      }
+      endPress();
+    }
+    // The arrow keys move it while the stub has the focus.
+    const onKey = (event: KeyboardEvent) => {
+      if (!canCarry() || event.altKey || event.metaKey || event.ctrlKey) return;
+      const step = event.shiftKey ? PASS_DRAG.nudgeFar : PASS_DRAG.nudge;
+      const by = ({ ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] } as Record<string, [number, number]>)[event.key];
+      if (!by) return;
+      event.preventDefault();
+      vel = { x: 0, y: 0 };
+      readHome();
+      off = clampOffset({ x: off.x + by[0], y: off.y + by[1] }, home, vw(), vh());
+      wake();
+    };
+    // A new screen size: the pass is kept whole on it.
+    const onResize = () => {
+      if (off.x === 0 && off.y === 0) return;
+      readHome();
+      off = clampOffset(off, home, vw(), vh());
+      wake();
+    };
 
     tearButton.addEventListener('pointerenter', onEnter);
     tearButton.addEventListener('pointerleave', onLeave);
@@ -424,6 +584,9 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
     tearButton.addEventListener('click', onClick);
     root.addEventListener('click', onMainClick);
     root.addEventListener('dragstart', noDrag);
+    body.addEventListener('pointerdown', onPressDown);
+    tearButton.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize, { passive: true });
 
     api.current = {
       tear,
@@ -450,6 +613,13 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       tearButton.removeEventListener('click', onClick);
       root.removeEventListener('click', onMainClick);
       root.removeEventListener('dragstart', noDrag);
+      body.removeEventListener('pointerdown', onPressDown);
+      tearButton.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('pointermove', onPressMove);
+      window.removeEventListener('pointerup', onPressUp);
+      window.removeEventListener('pointercancel', onPressUp);
+      window.clearTimeout(swallowTimer);
       written.forEach((props, element) => props.forEach((_value, property) => element.style.removeProperty(property)));
       written.clear();
     };

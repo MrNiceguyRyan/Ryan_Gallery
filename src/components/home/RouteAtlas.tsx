@@ -77,7 +77,10 @@ import { CSS_EASE, DUR_MS, EASE, bezierFn, smootherstep, voyageEase } from '../.
 import {
   ENTRY,
   ENTRY_FINISH,
+  entryEase,
+  entryFrame,
   entryStartZoom,
+  phoneEntryMs,
   EXPLORE_BEARING,
   EXPLORE_PITCH,
   EXPLORE_ZOOM,
@@ -338,9 +341,9 @@ const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 // ── The globe, and the entry's descent from it ──
 // The torn boarding pass brings the globe up the screen with the page
-// (HomePage, EntranceIntro): the whole planet on the atlas's focal point,
-// already facing the entry's place (stop 01 by route order, or the place
-// asked for). The explorer's entry then takes the camera straight down onto
+// (HomePage, EntranceIntro): the whole planet in the middle of the screen,
+// facing the entry's place (stop 01 by route order, or the place asked
+// for), the place at its centre (explorerCamera.ts `entryFrame`). The explorer's entry then takes the camera straight down onto
 // it (globeEntryPose), and the archive stays on the globe (the owner's call,
 // 2026-09-25). From zoom 5 up Mapbox sizes its globe to the flat map at the
 // camera's own latitude, and from zoom 6 it draws pure Mercator: the places
@@ -355,9 +358,11 @@ const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const GLOBE_START_ZOOM = 1.9;
 const GLOBE_HANDOFF_ZOOM = HOP.restZoom;
 // Where in the descent the camera begins to tip from square-on to its
-// oblique view (see globeEntryPose): the last 70% of it, so the 24° come in
-// at 15°/s at the steepest (a 40° tip over the last 40% peaked at 44°/s).
-const GLOBE_TIP_FROM = 0.3;
+// oblique view (see globeEntryPose): the last 80% of it, so the 24° come in
+// at ~20°/s at the steepest over the 2.4 s descent (a 40° tip over the last
+// 40% peaked at 44°/s; the last 70% of the 3.9 s one at 14°/s). The first
+// fifth is the whole planet coming up with the page, square on.
+const GLOBE_TIP_FROM = 0.2;
 // The entry's clock jumped to its end from under this share of the descent:
 // the reader cut it short (a key, a press, a new wheel), and the camera is
 // set down under a dip. From above it the descent was all but down (the
@@ -428,8 +433,8 @@ function globeEntryProgress(entry: number) {
 const GLOBE_REVEAL_CAP_MS = 3000;
 
 /** The globe the page brings up with the torn boarding pass (HomePage,
- *  EntranceIntro): the whole planet on the atlas's focal point, already
- *  facing the entry's place, and the entry's descent starts from it. Its
+ *  EntranceIntro): the whole planet in the middle of the screen, facing
+ *  the entry's place, and the entry's descent starts from it. Its
  *  disc sits inside the screen — its top RISE_PLANET.margin of the height
  *  below the screen's top, its width within RISE_PLANET.across of the atlas
  *  column — so it rises over the lower edge as a planet, never as a slab of
@@ -457,7 +462,7 @@ function risePlanetZoom(viewportWidth: number, viewportHeight: number) {
   return Math.log2((sphere * 2 * Math.PI * Math.SQRT1_2) / 512);
 }
 // Reduced motion keeps the same globe, still. It holds two poses: the planet
-// the page brings up (on the atlas's focal point, facing the place) and the
+// the page brings up (in the middle of the screen, facing the place) and the
 // place's resting pose. Nothing turns, glides or descends: the entry cuts to
 // the ground (the canvas dips out and the new view fades in), and the way
 // back to the planet likewise. The route and its places are drawn whole on
@@ -552,25 +557,28 @@ function satelliteOpacityAt(stops: readonly number[], zoom: number) {
 
 /**
  * The entry's descent at `progress` (0 → 1): from the whole planet the page
- * brought up (`startZoom`, `risePlanetZoom`), already facing the place, down
- * onto its resting pose. The centre never moves — nothing turns, nothing
- * slides: the planet only comes closer — and the zoom runs on the house's
- * sine (voyageEase: one peak, in the middle, π/2 of the mean rate).
+ * brought up (`startZoom`, `risePlanetZoom`), facing the place, down onto
+ * its resting pose. The zoom runs on the entry's clock (entryEase: a
+ * cruise between two soft ramps); where the camera looks and where the
+ * place stands on the screen follow the zoom's share (`share`: see
+ * explorerCamera.ts `entryFrame` — the place goes on one straight line from
+ * the middle of the screen to the dock's point).
  * Owner, 2026-09-28 (有点晕): the camera does not tip while it falls. The
- * pitch comes in only over the last of the descent, from GLOBE_TIP_FROM, once
- * most of the zoom is done, on the same sine: the tip is the one large motion
- * left at that point, so it is the gentlest curve that still lands without a
- * jolt.
+ * pitch comes in only over the last of the descent, from GLOBE_TIP_FROM,
+ * once the planet is past its rise, on the house's sine: the tip is the one
+ * large motion left at that point, so it is the gentlest curve that still
+ * lands without a jolt.
  */
 function globeEntryPose(
-  target: { coordinate: GeoCoordinate; zoom: number; pitch: number; bearing: number },
+  target: { zoom: number; pitch: number; bearing: number },
   progress: number,
   startZoom: number,
 ) {
-  const zoom = startZoom + (target.zoom - startZoom) * voyageEase(clamp01(progress));
+  const share = entryEase(clamp01(progress));
+  const zoom = startZoom + (target.zoom - startZoom) * share;
   const pose = voyageEase(clamp01((progress - GLOBE_TIP_FROM) / (1 - GLOBE_TIP_FROM)));
   return {
-    center: target.coordinate,
+    share,
     zoom,
     pitch: target.pitch * pose,
     bearing: target.bearing * pose,
@@ -1647,6 +1655,7 @@ export default function RouteAtlas({
     let lastZoom = Number.NaN;
     let lastPitch = Number.NaN;
     let lastBearing = Number.NaN;
+    let lastPadKey = Number.NaN;
     let lastRouteProgress = Number.NaN;
     if (map.getProjection?.()?.name !== 'globe') map.setProjection('globe');
     // ── The places on the planet ──
@@ -2170,9 +2179,10 @@ export default function RouteAtlas({
         easing = turnEase;
       } else {
         const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
-        // The phone's entry starts under the entrance's glide: that much
-        // longer, the same pace once the page has landed.
-        durationMs = next.kind === 'entry' ? Math.max(ENTRY.phoneMinMs, plan.durationMs) + Math.max(0, next.leadMs ?? 0) : plan.durationMs;
+        // The phone's entry starts under the entrance's glide and runs on
+        // the desktop's clock from there (phoneEntryMs: it was the glide
+        // PLUS 2.4 s, 4.9 s from the tear to the cover).
+        durationMs = next.kind === 'entry' ? phoneEntryMs(dest.zoom - zoomNow, plan.durationMs, Math.max(0, next.leadMs ?? 0)) : plan.durationMs;
         curve = plan.curve;
         easing = voyageEase;
       }
@@ -2360,26 +2370,54 @@ export default function RouteAtlas({
         // Back in the globe's hands (a new entry, or the first): a jump to
         // the end of its clock is the reader cutting it short again.
         cutDown = false;
-        if (padded !== true) {
-          padded = true;
-          map.setPadding(activePadding);
-        }
-        const aim = { coordinate: restCenter(entryIndex), zoom: restZoom(entryIndex), pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING };
+        const aim = { zoom: restZoom(entryIndex), pitch: CHAPTER_PITCH, bearing: CHAPTER_BEARING };
         const ink = smootherstep(clamp01(entryNow / PROLOGUE_INK_ENTRY));
         writePrologueInk(ink);
         hideRouteAll(ink < 1);
         entryPoseAt = globeEntryProgress(entryNow);
         const riseZoom = entryStartZoom(risePlanetZoom(document.documentElement.clientWidth, viewportH), aim.zoom);
         const pose = globeEntryPose(aim, entryPoseAt, riseZoom);
+        // The frame (explorerCamera.ts `entryFrame`): the planet rises in
+        // the middle of the screen facing the place, and the place goes on
+        // one line to the dock's point as the camera comes down.
+        const frame = entryFrame({
+          place: firstTarget,
+          restCentre: restCenter(entryIndex),
+          startZoom: riseZoom,
+          restZoom: aim.zoom,
+          rise: { x: document.documentElement.clientWidth / 2, y: focalPoint.y },
+          dock: planFocal(entryIndex),
+          focal: focalPoint,
+          pitch: pose.pitch,
+          bearing: pose.bearing,
+          restPitch: CHAPTER_PITCH,
+          restBearing: CHAPTER_BEARING,
+          distance: 1.5 * canvasSize.height,
+        }, pose.share);
+        // The focal point moves the padding's centre (only the centre counts
+        // for the camera); at rest it is the chapters' padding itself.
+        const shiftX = Math.round((frame.focal.x - focalPoint.x) * 2) / 2;
+        const shiftY = Math.round((frame.focal.y - focalPoint.y) * 2) / 2;
+        const atRest = Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5;
+        const padding = atRest ? activePadding : {
+          top: activePadding.top + Math.max(0, 2 * shiftY),
+          bottom: activePadding.bottom + Math.max(0, -2 * shiftY),
+          left: activePadding.left + Math.max(0, 2 * shiftX),
+          right: activePadding.right + Math.max(0, -2 * shiftX),
+        };
+        const padKey = atRest ? 0 : shiftX * 100000 + shiftY;
         writeLook();
-        if (!lastCoordinate || Math.abs(lastZoom - pose.zoom) > 0.0004 ||
-          Math.abs(lastCoordinate[0] - pose.center[0]) > 0.00005 || Math.abs(lastCoordinate[1] - pose.center[1]) > 0.00005 ||
-          Math.abs(lastPitch - pose.pitch) > 0.015 || Math.abs(lastBearing - pose.bearing) > 0.015) {
-          map.jumpTo({ center: pose.center, zoom: pose.zoom, bearing: pose.bearing, pitch: pose.pitch });
-          lastCoordinate = pose.center;
-          lastZoom = pose.zoom;
+        if (!lastCoordinate || Math.abs(lastZoom - frame.zoom) > 0.0004 ||
+          Math.abs(lastCoordinate[0] - frame.centre[0]) > 0.00005 || Math.abs(lastCoordinate[1] - frame.centre[1]) > 0.00005 ||
+          Math.abs(lastPitch - pose.pitch) > 0.015 || Math.abs(lastBearing - pose.bearing) > 0.015 ||
+          padded !== atRest || lastPadKey !== padKey) {
+          map.jumpTo({ center: frame.centre, zoom: frame.zoom, bearing: pose.bearing, pitch: pose.pitch, padding });
+          lastCoordinate = frame.centre;
+          lastZoom = frame.zoom;
           lastPitch = pose.pitch;
           lastBearing = pose.bearing;
+          lastPadKey = padKey;
+          padded = atRest;
         }
         writeRouteTrim(restRoute(entryIndex));
         viewfinderRef.current?.focal(planFocal(entryIndex));

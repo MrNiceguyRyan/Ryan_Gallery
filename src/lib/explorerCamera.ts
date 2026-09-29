@@ -23,6 +23,7 @@
 // Pure: no DOM, no Mapbox. RouteAtlas plays what this plans.
 
 import { DUR_MS, EASE, bezierFn, voyageEase } from './motion.ts';
+import { projectAt, type Point } from './coverDock.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -283,15 +284,25 @@ export function switchLift(w0: number, u1: number, dz = 0) {
 // ── The entry ──
 // From the globe the page brings up to stop 01, in one calm move. The torn
 // boarding pass (HomePage, EntranceIntro) glides the page on and the globe
-// rises over the lower edge with it — the whole planet on the atlas's focal
-// point, already facing stop 01 (RouteAtlas, `risePlanetZoom`) — and the
-// explorer's entry, asked for through the seam as the glide sets off (its
-// clock runs under the glide: ENTRY.glideMs), takes the camera straight down
-// onto the place: the centre held, the zoom on the
-// house's sine, the tip to the oblique view over the last 70% (RouteAtlas,
-// `globeEntryPose`). There is no turn before it any more: the first screen's
-// corner globe (India's face, turned ~195° to the Americas over 3.8 s) went
-// with the first screen.
+// rises over the lower edge with it — the whole planet in the middle of the
+// screen, facing stop 01, the place at the planet's centre (RouteAtlas,
+// `risePlanetZoom`, `entryFrame`) — and the explorer's entry, asked for
+// through the seam as the glide sets off (its clock runs under the glide:
+// ENTRY.glideMs), takes the camera straight down onto the place: the zoom on
+// the entry's own clock (`entryEase`), the place drawn on one straight line
+// from the middle of the screen to the dock's point (where its cover will
+// hang), the tip to the oblique view over the last of it (RouteAtlas,
+// `globeEntryPose`).
+// Owner, 2026-09-29 (撕开miami票根之后，飞入地球的速度可以快一点，然后地球的角度
+// 是不是有点太靠左了): the tear to the cover took 4.9 s at 1728 (a 1.3 s
+// glide, a 3.9 s descent on the sine at 1.15 levels/s), and the planet rose
+// on the atlas's focal point — 542 px of 1728, a third of the way in — with
+// Miami beside its centre, then slid up and right 420 px to its dock over
+// the last second and a half. Now the glide is 1.0 s, the descent 2.4 s, on
+// a clock that holds its pace (a cruise between two soft ramps: its peak is
+// 1 / (1 − ramp) of the mean, not the sine's π/2), so the zoom's peak rises
+// only from ~1.25 to ~1.7 levels/s; and the planet rises in the middle with
+// the place at its centre.
 // The reader can cut it short: a key, a press or a new turn of the wheel
 // plays the rest of the descent quickly, from where it is (HomePage,
 // `finishEntry`; ENTRY_FINISH below).
@@ -299,25 +310,72 @@ export const ENTRY = {
   /** The entrance's glide the entry rides under (boardingPass.ts
    *  ARRIVAL_SECONDS, in ms): the torn pass asks for the explorer as the
    *  glide SETS OFF, so the camera is already coming down while the globe
-   *  rises with the page. */
-  glideMs: 1300,
-  /** What is left of the descent once the glide has landed, ms (review of
-   *  2026-09-29: it was the whole 4.4 s, after the glide). */
-  afterGlideMs: 2600,
+   *  rises with the page. It was 1.3 s. */
+  glideMs: 1000,
+  /** What is left of the descent once the glide has landed, ms (it was
+   *  2.6 s; review of 2026-09-29: before that, the whole 4.4 s, after the
+   *  glide). */
+  afterGlideMs: 1400,
   /** The descent onto stop 01, ms: under the glide, then the rest (the
    *  clock starts with the glide). The rise planet's zoom is ~2.2 at
    *  1728 × 1000 and ~1.9 at 1280 × 800, and a place rests at 5.05: on the
-   *  sine a descent of Δ levels over T peaks at π/2 · Δ / T, so 3.9 s keeps
-   *  the zoom at FLIGHT.zoomPerS (1.15 levels/s from the fitted planet at
-   *  1728; a smaller window's planet rises a little larger:
-   *  `entryStartZoom`), and the 24° tip over its last 70% at ~14°/s. */
-  diveMs: 3900,
+   *  entry's clock a descent of Δ levels over T peaks at Δ / T / (1 − ramp),
+   *  so 2.4 s keeps it under `zoomPerS` from the fitted planet at 1728 (a
+   *  smaller window's planet rises a little larger: `entryStartZoom`; at
+   *  1280 × 800 it rose at 2.2 before as well). */
+  diveMs: 2400,
+  /** The entry's clock (`entryEase`): its pace eases up over this share of
+   *  the descent, cruises, and eases down over the same share at the end
+   *  (raised-cosine ramps: no jolt at either end). */
+  ramp: 0.25,
+  /** The descent's zoom: never faster than this, levels a second, as
+   *  planned (the flights' own cap is 1.15; the entry is the one move the
+   *  reader asked for with the tear, and it now takes 2.4 s instead of 3.9).
+   *  Traced on the built page the peak runs ~8% over the plan (1.25 for the
+   *  old 1.15): ~1.7 levels/s at 1728 × 1000. */
+  zoomPerS: 1.6,
   /** On a phone: the camera waits above stop 01 at PHONE_APPROACH_ZOOM (the
-   *  page brings that view up) and goes down, at least this long once the
-   *  glide has landed (its flight starts with the glide, and is that much
-   *  longer). */
+   *  page brings that view up) and goes down, at least this long when
+   *  nothing glides first (a torn pass: its flight starts with the glide and
+   *  lasts the desktop's `diveMs`). */
   phoneMinMs: 2400,
 } as const;
+
+/** The entry's clock: the share of the descent's zoom done at `t` (0 → 1) of
+ *  its time. Its pace rises on a raised cosine over ENTRY.ramp, holds, and
+ *  falls the same way: at its peak 1 / (1 − ramp) of the mean (the sine's
+ *  is π/2 ≈ 1.57; this, at 0.25, 1.33). */
+export function entryEase(t: number) {
+  const x = clamp01(t);
+  const a = ENTRY.ramp;
+  const v = 1 / (1 - a);
+  const ramp = (s: number) => v * (s / 2 - (a / (2 * Math.PI)) * Math.sin((Math.PI * s) / a));
+  if (x <= a) return ramp(x);
+  if (x >= 1 - a) return 1 - ramp(1 - x);
+  return ramp(a) + v * (x - a);
+}
+/** The entry clock's pace at `t`, the zoom's share per unit of time. */
+export function entryEaseRate(t: number) {
+  const x = clamp01(t);
+  const a = ENTRY.ramp;
+  const v = 1 / (1 - a);
+  const edge = Math.min(x, 1 - x);
+  return edge >= a ? v : (v * (1 - Math.cos((Math.PI * edge) / a))) / 2;
+}
+/** The entry clock's peak over its mean. */
+export const ENTRY_PEAK = 1 / (1 - ENTRY.ramp);
+/** The progress at which the entry's clock has done `y` of its zoom. */
+export function entryEaseInverse(y: number) {
+  const target = clamp01(y);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (entryEase(mid) < target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 
 /** Cutting the entry short (a key, a press, a new turn of the wheel): the
  *  rest of the descent is played quickly, never jumped (review of
@@ -345,17 +403,14 @@ export interface EntryFinish {
   zoomPerS: number;
 }
 
-/** The progress at which the descent's sine has done `y` of its zoom. */
-const voyageInverse = (y: number) => Math.acos(1 - 2 * clamp01(y)) / Math.PI;
-
 /** The rest of the entry from progress `p0`, its clock moving at `v0`
  *  (progress per second), for a descent of `levels` zoom levels on the
- *  house's sine (globeEntryPose). */
+ *  entry's clock (entryEase, globeEntryPose). */
 export function finishEntry(p0: number, v0: number, levels: number): EntryFinish {
   const from = clamp01(p0);
-  const y0 = voyageEase(from);
+  const y0 = entryEase(from);
   // The zoom's share per second where the clock is now.
-  const rate0 = Math.max(0, (Math.PI / 2) * Math.sin(Math.PI * from) * v0);
+  const rate0 = Math.max(0, entryEaseRate(from) * v0);
   const plan = (T: number) => {
     const m0 = Math.max(0, Math.min(rate0 * T, 3 * (1 - y0)));
     const share = (tau: number) => {
@@ -378,24 +433,97 @@ export function finishEntry(p0: number, v0: number, levels: number): EntryFinish
   while (ms < ENTRY_FINISH.maxMs && plan(ms / 1000).max > ENTRY_FINISH.zoomPerS) ms += 50;
   ms = Math.min(ms, ENTRY_FINISH.maxMs);
   const { share, max } = plan(ms / 1000);
-  return { ms, at: (tau: number) => (tau >= 1 ? 1 : voyageInverse(share(tau))), zoomPerS: max };
+  return { ms, at: (tau: number) => (tau >= 1 ? 1 : entryEaseInverse(share(tau))), zoomPerS: max };
 }
 
 /** The fastest the entry's descent changes the zoom, levels a second: from
- *  `startZoom` to `restZoom` on the house's sine over `diveMs`. */
+ *  `startZoom` to `restZoom` on the entry's clock over `diveMs`. */
 export function entryZoomRate(startZoom: number, restZoom: number, diveMs: number = ENTRY.diveMs) {
-  return (Math.PI / 2) * Math.abs(restZoom - startZoom) / (diveMs / 1000);
+  return (ENTRY_PEAK * Math.abs(restZoom - startZoom)) / (diveMs / 1000);
 }
 
 /** Where the entry's descent starts: the whole planet fitted to the screen
  *  (`fitted`), but never so far out that the descent to `restZoom` would
- *  pass FLIGHT.zoomPerS — a tall, narrow window (a tablet held upright)
- *  fits a smaller planet; it rises a little larger instead. */
+ *  pass ENTRY.zoomPerS — a smaller or a tall, narrow window fits a smaller
+ *  planet; it rises a little larger instead. */
 export function entryStartZoom(fitted: number, restZoom: number, diveMs: number = ENTRY.diveMs) {
-  return Math.max(fitted, restZoom - (FLIGHT.zoomPerS * (diveMs / 1000)) / (Math.PI / 2));
+  return Math.max(fitted, restZoom - (ENTRY.zoomPerS * (diveMs / 1000)) / ENTRY_PEAK);
 }
 
 /** The most zoom the entry's descent spans (from `entryStartZoom`'s floor
  *  to the rest, at the cap over its clock), levels: what a finish plans
  *  for. */
-export const ENTRY_SPAN = (FLIGHT.zoomPerS * (ENTRY.diveMs / 1000)) / (Math.PI / 2);
+export const ENTRY_SPAN = (ENTRY.zoomPerS * (ENTRY.diveMs / 1000)) / ENTRY_PEAK;
+
+/** The phone's entry flight, ms: started under the glide (`leadMs` > 0) it
+ *  runs on the desktop's clock, `diveMs` from the glide's start, or longer
+ *  if its `dz` levels would pass ENTRY.zoomPerS on the house's sine; with
+ *  nothing gliding first, at least ENTRY.phoneMinMs (or `planMs`, the
+ *  flights' own). */
+export function phoneEntryMs(dz: number, planMs: number, leadMs: number) {
+  if (leadMs > 0) return Math.round(Math.max(ENTRY.diveMs, ((Math.PI / 2) * Math.abs(dz) * 1000) / ENTRY.zoomPerS));
+  return Math.round(Math.max(ENTRY.phoneMinMs, planMs));
+}
+
+// ── The entry's frame: where the planet rises, and where the place goes ──
+// Owner, 2026-09-29 (地球的角度是不是有点太靠左了，可以优化一下，能更舒适的找到
+// 目的地): the planet used to rise on the atlas's focal point (542 px of 1728,
+// the chapters' camera at rest) looking at the ground the dock needs under
+// it, with Miami off its centre, and the camera went down with its centre
+// held there — so the place slid 420 px right and 185 px up across the
+// last second and a half, under the eye, to its dock. Now the planet rises
+// in the middle of the screen with the place at its centre (the camera's
+// centre ON the place, the camera's focal point — the padding's centre — in
+// the middle), and on the way down the place is drawn on one straight line
+// from there to the dock's point, in step with the zoom's share, while the
+// camera's centre and focal point come round to the chapters' resting ones
+// (the rest pose, exactly, at the end: nothing to snap). DERIVED: the
+// screen points are the viewport's (the middle, the reading line) and the
+// dock plan's; the camera is the dock's pinhole (projectAt), corrected by
+// its own residual at rest so the last frame is the rest pose to the pixel.
+export interface EntryFrameInput {
+  /** The place, and the camera's centre at rest ([lng, lat]). */
+  place: readonly [number, number];
+  restCentre: readonly [number, number];
+  startZoom: number;
+  restZoom: number;
+  /** Where the place stands as the planet rises (the middle of the
+   *  screen), at rest (the dock's point), and the camera's focal point at
+   *  rest, viewport px. */
+  rise: Point;
+  dock: Point;
+  focal: Point;
+  /** The camera now (its pitch and bearing on the descent) and at rest. */
+  pitch: number;
+  bearing: number;
+  restPitch: number;
+  restBearing: number;
+  /** Mapbox's camera distance, px (1.5 canvas heights). */
+  distance: number;
+}
+
+/** The camera for the entry's zoom share `y` (0 = the planet risen, 1 =
+ *  the rest pose): its centre, its zoom and its focal point on the screen
+ *  (the padding's centre, viewport px). */
+export function entryFrame(input: EntryFrameInput, y: number) {
+  const k = clamp01(y);
+  const zoom = input.startZoom + (input.restZoom - input.startZoom) * k;
+  if (k >= 1) return { centre: [input.restCentre[0], input.restCentre[1]] as [number, number], zoom: input.restZoom, focal: { ...input.focal }, placeAt: { ...input.dock } };
+  const dLng = ((((input.restCentre[0] - input.place[0]) % 360) + 540) % 360) - 180;
+  const centre: [number, number] = [input.place[0] + dLng * k, input.place[1] + (input.restCentre[1] - input.place[1]) * k];
+  const at = { x: input.rise.x + (input.dock.x - input.rise.x) * k, y: input.rise.y + (input.dock.y - input.rise.y) * k };
+  const origin = { x: 0, y: 0 };
+  const off = projectAt(input.place, centre, zoom, { focal: origin, pitch: input.pitch, bearing: input.bearing, distance: input.distance });
+  const offRest = projectAt(input.place, input.restCentre, input.restZoom, { focal: origin, pitch: input.restPitch, bearing: input.restBearing, distance: input.distance });
+  // The pinhole's own error at rest (Mapbox's globe and its camera differ
+  // from it by a few px there), carried in with the offset's own scale.
+  const scale = k * 2 ** (zoom - input.restZoom);
+  const cx = input.dock.x - input.focal.x - offRest.x;
+  const cy = input.dock.y - input.focal.y - offRest.y;
+  return {
+    centre,
+    zoom,
+    focal: { x: at.x - off.x - cx * scale, y: at.y - off.y - cy * scale },
+    placeAt: at,
+  };
+}

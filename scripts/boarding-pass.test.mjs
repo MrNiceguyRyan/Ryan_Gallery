@@ -343,10 +343,17 @@ test('only a click on the stub tears it: no drag, no wheel, no scroll, no timer'
   assert.deepEqual(table.elsewhere, inputs.map(() => 'none'));
   for (const target of ['stub', 'main', 'elsewhere']) for (const input of inputs) assert.equal(P.passResponse(target, input, true), 'none');
   // The pass itself: the stub is a real button (Enter and Space are its
-  // own), and nothing picks the pass up or follows a scroll.
+  // own), and nothing follows a scroll. The pass can be carried (PASS_DRAG,
+  // owner 2026-09-29), but a carry never tears: the only calls to the tear
+  // are the stub's click (swallowed after a drag) and the handle.
   const pass = source('src/components/home/BoardingPass.tsx');
   assert.match(pass, /<button\s+ref=\{tearRef\}\s+type="button"\s+className="bp-tear"/);
-  assert.doesNotMatch(pass, /pointermove|setPointerCapture|setStrain|setRise|'scroll'|touchmove/);
+  assert.doesNotMatch(pass, /setPointerCapture|setStrain|setRise|'scroll'|touchmove/);
+  assert.equal((pass.match(/(?<![.\w])tear\(\)/g) || []).length, 1, 'tear() is called from the click alone');
+  assert.match(pass, /const onClick = \(\) => \{\s*if \(swallowClick\) return;\s*tear\(\);/);
+  assert.match(pass, /tear: \(\) => api\.current\.tear\(\)/);
+  const moves = pass.slice(pass.indexOf('function onPressMove('), pass.indexOf('function onPressUp('));
+  assert.doesNotMatch(moves, /tear|onTear|onFree/);
   const intro = source('src/components/home/EntranceIntro.tsx');
   assert.doesNotMatch(intro, /\.tear\(/, 'the entrance never tears the pass itself');
   assert.doesNotMatch(intro, /setTimeout\([^)]*tear/);
@@ -654,7 +661,7 @@ test('the hand-off contract, as the page speaks it', () => {
   // The glide: the page goes on by itself, a beat after the stub is free,
   // on the glide's own curve.
   // One number for the glide and the entry riding under it.
-  assert.equal(P.ARRIVAL_SECONDS, 1.3);
+  assert.equal(P.ARRIVAL_SECONDS, 1);
   assert.equal(P.ARRIVAL_SECONDS * 1000, CAMERA.ENTRY.glideMs);
   assert.ok(P.GLIDE_AFTER_FREE_MS > 0 && P.GLIDE_AFTER_FREE_MS <= 200);
   assert.match(intro, /arrivalCurve\(k\)/);
@@ -663,4 +670,50 @@ test('the hand-off contract, as the page speaks it', () => {
   for (const file of ['src/components/home/EntranceIntro.tsx', 'src/components/home/BoardingPass.tsx']) {
     assert.doesNotMatch(source(file), /useReducedMotion/, file);
   }
+});
+
+test('the pass in the hand: carried, never torn by it, kept on the screen', () => {
+  const D = P.PASS_DRAG;
+  // A press that travels past the threshold is a drag (never a click).
+  assert.equal(P.isDrag(D.threshold, 0), false);
+  assert.equal(P.isDrag(D.threshold + 0.5, 0), true);
+  assert.equal(P.isDrag(4, 4), false);
+  assert.ok(D.threshold >= 4 && D.threshold <= 8);
+  // Clamped whole on the screen, margin in from each edge.
+  const home = { left: 1000, top: 600, right: 1660, bottom: 900 };
+  assert.deepEqual(P.clampOffset({ x: -5000, y: -5000 }, home, 1728, 1000), { x: D.margin - 1000, y: D.margin - 600 });
+  assert.deepEqual(P.clampOffset({ x: 5000, y: 5000 }, home, 1728, 1000), { x: 1728 - D.margin - 1660, y: 1000 - D.margin - 900 });
+  assert.deepEqual(P.clampOffset({ x: -20, y: 10 }, home, 1728, 1000), { x: -20, y: 10 });
+  // The pace at the let-go: its last samples, capped.
+  const v = P.releaseVelocity([[0, 0, 0], [16, 10, 0], [32, 20, 0], [48, 30, 5]]);
+  assert.ok(Math.abs(v.x - 625) < 1 && Math.abs(v.y - 104.2) < 1, JSON.stringify(v));
+  const fast = P.releaseVelocity([[0, 0, 0], [16, 400, 0]]);
+  assert.ok(Math.abs(Math.hypot(fast.x, fast.y) - D.maxSpeed) < 1e-6);
+  assert.deepEqual(P.releaseVelocity([[0, 0, 0]]), { x: 0, y: 0 });
+  // The drift: light (1000 px/s carries ~110 px), stops, and an edge stops it.
+  let off = { x: 0, y: 0 };
+  let vel = { x: 1000, y: 0 };
+  const open = { left: 400, top: 300, right: 800, bottom: 500 };
+  for (let i = 0; i < 240 && (vel.x || vel.y); i += 1) ({ off, v: vel } = P.driftStep(off, vel, 1 / 60, open, 1728, 1000));
+  assert.ok(off.x > 90 && off.x < 125, off.x.toFixed(1));
+  assert.deepEqual(vel, { x: 0, y: 0 });
+  const edge = P.driftStep({ x: 0, y: 0 }, { x: 0, y: 8000 }, 0.5, open, 1728, 1000);
+  assert.equal(edge.off.y, 1000 - D.margin - 500);
+  assert.equal(edge.v.y, 0);
+  // Held, it turns a little toward where it was taken (and with the hand).
+  assert.ok(Math.abs(P.heldTilt(1, 0)) <= 2 && P.heldTilt(-1, 0) < 0 && P.heldTilt(1, 0) > 0);
+  assert.ok(Math.abs(P.heldTilt(1, 99999)) <= D.tiltDeg + D.swayMax + 1e-9);
+  // The page: the carry moves the pass with its hint (EntranceIntro), the
+  // pass takes no touch scroll, and the glow is bone light, never lime, a
+  // slow breath put out by the tear, still under reduced motion.
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  assert.match(intro, /carry=\{stageRef\}/);
+  const css = source('src/styles/entrance.css');
+  assert.match(css, /\.ec-pass \.bp-body \{\s*touch-action: none;/);
+  assert.match(css, /@keyframes bp-breathe/);
+  assert.match(css, /animation: bp-breathe 2\.8s ease-in-out 0\.4s infinite;/);
+  assert.match(css, /\.bp\[data-stub\]::before,\s*\.bp\[data-stub\]::after \{\s*animation: none;\s*opacity: 0;/);
+  const glow = css.slice(css.indexOf('.bp::before,'), css.indexOf('/* ── Carried'));
+  assert.doesNotMatch(glow, /d2ff00|lime/i);
+  assert.match(glow, /prefers-reduced-motion: reduce[\s\S]*animation: none;/);
 });
