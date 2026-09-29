@@ -1701,7 +1701,7 @@ function ArchiveChapter({
         <motion.div
           data-chapter-anchor
           {...interactive}
-          className="archive-rail group relative cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#D2FF00]"
+          className="archive-rail group relative cursor-pointer"
         >
           {/* Reduced motion changes these values, never whether they are
               there: the MotionValues answer `reduce` themselves (a style

@@ -22,7 +22,7 @@
 //    (READER_ZOOM, RouteAtlas "The reader's map").
 // Pure: no DOM, no Mapbox. RouteAtlas plays what this plans.
 
-import { DUR_MS, voyageEase } from './motion.ts';
+import { DUR_MS, EASE, bezierFn, voyageEase } from './motion.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -210,12 +210,67 @@ export const SWITCH = {
    *  2.4 s turn, not a 1.4 s dive. */
   perLevelMs: 400,
   maxMs: 2600,
+  /** A far leg (review of 2026-09-29, 有点晕): on the turn at the rest zoom
+   *  the ground crossed at 1.4–1.7 viewport widths a second at 1728
+   *  (Orlando → Page 2827 px/s, Page → New York 2987), and the camera took
+   *  off from rest to 40 px a frame in one frame (the turn's curve starts at
+   *  2.77× its mean speed). The reference turns its planet at zoom 2.8,
+   *  where the same curve peaks near 0.8 vw/s. So a leg whose turn would
+   *  pass `farShare` of the viewport's width a second under the focal point
+   *  turns on the house's sine instead — it sets off from rest and peaks at
+   *  π/2 of its mean, not 2.77× — as long as it needs to stay under the
+   *  share, up to `farMaxMs`. The share is set at the focal point; the
+   *  fastest shield on screen runs ~1.2× it under the oblique camera, so
+   *  0.72 keeps every shield on screen near 0.9 vw/s (1550 px/s at 1728:
+   *  traced on the built page). The path keeps Mapbox's own curve: at the
+   *  rest zooms it climbs 0.4–0.5 of a level on the far legs (a curve of 2
+   *  climbed a whole level, an apex). A neighbour keeps the turn. */
+  farShare: 0.72,
+  farMaxMs: 2000,
 } as const;
 
 /** A switch's duration for a zoom change of `dz` levels. */
 export function switchMs(dz: number) {
   const extra = Math.max(0, Math.abs(dz) - 1);
   return Math.round(Math.min(SWITCH.maxMs, SWITCH.ms + SWITCH.perLevelMs * extra));
+}
+
+const turnCurve = bezierFn(EASE.turn);
+
+export interface SwitchPlan {
+  durationMs: number;
+  curve: number;
+  /** The clock's shape: the reference's turn, or the house's sine (a far
+   *  leg). */
+  ease: 'turn' | 'sine';
+  /** The fastest the ground under the focal point crosses the screen, px/s. */
+  screenPxPerS: number;
+  /** Levels the path climbs above the start. */
+  lift: number;
+}
+
+/**
+ * A switch: the turn (SWITCH.ms, or longer from far out: `switchMs`) on the
+ * reference's curve, unless that would race the ground past
+ * SWITCH.farShare of the viewport's width a second — then the house's sine,
+ * as long as the share needs (DERIVED: a path's speed scales as one over
+ * its duration), within SWITCH.farMaxMs. `w0` the canvas's larger side
+ * (px), `u1` the ground to cover at the start zoom (px), `dz` the zoom
+ * change, `viewportW` the screen's width.
+ */
+export function planSwitch(w0: number, u1: number, dz: number, viewportW: number): SwitchPlan {
+  const path = flightPath(w0, w0 / 2 ** dz, u1, SWITCH.curve);
+  const base = switchMs(dz);
+  const cap = SWITCH.farShare * Math.max(320, viewportW);
+  const turn = flightSpeeds(path, u1, base, turnCurve);
+  if (turn.screenPxPerS <= cap) {
+    return { durationMs: base, curve: SWITCH.curve, ease: 'turn', screenPxPerS: turn.screenPxPerS, lift: path.lift };
+  }
+  const probe = flightSpeeds(path, u1, 1000, voyageEase);
+  const needed = (probe.screenPxPerS / cap) * 1000;
+  const durationMs = Math.round(Math.max(base, Math.min(Math.max(base, SWITCH.farMaxMs), needed)));
+  const speeds = flightSpeeds(path, u1, durationMs, voyageEase);
+  return { durationMs, curve: SWITCH.curve, ease: 'sine', screenPxPerS: speeds.screenPxPerS, lift: path.lift };
 }
 
 /** How far a switch climbs above its start, levels: the van Wijk path Mapbox
@@ -230,26 +285,101 @@ export function switchLift(w0: number, u1: number, dz = 0) {
 // boarding pass (HomePage, EntranceIntro) glides the page on and the globe
 // rises over the lower edge with it — the whole planet on the atlas's focal
 // point, already facing stop 01 (RouteAtlas, `risePlanetZoom`) — and the
-// explorer's entry, asked for through the seam as the glide lands, takes the
-// camera straight down onto the place: the centre held, the zoom on the
+// explorer's entry, asked for through the seam as the glide sets off (its
+// clock runs under the glide: ENTRY.glideMs), takes the camera straight down
+// onto the place: the centre held, the zoom on the
 // house's sine, the tip to the oblique view over the last 70% (RouteAtlas,
 // `globeEntryPose`). There is no turn before it any more: the first screen's
 // corner globe (India's face, turned ~195° to the Americas over 3.8 s) went
 // with the first screen.
 // The reader can cut it short: a key, a press or a new turn of the wheel
-// sets the camera down on stop 01 at once (HomePage, `finishEntry`).
+// plays the rest of the descent quickly, from where it is (HomePage,
+// `finishEntry`; ENTRY_FINISH below).
 export const ENTRY = {
-  /** The descent onto stop 01, ms. The rise planet's zoom is ~2.2 at
+  /** The entrance's glide the entry rides under (boardingPass.ts
+   *  ARRIVAL_SECONDS, in ms): the torn pass asks for the explorer as the
+   *  glide SETS OFF, so the camera is already coming down while the globe
+   *  rises with the page. */
+  glideMs: 1300,
+  /** What is left of the descent once the glide has landed, ms (review of
+   *  2026-09-29: it was the whole 4.4 s, after the glide). */
+  afterGlideMs: 2600,
+  /** The descent onto stop 01, ms: under the glide, then the rest (the
+   *  clock starts with the glide). The rise planet's zoom is ~2.2 at
    *  1728 × 1000 and ~1.9 at 1280 × 800, and a place rests at 5.05: on the
-   *  sine a descent of Δ levels over T peaks at π/2 · Δ / T, so 4.4 s keeps
-   *  the zoom at or under FLIGHT.zoomPerS down to an 800 px window (1.02 and
-   *  1.14 levels/s traced on the built page), and the 24° tip over its last
-   *  70% at ~12°/s. */
-  diveMs: 4400,
+   *  sine a descent of Δ levels over T peaks at π/2 · Δ / T, so 3.9 s keeps
+   *  the zoom at FLIGHT.zoomPerS (1.15 levels/s from the fitted planet at
+   *  1728; a smaller window's planet rises a little larger:
+   *  `entryStartZoom`), and the 24° tip over its last 70% at ~14°/s. */
+  diveMs: 3900,
   /** On a phone: the camera waits above stop 01 at PHONE_APPROACH_ZOOM (the
-   *  page brings that view up) and goes down, at least this long. */
+   *  page brings that view up) and goes down, at least this long once the
+   *  glide has landed (its flight starts with the glide, and is that much
+   *  longer). */
   phoneMinMs: 2400,
 } as const;
+
+/** Cutting the entry short (a key, a press, a new turn of the wheel): the
+ *  rest of the descent is played quickly, never jumped (review of
+ *  2026-09-29: a jump from the whole planet to the place in ONE frame, then
+ *  60–150 ms of flat unloaded ground). From where the camera is, at the pace
+ *  its zoom was going (velocity-continuous: a cubic Hermite in the zoom
+ *  from its level and rate to the rest, arriving at rest), in the shortest
+ *  time from `minMs` that keeps the zoom under `zoomPerS` (twice the
+ *  flights' cap: the reader asked for it), within `maxMs` (a cut in the
+ *  first half of a whole-planet descent peaks near 2.8 levels/s there). */
+export const ENTRY_FINISH = {
+  minMs: 700,
+  maxMs: 1500,
+  zoomPerS: 2.3,
+  /** The phone's entry cut short: a turn this long onto the place, from the
+   *  live camera. */
+  phoneMs: 700,
+} as const;
+
+export interface EntryFinish {
+  ms: number;
+  /** The entry's progress at `tau` (0 → 1) of `ms`. */
+  at: (tau: number) => number;
+  /** The fastest the zoom changes on the way, levels/s. */
+  zoomPerS: number;
+}
+
+/** The progress at which the descent's sine has done `y` of its zoom. */
+const voyageInverse = (y: number) => Math.acos(1 - 2 * clamp01(y)) / Math.PI;
+
+/** The rest of the entry from progress `p0`, its clock moving at `v0`
+ *  (progress per second), for a descent of `levels` zoom levels on the
+ *  house's sine (globeEntryPose). */
+export function finishEntry(p0: number, v0: number, levels: number): EntryFinish {
+  const from = clamp01(p0);
+  const y0 = voyageEase(from);
+  // The zoom's share per second where the clock is now.
+  const rate0 = Math.max(0, (Math.PI / 2) * Math.sin(Math.PI * from) * v0);
+  const plan = (T: number) => {
+    const m0 = Math.max(0, Math.min(rate0 * T, 3 * (1 - y0)));
+    const share = (tau: number) => {
+      const t = clamp01(tau);
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * m0 + (-2 * t3 + 3 * t2);
+    };
+    let max = 0;
+    let prev = share(0);
+    const steps = 60;
+    for (let i = 1; i <= steps; i += 1) {
+      const now = share(i / steps);
+      max = Math.max(max, (Math.abs(now - prev) * levels) / (T / steps));
+      prev = now;
+    }
+    return { share, max };
+  };
+  let ms: number = ENTRY_FINISH.minMs;
+  while (ms < ENTRY_FINISH.maxMs && plan(ms / 1000).max > ENTRY_FINISH.zoomPerS) ms += 50;
+  ms = Math.min(ms, ENTRY_FINISH.maxMs);
+  const { share, max } = plan(ms / 1000);
+  return { ms, at: (tau: number) => (tau >= 1 ? 1 : voyageInverse(share(tau))), zoomPerS: max };
+}
 
 /** The fastest the entry's descent changes the zoom, levels a second: from
  *  `startZoom` to `restZoom` on the house's sine over `diveMs`. */
@@ -264,3 +394,8 @@ export function entryZoomRate(startZoom: number, restZoom: number, diveMs: numbe
 export function entryStartZoom(fitted: number, restZoom: number, diveMs: number = ENTRY.diveMs) {
   return Math.max(fitted, restZoom - (FLIGHT.zoomPerS * (diveMs / 1000)) / (Math.PI / 2));
 }
+
+/** The most zoom the entry's descent spans (from `entryStartZoom`'s floor
+ *  to the rest, at the cap over its clock), levels: what a finish plans
+ *  for. */
+export const ENTRY_SPAN = (FLIGHT.zoomPerS * (ENTRY.diveMs / 1000)) / (Math.PI / 2);

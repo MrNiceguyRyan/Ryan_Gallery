@@ -2827,6 +2827,14 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .archive-photo-frame__mat[data-on] {
   display: block;
 }
+/* While the torn pass's stub is on its way to stop 01's ticket, and
+   ARRIVAL_INERT_MS after it lands (HomePage `data-stub-arriving`), the
+   tickets and the shields are out of the hand: a tap that cut the entry
+   short, its finger where the cover is about to be, never opens the story
+   or turns the map (review of 2026-09-29). */
+[data-stub-arriving] :is(.archive-dock, .archive-dock *, .place-shield__sign) {
+  pointer-events: none !important;
+}
 /* The stub hand-off (src/lib/explorer.ts): stop 01's stub, and its caret,
    wait for the torn pass's stub to land on them; the photograph shows.
    Everything printed on the stub waits with it (its "Next stop" says
@@ -2931,6 +2939,15 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .archive-rail {
   width: clamp(280px, 25vw, 440px);
   pointer-events: auto;
+}
+/* Its focus ring is bone, thin and off the type: a whole column ringed in
+   lime (focus back on the rail after a story, from the keyboard) made two
+   and three limes in one view (review of 2026-09-29). The view's lime stays
+   on the interface's pills. */
+.archive-rail:focus { outline: none; }
+.archive-rail:focus-visible {
+  outline: 1px solid rgba(244, 244, 237, 0.55);
+  outline-offset: 6px;
 }
 .archive-rail::before {
   content: '';

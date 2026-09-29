@@ -76,16 +76,16 @@ import { wrap180 } from '../../lib/geo';
 import { CSS_EASE, DUR_MS, EASE, bezierFn, smootherstep, voyageEase } from '../../lib/motion';
 import {
   ENTRY,
+  ENTRY_FINISH,
   entryStartZoom,
   EXPLORE_BEARING,
   EXPLORE_PITCH,
   EXPLORE_ZOOM,
   READER_ZOOM,
-  SWITCH,
   planFlight,
-  switchMs,
+  planSwitch,
 } from '../../lib/explorerCamera';
-import { ENTRY_LANDED_EVENT, phoneFocalY, phoneStubRect } from '../../lib/explorer';
+import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, entryLandsAt, phoneFocalY, phoneStubRect, setEntryLandsAt } from '../../lib/explorer';
 
 // A switch's turn and the covers' glide with it: the house's `turn` curve
 // (11 mois sans toi(t)'s ENTER), as a function for Mapbox and the pin.
@@ -115,19 +115,25 @@ export interface RouteStop {
 /** A camera move the explorer asks for (src/lib/explorer.ts): `fly` to a
  *  place (a shield, the list, Prev / Next, the one in hand again), `entry`
  *  the phone's descent onto stop 01 (the desktop's entry is the descent's
- *  own clock, driven by HomePage), `cut` straight onto a place (under a
- *  story, turned to another place, an entry cut short), `home` the phone's
- *  camera back above stop 01 (Back to the start);
+ *  own clock, driven by HomePage), `finish` the phone's entry cut short (a
+ *  short turn onto the place from the live camera, never a jump), `cut`
+ *  straight onto a place (under a story, turned to another place, a window
+ *  crossing the phone/desktop line), `home` the phone's camera back above
+ *  stop 01 (Back to the start);
  *  `release` moves nothing: the ticket in hand is let go (its cover fades
  *  from the map; nothing tears). */
 export interface AtlasFlight {
-  kind: 'fly' | 'entry' | 'cut' | 'home' | 'release';
-  /** This move sets the entry down (the phone's cut, when the reader cuts
-   *  its entry short): its landing is the entry's (ENTRY_LANDED_EVENT). */
+  kind: 'fly' | 'entry' | 'finish' | 'cut' | 'home' | 'release';
+  /** This move sets the entry down (the phone's finish, when the reader
+   *  cuts its entry short): its landing is the entry's (ENTRY_LANDED_EVENT). */
   entry?: boolean;
+  /** The phone's entry, asked for as the entrance's glide set off: the
+   *  glide's time, added to the flight (ms). */
+  leadMs?: number;
   id: string | null;
   token: number;
 }
+
 
 interface Props {
   stops: RouteStop[];
@@ -1230,9 +1236,13 @@ export default function RouteAtlas({
     window.__archiveCoverStubTarget = () => {
       const entry = chapterRoute[entryIndexRef.current] ?? chapterRoute[0];
       if (!entry) return null;
-      if (mobile) return phoneStubRect(window.innerWidth, window.innerHeight, entry.stop.coverRatio ?? 1.5);
+      // When the camera will touch down (once the entry is under way): the
+      // stub's arc is timed to land on it.
+      const landsAt = entryLandsAt();
+      const at = landsAt != null ? { landsAt } : null;
+      if (mobile) return { ...phoneStubRect(window.innerWidth, window.innerHeight, entry.stop.coverRatio ?? 1.5), ...at };
       const planned = dockPlanRef.current?.[entry.stop.id];
-      return planned ? coverStubRect(planned) : null;
+      return planned ? { ...coverStubRect(planned), ...at } : null;
     };
     return () => {
       delete window.__archiveCoverStubTarget;
@@ -1938,9 +1948,10 @@ export default function RouteAtlas({
     // the dock's point under the cover's corner, the pitch the atlas's — on a
     // Mapbox flight (the reader can take the map from it at any moment).
     // Bearing never turns. A switch (from a cover on screen) is one turn of
-    // SWITCH on the house's `turn` curve, whatever the distance, and the
-    // ticket stays where it lies through it (`carry`); the phone's entry is
-    // a flight DERIVED to stay under the explorer's caps (planFlight).
+    // SWITCH on the house's `turn` curve — a far leg on the house's sine,
+    // as long as the ground needs to stay calm (planSwitch) — and
+    // the ticket stays where it lies through it (`carry`); the phone's entry
+    // is a flight DERIVED to stay under the explorer's caps (planFlight).
     let flying: {
       token: number;
       kind: AtlasFlight['kind'];
@@ -1991,10 +2002,16 @@ export default function RouteAtlas({
       const out = restZoom(index) - map.getZoom();
       return { id: held, appear: out <= HOP.appearOut, stay: out <= HOP.stayOut };
     };
-    // The entry is down on stop 01 (the stub hand-off, src/lib/explorer.ts).
+    // The entry is down on stop 01 (the stub hand-off, src/lib/explorer.ts);
+    // then, once the map is still with its tiles in, ATLAS_IDLE_EVENT
+    // (reduced motion cuts the entrance away on it).
     const entryLanded = (index: number) => {
       const id = chapterRoute[index]?.stop.id;
-      if (id) window.dispatchEvent(new CustomEvent(ENTRY_LANDED_EVENT, { detail: { id } }));
+      if (!id) return;
+      window.dispatchEvent(new CustomEvent(ENTRY_LANDED_EVENT, { detail: { id } }));
+      map.once('idle', () => {
+        if (!disposed) window.dispatchEvent(new CustomEvent(ATLAS_IDLE_EVENT, { detail: { id } }));
+      });
     };
     // The pin lets go: the covers go back onto their shield's foot — at the
     // landing that is the dock's point itself, so nothing moves; cut short by
@@ -2094,7 +2111,7 @@ export default function RouteAtlas({
         token: next.token,
         kind: next.kind,
         index,
-        from: next.kind === 'entry' ? -1 : from,
+        from: next.kind === 'entry' || next.kind === 'finish' ? -1 : from,
         center: dest.center,
         zoom: dest.zoom,
         origin,
@@ -2103,7 +2120,7 @@ export default function RouteAtlas({
         tip: null,
         tipping: false,
         carry: switching && !reducedMotion,
-        entry: next.kind === 'entry' || !!next.entry,
+        entry: next.kind === 'entry' || next.kind === 'finish' || !!next.entry,
       };
       setCameraState('flying');
       announce('atlas:depart', index, flying.from);
@@ -2133,18 +2150,29 @@ export default function RouteAtlas({
         return;
       }
       const zoomNow = map.getZoom();
+      const w0 = Math.max(canvasSize.width, canvasSize.height);
+      const u1 = worldPx(origin, dest.center, zoomNow);
       let durationMs: number;
       let curve: number;
       let easing: (t: number) => number;
       if (next.kind === 'fly') {
-        durationMs = switchMs(dest.zoom - zoomNow);
-        curve = SWITCH.curve;
+        // The turn (the reference's, 1.4 s); a far leg on the house's sine,
+        // as long as the ground needs to stay calm (planSwitch).
+        const plan = planSwitch(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        durationMs = plan.durationMs;
+        curve = plan.curve;
+        easing = plan.ease === 'sine' ? voyageEase : turnEase;
+      } else if (next.kind === 'finish') {
+        // The phone's entry cut short: a short turn from the live camera.
+        const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        durationMs = ENTRY_FINISH.phoneMs;
+        curve = plan.curve;
         easing = turnEase;
       } else {
-        const w0 = Math.max(canvasSize.width, canvasSize.height);
-        const u1 = worldPx(origin, dest.center, zoomNow);
         const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
-        durationMs = next.kind === 'entry' ? Math.max(ENTRY.phoneMinMs, plan.durationMs) : plan.durationMs;
+        // The phone's entry starts under the entrance's glide: that much
+        // longer, the same pace once the page has landed.
+        durationMs = next.kind === 'entry' ? Math.max(ENTRY.phoneMinMs, plan.durationMs) + Math.max(0, next.leadMs ?? 0) : plan.durationMs;
         curve = plan.curve;
         easing = voyageEase;
       }
@@ -2154,7 +2182,7 @@ export default function RouteAtlas({
         // away), and, from another place's cover, the switch — the arriving
         // cover laid over the leaving one until SWITCH_COVER.leaveMs.
         const to = planFocal(index);
-        pinRef.current = { from: dockWrittenRef.current ?? to, to, t0: performance.now(), ms: durationMs, ease: turnEase };
+        pinRef.current = { from: dockWrittenRef.current ?? to, to, t0: performance.now(), ms: durationMs, ease: easing };
         window.clearTimeout(switchTimerRef.current);
         if (shown !== destId) {
           switchKeyRef.current += 1;
@@ -2182,6 +2210,8 @@ export default function RouteAtlas({
         : null;
       const place = viewfinderPlace(index);
       if (place) viewfinderRef.current?.hunt(place, performance.now() + durationMs + (flying.tip?.ms ?? 0));
+      // The entry's touchdown, for the stub's arc (the contract's `landsAt`).
+      if (flying.entry) setEntryLandsAt(performance.now() + durationMs + (flying.tip?.ms ?? 0));
       map.flyTo({
         ...dest,
         ...(flying.tip ? { pitch: pitchNow, bearing: bearingNow } : null),

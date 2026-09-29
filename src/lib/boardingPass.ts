@@ -13,9 +13,10 @@
 // way the reference's cover sets (opacity 0 → 1 and 20 px up over 0.6 s, a
 // block every 180 ms, on its ENTER curve) — in our type, Fraunces on olive,
 // never its condensed yellow. At the end of it the boarding pass ASSEMBLES
-// beside the words: its paper forms, its print comes up like the text, and
-// two words leave the last sentence and land on it (the first place → TO,
-// "you" → PASSENGER). Both stay on the screen. The pass is a start button:
+// beside the words: its paper is laid down, its print comes up like the
+// text, and three facts leave the words and land on it (the first place →
+// TO, "you" → PASSENGER, the archive's years → DATE). Both stay on the
+// screen. The pass is a start button:
 // only a click (a tap, Enter, Space) on its right side — the stub — tears it.
 // Torn, the page goes down on its own into the globe, and the stub, kept by
 // the reader, travels on an arc and becomes stop 01's cover's stub.
@@ -43,6 +44,7 @@
 // site through Vite; both resolve it.
 import { stateCode } from './routeShield.ts';
 import { EASE } from './motion.ts';
+import { ENTRY } from './explorerCamera.ts';
 import type { CoverStubTarget } from './explorer.ts';
 
 // ── The contract's names ────────────────────────────────────────────────
@@ -67,7 +69,8 @@ export function validStubRect(rect: unknown): StubRect | null {
   const h = Number(r.h);
   const rotate = Number(r.rotate ?? 0);
   if (![x, y, w, h, rotate].every(Number.isFinite) || w < 4 || h < 4) return null;
-  return { x, y, w, h, rotate };
+  const landsAt = Number(r.landsAt);
+  return r.landsAt != null && Number.isFinite(landsAt) ? { x, y, w, h, rotate, landsAt } : { x, y, w, h, rotate };
 }
 
 // ── The curve ───────────────────────────────────────────────────────────
@@ -309,30 +312,42 @@ export const revealEnd = (blocks: number) => (blocks > 0 ? revealAt(blocks - 1) 
 
 // ── The assembly ────────────────────────────────────────────────────────
 // At the end of the reveal the pass assembles beside the words, one
-// choreographed FLIP of 1.2 s: its main paper comes up like a block of the
-// text, the stub slides in to meet it at the perforation, the print comes
-// up part by part, and two words fly out of the last sentence onto it — the
-// first place into TO, "you" into PASSENGER (each a twin: the sentence keeps
-// its own word). Then the hint. Times are ms from the assembly's start.
+// choreographed FLIP of 1.2 s: its main paper is laid down like a sheet
+// (an opaque wipe, left to right: review of 2026-09-29 — faded in, a white
+// slab flashed onto the olive in 62 ms, the brightest pop after the film),
+// the stub is laid down to meet it at the perforation, the print comes up
+// part by part, and three facts fly out of the words onto it — the first
+// place into TO (under its own line, then over the band: never across its
+// sentence or FROM), "you" into
+// PASSENGER, the archive's years into DATE — each lifting off its word (the
+// word goes with it, and comes back once it has landed: never printed
+// twice), all landed before the print is done. Then the hint. Times are ms
+// from the assembly's start.
 export type AssemblyPart = 'paper' | 'stub' | 'band' | 'route' | 'grid' | 'qr' | 'stubprint';
+export type PassFlight = 'to' | 'you' | 'date';
 export const PASS_ASSEMBLY = {
   /** The assembly starts this long after the LAST block starts rising (the
    *  last line is still settling: one breath, not a wait). */
   lead: 240,
-  /** The paper: up from `rise` px, in, and a hair of scale. */
-  paper: { at: 0, ms: 600, rise: 20 },
-  /** The stub: in from `slide` px to the right, to meet the perforation. */
-  stub: { at: 120, ms: 600, slide: 26 },
+  /** The paper: wiped on left to right (never faded), up from `rise` px
+   *  and a hair of scale. */
+  paper: { at: 0, ms: 480, rise: 20 },
+  /** The stub: wiped on the same way, in from `slide` px to the right, to
+   *  meet the perforation. */
+  stub: { at: 240, ms: 360, slide: 26 },
   /** The print, part by part, up from `rise` px. */
   print: { ms: 420, rise: 8, at: { band: 180, route: 300, stubprint: 360, grid: 420, qr: 540 } },
-  /** The words flying out of the sentence onto the pass. */
-  flights: { ms: 860, at: { to: 160, you: 260 } },
+  /** The words flying out onto the pass, 90 ms apart; TO on an S of `bow`
+   *  px (under its own line, then up over the band). */
+  flights: { ms: 700, bow: 60, at: { to: 60, you: 150, date: 240 } },
+  /** A word that flew comes back into its sentence over this long, ms. */
+  wordBackMs: 200,
   /** "Tear the stub to begin". */
   hint: { at: 820, ms: 380 },
 } as const;
 
 export interface AssemblyItem {
-  part: AssemblyPart | 'flight-to' | 'flight-you' | 'hint';
+  part: AssemblyPart | 'flight-to' | 'flight-you' | 'flight-date' | 'hint';
   at: number;
   ms: number;
 }
@@ -349,6 +364,7 @@ export function assemblySchedule(): AssemblyItem[] {
   });
   items.push({ part: 'flight-to', at: A.flights.at.to, ms: A.flights.ms });
   items.push({ part: 'flight-you', at: A.flights.at.you, ms: A.flights.ms });
+  items.push({ part: 'flight-date', at: A.flights.at.date, ms: A.flights.ms });
   items.push({ part: 'hint', at: A.hint.at, ms: A.hint.ms });
   return items.sort((a, b) => a.at - b.at);
 }
@@ -417,25 +433,30 @@ export function approach(value: number, target: number, rate: number, dt: number
 // and away as the globe rises over the lower edge, already facing stop 01.
 /** The beat between the stub coming free and the page setting off, ms. */
 export const GLIDE_AFTER_FREE_MS = 140;
-/** The glide: one length, s. */
-export const ARRIVAL_SECONDS = 1.6;
+/** The glide: one length, s — the explorer's entry rides under it
+ *  (explorerCamera.ts ENTRY.glideMs: one number for both). It was 1.6 s,
+ *  then the whole descent after it (review of 2026-09-29: 7.2 s from the
+ *  click to the cover). */
+export const ARRIVAL_SECONDS = ENTRY.glideMs / 1000;
 /** Its curve: a soft start and a long, soft landing. Its peak is 2.56× the
- *  mean speed — about 1600 px/s over a 1000 px glide. */
+ *  mean speed — about 1970 px/s over a 1000 px glide. */
 export const ARRIVAL_EASE = [0.3, 0, 0.2, 1] as const;
 
 // ── The stub, kept ──────────────────────────────────────────────────────
 // Free, the stub stays with the reader (a fixed layer: the page glides on
 // under it). It settles into the hand — straightens a little, lifts, its
 // shadow deepens (CARRY) — and once the explorer says where stop 01's cover
-// stub will rest (COVER_STUB_TARGET) it travels there on one arc (FLIGHT): a
-// quadratic path bowed up off the chord, a slight turn that peaks mid-way,
-// its width going to the cover stub's. It waits there, still the pass's
-// white stub, held in the air, fixed on the screen while the camera comes
-// down under it (the reference's board holds still while its planet turns).
-// When the camera has landed and the cover is there, it MERGES (MERGE): it
-// settles onto the cover, the pass's paper and print giving way to stop 01's
-// own card stock as the card unfolds to the cover stub's height; then it
-// hands over — STUB_LANDED_EVENT — and its copy goes as the real stub shows.
+// stub will rest (COVER_STUB_TARGET) and when the camera will touch down
+// there (its `landsAt`), it travels there on one arc (FLIGHT) timed to land
+// on the touchdown, as the reference's board settles the moment its planet
+// stops: a quadratic path bowed up off the chord, a slight turn that peaks
+// mid-way, its width going to the cover stub's. On the way it BECOMES stop
+// 01's stub (ARC_MERGE; review of 2026-09-29: it used to hang white over
+// the planet for 4.6 s, then turn into a blank maroon slab for ~0.3 s): the
+// pass's white paper gives way to the chapter's card stock, the pass's
+// print to the cover stub's own sign, and the card unfolds to the cover
+// stub's height. Down, it settles (MERGE: its shadow goes) and hands over —
+// STUB_LANDED_EVENT — in the frame the real stub shows.
 export const STUB_CARRY = {
   /** Settling into the hand, ms (ease-out). */
   ms: 460,
@@ -462,10 +483,10 @@ export const STUB_FLIGHT = {
   /** Coming in it is held a little lower (its shadow shortens by this
    *  share): still in the air, nearer the map. */
   shadowIn: 0.3,
-  /** After the merge the copy (the blank card) fades over the real stub
-   *  this long, ms (the stub's print develops): one step, no gap, no
-   *  second stub anywhere. */
-  handoffMs: 140,
+  /** After the merge the copy goes this long after the real stub shows,
+   *  ms: 0 — it already IS the stub (its sign printed on the way), so the
+   *  real one shows and the copy goes in the same frame. */
+  handoffMs: 0,
   /** No target this long after the explorer landed (an explorer that does
    *  not say where): the stub is let go where it is. ms. */
   targetGraceMs: 900,
@@ -478,16 +499,25 @@ export const STUB_FLIGHT = {
   letGoMs: 240,
 } as const;
 
-/** The merge, once the camera is down: shares of its length (linear time) —
- *  the card (stop 01's stock) comes up under the print, the print goes, the
- *  card unfolds to the cover stub's height, the stub settles onto the map
- *  (its shadow gone). On ENTER. */
+/** The stub becoming stop 01's on its arc: shares of the arc (linear
+ *  time) — stop 01's card comes up under the white paper and unfolds out
+ *  past it to the cover stub's height, its sign printed on it (the sign
+ *  sits at the stub's head: it shows as the card opens past the paper's
+ *  top), then the pass's paper and print dissolve off the middle of it.
+ *  One becomes the other: a sign that waited for the paper to go, or a card
+ *  that unfolded after it, left a blank stock slab between them. */
+export const ARC_MERGE = {
+  cardIn: [0.25, 0.5] as const,
+  signIn: [0.3, 0.6] as const,
+  unfold: [0.3, 0.75] as const,
+  printOut: [0.4, 0.9] as const,
+} as const;
+
+/** Down (the camera has landed and the stub is on its rect): it settles
+ *  onto the map, its shadow going over `ms`, then hands over. */
 export const STUB_MERGE = {
-  ms: 520,
-  cardIn: [0, 0.5] as const,
-  printOut: [0.12, 0.7] as const,
-  unfold: [0.08, 1] as const,
-  shadowOut: [0, 0.8] as const,
+  ms: 240,
+  shadowOut: [0, 1] as const,
 } as const;
 
 export interface Point2 {
@@ -573,6 +603,8 @@ export interface StubPose {
   print: number;
   /** Stop 01's card stock under it, 0 → 1. */
   card: number;
+  /** The cover stub's own print (its sign) on the card, 0 → 1. */
+  sign: number;
   /** The card's height, from the print's (0) to the cover stub's (1). */
   unfold: number;
   /** The carried shadow, 0 → 1. */
@@ -599,6 +631,7 @@ export function carryPose(free: FreeStub, ms: number): StubPose {
     scale: 1 + (STUB_CARRY.scale - 1) * k,
     print: 1,
     card: 0,
+    sign: 0,
     unfold: 0,
     shadow: k,
   };
@@ -616,7 +649,9 @@ export function landingScale(box: { w: number; h: number }, to: StubRect) {
 
 /** The flight, `k` (linear time, 0 → 1) of the way from `from` (the carried
  *  pose it set off in; its box `w` × `h`) to the cover stub's `to`. At 1 it
- *  is on `to`: centred on it, turned as it, fitted inside it. */
+ *  is on `to`: centred on it, turned as it, fitted inside it — and it is
+ *  stop 01's stub (ARC_MERGE): its card, its sign, its height; only its
+ *  shadow still says it is in the air. */
 export function stubFlightPose(from: StubPose, box: { w: number; h: number }, to: StubRect, k: number): StubPose {
   const t = clamp01(k);
   const e = enter(t);
@@ -630,24 +665,27 @@ export function stubFlightPose(from: StubPose, box: { w: number; h: number }, to
     cy: p.y,
     rotate: lerp(from.rotate, to.rotate, e) + STUB_FLIGHT.turn * Math.sin(Math.PI * e),
     scale: lerp(from.scale, endScale, e),
-    print: 1,
-    card: 0,
-    unfold: 0,
+    print: 1 - smooth(span01(t, ARC_MERGE.printOut)),
+    card: smooth(span01(t, ARC_MERGE.cardIn)),
+    sign: smooth(span01(t, ARC_MERGE.signIn)),
+    unfold: enter(span01(t, ARC_MERGE.unfold)),
     shadow: from.shadow * (1 - STUB_FLIGHT.shadowIn * e),
   };
 }
 
-/** The merge, `k` (linear time, 0 → 1) of STUB_MERGE.ms after the camera
- *  landed, from `at` (the stub where the arc left it, on the target): the
- *  card comes up, the print goes, the card unfolds, the shadow settles. At 1
- *  it is the cover stub, blank: exactly its rect, its card, no shadow. */
+/** Down, `k` (linear time, 0 → 1) of STUB_MERGE.ms after the camera landed
+ *  (or the stub arrived, whichever is later), from `at` (the stub where the
+ *  arc left it, on the target, already the cover stub): it settles onto the
+ *  map, its shadow going. At 1 it is the cover stub exactly: its rect, its
+ *  card, its sign, no shadow. */
 export function stubMergePose(at: StubPose, k: number): StubPose {
   const t = clamp01(k);
   return {
     ...at,
-    print: 1 - smooth(span01(t, STUB_MERGE.printOut)),
-    card: smooth(span01(t, STUB_MERGE.cardIn)),
-    unfold: enter(span01(t, STUB_MERGE.unfold)),
+    print: 0,
+    card: 1,
+    sign: 1,
+    unfold: 1,
     shadow: at.shadow * (1 - smooth(span01(t, STUB_MERGE.shadowOut))),
   };
 }
@@ -738,9 +776,15 @@ export function courierStep(state: CourierState, event: CourierEvent, free: Free
   };
   switch (s.phase) {
     case 'carry': {
-      if (s.target && now - s.freeAt >= STUB_CARRY.ms) {
-        const from = event.pose ?? carried(free);
-        s = { ...s, phase: 'arc', arcAt: now, from, arcMs: stubFlightMs({ x: from.cx, y: from.cy }, centreOf(s.target)) };
+      // Settled into the hand, and named: the arc sets off so that it lands
+      // as the camera touches down (`landsAt`), or at once when the camera
+      // is down already or no touchdown is said.
+      const from = s.target && now - s.freeAt >= STUB_CARRY.ms ? event.pose ?? carried(free) : null;
+      const arcMs = from && s.target ? stubFlightMs({ x: from.cx, y: from.cy }, centreOf(s.target)) : 0;
+      const landsAt = s.target?.landsAt;
+      const due = s.entryLanded != null || landsAt == null || !Number.isFinite(landsAt) || now >= landsAt - arcMs;
+      if (from && s.target && due) {
+        s = { ...s, phase: 'arc', arcAt: now, from, arcMs };
       } else if (
         (!s.target && s.entryLanded != null && now - s.entryLanded >= STUB_FLIGHT.targetGraceMs) ||
         now - s.freeAt >= STUB_FLIGHT.maxWaitMs
@@ -798,7 +842,7 @@ export function courierPose(state: CourierState, free: FreeStub, now: number): {
       const flown = state.target ? stubFlightPose(from, box, state.target, k) : from;
       const m = state.phase === 'merge' ? (now - state.mergeAt) / STUB_MERGE.ms : state.phase === 'handoff' ? 1 : 0;
       const pose = m > 0 ? stubMergePose(flown, m) : flown;
-      const opacity = state.phase === 'handoff' ? 1 - clamp01((now - state.endAt) / STUB_FLIGHT.handoffMs) : 1;
+      const opacity = state.phase === 'handoff' ? 1 - clamp01((now - state.endAt) / Math.max(1, STUB_FLIGHT.handoffMs)) : 1;
       return { pose, opacity };
     }
     case 'fade': {

@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import * as P from '../src/lib/boardingPass.ts';
 import * as Q from '../src/lib/qrCode.ts';
+import * as CAMERA from '../src/lib/explorerCamera.ts';
 import { TEAR_FREE_MS, mirrorAffine, tearPose } from '../src/lib/ticketTear.ts';
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
@@ -277,10 +278,33 @@ test('the pass assembles in one choreographed move of 0.8–1.2 s, as the last l
   assert.ok(at['flight-to'].at + at['flight-to'].ms >= at.route.at + at.route.ms, 'TO lands on its line once it is printed');
   assert.ok(at['flight-you'].at + at['flight-you'].ms >= at.grid.at + at.grid.ms, 'PASSENGER lands on its line once it is printed');
   assert.ok(at['flight-you'].at + at['flight-you'].ms >= at.paper.at + at.paper.ms);
+  assert.ok(at['flight-date'].at + at['flight-date'].ms >= at.grid.at + at.grid.ms, 'DATE lands on its line once it is printed');
   assert.equal(Math.max(...items.map((i) => i.at + i.ms)), at.hint.at + at.hint.ms);
-  // Calm: every part is at least 0.38 s long; the words fly under 0.9 s.
-  items.forEach((item) => assert.ok(item.ms >= 380, item.part));
+  // Calm: every part is at least 0.36 s long; the words fly under 0.9 s,
+  // 90 ms apart, and every one has landed before the print is done (review
+  // of 2026-09-29: "you" came last, after the pass was whole).
+  items.forEach((item) => assert.ok(item.ms >= 360, item.part));
   assert.ok(P.PASS_ASSEMBLY.flights.ms <= 900);
+  const printDone = Math.max(...['band', 'route', 'grid', 'qr', 'stubprint'].map((part) => at[part].at + at[part].ms));
+  const flights = ['flight-to', 'flight-you', 'flight-date'].map((part) => at[part]);
+  flights.forEach((flight, index) => {
+    assert.ok(flight.at + flight.ms <= printDone, `${['to', 'you', 'date'][index]} lands before the print is done`);
+    if (index) assert.equal(flight.at - flights[index - 1].at, 90);
+  });
+  // The paper and the stub are laid down (a wipe), never faded: faded, the
+  // white slab flashed onto the olive in 62 ms.
+  const motion = source('src/components/home/entranceMotion.ts');
+  const assembly = motion.slice(motion.indexOf('export function assemblePass'), motion.indexOf('// ── 2. The courier'));
+  assert.match(assembly, /paper: wipe\(/);
+  assert.match(assembly, /stub: wipe\(/);
+  assert.match(assembly, /clipPath: `inset\(-\$\{WIPE\}px 100% -\$\{WIPE\}px 0px\)`/);
+  assert.ok(at.paper.ms <= 500 && at.stub.at >= 200);
+  // Each word lifts off its sentence as its copy flies (never printed
+  // twice), and comes back once it has landed; TO bows up over the band.
+  assert.match(assembly, /src\.animate\(\[\{ visibility: 'hidden' \}, \{ visibility: 'hidden' \}\], \{ duration: item\.ms, delay: item\.at, fill: 'none' \}\)/);
+  assert.match(assembly, /wrap\.style\.visibility = 'hidden';/);
+  assert.match(assembly, /const bow = flight\.word === 'to' \? A\.flights\.bow : 0;/);
+  assert.ok(P.PASS_ASSEMBLY.flights.bow >= 40);
   // It starts as the last block is settling: after it started rising, before
   // it has finished.
   for (const blocks of [4, 5, 6]) {
@@ -295,7 +319,11 @@ test('the pass assembles in one choreographed move of 0.8–1.2 s, as the last l
   assert.match(intro, /data-asm="hint"/);
   assert.match(pass, /data-pass-land="to"/);
   assert.match(pass, /data-pass-land="you"/);
+  assert.match(pass, /data-pass-land="date"/);
   assert.match(intro, /data-pass-from=\{part\.land === 'you' \? 'you' : undefined\}/);
+  // DATE flies out of the archive's years only when they hold it (a fact,
+  // never a stretch).
+  assert.match(intro, /data-pass-from=\{at > 0 && fields\.date !== '—' && String\(piece\)\.includes\(fields\.date\) \? 'date' : undefined\}/);
   // Both on the first screen: the pass sits beside the words (desktop) or
   // under them (narrower), never a screen below.
   const css = source('src/styles/entrance.css');
@@ -369,45 +397,46 @@ test('the arc: 1.2–1.6 s, bowed up, a slight turn, onto the cover stub; the me
   assert.ok(near >= 1200 && near < 1210);
   assert.ok(mid > near && mid < 1600);
   assert.equal(far, 1600);
-  // At 0 it is where it set off; at 1 it is on the cover stub: centred on
-  // it, turned as it, the cover stub's width — still the pass's white stub,
-  // held in the air (its shadow shortened, not gone).
+  // At 0 it is where it set off, the pass's white stub; at 1 it is on the
+  // cover stub — centred on it, turned as it, the cover stub's width — and
+  // it IS the cover stub (review of 2026-09-29: it used to hang white, then
+  // turn into a blank slab after the landing): its card, its sign, its
+  // height; only its shadow (shortened, not gone) says it is in the air.
   const a = P.stubFlightPose(from, BOX, to, 0);
   assert.ok(close(a.cx, from.cx) && close(a.cy, from.cy) && close(a.rotate, from.rotate) && close(a.scale, from.scale));
-  assert.equal(a.print, 1);
-  assert.equal(a.card, 0);
+  assert.deepEqual([a.print, a.card, a.sign, a.unfold], [1, 0, 0, 0]);
   const z = P.stubFlightPose(from, BOX, to, 1);
   assert.ok(close(z.cx, end.x) && close(z.cy, end.y) && close(z.rotate, to.rotate, 1e-9));
   assert.ok(close(BOX.w * z.scale, to.w));
-  assert.equal(z.print, 1);
-  assert.equal(z.card, 0);
+  assert.deepEqual([z.print, z.card, z.sign, z.unfold], [0, 1, 1, 1]);
   assert.ok(z.shadow > 0.5 && z.shadow < from.shadow);
-  // The merge (once the camera is down): in place, it becomes the cover
-  // stub, blank — exactly its rect (the card's height lands at the cover
-  // stub's), its card, no print, no shadow.
   const card = P.courierCard(BOX, to);
   assert.ok(close(card.h * z.scale, to.h));
   assert.ok(close(card.w * z.scale, to.w));
+  assert.equal(P.unfoldInset(card.h, BOX.h, z.unfold), 0);
+  // On the way: the card (stop 01's stock) is up under the white paper
+  // before the paper goes (never a see-through moment), the sign prints on
+  // the card only (never on the white), the card unfolds last.
+  for (let i = 0; i <= 60; i += 1) {
+    const p = P.stubFlightPose(from, BOX, to, i / 60);
+    assert.ok(p.card + p.print >= 0.99, `${i / 60}`);
+    assert.ok(p.sign <= p.card + 1e-9, `${i / 60}: the sign is on the card`);
+    if (i / 60 < P.ARC_MERGE.unfold[0]) assert.equal(p.unfold, 0);
+  }
+  // Down, it settles in place (its shadow goes) and is exactly the cover
+  // stub: nothing else changes.
   const m0 = P.stubMergePose(z, 0);
-  assert.deepEqual([m0.cx, m0.cy, m0.rotate, m0.scale, m0.print, m0.card, m0.unfold, m0.shadow], [z.cx, z.cy, z.rotate, z.scale, 1, 0, 0, z.shadow]);
+  assert.deepEqual([m0.cx, m0.cy, m0.rotate, m0.scale, m0.print, m0.card, m0.sign, m0.unfold, m0.shadow], [z.cx, z.cy, z.rotate, z.scale, 0, 1, 1, 1, z.shadow]);
   const m1 = P.stubMergePose(z, 1);
-  assert.deepEqual([m1.cx, m1.cy, m1.rotate, m1.scale], [z.cx, z.cy, z.rotate, z.scale]);
-  assert.equal(P.unfoldInset(card.h, BOX.h, m1.unfold), 0);
-  assert.equal(m1.print, 0);
-  assert.equal(m1.card, 1);
-  assert.equal(m1.shadow, 0);
+  assert.deepEqual([m1.cx, m1.cy, m1.rotate, m1.scale, m1.print, m1.card, m1.sign, m1.unfold, m1.shadow], [z.cx, z.cy, z.rotate, z.scale, 0, 1, 1, 1, 0]);
   let before = m0;
   for (let i = 1; i <= 30; i += 1) {
     const p = P.stubMergePose(z, i / 30);
-    assert.ok(p.print <= before.print + 1e-12 && p.card >= before.card - 1e-12 && p.unfold >= before.unfold - 1e-12 && p.shadow <= before.shadow + 1e-12);
+    assert.ok(p.shadow <= before.shadow + 1e-12);
     before = p;
   }
-  // The card is up before the print is gone: never a see-through moment.
-  for (let i = 0; i <= 30; i += 1) {
-    const p = P.stubMergePose(z, i / 30);
-    assert.ok(p.card + p.print >= 0.99, `${i / 30}`);
-  }
-  assert.ok(P.STUB_MERGE.ms >= 380 && P.STUB_MERGE.ms <= 700);
+  assert.ok(P.STUB_MERGE.ms >= 160 && P.STUB_MERGE.ms <= 400);
+  assert.equal(P.STUB_FLIGHT.handoffMs, 0, 'the real stub shows and the copy goes in one frame');
   // Bowed up: mid-way it is above the chord's middle, by no more than bowMax.
   const c = P.arcControl({ x: from.cx, y: from.cy }, end);
   assert.ok(c.y < (from.cy + end.y) / 2);
@@ -424,7 +453,7 @@ test('the arc: 1.2–1.6 s, bowed up, a slight turn, onto the cover stub; the me
     const base = from.rotate + (to.rotate - from.rotate) * ((p.scale - from.scale) / (z.scale - from.scale));
     maxTurn = Math.max(maxTurn, Math.abs(p.rotate - base));
     assert.ok(Math.hypot(p.cx - prev.cx, p.cy - prev.cy) < 40, `step ${i}`);
-    assert.ok(p.print <= prev.print + 1e-12 && p.card >= prev.card - 1e-12 && p.unfold >= prev.unfold - 1e-12);
+    assert.ok(p.print <= prev.print + 1e-12 && p.card >= prev.card - 1e-12 && p.sign >= prev.sign - 1e-12 && p.unfold >= prev.unfold - 1e-12);
     prev = p;
   }
   assert.ok(maxTurn <= P.STUB_FLIGHT.turn + 0.5 && maxTurn >= P.STUB_FLIGHT.turn * 0.8, `${maxTurn}°`);
@@ -488,7 +517,7 @@ test('the hand-off: it merges only once it has arrived AND the camera is down, s
   // 1.6 s glide), a long descent: the stub arrives first and waits there,
   // fixed while the camera comes down under it; then it merges.
   const slow = runHandoff({ targetAt: 2300, landedAt: 2300 + 4400 });
-  assert.deepEqual(slow.phases.map((p) => p.phase), ['carry', 'arc', 'hold', 'merge', 'handoff', 'done']);
+  assert.deepEqual(slow.phases.map((p) => p.phase), ['carry', 'arc', 'hold', 'merge', 'done']);
   const arc = slow.phases.find((p) => p.phase === 'arc');
   assert.ok(arc.now >= 2300 && arc.now < 2300 + 40);
   const hold = slow.phases.find((p) => p.phase === 'hold');
@@ -498,8 +527,27 @@ test('the hand-off: it merges only once it has arrived AND the camera is down, s
   assert.equal(slow.said.length, 1);
   assert.ok(slow.said[0] >= merge.now + P.STUB_MERGE.ms && slow.said[0] < merge.now + P.STUB_MERGE.ms + 20);
   assert.equal(slow.removed.length, 1);
-  assert.ok(slow.removed[0] - slow.said[0] >= P.STUB_FLIGHT.handoffMs);
+  // It is the cover stub already: the real one shows and the copy goes in
+  // the same frame.
+  assert.equal(slow.removed[0], slow.said[0]);
   assert.equal(slow.jumps, 0);
+  // The contract says when the camera will touch down (`landsAt`): the arc
+  // is timed to land on it — no hanging in the air over the planet (review
+  // of 2026-09-29: 4.6 s still at 1728) — the stub held in the hand until
+  // then.
+  const landsAt = 700 + 3900;
+  const timed = runHandoff({ targetAt: 700, landedAt: landsAt, target: { ...TARGET, landsAt } });
+  const tArc = timed.phases.find((p) => p.phase === 'arc');
+  const tMerge = timed.phases.find((p) => p.phase === 'merge');
+  assert.ok(tArc.now > 700 + P.STUB_CARRY.ms, 'held in the hand first');
+  assert.ok(Math.abs(tMerge.now - landsAt) <= 20, `merges at the touchdown (${tMerge.now} vs ${landsAt})`);
+  assert.ok(!timed.phases.some((p) => p.phase === 'hold' && tMerge.now - p.now > 20), 'never hangs on the rect');
+  assert.ok(timed.said[0] - landsAt <= P.STUB_MERGE.ms + 20);
+  assert.equal(timed.jumps, 0);
+  // The touchdown brought forward (the entry cut short) while it is still
+  // in the hand: it sets off at once.
+  const cut = runHandoff({ targetAt: 700, landedAt: 1800, target: { ...TARGET, landsAt: 1800 } });
+  assert.ok(cut.phases.find((p) => p.phase === 'arc').now <= 700 + P.STUB_CARRY.ms + 20);
   // A short descent (or one the reader cut short): the camera is down before
   // the stub arrives; it merges the moment it arrives.
   const quick = runHandoff({ targetAt: 2300, landedAt: 2600 });
@@ -562,11 +610,12 @@ test('let go on its way: the reader already elsewhere, the stub fades where it i
   assert.deepEqual(fading.pose, at);
   assert.ok(fading.opacity > 0 && fading.opacity < 1);
   assert.equal(P.courierPose(state, free, 1200 + P.STUB_FLIGHT.letGoMs).opacity, 0);
-  // Already the cover's stub (the landing said): its blank copy just goes.
+  // Already the cover's stub (the landing said): the copy went in the frame
+  // the real stub showed; there is nothing left to let go.
   const handed = runHandoff({ targetAt: 2300, landedAt: 6700, letGoAt: 6700 + P.STUB_MERGE.ms + 60 });
-  assert.equal(handed.letGone.phase, 'handoff');
+  assert.equal(handed.letGone, null);
   assert.equal(handed.said.length, 1);
-  assert.equal(handed.removed[0], handed.letGone.now);
+  assert.equal(handed.removed[0], handed.said[0]);
   // The page tells it when the explorer leaves stop 01 before the landing.
   const motion = source('src/components/home/entranceMotion.ts');
   assert.match(motion, /if \(entryId && \(detail\.phase === 'globe' \|\| \(detail\.phase === 'explore' && detail\.current !== entryId\)\)\) letGo\(\);/);
@@ -579,8 +628,13 @@ test('the hand-off contract, as the page speaks it', () => {
   assert.equal(P.COVER_STUB_TARGET, '__archiveCoverStubTarget');
   // Torn, the entrance asks for the explorer with the stub's hand-off.
   const intro = source('src/components/home/EntranceIntro.tsx');
-  assert.match(intro, /requestExplore\(\{ from: 'boarding-pass', stubHandoff \}\)/);
+  assert.match(intro, /requestExplore\(\{ from: 'boarding-pass', stubHandoff, \.\.\.\(arrivingMs > 0 \? \{ arrivingMs \} : null\) \}\)/);
   assert.match(intro, /ask\(true\)/);
+  // …as its glide SETS OFF (the entry rides under the glide), and says when
+  // the glide has landed (HomePage takes the entrance off then).
+  assert.match(intro, /const duration = ARRIVAL_SECONDS \* 1000;\s*ask\(true, duration\);/);
+  assert.match(intro, /callbacks\.current\.onGlided\?\.\(\);/);
+  assert.match(source('src/lib/explorer.ts'), /arrivingMs\?: number;/);
   assert.match(source('src/lib/explorer.ts'), /stubHandoff\?: boolean;/);
   // The courier reads the explorer's derived rect, never a rect of its own
   // per frame (derive, do not sample), and says the landing on window.
@@ -596,7 +650,9 @@ test('the hand-off contract, as the page speaks it', () => {
   assert.match(courier, /astro:before-swap/);
   // The glide: the page goes on by itself, a beat after the stub is free,
   // on the glide's own curve.
-  assert.equal(P.ARRIVAL_SECONDS, 1.6);
+  // One number for the glide and the entry riding under it.
+  assert.equal(P.ARRIVAL_SECONDS, 1.3);
+  assert.equal(P.ARRIVAL_SECONDS * 1000, CAMERA.ENTRY.glideMs);
   assert.ok(P.GLIDE_AFTER_FREE_MS > 0 && P.GLIDE_AFTER_FREE_MS <= 200);
   assert.match(intro, /arrivalCurve\(k\)/);
   // Values, not structure: neither component branches its markup on

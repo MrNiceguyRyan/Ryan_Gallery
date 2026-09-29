@@ -29,16 +29,17 @@ import { bezierFn } from '../../lib/motion';
 // block — his name and what the archive is, its numbers, its regions and
 // years, what the camera kept, and the first stop — the way the reference's
 // cover sets (src/lib/boardingPass.ts, COVER_REVEAL). At the end of it the
-// boarding pass assembles beside the words, and two words fly out of the
-// last sentence onto it (entranceMotion.ts, assemblePass). Then it waits:
-// the pass is the start button, and only its stub tears it (BoardingPass).
-// Torn, the page goes on by itself: a beat, then one glide down onto the
-// globe (rising, already facing stop 01) — the words and the pass's main
-// part going up and away — while the stub stays with the reader, and flies
-// on to become stop 01's cover's stub (entranceMotion.ts, the courier; the
-// hand-off contract is in src/lib/boardingPass.ts). Landed, the entrance
-// asks for the explorer (`requestExplore`, with `stubHandoff`) and HomePage
-// takes it off the page.
+// boarding pass assembles beside the words, and three facts fly out of the
+// words onto it (entranceMotion.ts, assemblePass). Then it waits: the pass
+// is the start button, and only its stub tears it (BoardingPass). Torn, the
+// page goes on by itself: a beat, then one glide down onto the globe
+// (rising, already facing stop 01) — the words and the pass's main part
+// going up and away — while the stub stays with the reader, and flies on to
+// become stop 01's cover's stub (entranceMotion.ts, the courier; the
+// hand-off contract is in src/lib/boardingPass.ts). As the glide sets off,
+// the entrance asks for the explorer (`requestExplore`, with `stubHandoff`
+// and the glide's `arrivingMs`: the camera comes down under the glide), and
+// once it has landed HomePage takes the entrance off the page.
 //
 // A second view (the film skipped: src/lib/reelVisit.ts) and Back to the
 // start open on the cover already composed and the pass ready: nothing
@@ -66,6 +67,9 @@ interface Props {
   /** The globe may come in: HomePage lets go of the atlas's held reveal.
    *  `glide`: the page glides it into view; false when it cuts. */
   onArrive: (glide: boolean) => void;
+  /** The glide has landed on the explorer (HomePage takes the entrance off
+   *  the page: the entry has been under way since the glide set off). */
+  onGlided?: () => void;
   /** The opening film still lies over the page. */
   covered: boolean;
 }
@@ -113,7 +117,7 @@ function Words({ block }: { block: CoverBlock }) {
   );
 }
 
-export default function EntranceIntro({ facts, first, nextTop, onArrive, covered }: Props) {
+export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlided, covered }: Props) {
   const sectionRef = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -126,8 +130,8 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, covered
   const [lifted, setLifted] = useState(false);
   const fields = useMemo(() => passFields(first), [first]);
   const blocks = useMemo(() => coverBlocks(facts, first), [facts, first]);
-  const callbacks = useRef({ nextTop, onArrive });
-  callbacks.current = { nextTop, onArrive };
+  const callbacks = useRef({ nextTop, onArrive, onGlided });
+  callbacks.current = { nextTop, onArrive, onGlided };
   const flow = useRef({ released: false, gliding: false, asked: false });
   // The glide (set by the page's effect below), started once the stub is free.
   const glideRef = useRef<() => void>(() => {});
@@ -205,17 +209,18 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, covered
     let disposed = false;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-    const ask = (stubHandoff: boolean) => {
+    // `arrivingMs`: the glide still bringing the page down (the entry starts
+    // under it: the camera comes down while the globe rises).
+    const ask = (stubHandoff: boolean, arrivingMs = 0) => {
       if (state.asked) return;
       state.asked = true;
-      state.gliding = false;
       // Keyboard focus left on the stub's button (or dropped to the body as
       // the torn stub's button went) goes on with the page.
       const active = document.activeElement;
       if (!active || active === document.body || (active instanceof HTMLElement && section.contains(active))) {
         document.getElementById('main-content')?.focus({ preventScroll: true });
       }
-      requestExplore({ from: 'boarding-pass', stubHandoff });
+      requestExplore({ from: 'boarding-pass', stubHandoff, ...(arrivingMs > 0 ? { arrivingMs } : null) });
     };
     const release = (glide: boolean) => {
       if (state.released) return;
@@ -223,7 +228,10 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, covered
       callbacks.current.onArrive(glide);
     };
 
-    // The glide, a beat after the stub is free: down onto the globe.
+    // The glide, a beat after the stub is free: down onto the globe. The
+    // explorer is asked for as it sets off (the entry rides under it: the
+    // camera is already coming down as the globe rises), and told when it
+    // has landed (HomePage then takes the entrance off the page).
     glideRef.current = () => {
       const next = callbacks.current.nextTop();
       const from = window.scrollY;
@@ -236,13 +244,18 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, covered
       state.gliding = true;
       const start = performance.now();
       const duration = ARRIVAL_SECONDS * 1000;
+      ask(true, duration);
       const step = (now: number) => {
         tween = 0;
         if (disposed) return;
         const k = Math.min(1, (now - start) / duration);
         window.scrollTo({ top: from + (next - from) * arrivalCurve(k), behavior: 'instant' as ScrollBehavior });
-        if (k < 1) tween = requestAnimationFrame(step);
-        else ask(true);
+        if (k < 1) {
+          tween = requestAnimationFrame(step);
+          return;
+        }
+        state.gliding = false;
+        callbacks.current.onGlided?.();
       };
       tween = requestAnimationFrame(step);
     };
@@ -304,7 +317,15 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, covered
                   <p key="kicker" className="ec-block ec-kicker" style={{ ['--b' as string]: indexOf(block) } as CSSProperties}>
                     <span className="ec-w ec-kicker__dot" aria-hidden="true" />
                     {block.pieces.map((piece, at) => (
-                      <span key={at} className={`ec-w${at > 0 ? ' ec-kicker__years' : ''}`}>{String(piece)}</span>
+                      <span
+                        key={at}
+                        className={`ec-w${at > 0 ? ' ec-kicker__years' : ''}`}
+                        // The pass's DATE flies out of the archive's years
+                        // (when they hold it: the first chapter's year).
+                        data-pass-from={at > 0 && fields.date !== '—' && String(piece).includes(fields.date) ? 'date' : undefined}
+                      >
+                        {String(piece)}
+                      </span>
                     ))}
                   </p>
                 ) : (

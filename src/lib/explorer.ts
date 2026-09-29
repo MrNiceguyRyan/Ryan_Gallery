@@ -21,10 +21,10 @@
 
 // ── The seam ──
 // The entrance in front of the explorer hands the page over once the globe
-// is on screen: the boarding pass, torn, asks as the page's glide lands with
-// the globe risen (EntranceIntro, with `stubHandoff`: its torn stub is on
-// its way to stop 01's cover — src/lib/boardingPass.ts), and nothing synthetic
-// follows the ask. Anyone can ask for it:
+// is coming on: the boarding pass, torn, asks as the page's glide sets off
+// (EntranceIntro, with `stubHandoff`: its torn stub is on its way to stop
+// 01's cover — src/lib/boardingPass.ts; and `arrivingMs`: the entry rides
+// under the glide), and nothing synthetic follows the ask. Anyone can ask for it:
 //   import { requestExplore } from '../lib/explorer';
 //   requestExplore();            // or: window.dispatchEvent(new CustomEvent('archive:explore'))
 // The homepage answers by taking the page to the explorer (if it is not
@@ -51,6 +51,14 @@ export interface ExploreRequest {
    *  onto the cover: "The stub hand-off" below): the cover's own stub waits,
    *  hidden, for STUB_LANDED_EVENT. */
   stubHandoff?: boolean;
+  /** The entrance is still bringing the page to the explorer itself (its
+   *  glide), for this many ms more: the entry starts now, under the glide —
+   *  the camera begins to come down while the globe rises — and the page is
+   *  not scrolled for it; the entrance is taken off once the glide has
+   *  landed (EntranceIntro calls `onGlided`). Review of 2026-09-29: the
+   *  click-to-cover took 7.2 s, the torn stub hanging still for 4.6 s of it,
+   *  where the reference's board settles 1.6 s after its click. */
+  arrivingMs?: number;
 }
 
 // ── The stub hand-off (the entrance ↔ the explorer) ──
@@ -74,6 +82,15 @@ export interface ExploreRequest {
 export const ENTRY_LANDED_EVENT = 'archive:entry-landed';
 export const STUB_LANDED_EVENT = 'archive:stub-landed';
 export const STUB_WAIT_MS = 4000;
+/** After the stub has landed, the ticket and the shields stay out of the
+ *  hand this much longer, ms: a tap that cut the entry short (a phone's
+ *  finger coming down where the cover is about to be) is never read as a
+ *  tap on the cover (review of 2026-09-29: it opened the story, 4/4). */
+export const ARRIVAL_INERT_MS = 250;
+/** Said on window once the map is still (Mapbox's 'idle') after the entry
+ *  has landed: its tiles are in. Reduced motion holds the entrance over the
+ *  explorer until then (and the cover's print is decoded), and cuts once. */
+export const ATLAS_IDLE_EVENT = 'archive:atlas-idle';
 
 /** (x, y) the top-left of the UNROTATED box, in viewport px (like a DOMRect
  *  of the box before its turn); `rotate` in degrees, clockwise, about the
@@ -85,6 +102,11 @@ export interface CoverStubTarget {
   h: number;
   /** Degrees (the cover lies square on the screen: 0). */
   rotate: number;
+  /** When the entry will touch down (performance.now() ms), once it has
+   *  started: the entrance times its arc to land on it, as the reference's
+   *  board settles the moment its planet stops. Absent before the entry
+   *  starts. */
+  landsAt?: number;
 }
 
 declare global {
@@ -92,7 +114,21 @@ declare global {
     __archiveExplorer?: ExplorerDetail;
     __archiveExploreAsked?: ExploreRequest;
     __archiveCoverStubTarget?: () => CoverStubTarget | null;
+    __archiveEntryLandsAt?: number | null;
   }
+}
+
+/** The entry's touchdown (performance.now() ms), written by whoever runs the
+ *  entry's clock (HomePage on a desktop, RouteAtlas's flight on a phone) and
+ *  read into the stub target (`landsAt`); null when no entry is under way. */
+export function setEntryLandsAt(at: number | null) {
+  if (typeof window === 'undefined') return;
+  window.__archiveEntryLandsAt = at != null && Number.isFinite(at) ? at : null;
+}
+export function entryLandsAt(): number | null {
+  if (typeof window === 'undefined') return null;
+  const at = window.__archiveEntryLandsAt;
+  return typeof at === 'number' && Number.isFinite(at) ? at : null;
 }
 
 /** Ask the homepage to enter the explorer (see "The seam"). Safe to call

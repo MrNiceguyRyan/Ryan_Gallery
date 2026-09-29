@@ -29,12 +29,16 @@ import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardi
 import { NOTES_LIVE } from '../../lib/notesNav';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
 import {
+  ARRIVAL_INERT_MS,
+  ATLAS_IDLE_EVENT,
   ENTRY_LANDED_EVENT,
   EXPLORE_EVENT,
   EXPLORER_START,
   STUB_LANDED_EVENT,
   STUB_WAIT_MS,
   announceExplorer,
+  entryLandsAt,
+  setEntryLandsAt,
   explore,
   neighbour,
   phoneCard,
@@ -44,7 +48,7 @@ import {
   type ExplorerEffect,
   type ExplorerState,
 } from '../../lib/explorer';
-import { ENTRY } from '../../lib/explorerCamera';
+import { ENTRY, ENTRY_FINISH, ENTRY_SPAN, finishEntry as finishEntryPlan } from '../../lib/explorerCamera';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
 // the opening is settling without creating Mapbox's WebGL context or mounting
@@ -69,6 +73,64 @@ const ROUTE_FALLBACKS: Record<string, [number, number]> = {
   'district of columbia': [-77.0369, 38.9072],
   baltimore: [-76.6122, 39.2904],
 };
+
+// Reduced motion's one cut onto the explorer (HomePage, the hand-over): once
+// the map is still after the entry has landed (ATLAS_IDLE_EVENT) and the
+// cover in hand's print is decoded — never longer than STILL_CAP_MS.
+// Returns a cancel.
+const STILL_CAP_MS = 2500;
+function holdUntilStill(then: () => void): () => void {
+  let over = false;
+  let idle = false;
+  let decoded = false;
+  let raf = 0;
+  const stop = () => {
+    over = true;
+    window.clearTimeout(cap);
+    cancelAnimationFrame(raf);
+    window.removeEventListener(ATLAS_IDLE_EVENT, onIdle);
+    window.removeEventListener(ENTRY_LANDED_EVENT, onLanded);
+  };
+  const finish = () => {
+    if (over) return;
+    stop();
+    then();
+  };
+  const check = () => {
+    if (idle && decoded) finish();
+  };
+  function onIdle() {
+    idle = true;
+    check();
+  }
+  function onLanded() {
+    let frames = 0;
+    const look = () => {
+      raf = 0;
+      if (over) return;
+      const img = document.querySelector<HTMLImageElement>('.archive-dock[data-at] .archive-photo-frame img');
+      if (!img && frames < 30) {
+        frames += 1;
+        raf = requestAnimationFrame(look);
+        return;
+      }
+      const done = () => {
+        decoded = true;
+        check();
+      };
+      if (!img || typeof img.decode !== 'function') {
+        done();
+        return;
+      }
+      img.decode().then(done, done);
+    };
+    raf = requestAnimationFrame(look);
+  }
+  const cap = window.setTimeout(finish, STILL_CAP_MS);
+  window.addEventListener(ATLAS_IDLE_EVENT, onIdle);
+  window.addEventListener(ENTRY_LANDED_EVENT, onLanded);
+  return stop;
+}
 
 function documentTop(node: HTMLElement) {
   let top = 0;
@@ -410,7 +472,13 @@ export default function HomePage({ collections }: Props) {
     const chapterId = `archive-item-${collection._id}`;
     const chapter = document.getElementById(chapterId);
     const chapterControl = chapter?.querySelector<HTMLElement>('[role="button"], button') ?? null;
-    const returnFocus = chapterControl ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    // Focus comes back to what asked for the story: the rail (or a row, a
+    // key) that had it; a pointer on the cover leaves nothing focused, and
+    // the chapter's own control stands in for it (its ring is bone: the
+    // view's one lime stays on the interface — review of 2026-09-29).
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const invoker = active && active !== document.body && active.id !== 'main-content' && pageRootRef.current?.contains(active) ? active : null;
+    const returnFocus = invoker ?? chapterControl;
     const dockedCover = coverOf(chapter);
     const plateRoot = dockedCover?.hasAttribute('data-at') ? dockedCover : null;
     const image = plateRoot?.querySelector<HTMLImageElement>('.archive-photo-frame img') ?? null;
@@ -473,9 +541,15 @@ export default function HomePage({ collections }: Props) {
     section?.dispatchEvent(new CustomEvent('archive:tear-stub', { detail }));
     if (!detail.handled) go();
   }, []);
-  const nextFlight = useCallback((kind: AtlasFlight['kind'], id: string | null, entry = false) => {
+  const nextFlight = useCallback((kind: AtlasFlight['kind'], id: string | null, entry = false, leadMs = 0) => {
     flightTokenRef.current += 1;
-    const next: AtlasFlight = { kind, id, token: flightTokenRef.current, ...(entry ? { entry: true } : null) };
+    const next: AtlasFlight = {
+      kind,
+      id,
+      token: flightTokenRef.current,
+      ...(entry ? { entry: true } : null),
+      ...(leadMs > 0 ? { leadMs } : null),
+    };
     setFlight(next);
     return next.token;
   }, []);
@@ -484,29 +558,40 @@ export default function HomePage({ collections }: Props) {
   // brought up (facing stop 01 already, on the atlas's focal point) onto the
   // place, on the entry's clock (src/lib/explorerCamera.ts ENTRY). Nothing
   // turns first: the turn from the first screen's corner globe went with it.
-  // Reduced motion: a cut.
+  // The torn pass asks as its glide sets off, so the clock starts under the
+  // glide (ENTRY.diveMs counts it) and says when it will touch down
+  // (`setEntryLandsAt`: the stub's arc lands on it). Reduced motion: a cut.
   const dispatchRef = useRef<(action: ExplorerAction) => void>(() => {});
+  // The glide still bringing the page down when the entry was asked for, ms
+  // (the phone's entry flight is that much longer).
+  const entryLeadRef = useRef(0);
+  const entryDown = useCallback(() => {
+    entryAnimRef.current = null;
+    setEntryLandsAt(null);
+    dispatchRef.current({ type: 'entered' });
+  }, []);
   const runEntry = useCallback((id: string | null) => {
     entryAnimRef.current?.stop();
-    const entered = () => {
-      entryAnimRef.current = null;
-      dispatchRef.current({ type: 'entered' });
-    };
+    const lead = entryLeadRef.current;
+    entryLeadRef.current = 0;
     if (!desktopLayout) {
-      entryFlightRef.current = nextFlight('entry', id);
+      entryFlightRef.current = nextFlight('entry', id, false, lead);
       return;
     }
     if (reduce) {
       entryProgress.set(1);
-      entered();
+      entryDown();
       return;
     }
     let stopped = false;
+    const from = entryProgress.get();
+    const ms = ENTRY.diveMs * (1 - Math.min(0.999, Math.max(0, from)));
+    setEntryLandsAt(performance.now() + ms);
     const dive = animate(entryProgress, 1, {
-      duration: ENTRY.diveMs / 1000,
+      duration: ms / 1000,
       ease: 'linear',
       onComplete: () => {
-        if (!stopped) entered();
+        if (!stopped) entryDown();
       },
     });
     entryAnimRef.current = {
@@ -515,7 +600,7 @@ export default function HomePage({ collections }: Props) {
         dive.stop();
       },
     };
-  }, [desktopLayout, entryProgress, nextFlight, reduce]);
+  }, [desktopLayout, entryDown, entryProgress, nextFlight, reduce]);
 
   // ── The entrance (EntranceIntro) ──
   // On the page above the explorer until the explorer has it (`entranceOn`);
@@ -540,6 +625,9 @@ export default function HomePage({ collections }: Props) {
     entryAnimRef.current?.stop();
     entryAnimRef.current = null;
     entryFlightRef.current = null;
+    finishingRef.current = false;
+    glidePendingRef.current = false;
+    setEntryLandsAt(null);
     setPageVeiled(true);
     window.setTimeout(() => {
       if (desktopLayout) {
@@ -616,6 +704,8 @@ export default function HomePage({ collections }: Props) {
   const onArrive = useCallback((token: number) => {
     if (token === entryFlightRef.current) {
       entryFlightRef.current = null;
+      finishingRef.current = false;
+      setEntryLandsAt(null);
       dispatchRef.current({ type: 'entered' });
     }
   }, []);
@@ -623,21 +713,51 @@ export default function HomePage({ collections }: Props) {
   // ── The entry, cut short ──
   // Being able to stop a motion is itself a comfort: while the entry plays,
   // a key (Escape among them), a press anywhere or a second turn of the wheel
-  // sets the camera down on the place at once — the desktop's clocks to
-  // their ends (RouteAtlas dips the canvas and cuts, as reduced motion
-  // does), the phone's flight cut onto the place.
+  // plays the rest of it quickly, from where the camera is — never a jump
+  // (review of 2026-09-29: the planet to the place in one frame, then flat
+  // unloaded ground): the desktop's clock on ENTRY_FINISH (velocity-
+  // continuous, the zoom under twice the flights' cap), the phone's flight
+  // turned onto the place in a short turn from the live camera ('finish').
+  // An entry that would be down sooner on its own is left to land (cutting
+  // it short never makes it later). Says whether it had an entry to finish.
+  const finishingRef = useRef(false);
   const finishEntry = useCallback(() => {
-    if (explorerRef.current.phase !== 'entering') return;
+    if (explorerRef.current.phase !== 'entering') return false;
+    if (finishingRef.current) return true;
+    const landsAt = entryLandsAt();
+    const left = landsAt != null ? landsAt - performance.now() : Infinity;
     if (desktopLayout) {
+      const p0 = entryProgress.get();
+      const plan = finishEntryPlan(p0, 1000 / ENTRY.diveMs, ENTRY_SPAN);
+      if (left <= plan.ms) return true;
+      finishingRef.current = true;
       entryAnimRef.current?.stop();
-      entryAnimRef.current = null;
-      entryProgress.set(1);
-      dispatchRef.current({ type: 'entered' });
-      return;
+      setEntryLandsAt(performance.now() + plan.ms);
+      let stopped = false;
+      const rest = animate(entryProgress, 1, {
+        duration: plan.ms / 1000,
+        ease: (tau: number) => (plan.at(tau) - p0) / Math.max(1e-6, 1 - p0),
+        onComplete: () => {
+          finishingRef.current = false;
+          if (!stopped) entryDown();
+        },
+      });
+      entryAnimRef.current = {
+        stop: () => {
+          stopped = true;
+          finishingRef.current = false;
+          rest.stop();
+        },
+      };
+      return true;
     }
     const id = explorerRef.current.current;
-    if (id && entryFlightRef.current != null) entryFlightRef.current = nextFlight('cut', id, true);
-  }, [desktopLayout, entryProgress, nextFlight]);
+    if (id && entryFlightRef.current != null && left > ENTRY_FINISH.phoneMs) {
+      finishingRef.current = true;
+      entryFlightRef.current = nextFlight('finish', id, true);
+    }
+    return true;
+  }, [desktopLayout, entryDown, entryProgress, nextFlight]);
 
   // A window that crosses the phone/desktop line with the map in hand (a
   // tablet turned, a window dragged narrower): the other layout's camera is
@@ -662,17 +782,29 @@ export default function HomePage({ collections }: Props) {
   }, [desktopLayout, entryProgress, nextFlight]);
 
   // ── The hand-over: the explorer takes the page ──
-  // Asked for through the seam (below): the boarding pass, torn, asks once
-  // the globe has risen (EntranceIntro's glide has brought the page to the
-  // explorer's top); anyone else may ask too. The page is brought to the
-  // explorer's top if it is not there yet (a glide a touch stopped short, an
-  // ask from elsewhere), then the entrance above is taken off the page in
-  // the same frame as the scroll goes to 0 — nothing on screen moves — and
-  // the camera goes down onto stop 01. Nothing synthetic is dispatched
-  // after the ask: a real key, press or new wheel cuts the entry short.
-  const handOverRef = useRef<(enter: () => void) => void>(() => {});
+  // Asked for through the seam (below): the boarding pass, torn, asks as
+  // its glide sets off (`arrivingMs`): the camera starts down at once, under
+  // the glide, and the entrance is taken off the page when the glide lands
+  // (`onGlided`) in the same frame as the scroll goes to 0 — nothing on
+  // screen moves. Anyone else may ask too: the page is brought to the
+  // explorer's top if it is not there yet, the entrance taken off, and the
+  // camera goes down onto stop 01. Reduced motion holds the entrance until
+  // the explorer is still and whole, then cuts once. Nothing synthetic is
+  // dispatched after the ask: a real key, press or new wheel cuts the entry
+  // short.
+  const handOverRef = useRef<(enter: () => void, ask: ExploreRequest) => void>(() => {});
   const handOverTween = useRef(0);
-  handOverRef.current = (enter: () => void) => {
+  // The entrance's glide still under way when the entry was asked for: the
+  // entrance goes once it has landed (`onGlided`).
+  const glidePendingRef = useRef(false);
+  const stillHoldRef = useRef<(() => void) | null>(null);
+  const takeEntranceOff = useCallback(() => {
+    handOverTween.current = 0;
+    if (!entranceOnRef.current) return;
+    entranceOnRef.current = false;
+    setEntranceOn(false);
+  }, []);
+  handOverRef.current = (enter: () => void, ask: ExploreRequest) => {
     const section = explorerSectionRef.current;
     if (!entranceOnRef.current || !section) {
       enter();
@@ -680,15 +812,37 @@ export default function HomePage({ collections }: Props) {
     }
     setGlobeHeld(false);
     cancelAnimationFrame(handOverTween.current);
+    stillHoldRef.current?.();
     const done = () => {
-      handOverTween.current = 0;
-      entranceOnRef.current = false;
-      setEntranceOn(false);
+      takeEntranceOff();
       enter();
     };
+    // The torn pass asks as its glide sets off: the entry starts now, under
+    // the glide (the camera coming down while the globe rises), and nothing
+    // scrolls the page but the glide itself; the entrance goes as it lands.
+    const arriving = Math.max(0, ask.arrivingMs ?? 0);
+    if (arriving > 0 && !reduce) {
+      glidePendingRef.current = true;
+      entryLeadRef.current = arriving;
+      enter();
+      return;
+    }
+    if (reduce) {
+      // Reduced motion: the explorer is set on stop 01 under the entrance,
+      // and the entrance is cut away only once the map is still with its
+      // tiles in (ATLAS_IDLE_EVENT) and the cover's print is decoded — one
+      // cut, never onto an empty explorer (review of 2026-09-29: a flat
+      // photograph, no tiles for ~250 ms, the idle line before MIAMI).
+      stillHoldRef.current = holdUntilStill(() => {
+        stillHoldRef.current = null;
+        takeEntranceOff();
+      });
+      enter();
+      return;
+    }
     const top = documentTop(section);
     const from = window.scrollY;
-    if (Math.abs(from - top) <= 2 || reduce) {
+    if (Math.abs(from - top) <= 2) {
       done();
       return;
     }
@@ -705,7 +859,17 @@ export default function HomePage({ collections }: Props) {
     };
     handOverTween.current = requestAnimationFrame(step);
   };
-  useEffect(() => () => cancelAnimationFrame(handOverTween.current), []);
+  useEffect(() => () => {
+    cancelAnimationFrame(handOverTween.current);
+    stillHoldRef.current?.();
+  }, []);
+  // The glide has brought the explorer up: the entrance leaves the page in
+  // the frame the scroll goes to 0 (nothing on screen moves).
+  const onEntranceGlided = useCallback(() => {
+    if (!glidePendingRef.current) return;
+    glidePendingRef.current = false;
+    takeEntranceOff();
+  }, [takeEntranceOff]);
 
   // ── The stub hand-off (src/lib/explorer.ts) ──
   // Asked with `stubHandoff`, stop 01's cover shows its photograph but not
@@ -714,20 +878,34 @@ export default function HomePage({ collections }: Props) {
   // the same frame the entrance removes its copy). Never waited on for good:
   // STUB_WAIT_MS after the entry lands, the stub is shown anyway.
   const [stubAwaited, setStubAwaited] = useState<string | null>(null);
+  // The ticket and the shields are out of the hand while the stub is on its
+  // way, and ARRIVAL_INERT_MS after it lands (global.css
+  // `[data-stub-arriving]`; the empty map's click waits too).
+  const [arriving, setArriving] = useState(false);
+  const arrivingRef = useRef(false);
+  arrivingRef.current = arriving || !!stubAwaited;
+  useEffect(() => {
+    if (stubAwaited) {
+      setArriving(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setArriving(false), ARRIVAL_INERT_MS);
+    return () => window.clearTimeout(timer);
+  }, [stubAwaited]);
   useEffect(() => {
     if (!stubAwaited) return;
     let timer = 0;
     const landed = () => setStubAwaited(null);
-    const entryDown = () => {
+    const onEntryLanded = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(landed, STUB_WAIT_MS);
     };
     window.addEventListener(STUB_LANDED_EVENT, landed);
-    window.addEventListener(ENTRY_LANDED_EVENT, entryDown);
+    window.addEventListener(ENTRY_LANDED_EVENT, onEntryLanded);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener(STUB_LANDED_EVENT, landed);
-      window.removeEventListener(ENTRY_LANDED_EVENT, entryDown);
+      window.removeEventListener(ENTRY_LANDED_EVENT, onEntryLanded);
     };
   }, [stubAwaited]);
 
@@ -743,7 +921,7 @@ export default function HomePage({ collections }: Props) {
       const ask = ((event as CustomEvent<ExploreRequest> | undefined)?.detail ?? window.__archiveExploreAsked ?? {}) as ExploreRequest;
       delete window.__archiveExploreAsked;
       if (ask.stubHandoff && explorerRef.current.phase === 'globe') setStubAwaited(stopOne(placeIdsRef.current));
-      handOverRef.current(() => dispatchRef.current({ type: 'enter' }));
+      handOverRef.current(() => dispatchRef.current({ type: 'enter' }), ask);
     };
     if (window.__archiveExploreAsked) enter();
     window.addEventListener(EXPLORE_EVENT, enter);
@@ -784,9 +962,22 @@ export default function HomePage({ collections }: Props) {
       if (event.key !== 'Escape' && performance.now() - began < 250) return;
       finishEntry();
     };
+    // The press that cuts the entry short is only that: its click (a tap's
+    // finger coming down where the cover is about to be) never reaches the
+    // cover, a shield or the empty map (review of 2026-09-29: it opened the
+    // story, 4/4 on a phone).
+    let swallowTimer = 0;
+    const swallow = (event: MouseEvent) => {
+      event.stopPropagation();
+      event.preventDefault();
+    };
     const onDown = (event: PointerEvent) => {
       if (!event.isPrimary) return;
-      finishEntry();
+      if (!finishEntry()) return;
+      window.removeEventListener('click', swallow, true);
+      window.clearTimeout(swallowTimer);
+      window.addEventListener('click', swallow, { capture: true, once: true });
+      swallowTimer = window.setTimeout(() => window.removeEventListener('click', swallow, true), 700);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('keydown', onKey);
@@ -795,6 +986,8 @@ export default function HomePage({ collections }: Props) {
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pointerdown', onDown);
+      // A press's click still to come is swallowed even once the entry is
+      // down (its timer lets it go).
     };
   }, [explorer.phase, finishEntry, reduce]);
 
@@ -1098,7 +1291,11 @@ export default function HomePage({ collections }: Props) {
   // A click on the empty map: the ticket in hand is let go, calmly (its
   // cover fades, its shield steps back; nothing tears) — as the reference's
   // board goes when the globe itself is clicked.
-  const dismissFromMap = useCallback(() => dispatchRef.current({ type: 'dismiss' }), []);
+  const dismissFromMap = useCallback(() => {
+    // Not while the stub is still landing on the ticket in hand.
+    if (arrivingRef.current) return;
+    dispatchRef.current({ type: 'dismiss' });
+  }, []);
   const select = useCallback((id: string) => {
     dispatchRef.current({ type: 'select', id });
   }, []);
@@ -1220,6 +1417,7 @@ export default function HomePage({ collections }: Props) {
         className="relative overflow-x-clip font-sans bg-[#282c20] text-[#F4F4ED]"
         data-explorer-phase={phase}
         data-explorer-place={current ?? undefined}
+        data-stub-arriving={arriving || stubAwaited ? '' : undefined}
         inert={pageInert}
         aria-hidden={pageInert}
       >
@@ -1316,6 +1514,7 @@ export default function HomePage({ collections }: Props) {
             first={firstStop}
             nextTop={entranceNextTop}
             onArrive={onEntranceArrive}
+            onGlided={onEntranceGlided}
             covered={reelCovering}
           />
         )}

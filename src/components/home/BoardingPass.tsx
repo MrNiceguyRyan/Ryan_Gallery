@@ -507,7 +507,9 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
               </span>
               <span className="bp-field bp-field--stack">
                 <span className="bp-label">Date</span>
-                <span className="bp-value">{fields.date}</span>
+                <span className="bp-value">
+                  <span data-pass-land="date">{fields.date}</span>
+                </span>
               </span>
               <span className="bp-field bp-field--stack">
                 <span className="bp-label">Gate</span>

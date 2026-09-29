@@ -99,7 +99,7 @@ test('a switch can be interrupted: a new choice mid-turn turns on from there', (
   assert.match(atlas, /token != null && token !== flying\.token/);
   // The pin glides on from where the ticket is (never snaps), and the cover
   // shown becomes the one leaving.
-  assert.match(atlas, /pinRef\.current = \{ from: dockWrittenRef\.current \?\? to, to, t0: performance\.now\(\), ms: durationMs, ease: turnEase \};/);
+  assert.match(atlas, /pinRef\.current = \{ from: dockWrittenRef\.current \?\? to, to, t0: performance\.now\(\), ms: durationMs, ease: easing \};/);
   assert.match(atlas, /dockSwitchRef\.current = \{ key: switchKeyRef\.current, from: shown, to: destId \};/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // An arrival cut short prints its photograph whole before it leaves.
@@ -134,7 +134,8 @@ test('the empty map, Escape: the ticket is let go calmly, nothing in hand', () =
   assert.deepEqual(explore(dismissed.state, { type: 'select', id: 'zion' }, ORDER).effects, [{ type: 'fly', id: 'zion', from: null }]);
   const home = source('src/components/home/HomePage.tsx');
   assert.match(home, /if \(event\.key === 'Escape'\) \{\s+if \(explorerRef\.current\.current\) dispatchRef\.current\(\{ type: 'dismiss' \}\);/);
-  assert.match(home, /const dismissFromMap = useCallback\(\(\) => dispatchRef\.current\(\{ type: 'dismiss' \}\), \[\]\);/);
+  // (Not while the torn pass's stub is still landing on the ticket.)
+  assert.match(home, /const dismissFromMap = useCallback\(\(\) => \{\s*\/\/[^\n]*\n\s*if \(arrivingRef\.current\) return;\s*dispatchRef\.current\(\{ type: 'dismiss' \}\);\s*\}, \[\]\);/);
 });
 
 test('back to the first screen goes home, with nothing torn', () => {
@@ -366,10 +367,111 @@ test('a switch is the reference\'s turn: 1.4 s, its ENTER curve, no climb to spe
   }
   if (process.env.EXPLORER_NUMBERS) console.log(`switch lift at 1728: ${rows.join(', ')}`);
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  assert.match(atlas, /durationMs = switchMs\(dest\.zoom - zoomNow\);\s+curve = SWITCH\.curve;\s+easing = turnEase;/);
+  assert.match(atlas, /const plan = planSwitch\(w0, u1, dest\.zoom - zoomNow, window\.innerWidth\);\s+durationMs = plan\.durationMs;\s+curve = plan\.curve;\s+easing = plan\.ease === 'sine' \? voyageEase : turnEase;/);
   // The shields: the one arrived at lifts at the click (the reference's
   // active stop, 1.45 from its foot), the one left relaxes.
   assert.match(atlas, /if \(next\.kind === 'fly'\) \{[\s\S]{0,200}markCurrentStop\(destId\);/);
+});
+
+test('a far switch turns on the sine, the ground calm, no take-off in one frame', () => {
+  // Review of 2026-09-29 (有点晕): on the turn at the rest zoom the far legs
+  // raced the ground at 1.4–1.7 viewport widths a second at 1728 and took
+  // off from rest to 40 px a frame in one frame (the turn starts at 2.77×
+  // its mean). A neighbour keeps the reference's turn; a far leg turns on
+  // the house's sine, as long as the share needs, within SWITCH.farMaxMs.
+  const turn = bezier([0.22, 0.61, 0.36, 1]);
+  const sine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
+  // The ground under the focal point, frame by frame at 60 fps: its fastest
+  // and its biggest change from one frame to the next, px a frame.
+  const frames = (plan, w0, u1) => {
+    const path = flightPath(w0, w0, u1, plan.curve);
+    const ease = plan.ease === 'sine' ? sine : turn;
+    const n = Math.round(plan.durationMs / (1000 / 60));
+    let prev = path.at(0);
+    let prevV = 0;
+    let fastest = 0;
+    let jolt = 0;
+    for (let i = 1; i <= n; i += 1) {
+      const now = path.at(ease(i / n));
+      const v = Math.abs(now.u - prev.u) * u1 * 2 ** ((now.dz + prev.dz) / 2);
+      fastest = Math.max(fastest, v);
+      jolt = Math.max(jolt, Math.abs(v - prevV));
+      prevV = v;
+      prev = now;
+    }
+    return { fastest, jolt };
+  };
+  const rows = [];
+  for (const vw of [1728, 1280]) {
+    const w0 = vw + 64;
+    for (const [from, to] of [...LEGS.filter(([a]) => a !== 'dc'), ['page', 'new-york'], ['new-york', 'page'], ['miami', 'zion'], ['zion', 'bryce']]) {
+      const u1 = pxAt(PLACES[from], PLACES[to], 5.05);
+      const plan = camera.planSwitch(w0, u1, 0, vw);
+      const f = frames(plan, w0, u1);
+      assert.ok(plan.durationMs >= SWITCH.ms && plan.durationMs <= SWITCH.farMaxMs, `${vw} ${from}→${to}: ${plan.durationMs} ms`);
+      assert.ok(plan.screenPxPerS <= SWITCH.farShare * vw * 1.01 || plan.durationMs === SWITCH.farMaxMs, `${vw} ${from}→${to}: ${Math.round(plan.screenPxPerS)} px/s`);
+      assert.ok(f.jolt <= 12, `${vw} ${from}→${to}: ${f.jolt.toFixed(1)} px a frame from one frame to the next`);
+      assert.ok(plan.lift < 0.8, `${vw} ${from}→${to}: no apex (${plan.lift.toFixed(2)})`);
+      if (u1 < 0.3 * vw) assert.deepEqual([plan.ease, plan.durationMs], ['turn', SWITCH.ms], `${from}→${to}: a neighbour keeps the turn`);
+      if (vw === 1728) rows.push(`${from}→${to} ${plan.ease} ${plan.durationMs} ms ${Math.round(plan.screenPxPerS)} px/s, jolt ${f.jolt.toFixed(1)}`);
+    }
+  }
+  if (process.env.EXPLORER_NUMBERS) console.log(rows.join('\n'));
+  // At 1728 the far legs the review measured stay under 1550 px/s for every
+  // shield on screen (~1.2× the focal point under the oblique camera).
+  for (const [from, to] of [['orlando', 'page'], ['page', 'new-york'], ['new-york', 'miami']]) {
+    const plan = camera.planSwitch(1728 + 64, pxAt(PLACES[from], PLACES[to], 5.05), 0, 1728);
+    assert.ok(plan.screenPxPerS * 1.24 <= 1560, `${from}→${to}: ${Math.round(plan.screenPxPerS)} px/s at the focal point`);
+  }
+  // The pin (the ticket held through the turn) rides the camera's curve.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /ms: durationMs, ease: easing \};/);
+});
+
+test('the entry cut short plays its rest quickly, never a jump', () => {
+  // Review of 2026-09-29: a click 0.6 s into the descent jumped the camera
+  // from the whole planet to the place in one frame, then 60–150 ms of flat
+  // unloaded ground. Now: from where the clock is, at its pace, landing at
+  // rest; the zoom under twice the flights' cap (a first-half cut of a
+  // whole-planet descent within ENTRY_FINISH.maxMs).
+  const { ENTRY_FINISH, ENTRY_SPAN, finishEntry } = camera;
+  assert.ok(Math.abs(ENTRY_SPAN - entryZoomRate(0, 1) * 0 - (5.05 - entryStartZoom(0, 5.05))) < 1e-9);
+  const sine = (p) => -(Math.cos(Math.PI * p) - 1) / 2;
+  for (const p0 of [0, 0.08, 0.2, 0.4, 0.6, 0.8, 0.95]) {
+    const v0 = 1000 / ENTRY.diveMs;
+    const plan = finishEntry(p0, v0, ENTRY_SPAN);
+    assert.ok(plan.ms >= ENTRY_FINISH.minMs && plan.ms <= ENTRY_FINISH.maxMs, `${p0}: ${plan.ms} ms`);
+    assert.ok(Math.abs(plan.at(0) - p0) < 1e-6 && plan.at(1) === 1);
+    let prev = plan.at(0);
+    for (let i = 1; i <= 100; i += 1) {
+      const p = plan.at(i / 100);
+      assert.ok(p >= prev - 1e-9, `${p0}: never back`);
+      prev = p;
+    }
+    assert.ok(plan.zoomPerS <= ENTRY_FINISH.zoomPerS + 1e-6 || plan.ms === ENTRY_FINISH.maxMs, `${p0}: ${plan.zoomPerS.toFixed(2)} levels/s`);
+    assert.ok(plan.zoomPerS <= 3, `${p0}: ${plan.zoomPerS.toFixed(2)} levels/s at most`);
+    // Velocity-continuous: its first step goes on at about the clock's pace
+    // (no lurch), and it lands at rest.
+    const dt = plan.ms / 1000 / 100;
+    const first = (ENTRY_SPAN * (sine(plan.at(0.01)) - sine(plan.at(0)))) / dt;
+    const before = ENTRY_SPAN * (Math.PI / 2) * Math.sin(Math.PI * p0) * v0;
+    assert.ok(Math.abs(first - before) <= 0.35, `${p0}: ${first.toFixed(2)} vs ${before.toFixed(2)} levels/s`);
+    const last = (ENTRY_SPAN * (sine(plan.at(1)) - sine(plan.at(0.99)))) / dt;
+    assert.ok(last <= 0.1, `${p0}: lands at rest (${last.toFixed(3)})`);
+  }
+  // The page plays it, and the phone turns onto the place from the live
+  // camera; the press that cut it short never clicks what lies under it.
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /const plan = finishEntryPlan\(p0, 1000 \/ ENTRY\.diveMs, ENTRY_SPAN\);/);
+  assert.doesNotMatch(home.slice(home.indexOf('const finishEntry = useCallback'), home.indexOf('// A window that crosses')), /entryProgress\.set\(1\)/);
+  assert.match(home, /entryFlightRef\.current = nextFlight\('finish', id, true\);/);
+  assert.match(home, /window\.addEventListener\('click', swallow, \{ capture: true, once: true \}\);/);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /durationMs = ENTRY_FINISH\.phoneMs;/);
+  // Cutting it short never makes it later: an entry down sooner on its own
+  // is left to land.
+  assert.match(home, /if \(left <= plan\.ms\) return true;/);
+  assert.match(home, /entryFlightRef\.current != null && left > ENTRY_FINISH\.phoneMs/);
 });
 
 test('the stub hand-off: a derived target, a landing event, a stub that waits', () => {
@@ -502,7 +604,7 @@ test('the homepage hands the entrance a seam: an event, a function, a record', (
   // itself, with its stub's hand-off (entrance v2) — and nothing synthetic
   // follows the ask (a real key, press or new wheel cuts the entry short).
   const entrance = source('src/components/home/EntranceIntro.tsx');
-  assert.match(entrance, /requestExplore\(\{ from: 'boarding-pass', stubHandoff \}\)/);
+  assert.match(entrance, /requestExplore\(\{ from: 'boarding-pass', stubHandoff, \.\.\.\(arrivingMs > 0 \? \{ arrivingMs \} : null\) \}\)/);
   assert.match(lib, /stubHandoff\?: boolean;/);
   assert.doesNotMatch(home, /onEntranceArrived|onArrived=/);
   const handOver = home.slice(home.indexOf('handOverRef.current = (enter'), home.indexOf('// ── The seam: anyone may ask'));
@@ -523,8 +625,13 @@ test('the fall from the whole planet onto a place stays near the zoom cap', () =
     const plan = planFlight(Math.max(vw, vh) + 64, 300, 4.4, vw);
     assert.ok(plan.speeds.zoomPerS <= 1.45, `${vw}: ${plan.speeds.zoomPerS.toFixed(2)} levels/s over ${plan.durationMs} ms`);
   }
-  // The entry's descent is long enough for its own zoom and tip (see ENTRY).
-  assert.ok(ENTRY.diveMs >= 4000);
+  // The entry's descent is long enough for its own zoom and tip (see ENTRY):
+  // it starts under the entrance's glide and has ENTRY.afterGlideMs left
+  // once the page has landed.
+  assert.equal(ENTRY.diveMs, ENTRY.glideMs + ENTRY.afterGlideMs);
+  assert.ok(ENTRY.diveMs >= 3600 && ENTRY.afterGlideMs >= 2400);
+  assert.ok(entryZoomRate(entryStartZoom(0, 5.05), 5.05) <= FLIGHT.zoomPerS + 1e-9);
+  assert.ok((Math.PI / 2) * (24 / ((ENTRY.diveMs / 1000) * 0.7)) <= 15, 'the tip over its last 70% stays under 15°/s');
 });
 
 test('a drag never turns the map; a camera set square tips only once it is down', () => {

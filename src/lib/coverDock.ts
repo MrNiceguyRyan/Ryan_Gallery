@@ -410,7 +410,10 @@ export function developSweep(ratio: number) {
   const r = Math.max(0.45, Math.min(2.4, ratio || 1.5));
   return { from: 36 - 7.46 / r, to: 80 + 9.34 / r } as const;
 }
-export const DEVELOP_MASK = 'linear-gradient(245deg, #000 40%, transparent 60%)';
+// The band between the two prints: narrow, so the develop reads as a sweep
+// (at 40–60% both photographs lay over each other for ~300 ms: review of
+// 2026-09-29). The sweep's positions hold: the band's middle is where it was.
+export const DEVELOP_MASK = 'linear-gradient(245deg, #000 45%, transparent 55%)';
 
 // ── When a cover shows ──
 // The atlas's camera asks, on every draw, for the cover of the place in hand

@@ -330,7 +330,7 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   // left (none from the open map, none on the entry), once the cover is up.
   assert.match(atlas, /window\.dispatchEvent\(new CustomEvent\(type, \{ detail: \{ id: to\.id, from: signFrom\(from\) \} \}\)\)/);
   assert.match(atlas, /announce\('atlas:depart', index, flying\.from\)/);
-  assert.match(atlas, /from: next\.kind === 'entry' \? -1 : from,/);
+  assert.match(atlas, /from: next\.kind === 'entry' \|\| next\.kind === 'finish' \? -1 : from,/);
   assert.match(chapter, /primeFlap\(root, detail\.from\)/);
   assert.doesNotMatch(chapter + home, /archive:voyage-end/);
   assert.match(shield, /export function primeFlap/);

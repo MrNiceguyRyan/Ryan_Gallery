@@ -177,7 +177,7 @@ test('the voyage\'s sine is the explorer\'s: its flights and its entry\'s descen
     assert.equal(scrolls.length, 1);
   }
   const camera = readFileSync(join(ROOT, 'src/lib/explorerCamera.ts'), 'utf8');
-  assert.match(camera, /import \{ DUR_MS, voyageEase \} from '\.\/motion\.ts';/);
+  assert.match(camera, /import \{ DUR_MS, EASE, bezierFn, voyageEase \} from '\.\/motion\.ts';/);
   const atlas = readFileSync(join(ROOT, 'src/components/home/RouteAtlas.tsx'), 'utf8');
   assert.match(atlas, /easing: voyageEase,/);
   // A switch between places is the reference's turn, on its own token: one

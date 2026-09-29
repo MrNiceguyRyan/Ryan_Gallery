@@ -3,10 +3,12 @@
 // file only plays them.)
 //
 // 1. The assembly: at the end of the cover's reveal the boarding pass forms
-//    beside the words — its paper, its stub, its print part by part — and
-//    two words fly out of the last sentence onto it (the first place → TO,
-//    "you" → PASSENGER). One read of every box before anything moves (the
-//    pass is laid out, only hidden), then WAAPI on the compositor.
+//    beside the words — its paper and its stub laid down (wiped on, never
+//    faded), its print part by part — and three facts fly out of the words
+//    onto it (the first place → TO, "you" → PASSENGER, the archive's years →
+//    DATE), each word lifting off its sentence as its copy flies. One read
+//    of every box before anything moves (the pass is laid out, only hidden),
+//    then WAAPI on the compositor.
 // 2. The courier: the torn stub, kept by the reader in a fixed layer of its
 //    own on <body> — it outlives the entrance, which leaves the page once
 //    the explorer has it — carried, flown on its arc to the rect the explorer
@@ -33,7 +35,7 @@ import {
   type FreeStub,
   type StubRect,
 } from '../../lib/boardingPass';
-import { EXPLORER_EVENT, type ExplorerDetail } from '../../lib/explorer';
+import { EXPLORER_EVENT, PHONE_CARD, type ExplorerDetail } from '../../lib/explorer';
 
 const ENTER_CSS = `cubic-bezier(${ENTER_EASE.join(', ')})`;
 const enter = cubicEase(ENTER_EASE);
@@ -72,19 +74,18 @@ export function assemblePass(stage: HTMLElement, text: HTMLElement, reduced: boo
     parts.set(key, [...(parts.get(key) ?? []), el]);
   });
   const A = PASS_ASSEMBLY;
-  // The paper is opaque early (a sheet laid down, never a grey veil fading
-  // up over the olive) and settles for the rest of its time.
+  // The paper and the stub are laid down, never faded up: an opaque wipe
+  // from their left edge to their right (their shadows inside the clip's
+  // margin), the paper rising its last 20 px as it goes. Faded in, the white
+  // slab flashed onto the olive in 62 ms (review of 2026-09-29).
+  const WIPE = 60;
+  const wipe = (from: string) => [
+    { offset: 0, clipPath: `inset(-${WIPE}px 100% -${WIPE}px 0px)`, transform: from },
+    { offset: 1, clipPath: `inset(-${WIPE}px -${WIPE}px -${WIPE}px -${WIPE}px)`, transform: 'none' },
+  ];
   const keyframes: Record<string, Keyframe[]> = {
-    paper: [
-      { offset: 0, opacity: 0, transform: `translate3d(0, ${A.paper.rise}px, 0) scale(0.985)` },
-      { offset: 0.3, opacity: 1 },
-      { offset: 1, opacity: 1, transform: 'none' },
-    ],
-    stub: [
-      { offset: 0, opacity: 0, transform: `translate3d(${A.stub.slide}px, 0, 0)` },
-      { offset: 0.3, opacity: 1 },
-      { offset: 1, opacity: 1, transform: 'none' },
-    ],
+    paper: wipe(`translate3d(0, ${A.paper.rise}px, 0) scale(0.985)`),
+    stub: wipe(`translate3d(${A.stub.slide}px, 0, 0)`),
     print: [
       { opacity: 0, transform: `translate3d(0, ${A.print.rise}px, 0)` },
       { opacity: 1, transform: 'none' },
@@ -93,7 +94,7 @@ export function assemblePass(stage: HTMLElement, text: HTMLElement, reduced: boo
   };
 
   // The flights: every box read once, before anything moves.
-  const flights = (['to', 'you'] as const)
+  const flights = (['to', 'you', 'date'] as const)
     .map((word) => {
       const src = text.querySelector<HTMLElement>(`[data-pass-from="${word}"]`);
       const dst = stage.querySelector<HTMLElement>(`[data-pass-land="${word}"]`);
@@ -130,7 +131,7 @@ export function assemblePass(stage: HTMLElement, text: HTMLElement, reduced: boo
   const schedule = assemblySchedule();
   schedule.forEach((item) => {
     const timing = (ms: number, at: number): KeyframeAnimationOptions => ({ duration: ms, delay: at, easing: ENTER_CSS, fill: 'backwards' });
-    if (item.part === 'flight-to' || item.part === 'flight-you') {
+    if (item.part === 'flight-to' || item.part === 'flight-you' || item.part === 'flight-date') {
       const flight = flights.find((f) => `flight-${f.word}` === item.part);
       if (!flight || !layer) return;
       const { a, b, src, dst, sStyle, dStyle } = flight;
@@ -167,18 +168,38 @@ export function assemblePass(stage: HTMLElement, text: HTMLElement, reduced: boo
       dst.style.visibility = 'hidden';
       // The path: the slide on ENTER, the fall a little ahead of it (y done
       // by 80% of the way), so the word drops clear before it slides home.
+      // TO sits at the height of its sentence, so straight it printed over
+      // the rest of the sentence and then over FROM, HERE and the arrow
+      // (review of 2026-09-29): it dips under its line while it clears the
+      // sentence, and bows up over the pass's band while it crosses FROM
+      // (one S, `bow` px each way, level between the two). DATE leaves the
+      // years over the headline: it goes along first, clear of the large
+      // lines, and only then down the open side of the screen.
+      const bow = flight.word === 'to' ? A.flights.bow : 0;
+      const along = flight.word === 'date' ? 0.3 : 0;
       const frames: Keyframe[] = [];
       for (let i = 0; i <= 24; i += 1) {
         const u = i / 24;
         const ex = enter(u);
-        const ey = enter(Math.min(1, u / 0.8));
+        const ey = along > 0 ? enter(Math.max(0, (u - along) / (1 - along))) : enter(Math.min(1, u / 0.8));
+        const lift = -bow * Math.sin(2 * Math.PI * ex);
         frames.push({
           offset: u,
-          transform: `translate3d(${(dx * (1 - ex)).toFixed(2)}px, ${(dy * (1 - ey)).toFixed(2)}px, 0) scale(${(k + (1 - k) * ex).toFixed(4)})`,
+          transform: `translate3d(${(dx * (1 - ex)).toFixed(2)}px, ${(dy * (1 - ey) - lift).toFixed(2)}px, 0) scale(${(k + (1 - k) * ex).toFixed(4)})`,
         });
       }
       const flightTiming: KeyframeAnimationOptions = { duration: item.ms, delay: item.at, easing: 'linear', fill: 'both' };
       animations.push(wrap.animate(frames, flightTiming));
+      // The copy is there only from its lift, and the word lifts off its
+      // sentence with it in that frame (never printed twice, one a hair off
+      // the other: review of 2026-09-29); the word comes back into its
+      // sentence once the copy has landed.
+      wrap.style.visibility = 'hidden';
+      animations.push(
+        wrap.animate([{ visibility: 'visible' }, { visibility: 'visible' }], { duration: item.ms, delay: item.at, fill: 'forwards' }),
+        src.animate([{ visibility: 'hidden' }, { visibility: 'hidden' }], { duration: item.ms, delay: item.at, fill: 'none' }),
+        src.animate([{ opacity: 0 }, { opacity: 1 }], { duration: A.wordBackMs, delay: item.at + item.ms, easing: ENTER_CSS, fill: 'none' }),
+      );
       animations.push(
         from.animate([{ offset: 0, opacity: 1 }, { offset: 0.34, opacity: 1 }, { offset: 0.58, opacity: 0 }, { offset: 1, opacity: 0 }], flightTiming),
         to.animate([{ offset: 0, opacity: 0 }, { offset: 0.34, opacity: 0 }, { offset: 0.58, opacity: 1 }, { offset: 1, opacity: 1 }], flightTiming),
@@ -297,15 +318,39 @@ export function launchStubCourier({ face, free, stock }: { face: HTMLElement | n
   const layer = document.createElement('div');
   layer.className = 'bp-courier';
   layer.setAttribute('aria-hidden', 'true');
+  layer.style.setProperty('--stub-paper', stock);
   const stub = document.createElement('div');
   stub.className = 'bp-courier__stub';
   stub.style.width = `${free.w}px`;
   stub.style.height = `${free.h}px`;
   const shadow = document.createElement('span');
   shadow.className = 'bp-courier__shadow';
-  const card = document.createElement('div');
+  // Stop 01's card: a plain card of its stock until the cover stub is on the
+  // page, then a print of that stub itself (its sign, its rows, its
+  // perforation), so the stub that lands IS the one that shows — nothing
+  // blank, nothing that pops in after. Its box is the cover stub's own
+  // measure (PHONE_CARD.stub wide, the target's height at that width),
+  // scaled onto the courier's frame: derived from the contract's rect,
+  // never read off the page.
+  let card: HTMLElement = document.createElement('div');
   card.className = 'bp-courier__card';
   card.style.background = stock;
+  let signed = false;
+  const sign = () => {
+    if (signed) return;
+    const real = document.querySelector<HTMLElement>('.archive-plate[data-stub-awaited] .archive-ticket-stub');
+    if (!real) return;
+    const copy = real.cloneNode(true) as HTMLElement;
+    copy.removeAttribute('id');
+    copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    copy.querySelectorAll('button, a, [tabindex]').forEach((el) => el.setAttribute('tabindex', '-1'));
+    copy.classList.add('bp-courier__card', 'bp-courier__card--signed');
+    copy.style.cssText = '';
+    card.replaceWith(copy);
+    card = copy;
+    signed = true;
+    cardKey = '';
+  };
   const print = document.createElement('div');
   print.className = 'bp-courier__print';
   print.append(face);
@@ -330,19 +375,29 @@ export function launchStubCourier({ face, free, stock }: { face: HTMLElement | n
     shadow.style.opacity = pose.shadow.toFixed(3);
     print.style.opacity = pose.print >= 1 ? '' : pose.print.toFixed(3);
     if (state.target) {
+      if (!signed && pose.card > 0) sign();
       const size = courierCard(box, state.target);
-      const key = `${size.w.toFixed(1)}x${size.h.toFixed(1)}`;
+      // The signed card is laid out at the cover stub's own width and
+      // scaled onto the courier's frame; the plain one is simply its size.
+      const natural = signed ? { w: PHONE_CARD.stub, h: (state.target.h * PHONE_CARD.stub) / Math.max(1, state.target.w) } : size;
+      const k = size.w / Math.max(1, natural.w);
+      const key = `${size.w.toFixed(1)}x${size.h.toFixed(1)}:${signed ? 's' : 'p'}`;
       if (key !== cardKey) {
         cardKey = key;
-        card.style.width = `${size.w}px`;
-        card.style.height = `${size.h}px`;
+        card.style.position = 'absolute';
+        card.style.margin = '0';
+        card.style.width = `${natural.w}px`;
+        card.style.height = `${natural.h}px`;
         card.style.left = `${((free.w - size.w) / 2).toFixed(2)}px`;
         card.style.top = `${((free.h - size.h) / 2).toFixed(2)}px`;
+        card.style.transformOrigin = '0 0';
+        card.style.transform = signed ? `scale(${k.toFixed(5)})` : '';
       }
-      const dy = unfoldInset(size.h, free.h, pose.unfold);
-      const dx = unfoldInset(size.w, free.w, pose.unfold);
+      const dy = unfoldInset(size.h, free.h, pose.unfold) / k;
+      const dx = unfoldInset(size.w, free.w, pose.unfold) / k;
       card.style.clipPath = `inset(${dy.toFixed(2)}px ${dx.toFixed(2)}px)`;
       card.style.opacity = pose.card.toFixed(3);
+      card.style.setProperty('--courier-sign', pose.sign.toFixed(3));
     } else {
       card.style.opacity = '0';
     }
@@ -392,5 +447,6 @@ export function launchStubCourier({ face, free, stock }: { face: HTMLElement | n
 }
 
 function sameRect(a: StubRect, b: StubRect | null) {
-  return !!b && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5 && Math.abs(a.rotate - b.rotate) < 0.05;
+  return !!b && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5 && Math.abs(a.rotate - b.rotate) < 0.05
+    && Math.abs((a.landsAt ?? -1) - (b.landsAt ?? -1)) < 1;
 }

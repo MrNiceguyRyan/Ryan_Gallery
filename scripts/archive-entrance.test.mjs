@@ -99,7 +99,9 @@ test('the fallback and the live map share the entry\'s clock, which is time, not
   // page does not scroll. Nor does the entrance above it (entrance v2: one
   // screen, the pass the one way on, its glide the only move of the page):
   // the body is clipped from the first frame, and there is no Lenis.
-  assert.match(home, /animate\(entryProgress, 1, \{\s*duration: ENTRY\.diveMs \/ 1000/);
+  // The clock starts under the entrance's glide (ENTRY.diveMs counts it)
+  // and says when it will touch down (the stub's arc lands on it).
+  assert.match(home, /const ms = ENTRY\.diveMs \* \(1 - Math\.min\(0\.999, Math\.max\(0, from\)\)\);\s*setEntryLandsAt\(performance\.now\(\) \+ ms\);\s*const dive = animate\(entryProgress, 1, \{\s*duration: ms \/ 1000,\s*ease: 'linear'/);
   assert.doesNotMatch(home, /prologueProgress|entryQ|turnMs|archiveEntryProgress/);
   assert.doesNotMatch(home, /startLenis|lenisRef/);
   assert.match(home, /useEffect\(\(\) => \{\s*document\.body\.style\.overflow = 'clip';/);

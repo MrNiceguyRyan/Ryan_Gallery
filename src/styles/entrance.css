@@ -640,6 +640,13 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
   margin-bottom: calc(var(--bp-u) * 1.8);
 }
 .bp-stub .bp-band__kind { overflow: hidden; text-overflow: ellipsis; }
+/* A narrow stub (under 150 px: a 1280 or 1440 window's) keeps its band's
+   words whole and gives up the flight number (the main part prints it
+   too). The query reads the stub's content box: 150 px less its padding. */
+.bp-stub { container-type: inline-size; }
+@container (max-width: 122px) {
+  .bp-band--stub .bp-band__flight { display: none; }
+}
 .bp-stub__fields {
   display: flex;
   flex-direction: column;
@@ -700,6 +707,11 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
   z-index: 60;
   overflow: hidden;
   pointer-events: none;
+  /* The cover stub's perforation (global.css .archive-plate--ticket): the
+     card it becomes on the way is a print of that stub. */
+  --ticket-pitch: 8px;
+  --ticket-hole: 2.1px;
+  --ticket-notch: 8px;
 }
 .bp-courier__stub {
   position: absolute;
@@ -724,6 +736,12 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
 .bp-courier__print {
   position: absolute;
   inset: 0;
+}
+/* The card, once it is a print of stop 01's own stub: its sign and rows
+   come up on it over the arc's second half (--courier-sign, written per
+   frame); its stock and its perforation are there from the start. */
+.bp-courier__card--signed > :not(.archive-ticket-fibre):not(.archive-ticket-strain) {
+  opacity: var(--courier-sign, 0);
 }
 .bp-hand {
   position: absolute;
