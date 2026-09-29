@@ -1,4 +1,49 @@
-import {defineField, defineType} from 'sanity'
+import {defineArrayMember, defineField, defineType, type ValidationContext} from 'sanity'
+
+/** 章节里同一张照片出现在两个章节时：网站只放在第一个章节里，这里给出提醒。 */
+function repeatedPhotos(chapters: unknown): string | true {
+  if (!Array.isArray(chapters)) return true
+  const seen = new Set<string>()
+  const repeated = new Set<string>()
+  for (const chapter of chapters) {
+    const photos = (chapter as {photos?: Array<{_ref?: string}>} | null)?.photos
+    for (const photo of Array.isArray(photos) ? photos : []) {
+      const id = photo?._ref
+      if (!id) continue
+      if (seen.has(id)) repeated.add(id)
+      seen.add(id)
+    }
+  }
+  return repeated.size === 0
+    ? true
+    : `有 ${repeated.size} 张照片被放进了不止一个章节；网站上它只会出现在第一个章节里`
+}
+
+/**
+ * 分好章节之后，这个 Collection 还有几张照片不在任何章节里（封面除外）。
+ * 它们不会消失，会排在故事最后的「More frames」里；这里只是让他知道还剩几张。
+ * 只数已发布的照片，和网站上看到的一致。
+ */
+async function unplacedPhotos(chapters: unknown, context: ValidationContext): Promise<string | true> {
+  if (!Array.isArray(chapters) || chapters.length === 0) return true
+  const id = String(context.document?._id ?? '').replace(/^drafts\./, '')
+  if (!id) return true
+  const placed = chapters.flatMap((chapter) => {
+    const photos = (chapter as {photos?: Array<{_ref?: string}>} | null)?.photos
+    return Array.isArray(photos) ? photos.map((photo) => photo?._ref).filter(Boolean) : []
+  })
+  const cover = (context.document as {coverImage?: {asset?: {_ref?: string}}} | undefined)?.coverImage?.asset?._ref ?? ''
+  try {
+    const count = await context.getClient({apiVersion: '2025-04-01'}).fetch<number>(
+      `count(*[_type == "photo" && references($id) && !(_id in path("drafts.**")) && !(_id in $placed) && image.asset._ref != $cover])`,
+      {id, placed, cover},
+    )
+    return count > 0 ? `还有 ${count} 张照片没有放进任何章节，会排在最后的「More frames」里` : true
+  } catch {
+    // 查询失败（离线等）时不提示，不妨碍编辑。
+    return true
+  }
+}
 
 /**
  * Collection / Series document type
@@ -100,6 +145,107 @@ export default defineType({
         lists: [],
       }],
       description: '在 Collection 页面侧边栏展示的精炼文案，支持段落和引用格式。建议 50-120 字，有文学感。',
+    }),
+    // ─────────────────────────────────────────
+    // 小章节：把一个故事分成几个主题
+    // ─────────────────────────────────────────
+    defineField({
+      name: 'chapters',
+      title: '小章节 / Chapters (可选)',
+      type: 'array',
+      description:
+        '可选。把这个故事分成几个小章节（主题），每章有标题、可选的小标签和导语，以及属于这一章的照片（按这里拖动的顺序显示）。打开故事后，开篇页和导语之后会有一个小目录，章节用罗马数字编号（Part I、II、III……，和照片的 01、02 编号区分开），点一下就滑到那一章。' +
+        '封面照片固定是开篇页的第 01 帧，不会在章节里重复出现。没放进任何章节的照片不会消失，会排在最后，归在「More frames」里。一张照片都没有的章节不会显示。不填章节时，故事和现在完全一样。',
+      of: [
+        defineArrayMember({
+          name: 'storyChapter',
+          title: '章节 / Chapter',
+          type: 'object',
+          fields: [
+            defineField({
+              name: 'title',
+              title: '章节标题 / Title',
+              type: 'string',
+              description: '显示在目录里和这一章的开头，例如「Night on Ocean Drive」。建议英文 40 字符、中文 16 字以内。',
+              validation: (rule) => [
+                rule.required().max(90),
+                rule
+                  .custom((value) =>
+                    typeof value === 'string' && value.length > 40
+                      ? '标题建议英文 40 字符、中文 16 字以内，太长在目录里会折好几行'
+                      : true,
+                  )
+                  .warning(),
+              ],
+            }),
+            defineField({
+              name: 'shortTitle',
+              title: '目录短标题 / Short title (可选)',
+              type: 'string',
+              description:
+                '可选。目录和手机上那一排章节标签用的短标题；不填就用上面的章节标题。标题较长时建议填一个，例如「Ocean Drive」。',
+              validation: (rule) => rule.max(24),
+            }),
+            defineField({
+              name: 'kicker',
+              title: '小标签 / Kicker (可选)',
+              type: 'string',
+              description: '可选。标题上方一行小字，和章节编号排在一起，例如「After dark」。',
+              validation: (rule) => rule.max(40),
+            }),
+            defineField({
+              name: 'intro',
+              title: '章节导语 / Intro (可选)',
+              type: 'text',
+              rows: 3,
+              description: '可选。标题下面的一两句话，介绍这一章。英文约 40 词、中文约 80 字以内。',
+              validation: (rule) => rule.max(400),
+            }),
+            defineField({
+              name: 'photos',
+              title: '这一章的照片 / Photos',
+              type: 'array',
+              description:
+                '从这个 Collection 自己的照片里选（只列出属于这个 Collection 的照片）。以缩略图排列，拖动可以调整顺序，网站按这个顺序显示。第一张会挂在章节标题旁边。',
+              // 缩略图网格：照片标题都是自动生成的（Miami #24），只能靠缩略图认出是哪一张。
+              options: {layout: 'grid'},
+              of: [
+                defineArrayMember({
+                  type: 'reference',
+                  to: [{type: 'photo'}],
+                  // 弱引用：以后删除照片时不会被章节挡住，网站会自动忽略已删除的照片。
+                  weak: true,
+                  options: {
+                    disableNew: true,
+                    filter: ({document}) => ({
+                      filter: 'collection._ref == $collectionId',
+                      params: {collectionId: String(document?._id ?? '').replace(/^drafts\./, '')},
+                    }),
+                  },
+                }),
+              ],
+              validation: (rule) => rule.unique(),
+            }),
+          ],
+          preview: {
+            select: {title: 'title', shortTitle: 'shortTitle', kicker: 'kicker', photos: 'photos', media: 'photos.0.image'},
+            prepare({title, shortTitle, kicker, photos, media}) {
+              const count = Array.isArray(photos) ? photos.length : 0
+              return {
+                title: title || '（无标题章节）',
+                subtitle: [shortTitle && shortTitle !== title ? `目录：${shortTitle}` : '', kicker, `${count} 张照片`]
+                  .filter(Boolean)
+                  .join(' · '),
+                media,
+              }
+            },
+          },
+        }),
+      ],
+      validation: (rule) => [
+        rule.custom(repeatedPhotos).warning(),
+        rule.custom(unplacedPhotos).warning(),
+      ],
     }),
     defineField({
       name: 'featured',

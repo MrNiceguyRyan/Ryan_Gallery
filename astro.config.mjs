@@ -55,6 +55,17 @@ async function countPublishedNotes() {
   return null;
 }
 
+// ── STORY_CHAPTERS_SAMPLE=1: sub-chapters on a PREVIEW build only ──
+// Prints Miami's Collection Story in three placeholder sub-chapters with a
+// contents list (src/lib/storyChaptersSample.ts), so the owner can see the
+// design before he writes chapters in Sanity. Read by the pages at build time
+// (index.astro, works/[slug].astro); production builds never set it, and a
+// story with chapters of its own is never replaced. Nothing in Sanity changes.
+//   npm run build:sample   (NOTES_SAMPLE=1 STORY_CHAPTERS_SAMPLE=1 astro build)
+// A sample build stamps <html data-story-sample> (Layout.astro), and wrangler
+// refuses to deploy such a dist/ to production (wrangler.jsonc build.command,
+// scripts/assert-no-sample.mjs); run `npm run build` again before a prod deploy.
+
 let notesLive = false;
 
 function notesNav() {

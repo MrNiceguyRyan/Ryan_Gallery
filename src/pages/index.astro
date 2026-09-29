@@ -8,8 +8,13 @@ import { reelHeadScript } from '../lib/reelVisit';
 import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
+import { withSampleChapters } from '../lib/storyChaptersSample';
 
 // ─── GROQ: All collections with photos + location data ───
+// `chapters`: the story's optional sub-chapters, each with its photographs as
+// ids; the story finds them among `photos` (src/lib/storyChapters.ts), so a
+// photograph is projected once and a reference to anything that is not this
+// collection's is simply not found.
 const collectionsQuery = `
   *[_type == "collection"] | order(year desc) {
     _id,
@@ -24,6 +29,14 @@ const collectionsQuery = `
     mapLocation,
     description,
     introduction,
+    "chapters": chapters[defined(title)] {
+      _key,
+      title,
+      shortTitle,
+      kicker,
+      intro,
+      "photoIds": photos[]._ref
+    },
     "photoCount": count(*[_type == "photo" && references(^._id)]),
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
       _id,
@@ -42,9 +55,14 @@ const collectionsQuery = `
   }
 `;
 
-const collections = await fetchSanityWithRetry(() =>
+// A STORY_CHAPTERS_SAMPLE=1 preview build prints one story in placeholder
+// chapters (src/lib/storyChaptersSample.ts); every other build as fetched.
+const fetchedCollections = await fetchSanityWithRetry(() =>
   sanityClient.fetch<Collection[]>(collectionsQuery),
 );
+const collections = Array.isArray(fetchedCollections)
+  ? fetchedCollections.map((collection) => withSampleChapters(collection))
+  : fetchedCollections;
 // His own frames for the film's magazine page and strip of film.
 const openingPictures = pickPictures(collections ?? []);
 ---

@@ -2007,6 +2007,303 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   .story-cap { font-size: 11.5px; }
 }
 
+/* ── Sub-chapters: the openers and the contents ──
+   A story the owner has split into chapters (src/lib/storyChapters.ts,
+   MagazineLayout's ChapterContents). Each chapter opens on a rule, its
+   number and kicker in the label face, its title in Fraunces a step under
+   the pull quote, and its intro in the reading face, beside its first frame
+   (storyBoxes: CHAPTER). The contents is one list: in the rail on desktop
+   (columns 1–3, above the kept stub), a row under the running head on the
+   phone; the chapter being read carries aria-current. Ink only: the story's
+   one lime stays the end page's arrow. */
+.story {
+  --story-chapter: clamp(34px, 2.8vw, 50px);
+}
+.story-chapters {
+  position: relative;
+  display: flow-root;
+}
+.story-chapter {
+  padding-top: 16px;
+  border-top: 1px solid var(--story-rule);
+}
+/* Two classes: `.story-text p { margin: 0 }` (0,1,1) would otherwise zero
+   the label's and the intro's margins. The kicker hugs the title tighter
+   than the standfirst stands off it. */
+.story-chapter .story-chapter__label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 18px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--story-ink-3);
+}
+.story-chapter__label b {
+  font-weight: 500;
+  color: var(--story-ink);
+}
+.story-chapter__title {
+  margin: 0 0 0 -0.03em;
+  font-weight: 400;
+  font-variation-settings: "opsz" 144;
+  font-size: var(--story-chapter);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+/* The title takes focus from the contents (so a screen reader lands on it);
+   it is not a control and draws no ring. */
+.story-chapter__title:focus {
+  outline: none;
+}
+/* Han characters are not tightened (a title he writes in Chinese). */
+.story-chapter__title:lang(zh) {
+  letter-spacing: 0;
+}
+.story-chapter .story-chapter__intro {
+  max-width: 36ch;
+  margin: 24px 0 0;
+  font-size: var(--story-text);
+  line-height: 1.55;
+  font-variation-settings: "opsz" 18;
+  text-wrap: pretty;
+  color: var(--story-ink-2);
+}
+/* The frames no chapter holds: a quieter title, no number. */
+.story-chapter--more .story-chapter__title {
+  font-style: italic;
+  font-variation-settings: "opsz" 36;
+  font-size: var(--story-lead);
+  letter-spacing: -0.005em;
+}
+.story-toc__label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--story-ink-3);
+}
+.story-toc__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-toc__link {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: baseline;
+  color: var(--story-ink-3);
+  text-decoration: none;
+  transition: color var(--dur-out) var(--ease-arrive);
+}
+.story-toc__link[aria-current] {
+  color: var(--story-ink);
+  transition-duration: var(--dur-in);
+}
+/* Only where there is a pointer to hover with: a tap leaves :hover on the
+   link it touched, and the phone's row would print two chapters in ink. */
+@media (hover: hover) {
+  .story-toc__link:hover {
+    color: var(--story-ink);
+    transition-duration: var(--dur-in);
+  }
+}
+/* A part's number: Fraunces Roman, the story's own "II" at reading size.
+   The frames it holds stay Space Grotesk figures, like the captions'. */
+.story-toc__no {
+  font-size: 15px;
+  font-weight: 400;
+  font-variation-settings: "opsz" 18;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--story-ink-3);
+}
+.story-toc__frames {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--story-ink-3);
+}
+.story-toc__title {
+  font-variation-settings: "opsz" 18;
+  font-size: 17px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.story-toc__link[aria-current] .story-toc__title { font-style: italic; }
+.story-toc__link[aria-current] .story-toc__no { color: var(--story-ink); }
+.story-toc__title:lang(zh) { font-style: normal; }
+@media (min-width: 1024px) {
+  /* The rail's columns, from the introduction's top to the end page: the
+     list rides up with the paper, then holds under the running head, kept
+     clear of the kept stub at the foot. A full-screen landscape passes over
+     it as it passes over the stub. */
+  .story-toc-track {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--sM);
+    z-index: 2;
+    width: var(--story-rail);
+    box-sizing: border-box;
+    padding-top: 14svh;
+    pointer-events: none;
+  }
+  .story-toc {
+    position: sticky;
+    top: calc(var(--story-head) + 28px);
+    max-height: calc(100svh - var(--story-head) - 28px - var(--story-stub-h) - var(--sM) - 32px);
+    /* Room in the margin for the square that marks the chapter being read
+       (the list scrolls, if it ever must, and would clip it). */
+    margin: 0 -6px 0 -16px;
+    padding: 0 6px 6px 16px;
+    /* Scrolls only if a long contents outgrows the screen; a wheel over it
+       otherwise reads on through the story (no overscroll containment: that
+       held the story still under a pointer resting on the list). */
+    overflow-y: auto;
+    scrollbar-width: thin;
+    pointer-events: auto;
+  }
+  .story-toc__list {
+    margin-top: 14px;
+    border-top: 1px solid var(--story-rule);
+  }
+  .story-toc__link {
+    padding: 11px 0 12px;
+    border-bottom: 1px solid var(--story-rule);
+  }
+  /* Where the reader is: a square of ink, the story's own end mark. */
+  .story-toc__link::before {
+    content: '';
+    position: absolute;
+    left: -14px;
+    top: calc(11px + 0.3em);
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity var(--dur-out) var(--ease-fade);
+  }
+  .story-toc__link[aria-current]::before {
+    opacity: 1;
+    transition: opacity var(--dur-swap) var(--ease-arrive);
+  }
+  /* Rising under the kept stub it is faded out by the scroll
+     (MagazineLayout, contentsOpacity) and not clickable through the stub;
+     a keyboard focus brings it back whole. */
+  .story-toc[data-faint] { pointer-events: none; }
+  .story-toc:focus-within,
+  .story-toc:focus-within .story-toc__label {
+    opacity: 1 !important;
+  }
+  /* A part opened by a portrait: the rule and its number stay at the top,
+     the title and intro stand at the foot, the intro's last line level with
+     the photograph's bottom edge (--th, its height), as a screen-high
+     frame's caption stands at its foot. A landscape's opener stays set from
+     the top. */
+  .story-slot[data-kind="CHAPTER"][data-pp] > .story-chapter {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-height: var(--th);
+  }
+  .story-slot[data-kind="CHAPTER"][data-pp] .story-chapter__title {
+    margin-top: auto;
+    /* Clear of the label when the words fill the frame's height. */
+    padding-top: 40px;
+  }
+}
+/* Between 1024 and 1279 the rail is narrow: the titles take the frames'
+   column rather than folding onto two lines each. */
+@media (min-width: 1024px) and (max-width: 1279.98px) {
+  .story-toc__frames { display: none; }
+  .story-toc__link { grid-template-columns: 34px minmax(0, 1fr); }
+}
+@media (max-width: 1023.98px) {
+  /* A row under the running head, from the introduction's end to the end
+     page, sliding sideways to the chapter being read. */
+  .story-toc-track { display: contents; }
+  .story-toc {
+    position: sticky;
+    /* A pixel up, so its top rule lies on the running head's own. */
+    top: calc(var(--story-head) + env(safe-area-inset-top) - 1px);
+    z-index: 80;
+    margin-top: 44px;
+    /* Opaque: a chapter title passing under it showed through a 97% sheet. */
+    background: var(--story-paper);
+    border-top: 1px solid var(--story-rule);
+    border-bottom: 1px solid var(--story-rule);
+  }
+  .story-toc__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .story-toc__list {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    /* The first title on the page's margin; the last can scroll clear of
+       the fade at the right edge. */
+    padding: 0 var(--sM) 0 calc(var(--sM) - 10px);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--sM), #000 calc(100% - var(--sM)), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 var(--sM), #000 calc(100% - var(--sM)), transparent 100%);
+  }
+  .story-toc__list::-webkit-scrollbar { display: none; }
+  .story-toc__item { flex: none; }
+  .story-toc__link {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 15px 10px 0;
+    white-space: nowrap;
+  }
+  .story-toc__link[aria-current] {
+    box-shadow: inset 0 -2px 0 currentColor;
+  }
+  .story-toc__no:empty { display: none; }
+  .story-toc__frames { display: none; }
+  .story-toc__title {
+    /* A long title never makes one chip the width of the screen (the short
+       title in Sanity is the fix; this is the guard). */
+    max-width: 62vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 15px;
+  }
+  /* A part is a real pause; the frames no part holds, a quieter one. */
+  .story-slot[data-kind="CHAPTER"] { margin-top: 112px; }
+  .story-slot[data-kind="CHAPTER"][data-more] { margin-top: 72px; }
+  .story-slot[data-kind="CHAPTER"] > .story-fig { margin-top: 32px; }
+  .story-chapter__title { font-size: 30px; }
+  .story-chapter .story-chapter__label { margin-bottom: 14px; }
+  .story-chapter .story-chapter__intro { margin-top: 16px; }
+  .story-chapter--more .story-chapter__title { font-size: var(--story-lead); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-toc__link,
+  .story-toc__link::before {
+    transition: none;
+  }
+}
+
 /* ── The end page, on the chapter's stock ──
    The Plates (every frame at its own ratio, numbered, each opening the
    viewer), the terrain plate whole with its credit, the facts, the next

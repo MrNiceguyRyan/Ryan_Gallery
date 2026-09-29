@@ -1,5 +1,7 @@
 // ─── Shared TypeScript interfaces ───
 
+import type { ChapterInput } from './lib/storyChapters';
+
 export interface TimelineItem {
   year: string;
   title: string;
@@ -52,6 +54,10 @@ export interface Collection {
   description?: string;
   /** Portable Text — editorial introduction shown in the collection sidebar */
   introduction?: PortableTextBlock[];
+  /** Optional sub-chapters inside the story (Sanity `chapters`): each a
+   *  title, kicker, intro and its photographs as ids, which the story groups
+   *  among `photos` (src/lib/storyChapters.ts). Null or absent: none. */
+  chapters?: ChapterInput[] | null;
   photos?: Photo[];
   photoCount?: number;
 }

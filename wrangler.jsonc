@@ -4,6 +4,13 @@
 	"assets": {
 		"directory": "./dist"
 	},
+	// Runs before every deploy of dist/: refuses a build made with a
+	// preview-only sample (`npm run build:sample`: STORY_CHAPTERS_SAMPLE=1,
+	// NOTES_SAMPLE=1), so "Sample chapter one" can never reach production.
+	// It builds nothing; `npm run build` still comes first.
+	"build": {
+		"command": "node scripts/assert-no-sample.mjs"
+	},
 	// Named env for the CI "Deploy Preview" job (`wrangler deploy --env preview`).
 	// Named envs do NOT inherit top-level `assets`, so it's re-declared here.
 	// Publishes a separate `ryan-gallery-preview` worker — never touches prod.
@@ -19,6 +26,10 @@
 			"routes": [{ "pattern": "preview.ryanxugallery.com", "custom_domain": true }],
 			"assets": {
 				"directory": "./dist"
+			},
+			// The preview worker may show a sample build: reported, not refused.
+			"build": {
+				"command": "node scripts/assert-no-sample.mjs --preview"
 			}
 		}
 	}
