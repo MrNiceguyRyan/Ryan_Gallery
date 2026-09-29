@@ -404,7 +404,8 @@ const TIP_DEG_PER_S = 15;
 // the space is the page's ink a step under its ground (#1d2117: luma 31
 // against the ground's 42, the whole planet's open sea at 33 just over it,
 // so the planet reads as a sphere, not a hole in a ring). The planet the
-// torn pass brings up has this space too (globeLook SILVER_FOG).
+// torn pass brings up rises on the page's ground and takes this space once
+// the entrance has gone (DIVE_SPACE_ZOOMS).
 const GLOBE_FOG = {
   range: [10, 20] as [number, number],
   color: 'rgba(170, 170, 154, 0.55)',
@@ -428,19 +429,27 @@ const PROLOGUE_INK_ENTRY = 0.15;
 // read before the atlas takes the camera (its reading line sits inside the
 // entrance's last stretch), and it was read under the prologue's clear air
 // — its sea and the space over the limb the darkest ground of any chapter —
-// with the archive's haze cutting in a scroll later. The space is not
-// ramped: it is the archive's from the moment the planet is up (it ramped
-// from the page's ground, and the planet's night-side sea sat 9.5 of luma
-// under it).
+// with the archive's haze cutting in a scroll later.
 const DIVE_FOG_ZOOMS = [4.2, 5] as const;
+// The space has its own, earlier band. The planet rises behind the entrance
+// while the entrance still scrolls up over it, so until the entrance has gone
+// the space is the page's own ground (globeLook SILVER_FOG): the archive's
+// darker space from the start (e00f013) turned the entrance's bottom edge
+// into a straight line across the whole screen, 8–11 of luma, swept from the
+// bottom up to the nav for about 0.6 s after the tear. The entrance's edge
+// leaves the screen at zoom 3.31 on the desktop and 3.87 on the phone (a DOM
+// trace of the dive), so the ramp starts after both, and the space is the
+// archive's by 4.4, early in the air's own band.
+const DIVE_SPACE_ZOOMS = [3.9, 4.4] as const;
 function diveFog(prologueAir: typeof SILVER_FOG) {
   const [from, to] = DIVE_FOG_ZOOMS;
   const ramp = <T,>(a: T, b: T) => ['interpolate', ['linear'], ['zoom'], from, a, to, b];
+  const [spaceFrom, spaceTo] = DIVE_SPACE_ZOOMS;
   return {
     range: ramp(['literal', prologueAir.range], ['literal', GLOBE_FOG.range]),
     color: ramp(prologueAir.color, GLOBE_FOG.color),
     'high-color': ramp(prologueAir['high-color'], GLOBE_FOG['high-color']),
-    'space-color': prologueAir['space-color'],
+    'space-color': ['interpolate', ['linear'], ['zoom'], spaceFrom, prologueAir['space-color'], spaceTo, GLOBE_FOG['space-color']],
     'horizon-blend': ramp(prologueAir['horizon-blend'], GLOBE_FOG['horizon-blend']),
     'star-intensity': 0,
   } as unknown as typeof GLOBE_FOG;

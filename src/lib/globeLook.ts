@@ -104,22 +104,27 @@ export function silverFloorAt(q: number) {
 // ── The air ──
 // A thin atmosphere: the planet's limb crisp, a narrow bone glow on it (the
 // site's own type colour; it was a pale sky blue under the bright pass, off
-// the palette), the space round it darker than the page so the planet stands
-// out. The air on the planet the page brings up comes from the light, on the
-// lit limb (planetLight); the fog keeps a whisper of bone there. Its space
-// is the archive's (#1d2117, RouteAtlas GLOBE_FOG) from the moment the
-// planet is up, not the page's ground (#282c20): the planet the torn pass
-// brings up shows its night side (the Pacific), and against the page's
-// ground that sea sat 9.5 of luma under the space round it, a dark hole
-// (the grey build had it 11 over, the bright one 6). One space the whole
-// way down: the sea there is level with it now (−1.1), where the lit open
-// sea of the idle planet sits 2 over it. The lite light (weak GPUs) draws
-// no air, so its fog carries the rim instead.
+// the palette), the archive's space round it darker than the page so the
+// planet stands out. The air on the planet the page brings up comes from
+// the light, on the lit limb (planetLight); the fog keeps a whisper of bone
+// there. Its space is the page's own ground (#282c20): the planet rises
+// behind the entrance while the entrance still scrolls up over it, and the
+// entrance's bottom edge must meet the space in one tone. The dive ramps it
+// to the archive's (#1d2117, RouteAtlas GLOBE_FOG) once the entrance has
+// gone (DIVE_SPACE_ZOOMS). The archive's space from the start (e00f013) put a
+// straight seam of 8–11 luma across the whole screen for 0.6 s after the
+// tear; on the page's ground the widest step at the screen's two edges is
+// 1.5, the grain. The cost: the planet's night side (the Pacific) rises dark
+// on the page's ground, as the first toned pass's did — its lower-left rim
+// (20–60 px inside the limb against 20–60 px outside) 12–19 of luma under
+// the ground from zoom 2.6 to 3.8, about 0.7 s (the first toned pass −19 at
+// worst; the archive's space from the start −9). The lite light (weak GPUs)
+// draws no air, so its fog carries the rim instead.
 export const SILVER_FOG = {
   range: [10, 20] as [number, number],
   color: 'rgba(190, 214, 226, 0)',
   'high-color': 'rgba(220, 218, 200, 0.08)',
-  'space-color': '#1d2117',
+  'space-color': '#282c20',
   'horizon-blend': 0.012,
   'star-intensity': 0,
 };

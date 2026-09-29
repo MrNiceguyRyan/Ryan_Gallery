@@ -125,11 +125,14 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   // A thin atmosphere in the site's palette: the limb a quiet bone hairline,
   // the night the page's ink.
   assert.ok(SILVER_FOG['horizon-blend'] <= 0.02);
-  // The space round the planet the torn pass brings up is the archive's
-  // from the start, not the page's ground (#282c20): against the page's
-  // ground the planet's night-side sea sat 9.5 of luma under it.
-  assert.equal(SILVER_FOG['space-color'], '#1d2117');
-  assert.equal(SILVER_FOG_LITE['space-color'], '#1d2117');
+  // The space round the planet the torn pass brings up is the page's own
+  // ground (HomePage's), so the entrance's bottom edge, scrolling up over
+  // it, meets it in one tone: the archive's darker space from the start drew
+  // a straight seam of 8–11 luma across the whole screen.
+  const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
+  assert.match(home, /className="relative overflow-x-clip font-sans bg-\[#282c20\]/);
+  assert.equal(SILVER_FOG['space-color'], '#282c20');
+  assert.equal(SILVER_FOG_LITE['space-color'], '#282c20');
   assert.match(SILVER_FOG['high-color'], /^rgba\(220, 218, 200, 0\.08\)$/);
   assert.equal(SILVER_FOG_LITE['high-color'], 'rgba(220, 218, 200, 0.18)');
   assert.deepEqual([PLANET_LIGHT.rim, PLANET_LIGHT.rimWidth, PLANET_LIGHT.glow, PLANET_LIGHT.spec], [0.28, 0.028, 0.12, 0.06]);
@@ -165,10 +168,17 @@ test('the reader\'s map carries the photograph whole, the seas tinted, under a c
   assert.match(fog, /color: 'rgba\(170, 170, 154, 0\.55\)'/);
   assert.match(fog, /'high-color': 'rgba\(214, 212, 196, 0\.14\)'/);
   assert.match(fog, /'space-color': '#1d2117'/);
-  // One space the whole way down: the dive's fog does not ramp it.
+  // The dive takes the space from the page's ground to the archive's on its
+  // own band, after the entrance's edge has left the screen (zoom 3.31 on
+  // the desktop, 3.87 on the phone) and done early in the air's (4.2–5).
+  const spaceBand = /const DIVE_SPACE_ZOOMS = \[([\d.]+), ([\d.]+)\] as const;/.exec(source);
+  assert.ok(spaceBand, 'DIVE_SPACE_ZOOMS');
+  const [spaceFrom, spaceTo] = [Number(spaceBand[1]), Number(spaceBand[2])];
+  assert.deepEqual([spaceFrom, spaceTo], [3.9, 4.4]);
+  const airTo = Number(/const DIVE_FOG_ZOOMS = \[[\d.]+, ([\d.]+)\] as const;/.exec(source)?.[1]);
+  assert.ok(spaceFrom > 3.87 && spaceTo < airTo, 'after the entrance has gone, before the air has turned');
   const dive = source.slice(source.indexOf('function diveFog('), source.indexOf('const PROLOGUE_FOG = '));
-  assert.match(dive, /'space-color': prologueAir\['space-color'\],/);
-  assert.doesNotMatch(dive, /ramp\(prologueAir\['space-color'\]/);
+  assert.match(dive, /'space-color': \['interpolate', \['linear'\], \['zoom'\], spaceFrom, prologueAir\['space-color'\], spaceTo, GLOBE_FOG\['space-color'\]\],/);
   assert.match(fog, /'horizon-blend': 0\.01,/);
   // The reading tone: the page's olive ink at 0.16 (a whisper, 0.04, under
   // the bright pass); the rail's shade and the readout's shadow lighter again.
