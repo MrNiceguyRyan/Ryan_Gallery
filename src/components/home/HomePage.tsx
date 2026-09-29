@@ -48,6 +48,7 @@ import {
   type ExplorerEffect,
   type ExplorerState,
 } from '../../lib/explorer';
+import { recentreShown, recentreTarget } from '../../lib/explorerDrift';
 import { ENTRY, ENTRY_FINISH, ENTRY_SPAN, finishEntry as finishEntryPlan } from '../../lib/explorerCamera';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
@@ -213,6 +214,8 @@ interface DeferredRouteAtlasProps {
   onEngage?: (chapterId: string | null) => void;
   onSelect?: (chapterId: string) => void;
   onDismiss?: () => void;
+  onLeave?: () => void;
+  onDrift?: (drifted: boolean) => void;
   onArrive?: (token: number, arrived: boolean) => void;
   eager?: boolean;
   holdReveal?: boolean;
@@ -431,6 +434,15 @@ export default function HomePage({ collections }: Props) {
   const flightTokenRef = useRef(0);
   const entryFlightRef = useRef<number | null>(null);
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
+  // ── Left, and come back to (src/lib/explorerDrift.ts) ──
+  // The last place held (Recentre goes back to it once nothing is in hand);
+  // whether the view has drifted from the place in hand (RouteAtlas says,
+  // off the map's own projection on the reader's moves); and whether the
+  // place was let go by the reader's own hand (its ticket fades a little
+  // sooner as it rides away: global.css `[data-let-go]`).
+  const [lastPlace, setLastPlace] = useState<string | null>(null);
+  const [viewDrifted, setViewDrifted] = useState(false);
+  const [letGo, setLetGo] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
   // A sequence per gesture: a gesture's later steps (after the admission) are
@@ -693,6 +705,10 @@ export default function HomePage({ collections }: Props) {
     if (step.state === explorerRef.current && !step.effects.length) return;
     explorerRef.current = step.state;
     setExplorer(step.state);
+    if (step.state.current) {
+      setLastPlace(step.state.current);
+      setLetGo(false);
+    }
     announceExplorer({ phase: step.state.phase, current: step.state.current });
     if (step.effects.length) {
       gestureRef.current += 1;
@@ -1006,6 +1022,14 @@ export default function HomePage({ collections }: Props) {
         if (explorerRef.current.current) dispatchRef.current({ type: 'dismiss' });
         return;
       }
+      if ((event.key === 'r' || event.key === 'R') && !event.shiftKey) {
+        const target = event.target as Element | null;
+        if (target?.closest?.('input, textarea, select, [contenteditable="true"], .explorer-list')) return;
+        if (!recentreOnRef.current) return;
+        event.preventDefault();
+        recentreRef.current();
+        return;
+      }
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       const target = event.target as Element | null;
       if (target?.closest?.('input, textarea, select, [contenteditable="true"], .mapboxgl-canvas, .explorer-list')) return;
@@ -1231,11 +1255,17 @@ export default function HomePage({ collections }: Props) {
 
   // The phone's card height: the camera sets a place in the band above it.
   const [phoneCardH, setPhoneCardH] = useState(0);
+  // Each place's own card height (Recentre stands just over the card up).
+  const [phoneCardHeights, setPhoneCardHeights] = useState<Record<string, number>>({});
   useEffect(() => {
     if (desktopLayout) return;
     const size = () => {
-      const tallest = routeStops.reduce((most, stop) => Math.max(most, phoneCard(window.innerWidth, window.innerHeight, stop.coverRatio ?? 1.5).h), 0);
-      setPhoneCardH(tallest);
+      const heights: Record<string, number> = {};
+      routeStops.forEach((stop) => {
+        heights[stop.id] = phoneCard(window.innerWidth, window.innerHeight, stop.coverRatio ?? 1.5).h;
+      });
+      setPhoneCardHeights(heights);
+      setPhoneCardH(Object.values(heights).reduce((most, h) => Math.max(most, h), 0));
     };
     size();
     window.addEventListener('resize', size, { passive: true });
@@ -1254,6 +1284,16 @@ export default function HomePage({ collections }: Props) {
   const phase = explorer.phase;
   const entered = phase !== 'globe';
   const free = phase === 'explore';
+  // Recentre shows once the view has drifted from the place in hand, or
+  // with nothing in hand (src/lib/explorerDrift.ts); it goes back to the
+  // place in hand, else the last one held, else stop 01.
+  const recentreOn = recentreShown({ free, flying: false, places: placeIds.length, current, drifted: viewDrifted });
+  const recentreOnRef = useRef(recentreOn);
+  recentreOnRef.current = recentreOn;
+  const recentrePlace = useMemo(() => {
+    const id = recentreTarget(placeIds, current, lastPlace);
+    return places.find((place) => place.id === id) ?? null;
+  }, [current, lastPlace, placeIds, places]);
   // The wheel zooms the map wherever it turns: over the ticket at its shield
   // and over the rail's words too (they lie on the map), not only over the
   // bare canvas — a quarter of the screen used to be dead to it. Handed on to
@@ -1296,6 +1336,25 @@ export default function HomePage({ collections }: Props) {
     if (arrivingRef.current) return;
     dispatchRef.current({ type: 'dismiss' });
   }, []);
+  // The reader's own drag or zoom has taken the place in hand out of view
+  // (src/lib/explorerDrift.ts): it is let go, as the empty map lets it go —
+  // its ticket fades as it rides off, the rail says what the archive is.
+  // Never while the stub is still landing on it; never by our own flights
+  // (RouteAtlas reads only the reader's moves).
+  const leaveFromMap = useCallback(() => {
+    if (arrivingRef.current || !explorerRef.current.current) return;
+    setLetGo(true);
+    dispatchRef.current({ type: 'drift' });
+  }, []);
+  // Recentre: back onto the place in hand, else the last one held, else
+  // stop 01 — the switch's own move; its ticket docks again.
+  const lastPlaceRef = useRef(lastPlace);
+  lastPlaceRef.current = lastPlace;
+  const recentre = useCallback(() => {
+    dispatchRef.current({ type: 'recentre', last: lastPlaceRef.current });
+  }, []);
+  const recentreRef = useRef(recentre);
+  recentreRef.current = recentre;
   const select = useCallback((id: string) => {
     dispatchRef.current({ type: 'select', id });
   }, []);
@@ -1360,6 +1419,8 @@ export default function HomePage({ collections }: Props) {
       onEngage={setEngagedChapterId}
       onSelect={select}
       onDismiss={dismissFromMap}
+      onLeave={leaveFromMap}
+      onDrift={setViewDrifted}
       onArrive={onArrive}
       eager
       holdReveal={globeHeld}
@@ -1551,9 +1612,13 @@ export default function HomePage({ collections }: Props) {
                   <p className="explorer-idle__figures font-ui tabular-nums">
                     {String(places.length).padStart(2, '0')} places · {totalFrames} frames
                   </p>
-                  {/* PROPOSED copy (the explorer's build, 2026-09-28): for the
-                      owner to approve. */}
-                  <p className="explorer-idle__hint font-ui">Choose a shield on the map, or step through below.</p>
+                  {/* PROPOSED copy (the explorer's build, 2026-09-28; the
+                      recentre line 2026-09-29): for the owner to approve. */}
+                  <p className="explorer-idle__hint font-ui">
+                    {recentrePlace && lastPlace
+                      ? `Choose a shield on the map, or recentre on ${recentrePlace.name}.`
+                      : 'Choose a shield on the map, or step through below.'}
+                  </p>
                 </div>
                 {chapters}
               </div>
@@ -1570,6 +1635,7 @@ export default function HomePage({ collections }: Props) {
                 onIndex={openIndex}
                 onEngage={setEngagedChapterId}
                 visible={free}
+                recentre={{ shown: recentreOn, place: recentrePlace, onRecentre: recentre }}
               />
               {/* The map comes after the rail and the controls in the page's
                   order (they lie over it: z-index, not order, stacks them),
@@ -1580,7 +1646,7 @@ export default function HomePage({ collections }: Props) {
                 {/* The covers' dock: each place's cover rides here, on the
                     atlas, beside its shield (ArchiveChapter portals it in;
                     src/lib/coverDock.ts places it every camera frame). */}
-                <div ref={setDockHost} className="archive-dock-host" />
+                <div ref={setDockHost} className="archive-dock-host" data-let-go={letGo ? '' : undefined} />
               </aside>
             </div>
           ) : (
@@ -1592,7 +1658,7 @@ export default function HomePage({ collections }: Props) {
               <div className="explorer-stage absolute inset-0 z-0">
                 {atlas}
               </div>
-              <div ref={setDockHost} className="archive-dock-host archive-dock-host--phone" />
+              <div ref={setDockHost} className="archive-dock-host archive-dock-host--phone" data-let-go={letGo ? '' : undefined} />
               <div data-archive-column className="explorer-rail explorer-rail--phone">
                 <h2 className="sr-only font-ui">Places</h2>
                 {chapters}
@@ -1610,6 +1676,10 @@ export default function HomePage({ collections }: Props) {
                 onEngage={setEngagedChapterId}
                 phone
                 visible={free}
+                // Over the card when one is up: the card stands
+                // PHONE_CARD.dockBottom (76) up, the controls' top ~60, so
+                // its height, the 16 between, and a 10 px gap.
+                recentre={{ shown: recentreOn, place: recentrePlace, onRecentre: recentre, lift: dockAt ? (phoneCardHeights[dockAt] ?? phoneCardH) + 26 : 10 }}
               />
             </div>
           )}

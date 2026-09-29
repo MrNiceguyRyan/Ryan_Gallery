@@ -19,6 +19,8 @@
 // hold it: what each gesture does from each state, in order, and the seams
 // the entrance hands over by.
 
+import { recentreTarget } from './explorerDrift.ts';
+
 // ── The seam ──
 // The entrance in front of the explorer hands the page over once the globe
 // is coming on: the boarding pass, torn, asks as the page's glide sets off
@@ -168,6 +170,14 @@ export type ExplorerAction =
   | { type: 'open'; id: string }
   /** The empty map, Escape: nothing in hand. */
   | { type: 'dismiss' }
+  /** The reader's own drag or zoom has taken the place in hand out of what
+   *  they are looking at (src/lib/explorerDrift.ts): let it go, as a click
+   *  on the empty map does (its cover fades; nothing tears). */
+  | { type: 'drift' }
+  /** Recentre (its control, the R key): back onto the place in hand, else
+   *  the last one held (`last`, kept by the page), else stop 01 — the
+   *  switch's own move, its ticket docked again. */
+  | { type: 'recentre'; last?: string | null }
   /** Back to the start (the entrance's opening words). */
   | { type: 'leave' };
 
@@ -240,9 +250,19 @@ export function explore(state: ExplorerState, action: ExplorerAction, order: rea
       if (state.phase !== 'explore' || action.id !== state.current) return same(state);
       return { state, effects: [{ type: 'tear-stub', id: action.id }, { type: 'story', id: action.id }] };
     }
-    case 'dismiss': {
+    case 'dismiss':
+    case 'drift': {
       if (state.phase !== 'explore' || !state.current) return same(state);
       return { state: { ...state, current: null }, effects: [{ type: 'release', id: state.current }] };
+    }
+    case 'recentre': {
+      if (state.phase !== 'explore') return same(state);
+      const id = recentreTarget(order, state.current, action.last ?? null);
+      if (!id) return same(state);
+      return {
+        state: id === state.current ? state : { ...state, current: id },
+        effects: [{ type: 'fly', id, from: state.current }],
+      };
     }
     case 'leave': {
       if (state.phase === 'globe') return same(state);

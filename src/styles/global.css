@@ -411,7 +411,7 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
 }
 /* Pointed at, focused or its cover engaged, a shield comes to the top of
    its pile (over the inline order the atlas writes). */
-.mapboxgl-marker:has(> .place-shield > .place-shield__sign:is(:hover, :focus-visible, [data-engaged])) {
+.mapboxgl-marker:has(> .place-shield > .place-shield__sign:is(:hover, :focus-visible, [data-engaged], [data-offered])) {
   z-index: 60 !important;
 }
 /* Its place lies under the covers (`data-under`, written with the pile):
@@ -468,7 +468,7 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   transition-duration: var(--dur-swap);
   transition-timing-function: var(--ease-arrive);
 }
-.place-shield__sign:is(:hover, :focus-visible, [data-engaged]):not(.is-current):not(.is-inbound) {
+.place-shield__sign:is(:hover, :focus-visible, [data-engaged], [data-offered]):not(.is-current):not(.is-inbound) {
   transform: scale(1.04);
   opacity: 1;
   transition-duration: var(--dur-in);
@@ -569,7 +569,10 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   pointer-events: none;
   transition: opacity var(--dur-out) var(--ease-fade);
 }
-.place-shield__sign:is(:hover, :focus-visible, [data-engaged]):not(.is-current) .place-shield__name {
+/* Nothing in hand and the map at rest near a place (src/lib/explorerDrift.ts,
+   OFFER): its shield lifts and prints its name, as if pointed at, until the
+   map moves again. Nothing switches without a click. */
+.place-shield__sign:is(:hover, :focus-visible, [data-engaged], [data-offered]):not(.is-current) .place-shield__name {
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
 }
@@ -830,6 +833,82 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   align-items: stretch;
   gap: 6px;
 }
+/* Recentre (src/lib/explorerDrift.ts): over the controls, out of their
+   flow (they never shift for it), in when the view has drifted from the
+   place in hand or nothing is in hand; away while the list is open. A
+   crosshair, the word, and the place it goes back to. */
+.explorer-controls__recentre {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--recentre-lift, 10px));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 14px 0 11px;
+  border: 1px solid rgba(244, 244, 237, 0.22);
+  border-radius: 999px;
+  background: rgba(17, 21, 15, 0.88);
+  color: #F4F4ED;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur-in) var(--ease-fade),
+    transform var(--dur-in) var(--ease-leave),
+    visibility 0s linear var(--dur-in),
+    background-color var(--dur-in) var(--ease-arrive),
+    border-color var(--dur-in) var(--ease-arrive);
+}
+.explorer-controls__recentre[data-shown] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--dur-swap) var(--ease-arrive) 120ms,
+    transform var(--dur-swap) var(--ease-arrive) 120ms,
+    visibility 0s,
+    background-color var(--dur-in) var(--ease-arrive),
+    border-color var(--dur-in) var(--ease-arrive);
+}
+.explorer-controls__recentre:hover {
+  background: rgba(30, 35, 27, 0.96);
+  border-color: rgba(244, 244, 237, 0.4);
+}
+.explorer-controls__recentre:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 2px;
+}
+.explorer-controls__recentre-mark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.explorer-controls__recentre-place {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(244, 244, 237, 0.62);
+}
+.explorer-controls__recentre kbd {
+  font: inherit;
+  padding: 1px 4px;
+  border: 1px solid rgba(244, 244, 237, 0.24);
+  border-radius: 3px;
+  color: rgba(244, 244, 237, 0.62);
+}
+.explorer-controls--phone .explorer-controls__recentre {
+  right: 50%;
+  transform: translate(50%, 6px);
+}
+.explorer-controls--phone .explorer-controls__recentre[data-shown] {
+  transform: translate(50%, 0);
+}
 /* The desktop's two rows: the list and the Index, then the steps; each
    button half the rail, so a neighbour's name reads whole. */
 .explorer-controls__bar + .explorer-controls__bar {
@@ -1067,7 +1146,9 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   .explorer-idle,
   .explorer-idle[data-shown],
   .explorer-controls,
-  .explorer-controls[data-visible] {
+  .explorer-controls[data-visible],
+  .explorer-controls__recentre,
+  .explorer-controls__recentre[data-shown] {
     transition-duration: 0s !important;
     transition-delay: 0s !important;
   }
@@ -2763,6 +2844,13 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   opacity: 1;
   visibility: visible;
   transition: none;
+}
+/* Let go because the reader's own hand has taken its place away
+   (src/lib/explorerDrift.ts): the ticket rides off with its shield and
+   fades a little sooner than a dismissed one (the swap's 320 ms, not the
+   400 ms exit), so no ticket lingers over empty ground. */
+.archive-dock-host[data-let-go] .archive-dock:not([data-at]):not([data-leaving]) {
+  transition: opacity var(--dur-swap) var(--ease-fade), visibility 0s linear var(--dur-swap);
 }
 .archive-dock__seat {
   position: absolute;

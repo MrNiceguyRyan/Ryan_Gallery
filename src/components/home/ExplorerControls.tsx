@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type CSSProperties } from 'react';
 import { MapShield } from './RouteShield';
 import { pad2, stateCode } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
@@ -24,6 +24,10 @@ export interface ExplorerPlace {
  * PROPOSED copy (the explorer's build, 2026-09-28), for the owner to
  * approve: "All places", "Index", and for screen readers "Previous place:
  * …" / "Next place: …" and "All places, N".
+ * Recentre (src/lib/explorerDrift.ts, 2026-09-29): a crosshair pill over the
+ * controls, in once the view has drifted from the place in hand (or nothing
+ * is in hand): "Recentre · 01 Miami" and the R key; for screen readers
+ * "Recentre on 01 Miami (R)". PROPOSED copy.
  */
 export default function ExplorerControls({
   places,
@@ -39,6 +43,7 @@ export default function ExplorerControls({
   onEngage,
   phone = false,
   visible,
+  recentre,
 }: {
   places: ExplorerPlace[];
   current: string | null;
@@ -55,6 +60,10 @@ export default function ExplorerControls({
   phone?: boolean;
   /** Up once the explorer has been entered. */
   visible: boolean;
+  /** Recentre: shown when the view has drifted from the place in hand (or
+   *  nothing is in hand), back onto `place`; `lift` stands it this far over
+   *  the controls, px (the phone's card, when one is up). */
+  recentre?: { shown: boolean; place: ExplorerPlace | null; onRecentre: () => void; lift?: number };
 }) {
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -142,6 +151,34 @@ export default function ExplorerControls({
       All places <span className="tabular-nums explorer-controls__count">{pad2(total)}</span>
     </button>
   );
+  const recentreShown = !!recentre?.shown && !listOpen;
+  const recentreButton = recentre && (
+    <button
+      type="button"
+      className="explorer-controls__recentre"
+      data-shown={recentreShown ? '' : undefined}
+      aria-hidden={!recentreShown}
+      inert={!recentreShown}
+      tabIndex={recentreShown ? undefined : -1}
+      onClick={recentre.onRecentre}
+      aria-keyshortcuts="R"
+      aria-label={recentre.place ? `Recentre on ${pad2(recentre.place.number)} ${recentre.place.name} (R)` : 'Recentre (R)'}
+      style={recentre.lift != null ? ({ '--recentre-lift': `${recentre.lift}px` } as CSSProperties) : undefined}
+    >
+      <svg className="explorer-controls__recentre-mark" viewBox="0 0 14 14" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <circle cx="7" cy="7" r="1.1" fill="currentColor" />
+        <path d="M7 0.5v2.4M7 11.1v2.4M0.5 7h2.4M11.1 7h2.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+      </svg>
+      <span>Recentre</span>
+      {recentre.place && (
+        <span className="explorer-controls__recentre-place tabular-nums">
+          {pad2(recentre.place.number)} {recentre.place.name}
+        </span>
+      )}
+      {!phone && <kbd aria-hidden="true">R</kbd>}
+    </button>
+  );
   return (
     <div
       className={`explorer-controls font-ui${phone ? ' explorer-controls--phone' : ''}`}
@@ -149,6 +186,7 @@ export default function ExplorerControls({
       aria-hidden={!visible}
       inert={!visible}
     >
+      {recentreButton}
       {listOpen && (
         <div
           ref={listRef}
