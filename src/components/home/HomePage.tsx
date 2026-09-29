@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type CSSProperties,
 } from 'react';
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
 import type { Collection } from '../../types';
@@ -23,7 +24,7 @@ import { storyFrames } from '../../lib/storyPlan';
 import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
 import { activeChapters, chapterSections } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
-import { coverDock, coverOf, coverRatioOf } from '../../lib/coverDock';
+import { ARRIVAL, coverDock, coverOf, coverRatioOf } from '../../lib/coverDock';
 import { DUR, DUR_MS, EASE, bezierFn } from '../../lib/motion';
 import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardingPass';
 import { NOTES_LIVE } from '../../lib/notesNav';
@@ -1255,17 +1256,11 @@ export default function HomePage({ collections }: Props) {
 
   // The phone's card height: the camera sets a place in the band above it.
   const [phoneCardH, setPhoneCardH] = useState(0);
-  // Each place's own card height (Recentre stands just over the card up).
-  const [phoneCardHeights, setPhoneCardHeights] = useState<Record<string, number>>({});
   useEffect(() => {
     if (desktopLayout) return;
     const size = () => {
-      const heights: Record<string, number> = {};
-      routeStops.forEach((stop) => {
-        heights[stop.id] = phoneCard(window.innerWidth, window.innerHeight, stop.coverRatio ?? 1.5).h;
-      });
-      setPhoneCardHeights(heights);
-      setPhoneCardH(Object.values(heights).reduce((most, h) => Math.max(most, h), 0));
+      const heights = routeStops.map((stop) => phoneCard(window.innerWidth, window.innerHeight, stop.coverRatio ?? 1.5).h);
+      setPhoneCardH(heights.reduce((most, h) => Math.max(most, h), 0));
     };
     size();
     window.addEventListener('resize', size, { passive: true });
@@ -1277,8 +1272,19 @@ export default function HomePage({ collections }: Props) {
   // it — never while the ticket tears or the camera flies (one large motion
   // at a time) — and with no cover up the rail says what the archive is.
   const [dockAt, setDockAt] = useState<string | null>(null);
+  // A ticket arriving from the open map (src/lib/coverDock.ts, "The
+  // arrival") is up from take-off but seen only as the camera settles: its
+  // rail's name and lede come in with it, this many ms after the take-off
+  // (null: the rail's own beat).
+  const [railDelay, setRailDelay] = useState<number | null>(null);
+  const dockAtSeenRef = useRef<string | null>(null);
   useEffect(() => coverDock.subscribe((frame) => {
     const id = frame.at;
+    if (id !== dockAtSeenRef.current) {
+      dockAtSeenRef.current = id;
+      const arrive = frame.arrive;
+      setRailDelay(id && arrive && arrive.id === id ? Math.max(0, Math.round(arrive.at - performance.now())) : null);
+    }
     setDockAt((was) => (was === id ? was : id));
   }), []);
   const phase = explorer.phase;
@@ -1599,7 +1605,12 @@ export default function HomePage({ collections }: Props) {
               {/* The rail: the place in hand — its name and lede — down the
                   right of the page; with nothing in hand, the archive's own
                   line. It lets the pointer through to the map elsewhere. */}
-              <div data-archive-column className="explorer-rail" data-entered={entered ? '' : undefined}>
+              <div
+                data-archive-column
+                className="explorer-rail"
+                data-entered={entered ? '' : undefined}
+                style={railDelay != null ? ({ '--place-delay': `${railDelay + ARRIVAL.inkMs}ms` } as CSSProperties) : undefined}
+              >
                 <h2 className="sr-only font-ui">Places</h2>
                 <div className="explorer-idle" data-shown={free && !dockAt ? '' : undefined} aria-hidden={!free || !!dockAt}>
                   <p className="explorer-idle__kicker font-ui">
@@ -1676,10 +1687,7 @@ export default function HomePage({ collections }: Props) {
                 onEngage={setEngagedChapterId}
                 phone
                 visible={free}
-                // Over the card when one is up: the card stands
-                // PHONE_CARD.dockBottom (76) up, the controls' top ~60, so
-                // its height, the 16 between, and a 10 px gap.
-                recentre={{ shown: recentreOn, place: recentrePlace, onRecentre: recentre, lift: dockAt ? (phoneCardHeights[dockAt] ?? phoneCardH) + 26 : 10 }}
+                recentre={{ shown: recentreOn, place: recentrePlace, onRecentre: recentre }}
               />
             </div>
           )}

@@ -21,15 +21,19 @@ import { usePressGive } from '../../lib/usePressGive';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
 import { CSS_EASE, DUR_MS, EASE, SPRING, smootherstep } from '../../lib/motion';
 import {
+  ARRIVAL,
   DEVELOP_MASK,
   DOCK,
   SWITCH_COVER,
+  arrivalClipFrames,
   awaySide,
   coverDock,
   coverRatioOf,
   developSweep,
+  foldClip,
   matPolygon,
   switchClip,
+  type DockArrive,
   type DockEntry,
 } from '../../lib/coverDock';
 import { STUB_LANDED_EVENT, phoneCard, type PhoneCard } from '../../lib/explorer';
@@ -469,10 +473,12 @@ function ArchiveChapter({
   // foot of the screen instead, `phone`). The section keeps the chapter's
   // rail (the name, the lede). The atlas publishes, every camera frame, where
   // each place stands and the place whose cover shows; the cover is written
-  // there, and shows only while its place is in hand — it appears when the
-  // camera settles on it from the open map (no slide), rides with its shield
+  // there, and shows only while its place is in hand — it arrives as the
+  // camera settles on it from the open map (unrolled from its shield's
+  // corner: "The arrival" below), rides with its shield
   // wherever the reader takes the map, stays where it lies through a switch
-  // (pinned: "The switch" below), and fades out when the place is let go.
+  // (pinned: "The switch" below), and folds back into that corner as it
+  // fades when the place is let go.
   const docked = ticket;
   const dockRef = useRef<HTMLDivElement>(null);
   const dockEntry = useSyncExternalStore(
@@ -559,6 +565,58 @@ function ArchiveChapter({
     if (band) anims.push(band.animate([{ fill: from }, { fill: to }], timing));
     return anims;
   };
+  // The print develops in, from the corner by the stub (held back, a moment
+  // at most, for a print not yet decoded), `delay` ms from now, over `ms`;
+  // the mat under it goes when it is done.
+  const developIn = (
+    record: NonNullable<typeof switchRef.current>,
+    plate: HTMLElement,
+    dock: HTMLElement,
+    mine: DockEntry | null,
+    delay: number,
+    ms: number,
+  ) => {
+    const mat = plate.querySelector<HTMLElement>('.archive-photo-frame__mat');
+    const print = plate.querySelector<HTMLElement>('.archive-photo-frame__print');
+    if (print) {
+      const sweep = developSweep(mine ? mine.photoW / Math.max(1, mine.photoH) : cardRatio);
+      print.style.setProperty('mask-image', DEVELOP_MASK);
+      print.style.setProperty('-webkit-mask-image', DEVELOP_MASK);
+      print.style.setProperty('mask-size', '400% 100%');
+      print.style.setProperty('-webkit-mask-size', '400% 100%');
+      print.style.setProperty('mask-repeat', 'no-repeat');
+      print.style.setProperty('-webkit-mask-repeat', 'no-repeat');
+      const develop = print.animate(
+        [
+          { maskPosition: `${sweep.from.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.from.toFixed(2)}% 0` },
+          { maskPosition: `${sweep.to.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.to.toFixed(2)}% 0` },
+        ] as Keyframe[],
+        { duration: ms, delay, easing: CSS_EASE.develop, fill: 'both' },
+      );
+      record.develop = develop;
+      const image = print.querySelector('img');
+      if (image && !image.complete) {
+        develop.pause();
+        let started = false;
+        const go = () => {
+          if (started || switchRef.current !== record) return;
+          started = true;
+          develop.play();
+        };
+        image.decode?.().then(go, go);
+        record.timers.push(window.setTimeout(go, DEVELOP_WAIT_MS));
+      }
+      develop.onfinish = () => {
+        if (switchRef.current !== record || record.develop !== develop) return;
+        record.develop = null;
+        develop.cancel();
+        clearDevelop(print);
+        mat?.removeAttribute('data-on');
+        // The outline was set already: the switch is over for this cover.
+        if (!dock.hasAttribute('data-switch')) switchRef.current = null;
+      };
+    }
+  };
   // This cover arrives over `fromId`'s.
   const switchIn = (fromId: string, key: number) => {
     endSwitch();
@@ -603,46 +661,8 @@ function ArchiveChapter({
       mat.setAttribute('data-on', '');
     }
     // The print develops in over the one leaving, from the corner by the
-    // stub (held back, a moment at most, for a print not yet decoded).
-    const print = plate.querySelector<HTMLElement>('.archive-photo-frame__print');
-    if (print) {
-      const sweep = developSweep(mine ? mine.photoW / Math.max(1, mine.photoH) : cardRatio);
-      print.style.setProperty('mask-image', DEVELOP_MASK);
-      print.style.setProperty('-webkit-mask-image', DEVELOP_MASK);
-      print.style.setProperty('mask-size', '400% 100%');
-      print.style.setProperty('-webkit-mask-size', '400% 100%');
-      print.style.setProperty('mask-repeat', 'no-repeat');
-      print.style.setProperty('-webkit-mask-repeat', 'no-repeat');
-      const develop = print.animate(
-        [
-          { maskPosition: `${sweep.from.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.from.toFixed(2)}% 0` },
-          { maskPosition: `${sweep.to.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.to.toFixed(2)}% 0` },
-        ] as Keyframe[],
-        { duration: SWITCH_COVER.developMs, delay: SWITCH_COVER.developDelay, easing: CSS_EASE.develop, fill: 'both' },
-      );
-      record.develop = develop;
-      const image = print.querySelector('img');
-      if (image && !image.complete) {
-        develop.pause();
-        let started = false;
-        const go = () => {
-          if (started || switchRef.current !== record) return;
-          started = true;
-          develop.play();
-        };
-        image.decode?.().then(go, go);
-        record.timers.push(window.setTimeout(go, DEVELOP_WAIT_MS));
-      }
-      develop.onfinish = () => {
-        if (switchRef.current !== record || record.develop !== develop) return;
-        record.develop = null;
-        develop.cancel();
-        clearDevelop(print);
-        mat?.removeAttribute('data-on');
-        // The outline was set already: the switch is over for this cover.
-        if (!dock.hasAttribute('data-switch')) switchRef.current = null;
-      };
-    }
+    // stub.
+    developIn(record, plate, dock, mine, SWITCH_COVER.developDelay, SWITCH_COVER.developMs);
     // The outline set, the tab, the cue and the pad come in on it.
     record.timers.push(window.setTimeout(() => {
       if (switchRef.current !== record) return;
@@ -686,6 +706,82 @@ function ArchiveChapter({
     const myStock = stockPaper(collection.slug);
     if (toStock && toStock !== myStock) record.anims.push(...paperFrom(plate, myStock, toStock, true));
   };
+  // The plate's own size (photograph + stub), from the plan or the phone's
+  // card: DERIVED, never measured.
+  const plateSize = (): { w: number; h: number } | null => {
+    if (phone) return card ? { w: card.photoW + TICKET_STUB, h: card.photoH } : null;
+    const mine = coverDock.plan()?.[collection._id];
+    return mine ? { w: mine.photoW + TICKET_STUB, h: mine.photoH } : null;
+  };
+  // ── The arrival (src/lib/coverDock.ts, "The arrival") ──
+  // This cover, asked for from the open map, shown from take-off but not
+  // yet seen: at `arrive.at` its ink comes up, its stub unrolls from the
+  // corner by the shield, its face opens across and its print develops in;
+  // the tab, the cue and the pad come in on the set outline.
+  const arriveIn = (arrive: DockArrive) => {
+    endSwitch();
+    const dock = dockRef.current;
+    const plate = plateRef.current;
+    if (!dock || !plate) return;
+    const record = { key: arrive.key, role: 'in' as const, anims: [] as Animation[], timers: [] as number[], develop: null as Animation | null };
+    switchRef.current = record;
+    dock.setAttribute('data-switch', 'in');
+    if (reduce) {
+      endSwitch(true);
+      return;
+    }
+    const delay = Math.max(0, arrive.at - performance.now());
+    // Out of the hand until it starts (it is on the map, unseen).
+    dock.setAttribute('data-arriving', '');
+    record.timers.push(window.setTimeout(() => dock.removeAttribute('data-arriving'), delay));
+    record.anims.push(dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ARRIVAL.inkMs, delay, easing: CSS_EASE.arrive, fill: 'backwards' }));
+    const own = plateSize();
+    if (own) {
+      const clip = arrivalClipFrames(own, TICKET_STUB);
+      record.anims.push(plate.animate(clip.frames, { duration: clip.ms, delay, easing: 'linear', fill: 'backwards' }));
+    }
+    // The dark card ground shows where the print has not developed yet.
+    const mat = plate.querySelector<HTMLElement>('.archive-photo-frame__mat');
+    if (mat) {
+      mat.style.clipPath = 'none';
+      mat.setAttribute('data-on', '');
+    }
+    const mine: DockEntry | null = phone ? null : coverDock.plan()?.[collection._id] ?? null;
+    developIn(record, plate, dock, mine, delay + ARRIVAL.developDelay, ARRIVAL.developMs);
+    record.timers.push(window.setTimeout(() => {
+      if (switchRef.current !== record) return;
+      dock.removeAttribute('data-switch');
+      dock.setAttribute('data-arrived', '');
+      record.timers.push(window.setTimeout(() => dock.removeAttribute('data-arrived'), SWITCH_COVER.extrasMs));
+      record.anims.forEach((anim) => anim.cancel());
+      record.anims = [];
+      if (!record.develop) switchRef.current = null;
+    }, delay + ARRIVAL.extrasAt));
+  };
+  // ── Letting go: the arrival backwards ──
+  // The ticket let go (the empty map, Escape, the reader's own hand taking
+  // its place away) folds back into the corner by its shield as it fades.
+  const foldRef = useRef<Animation | null>(null);
+  const unfold = () => {
+    foldRef.current?.cancel();
+    foldRef.current = null;
+  };
+  const foldAway = () => {
+    unfold();
+    const plate = plateRef.current;
+    const own = plateSize();
+    if (reduce || !plate || !own) return;
+    foldRef.current = plate.animate(
+      [{ clipPath: switchClip(own, own) }, { clipPath: foldClip(own, TICKET_STUB) }],
+      { duration: ARRIVAL.foldMs, easing: CSS_EASE.leave, fill: 'forwards' },
+    );
+  };
+  const arriveInRef = useRef(arriveIn);
+  arriveInRef.current = arriveIn;
+  const foldAwayRef = useRef(foldAway);
+  foldAwayRef.current = foldAway;
+  const unfoldRef = useRef(unfold);
+  unfoldRef.current = unfold;
   const switchInRef = useRef(switchIn);
   switchInRef.current = switchIn;
   const switchOutRef = useRef(switchOut);
@@ -701,6 +797,7 @@ function ArchiveChapter({
     let shown = false;
     let leaving = false;
     let seenKey = 0;
+    let seenArrive = 0;
     let hiddenAt = Number.NEGATIVE_INFINITY;
     let reseatTimer = 0;
     let lastX = Number.NaN;
@@ -733,18 +830,31 @@ function ArchiveChapter({
         dockShownRef.current = at;
         window.clearTimeout(reseatTimer);
         if (at) {
+          unfoldRef.current();
+          const arrive = frame.arrive;
+          if (arrive && arrive.id === me && arrive.key !== seenArrive) {
+            seenArrive = arrive.key;
+            arriveInRef.current(arrive);
+          }
           dock.setAttribute('data-at', '');
           const appeared = dockAppearRef.current;
           dockAppearRef.current = null;
           appeared?.();
         } else {
           dock.removeAttribute('data-at');
+          dock.removeAttribute('data-arriving');
           // Let go while arriving: nothing of the switch stays.
           if (switchRef.current?.role === 'in') endSwitchRef.current();
+          // Let go (not handed on in a switch): it folds back into the
+          // corner by its shield as it fades.
+          if (!out) foldAwayRef.current();
           hiddenAt = performance.now();
           // Gone: once its fade is done, the ticket is put back whole for
           // the next visit (a stub torn off for the story).
-          reseatTimer = window.setTimeout(() => reseatRef.current(), DOCK_FADE_MS + 60);
+          reseatTimer = window.setTimeout(() => {
+            unfoldRef.current();
+            reseatRef.current();
+          }, DOCK_FADE_MS + 60);
         }
       }
       // The phone's card is dealt at the foot of the screen: nothing to place.

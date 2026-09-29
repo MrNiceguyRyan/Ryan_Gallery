@@ -39,6 +39,7 @@ import {
 import {
   DOCK,
   SWITCH_COVER,
+  arrivalDelay,
   centreFor,
   coverDock,
   coverStubRect,
@@ -46,6 +47,7 @@ import {
   glideAt,
   planDock,
   railBox,
+  type DockArrive,
   type DockAsk,
   type DockCamera,
   type DockChapter,
@@ -62,14 +64,14 @@ import {
   type GeoCoordinate,
 } from '../../lib/routeGeometry';
 import {
+  PLANET_PAINT,
   STOCK_PAINT,
   SILVER_FOG,
   SILVER_FOG_LITE,
+  WATER_TINT,
   createGlobeChannel,
   silverExitAt,
   silverFloorAt,
-  silverPaint,
-  silverRamp,
 } from '../../lib/globeLook';
 import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight';
 import { wrap180 } from '../../lib/geo';
@@ -391,12 +393,18 @@ const TIP_DEG_PER_S = 15;
 // behind the nav, p99 103 against ~60 of ground, swept across the screen by
 // every flight; the air is now about the ground's own tone (p99 71) and the
 // sky above it dark.
+// Owner, 2026-09-29 (有点灰灰的，我想要精致和明亮一点): the grey-olive haze
+// (#555a4a from 7 viewport heights, a 0.06 blend) was the grey veil over every
+// view with the horizon in it. Now a thin, clear atmosphere: pale blue on the
+// far land from further out, a narrow blue glow on the limb (a 0.012 blend),
+// and the space beyond it darker than the page, so the planet stands out
+// against it.
 const GLOBE_FOG = {
-  range: [7, 18] as [number, number],
-  color: '#555a4a',
-  'high-color': '#2e3327',
-  'space-color': '#282c20',
-  'horizon-blend': 0.06,
+  range: [10, 20] as [number, number],
+  color: 'rgba(190, 214, 226, 0.85)',
+  'high-color': 'rgba(80, 130, 180, 0.4)',
+  'space-color': '#141810',
+  'horizon-blend': 0.012,
   'star-intensity': 0,
 };
 
@@ -505,7 +513,10 @@ const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // ground was a black void; the land now reads as a photograph of itself.
 // Calmed the same day (有点晃眼): 0.88 → 0.76, with the stock paint's own
 // quieter grade (src/lib/globeLook.ts STOCK_PAINT).
-const PROLOGUE_SATELLITE_RESIDUAL = 0.76;
+// Owner, 2026-09-29 (有点灰灰的): at 0.76 the dark basemap came through the
+// photograph as a grey film; the photograph is whole now (its grade is
+// src/lib/globeLook.ts STOCK_PAINT).
+const PROLOGUE_SATELLITE_RESIDUAL = 1;
 // The dive's veil on the way down to that residual, as [zoom, opacity] pairs:
 // one steady step down, the archive's handoff zoom at the residual, where the
 // archive's own veil (below) takes over at the same strength. It used to dip
@@ -525,9 +536,24 @@ const SATELLITE_STOCK_LAYER = 'prologue-satellite-stock';
 // In the archive: at a long flight's apex the camera climbs past the
 // prologue's zoom keys, so a modest photographic veil (more real ground from
 // higher up), never the prologue's full print.
-const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 0.78, 4.6, PROLOGUE_SATELLITE_RESIDUAL];
-// The phone's map carries the same photograph, a little quieter.
-const PHONE_SATELLITE_OPACITY = 0.62;
+const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 1, 4.6, PROLOGUE_SATELLITE_RESIDUAL];
+// The phone's map carries the same photograph, whole.
+const PHONE_SATELLITE_OPACITY = 1;
+/** The seas' clear blue-green (src/lib/globeLook.ts WATER_TINT): the
+ *  basemap's own water, a fill laid over the photograph, under the names. */
+// (Its id must not say "water": the basemap's restyle below paints every
+// fill layer named so in the paper's dark water.)
+const WATER_TINT_LAYER = 'atlas-sea-tint';
+function addWaterTint(map: { getLayer: (id: string) => unknown; getSource: (id: string) => unknown; addLayer: (layer: never, before?: string) => void }, before?: string) {
+  if (map.getLayer(WATER_TINT_LAYER) || !map.getSource('composite')) return;
+  map.addLayer({
+    id: WATER_TINT_LAYER,
+    type: 'fill',
+    source: 'composite',
+    'source-layer': 'water',
+    paint: { 'fill-color': WATER_TINT.color, 'fill-opacity': WATER_TINT.opacity, 'fill-antialias': false },
+  } as never, before);
+}
 // The phone's shields, css px (the desktop's SHIELD_MAP_PX is 34).
 const SHIELD_PHONE_PX = 26;
 // Where the phone's camera waits while the entrance is read (the torn pass
@@ -1208,6 +1234,11 @@ export default function RouteAtlas({
   type Pin = { from: Point; to: Point | 'foot'; t0: number; ms: number; ease: (k: number) => number };
   const pinRef = useRef<Pin | null>(null);
   const pinFrameRef = useRef(0);
+  // ── The arrival (src/lib/coverDock.ts, "The arrival") ──
+  // A ticket asked for from the open map: shown from take-off, riding in
+  // with its shield, and played in by its chapter from `at`.
+  const dockArriveRef = useRef<DockArrive | null>(null);
+  const arriveKeyRef = useRef(0);
   useLayoutEffect(() => {
     if (!signs || !viewportReady || mobile) {
       dockPlanRef.current = null;
@@ -1324,10 +1355,11 @@ export default function RouteAtlas({
     const written = pin ?? (at ? points[at] ?? null : null);
     dockWrittenRef.current = written;
     const sw = dockSwitchRef.current;
-    const key = `${cameraKey(map)}|${at}|${pin ? `${pin.x},${pin.y}` : '-'}|${sw ? sw.key : 0}|${coverDock.plan() ? 1 : 0}|${currentStopRef.current}`;
+    const arrive = dockArriveRef.current;
+    const key = `${cameraKey(map)}|${at}|${pin ? `${pin.x},${pin.y}` : '-'}|${sw ? sw.key : 0}|${arrive ? arrive.key : 0}|${coverDock.plan() ? 1 : 0}|${currentStopRef.current}`;
     if (key === publishedKeyRef.current) return;
     publishedKeyRef.current = key;
-    coverDock.publish({ at, points, switch: sw, pin });
+    coverDock.publish({ at, points, switch: sw, pin, arrive });
     const held = pin ?? (currentStopRef.current ? points[currentStopRef.current] : null);
     if (held) viewfinderRef.current?.focal(held);
   };
@@ -1963,13 +1995,7 @@ export default function RouteAtlas({
     // floor lifted, the light swung round onto the places).
     const writeLook = () => {
       lookWrites.lookQ = 1;
-      if (map.getLayer('prologue-satellite')) {
-        const floor = silverFloorAt(1);
-        if (floor !== lookWrites.floor) {
-          lookWrites.floor = floor;
-          map.setPaintProperty('prologue-satellite', 'raster-color', silverRamp(floor) as never);
-        }
-      }
+      lookWrites.floor = silverFloorAt(1);
     };
     let paintMode: 'prologue' | 'archive' | null = null;
     const applyPaintMode = (mode: 'prologue' | 'archive') => {
@@ -2157,6 +2183,7 @@ export default function RouteAtlas({
       // moves are read again once it is down: `readDrift`).
       markOffered(null);
       if (next.kind !== 'release') tellDrift(false);
+      dockArriveRef.current = null;
       if (next.kind === 'release') {
         // Nothing in hand: its cover fades from the map (nothing tears), its
         // shield steps back among the others, the viewfinder has nothing to
@@ -2211,6 +2238,10 @@ export default function RouteAtlas({
       // unseen).
       const shown = dockAtRef.current;
       const switching = next.kind === 'fly' && !!shown;
+      // From the open map (nothing shown): the arrival — the ticket asked
+      // for from take-off too, riding in with its shield, played in by its
+      // chapter as the camera settles (coverDock.ts "The arrival").
+      const arriving = next.kind === 'fly' && !shown && !reducedMotion;
       flying = {
         token: next.token,
         kind: next.kind,
@@ -2223,7 +2254,7 @@ export default function RouteAtlas({
         trimTo: restRoute(index),
         tip: null,
         tipping: false,
-        carry: switching && !reducedMotion,
+        carry: (switching || arriving) && !reducedMotion,
         entry: next.kind === 'entry' || next.kind === 'finish' || !!next.entry,
       };
       setCameraState('flying');
@@ -2297,6 +2328,13 @@ export default function RouteAtlas({
           dockSwitchRef.current = null;
         }
         setDockAt({ id: destId, appear: true, stay: true });
+      } else if (arriving) {
+        // Not pinned (nothing was in hand to hold still): it rides in with
+        // its shield. The tip, if any, is planned below; the arrival is
+        // timed off the whole landing there.
+        pinRef.current = null;
+        endSwitch();
+        setDockAt({ id: destId, appear: true, stay: true });
       } else {
         pinRef.current = null;
         endSwitch();
@@ -2313,6 +2351,17 @@ export default function RouteAtlas({
       flying.tip = tipDeg > 0.5
         ? { pitch: dest.pitch, bearing: dest.bearing, ms: Math.max(500, Math.round(((tipDeg * Math.PI) / 2 / TIP_DEG_PER_S) * 1000)) }
         : null;
+      if (arriving) {
+        // Its ticket starts ARRIVAL.leadMs before the touchdown (at once
+        // when the camera is all but there already). DERIVED from the
+        // flight's own plan: the screen px it covers (world px at the start
+        // zoom) and when it lands.
+        const landMs = durationMs + (flying.tip?.ms ?? 0);
+        const travelPx = Math.max(u1, Math.abs(dest.zoom - zoomNow) * 200);
+        arriveKeyRef.current += 1;
+        dockArriveRef.current = { key: arriveKeyRef.current, id: destId, at: performance.now() + arrivalDelay(landMs, travelPx) };
+        publishDockRef.current();
+      }
       const place = viewfinderPlace(index);
       if (place) viewfinderRef.current?.hunt(place, performance.now() + durationMs + (flying.tip?.ms ?? 0));
       // The entry's touchdown, for the stub's arc (the contract's `landsAt`).
@@ -2981,7 +3030,7 @@ export default function RouteAtlas({
               paint: {
                 'raster-opacity': lookWrites.opacity,
                 'raster-opacity-transition': { duration: 0, delay: 0 },
-                ...silverPaint(lookWrites.floor),
+                ...PLANET_PAINT,
                 'raster-fade-duration': 160,
               } as never,
             }, firstLabel);
@@ -3007,6 +3056,9 @@ export default function RouteAtlas({
                 'raster-fade-duration': 160,
               } as never,
             }, firstLabel);
+            // The seas' blue-green, over both photographs' water and
+            // under the light (so the night side shades it too).
+            addWaterTint(map, firstLabel);
             const light = createPlanetLight(map, () => ({
               q: globeWritesRef.current.lookQ,
               dawn: globeChannel.dawn,
@@ -3148,6 +3200,7 @@ export default function RouteAtlas({
                 ...STOCK_PAINT,
               } as never,
             }, firstLabel);
+            addWaterTint(map, firstLabel);
           }
           // Keep-out, the /travel technique: an invisible icon on every
           // place, so the basemap does not set a town's name across the

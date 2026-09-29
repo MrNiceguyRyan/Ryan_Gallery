@@ -344,7 +344,7 @@ test('a ticket tears only while its cover is up, and is put back whole once it h
   // Nothing tears a cover no one can see (the explorer then simply goes on).
   assert.match(chapter, /const tearStubThen = \(go: \(\) => void\) => \{\s+if \(!ticket \|\| !dockShownRef\.current\) return false;/);
   // Gone (its fade done), it is whole again for the next visit.
-  assert.match(chapter, /reseatTimer = window\.setTimeout\(\(\) => reseatRef\.current\(\), DOCK_FADE_MS \+ 60\);/);
+  assert.match(chapter, /reseatTimer = window\.setTimeout\(\(\) => \{\s+unfoldRef\.current\(\);\s+reseatRef\.current\(\);\s+\}, DOCK_FADE_MS \+ 60\);/);
 });
 
 test('wiring: the atlas publishes on its render, the chapters ride it', () => {
