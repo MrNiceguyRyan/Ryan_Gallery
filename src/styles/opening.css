@@ -2,6 +2,7 @@
    A retro editorial type film; the acts, the scenes, the machines and the
    burn's frames are data in src/lib/openingFilm.ts, and the island only
    times what this sheet draws. This sheet is the film's MATERIALS: the
+   proof it opens on (the first paint, counting in by itself); the
    match cuts' pages round the lime anchor (editorial pages on paper, on the
    dark neutrals and on the ticket stocks, with their layered print, and
    twelve pieces of printed matter); the hand-off's lime block; eight
@@ -69,6 +70,16 @@
    scripts — the film is not there at all. */
 html[data-opening] .opening { display: block; }
 html[data-reel='skip'] .opening { display: none; }
+/* Until the island is up, the page's own ground is the proof's newsprint: a
+   paint of the page before the parser has reached the film (a slow first
+   chunk of a long document: measured on 1 load in 6, before the proof and
+   before it) is the proof's paper, never a dark frame first. Not under
+   reduced motion (it opens on the dark end title). The ground turns back
+   under the film, at once (no transition while the film plays). */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-opening=''] body { background-color: #e9e5d8; }
+}
+html[data-opening] body { transition: none; }
 /* A failsafe: the island marks the film running (data-opening="run"). If it
    never does — its script failed or never came — the layer lets the page
    through after a while instead of covering it for good. */
@@ -87,12 +98,13 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   to { opacity: 0; visibility: hidden; }
 }
 /* The Skip pill, the one control while the film plays, comes up with the
-   first page (a first movement before the clock has started). */
+   proof (a first movement before the clock has started). */
 @keyframes of-skip-in {
   from { opacity: 0; transform: translateY(6px); }
 }
-/* The first page's grain moves from the first paint (the island's own
-   grain takes over as the clock starts): the page is never a still. */
+/* The frame's grain moves from the first paint (the island's own grain,
+   counted from the proof's first frame, takes over as the clock is laid):
+   the proof is never a still. */
 @keyframes of-grain-first {
   0% { transform: translate(0px, 0px); }
   25% { transform: translate(-37px, 21px); }
@@ -135,8 +147,8 @@ html[data-film-lock] body { overflow: clip !important; }
    hidden (visibility) until a quarter second before its turn, when the
    island lets it be drawn (so a cut never waits on a first raster, and the
    film never holds every scene in memory at once); its opacity is timed on
-   the compositor. The first page is the first paint: it is drawn from the
-   start (and let go by the island once it has played). */
+   the compositor. The first page is drawn from the first paint (under the
+   proof) and let go by the island once it has played. */
 .of-act,
 .of-mat,
 .of-burnground,
@@ -193,14 +205,16 @@ html[data-film-lock] body { overflow: clip !important; }
    raster is done before the clock starts. */
 [data-early] { visibility: visible; }
 
-/* The first page is the first paint, before the island has measured a
-   word: the stylesheet sets its anchor, its giant word and the words on its
-   line where the island will (the island's own measure, as ratios of the
+/* The first page is drawn from the first paint (under the proof, unseen;
+   its anchor over the proof), before the island has measured a word: the
+   stylesheet sets its anchor, its giant word and the words on its line
+   where the island will (the island's own measure, as ratios of the
    anchor's cap height --c0 and the short side, for the faces the film
-   loads), so the clock starts on the very frame the server painted. The
-   island's inline measure takes over from here. */
+   loads; FIRST_PAINT in src/lib/openingFilm.ts), so the lime block the
+   proof prints never moves when the island takes over. The island's inline
+   measure takes over from here. */
 .opening {
-  --c0: min(12vh, calc(78vw / 7.3));
+  --c0: min(12vh, calc(78vw / 7.4087));
   --c0w: 7.062;
   --c0l: 0.3578;
   --c0b: 0.8585;
@@ -208,8 +222,8 @@ html[data-film-lock] body { overflow: clip !important; }
 }
 @media (max-width: 1023px) {
   .opening {
-    --c0: min(12vh, calc(86vw / 7.878));
-    --c0w: 7.63;
+    --c0: min(12vh, calc(86vw / 7.4087));
+    --c0w: 7.598;
     --c0l: 0.333;
     --c0b: 0.839;
     --g0: 0.4857;
@@ -242,6 +256,106 @@ html[data-film-lock] body { overflow: clip !important; }
 @media (min-width: 1024px) {
   .of-cut[data-cut='0'] .of-news__from { top: calc(50vh + var(--c0) / 2 - 0.915em); }
   .of-cut[data-cut='0'] .of-news__sect { top: calc(50vh + var(--c0) / 2 - 12px); }
+}
+
+/* ── Act 0: the proof ──
+   The first paint is a printer's proof on the newspaper's newsprint
+   (PRELUDE in src/lib/openingFilm.ts): the stylesheet rules the crop marks
+   in and prints the lime plate from the first paint (html[data-opening],
+   never data-clock, so the clock can't cut the count short). One animation
+   an element, so the compositor plays them through the island's hydration;
+   each filled both ways and at rest in its printed state, so the island can
+   read the proof's start from them at any moment (its clock is counted from
+   it) and seek them, and a cancel never un-prints anything. The island
+   prints the word on the film's clock and lets the proof go at film 0. The
+   first page is under the sheet from the first paint (the sheet at 0.998:
+   never opaque, so the page is rastered as it always was, and never seen). */
+.of-proof {
+  position: absolute;
+  inset: 0;
+  background: #e9e5d8;
+  opacity: 0.998;
+  visibility: visible;
+  will-change: opacity;
+}
+.of-proof-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --fg: #171b15;
+  opacity: 1;
+  visibility: visible;
+  will-change: opacity;
+}
+/* Each crop mark rules out from its trim corner (the vertex of its two
+   hairlines). */
+.of-proof-marks .of-crop--tl { transform-origin: 100% 100%; }
+.of-proof-marks .of-crop--tr { transform-origin: 0 100%; }
+.of-proof-marks .of-crop--bl { transform-origin: 100% 0; }
+.of-proof-marks .of-crop--br { transform-origin: 0 0; }
+html[data-opening] .of-proof-marks .of-crop { animation: of-proof-draw 333.333ms var(--ease-arrive) both; }
+html[data-opening] .of-key[data-key='0'] .of-key__block { animation: of-proof-lime 583.333ms linear both; }
+html[data-opening] .of-proof__slug [data-plate='1'] { animation: of-proof-plate 333.333ms steps(1, end) both; }
+/* The ink plate is the clock's (it is held here until the clock is laid;
+   without the island it never prints — the failsafe lets the page through). */
+.opening:not([data-clock]) .of-key[data-key='0'] .of-key__word,
+.opening:not([data-clock]) .of-proof__slug [data-plate='2'] { opacity: 0; }
+/* The slug at the proof's foot: the system monospace (it cannot swap). */
+.of-proof__slug {
+  position: absolute;
+  left: max(14px, 3vw);
+  bottom: max(20px, 3vh);
+  margin: 0;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, #171b15 62%, transparent);
+}
+/* A box of their own, so their opacity is the compositor's. */
+.of-proof__slug [data-plate] { display: inline-block; }
+@keyframes of-proof-draw {
+  from { transform: scale(0); }
+}
+/* Unprinted (drawn, unseen) to the lime beat, 4/7 of the way (the step a
+   hair before it: the beat is a frame's own time); then its first
+   impression, setting to full on the house curve (sampled:
+   proofLimeKeyframes). */
+@keyframes of-proof-lime {
+  0%,
+  57.1427% { opacity: 0.002; }
+  57.1428% { opacity: 0.64; }
+  61.4286% { opacity: 0.818; }
+  65.7143% { opacity: 0.9108; }
+  70% { opacity: 0.9558; }
+  74.2857% { opacity: 0.9783; }
+  78.5714% { opacity: 0.9898; }
+  82.8571% { opacity: 0.9957; }
+  87.1429% { opacity: 0.9984; }
+  91.4286% { opacity: 0.9996; }
+  95.7143%,
+  100% { opacity: 1; }
+}
+@keyframes of-proof-plate {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (max-width: 1023px) {
+  .of-proof__slug {
+    font-size: 9px;
+    /* Above the Skip pill, as the credit is (never beside or under it at
+       any width). */
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
+  }
+  .of-proof__wide { display: none; }
+  /* The phone keeps the proof's registration mark (the pages drop theirs). */
+  .of-proof-marks .of-reg {
+    display: block;
+    left: calc(50% - 10px);
+    width: 20px;
+    height: 20px;
+  }
 }
 
 /* His photographs: at their own ratio, never cropped or stretched. */
@@ -3382,7 +3496,8 @@ html[data-reel='skip'] .of-skip { display: none; }
 /* ── Reduced motion: no film ──────────────────────────────────────────────
    The end title as a still, then a calm crossfade into the first screen
    (the island times it). Values, not structure: the same scenes are there;
-   only which one shows differs (the first page is not drawn). */
+   only which one shows differs (neither the proof nor the first page is
+   drawn). */
 @media (prefers-reduced-motion: reduce) {
   .of-frame { visibility: hidden; }
   .of-frame__paper,
@@ -3400,4 +3515,10 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-title__cursor,
   .of-title__gm { visibility: hidden; }
   .opening { transition: opacity 700ms var(--ease-fade); }
+  /* No proof either (the same selectors as its running rules). */
+  .of-proof,
+  .of-proof-marks { opacity: 0; visibility: hidden; }
+  html[data-opening] .of-proof-marks .of-crop,
+  html[data-opening] .of-proof__slug [data-plate='1'],
+  html[data-opening] .of-key[data-key='0'] .of-key__block { animation: none; }
 }

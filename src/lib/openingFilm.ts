@@ -7,12 +7,24 @@
 // across machines; no limit on the length; the single words FIRST, then the
 // relay — "先单独的字，再轮到打字接力"; richer, more layered pages; black-and-
 // white pages and a stronger colour rhythm, in runs, never abrupt), in six
-// acts:
+// acts, after a count-in:
 //
+//   0. The proof (1 s, before the clock). The owner, 2026-09-29: "然后开头
+//      动画最开端是直接播放，有点突兀了，可以加一个小小的开场" (the very
+//      start just plays, a little abrupt: add a small opening). The first
+//      paint is a printer's proof on the newspaper's own newsprint: the crop
+//      marks rule in from the corners, the lime plate prints the anchor's
+//      block, the ink plate prints ARCHIVE into it, and the first page is
+//      printed round it — four beats a third of a second apart, on the
+//      film's sixth, then the cuts at double time. Light on light: it turns
+//      nothing over. It is what the reader sees while the island and the
+//      faces come (the busy first page used to sit there frozen, about to
+//      snap), so it adds a second at most, and less on a slow load.
 //   1. Match cuts round a fixed lime anchor (3⅓ s, 17 scenes on a sixth of
 //      a second — the owner's "缩短3-4秒", 2026-09-29, took it down from 5.7 s
-//      and 25): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU. The server's markup is its first page (the
-//      first paint). The block's centre, its height and the word's cap
+//      and 25): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU. The first paint
+//      is the proof (act 0), with the first page drawn under it, unseen.
+//      The block's centre, its height and the word's cap
 //      height never move; only the word and its face change (Fraunces 900,
 //      Fraunces italic, Space Grotesk 700, Fraunces 400, the monospace).
 //      Round it the frame is recomposed every cut, alternating an editorial
@@ -64,11 +76,13 @@
 // turn); no fallback face, no blank frame, no dropped frame at a cut (the
 // fonts and his photographs are in before the clock starts, every page is
 // drawn a quarter second before its cut, and everything is transform and
-// opacity on one clock).
+// opacity on one clock). The proof's beats are on the same sixth, counted
+// from its first frame: the clock is taken from the proof's own start
+// (filmStart), so the count-in and the cuts are one grid.
 //
-// It plays once a tab session (src/lib/reelVisit.ts). While it plays, ONLY
-// the Skip pill skips it (to the end title and a hurried landing — never a
-// hard cut to the page); a wheel, a touch, a key or a click anywhere else
+// It plays once a tab session (src/lib/reelVisit.ts). While it plays (the
+// proof too), ONLY the Skip pill skips it (to the end title and a hurried
+// landing — never a hard cut to the page); a wheel, a touch, a key or a click anywhere else
 // does nothing at all (the page's scroll is held). Reduced motion gets the
 // end title as a still and a calm crossfade.
 //
@@ -78,7 +92,7 @@
 // only samples it by time. scripts/opening-film.test.mjs holds it to account
 // offline.
 
-import { bezierFn, type Bezier } from './motion';
+import { EASE, bezierFn, type Bezier } from './motion';
 
 export const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -134,6 +148,102 @@ export interface Span {
   start: number;
   end: number;
 }
+
+// ── Act 0: the proof (a count-in, before the clock) ───────────────────────
+// The film opens on the newspaper's own newsprint as a printer's proof:
+// crop marks rule in from the corners, the lime plate prints the anchor's
+// block, the ink plate prints its word, and the page is printed round it —
+// four beats a third of a second apart, then the cuts at double time. The
+// stylesheet plays the marks and the lime from the first paint (so the
+// island's hydration and the faces are waited for under it, on the
+// compositor); the island prints the word on the film's clock (never before
+// the faces have had their chance) and lets the proof go at film 0. It lives
+// before the clock (film −PRELUDE_MS … 0): no act, no act time, no cut
+// moves. Light on light (newsprint, then lime, a change of hue, not of
+// light): it turns nothing over.
+export const PRELUDE = {
+  /** Sixths before the page: the first paint, the lime plate, the ink plate. */
+  beats: { paint: 6, lime: 4, word: 2 },
+  /** The crop marks rule in across this many sixths (from the first paint). */
+  draw: 2,
+  /** The lime plate before its beat: drawn, never seen (the pages' own warm
+   *  opacity: its raster is done before it prints). */
+  unprinted: 0.002,
+  /** The lime plate's first impression, and its ink setting to full (ms, on
+   *  the house curve). */
+  limeInk: 0.64,
+  set: 250,
+  /** The newspaper's newsprint (.of-sheet--newspaper): proof and first page
+   *  are one sheet, so only ink arrives with the page. */
+  ground: '#e9e5d8',
+  /** Never quite opaque: the page under it stays rastered (never occlusion-
+   *  culled), and unseen (under half an 8-bit level). */
+  sheet: 0.998,
+} as const;
+export const PRELUDE_MS = PRELUDE.beats.paint * CUT_MS; // 1000
+/** The lime plate's one stylesheet animation, from the first paint: held
+ *  unprinted to its beat, then its first impression setting to full. */
+export const PROOF_LIME_MS = (PRELUDE.beats.paint - PRELUDE.beats.lime) * CUT_MS + PRELUDE.set;
+/** Its keyframes (offsets over PROOF_LIME_MS; the stylesheet's of-proof-lime
+ *  holds these, scripts/opening-film.test.mjs checks them). ONE animation on
+ *  the block's opacity, the house curve sampled into it (linear between, no
+ *  keyframe easing), not two chained: two animations on one property are
+ *  played on the main thread, where the island's hydration would stall the
+ *  print it is there to hide. `samples` steps of 25 ms: under 0.013 of
+ *  opacity off the curve anywhere. */
+export function proofLimeKeyframes(samples = 10) {
+  const hold = (PRELUDE.beats.paint - PRELUDE.beats.lime) * CUT_MS;
+  const at = hold / PROOF_LIME_MS;
+  const curve = bezierFn(EASE.arrive);
+  // The step is taken a hair (about a microsecond) before the beat: the beat
+  // is a frame's own time (a sixth is ten vsyncs from the first frame), and
+  // a step exactly on it drew that frame half printed.
+  const hair = 1e-6;
+  const out: { offset: number; opacity: number }[] = [
+    { offset: 0, opacity: PRELUDE.unprinted },
+    { offset: at - 2 * hair, opacity: PRELUDE.unprinted },
+    { offset: at - hair, opacity: PRELUDE.limeInk },
+  ];
+  for (let i = 1; i <= samples; i += 1) {
+    const u = i / samples;
+    out.push({ offset: at + (1 - at) * u, opacity: PRELUDE.limeInk + (1 - PRELUDE.limeInk) * curve(u) });
+  }
+  return out;
+}
+/** The proof's slug, at its foot (PROPOSED copy; no place names, and not his
+ *  name — the film ends on it). The plates' labels come with their plates. */
+export const PROOF_SLUG = { head: 'Proof 01', wide: '— Visual archive', plates: ['· Plate 1 lime', '· Plate 2 ink'] } as const;
+
+/** Film 0 (the page) on document.timeline. `origin`: the proof's first frame
+ *  (its stylesheet animations' start time), or null; `ready`: the earliest
+ *  the island's keyframes take effect (now + CLOCK_LEAD_MS). The word is the
+ *  island's, so it falls on the first sixth of the proof's grid at or after
+ *  `ready`, never before its own beat; the page a third of a second later.
+ *  Without an origin (no proof to count from), the word when ready. */
+export function filmStart(origin: number | null, ready: number) {
+  const word = PRELUDE.beats.word * CUT_MS;
+  if (origin == null) return ready + word;
+  const beat = origin + PRELUDE_MS - word;
+  const k = Math.max(0, Math.ceil((ready - beat) / CUT_MS - 1e-6));
+  return origin + PRELUDE_MS + k * CUT_MS;
+}
+
+/** The first paint's anchor as the stylesheet sets it (opening.css --c0 and
+ *  --c0w), per cap height: the widest keyword's block (THOUGHT in Fraunces
+ *  400, 6.7286 caps of ink at 100 px, and its padding), and the first
+ *  word's (ARCHIVE in Fraunces 900 at its set size — its largest optical
+ *  size on the desktop; 65 px on a 390 px phone, where the optical size
+ *  draws it wider). The island lays the anchor's cap and the first block
+ *  from these, always (derive, don't sample): the lime block stands alone
+ *  on the proof from the first paint, and must never move or change size
+ *  when the island takes it over — in any face state, on any engine, at any
+ *  width. (They were measured again when the film lost eight pages: the
+ *  widest word had gone with them, and the phone's block jumped 10 px at
+ *  the clock.) */
+export const FIRST_PAINT = {
+  desktop: { across: 7.4087, key0: 7.062 },
+  phone: { across: 7.4087, key0: 7.598 },
+} as const;
 
 // ── Act 1: the fixed anchor and its match cuts ────────────────────────────
 
@@ -518,7 +628,7 @@ const RECEIPT_ROAD = ['1 × SINGLE', 'OUT  ——', 'RETURN  ——', 'PAID', 'K
  *  owner found the film long (2026-09-29, "缩短3-4秒"): the pages most like
  *  their neighbours went (the catalogue card, the strip of negatives, the
  *  book, the notebook and four editorial pages) and every page now holds one
- *  sixth — but the first (it is also the first paint), two, and the last
+ *  sixth — but the first (drawn from the first paint, under the proof), two, and the last
  *  (YOU, before the hand-off), three. The drift turns only by a quarter
  *  between neighbours, so the motion runs on across every cut; the face
  *  changes at every cut. The colour in runs: ARCHIVE on paper, CAMERA in
@@ -1189,6 +1299,9 @@ export interface CutPlan extends Span {
 }
 export interface FilmPlan {
   layout: FilmLayout;
+  /** Act 0, before the clock: the proof (film −PRELUDE_MS … 0), its lime
+   *  plate and its ink plate (the word). */
+  prelude: Span & { lime: number; word: number };
   acts: Record<ActId, Span>;
   /** Act 1. */
   cuts: CutPlan[];
@@ -1232,6 +1345,7 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
   const blink = { start: title.start - CURSOR_MS / 2, end: title.start };
   return {
     layout,
+    prelude: { start: -PRELUDE_MS, lime: -PRELUDE.beats.lime * CUT_MS, word: -PRELUDE.beats.word * CUT_MS, end: 0 },
     acts: { cuts: cutsAct, hand, type, burn, dark, title },
     cuts,
     styles,
@@ -1283,6 +1397,9 @@ export function toneTimeline(plan: FilmPlan): (Span & { tone: Tone })[] {
     if (last && last.tone === tone && Math.abs(last.end - start) < 1e-6) last.end = end;
     else out.push({ start, end, tone });
   };
+  // The proof: newsprint, then the lime plate on it — light, and one with
+  // the first page (the same newsprint).
+  push(plan.prelude.start, plan.prelude.end, 'light');
   plan.cuts.forEach((c) => push(c.start, c.end, c.tone));
   // The hand-off is on the first machine's screen.
   push(plan.acts.hand.start, plan.acts.hand.end, STYLE_TONE[plan.styles[0].id]);
@@ -1526,12 +1643,13 @@ export function pickPictures(groups: readonly { photos?: readonly PictureSource[
 // ── The fonts, loaded before the clock starts ─────────────────────────────
 // Every face and weight the film sets (document.fonts.load each, with the
 // characters it sets, so the right subset comes). The clock waits for them
-// at most FONT_WAIT_MS after the island starts (the first page is on screen
-// meanwhile: the server's markup) and never for his photographs (they load
+// at most FONT_WAIT_MS after the island starts (the proof is on screen
+// meanwhile, counting in from the first paint: its lime plate is the
+// stylesheet's, its word the clock's) and never for his photographs (they load
 // behind the film) — past that the film plays on whatever has come, and a
 // face that lands later has every word measured again on the same clock. A
-// reload never sits still: the clock is running a third of a second after
-// the island is.
+// reload never sits still: the proof moves from the first paint, and the
+// clock's keyframes are laid a third of a second after the island is.
 export const FONT_LOADS = [
   '900 100px Fraunces',
   '400 100px Fraunces',

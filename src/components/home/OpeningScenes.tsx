@@ -7,6 +7,7 @@ import {
   DARK_TYPED,
   DRIFT_VEC,
   LEADER,
+  PROOF_SLUG,
   SCENES,
   SHEETS,
   STYLES,
@@ -39,9 +40,12 @@ import {
 // transformed at rest by the island's clock; what moves, the island moves
 // (transform and opacity on the film's one clock), and where a word must be
 // measured or set on the anchor's baseline it carries a baseline probe
-// (`.of-bl`). The first match cut is the server's first paint: the
-// stylesheet sets it (the anchor, its giant, the words on its line) exactly
-// where the island will.
+// (`.of-bl`). The server's first paint is the proof (act 0): a sheet of the
+// newspaper's newsprint over the first match cut, its marks and its slug,
+// the first cut's lime anchor over it — the stylesheet counts it in. The
+// first match cut is drawn under it from the first paint: the stylesheet
+// sets it (the anchor, its giant, the words on its line) exactly where the
+// island will.
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
 // the anchor, the printed matter's own words (but the dictionary, Webster's
@@ -170,6 +174,31 @@ function Marks() {
           <i key={k} style={vars({ '--k': k })} />
         ))}
       </span>
+    </div>
+  );
+}
+
+// ── Act 0: the proof ──────────────────────────────────────────────────────
+
+/** The proof's sheet: the newspaper's newsprint over the first page (let go
+ *  at film 0; never quite opaque, so the page under it is drawn). */
+function ProofSheet() {
+  return <div className="of-proof" data-proof aria-hidden="true" />;
+}
+/** Its marks (the pages' own: crop marks, registration mark, step bar) and
+ *  its slug, above the soft edge so the hairlines stay crisp. Each plate's
+ *  label comes with its plate: the lime's (the stylesheet), the ink's (the
+ *  clock). */
+function ProofMarks() {
+  return (
+    <div className="of-proof-marks" data-proof-marks aria-hidden="true">
+      <Marks />
+      <p className="of-proof__slug of-mono">
+        {PROOF_SLUG.head}{' '}
+        <span className="of-proof__wide">{PROOF_SLUG.wide}</span>{' '}
+        <span data-plate="1">{PROOF_SLUG.plates[0]}</span>{' '}
+        <span data-plate="2">{PROOF_SLUG.plates[1]}</span>
+      </p>
     </div>
   );
 }
@@ -1042,7 +1071,8 @@ const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
 
 /**
  * Every scene, stacked (the island times them): the frame (the paper, every
- * cut's page, the anchor, the soft edge, the grain; the relay's machines
+ * cut's page, the proof's sheet, the anchor, the soft edge, the proof's
+ * marks, the grain; the relay's machines
  * over them; the hand-off's lime block; for the burn the sepia and its
  * canvas and — past its foot — the frame line and perforations a slip
  * shows), the dark of the burn with its leader and lit perforations, and the
@@ -1059,12 +1089,15 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
         {SCENES.map((s, i) => (
           <Cut key={i} index={i} s={s} pictures={pictures} />
         ))}
+        {/* Act 0: the proof over the first page, under its anchor. */}
+        <ProofSheet />
         <div className="of-anchor" data-anchor>
           {SCENES.map((s, i) => (
             <Key key={i} index={i} s={s} />
           ))}
         </div>
         <div className="of-frame__soft" data-soft />
+        <ProofMarks />
         {SCENES.map((s, i) => (
           <Chrome key={i} index={i} s={s} />
         ))}

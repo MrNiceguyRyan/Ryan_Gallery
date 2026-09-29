@@ -13,6 +13,7 @@ import {
   DRIFT_VEC,
   FF_RATE,
   FF_TAIL,
+  FIRST_PAINT,
   FLY_ORDER,
   FONT_LOADS,
   FONT_SAMPLE,
@@ -25,6 +26,8 @@ import {
   LANDING_TARGETS,
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
+  PRELUDE,
+  PRELUDE_MS,
   SCENES,
   STILL,
   TITLE,
@@ -42,6 +45,7 @@ import {
   faceText,
   fastForwardTarget,
   filmPlan,
+  filmStart,
   flightFor,
   flightPath,
   frameAt,
@@ -399,10 +403,12 @@ function scratchOf(f: number): [number, number, number, number] {
  * (src/lib/openingFilm.ts has the plan and the reasons).
  *
  * A fixed layer over the first screen from the first paint (the server's
- * markup is its first frame: the first match cut — its page, the lime
- * anchor and its word, set by the stylesheet where the island will set
- * them). The island loads every face the film sets (at most FONT_WAIT_MS),
- * measures the words, and only then starts the clock: the whole film is WAAPI
+ * markup is its first frame: the proof, with the first page drawn under it
+ * — its page, the lime anchor and its word, set by the stylesheet where the
+ * island will set them; the stylesheet counts in, and the clock starts
+ * where the page is printed). The island loads every face the film sets (at
+ * most FONT_WAIT_MS) while the proof counts in, measures the words, and
+ * lays the clock on the proof's own grid (filmStart): the whole film is WAAPI
  * on transform and opacity from that one start (the compositor plays it, so
  * the page's hydration and the map's start-up behind it cannot stutter it),
  * plus the burn's canvas, drawn on the same clock a 24th of a second at a
@@ -413,8 +419,8 @@ function scratchOf(f: number): [number, number, number, number] {
  *
  * It plays once a tab session (src/lib/reelVisit.ts decides before the first
  * paint: html[data-opening] present means it plays). `?filmT=<ms>` (a
- * verification hook, never linked) holds the film still at that time and
- * exposes window.__filmSeek.
+ * verification hook, never linked) holds the film still at that time (from
+ * −1000, the proof's first frame) and exposes window.__filmSeek.
  */
 export default function OpeningFilm({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -638,6 +644,13 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     // ── The film ──
     const timeline = document.timeline;
     const nowMs = () => Number(timeline.currentTime ?? performance.now());
+    /** The proof's stylesheet animations (its count-in from the first paint;
+     *  each filled both ways, so every one of them is here at any moment
+     *  until the film is let go). */
+    const proofAnims = () =>
+      (overlay.getAnimations?.({ subtree: true }) ?? []).filter(
+        (a) => typeof (a as CSSAnimation).animationName === 'string' && (a as CSSAnimation).animationName.startsWith('of-proof'),
+      );
     const layoutOf = (): FilmLayout => (overlay.clientWidth <= PHONE_MAX_WIDTH ? 'phone' : 'desktop');
     let plan: FilmPlan = filmPlan(layoutOf());
     let t0 = nowMs();
@@ -690,42 +703,45 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const short = Math.min(W, H);
       const phoneLayout = plan.layout === 'phone';
 
-      // The anchor: one cap height for every cut, the widest word fitting.
+      // The anchor: one cap height for every cut, the widest word (THOUGHT)
+      // fitting across. It is the first paint's, always (derive, don't
+      // sample): the cap from the stylesheet's own numbers (FIRST_PAINT, its
+      // --c0: the widest word's measure in the faces) and the first word's
+      // block from its --c0w — so the lime block the proof prints alone is
+      // never moved or resized when the island takes it over, whatever the
+      // faces' state (a cold load, or faces that never come, measure a
+      // fallback face: document.fonts reports them ready all the same) or
+      // the engine's measure.
       const keys = qa<HTMLElement>('[data-key]');
-      const used = new Set(plan.cuts.map((c) => c.index));
-      const perCap = keys.map((key, i) => {
-        const word = q('[data-word]', key)!;
-        word.style.fontSize = '100px';
-        const ink = inkOf(word, faceText(SCENES[i].word, SCENES[i].face));
-        return { word, perCap: (ink.left + ink.right) / Math.max(1, ink.cap) };
-      });
-      const widest = Math.max(...perCap.filter((_, i) => used.has(i)).map((p) => p.perCap));
-      const cap = anchorCap(W, H, widest, plan.layout);
+      const firstPaint = FIRST_PAINT[plan.layout];
+      const cap = anchorCap(W, H, firstPaint.across - 2 * ANCHOR.pad, plan.layout);
       const blocks: Box[] = [];
       let anchorBase = 0;
       keys.forEach((key, i) => {
-        const { word } = perCap[i];
+        const word = q('[data-word]', key)!;
         fitCap(word, word, cap);
         const ink = inkOf(word, faceText(SCENES[i].word, SCENES[i].face));
-        const inkW = ink.left + ink.right;
-        const kb = keyBox(W, H, cap, inkW);
+        const kb = keyBox(W, H, cap, ink.left + ink.right);
+        // The first block is the first paint's; its word is centred in it
+        // by its own ink (the centre and the baseline never depend on it).
+        const box = i === plan.cuts[0].index ? keyBox(W, H, cap, (firstPaint.key0 - 2 * ANCHOR.pad) * cap).block : kb.block;
         anchorBase = kb.baseline;
         const block = q('[data-block]', key)!;
-        block.style.left = px(kb.block.x);
-        block.style.top = px(kb.block.y);
-        block.style.width = px(kb.block.w);
-        block.style.height = px(kb.block.h);
+        block.style.left = px(box.x);
+        block.style.top = px(box.y);
+        block.style.width = px(box.w);
+        block.style.height = px(box.h);
         word.style.left = px(kb.inkX + ink.left);
         word.style.top = '0px';
         word.style.top = px(kb.baseline - baselineIn(word));
-        blocks.push(kb.block);
+        blocks.push(box);
         // The page round it knows where the block is.
         const cut = q(`[data-cut="${i}"]`);
         if (cut) {
-          cut.style.setProperty('--bl', px(kb.block.x));
-          cut.style.setProperty('--br', px(kb.block.x + kb.block.w));
-          cut.style.setProperty('--bt', px(kb.block.y));
-          cut.style.setProperty('--bb', px(kb.block.y + kb.block.h));
+          cut.style.setProperty('--bl', px(box.x));
+          cut.style.setProperty('--br', px(box.x + box.w));
+          cut.style.setProperty('--bt', px(box.y));
+          cut.style.setProperty('--bb', px(box.y + box.h));
           cut.style.setProperty('--cap', px(cap));
         }
       });
@@ -1130,6 +1146,24 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         frames.push({ offset: 1, transform: 'translate(0px, 0px)' });
         during(tile, start, start + GRAIN_LOOP_MS, frames, Math.max(1, Math.ceil((end - start) / GRAIN_LOOP_MS)));
       };
+      /** The proof's part on the clock: laid from film −PRELUDE_MS (a
+       *  negative delay, so its start time is t0 like every film animation's
+       *  — seek and skip move it with the rest). Hard steps of opacity. */
+      const preSpan = total + PRELUDE_MS;
+      const pat = (t: number) => clamp01((t + PRELUDE_MS) / preSpan);
+      const pre = (el: Element | null, first: number, changes: [number, number][]) => {
+        if (!el) return;
+        const frames: Keyframe[] = [{ offset: 0, opacity: first }];
+        let prev = first;
+        changes.forEach(([t, v]) => {
+          frames.push({ offset: pat(t), opacity: prev }, { offset: pat(t), opacity: v });
+          prev = v;
+        });
+        frames.push({ offset: 1, opacity: prev });
+        const anim = el.animate(frames, { delay: -PRELUDE_MS, duration: preSpan, fill: 'both', easing: 'linear' });
+        anim.startTime = t0;
+        filmAnims.push(anim);
+      };
       /** A morph's letters: each pair fitted into their shared ink box across
        *  `win` (shares of the move [start, start + dur]); outside it each
        *  letter is its own (the face not shown then is hidden). */
@@ -1154,9 +1188,26 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const frameT = (f: number) => burnFrameStart(plan, f);
       const frameOut = frameT(BURN.out[1]);
 
+      // ── Act 0: the proof — the ink plate on the clock; the sheet let go at the page ──
+      // (The crop marks and the lime plate are the stylesheet's, from the
+      // first paint; the clock was counted from them.)
+      {
+        const pr = plan.prelude;
+        pre(q('[data-key="0"] [data-word]'), 0, [[pr.word, 1]]);
+        pre(q('[data-plate="2"]'), 0, [[pr.word, 1]]);
+        const sheet = q('[data-proof]');
+        const marks = q('[data-proof-marks]');
+        pre(sheet, PRELUDE.sheet, [[pr.end, 0]]);
+        pre(marks, 1, [[pr.end, 0]]);
+        if (sheet) goneAfter(sheet, pr.end);
+        if (marks) goneAfter(marks, pr.end);
+      }
+
       // ── Act 1: the paper, the pages, the anchor ──
       [q('[data-paper]'), q('[data-soft]'), q('[data-grain]'), q('[data-vignette]')].forEach((el) => el && scene(el, 0, acts.hand.start));
-      grain(q('[data-grain-tile]'), 0, acts.hand.start);
+      // The frame's grain from the proof's first frame (it moves on across
+      // the clock's laying).
+      grain(q('[data-grain-tile]'), -PRELUDE_MS, acts.hand.start);
       const used = new Map(plan.cuts.map((c, k) => [c.index, k]));
       qa<HTMLElement>('[data-cut]').forEach((cutEl) => {
         const index = Number(cutEl.dataset.cut);
@@ -1450,6 +1501,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const target = fastForwardTarget(plan, t);
       if (target == null) return;
       shiftAll(-(target - t));
+      // The proof's count-in (the stylesheet's) ends printed; its layers are
+      // gone on the shifted clock.
+      proofAnims().forEach((a) => a.finish());
       drawBurn(target);
       schedule();
       if (!burnRaf) burnRaf = requestAnimationFrame(burnLoop);
@@ -1722,18 +1776,32 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       if (!burn) burn = makeBurn(canvas);
       burn?.resize(geo.W, geo.H);
       burn?.draw(null);
-      // Measured on this frame; the keyframes laid on the next, to start a
-      // few frames on (the first page held until then, as the server
-      // painted it): the frame that lays them is never one the film's time
-      // is spent on, and nothing is re-timed once laid.
+      // Measured on this frame; the keyframes laid on the next, to take
+      // effect a few frames on (the proof counting in meanwhile, as the
+      // stylesheet plays it): the frame that lays them is never one the
+      // film's time is spent on, and nothing is re-timed once laid.
       requestAnimationFrame(() => {
         if (disposed || phase !== 'wait') return;
         phase = 'film';
         overlay.setAttribute('data-clock', '');
-        t0 = nowMs() + CLOCK_LEAD_MS;
+        const proof = proofAnims();
         if (pendingSkip) {
+          // Skipped before the clock: to the title's tail (the proof never
+          // counted).
           hurried = true;
-          t0 -= plan.length - FF_TAIL;
+          t0 = nowMs() + CLOCK_LEAD_MS - (plan.length - FF_TAIL);
+          proof.forEach((a) => a.finish());
+        } else {
+          // The clock is the proof's: film 0 on its sixth grid, counted from
+          // its first frame, the word on the first beat the keyframes can
+          // make (filmStart).
+          const starts = proof.map((a) => a.startTime).filter((s) => s != null).map(Number);
+          const origin = starts.length ? Math.min(...starts) : proof.length ? nowMs() : null;
+          t0 = filmStart(seekParam != null ? null : origin, nowMs() + CLOCK_LEAD_MS);
+          // One still pending (no frame drawn yet) joins the film's clock.
+          proof.forEach((a) => {
+            if (a.startTime == null) a.startTime = t0 - PRELUDE_MS;
+          });
         }
         build();
         schedule();
@@ -1745,7 +1813,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       });
     };
 
-    // A verification hook (?filmT=<ms>): the film held still at any time.
+    // A verification hook (?filmT=<ms>): the film held still at any time
+    // (−PRELUDE_MS … 0: the proof).
     const seek = (t: number) => {
       if (!geo) return;
       // Its own list: a window already played is no longer among the
@@ -1754,6 +1823,12 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       film.forEach((a) => {
         a.pause();
         a.currentTime = Math.min(t, plan.length + 39);
+      });
+      // The proof's count-in (the stylesheet's, from its first frame, a
+      // PRELUDE_MS before film 0): ?filmT=-1000 is the first paint.
+      proofAnims().forEach((a) => {
+        a.pause();
+        a.currentTime = Math.max(0, t + PRELUDE_MS);
       });
       drawnFrame = -2;
       drawBurn(t);
@@ -1795,8 +1870,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       if (seekParam != null) seek(t);
     };
 
-    // The fonts, before the clock starts — at most FONT_WAIT_MS (the first
-    // page is on screen meanwhile, as the server painted it): never longer,
+    // The fonts, before the clock starts — at most FONT_WAIT_MS (the proof
+    // is on screen meanwhile, counting in from the first paint): never longer,
     // whatever the network; a face that lands after the clock has started
     // has every word measured again, once, on the same clock. His
     // photographs are never waited for: they load behind the film (each
