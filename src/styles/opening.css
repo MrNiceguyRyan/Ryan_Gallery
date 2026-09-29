@@ -1,8 +1,8 @@
 /* ── The opening film (src/components/home/OpeningFilm.tsx) ────────────────
    A word hunt through many texts; the schedule, the entrances, the camera
    and the landings are src/lib/openingFilm.ts. This sheet is the film's
-   MATERIALS: the overlay, the code rain, the finder, the timecode, the
-   whip's streaks, and one block per scene. Sheets are drawn at the
+   MATERIALS: the overlay, the code rain, the finder, the frame counter, a
+   whip's ghosts, and one block per scene. Sheets are drawn at the
    desktop's scale (a found word's cap height is about 64 px); the island's
    camera scales and places them. Type as material — engraving, paint in a
    lens ring's grooves, a halftone screen, stencil spray, an LED matrix,
@@ -90,6 +90,11 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
 }
 /* Landing: the page shows through where the film has gone. */
 .opening.is-landing { background: transparent; }
+/* The page's scroll is held while the film plays (the island sets and lifts
+   data-film-lock). A stylesheet rule, not an inline style: the homepage's
+   own scroll-lock effect writes the body's inline overflow as it mounts,
+   and must not lift this. `clip`, the one lock the sticky atlas survives. */
+html[data-film-lock] body { overflow: clip !important; }
 
 .of-stage,
 .of-portal,
@@ -148,28 +153,13 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
 /* What moves inside a shot (data-kick) moves on the compositor. */
 .opening [data-kick] { will-change: transform; }
 
-/* A whip's motion blur: long horizontal streaks in the incoming shot's tone,
-   over it while it moves (the island times their strength). Streaks run the
-   whole width, so they are drawn with gradients alone (cheap to draw, no
-   filter) and need not move themselves. */
-.of-whip {
-  position: absolute;
-  inset: 0;
+/* A whip's motion blur: ghosts of the sheet itself (copies the island makes
+   of its markup), faint, trailing it on the side it came from — the words
+   smear as they pass, instead of a plate of streaks over the frame. Seen
+   only for the whip's first ~120 ms (the island times them). */
+.of-ghost {
   opacity: 0;
   pointer-events: none;
-  will-change: opacity;
-}
-.of-whip--light {
-  background:
-    repeating-linear-gradient(180deg, rgba(40, 40, 38, 0) 0 5px, rgba(40, 40, 38, 0.22) 5px 7px, rgba(40, 40, 38, 0) 7px 11px),
-    repeating-linear-gradient(180deg, rgba(248, 247, 242, 0.5) 0 19px, rgba(248, 247, 242, 0) 19px 31px, rgba(30, 30, 28, 0.18) 31px 34px, rgba(248, 247, 242, 0) 34px 53px),
-    repeating-linear-gradient(180deg, rgba(236, 234, 227, 0.75) 0 70px, rgba(200, 198, 190, 0.6) 70px 97px, rgba(236, 234, 227, 0.7) 97px 161px, rgba(120, 119, 114, 0.45) 161px 173px, rgba(236, 234, 227, 0.75) 173px 227px);
-}
-.of-whip--dark {
-  background:
-    repeating-linear-gradient(180deg, rgba(230, 229, 222, 0) 0 5px, rgba(230, 229, 222, 0.1) 5px 7px, rgba(230, 229, 222, 0) 7px 11px),
-    repeating-linear-gradient(180deg, rgba(14, 15, 13, 0.55) 0 19px, rgba(14, 15, 13, 0) 19px 31px, rgba(210, 209, 202, 0.16) 31px 34px, rgba(14, 15, 13, 0) 34px 53px),
-    repeating-linear-gradient(180deg, rgba(22, 23, 20, 0.8) 0 70px, rgba(52, 53, 49, 0.65) 70px 97px, rgba(22, 23, 20, 0.75) 97px 161px, rgba(120, 120, 114, 0.35) 161px 173px, rgba(22, 23, 20, 0.8) 173px 227px);
 }
 
 /* ── The film's furniture ─────────────────────────────────────────────── */
@@ -245,9 +235,9 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   .of-finder__c { width: 14px; height: 14px; }
 }
 
-/* The timecode, bottom left, on an ink pill (a film's running clock, no
-   progress count); the Skip pill bottom right. Digits run on strips (a
-   transform, stepped). */
+/* A camera's frame counter, bottom left, on an ink pill (FR 01/36: one
+   frame of the roll a cut); the Skip pill bottom right. The digits run on a
+   strip (a transform the island steps on every cut). */
 .of-hud {
   position: absolute;
   left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
@@ -281,12 +271,10 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   white-space: pre;
   line-height: 1;
 }
-.of-digits--ff .of-digits__strip { animation: of-strip-24 1s steps(24) infinite; }
-.of-digits--ss .of-digits__strip { animation: of-strip-10 10s steps(10) infinite; }
-@keyframes of-strip-24 { to { transform: translateY(-24em); } }
-@keyframes of-strip-10 { to { transform: translateY(-10em); } }
+.of-digits__strip { will-change: transform; }
+.of-hud__of { color: rgba(244, 244, 237, 0.42); }
 @media (max-width: 1023px) {
-  .of-hud__tc-label { display: none; }
+  .of-hud__label { display: none; }
 }
 
 .of-skip {
@@ -439,6 +427,29 @@ html[data-reel='skip'] .of-skip { display: none; }
   animation-delay: calc(360ms + var(--k) * 55ms);
 }
 @keyframes of-lock-on { to { opacity: 1; } }
+/* The word's depth: copies stacked behind it (the island steps them back,
+   down and to the right, darker as they go back — the word's extruded side
+   — and closes them up into the word as it lands). Unseen until the lift. */
+.of-lock__depth {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+.of-lock__layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  /* Nearest (d 1) a mid grey, the deepest (d 8) all but the ground: the
+     extruded side, in shade. */
+  color: rgb(calc(104 - var(--d) * 9) calc(104 - var(--d) * 9) calc(100 - var(--d) * 8.6));
+  will-change: transform, opacity;
+}
 
 /* ── 2. Dictionary ────────────────────────────────────────────────────── */
 .of-scene--dictionary { background: #171716; }
@@ -1002,6 +1013,26 @@ html[data-reel='skip'] .of-skip { display: none; }
     radial-gradient(ellipse 60% 20% at 40% 30%, rgba(255, 255, 255, 0.07), transparent 70%),
     #1f2320;
 }
+/* What a strip carries besides its stock, on a layer the size of the strip;
+   on the strips round the word it is cleared out of the word's band (the
+   band's top and bottom in the strip, less the strip's own offset --rest),
+   with a short fade, so no half letter is left at its edge. */
+.of-slice__ink {
+  position: absolute;
+  inset: 0;
+  --bt: calc(var(--band-top) - var(--rest, 0px));
+  --bb: calc(var(--band-bottom) - var(--rest, 0px));
+}
+.of-slice__ink.is-banded {
+  -webkit-mask: linear-gradient(180deg, #000 0 calc(var(--bt) - 12px), transparent var(--bt) var(--bb), #000 calc(var(--bb) + 12px));
+  mask: linear-gradient(180deg, #000 0 calc(var(--bt) - 12px), transparent var(--bt) var(--bb), #000 calc(var(--bb) + 12px));
+}
+.of-slices {
+  /* The word's band, in a strip's own coordinates (phone: the strips start
+     30 px above the sheet). */
+  --band-top: 750px;
+  --band-bottom: 980px;
+}
 .of-slice__news {
   position: absolute;
   left: 6px;
@@ -1023,7 +1054,7 @@ html[data-reel='skip'] .of-skip { display: none; }
 .of-slice__big {
   position: absolute;
   left: -40px;
-  top: 540px;
+  top: 990px;
   font-family: var(--of-clarendon);
   font-size: 520px;
   line-height: 1;
@@ -1048,7 +1079,6 @@ html[data-reel='skip'] .of-skip { display: none; }
   color: rgba(16, 16, 16, 0.85);
   writing-mode: vertical-rl;
 }
-.of-slice__news.is-short { top: 0; max-height: 560px; overflow: hidden; }
 .of-slice__perfs {
   position: absolute;
   left: 28px;
@@ -1072,16 +1102,34 @@ html[data-reel='skip'] .of-skip { display: none; }
 /* A desktop frame sees only the strips' middle: they are cut to it (less to
    draw as they slam). */
 @media (min-width: 1024px) {
+  .of-slices {
+    --band-top: 460px;
+    --band-bottom: 690px;
+  }
   .of-slice {
     height: 1240px;
     margin-top: 260px;
   }
   .of-slice__news { top: -290px; }
-  .of-slice__big { top: 280px; }
+  /* (Below the word's band: a big letter cut by the band left a stray
+     stroke by the word.) */
+  .of-slice__big { top: 700px; }
   .of-slice__chalk { top: 40px; }
   .of-slice__stencil { top: 840px; }
   .of-slice__screw { top: 100px; }
 }
+/* As the word can be read, the strips either side of it go down under a
+   veil (the island fades it in); the word's own six strips stay lit. */
+.of-slices__veil {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(5, 5, 4, 0.45);
+  opacity: 0;
+  pointer-events: none;
+}
+.of-slices__veil--l { left: 0; width: 1012px; }
+.of-slices__veil--r { left: 1588px; right: 0; }
 /* The frame's edge falls into the dark; the word's six strips stay lit. */
 .of-slices__shade {
   position: absolute;
@@ -1113,10 +1161,15 @@ html[data-reel='skip'] .of-skip { display: none; }
   color: #141413;
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.9), 0 -1.5px 0 rgba(0, 0, 0, 0.4);
 }
-/* A halftone letter: filled with a screen of dots. */
+/* A halftone letter: filled with a screen of dots. Heavy, so a phone
+   without Impact (iOS: Avenir Next Condensed) takes its Heavy face — a
+   regular stroke under a 7 px screen does not read; never a faked bold of
+   Impact's one weight. */
 .of-slices__cell--news .of-slices__letter {
   font-family: var(--of-impact);
   font-size: 81px;
+  font-weight: 800;
+  font-synthesis: none;
   background: radial-gradient(circle, #111 0 50%, transparent 56%) 0 0 / 7px 7px;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1231,6 +1284,12 @@ html[data-reel='skip'] .of-skip { display: none; }
 }
 .of-flap__top > span { top: 0; }
 .of-flap__leaf > span { top: -100%; }
+/* The word's leaves fall in depth (a perspective in their own transform,
+   rotateX from the hinge): their back is never seen. */
+.of-flap__leaf--3d {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
 /* The small flaps' leaves (one row changes as the shot lands). */
 .of-flap:not(.of-flap--big) .of-flap__leaf { border-radius: 0 0 4px 4px; }
 .of-board__label {
@@ -1385,6 +1444,13 @@ html[data-reel='skip'] .of-skip { display: none; }
   top: var(--lift);
   opacity: var(--ink);
   text-shadow: 0 0 0.8px rgba(0, 0, 0, 0.95), 0.5px 0.3px 1.2px rgba(0, 0, 0, 0.4);
+}
+/* A struck letter (the island strikes it on the film's clock: a size too
+   big, pressed flat); invisible until struck. */
+.of-typed__key {
+  display: inline-block;
+  opacity: 0;
+  transform-origin: 50% 80%;
 }
 /* The toner: specks, and a faint mottle over everything, as a copy has. */
 .of-type__toner {
@@ -1604,6 +1670,38 @@ html[data-reel='skip'] .of-skip { display: none; }
 }
 .of-film__mark path { vector-effect: non-scaling-stroke; }
 
+/* The loupe: a chrome ring standing on the sheet, the print seen through
+   its glass (a highlight across it, darker at its rim), its shadow thrown on
+   the print outside it (it stands above the sheet: the island's kick trails
+   it on the whip). */
+.of-film__loupe {
+  position: absolute;
+  left: 1420px;
+  top: 470px;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  box-shadow: 24px 32px 36px rgba(0, 0, 0, 0.6);
+}
+.of-film__loupe::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 200deg, #6f716d, #f2f2ef 12%, #9c9e9a 24%, #4d4f4b 38%, #d8d9d5 52%, #7c7e7a 66%, #f5f5f2 80%, #8a8c88 90%, #6f716d);
+  -webkit-mask: radial-gradient(circle, transparent 0 169px, #000 170px);
+  mask: radial-gradient(circle, transparent 0 169px, #000 170px);
+}
+.of-film__loupe-glass {
+  position: absolute;
+  inset: 30px;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 58% 30% at 36% 22%, rgba(255, 255, 255, 0.3), transparent 70%),
+    radial-gradient(circle, transparent 0 60%, rgba(8, 8, 8, 0.45) 100%);
+  box-shadow: inset 0 0 0 5px rgba(0, 0, 0, 0.7), inset 0 0 0 7px rgba(255, 255, 255, 0.18);
+}
+
 /* ── 12. The clapperboard ─────────────────────────────────────────────── */
 .of-scene--slate {
   background: radial-gradient(ellipse 60% 60% at 42% 42%, #22261c 0%, #14170f 78%);
@@ -1680,6 +1778,10 @@ html[data-reel='skip'] .of-skip { display: none; }
   position: relative;
   display: inline-block;
 }
+/* The chalk: drawn in the SVG's own units (a non-scaling stroke made
+   Chrome size the dash on screen: lines stopped short of their words). The
+   box is about as tall as its viewBox, so a unit is about a pixel and the
+   stroke about 2.4 px. */
 .of-chalk {
   position: absolute;
   left: -2%;
@@ -1691,12 +1793,25 @@ html[data-reel='skip'] .of-skip { display: none; }
   stroke: #efeee4;
   stroke-width: 2.4;
   stroke-linecap: round;
+  stroke-linejoin: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  vector-effect: non-scaling-stroke;
   opacity: 0.85;
 }
-.of-chalk path { vector-effect: non-scaling-stroke; }
+/* The ring round CAMERA (the label's text, not its column). */
+.of-slate__ringed {
+  position: relative;
+  display: inline-block;
+  color: rgba(239, 238, 228, 0.9);
+}
+.of-chalk--ring {
+  left: -19%;
+  top: -0.95em;
+  bottom: auto;
+  width: 138%;
+  height: 3.1em;
+  stroke-width: 2.1;
+}
 .of-slate__o {
   display: inline-block;
   width: 0.74em;
@@ -1778,8 +1893,11 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-slate__prod {
     max-width: 560px;
     font-size: 42px;
-    line-height: 1.45;
+    line-height: 1.55;
   }
+  /* (The line wraps here: a line under ARCHIVE must sit under it, not read
+     as a line over THOUGHT below.) */
+  .of-slate__prod .of-chalk { bottom: -0.16em; }
   .of-slate__row--grid { grid-template-columns: repeat(2, 1fr); }
   .of-slate__cell { align-items: center; }
   .of-slate__cell + .of-slate__cell { padding-left: 0; }
@@ -1820,8 +1938,7 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-grain,
   .of-rain__col,
   .of-lock__strip,
-  .of-lock__letter,
-  .of-digits__strip { animation: none; }
+  .of-lock__letter { animation: none; }
   .of-hud { display: none; }
   .of-chalk { stroke-dashoffset: 0; }
   .opening { transition: opacity 700ms var(--ease-fade); }

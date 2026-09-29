@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { RAIN_COLUMNS, rainColumns, scrambleStrip, seeded, type FoundWord, type KickEase, type SceneId } from '../../lib/openingFilm';
+import { RAIN_COLUMNS, TYPE_STRIKE, rainColumns, scrambleStrip, seeded, type FoundWord, type KickEase, type SceneId } from '../../lib/openingFilm';
 
 // ── The opening film's scenes ──
 // Plain markup, the same on the server and the client (no branch on the
@@ -89,9 +89,14 @@ const vars = (v: Record<string, string | number>) => v as CSSProperties;
 // ── 1. Code ─────────────────────────────────────────────────────────────
 // The archive's own jargon falling down the screen, read a character at a
 // time; seven columns in the middle lock, one letter after another, into
-// ARCHIVE, and the word jumps off the rain toward the lens.
+// ARCHIVE, and the word jumps off the rain toward the lens — as a SOLID: a
+// stack of copies behind it, stepping back and darker as they go (its side),
+// that closes up into the one word as it lands (the island plays it on the
+// lift).
 const RAIN = rainColumns();
 const LOCK = 'ARCHIVE';
+/** The copies stacked behind the lifting word. */
+export const LOCK_DEPTH = 8;
 
 function CodeScene() {
   return (
@@ -120,6 +125,13 @@ function CodeScene() {
           ))}
         </span>
         <Find word="archive" className="of-lock__word" ink="ARCHIVE">
+          <span className="of-lock__depth" aria-hidden="true">
+            {Array.from({ length: LOCK_DEPTH }, (_, k) => (
+              <span key={k} className="of-lock__layer" data-depth={LOCK_DEPTH - k} style={vars({ '--d': LOCK_DEPTH - k })}>
+                {LOCK}
+              </span>
+            ))}
+          </span>
           {LOCK.split('').map((letter, index) => (
             <span key={index} className="of-lock__slot" style={vars({ '--k': index })}>
               <span className="of-lock__strip">{scrambleStrip(letter, index)}</span>
@@ -401,6 +413,9 @@ const SLICES = Array.from({ length: SLICE_OUTER * 2 + 6 }, (_, n) => {
   const reachPx = inWord ? 900 : Math.round(600 + rand() * 600);
   return { j, n, inWord, material, at, up, rest, reachPx };
 });
+/** The veil over the strips round the word: at the shot's read (the finder's
+ *  lock, ENTRANCES.slices.read), down over 90 ms. */
+const SLICES_VEIL = { at: 190, ms: 90 } as const;
 const NEWS_TEXT =
   'Every archive begins as a drawer. The contact sheets pile up, the envelopes are labelled in pencil and then in ink. Read in order, the frames make a route; read out of order, something closer to a mind. ';
 
@@ -409,7 +424,9 @@ const NEWS_TEXT =
 function SliceBody({ material, n, inWord }: { material: Material; n: number; inWord: boolean }) {
   switch (material) {
     case 'news':
-      return <span className={`of-slice__news${inWord ? ' is-short' : ''}`}>{NEWS_TEXT.repeat(inWord ? 1 : 3)}</span>;
+      // (The word's own newsprint strip is bare: a paragraph over the
+      // halftone A pulled the eye off the word.)
+      return inWord ? null : <span className="of-slice__news">{NEWS_TEXT.repeat(3)}</span>;
     case 'led':
       return <span className="of-slice__dots" />;
     case 'card':
@@ -436,12 +453,22 @@ function SlicesScene() {
           <span
             key={s.n}
             className={`of-slice of-slice--${s.material}${s.inWord ? ' is-word' : ''}`}
-            style={{ left: `${1012 + s.j * PITCH}px`, top: `${s.rest}px` }}
+            style={vars({ left: `${1012 + s.j * PITCH}px`, top: `${s.rest}px`, '--rest': `${s.rest}px` })}
             {...kick(`translate3d(0, ${s.up ? -s.reachPx : s.reachPx}px, 0)`, s.at, 150, 'whip')}
           >
-            <SliceBody material={s.material} n={s.n} inWord={s.inWord} />
+            {/* What a strip carries besides its stock — cleared out of the
+                word's band on the strips round it, so nothing but the six
+                letters is there to read at the word's height. */}
+            <span className={`of-slice__ink${s.inWord ? '' : ' is-banded'}`}>
+              <SliceBody material={s.material} n={s.n} inWord={s.inWord} />
+            </span>
           </span>
         ))}
+        {/* As the word can be read, the strips either side of the word's six
+            go down (a veil, not over the letters): the eye has one place to
+            go. */}
+        <span className="of-slices__veil of-slices__veil--l" aria-hidden="true" {...kick('none', SLICES_VEIL.at, SLICES_VEIL.ms, 'lock', 'none', 0)} />
+        <span className="of-slices__veil of-slices__veil--r" aria-hidden="true" {...kick('none', SLICES_VEIL.at, SLICES_VEIL.ms, 'lock', 'none', 0)} />
         <span className="of-slices__shade" aria-hidden="true" />
         <Find word="camera" className="of-slices__word" ink="box" cap={64}>
           {SLICE_WORD.map((cell, j) => {
@@ -494,7 +521,10 @@ function BoardScene() {
                 <span className="of-flap__top">
                   <span>{ch}</span>
                 </span>
-                <span className="of-flap__leaf" {...kick('scaleY(0.04)', 16 + index * 18, 100, 'fall')}>
+                {/* The word's flaps fall in real depth: each leaf swings down
+                    from the hinge, out of the board toward the lens, and lands
+                    flat (the rows' small flaps stay a flat squash). */}
+                <span className="of-flap__leaf of-flap__leaf--3d" {...kick('perspective(600px) rotateX(88deg)', 16 + index * 18, 110, 'fall', 'perspective(600px) rotateX(0deg)')}>
                   <span>{ch}</span>
                 </span>
               </span>
@@ -542,19 +572,33 @@ function BookScene() {
 // ── 9. A telegram, typed, then photocopied ───────────────────────────────
 // Black and white: the printed form, the typewriter's letters each struck a
 // little harder or softer, a little high or low, the ink bled into the
-// paper, and the copier's toner and dark edge over all of it.
-function Typed({ text, seed }: { text: string; seed: number }) {
+// paper, and the copier's toner and dark edge over all of it. It cuts in on
+// the carriage slamming home (its entrance), and THOUGHT is struck a letter
+// at a time.
+/** Typed text: each letter struck a little harder or softer and a little
+ *  high or low (by up to `jitter` px either way). `strike`: the letters are
+ *  struck on the film's clock as the shot lands (TYPE_STRIKE), each a size
+ *  too big and pressed flat. */
+function Typed({ text, seed, jitter = 1.6, strike = false }: { text: string; seed: number; jitter?: number; strike?: boolean }) {
   const rand = seeded(seed);
+  let struck = 0;
   return (
     <>
       {text.split('').map((ch, i) => {
         const ink = 0.84 + rand() * 0.16;
-        const lift = (rand() - 0.5) * 3.2;
-        return ch === ' ' ? (
-          ' '
-        ) : (
+        const lift = (rand() - 0.5) * 2 * jitter;
+        if (ch === ' ') return ' ';
+        const order = struck;
+        struck += 1;
+        return (
           <span key={i} className="of-typed" style={vars({ '--ink': ink.toFixed(2), '--lift': `${lift.toFixed(1)}px` })}>
-            {ch}
+            {strike ? (
+              <span className="of-typed__key" {...kick(`scale(${TYPE_STRIKE.k})`, TYPE_STRIKE.at + order * TYPE_STRIKE.stagger, TYPE_STRIKE.ms, 'snap', 'none', 0)}>
+                {ch}
+              </span>
+            ) : (
+              ch
+            )}
           </span>
         );
       })}
@@ -577,8 +621,10 @@ function TypewriterScene() {
             <Typed text="ARRIVED STOP LIGHT HOLDING STOP" seed={31} />
           </span>
           <span className="of-type__line">
+            {/* The found word's letters jitter by a pixel at most: the reading
+                rule sits 6 px under its baseline and must clear every one. */}
             <Find word="thought">
-              <Typed text="THOUGHT" seed={47} />
+              <Typed text="THOUGHT" seed={47} jitter={1} strike />
             </Find>{' '}
             <Typed text="OF THE SEA ALL DAY STOP" seed={53} />
           </span>
@@ -621,7 +667,8 @@ function PosterScene() {
 
 // ── 11. The edge of a strip of film, on a contact sheet ───────────────────
 // A black-and-white contact print: the strip's rebate with its edge print
-// and frame numbers, his frames in black and white, a china-marker circle.
+// and frame numbers, his frames in black and white, a china-marker circle,
+// and a loupe standing on it.
 const PERFS = Array.from({ length: 18 }, (_, index) => <i key={index} />);
 
 function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undefined)[] }) {
@@ -662,6 +709,12 @@ function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undef
         <svg className="of-film__mark" viewBox="0 0 400 260" aria-hidden="true">
           <path d="M40 150 C 30 60, 170 18, 280 34 S 392 120, 360 190 S 190 262, 96 236 S 22 190, 58 118" pathLength="1" />
         </svg>
+        {/* A photographer's loupe standing on the sheet: a layer nearer the
+            lens than the sheet, so on the whip it trails the sheet by 40 px
+            and settles after it (depth by parallax). */}
+        <span className="of-film__loupe" aria-hidden="true" {...kick('translate3d(40px, 0, 0)', 0, 170, 'lock')}>
+          <span className="of-film__loupe-glass" />
+        </span>
       </div>
     </Scene>
   );
@@ -669,14 +722,30 @@ function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undef
 
 // ── 12. The clapperboard ──────────────────────────────────────────────────
 // It carries every word the film found. RYAN XU is where the last run held
-// it; the line under it is the first screen's own line, and its found words
-// are chalked under before the sticks come down. The O of THOUGHT is a true
-// circle drawn in the stroke's weight, so landing B can push through its
-// counter exactly.
+// it, under its field label CAMERA; the line under it is the first screen's
+// own line. Every found word is chalked before the sticks come down — a ring
+// round CAMERA, a line under ARCHIVE, TRAVEL and THOUGHT. The O of THOUGHT is
+// a true circle drawn in the stroke's weight, so landing B can push through
+// its counter exactly. The board's fields are a roll of film's, not a
+// film set's (the owner asked for a camera) — PROPOSED copy (awaiting the
+// owner): the labels Title, Roll, Frame, Exp., Date, their values, and the
+// foot "35 mm · B&W · 36 exp.".
+// The chalk is drawn in the SVG's own units (no non-scaling stroke: with one,
+// Chrome sizes the dash on screen and a line stopped short of its word), so
+// every line and the ring are drawn whole, end to end.
 function Chalk() {
   return (
     <svg className="of-chalk" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
       <path d="M1 6.2 C 18 4.8, 36 7.4, 54 5.6 S 86 4.6, 99 6" pathLength="1" />
+    </svg>
+  );
+}
+/** A hand-drawn chalk ring round a label: one loop, its end running past its
+ *  start. */
+function ChalkRing() {
+  return (
+    <svg className="of-chalk of-chalk--ring" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M58 4.5 C 30 3, 5 8, 4.5 20 S 30 37.5, 55 36.5 S 96 31, 95.5 18.5 S 72 2.5, 38 6.5" pathLength="1" />
     </svg>
   );
 }
@@ -691,13 +760,18 @@ function SlateScene() {
         </div>
         <div className="of-slate__board">
           <div className="of-slate__row of-slate__row--name">
-            <span className="of-slate__label">Camera</span>
+            <span className="of-slate__label">
+              <span className="of-slate__ringed">
+                Camera
+                <ChalkRing />
+              </span>
+            </span>
             <Find word="ryanxu" className="of-slate__name">
               <span data-fly="ryan">RYAN</span> <span data-fly="xu">XU</span>
             </Find>
           </div>
           <div className="of-slate__row of-slate__row--prod">
-            <span className="of-slate__label">Prod.</span>
+            <span className="of-slate__label">Title</span>
             <span className="of-slate__prod">
               A PERSONAL{' '}
               <span className="of-slate__found" data-fly="archive">ARCHIVE<Chalk /></span>{' '}
@@ -711,14 +785,14 @@ function SlateScene() {
           </div>
           <div className="of-slate__row of-slate__row--grid">
             <span className="of-slate__cell"><span className="of-slate__label">Roll</span><span className="of-slate__val">001</span></span>
-            <span className="of-slate__cell"><span className="of-slate__label">Scene</span><span className="of-slate__val">01</span></span>
-            <span className="of-slate__cell"><span className="of-slate__label">Take</span><span className="of-slate__val">1</span></span>
+            <span className="of-slate__cell"><span className="of-slate__label">Frame</span><span className="of-slate__val">01</span></span>
+            <span className="of-slate__cell"><span className="of-slate__label">Exp.</span><span className="of-slate__val">1/125</span></span>
             <span className="of-slate__cell"><span className="of-slate__label">Date</span><span className="of-slate__val">2026</span></span>
           </div>
           <div className="of-slate__foot">
-            <span>24 fps</span>
             <span>35 mm</span>
-            <span>Sync</span>
+            <span>B&amp;W</span>
+            <span>36 exp.</span>
           </div>
         </div>
       </div>

@@ -3,7 +3,6 @@ import OpeningScenes from './OpeningScenes';
 import {
   CODE_BEATS,
   ENTRANCES,
-  ENTRANCE_SAMPLES,
   FF_RATE,
   FF_TAIL,
   FILM_DESKTOP,
@@ -17,14 +16,16 @@ import {
   PHONE_MAX_WIDTH,
   RAIN_DIM,
   LIFT_EASE,
-  SCENE_TONE,
   STILL,
+  WHIP_GHOSTS,
   cameraFor,
   cameraTransform,
   clamp01,
   codeFinderKeys,
   cutSchedule,
   entranceAt,
+  entranceLeft,
+  entranceSamples,
   fastForwardTarget,
   filmLength,
   finderBox,
@@ -34,6 +35,7 @@ import {
   flightFor,
   flightPath,
   focusAt,
+  ghostAt,
   globeReleaseAt,
   landingAEnd,
   landingFrom,
@@ -46,7 +48,6 @@ import {
   segment,
   sheetTransform,
   slateBeats,
-  streakAt,
   type Anchor,
   type Box,
   type Camera,
@@ -58,6 +59,7 @@ import {
   type Landing,
   type OpeningDetail,
   type OpeningState,
+  type SceneId,
   type Vec2,
 } from '../../lib/openingFilm';
 import { markReelSeen } from '../../lib/reelVisit';
@@ -132,7 +134,10 @@ function inkOf(el: HTMLElement, text: string) {
 }
 
 /** An element's position inside `container` (its offsetParent chain; no
- *  transform is read). */
+ *  transform is read). An offset is measured from its parent's PADDING edge,
+ *  so every parent's own border is added on the way up (the newspaper's
+ *  flag sits under a 14 px rule: without it the reading rule struck through
+ *  ARCHIVE instead of lying under it). */
 function offsetIn(el: HTMLElement, container: HTMLElement) {
   let x = 0;
   let y = 0;
@@ -140,7 +145,12 @@ function offsetIn(el: HTMLElement, container: HTMLElement) {
   while (node && node !== container) {
     x += node.offsetLeft;
     y += node.offsetTop;
-    node = node.offsetParent as HTMLElement | null;
+    const parent = node.offsetParent as HTMLElement | null;
+    if (parent && parent !== container) {
+      x += parent.clientLeft;
+      y += parent.clientTop;
+    }
+    node = parent;
   }
   return { x, y };
 }
@@ -197,6 +207,9 @@ function textBox(el: Element): Box | null {
 
 const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 * d, h: b.h + 2 * d });
 
+/** The keys that scroll a page (with or without a modifier). */
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ' ', 'Spacebar']);
+
 /**
  * OpeningFilm — the homepage's opening: a word hunt through many texts
  * (src/lib/openingFilm.ts has the score and the reasons).
@@ -210,9 +223,11 @@ const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 *
  * short move (its entrance: a transform on its sheet about the found word,
  * sampled into keyframes) and its own kicks (the dial, the rings, the
  * slices, the flaps), then holds. The page's scroll is held (body overflow:
- * clip, the one lock the sticky atlas survives); a wheel, a touch, a key or
- * a click does nothing else — only the Skip pill skips, to the clapperboard
- * and the landing.
+ * clip, the one lock the sticky atlas survives — set by a stylesheet rule on
+ * html[data-film-lock], so no inline write elsewhere on the page can lift
+ * it) and the page under the film is inert; a wheel, a touch, a key or a
+ * click does nothing else — only the Skip pill skips, to the clapperboard and
+ * the landing. Tab stays on the pill.
  *
  * It plays once a tab session (src/lib/reelVisit.ts decides before the first
  * paint: html[data-opening] present means it plays).
@@ -256,6 +271,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     // Landing A's globe keeps its rise after the page is handed over.
     let globeSettle = 0;
     const timers = new Set<number>();
+    // Undone when the film is torn down (declared before anything registers).
+    const cleanups: (() => void)[] = [];
     const later = (fn: () => void, ms: number) => {
       const id = window.setTimeout(() => {
         timers.delete(id);
@@ -279,18 +296,32 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       publish();
     };
 
-    // ── The scroll is held while the film plays ──
-    const previousOverflow = body.style.overflow;
+    // ── The page is held while the film plays ──
+    // Its scroll: body overflow: clip from opening.css while html carries
+    // data-film-lock (a stylesheet rule with !important: HomePage's own
+    // scroll-lock effect writes the body's inline overflow as it mounts, and
+    // an inline lock was lifted by it — Cmd+Down then scrolled the page under
+    // the film). Its focus and find-in-page: every other child of the body
+    // is inert, so Tab has nowhere to go but the pill.
     let locked = false;
+    const inerted: Element[] = [];
     const lock = () => {
       if (locked) return;
       locked = true;
-      body.style.overflow = 'clip';
+      html.setAttribute('data-film-lock', '');
+      let mine: Element | null = overlay;
+      while (mine && mine.parentElement !== body) mine = mine.parentElement;
+      Array.from(body.children).forEach((el) => {
+        if (el === mine || el.hasAttribute('inert') || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+        el.setAttribute('inert', '');
+        inerted.push(el);
+      });
     };
     const unlock = () => {
       if (!locked) return;
       locked = false;
-      if (body.style.overflow === 'clip') body.style.overflow = previousOverflow;
+      html.removeAttribute('data-film-lock');
+      inerted.splice(0).forEach((el) => el.removeAttribute('inert'));
     };
 
     // A reload deep in the page (a position restored below the first
@@ -344,7 +375,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     // (src/lib/openingFilm.ts INPUT_POLICY.) A wheel, a drag or a scrolling
     // key is held — the page must not scroll under the film — and that is
     // all; a click anywhere but the pill does nothing. The pill is a real
-    // button: Tab reaches it, and Enter and Space press it.
+    // button: Tab reaches it (and stays on it), and Enter and Space press it.
     let onSkipFilm: () => void = () => {};
     const input = (source: FilmInput) => {
       if (INPUT_POLICY[source] === 'skip') onSkipFilm();
@@ -360,17 +391,30 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       input('touch');
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      // The browser's own keys (shortcuts, F-keys) and Tab (to reach the
-      // pill) are left alone.
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === 'Tab' || /^F\d{1,2}$/.test(event.key)) return;
+      // Tab and Shift+Tab land on the pill and stay there (the page under
+      // the film is inert too): focus never walks into the page and scrolls
+      // it into view.
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        if (phase === 'film' && document.activeElement !== skip) skip.focus({ preventScroll: true });
+        return;
+      }
       // The pill's own keys press it (at once, on the key going down).
-      if (event.target === skip && (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar')) {
+      if (event.target === skip && !event.metaKey && !event.ctrlKey && !event.altKey && (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar')) {
         event.preventDefault();
         input('skip');
         return;
       }
-      // Anything else does nothing — no scroll, no default action at all.
+      // A scrolling key does nothing, whatever modifier is held with it
+      // (Cmd+Down is the Mac's own "to the end of the page").
+      if (SCROLL_KEYS.has(event.key)) {
+        event.preventDefault();
+        input('key');
+        return;
+      }
+      // The browser's own shortcuts (Cmd+R, Cmd+L, the F-keys) are left alone.
+      if (event.metaKey || event.ctrlKey || event.altKey || /^F\d{1,2}$/.test(event.key)) return;
+      // Anything else does nothing — no default action at all.
       event.preventDefault();
       input('key');
     };
@@ -454,6 +498,30 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       t0 += delta;
     };
 
+    // ── A whip's motion blur: ghosts of its sheet ──
+    // Made once (copies of the sheet's own markup, its kicks and his
+    // photographs included), above the sheet in its scene; the island trails
+    // them behind the sheet on the whip (src/lib/openingFilm.ts WHIP_GHOSTS).
+    const ghosts = new Map<SceneId, HTMLElement[]>();
+    stage.querySelectorAll<HTMLElement>('[data-scene]').forEach((scene) => {
+      const id = scene.dataset.scene as SceneId;
+      if (ENTRANCES[id]?.kind !== 'whip') return;
+      const sheet = scene.querySelector<HTMLElement>('[data-sheet]');
+      if (!sheet) return;
+      ghosts.set(
+        id,
+        WHIP_GHOSTS.map(() => {
+          const ghost = sheet.cloneNode(true) as HTMLElement;
+          ghost.removeAttribute('data-sheet');
+          ghost.classList.add('of-ghost');
+          ghost.querySelectorAll('[data-find]').forEach((el) => el.removeAttribute('data-find'));
+          scene.append(ghost);
+          return ghost;
+        }),
+      );
+    });
+    cleanups.push(() => ghosts.forEach((list) => list.forEach((g) => g.remove())));
+
     const measureAll = (): { cap: number; archiveFocus: Vec2; lockInk: Box; lockCap: Box; lockCentre: Vec2 } => {
       const lock = overlay.querySelector<HTMLElement>('[data-lock]')!;
       const word = lock.querySelector<HTMLElement>('.of-lock__word')!;
@@ -525,12 +593,10 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // ── Cuts, cameras, entrances and kicks ──
       // Every cut is hard (opacity steps on the frame). Each shot's sheet
       // carries its camera and, on top of it, its entrance about the found
-      // word (sampled, so the curve is the entrance's own and the camera's
-      // push stays exact under it); a whip adds a streak plate; a rack focus a
-      // blur; and the scene's own kicks play on the same clock.
+      // word (sampled, so the curve is the entrance's own); a whip trails
+      // ghosts of the sheet; and the scene's own kicks play on the same clock.
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const whips: Cut[] = [];
       rigs.forEach((rig, i) => {
         const { cut } = rig;
         const last = i === rigs.length - 1;
@@ -570,42 +636,36 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         // Only a swing turns in depth; the other shots stay flat (a flat
         // sheet needs no surface of its own to be drawn through).
         const depth = !!(entrance.rx || entrance.ry);
-        const sheetAt = (t: number, u: number) => sheetTransform(camAt(i, t)!, entranceAt(entrance, u, vw, vh), f, depth);
-        const frames: Keyframe[] = [{ offset: 0, transform: sheetAt(cut.start, 0) }];
-        const blur: Keyframe[] = [];
-        if (entrance.ms > 0) {
-          for (let k = 0; k <= ENTRANCE_SAMPLES; k += 1) {
-            const u = k / ENTRANCE_SAMPLES;
-            const t = cut.start + entrance.ms * u;
-            frames.push({ offset: at(t), transform: sheetAt(t, u) });
-            if (entrance.blur) blur.push({ offset: at(t), filter: `blur(${entranceAt(entrance, u, vw, vh).blur.toFixed(2)}px)` });
-          }
-        }
-        frames.push({ offset: at(cut.end), transform: sheetAt(cut.end, 1) }, { offset: 1, transform: sheetAt(cut.end, 1) });
-        play(rig.sheet, frames);
-        if (blur.length) {
-          play(rig.sheet, [{ offset: 0, filter: 'blur(0px)' }, { offset: at(cut.start), filter: 'blur(0px)' }, ...blur, { offset: 1, filter: 'blur(0px)' }]);
-        }
-        if (entrance.kind === 'whip') whips.push(cut);
-      });
-
-      // The whips' motion blur: a streak plate in the incoming shot's tone,
-      // as dense as the move is fast.
-      overlay.querySelectorAll<HTMLElement>('[data-whip]').forEach((plate) => {
-        const tone = plate.dataset.whip;
-        const mine = whips.filter((cut) => SCENE_TONE[cut.id] === tone);
-        if (!mine.length) return;
-        const frames: Keyframe[] = [{ offset: 0, opacity: 0 }];
-        mine.forEach((cut) => {
-          const entrance = ENTRANCES[cut.id];
-          frames.push({ offset: at(cut.start), opacity: 0 });
-          for (let k = 0; k <= ENTRANCE_SAMPLES; k += 1) {
-            const u = k / ENTRANCE_SAMPLES;
-            frames.push({ offset: at(cut.start + entrance.ms * u), opacity: k === ENTRANCE_SAMPLES ? 0 : streakAt(u) });
-          }
+        // `lag`: a whip's ghost trails the sheet by this many px (toward the
+        // side the sheet came from) at the cut, closing in with the move (a
+        // smear as long as the sheet is fast: none once it has braked).
+        const sheetAt = (t: number, u: number, lag = 0) => {
+          const state = entranceAt(entrance, u, vw, vh);
+          return sheetTransform(camAt(i, t)!, lag ? { ...state, x: state.x + lag * entranceLeft(entrance, u) } : state, f, depth);
+        };
+        const samples = entranceSamples(entrance);
+        const track = (lag = 0): Keyframe[] => [
+          { offset: 0, transform: sheetAt(cut.start, 0, lag) },
+          ...samples.map((u) => ({ offset: at(cut.start + entrance.ms * u), transform: sheetAt(cut.start + entrance.ms * u, u, lag) })),
+          { offset: at(cut.end), transform: sheetAt(cut.end, 1) },
+          { offset: 1, transform: sheetAt(cut.end, 1) },
+        ];
+        play(rig.sheet, track());
+        // A whip's ghosts: the same move, trailing (closing in as the sheet
+        // brakes), at full strength for its first GHOST_HOLD_MS, then fading,
+        // gone as it lands.
+        const mine = entrance.kind === 'whip' ? ghosts.get(cut.id) : undefined;
+        mine?.forEach((ghost, g) => {
+          const { lag, opacity } = WHIP_GHOSTS[g];
+          play(ghost, track(Math.sign(entrance.x ?? 1) * lag * vw));
+          play(ghost, [
+            { offset: 0, opacity: 0 },
+            { offset: at(cut.start), opacity: 0 },
+            { offset: at(cut.start), opacity },
+            ...samples.map((u) => ({ offset: at(cut.start + entrance.ms * u), opacity: opacity * ghostAt(u, entrance.ms) })),
+            { offset: 1, opacity: 0 },
+          ]);
         });
-        frames.push({ offset: 1, opacity: 0 });
-        play(plate, frames);
       });
 
       // ── Scene one: the word lifts off the rain; the rain dims and pushes ──
@@ -633,6 +693,22 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           { offset: 1, transform: lifted('1'), opacity: 0 },
         ]);
       }
+      // The word as a solid: the copies stacked behind it (each a step
+      // further back, down and to the right: its extruded side) come up as it
+      // leaves the rain and close into it as it lands.
+      code.scene.querySelectorAll<HTMLElement>('.of-lock__layer').forEach((layer) => {
+        const d = Number(layer.dataset.depth) || 1;
+        const deep = `translate3d(${(0.013 * d).toFixed(3)}em, ${(0.032 * d).toFixed(3)}em, 0)`;
+        const flat = 'translate3d(0em, 0em, 0)';
+        play(layer, [
+          { offset: 0, transform: deep, opacity: 0 },
+          { offset: at(liftA), transform: deep, opacity: 0 },
+          { offset: at(liftA + 1), transform: deep, opacity: 1, easing: LIFT_CSS },
+          { offset: at(liftB - 30), opacity: 1 },
+          { offset: at(liftB), transform: flat, opacity: 0 },
+          { offset: 1, transform: flat, opacity: 0 },
+        ]);
+      });
       if (rain) {
         const [dimA, dimB] = CODE_BEATS.dim;
         play(rain, [
@@ -708,15 +784,27 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // ── The clapperboard's own life ──
       const slate = rigs[rigs.length - 1];
       const beats = slateBeats(slate.cut.ms);
-      slate.scene.querySelectorAll<SVGElement>('.of-chalk').forEach((chalk, k) => {
-        const from = slate.cut.start + beats.underline[Math.min(k, beats.underline.length - 1)];
+      // The chalk: the ring round CAMERA, then the lines under the rest.
+      const chalkIn = (chalk: SVGElement, from: number, ms: number) =>
         play(chalk, [
           { offset: 0, strokeDashoffset: 1 },
           { offset: at(from), strokeDashoffset: 1, easing: EASES.arrive },
-          { offset: at(from + beats.underlineMs), strokeDashoffset: 0 },
+          { offset: at(from + ms), strokeDashoffset: 0 },
           { offset: 1, strokeDashoffset: 0 },
         ]);
+      slate.scene.querySelectorAll<SVGElement>('.of-chalk--ring').forEach((ring) => chalkIn(ring, slate.cut.start + beats.ring, beats.ringMs));
+      slate.scene.querySelectorAll<SVGElement>('.of-chalk:not(.of-chalk--ring)').forEach((chalk, k) => {
+        chalkIn(chalk, slate.cut.start + beats.underline[Math.min(k, beats.underline.length - 1)], beats.underlineMs);
       });
+
+      // ── The frame counter: one frame of the roll a cut ──
+      const counter = hud?.querySelector<HTMLElement>('[data-counter]');
+      if (counter) {
+        play(counter, [
+          ...cuts.map((cut, i) => ({ offset: at(cut.start), transform: `translate3d(0, ${-i}em, 0)`, easing: 'steps(1, end)' })),
+          { offset: 1, transform: `translate3d(0, ${-(cuts.length - 1)}em, 0)` },
+        ]);
+      }
       // The clap: the board gives a little under the sticks.
       const clapAt = slate.cut.start + beats.clap[1];
       const joltSpan = total + 320;
@@ -1109,8 +1197,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       cleanups.push(() => cancelAnimationFrame(raf));
     }
 
-    const cleanups: (() => void)[] = [];
-
     // ── His photographs, for the magazine's picture page and the strip of
     // film: fetched after the first paint at low priority (those scenes are
     // seconds in); until one has arrived and decoded, its scene keeps the
@@ -1220,9 +1306,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         <div className="of-stage" data-stage>
           <OpeningScenes pictures={pictures} />
         </div>
-        {/* A whip's motion blur: streak plates, one per tone. */}
-        <div className="of-whip of-whip--light" data-whip="light" />
-        <div className="of-whip of-whip--dark" data-whip="dark" />
         <div className="of-grain" />
         <div className="of-vignette" />
         <div className="of-finder" data-finder>
@@ -1232,19 +1315,17 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           <i className="of-finder__c of-finder__c--bl" />
           <i className="of-finder__c of-finder__c--br" />
         </div>
-        {/* The timecode only: a film's running clock, not a progress count. */}
+        {/* A camera's frame counter: one frame of a 36-exposure roll a cut
+            (the owner asked for a camera: no timecode). */}
         <div className="of-hud">
           <span>
-            <span className="of-hud__tc-label">TC </span>00:00:0
-            <span className="of-digits of-digits--ss">
-              <span className="of-digits__strip">{'0\n1\n2\n3\n4\n5\n6\n7\n8\n9'}</span>
-            </span>
-            :
-            <span className="of-digits of-digits--ff">
-              <span className="of-digits__strip">
-                {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).join('\n')}
+            <span className="of-hud__label">FR </span>
+            <span className="of-digits">
+              <span className="of-digits__strip" data-counter>
+                {Array.from({ length: 36 }, (_, i) => String(i + 1).padStart(2, '0')).join('\n')}
               </span>
             </span>
+            <span className="of-hud__of">/36</span>
           </span>
         </div>
         <div className="of-flight" data-flight />

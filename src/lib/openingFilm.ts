@@ -16,11 +16,11 @@
 // like autofocus (?finder=frame swaps it for four viewfinder corners).
 //
 // What gives it punch is the ENTRANCE: every shot cuts in hard, on a beat,
-// with one short kinetic move — a snap zoom, a whip pan with a streak of
-// motion blur, a 3D swing of the text plane, a speed ramp, a rack-focus pop,
-// a lens ring turning, slices slamming together — and then HOLDS still to be
-// read. The finder waits, wide and dim, while the shot moves, and locks on
-// when it lands.
+// with one short kinetic move — a snap zoom, a whip pan smeared by ghosts of
+// the sheet, a 3D swing of the text plane, a two-gear speed ramp, a
+// typewriter carriage slamming home, a lens ring turning, slices slamming
+// together — and then HOLDS dead still to be read. The finder waits, wide and
+// dim, while the shot moves, and locks on when it lands.
 //
 // Two ways to land, chosen by the URL (?open=a, the default, or ?open=b):
 //  A "words fly home": the clapperboard dissolves into the page's olive, and
@@ -110,39 +110,44 @@ export interface ScenePlan {
  *  eighth of a second: 120 bpm in sixteenths). */
 export const BEAT_MS = 125;
 
-// Desktop: twelve scenes, 8.4 s to the clap (he reviews by reloading, so he
+// Desktop: twelve scenes, 8.5 s to the clap (he reviews by reloading, so he
 // sits through it every time — the Skip pill is there). The code holds while
-// ARCHIVE locks and lifts off it; from there each shot is five beats, the
-// two camera objects six (their moves are bigger): every shot, once it has
-// landed, HOLDS for about 1.25× the reading time the last cut's shots had
-// (scripts/opening-film.test.mjs); the clapperboard then holds long enough
-// to be read, and claps.
+// ARCHIVE locks and lifts off it and cuts on its landing (the match cut
+// carries the hold into the dictionary); from there most shots are five
+// beats, and the bigger reads six — the two camera objects (their moves are
+// bigger), the slices (six materials, one letter each) and the poster (the
+// one full sentence): every shot, once it has landed, HOLDS for about 1.3×
+// the reading time the last cut's shots had, and the lengths vary (no
+// metronome) (scripts/opening-film.test.mjs); the clapperboard then holds
+// long enough to be read, and claps.
 //
 // The order is also a GRADE: dark code, light archive paper, the dark metal
 // and board of the camera and travel runs, light paper and print, then the
 // dark film into the olive page — four changes of tone, never two in one
 // second (a calm site: no black-white strobe).
 export const FILM_DESKTOP: readonly ScenePlan[] = [
-  { id: 'code', word: 'archive', ms: 1000 },
+  { id: 'code', word: 'archive', ms: 875 },
   { id: 'dictionary', word: 'archive', ms: 625 },
   { id: 'newspaper', word: 'archive', ms: 625 },
   { id: 'topplate', word: 'camera', ms: 750 },
   { id: 'lens', word: 'camera', ms: 750 },
-  { id: 'slices', word: 'camera', ms: 625 },
+  { id: 'slices', word: 'camera', ms: 750 },
   { id: 'board', word: 'travel', ms: 625 },
   { id: 'book', word: 'travel', ms: 625 },
   { id: 'typewriter', word: 'thought', ms: 625 },
-  { id: 'poster', word: 'thought', ms: 625 },
+  { id: 'poster', word: 'thought', ms: 750 },
   { id: 'contact', word: 'ryanxu', ms: 625 },
   { id: 'slate', word: 'ryanxu', ms: 875 },
 ];
 
-// Phone: the same film, fewer scenes (eight, 5.8 s to the clap).
+// Phone: the same film, fewer scenes (nine, 6.5 s to the clap) — both camera
+// objects kept (he judges on his phone: the word is CAMERA).
 export const FILM_PHONE: readonly ScenePlan[] = [
-  { id: 'code', word: 'archive', ms: 1000 },
+  { id: 'code', word: 'archive', ms: 875 },
   { id: 'dictionary', word: 'archive', ms: 625 },
+  { id: 'topplate', word: 'camera', ms: 750 },
   { id: 'lens', word: 'camera', ms: 750 },
-  { id: 'slices', word: 'camera', ms: 625 },
+  { id: 'slices', word: 'camera', ms: 750 },
   { id: 'board', word: 'travel', ms: 625 },
   { id: 'typewriter', word: 'thought', ms: 625 },
   { id: 'contact', word: 'ryanxu', ms: 625 },
@@ -214,18 +219,18 @@ export function runOf(cuts: readonly Cut[], i: number) {
 
 // ── The entrances: how each shot cuts in ──────────────────────────────────
 // Every cut is hard (the last frame of one scene, then the first of the
-// next: no crossfade) and the new shot arrives with ONE short move, then
-// holds. The move is a transform on the sheet ABOUT THE FOUND WORD (so it
-// lands exactly where the match cut wants it): an offset (a whip pan, a
-// share of the viewport), a tilt of the text plane in depth (a swing, deg), a
-// scale (a snap zoom or a speed ramp), a blur (a rack-focus pop, px). All of
-// it goes to rest at `ms`; `read` is when the word can be read (the finder
-// locks on then), at the landing — or, for a speed ramp, part of the way
-// through its long slow tail. Some scenes also have their own life on the
-// beat (the dial spins, the lens ring turns, the slices slam, the flaps
-// flip); `read` waits for that too.
+// next: no crossfade, no blur-in) and the new shot arrives with ONE short
+// move, then holds. The move is a transform on the sheet ABOUT THE FOUND WORD
+// (so it lands exactly where the match cut wants it): an offset (a whip pan
+// or a carriage slam, a share of the viewport), a tilt of the text plane in
+// depth (a swing, deg), a scale (a snap zoom or a speed ramp). All of it goes
+// to rest at `ms`; `read` is when the word can be read (the finder locks on
+// then), at the landing — or, for a speed ramp, as it shifts into its slow
+// gear. Some scenes also have their own life on the beat (the dial spins, the
+// lens ring turns, the slices slam, the flaps fall, the typebars strike);
+// `read` waits for that too.
 
-export type EntranceKind = 'cut' | 'snap' | 'whip' | 'swing' | 'ramp' | 'focus' | 'rise';
+export type EntranceKind = 'cut' | 'snap' | 'whip' | 'swing' | 'ramp' | 'slam' | 'rise';
 export interface Entrance {
   kind: EntranceKind;
   /** The move lands at this many ms after the cut. */
@@ -238,8 +243,10 @@ export interface Entrance {
   rx?: number;
   ry?: number;
   k?: number;
-  blur?: number;
   ease: Bezier;
+  /** A two-gear move: the first `gear[0]` of the time covers `gear[1]` of
+   *  the distance on `ease` (fast), the rest is one slow linear gear. */
+  gear?: readonly [number, number];
 }
 
 /** A snap: a hard start and a hard stop (1.14 → 1 in ~150 ms). */
@@ -261,46 +268,71 @@ export const ENTRANCES: Record<SceneId, Entrance> = {
   lens: { kind: 'snap', ms: 150, read: 270, k: 1.08, ease: SNAP_EASE },
   slices: { kind: 'cut', ms: 0, read: 190, ease: EASE.arrive },
   board: { kind: 'whip', ms: 120, read: 200, x: -0.72, ease: WHIP_EASE },
-  book: { kind: 'ramp', ms: 360, read: 200, k: 1.7, ease: RAMP_EASE },
-  typewriter: { kind: 'focus', ms: 190, read: 190, k: 1.035, blur: 16, ease: SNAP_EASE },
+  // Two gears: 1.7 → 1.06 in 90 ms, then 1.06 → 1 over 260 ms, linear (the
+  // finder locks as it shifts into the slow gear, on a word all but still).
+  book: { kind: 'ramp', ms: 350, read: 110, k: 1.7, gear: [90 / 350, 0.64 / 0.7], ease: SNAP_EASE },
+  // The carriage slams home; the typebars strike THOUGHT (TYPE_STRIKE).
+  typewriter: { kind: 'slam', ms: 110, read: 190, x: 0.1, ease: WHIP_EASE },
   poster: { kind: 'snap', ms: 150, read: 150, k: 1.2, ease: SNAP_EASE },
   contact: { kind: 'whip', ms: 120, read: 140, x: 0.72, ease: WHIP_EASE },
   slate: { kind: 'rise', ms: 250, read: 250, y: 0.62, rx: -14, ease: SWING_EASE },
 };
 
 /** The move at progress u (0 → 1 over its `ms`, on its curve): the offset
- *  (px), the tilt (deg), the scale and the blur. At u = 1 it is at rest. */
+ *  (px), the tilt (deg) and the scale. At u = 1 it is at rest. */
 export interface EntranceState {
   x: number;
   y: number;
   rx: number;
   ry: number;
   k: number;
-  blur: number;
 }
-export const REST: EntranceState = { x: 0, y: 0, rx: 0, ry: 0, k: 1, blur: 0 };
+export const REST: EntranceState = { x: 0, y: 0, rx: 0, ry: 0, k: 1 };
 const curves = new Map<Entrance, (x: number) => number>();
-export function entranceAt(e: Entrance, u: number, width: number, height: number): EntranceState {
-  if (e.ms <= 0 || u >= 1) return REST;
+/** How much of the move is still to go at progress u (1 → 0). */
+export function entranceLeft(e: Entrance, u: number) {
+  if (e.ms <= 0 || u >= 1) return 0;
   let curve = curves.get(e);
   if (!curve) {
     curve = bezierFn(e.ease);
     curves.set(e, curve);
   }
-  const left = 1 - curve(clamp01(u));
+  const v = clamp01(u);
+  if (e.gear) {
+    const [g0, g1] = e.gear;
+    if (v < g0) return 1 - g1 * curve(v / g0);
+    return (1 - g1) * (1 - (v - g0) / (1 - g0));
+  }
+  return 1 - curve(v);
+}
+export function entranceAt(e: Entrance, u: number, width: number, height: number): EntranceState {
+  if (e.ms <= 0 || u >= 1) return REST;
+  const left = entranceLeft(e, u);
   return {
     x: (e.x ?? 0) * width * left,
     y: (e.y ?? 0) * height * left,
     rx: (e.rx ?? 0) * left,
     ry: (e.ry ?? 0) * left,
     k: 1 + ((e.k ?? 1) - 1) * left,
-    blur: (e.blur ?? 0) * left,
   };
 }
 
 /** How many samples an entrance is drawn with (linear between them: about
  *  one a frame, so the curve is the entrance's own). */
 export const ENTRANCE_SAMPLES = 10;
+/** The progress points an entrance is sampled at: evenly, or — for a
+ *  two-gear move — densely through its fast gear (the curve is there) and
+ *  once at the end of the slow one (a straight line needs no more). */
+export function entranceSamples(e: Entrance): number[] {
+  if (e.ms <= 0) return [];
+  if (e.gear) {
+    const out: number[] = [];
+    for (let k = 0; k <= ENTRANCE_SAMPLES; k += 1) out.push((e.gear[0] * k) / ENTRANCE_SAMPLES);
+    out.push(1);
+    return out;
+  }
+  return Array.from({ length: ENTRANCE_SAMPLES + 1 }, (_, k) => k / ENTRANCE_SAMPLES);
+}
 
 /** The sheet's transform: the entrance about the found word's resting place
  *  `f` (a whip's offset, a tilt, a scale), on top of the camera. One shape of
@@ -318,14 +350,33 @@ export function sheetTransform(c: Camera, e: EntranceState, f: Vec2, depth = tru
   );
 }
 
-/** The motion blur of a whip: a streak plate over the shot while it moves,
- *  as dense as the move is fast (its opacity by `u`). */
-export const WHIP_STREAK = { peak: 0.92, tail: 0.55 } as const;
-export function streakAt(u: number) {
-  if (u >= 1) return 0;
-  const v = clamp01(u);
-  return v < WHIP_STREAK.tail ? WHIP_STREAK.peak : WHIP_STREAK.peak * (1 - (v - WHIP_STREAK.tail) / (1 - WHIP_STREAK.tail));
+/** The motion blur of a whip: GHOSTS of the sheet itself, trailing it (on
+ *  the side it came from) by a share of the viewport's width at the cut,
+ *  fainter as they fall back — the content smears, as a real whip smears
+ *  it, instead of a plate of streaks laid over the frame. Their lag closes
+ *  with the move (entranceLeft: a smear as long as the sheet is fast); their
+ *  strength is full for the first GHOST_HOLD_MS, then fades, gone as it
+ *  lands. */
+export const WHIP_GHOSTS = [
+  { lag: 0.04, opacity: 0.35 },
+  { lag: 0.08, opacity: 0.2 },
+  { lag: 0.12, opacity: 0.1 },
+] as const;
+export const GHOST_HOLD_MS = 80;
+/** The ghosts' strength (their opacity, 1 → 0) at progress u of a whip
+ *  lasting `ms`. */
+export function ghostAt(u: number, ms: number) {
+  if (u >= 1 || ms <= 0) return 0;
+  const t = clamp01(u) * ms;
+  if (t <= GHOST_HOLD_MS) return 1;
+  return clamp01(1 - (t - GHOST_HOLD_MS) / Math.max(1, ms - GHOST_HOLD_MS));
 }
+
+// ── The typewriter's strike ───────────────────────────────────────────────
+// As the carriage slams home, the typebars strike THOUGHT a letter at a
+// time: each letter appears at `at + i * stagger` ms after the cut, a size too
+// big (`k`), and is pressed flat in `ms` (two frames).
+export const TYPE_STRIKE = { at: 20, stagger: 22, ms: 33, k: 1.3 } as const;
 
 // ── The code scene (scene 1) ──────────────────────────────────────────────
 // Its beats are CSS from the first paint (the rain falls, the letters of
@@ -359,13 +410,16 @@ export const LIFT_EASE = [0.2, 0.7, 0.1, 1] as const;
 export const RAIN_DIM = 0.3;
 
 // ── The slate's beats (ms from the slate's cut) ───────────────────────────
-// It is lifted into the frame (its entrance), the found words are chalked
-// under one after another, and the sticks come down at the end (the clap):
-// the landing starts on the clap.
+// It is lifted into the frame (its entrance), then every found word is
+// chalked in turn — a ring round CAMERA first (its field label), then a line
+// under ARCHIVE, TRAVEL and THOUGHT — and the sticks come down at the end
+// (the clap): the landing starts on the clap.
 export function slateBeats(slateMs: number) {
   const from = ENTRANCES.slate.read;
   return {
-    underline: [from + 60, from + 150, from + 240] as const,
+    ring: from,
+    ringMs: 130,
+    underline: [from + 90, from + 180, from + 270] as const,
     underlineMs: 150,
     /** The sticks close: an ease-in fall, contact at `slateMs`. */
     clap: [slateMs - 130, slateMs] as const,
@@ -374,9 +428,12 @@ export function slateBeats(slateMs: number) {
 
 // ── Input: only the Skip pill ─────────────────────────────────────────────
 // While the film plays, the reader's wheel, touch, keys and clicks do
-// nothing: the page's scroll is held (a wheel, a drag, a scrolling key is
-// swallowed) and nothing else happens. The Skip pill (bottom right, a real
-// button: Tab reaches it, Enter and Space press it) is the one way out.
+// nothing: the page's scroll is held (a stylesheet lock on the body that
+// nothing else on the page can lift, html[data-film-lock]; a wheel, a drag, a
+// scrolling key — with or without Cmd, Ctrl, Alt — is swallowed), the page
+// under the film is inert (no focus, no find-in-page), and nothing else
+// happens. The Skip pill (bottom right, a real button: Tab reaches it and
+// stays on it, Enter and Space press it) is the one way out.
 export type FilmInput = 'skip' | 'wheel' | 'touch' | 'key' | 'pointer';
 export const INPUT_POLICY: Record<FilmInput, 'skip' | 'hold' | 'ignore'> = {
   skip: 'skip',
@@ -415,8 +472,8 @@ export const GLOBE_WAIT_MS = 700;
 // Every scene is a SHEET designed at the desktop's scale (a found word's
 // cap height is about 64 px there) and a camera: a uniform scale and a
 // translation that put the found word's centre on the run's focus point with
-// the run's cap height, times a slow push-in across the run (slow enough
-// that a held shot reads as still). The cap height is the code scene's
+// the run's cap height. Once a shot has landed it is DEAD STILL (no push, no
+// drift: a creeping hold reads soft). The cap height is the code scene's
 // locked word, measured (its size is the one CSS rule both agree on), so the
 // dictionary's headword takes over from it exactly.
 
@@ -446,9 +503,11 @@ export const FOCUS: Record<FoundWord, { desktop: Vec2; phone: Vec2 }> = {
   ryanxu: { desktop: [0.4, 0.36], phone: [0.5, 0.34] },
 };
 /** How far a run's camera pushes in (scale) and drifts (share of the
- *  viewport) from its first scene to its last: barely — the shots hold. */
-export const RUN_PUSH = 0.035;
-export const RUN_DRIFT: Vec2 = [-0.006, 0.002];
+ *  viewport) from its first scene to its last: not at all — after every hit
+ *  the shot holds dead still (the owner: the cuts must not feel soft). The
+ *  machinery stays for a later cut that wants a push. */
+export const RUN_PUSH = 0;
+export const RUN_DRIFT: Vec2 = [0, 0];
 
 export interface Anchor {
   /** The found word's centre in its sheet (sheet px). */
@@ -821,8 +880,8 @@ export function seeded(seed: number) {
 /** The rain's vocabulary: the archive's own jargon — exposure, film and
  *  place readouts — read down the columns a character at a time. */
 export const RAIN_TOKENS = [
-  'ISO400', 'F/2.8', '1/125', '35MM', '50MM', 'EV+0.3', 'ROLL07', 'FRAME24A', 'LAT25.76N', 'LNG80.19W', 'RAW', 'TAKE3',
-  'REEL01', 'SCN12', 'INDEX', 'F/8', '1/500', 'ISO800', '28MM', 'SYNC', 'FPS24', '36EXP', 'N40.71', 'W74.00', 'ZION',
+  'ISO400', 'F/2.8', '1/125', '35MM', '50MM', 'EV+0.3', 'ROLL07', 'FRAME24A', 'LAT25.76N', 'LNG80.19W', 'RAW', 'EXP36',
+  'ROLL01', 'FR12', 'INDEX', 'F/8', '1/500', 'ISO800', '28MM', 'AE-L', 'F/16', '36EXP', 'N40.71', 'W74.00', 'ZION',
   'PAGE', '0x2F', 'A7', 'DUST', 'GRAIN', 'LENS', 'KEEP', 'STOP', 'FILE', 'SHOT', 'LIGHT', '00:04:12', 'Ø', '▸', '·',
 ] as const;
 const RAIN_EXTRA = '0123456789ABCDEFXZ:/.·+-';
