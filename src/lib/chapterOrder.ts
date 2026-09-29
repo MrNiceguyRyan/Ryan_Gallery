@@ -1,20 +1,15 @@
-// ── The homepage's chapters, in the order it reads them ──
-// Which chapters the front page carries and the order they are read in, as
-// one pure rule the homepage and /about both use, so /about's "01 Miami" is
-// always the homepage's 01. Moved verbatim out of HomePage.tsx; the steps are
-// its three useMemos. scripts/chapter-order.test.mjs pins today's order.
+// ── The homepage's places, in the order it reads them ──
+// The order the places are numbered in, as one pure rule the homepage and
+// /about both use, so /about's "01 Miami" is always the homepage's 01.
+// scripts/chapter-order.test.mjs pins today's order.
 import type { Collection } from '../types';
 
-// The homepage is an ISSUE, not the archive. It flies a scripted camera through
-// every chapter it is given at roughly one screen each, so "all collections"
-// grows the page without bound: measured at 1.03 screens per chapter on a
-// 900px viewport, six chapters is 10.9 screens and thirty would be 35. The
-// archive keeps growing; this does not. The map is the complete index — that
-// is the surface built to scale, and it is where everything stays reachable.
-//
-// Six is today's whole archive, so nothing changes until the seventh chapter
-// lands, at which point the oldest leaves the front and stays on /travel.
-export const HOME_CHAPTER_LIMIT = 6;
+// Every place the archive has photographs of is on the homepage: it is a map
+// to roam now (src/lib/explorer.ts), not an issue read one screen per
+// chapter, so it no longer grows with the archive and nothing is left off
+// (the six-chapter issue went with the scroll that walked it, 2026-09-28:
+// Washington, DC is to be stop 01, and a seventh place would have pushed the
+// oldest off the front).
 
 type Chapter = Pick<Collection, '_id' | 'year' | 'routeOrder' | 'region' | 'photoCount'> & {
   photos?: ReadonlyArray<unknown> | null;
@@ -35,16 +30,6 @@ export function activeChapters<T extends Chapter>(collections: readonly T[]): T[
     : withPhotos;
 }
 
-/** The most recent chapters, put back into the archive's reading order.
- *  Recency chooses WHICH chapters are in the issue; routeOrder still chooses
- *  the order they are read in, so the front page never reads backwards. */
-export function issueChapters<T extends Chapter>(active: T[], limit = HOME_CHAPTER_LIMIT): T[] {
-  if (active.length <= limit) return active;
-  const byRecency = [...active].sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
-  const inIssue = new Set(byRecency.slice(0, limit).map((collection) => collection._id));
-  return active.filter((collection) => inIssue.has(collection._id));
-}
-
 export interface ChapterSection<T> {
   key: string;
   region: string | null;
@@ -57,10 +42,10 @@ export interface ChapterSection<T> {
  *  divider HEADER only when it has ≥2 cities; single-city regions (and
  *  untagged collections) just render their chapter — no redundant header.
  *  Cities remain the unit everywhere (observer, rail, accent, story). */
-export function chapterSections<T extends Chapter>(issue: T[]): Array<ChapterSection<T>> {
+export function chapterSections<T extends Chapter>(active: T[]): Array<ChapterSection<T>> {
   const groups = new Map<string, T[]>();
   const order: string[] = [];
-  for (const c of issue) {
+  for (const c of active) {
     const key = c.region?.trim() ? `r:${c.region.trim()}` : `s:${c._id}`;
     if (!groups.has(key)) {
       groups.set(key, []);
@@ -84,13 +69,13 @@ export function chapterSections<T extends Chapter>(issue: T[]): Array<ChapterSec
 /** The flat chapter list in on-screen order (region members grouped
  *  adjacent): the homepage's numbering, 01 to the last. */
 export function chapterOrder<T extends Chapter>(collections: readonly T[]): T[] {
-  return chapterSections(issueChapters(activeChapters(collections))).flatMap((section) => section.cities);
+  return chapterSections(activeChapters(collections)).flatMap((section) => section.cities);
 }
 
-/** A chapter's place in the homepage's run — "02 / 06" — and the chapter after
+/** A chapter's place in the homepage's run — "02 / 07" — and the chapter after
  *  it (the last wraps to the first): the number the ticket prints, which the
  *  story's kicker, running head, kept stub and Next line print too. `index` is
- *  -1 for a chapter the issue does not carry. */
+ *  -1 for a chapter with no photographs. */
 export function chapterOrdinal<T extends Chapter>(collections: readonly T[], id: string): { index: number; total: number; next: T | null } {
   const order = chapterOrder(collections);
   const index = order.findIndex((collection) => collection._id === id);

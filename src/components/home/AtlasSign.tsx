@@ -6,6 +6,7 @@ import { EASE } from '../../lib/motion';
 import { formatKm, haversineKm } from '../../lib/geo';
 import { pad2, stateCode } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
+import { railBox } from '../../lib/coverDock';
 import { MapShield } from './RouteShield';
 
 /** Everything the sign prints for a place. */
@@ -71,6 +72,8 @@ const READOUT_LINE_PX = 10;
 const META_DOT_PX = 14;
 /** A readout this close to a shield (px) steps back from it. */
 const YIELD_PAD = 6;
+// A readout keeps this far inside the window's edge, or steps back.
+const EDGE_PX = 12;
 /** The readouts' step back (global.css `.viewfinder__yield[data-yield]`,
  *  --dur-in on the fade curve): the leg moves to its other line only once it
  *  has gone. */
@@ -181,6 +184,14 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     legShown: false,
     /** The atlas has said where its focal point is (`focal`). */
     focalSet: false,
+    /** The atlas's width (px), kept on resize: a readout the window's edge
+     *  would cut steps back as one a shield covers does. */
+    width: 0,
+    /** Where the readouts' clear ground ends on the right (px): the rail's
+     *  left edge on the desktop (the place in hand's title and lede print
+     *  there — a longitude ran under "ZION" at 1280), the atlas's edge on
+     *  a phone. DERIVED from the viewport (coverDock's railBox). */
+    clearRight: 0,
   });
 
   // A readout steps back while a shield stands under it (`data-yield` on its
@@ -224,15 +235,20 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const latChars = latRef.current?.textContent?.length ?? 0;
     const lonChars = lonRef.current?.textContent?.length ?? 0;
     const top = cy + 10;
-    setYield(latYieldRef.current, latChars > 0 && blocked(cx - ARM, top, cx - ARM + READOUT_CHAR_PX * latChars, top + READOUT_LINE_PX));
-    setYield(lonYieldRef.current, lonChars > 0 && blocked(cx + ARM - READOUT_CHAR_PX * lonChars, top, cx + ARM, top + READOUT_LINE_PX));
+    // The reader can take the place in hand to the window's edge (the map is
+    // theirs): a readout the edge would cut is not printed half.
+    const cut = (left: number, right: number) => s.width > 0 && (left < EDGE_PX || right > (s.clearRight || s.width) - EDGE_PX);
+    const latRight = cx - ARM + READOUT_CHAR_PX * latChars;
+    const lonLeft = cx + ARM - READOUT_CHAR_PX * lonChars;
+    setYield(latYieldRef.current, latChars > 0 && (cut(cx - ARM, latRight) || blocked(cx - ARM, top, latRight, top + READOUT_LINE_PX)));
+    setYield(lonYieldRef.current, lonChars > 0 && (cut(lonLeft, cx + ARM) || blocked(lonLeft, top, cx + ARM, top + READOUT_LINE_PX)));
     const metaChars = metaRef.current?.textContent?.length ?? 0;
     if (!metaChars) {
       setYield(metaYieldRef.current, false);
       return;
     }
     const half = (READOUT_CHAR_PX * metaChars + META_DOT_PX) / 2;
-    const taken = (slot: 'below' | 'above') => blocked(cx - half, metaTop(slot), cx + half, metaTop(slot) + READOUT_LINE_PX);
+    const taken = (slot: 'below' | 'above') => cut(cx - half, cx + half) || blocked(cx - half, metaTop(slot), cx + half, metaTop(slot) + READOUT_LINE_PX);
     const other = s.legSlot === 'below' ? 'above' : 'below';
     const here = taken(s.legSlot);
     const moveTo = (slot: 'below' | 'above') => {
@@ -494,6 +510,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (!root) return;
     const measure = () => {
       const s = state.current;
+      s.width = root.clientWidth;
+      s.clearRight = window.innerWidth >= 1024 ? Math.min(root.clientWidth, railBox(window.innerWidth).left) : root.clientWidth;
       // Once the atlas has said where its focal point is, it keeps it there.
       if (s.focalSet) return;
       s.focalX = (root.clientWidth - 264) / 2;

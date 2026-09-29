@@ -38,6 +38,12 @@
 //       bone, the slab as the band, carrying UT.
 //   NY  New York state route: a shield with a raised, ogee-curved head and a
 //       pointed foot. Here: that shield, its head the band, carrying NY.
+//   DC  The District has no route marker of its own (its roads carry the US
+//       and Interstate shields), so its sign is its flag, the one mark every
+//       Washingtonian knows: three stars over two bars (the Washington
+//       family's arms). Here: a flag-shaped plate on a foot, the three stars
+//       across the head and the two bars under the number printed in the
+//       place's stock, the upper bar carrying DC.
 //   US  Anything else: the US-route shield (MUTCD M1-4), the 1926 form the
 //       archive signed every place with until now.
 export interface ShieldText {
@@ -50,7 +56,7 @@ export interface ShieldText {
 }
 
 export interface ShieldForm {
-  key: 'FL' | 'AZ' | 'UT' | 'NY' | 'US';
+  key: 'FL' | 'AZ' | 'UT' | 'NY' | 'DC' | 'US';
   /** Height of the box (the width is always 100), foot included. */
   h: number;
   /** The point that stands on the place. */
@@ -87,6 +93,17 @@ const tier = (top: number, hw: number) =>
 // on each side (`hw`, the lower tier's half-width).
 const seam = (y: number, hw: number, reach: number) =>
   `M${50 - hw + 7},${y} h${reach} M${50 + hw - 7},${y} h${-reach}`;
+
+// A five-pointed star (the flag's), point up, `r` to its points.
+const star = (cx: number, cy: number, r: number) => {
+  const inner = r * 0.382;
+  const points = Array.from({ length: 10 }, (_, index) => {
+    const radius = index % 2 ? inner : r;
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5;
+    return `${(cx + radius * Math.cos(angle)).toFixed(2)},${(cy + radius * Math.sin(angle)).toFixed(2)}`;
+  });
+  return `M${points.join(' L')}Z`;
+};
 
 export const SHIELD_FORMS: Readonly<Record<ShieldForm['key'], ShieldForm>> = {
   FL: {
@@ -156,6 +173,21 @@ export const SHIELD_FORMS: Readonly<Record<ShieldForm['key'], ShieldForm>> = {
     code: { x: 50, y: 29.5, size: 17 },
     num: { x: 50, y: 74, size: 42 },
   },
+  DC: {
+    key: 'DC',
+    h: 104,
+    tip: [50, 104],
+    // The flag, square-cornered like a banner, on the foot every form
+    // stands on.
+    plate: 'M4,0 H96 Q100,0 100,4 V88 Q100,92 96,92 H58 L50,104 L42,92 H4 Q0,92 0,88 V4 Q0,0 4,0Z',
+    // Three stars across the head; the two bars under the number, the upper
+    // one broad enough to carry the District's letters.
+    band: [star(24, 17, 9.5), star(50, 17, 9.5), star(76, 17, 9.5), 'M8,61 H92 V80 H8Z', 'M8,83.5 H92 V87.5 H8Z'].join(' '),
+    ink: 'M4.2,8 Q4.2,4.2 8,4.2 H92 Q95.8,4.2 95.8,8 V84 Q95.8,87.8 92,87.8 H8 Q4.2,87.8 4.2,84Z',
+    inkWidth: 2.2,
+    code: { x: 50, y: 76.5, size: 16 },
+    num: { x: 50, y: 56.5, size: 32 },
+  },
   US: {
     key: 'US',
     h: 100,
@@ -172,8 +204,8 @@ export const SHIELD_FORMS: Readonly<Record<ShieldForm['key'], ShieldForm>> = {
   },
 };
 
-/** A state's form, from its two letters: the four states the archive has
- *  been to have their own; anything else the US-route shield. */
+/** A state's form, from its two letters: the places the archive has been
+ *  to have their own; anything else the US-route shield. */
 export function shieldForm(code?: string | null): ShieldForm {
   const key = (code ?? '').trim().toUpperCase();
   return key in SHIELD_FORMS ? SHIELD_FORMS[key as ShieldForm['key']] : SHIELD_FORMS.US;
@@ -197,13 +229,20 @@ const STATE_CODES: Readonly<Record<string, string>> = {
   virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
 };
 
+// The District, however it is written: "District of Columbia", "Washington,
+// DC", "Washington D.C.", "DC". Never plain "Washington", which is the state.
+const DISTRICT = /^(?:district of columbia|washington,?\s*d\.?\s*c\.?|d\.?\s*c\.?)$/;
+
 /** The two letters in a shield's band, derived from the place's region:
- *  Florida → FL, Arizona → AZ, Utah → UT, New York → NY. Empty when there is
- *  no region (the band is then left blank rather than guessed). */
+ *  Florida → FL, Arizona → AZ, Utah → UT, New York → NY, District of
+ *  Columbia (or "Washington, DC") → DC. Empty when there is no region (the
+ *  band is then left blank rather than guessed). */
 export function stateCode(region?: string | null): string {
   const name = region?.trim();
   if (!name) return '';
-  const known = STATE_CODES[name.toLowerCase()];
+  const lower = name.toLowerCase().replace(/\s+/g, ' ');
+  if (DISTRICT.test(lower)) return 'DC';
+  const known = STATE_CODES[lower];
   if (known) return known;
   const words = name.split(/\s+/).filter(Boolean);
   const initials = words.length > 1 ? words.map((word) => word[0]).join('') : name;
@@ -411,58 +450,6 @@ export function stackShields(slots: readonly StackSlot[], gap = STACK_GAP): Map<
     });
   });
   return placed;
-}
-
-// ── A phone's pile as a deck ──
-// On the phone's overview Page, Zion and Bryce stand 7–12px apart: always one
-// pile, whose lifted heads (STACK_PEEK) jumbled three forms and three
-// half-numbers ("053"). Where a shield's place lies within DECK_REACH of its
-// pile's front shield's, it is laid as a deck behind that shield, as 11 mois
-// sans toi(t)'s close stops are: its box set on the front's top-left corner,
-// DECK_STEP up and left per place further back (in the pile's order), its
-// type hidden — the front's number, the edges of the shields behind, the
-// count. DECK_REACH is three-quarters of a phone shield (22px): over the
-// overview's zooms (≈2.6–2.85, 390px to a tablet) the Southwest's three lie
-// 7–14px apart and Miami–Orlando 22–27px, so the three are one deck and the
-// two Florida shields always stand on their own places.
-export const DECK_REACH = 16;
-export const DECK_STEP = 3;
-
-/** The foot point of every shield laid in a deck (see above), by id, and
- *  how far back it lies (1 = just behind the front). */
-export function deckShields(
-  slots: readonly StackSlot[],
-  placed: ReadonlyMap<string, StackPlace>,
-  reach = DECK_REACH,
-  step = DECK_STEP,
-): Map<string, { x: number; y: number; depth: number }> {
-  const byId = new Map(slots.map((slot) => [slot.id, slot]));
-  const decks = new Map<string, Array<{ slot: StackSlot; z: number }>>();
-  slots.forEach((slot) => {
-    const place = placed.get(slot.id);
-    const front = place ? byId.get(place.front) : undefined;
-    if (!place || !front || front.id === slot.id) return;
-    if (Math.hypot(slot.x - front.x, slot.y - front.y) > reach) return;
-    const deck = decks.get(front.id);
-    if (deck) deck.push({ slot, z: place.z });
-    else decks.set(front.id, [{ slot, z: place.z }]);
-  });
-  const laid = new Map<string, { x: number; y: number; depth: number }>();
-  decks.forEach((members, frontId) => {
-    const front = byId.get(frontId);
-    if (!front) return;
-    const left = front.x - front.w / 2;
-    const top = front.y - front.h;
-    [...members].sort((a, b) => b.z - a.z).forEach(({ slot }, index) => {
-      const depth = index + 1;
-      laid.set(slot.id, {
-        x: left - step * depth + slot.w / 2,
-        y: top - step * depth + slot.h,
-        depth,
-      });
-    });
-  });
-  return laid;
 }
 
 // ── The split-flap: a stop's name arriving ──

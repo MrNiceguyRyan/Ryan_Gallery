@@ -310,59 +310,17 @@ export function planDock(chapters: readonly DockChapter[], vw: number, vh: numbe
 }
 
 // ── When a cover shows ──
-// The atlas's camera asks, on every draw, for the cover of the place it is
-// down on: `appear` once its pose has settled (so a cover is never seen
-// sliding into its seat — the owner's rule: covers appear directly), `stay`
-// while it is still on that place. The dock decides on every published
-// frame, from what is shown and that ask.
+// The atlas's camera asks, on every draw, for the cover of the place in hand
+// (src/lib/explorer.ts): `appear` once the camera is down at it (so a cover
+// is never seen sliding into its seat — the owner's rule: covers appear
+// directly), `stay` while the place is in hand and the reader is still down
+// at it (they may drag and zoom the map; the cover rides with its shield).
+// The dock decides on every published frame, from what is shown and that ask.
 
 export interface DockAsk {
   id: string;
   appear: boolean;
   stay: boolean;
-}
-
-export const DOCK_GATE = {
-  /** A cover appears once the pose is this close (screen px) to the one it
-   *  rests in. Appearing at the lock, covers slid 29–52px into their seat
-   *  as the camera settled; one appeared off the top of the screen and slid
-   *  700px (back into Miami). */
-  settledPx: 3,
-  /** How far from the focal point a docked place may stand, for what a
-   *  zoom still to come moves it: r · |2^dz − 1| px. */
-  reachPx: 600,
-  /** The first chapter rests inside the entrance's last stretch on a tall
-   *  window: 50px of scroll up from its reading line took its cover away
-   *  while the camera had moved 2px, and a reader who came back from
-   *  Orlando and stopped 83px short of Miami's line had no cover at all.
-   *  Down to `entryAppear` of the entrance's camera (1728×1000: 240px of
-   *  scroll, the place 40px off its seat) its cover appears once the scroll
-   *  has left the camera alone for `entryStillMs`; shown, it stays down to
-   *  `entryHold`, riding the scrub. */
-  entryHold: 0.8,
-  entryAppear: 0.85,
-  entryStillMs: 140,
-} as const;
-
-/** How far the drawn pose still is from the one it rests in, in screen px
- *  (roughly): the centre's gap at the drawn zoom, and what the zoom still
- *  to come moves a place standing `reachPx` from the focal point. */
-export function poseRemainPx(centreGapPx: number, zoomToGo: number): number {
-  return centreGapPx + DOCK_GATE.reachPx * Math.abs(2 ** zoomToGo - 1);
-}
-
-/** The camera's ask for the place it is down on (`id`), from how far the
- *  entrance's camera has come down (1 in the archive), whether the scroll
- *  that drives it has held still (`entryStill`; the entrance's camera is
- *  the scroll's own) and how far the hop's pose still has to settle; null
- *  in the air. */
-export function askDock(id: string | null, landed: boolean, entry: number, entryStill: boolean, remainPx: number): DockAsk | null {
-  if (!id || !landed) return null;
-  return {
-    id,
-    appear: entry >= DOCK_GATE.entryAppear && (entryStill || entry >= 1) && remainPx <= DOCK_GATE.settledPx,
-    stay: entry >= DOCK_GATE.entryHold,
-  };
 }
 
 /** The place whose cover shows, from the one shown and the camera's ask: a
@@ -375,56 +333,16 @@ export function dockShown(shown: string | null, ask: DockAsk | null, placed: (id
   return at;
 }
 
-// ── The resting camera's lean ──
-// Before a commit the atlas's camera leans toward where the scroll is
-// heading (its pre-roll), up to the whole lean at the commit lines. It used
-// to lean from the place's own reading line: a wheel that stopped short of
-// Orlando's (at 0.59 of the way from Miami) set Orlando's camera leaning
-// back toward Miami — 26px, 0.85 s after it had landed and its cover had
-// appeared. It leans now only past the stretch between where the reader was
-// when the camera came down (`from`) and the reading line: a landed camera
-// holds until the hand moves on. Crossing the reading line ends the
-// stretch (the lean is nothing there either way, so nothing jumps).
-
-export interface Lean {
-  /** The stretch's far end, as it now stands (the place, once crossed). */
-  from: number;
-  /** The neighbour leaned toward (the place itself: no lean) … */
-  neighbour: number;
-  /** … and how far, 0–1 (eased). */
-  amount: number;
-}
-
-const smooth = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
-
-/** The lean at route `position` for the camera on route place `place`
- *  (0…`last`), which came down with the reader at `from`; `forward` and
- *  `back` are the commit lines (a share of a leg on and back). */
-export function restLean(position: number, place: number, from: number, last: number, forward: number, back: number): Lean {
-  let start = Math.min(place + forward, Math.max(place - back, from));
-  if ((start < place && position >= place) || (start > place && position <= place)) start = place;
-  const low = Math.min(start, place);
-  const high = Math.max(start, place);
-  const lean = position > high ? position - high : position < low ? position - low : 0;
-  const neighbour = lean > 0 ? Math.min(last, place + 1) : lean < 0 ? Math.max(0, place - 1) : place;
-  const amount = neighbour === place
-    ? 0
-    : smooth(Math.max(0, Math.min(1, lean > 0
-      ? lean / Math.max(1e-3, place + forward - high)
-      : -lean / Math.max(1e-3, low - (place - back)))));
-  return { from: start, neighbour, amount };
-}
-
 // ── The channel ──
 // The atlas is a lazy chunk and the chapters are in the page bundle, so the
 // two meet here: the atlas sets the plan once per layout and publishes, on
-// every camera frame it draws, where each place stands and which place the
-// camera is ON (its cover shows; null in the air and outside the archive).
+// every camera frame it draws, where each place stands and which place's
+// cover shows (null in the air, with nothing in hand, or zoomed far out).
 // A chapter subscribes and writes its own cover. The last of each is kept,
 // so a chapter that mounts late is placed at once.
 
 export interface DockFrame {
-  /** The place the camera has landed on (its cover shows), else null. */
+  /** The place whose cover shows (in hand, the camera down at it), else null. */
   at: string | null;
   /** Every place's foot this frame, viewport px. */
   points: Readonly<Record<string, Point>>;

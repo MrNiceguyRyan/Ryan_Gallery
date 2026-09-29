@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CSS_EASE, DUR, DUR_MS, EASE, smootherstep, voyageEase, voyageSeconds } from '../src/lib/motion.ts';
+import { CSS_EASE, DUR, DUR_MS, EASE, smootherstep, voyageEase } from '../src/lib/motion.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SOURCE = /\.(css|astro|tsx?|jsx?|mjs|mdx)$/;
@@ -160,17 +160,17 @@ test('every curve is one a browser accepts, and the leaving curves ease in', () 
   for (const ms of Object.values(DUR_MS)) assert.ok(Number.isInteger(ms) && ms > 0);
 });
 
-test('the voyage is the one HomePage used to write inline, moved verbatim', () => {
-  const was = (d) => Math.min(2.6, Math.max(1.5, 1.3 + d / 2400));
+test('the voyage\'s sine is the explorer\'s: its flights and its entry turn ride it', () => {
   const sine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
-  for (const d of [0, 120, 480, 1000, 2917.5, 3120, 4000, 12000]) assert.equal(voyageSeconds(d), was(d));
   for (let t = 0; t <= 1; t += 0.0625) assert.equal(voyageEase(t), sine(t));
-  assert.equal(voyageSeconds(0), 1.5);
-  assert.equal(voyageSeconds(1e6), 2.6);
-
+  // The page no longer scrolls on a voyage (the homepage is a map to roam):
+  // the voyage's clock went with it.
   const home = readFileSync(join(ROOT, 'src/components/home/HomePage.tsx'), 'utf8');
-  assert.match(home, /import \{[^}]*\bvoyageSeconds\b[^}]*\} from '\.\.\/\.\.\/lib\/motion'/);
-  assert.doesNotMatch(home, /\/ 2400/, 'HomePage keeps no private copy of the voyage clock');
+  assert.doesNotMatch(home, /voyageSeconds|lenis\.scrollTo/);
+  const camera = readFileSync(join(ROOT, 'src/lib/explorerCamera.ts'), 'utf8');
+  assert.match(camera, /import \{ voyageEase \} from '\.\/motion\.ts';/);
+  const atlas = readFileSync(join(ROOT, 'src/components/home/RouteAtlas.tsx'), 'utf8');
+  assert.match(atlas, /easing: voyageEase,/);
 });
 
 test('smootherstep is the quintic the scroll-owned values share', () => {

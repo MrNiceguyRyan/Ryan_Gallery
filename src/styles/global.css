@@ -93,24 +93,6 @@ html.lenis body {
   transition-duration: var(--dur-in);
 }
 
-/* The scroll cue's sweep is its screen's one lime mark (the kickers' dots
-   are bone ink): the globe's first pose here, the opening words in
-   entrance.css. */
-.prologue-scroll-cue::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: #D2FF00;
-  transform: translateY(-100%);
-  animation: prologue-scroll-cue 2.6s var(--ease-arrive) infinite;
-}
-@keyframes prologue-scroll-cue {
-  0% { transform: translateY(-100%); }
-  55%, 100% { transform: translateY(100%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prologue-scroll-cue::after { animation: none; transform: none; opacity: 0.5; }
-}
 /* Entrances run in CSS from the moment they are asked for, not from
    hydration: framer's `initial` is written into the server HTML and shipped
    type hidden until the scripts had loaded. The base styles ARE the finished
@@ -130,38 +112,6 @@ html.lenis body {
 }
 @keyframes prologue-hero-fade {
   from { opacity: 0; }
-}
-/* ── The globe's first pose (GlobePrologue) ──────────────────────────────
-   The globe is not on the first screen any more (the entrance's opening
-   words and boarding pass are, EntranceIntro): it arrives when the pass is
-   torn, rising over the lower edge with the page's glide. Its caption waits
-   out the move ('gliding') and comes up once the globe is in place
-   ('landed') — one thing at a time: the kicker at 80 ms, the line at 160,
-   the stop at 280, the cue at 420. At rest (a restored position, reduced
-   motion) the caption simply is. */
-.globe-prologue[data-arrival='gliding'] .prologue-cap { opacity: 0; }
-.globe-prologue[data-arrival='landed'] .prologue-cap--1 {
-  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 80ms backwards;
-}
-.globe-prologue[data-arrival='landed'] .prologue-cap--2 {
-  animation: prologue-hero-lift-14 900ms var(--ease-arrive) 160ms backwards;
-}
-.globe-prologue[data-arrival='landed'] .prologue-cap--3 {
-  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 280ms backwards;
-}
-.globe-prologue[data-arrival='landed'] .prologue-cap--4 {
-  animation: prologue-hero-fade 800ms var(--ease-arrive) 420ms backwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  .globe-prologue[data-arrival] .prologue-cap { animation: none; opacity: 1; }
-}
-/* The first stop's name (and its region and year) waits for its place to
-   turn into view: the globe arrives facing the far side of the planet, and
-   the scroll turns the place round (GlobePrologue's NAME_Q writes the share,
-   0 → 1). A scroll-linked value, so reduced motion keeps it too. */
-.globe-prologue .prologue-name {
-  opacity: var(--prologue-name, 1);
-  transform: translateY(calc((1 - var(--prologue-name, 1)) * 8px));
 }
 /* ── The opening film (OpeningFilm; its own sheet is opening.css) ────────
    It lies over the entrance's opening words until it lands (<html
@@ -604,12 +554,6 @@ html[data-globe-egg='bulb'] * {
   white-space: nowrap;
   color: var(--stub-ink);
 }
-/* A voyage from the ticket crosses the whole prologue in about two seconds:
-   its type steps aside for the trip instead of streaming past. */
-html[data-globe-voyage] .globe-prologue {
-  opacity: 0;
-  transition: opacity 240ms var(--ease-leave);
-}
 /* A voyage's passing. A ticket from the globe, a place on the atlas, a torn
    cover or Back to the start carries the page across several chapters in
    about two seconds. What it passes steps back to a fifth of its ink, so only
@@ -879,11 +823,17 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
     opacity var(--dur-out) var(--ease-fade),
     visibility 0s;
 }
-/* A hit area 5px round the shield. */
+/* A hit area 5px round the shield; 10px under a finger (the phone's shields
+   are 23–31px, under the 44px a fingertip needs). */
 .place-shield__sign::before {
   content: '';
   position: absolute;
   inset: -5px;
+}
+@media (pointer: coarse) {
+  .place-shield__sign::before {
+    inset: -10px;
+  }
 }
 .place-shield__sign:focus-visible {
   outline: 2px solid #D2FF00;
@@ -1004,32 +954,7 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
 }
-/* The phone's shields (RouteAtlas LivingShields): the same shields at 22px on
-   the living atlas's projected points, the foot's point on the place; the
-   scroll inks each one (its scale and ink are written inline). A pile whose
-   places lie a few px apart is laid as a deck behind its front shield
-   (deckShields: `--dx`, `--lift`), gliding as the front changes. */
-.place-shield--living {
-  position: absolute;
-  transform: translate(-50%, -100%) translate(var(--dx, 0px), var(--lift, 0px));
-  pointer-events: none;
-  transition: transform var(--dur-swap) var(--ease-arrive);
-}
-.place-shield--living .place-shield__sign {
-  cursor: default;
-  opacity: 1;
-  transition: none;
-}
-.place-shield--living .place-shield__sign[data-pile]::after {
-  top: -4px;
-  right: -5px;
-  min-width: 10px;
-  height: 10px;
-  padding: 0 2px;
-  box-shadow: 0 0 0 1px #F4F4ED;
-  font-size: 6.5px;
-  line-height: 10px;
-}
+
 .af-place__body {
   fill: rgba(11, 14, 9, 0.46);
   stroke: none;
@@ -1122,6 +1047,408 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   main[data-story-under="true"] .route-atlas,
   main[data-story-under="true"] .archive-dock-host,
   main[data-story-under="true"] [data-archive-column] { transform: none; filter: none; }
+}
+
+/* ─── The explorer (src/lib/explorer.ts) ────────────────────────────────
+   Owner, 2026-09-28: 我想采用自由探索的形式 … "地图随便逛". The homepage is one
+   screen: the map, full bleed, the reader's to drag and zoom; the first
+   screen's type lies over it until the reader's first move; the place in
+   hand's rail down the right; the controls at its foot. The page itself
+   never scrolls (the Index opens over the map). */
+.explorer-page {
+  overscroll-behavior: none;
+  /* The page never scrolls: every touch on it is the map's (or a control's),
+     never the browser's pan. The list keeps its own vertical scroll. */
+  touch-action: none;
+}
+.explorer-list {
+  touch-action: pan-y;
+}
+/* The reader's map: Mapbox's own handlers take the pointer (the atlas's map
+   was presentation-only while the scroll drove it). */
+.route-atlas[data-atlas-free] .mapboxgl-map {
+  pointer-events: auto;
+}
+.route-atlas[data-atlas-free] .mapboxgl-canvas:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: -6px;
+}
+/* With nothing in hand the viewfinder has nothing to read out. */
+.route-atlas[data-no-place] .viewfinder {
+  visibility: hidden;
+}
+/* Back to the start: the page is veiled (the page's own ground, under the
+   nav) while the explorer gives way to the opening words and a new pass —
+   never a scroll back up through the pass, never the camera seen sweeping
+   back across the planet. In on the fade curve, out on the arrive curve. */
+.home-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: #282c20;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 640ms var(--ease-arrive);
+}
+.home-veil[data-shown] {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+/* ── The rail: the place in hand ──
+   Down the right of the page, the width src/lib/coverDock.ts plans the
+   covers round (`RAIL`). One place at a time: the one in hand fades in once
+   the camera is down (never while it flies: one large motion at a time),
+   the others are out of sight and out of reach (`inert`, ArchiveChapter). */
+.explorer-rail {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  bottom: 0;
+  right: 48px;
+  width: clamp(280px, 25vw, 440px);
+  pointer-events: none;
+}
+@media (min-width: 1280px) {
+  .explorer-rail { right: 64px; }
+}
+.explorer-place {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6vh;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+}
+.explorer-place[data-shown] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 520ms var(--ease-arrive) 80ms, visibility 0s;
+}
+.explorer-idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-bottom: 6vh;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+}
+.explorer-idle[data-shown] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 520ms var(--ease-arrive) 120ms, visibility 0s;
+}
+html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
+  opacity: 0;
+}
+.explorer-idle::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 22% -80px 22% -100px;
+  pointer-events: none;
+  background: radial-gradient(closest-side at 50% 50%, rgba(16, 20, 14, 0.5) 0%, rgba(16, 20, 14, 0.32) 55%, transparent 100%);
+}
+.explorer-idle__kicker {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.72);
+}
+.explorer-idle__line {
+  margin-top: 18px;
+  max-width: 17em;
+  font-size: clamp(26px, 2.2vw, 36px);
+  line-height: 1.12;
+  color: #F4F4ED;
+  text-shadow: 0 0 20px rgba(16, 20, 14, 0.4);
+}
+.explorer-idle__figures {
+  margin-top: 22px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.86);
+}
+.explorer-idle__hint {
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(244, 244, 237, 0.64);
+}
+/* ── The controls: Prev · All places · Index · Next ── */
+.explorer-controls {
+  position: absolute;
+  z-index: 30;
+  right: 48px;
+  bottom: 26px;
+  width: clamp(280px, 25vw, 440px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+}
+@media (min-width: 1280px) {
+  .explorer-controls { right: 64px; }
+}
+.explorer-controls[data-visible] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 600ms var(--ease-arrive) 200ms, visibility 0s;
+}
+.explorer-controls__bar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+/* The desktop's two rows: the list and the Index, then the steps; each
+   button half the rail, so a neighbour's name reads whole. */
+.explorer-controls__bar + .explorer-controls__bar {
+  margin-top: 6px;
+}
+.explorer-controls__bar--tools > button,
+.explorer-controls__bar--steps > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.explorer-controls__bar > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(244, 244, 237, 0.14);
+  border-radius: 999px;
+  background: rgba(17, 21, 15, 0.84);
+  color: rgba(244, 244, 237, 0.86);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive), border-color var(--dur-in) var(--ease-arrive);
+}
+.explorer-controls__bar > button:hover:not(:disabled) {
+  background: rgba(30, 35, 27, 0.94);
+  border-color: rgba(244, 244, 237, 0.3);
+  color: #F4F4ED;
+}
+.explorer-controls__bar > button:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 2px;
+}
+.explorer-controls__bar > button:disabled {
+  opacity: 0.4;
+}
+.explorer-controls__step {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.explorer-controls__step--prev { justify-content: flex-start !important; }
+.explorer-controls__step--next { justify-content: flex-end !important; }
+.explorer-controls__place {
+  display: inline-flex;
+  min-width: 0;
+  gap: 6px;
+}
+.explorer-controls__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.explorer-controls__arrow {
+  font-size: 12px;
+  line-height: 1;
+}
+.explorer-controls__count {
+  color: rgba(244, 244, 237, 0.6);
+}
+.explorer-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 100%;
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 10px 10px;
+  border: 1px solid rgba(244, 244, 237, 0.12);
+  border-radius: 8px;
+  /* Opaque: at 96% the rail's lede showed through its head and first row,
+     two layers of type colliding (the review of 2026-09-28). */
+  background: #11140f;
+  box-shadow: 0 18px 50px rgba(5, 7, 4, 0.45);
+}
+.explorer-list__head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8px 10px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.62);
+  border-bottom: 1px solid rgba(244, 244, 237, 0.08);
+}
+.explorer-list__rows {
+  margin-top: 6px;
+}
+.explorer-list__row {
+  display: grid;
+  grid-template-columns: 22px 26px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  text-align: left;
+  color: rgba(244, 244, 237, 0.86);
+  transition: background-color var(--dur-in) var(--ease-arrive);
+}
+.explorer-list__row:hover,
+.explorer-list__row:focus-visible {
+  background: rgba(244, 244, 237, 0.07);
+  outline: none;
+}
+.explorer-list__row:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(244, 244, 237, 0.5);
+}
+.explorer-list__row[aria-current='true'] {
+  background: rgba(244, 244, 237, 0.1);
+}
+.explorer-list__no {
+  grid-row: span 2;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(244, 244, 237, 0.62);
+}
+.explorer-list__shield {
+  grid-row: span 2;
+  display: flex;
+  justify-content: center;
+}
+.explorer-list__name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.1;
+  color: #F4F4ED;
+}
+.explorer-list__meta {
+  grid-column: 3;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.6);
+}
+/* ── The Index: the archive's contact sheet, over the map ── */
+.explorer-index {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: #20241a;
+}
+.explorer-index__close {
+  position: absolute;
+  z-index: 40;
+  top: max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top));
+  right: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right));
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(244, 244, 237, 0.16);
+  border-radius: 999px;
+  background: rgba(17, 21, 15, 0.86);
+  color: rgba(244, 244, 237, 0.88);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.explorer-index__close:hover { color: #F4F4ED; border-color: rgba(244, 244, 237, 0.34); }
+.explorer-index__close:focus-visible { outline: 2px solid #D2FF00; outline-offset: 2px; }
+/* The sheet's own "Back to the start" is bone inside the Index: its Close is
+   focused on opening, and its lime ring is the view's one lime. */
+.explorer-index .closing-links > button {
+  color: rgba(244, 244, 237, 0.86);
+}
+.explorer-index .closing-links > button:hover {
+  color: #F4F4ED;
+}
+/* ── The phone ──
+   The card is dealt at the foot of the screen (src/lib/explorer.ts,
+   phoneCard), over the controls; the rail's words live on the card's stub
+   and in the story, so the phone's rail is for the keyboard and the screen
+   reader only. */
+.explorer-rail--phone {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.archive-dock-host--phone {
+  z-index: 25;
+}
+.archive-dock.archive-dock--phone {
+  left: 50%;
+  top: auto;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+}
+.archive-dock--phone .archive-dock__seat {
+  left: 0;
+  bottom: 34px;
+  translate: -50% 0;
+  transform-origin: 50% 100%;
+}
+.archive-dock--phone .archive-plate__caret {
+  display: none;
+}
+.explorer-controls--phone {
+  left: 12px;
+  right: 12px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: auto;
+}
+.explorer-controls--phone .explorer-controls__bar > button {
+  min-height: 46px;
+  padding: 0 10px;
+}
+.explorer-controls--phone .explorer-list {
+  max-height: min(58vh, 520px);
+}
+/* The stub's seat (ArchiveChapter): the stub's own box in the ticket; it
+   clips at the seam while the stub is torn off to open the story. */
+.archive-ticket-stub-seat {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex: 0 0 190px;
+}
+.archive-plate.is-stub-torn .archive-ticket-stub,
+.archive-plate.is-stub-torn .archive-ticket-stub * {
+  pointer-events: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .explorer-place,
+  .explorer-place[data-shown],
+  .explorer-idle,
+  .explorer-idle[data-shown],
+  .explorer-controls,
+  .explorer-controls[data-visible] {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
 }
 
 /* ─── The Collection Story: a weekly feature ──────────────────────────────
@@ -3139,9 +3466,6 @@ h1, h2, h3 {
   }
 }
 
-
-
-
 /* Focus-visible ring for keyboard navigation */
 /* One ring, and it lets the element it is on decide its own shape and distance.
    Unlayered, this blanket rule beat all 73 `focus-visible:outline-offset-*`
@@ -3230,28 +3554,9 @@ main:focus,
    sidebar row builds its outer glow from them. ─── */
 :root { --heat-r: 210; --heat-g: 255; --heat-b: 0; }
 
-/* ─── WalkIn opener — CSS-driven entrances (no framer mount anims there) ─── */
-/* City changes are deliberately quieter than the opening: a short focus-pull
-   rather than another full title reveal. */
-.walkin-city {
-  animation: walkin-city 0.62s var(--ease-arrive) both;
-}
-@keyframes walkin-city {
-  from {
-    opacity: 0;
-    transform: translateY(0.16em);
-    filter: blur(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
-}
-/* (WalkIn entrance — word rise, rotor spin→aim, card scale-out — is all
-   transition/rAF-driven in WalkIn.tsx, not keyframes.) */
-/* Nav wordmark slides down from above once the opening reveals — WalkIn flips
-   body.walkin-in when its reveal fires. */
+/* ─── The homepage wordmark ─── It slides down from above once the page is
+   up (HomePage flips body.walkin-in at mount; the opening film, when it
+   plays, keeps the whole nav under it). */
 .walkin-nav {
   transform: translateY(-110%);
   transition: transform 0.76s var(--ease-arrive) 0.14s;
@@ -3259,20 +3564,6 @@ main:focus,
 body.walkin-in .walkin-nav { transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {
   .walkin-nav { transform: none !important; transition: none !important; }
-  .walkin-city {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-    filter: none !important;
-  }
-}
-
-@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
-  /* Preserve enough physical scroll distance for the cover to read as a
-     controlled camera move on short phones, and keep its micro header clear of
-     the fixed 44px navigation targets. */
-  .walkin-scroll-stage { height: 270svh !important; }
-  .walkin-running-head { top: 14% !important; }
 }
 
 /* Homepage route — keep Mapbox's geographic detail, but grade the basemap into
@@ -3295,107 +3586,21 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   opacity: 0.76;
   filter: brightness(0.58) saturate(0.46) contrast(1.22);
 }
-.route-atlas-print-base {
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 76% 64% at 48% 46%, rgba(112, 121, 94, 0.08), transparent 74%),
-    #0d120d;
-}
-.route-atlas-print-base::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.16;
-  background-image:
-    linear-gradient(rgba(218, 224, 207, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(218, 224, 207, 0.035) 1px, transparent 1px);
-  background-size: 9.5vw 9.5vw;
-  -webkit-mask-image: radial-gradient(ellipse 78% 70% at 52% 48%, #000 12%, transparent 82%);
-  mask-image: radial-gradient(ellipse 78% 70% at 52% 48%, #000 12%, transparent 82%);
-}
-.route-atlas-print-paper {
-  opacity: 0.29;
-  filter: brightness(0.58) saturate(0.42) contrast(1.08);
-  mix-blend-mode: screen;
-}
-.route-atlas-print-map {
-  opacity: 1;
-}
-.route-atlas-print-silhouette {
-  opacity: 0.052;
-  filter: sepia(0.6) hue-rotate(32deg) saturate(0.6);
-}
-.route-atlas-print-states {
-  opacity: 0.14;
-  filter: sepia(0.52) hue-rotate(28deg) saturate(0.52) brightness(0.82);
-}
-.route-atlas-print-label {
-  position: absolute;
-  color: rgba(213, 219, 204, 0.16);
-  font-size: 11px;
-  font-style: italic;
-  line-height: 1.55;
-  letter-spacing: 0.1em;
-  text-align: center;
-}
-.route-atlas-print-label--canada { left: 43%; top: 13%; }
-.route-atlas-print-label--usa { left: 35%; top: 39%; }
-.route-atlas-print-label--mexico { left: 53%; top: 89%; }
-.route-atlas-print-label--pacific { left: 9%; top: 58%; }
-.route-atlas-print-label--atlantic { right: 2.8%; top: 61%; }
-.route-atlas-print-label--gulf { right: 23%; top: 78%; }
-/* The living tree's route overlay is white ink (MAP_INK): it is seated on a
-   burn shadow like the desktop's travelled line, not lit by a lime glow. */
-/* The living tree's places are its shields (.place-shield--living, under
-   "The place shields"). */
-.route-atlas__route-overlay {
-  filter: drop-shadow(0 0 2px rgba(11, 14, 9, 0.55));
-}
-/* Reading tone. Once the camera has landed on a chapter the ground settles
-   into a darker paper, so the photograph and the type are the subject and
-   the map is the drawing behind them; the moment a flight starts it lifts,
-   so the map comes forward exactly when it moves. Opacity only (compositor),
-   driven by the camera state the atlas broadcasts on <html> — `locked` is
-   the landing itself, so the settle begins on touchdown. Sinks slowly, lifts
-   fast: the flight is the event, the rest is the reading. */
-/* Lightened 2026-09-28 (the owner: the chapters' ground was too dark): the
-   settle is a breath now, not a dimmer — the photograph and its type are the
-   subject by their own weight, and the rail has its own local ground. It
-   covers the whole canvas: the map runs to the page's edge. */
+
+/* Reading tone: the map's ground a breath darker than the photograph, so the
+   photograph and its type are the subject and the map the drawing behind
+   them. Lightened 2026-09-28 (the owner: the chapters' ground was too dark),
+   deepened a little the same day (有点晃眼): 0.16, with the satellite's own
+   quieter grade (src/lib/globeLook.ts STOCK_PAINT). It covers the whole
+   canvas: the map runs to the page's edge.
+   It holds in every camera state. It used to lift at every take-off, "so the
+   map comes forward exactly when it moves" — the whole map brightened by 6–11
+   steps of luma exactly while it moved (the review of 2026-09-28), the
+   opposite of calm. */
 .route-atlas-rest-tone {
-  background: rgba(9, 12, 8, 0.1);
-  opacity: 0;
-  /* Take-off clears it on the fade curve: on the arrive curve 84% of the tone
-     was gone in the first 80 ms, a cut with a tail. */
-  transition: opacity 0.5s var(--ease-fade);
+  background: rgba(9, 12, 8, 0.16);
 }
-html[data-atlas-camera='locked'] .route-atlas-rest-tone,
-html[data-atlas-camera='rest'] .route-atlas-rest-tone {
-  opacity: 1;
-  transition-duration: 1.6s;
-  transition-timing-function: var(--ease-arrive);
-}
-.route-atlas-release {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(40, 44, 32, 0.04) 24%,
-    rgba(40, 44, 32, 0.18) 48%,
-    rgba(40, 44, 32, 0.56) 72%,
-    rgba(40, 44, 32, 0.9) 90%,
-    #282c20 100%
-  );
-}
-.route-atlas-release--mobile {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(40, 44, 32, 0.08) 26%,
-    rgba(40, 44, 32, 0.38) 58%,
-    rgba(40, 44, 32, 0.82) 82%,
-    #282c20 100%
-  );
-}
+
 .route-atlas-interface-veil {
   width: min(360px, 40%);
   background: radial-gradient(ellipse 110% 72% at 0% 46%, rgba(7, 9, 6, 0.16) 0%, rgba(7, 9, 6, 0.07) 42%, rgba(7, 9, 6, 0.02) 72%, transparent 100%);
@@ -4343,6 +4548,17 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
   opacity: 0.18;
   transform: scale(0.62);
 }
+/* The desktop canvas bleeds CANVAS_BLEED (32px) past the page on every side:
+   Mapbox's logo and attribution come back inside the page, where they can be
+   read and reached (a focus on the attribution used to sit below the fold). */
+.route-atlas__canvas--bleed .mapboxgl-ctrl-bottom-left {
+  left: 32px;
+  bottom: 32px;
+}
+.route-atlas__canvas--bleed .mapboxgl-ctrl-bottom-right {
+  right: 32px;
+  bottom: 32px;
+}
 @media (max-width: 1023px) {
   .atlas-map-workspace .mapboxgl-ctrl-bottom-left {
     left: max(0px, env(safe-area-inset-left));
@@ -4519,36 +4735,7 @@ body.travel-workspace-active {
     padding-right: max(4rem, env(safe-area-inset-right));
   }
 }
-.mobile-route-story {
-  --atlas-mobile-height: 100dvh;
-}
-.mobile-route-story__scenes {
-  margin-top: calc(-1 * var(--atlas-mobile-height));
-  pointer-events: none;
-}
-.mobile-route-story__lead-in {
-  height: 68svh;
-}
-.mobile-route-story__scene {
-  display: flex;
-  min-height: 108svh;
-  align-items: center;
-  padding: 18svh 0 14svh;
-}
-.mobile-route-story__scene [role="button"],
-.mobile-route-story__scene button,
-.mobile-route-story__scene a {
-  pointer-events: auto;
-}
-.mobile-route-story__release {
-  height: 56svh;
-}
-.mobile-route-region {
-  left: max(1.25rem, env(safe-area-inset-left));
-}
-.mobile-route-card {
-  padding-right: max(1rem, env(safe-area-inset-right));
-}
+
 .route-atlas--mobile .route-atlas-header {
   padding-left: max(1.25rem, env(safe-area-inset-left));
   padding-right: max(1.25rem, env(safe-area-inset-right));
@@ -4587,9 +4774,7 @@ body.travel-workspace-active {
   .route-atlas--mobile .route-atlas-footer > span {
     display: none;
   }
-  .route-atlas--mobile .route-atlas-overview-title {
-    font-size: clamp(24px, 6vw, 34px);
-  }
+
   .route-atlas--mobile .route-atlas-nav {
     top: 28% !important;
     width: 8.25rem;
@@ -4616,12 +4801,7 @@ body.travel-workspace-active {
     margin-top: 0;
     font-size: 9px;
   }
-  .mobile-route-region {
-    display: none;
-  }
-  .mobile-route-card {
-    width: 72vw !important;
-  }
+
 }
 @media (min-width: 1024px) and (max-height: 620px) {
   .route-atlas-header { padding-top: 5rem; }
@@ -4631,27 +4811,6 @@ body.travel-workspace-active {
 .location-atlas .mapboxgl-ctrl-bottom-left {
   top: 3px;
   bottom: auto;
-}
-
-@media (orientation: landscape) and (max-width: 1023px) {
-  .mobile-route-story__lead-in { height: 76svh; }
-  .mobile-route-story__scene {
-    min-height: 155svh;
-    padding-top: 14svh;
-    padding-bottom: 10svh;
-  }
-  .mobile-route-story__release { height: 45svh; }
-  .mobile-route-story .archive-cover-title {
-    font-size: clamp(44px, 11vw, 64px) !important;
-  }
-  .mobile-route-story .archive-cover-title-wrap {
-    bottom: -30px !important;
-  }
-}
-@media (orientation: landscape) and (max-width: 639px) and (max-height: 520px) {
-  .mobile-route-story .archive-photo-frame {
-    aspect-ratio: 16 / 10 !important;
-  }
 }
 
 /* ── Shared perpetual pulse vocabulary: every repeat-forever cue lives in
@@ -4714,268 +4873,12 @@ body.travel-workspace-active {
   .film-grain { opacity: 0.045; }
 }
 
-/* ─── Living Atlas homepage trial ───────────────────────────────────────────
-   Keep the continuous route timeline, but return to the earlier editorial
-   composition: the geographic field reads on the left and a clean photographic
-   dispatch sits on the right. Scroll-only scene anchors keep the motion and
-   story order independent from that presentation. */
-.living-atlas {
-  min-height: 100svh;
-  contain: paint;
-}
-
-.living-atlas__stage {
-  isolation: isolate;
-}
-
-.living-atlas__entry-wash {
-  background: linear-gradient(
-    180deg,
-    rgba(15, 19, 14, 0.48) 0%,
-    rgba(15, 19, 14, 0.2) 38%,
-    transparent 100%
-  );
-  height: 14svh;
-}
-
-.living-atlas__photo {
-  top: 16.5%;
-  height: 58%;
-  width: 50vw;
-  overflow: hidden;
-  background: #10140f;
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-.living-atlas__photo--right {
-  right: 5%;
-}
-
-.living-atlas__photo--left {
-  left: 12.5%;
-}
-
-/* Keep the photographic aperture geographically fixed while the image itself
-   carries the tiny pointer parallax. The overscan keeps that movement from
-   exposing a dark seam along the clean frame edge. */
-.living-atlas__photo > .living-atlas__photo-layer,
-.living-atlas__photo > div {
-  inset: -3%;
-}
-
-.living-atlas__photo img {
-  filter: saturate(0.72) contrast(1.08) brightness(0.8) sepia(0.04) hue-rotate(-3deg);
-  opacity: 1;
-}
-
-.living-atlas__photo-grade {
-  background: linear-gradient(
-    180deg,
-    rgba(8, 10, 7, 0.22) 0%,
-    rgba(8, 10, 7, 0.035) 34%,
-    rgba(8, 10, 7, 0.03) 62%,
-    rgba(8, 10, 7, 0.28) 100%
-  );
-}
-
-.living-atlas__photo-grade::after {
-  position: absolute;
-  inset: 0;
-  background: url('/assets/maps/walkin-silver-paper.webp') center / cover no-repeat;
-  content: '';
-  mix-blend-mode: soft-light;
-  opacity: 0.06;
-}
-
-.living-atlas__map-overprint {
-  display: none;
-}
-
-/* ── The ticket stub (phone) ──────────────────────────────────────────────
-   Hangs from the photograph's bottom edge. Its position is DERIVED from the
-   photo window's own box, never measured: the window is (left 35%, right
-   -2%) of the stage, i.e. 67vw wide, at aspect 4/3, so its bottom sits at
-   top + 67vw × 3/4 = top + 50.25vw. (640–1023px: 60vw at 8/5 → + 37.5vw.)
-   The perforation is bitten out of the stub's top edge, so the torn line
-   reads against the photograph it hangs from. Each stub is printed on its
-   chapter's own stock (`--stub-paper`, inline from StubFace), so the torn
-   one falls in its colour while the next chapter's arrives under it. */
-.living-ticket {
-  --ticket-pitch: 7px;
-  --ticket-hole: 1.8px;
-  display: none;
-  height: 48px;
-}
-.living-ticket__stub {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--stub-paper, #30352a);
-  box-shadow: inset 0 1px 0 rgba(244, 244, 237, 0.08);
-  color: var(--stub-ink);
-  transform-origin: 100% 0%;
-  -webkit-mask-image:
-    linear-gradient(#000, #000),
-    radial-gradient(circle at calc(var(--ticket-pitch) / 2) 0, #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px));
-  mask-image:
-    linear-gradient(#000, #000),
-    radial-gradient(circle at calc(var(--ticket-pitch) / 2) 0, #000 var(--ticket-hole), transparent calc(var(--ticket-hole) + 0.6px));
-  -webkit-mask-size: 100% 100%, var(--ticket-pitch) 100%;
-  mask-size: 100% 100%, var(--ticket-pitch) 100%;
-  -webkit-mask-repeat: no-repeat, repeat-x;
-  mask-repeat: no-repeat, repeat-x;
-  -webkit-mask-composite: source-out, source-over;
-  mask-composite: subtract, add;
-}
-/* Torn: the holes become a ragged edge — it came off the perforation, it was
-   not cut along it. */
-.living-ticket__stub.is-torn {
-  -webkit-mask-image:
-    linear-gradient(#000, #000),
-    repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 5px, #000 5px 9px, transparent 9px 10px);
-  mask-image:
-    linear-gradient(#000, #000),
-    repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 5px, #000 5px 9px, transparent 9px 10px);
-  -webkit-mask-size: 100% 100%, 100% 3px;
-  mask-size: 100% 100%, 100% 3px;
-  -webkit-mask-repeat: no-repeat, no-repeat;
-  mask-repeat: no-repeat, no-repeat;
-}
-/* The phone stub is the place's sign too: its route shield (the state, the
-   stop) where the ordinal was, then the name and the admission line. */
-.living-ticket__sign {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-.living-ticket__no.route-shield {
-  --shield: 30px;
-}
-/* A stub arriving in place of a torn one: the card is under the falling
-   stub already, and its print is inked in a beat later (house expo), so the
-   new ordinal never reads as overprint above the old. */
-.living-ticket__stub.is-printing .living-ticket__no,
-.living-ticket__stub.is-printing .living-ticket__text {
-  animation: living-ticket-print 260ms var(--ease-arrive) 200ms both;
-}
 @keyframes living-ticket-print {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .living-ticket__stub.is-printing .living-ticket__no,
-  .living-ticket__stub.is-printing .living-ticket__text { animation: none; }
-}
-.living-ticket__text {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-}
-.living-ticket__place {
-  position: relative;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--stub-strong);
-  --flap-ink: var(--stub-strong);
-}
-.living-ticket__facts {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 8.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--stub-muted);
-}
-@media (max-width: 1023px) {
-  .living-ticket {
-    display: block;
-    top: calc(14% + 37.5vw);
-    left: 38%;
-    right: 2%;
-  }
-}
-@media (max-width: 639px) {
-  .living-ticket {
-    top: calc(17% + 50.25vw);
-    left: 35%;
-    right: -2%;
-  }
-  /* The window bleeds off the right edge; keep the print inside the screen. */
-  .living-ticket__stub {
-    padding-right: calc(14px + 2vw);
-  }
-}
+
 /* Short landscape phones have no room under the photograph. */
-@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
-  .living-ticket { display: none; }
-}
-
-.living-atlas__rail-list {
-  max-height: min(48svh, 430px);
-}
-
-.living-atlas__rail-list.is-expanded {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.living-atlas__rail-list.is-expanded::-webkit-scrollbar {
-  display: none;
-}
-
-.living-atlas__rail::before {
-  content: '';
-  position: absolute;
-  bottom: 0.8rem;
-  left: 0.25rem;
-  top: 1.35rem;
-  width: 1px;
-  background: rgba(244, 244, 237, 0.22);
-}
-
-.living-atlas__rail-node {
-  width: 0.5rem;
-  height: 0.5rem;
-}
-
-.living-atlas__rail-item.is-active .living-atlas__rail-node {
-  width: 0.625rem;
-  height: 0.625rem;
-}
-
-.living-atlas__rail-item.is-passed .living-atlas__rail-node {
-  border-color: rgba(244, 244, 237, 0.28);
-  background: #171b15;
-}
-
-/* The phone's one lime is the caption's chapter number (LivingAtlasStory);
-   the rail's current stop is printed like the map's places — a white-ink dot
-   with a knockout, no glow — and its number in bone. */
-.living-atlas__rail-item.is-active .living-atlas__rail-node {
-  border-color: #f4f4ed;
-  background: #f4f4ed;
-  box-shadow: 0 0 0 1.5px rgba(11, 14, 9, 0.88);
-}
-
-.living-atlas__rail-item.is-active > span:last-child > span:first-child {
-  color: #f4f4ed;
-}
-
-.living-atlas__rail-item.is-active > span:last-child > span:last-child {
-  color: #f4f4ed;
-}
 
 /* The rolling place name. One cell per chapter, all of them the same height, so
    the column can be translated by whole cells and the window shows exactly one
@@ -5554,73 +5457,6 @@ html[data-travel-plate-blank]::view-transition-old(travel-plate) {
   from { opacity: 0; }
 }
 
-.living-atlas__caption-window {
-  height: var(--caption-cell);
-}
-
-.living-atlas__caption-cell {
-  display: flex;
-  height: var(--caption-cell);
-  flex-direction: column;
-  justify-content: flex-end;
-  padding-bottom: 0.4rem;
-}
-
-.living-atlas__caption {
-  /* Every cell in the column is this tall, so the height has to clear the
-     LONGEST caption at this width — "Bryce Canyon" wraps its name, or drops its
-     pager onto a second line, where the others do not. A cell that only fits the
-     short names pushes the tall one's first line up out of the clip (the column
-     is bottom-aligned), which reads as a crop. The air above a short name costs
-     nothing: the window is transparent and the type sits on its bottom edge. */
-  --caption-cell: 13rem;
-}
-
-.living-atlas__title {
-  font-size: clamp(60px, 5.2vw, 76px);
-  line-height: 0.82;
-  letter-spacing: -0.045em;
-  text-shadow: 0 10px 38px rgba(7, 9, 6, 0.48);
-}
-
-.living-atlas__slash {
-  font-size: clamp(30px, 3.4vw, 48px);
-}
-
-/* The phone's coordinates are instrument type: up while the reader moves
-   between chapters and for a moment after (`data-moving`, written by
-   LivingAtlasStory), down at rest — fast in, slow out, the exit easing in. */
-.living-atlas__readout {
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
-}
-.living-atlas__readout[data-moving] {
-  opacity: 1;
-  transition: opacity var(--dur-in) var(--ease-arrive);
-}
-@media (prefers-reduced-motion: reduce) {
-  .living-atlas__readout { transition: none !important; }
-}
-
-.living-atlas__lead-in {
-  height: 34svh;
-}
-
-.living-atlas__scene {
-  min-height: 92svh;
-}
-
-.living-atlas__release {
-  height: 58svh;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(40, 44, 32, 0.2) 32%,
-    rgba(40, 44, 32, 0.76) 72%,
-    #282c20 100%
-  );
-}
-
 .route-atlas--living .mapboxgl-map {
   opacity: 1;
 }
@@ -5637,240 +5473,11 @@ html[data-travel-plate-blank]::view-transition-old(travel-plate) {
   bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
-@media (min-width: 1024px) {
-  .living-atlas__running-head {
-    left: 3rem;
-    top: 5.45rem;
-  }
-
-  .living-atlas__follow {
-    top: 2.25rem;
-  }
-
-  .living-atlas__rail {
-    left: clamp(2.5rem, 3.1vw, 3.25rem);
-    top: 25.6%;
-    width: 9.5rem;
-  }
-
-  .living-atlas__rail-item {
-    min-height: 5.75rem;
-    padding-block: 0;
-  }
-
-  .living-atlas__rail-item > span:last-child > span:first-child {
-    font-size: 9px;
-  }
-
-  .living-atlas__rail-item > span:last-child > span:last-child {
-    max-width: 8.5rem;
-    font-size: 13px;
-    color: rgba(244, 244, 237, 0.68);
-  }
-
-  .living-atlas__caption {
-    left: 33.1%;
-    right: auto;
-    bottom: 13%;
-    width: min(42vw, 600px);
-  }
-}
-
 @media (max-width: 1023px) {
-  .living-atlas__running-head {
-    max-width: calc(100vw - 11.5rem);
-  }
-
-  .living-atlas__photo {
-    top: 14%;
-    left: 38%;
-    right: 2%;
-    width: auto;
-    height: auto;
-    aspect-ratio: 8 / 5;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .living-atlas__photo--right {
-    left: 38%;
-    right: 2%;
-  }
-
-  .living-atlas__photo--left {
-    left: -2%;
-    right: auto;
-  }
-
-  .living-atlas__rail {
-    top: 24%;
-  }
-
-  .living-atlas__rail-list {
-    max-height: 36svh;
-  }
-
-  .living-atlas__rail-item {
-    min-height: 3rem;
-  }
-
-  .living-atlas__caption {
-    padding-left: max(0px, env(safe-area-inset-left));
-    padding-right: max(0px, env(safe-area-inset-right));
-  }
-
-  .living-atlas__title {
-    max-width: 92vw;
-    font-size: clamp(48px, 13vw, 72px);
-  }
-
-  .living-atlas__lead-in {
-    height: 28svh;
-  }
-
-  .living-atlas__scene {
-    min-height: 96svh;
-  }
-
-  .living-atlas__release {
-    height: 46svh;
-  }
 
   .route-atlas--living .mapboxgl-ctrl-logo,
   .route-atlas--living .mapboxgl-ctrl-attrib {
     opacity: 0.42;
-  }
-}
-
-@media (max-width: 639px) {
-  .living-atlas__running-head {
-    left: max(1rem, env(safe-area-inset-left));
-    top: 4.65rem;
-    max-width: calc(100vw - 2rem);
-  }
-
-  .living-atlas__photo {
-    top: 17%;
-    left: 35%;
-    right: -2%;
-    width: auto;
-    max-width: none;
-    height: auto;
-    aspect-ratio: 4 / 3;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-
-  .living-atlas__photo--right {
-    left: 35%;
-    right: -2%;
-  }
-
-  .living-atlas__photo--left {
-    left: -7%;
-    right: auto;
-  }
-
-  .living-atlas__rail {
-    left: max(1rem, env(safe-area-inset-left));
-    top: 19%;
-    width: 7.25rem;
-  }
-
-  .living-atlas__rail-item {
-    gap: 0.55rem;
-  }
-
-  .living-atlas__rail-item span span:last-child {
-    max-width: 5.7rem;
-    font-size: 8px;
-  }
-
-  .living-atlas__caption {
-    left: max(1rem, env(safe-area-inset-left));
-    right: max(1rem, env(safe-area-inset-right));
-    bottom: max(2.5rem, env(safe-area-inset-bottom));
-  }
-
-  .living-atlas__caption > div:first-child {
-    margin-bottom: 0.55rem;
-  }
-
-  /* Phone widths can wrap the name and its pager onto two lines, and every cell
-     in the rolling column has to clear the tallest one — a short cell would let
-     the neighbouring name's ascenders into the window. */
-  .living-atlas__caption {
-    --caption-cell: 12.25rem;
-  }
-
-  .living-atlas__title {
-    font-size: clamp(46px, 14vw, 62px);
-  }
-
-  .living-atlas__slash {
-    font-size: clamp(25px, 9vw, 36px);
-  }
-}
-
-@media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
-  .living-atlas__photo {
-    left: auto;
-    right: 1%;
-    top: 9%;
-    width: 68%;
-    height: 72%;
-    aspect-ratio: auto;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .living-atlas__photo--right {
-    left: auto;
-    right: 1%;
-  }
-
-  .living-atlas__rail {
-    top: 24%;
-    width: 7.25rem;
-  }
-
-  .living-atlas__rail-item {
-    min-height: 2.75rem;
-  }
-
-  .living-atlas__caption {
-    bottom: max(0.75rem, env(safe-area-inset-bottom));
-    left: 31%;
-    --caption-cell: 7.5rem;
-  }
-
-  /* Short landscape windows keep the place name — it is the content — and drop
-     the two labels around it. This rule used to hide the name block itself: it
-     was written against an earlier DOM in which the chapter eyebrow was a
-     direct child of the caption, and its second selector had stopped matching
-     anything at all, so a phone held sideways showed coordinates and no place. */
-  .living-atlas__caption-cell > div:first-child,
-  .living-atlas__caption > div:last-child {
-    display: none;
-  }
-
-  .living-atlas__title {
-    font-size: clamp(38px, 8vw, 62px);
-  }
-
-  .living-atlas__scene {
-    min-height: 120svh;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .living-atlas__scene {
-    min-height: 82svh;
-  }
-
-  .living-atlas__photo img {
-    transform: none;
   }
 }
 

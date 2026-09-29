@@ -17,9 +17,7 @@
 // falls: after the snap no point of the face moves down the screen, and the
 // only ease-in is the fade of something that is already slowing.
 //
-// Times are ms from the trigger at rate 1. A reader who moves on harder pulls
-// harder: ArchiveChapter runs the clock up to TEAR_RATE_MAX× faster until the
-// face is free (`tearRate`), never after.
+// Times are ms from the trigger.
 
 // With its extension: the tests import this module straight into Node, which
 // does not resolve Vite's bare sibling paths.
@@ -88,10 +86,6 @@ export const STOPS: ReadonlyArray<readonly [number, number]> = [
 /** Each hole gives over this share of its interval; the rest is the catch. */
 export const ADV = 0.62;
 
-// The scroll's rate: 1 at a reading pace, up to TEAR_RATE_MAX for a swipe.
-const TEAR_RATE_V0 = 300;
-const TEAR_RATE_SPAN = 700;
-export const TEAR_RATE_MAX = 2.2;
 
 /** A 2D affine as CSS writes it: matrix(a, b, c, d, e, f). */
 export type Affine = [number, number, number, number, number, number];
@@ -201,11 +195,6 @@ export function msAtTip(tip: number) {
 }
 /** The hand's tip `ms` into the score. */
 export const handTipAt = (ms: number) => tipSmooth((ms - TEAR_TENSION_MS) / TEAR_RIP_MS);
-
-/** The clock's rate for a tear the reader's push sets off at `speed` px/s. */
-export function tearRate(speed: number) {
-  return Math.max(1, Math.min(TEAR_RATE_MAX, 1 + (speed - TEAR_RATE_V0) / TEAR_RATE_SPAN));
-}
 
 /**
  * The stamp a tear leaves on its section (`data-ticket-torn-at`) when its
