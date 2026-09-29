@@ -286,9 +286,10 @@ html[data-voyage] .route-atlas .viewfinder__scrim {
      so when they are up they are meant to be read: 0.86 ink holds ≥ 4.5:1
      where the route or pale rock runs behind a figure (0.62 measured 3.9:1). */
   color: rgba(244, 244, 237, 0.86);
-  /* A step firmer since the planet is a bright photograph (2026-09-29): pale
-     rock and desert run behind the figures now. */
-  text-shadow: 0 0 6px rgba(12, 15, 10, 0.72), 0 1px 2px rgba(12, 15, 10, 0.6);
+  /* One soft shadow (2026-09-29): the bright pass's pale rock and desert
+     (Page's p99 218) wanted a firmer pair; the toned print's whites stop
+     near 150 (p99 152). */
+  text-shadow: 0 0 6px rgba(12, 15, 10, 0.66);
 }
 .viewfinder__meta {
   display: flex;
@@ -739,10 +740,11 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 @media (min-width: 1280px) {
   .explorer-rail { right: 64px; }
 }
-/* The rail's own shade (2026-09-29): the planet is a bright photograph now,
-   and over the desert of Page, Zion and Bryce the name and the lede sat on
-   ground as light as they are. A soft pool behind the rail while a place's
-   words are on it (the idle line keeps its own), on the words' own beat. */
+/* The rail's own shade (2026-09-29): over the desert of Page, Zion and Bryce
+   the name and the lede sat on pale ground. A soft pool behind the rail
+   while a place's words are on it (the idle line keeps its own), on the
+   words' own beat. Lighter since the toned print (0.5 / 0.3 / 0.08 under the
+   bright photograph): those deserts are at 64–68 of luma now, not ~100. */
 .explorer-rail::before {
   content: '';
   position: absolute;
@@ -752,7 +754,7 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   left: -140px;
   right: -48px;
   pointer-events: none;
-  background: radial-gradient(ellipse 62% 56% at 60% 47%, rgba(14, 17, 11, 0.5) 0%, rgba(14, 17, 11, 0.3) 52%, rgba(14, 17, 11, 0.08) 82%, transparent 100%);
+  background: radial-gradient(ellipse 62% 56% at 60% 47%, rgba(14, 17, 11, 0.34) 0%, rgba(14, 17, 11, 0.2) 52%, rgba(14, 17, 11, 0.05) 82%, transparent 100%);
   opacity: 0;
   transition: opacity var(--dur-out) var(--ease-fade);
 }
@@ -3485,10 +3487,13 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
    steps of luma exactly while it moved (the review of 2026-09-28), the
    opposite of calm. */
 .route-atlas-rest-tone {
-  /* 2026-09-29 (有点灰灰的，我想要…明亮一点): 0.16 → 0.04. The photograph is
-     whole and in its own colour now (src/lib/globeLook.ts); the type keeps
+  /* 2026-09-29 (有点灰灰的，我想要…明亮一点): 0.16 → 0.04 under the bright
+     photograph; then (太亮了也和整体网站风格差异过大) the page's own olive
+     ink (#1e2416) at 0.16, the toned print's last step onto the site's
+     stock: it ties the map to the page's ground rather than greying it (the
+     print's colour and contrast are in src/lib/globeLook.ts). The type keeps
      its own local scrims (the lede's pool, the idle line's). */
-  background: rgba(9, 12, 8, 0.04);
+  background: rgba(30, 36, 22, 0.16);
 }
 
 .route-atlas-interface-veil {

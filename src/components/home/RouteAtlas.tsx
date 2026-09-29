@@ -395,16 +395,21 @@ const TIP_DEG_PER_S = 15;
 // sky above it dark.
 // Owner, 2026-09-29 (有点灰灰的，我想要精致和明亮一点): the grey-olive haze
 // (#555a4a from 7 viewport heights, a 0.06 blend) was the grey veil over every
-// view with the horizon in it. Now a thin, clear atmosphere: pale blue on the
-// far land from further out, a narrow blue glow on the limb (a 0.012 blend),
+// view with the horizon in it. Now a thin, clear atmosphere from further out
 // and the space beyond it darker than the page, so the planet stands out
-// against it.
+// against it. The same day (太亮了也和整体网站风格差异过大) the bright pass's
+// blue air (the far land to pale sky blue at 0.85, a 0.4 blue limb, space
+// #141810) went for the site's own palette: the far land goes into a warm
+// grey air (0.55), the limb is a bone hairline at 0.14 (a 0.01 blend), and
+// the space is the page's ink a step under its ground (#1d2117: luma 31
+// against the ground's 42, the whole planet's open sea at 32–36 just over
+// it, so the planet reads as a sphere, not a hole in a ring).
 const GLOBE_FOG = {
   range: [10, 20] as [number, number],
-  color: 'rgba(190, 214, 226, 0.85)',
-  'high-color': 'rgba(80, 130, 180, 0.4)',
-  'space-color': '#141810',
-  'horizon-blend': 0.012,
+  color: 'rgba(170, 170, 154, 0.55)',
+  'high-color': 'rgba(214, 212, 196, 0.14)',
+  'space-color': '#1d2117',
+  'horizon-blend': 0.01,
   'star-intensity': 0,
 };
 
@@ -539,7 +544,7 @@ const SATELLITE_STOCK_LAYER = 'prologue-satellite-stock';
 const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 1, 4.6, PROLOGUE_SATELLITE_RESIDUAL];
 // The phone's map carries the same photograph, whole.
 const PHONE_SATELLITE_OPACITY = 1;
-/** The seas' clear blue-green (src/lib/globeLook.ts WATER_TINT): the
+/** The seas' olive-grey (src/lib/globeLook.ts WATER_TINT): the
  *  basemap's own water, a fill laid over the photograph, under the names. */
 // (Its id must not say "water": the basemap's restyle below paints every
 // fill layer named so in the paper's dark water.)
@@ -3056,7 +3061,7 @@ export default function RouteAtlas({
                 'raster-fade-duration': 160,
               } as never,
             }, firstLabel);
-            // The seas' blue-green, over both photographs' water and
+            // The seas' olive-grey, over both photographs' water and
             // under the light (so the night side shades it too).
             addWaterTint(map, firstLabel);
             const light = createPlanetLight(map, () => ({

@@ -7,6 +7,7 @@ import {
   PLANET_LIGHT,
   PLANET_PAINT,
   SILVER_FOG,
+  SILVER_FOG_LITE,
   createGlobeChannel,
   globeLookAt,
   silverFloorAt,
@@ -42,9 +43,10 @@ test('the key light and the ambient floor follow the measured schedule', () => {
   assert.equal(mid.floor, 1);
   near(mid.azimuth, 150);
   const index = globeLookAt(0.9);
-  // Where the swing lands, brighter since 2026-09-29 (有点灰灰的): the far
-  // side at 0.6 of the lit one, the night laid over it at 0.12.
-  near(index.azimuth, 118); near(index.theta, 34); near(index.ambient, 0.6); near(index.nightTint, 0.12);
+  // Where the swing lands, the toned print (2026-09-29, 太亮了也和整体网站风格
+  // 差异过大): the far side at 0.45 of the lit one, the page's ink laid over
+  // it at 0.28, the wrap 0.5 (the bright pass: 0.6 / 0.12 / 0.6).
+  near(index.azimuth, 118); near(index.theta, 34); near(index.ambient, 0.45); near(index.nightTint, 0.28); near(index.wrap, 0.5);
   // The globe the pass brings up is drawn at q = 1: the light swung round
   // onto the places, the floor lifted.
   const planet = globeLookAt(1);
@@ -79,37 +81,52 @@ test('the first screen keeps the approved light, and eases to the under-way ligh
   assert.ok(Math.abs(globeLookAt(0.9).spec - PLANET_LIGHT.spec * 0.5) < 1e-9);
 });
 
-test('the planet is a photograph of itself, bright and in its own colour (owner, 2026-09-29)', () => {
-  // 整个地球的模型有点丑…有点灰灰的，我想要精致和明亮一点: no silver print, no
-  // grey lift. One grade from the planet the page brings up to the reader's
-  // map (nothing changes colour on the way down).
+test('the planet is a split-toned print in the site\'s own palette: calm, crisp, not grey (owner, 2026-09-29)', () => {
+  // Grey (有点灰灰的，我想要精致和明亮一点), then bright (太亮了也和整体网站风格
+  // 差异过大), now between: one grade from the planet the page brings up to
+  // the reader's map (nothing changes colour on the way down).
   const look = PLANET_PAINT;
   assert.deepEqual(STOCK_PAINT, PLANET_PAINT);
+  assert.deepEqual(
+    [look['raster-saturation'], look['raster-contrast'], look['raster-brightness-min'], look['raster-brightness-max'], look['raster-hue-rotate']],
+    [-0.46, 0.24, 0.04, 0.68, -8],
+  );
   for (const key of ['raster-color', 'raster-color-mix', 'raster-color-range']) assert.equal(key in look, false, key);
-  // Its own colour, never washed out; a little contrast, never flattened.
-  assert.ok(look['raster-saturation'] >= 0 && look['raster-saturation'] <= 0.15);
-  assert.ok(look['raster-contrast'] > 0 && look['raster-contrast'] <= 0.15);
-  // The floor only just lifted (it was 0.15: a grey veil over the sea), the
-  // whites allowed (they were capped at 0.58), short of paper.
+  // The colour kept at about half: never the full photograph (0, the bright
+  // pass), never the grey's washout.
+  assert.ok(look['raster-saturation'] <= -0.35 && look['raster-saturation'] >= -0.55);
+  // Crisp: a firm contrast, never the grey's flat card.
+  assert.ok(look['raster-contrast'] >= 0.18 && look['raster-contrast'] <= 0.3);
+  // The floor only just lifted (it was 0.15: a grey veil over the sea); the
+  // whites held well short of paper — the deserts' glare was the brightness
+  // (0.94 under the bright pass).
   assert.ok(look['raster-brightness-min'] <= 0.06);
-  assert.ok(look['raster-brightness-max'] >= 0.9 && look['raster-brightness-max'] < 1);
+  assert.ok(look['raster-brightness-max'] >= 0.6 && look['raster-brightness-max'] <= 0.72);
   // A hair warmer: the hue turns a few degrees at most.
   assert.ok(Math.abs(look['raster-hue-rotate']) <= 10);
-  // The seas: a clear blue-green over the water only, well short of opaque.
-  assert.match(WATER_TINT.color, /^#[0-9a-f]{6}$/i);
+  // The seas: the page's ink a step lifted (not the bright pass's
+  // blue-green, not a teal), over the water only, at half strength.
+  assert.equal(WATER_TINT.color, '#383f37');
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(WATER_TINT.color.slice(i, i + 2), 16));
-  assert.ok(g > r && b > r, 'blue-green');
-  assert.ok(WATER_TINT.opacity > 0.15 && WATER_TINT.opacity <= 0.45);
+  assert.ok(g >= r && g >= b && Math.max(r, g, b) - Math.min(r, g, b) <= 10, 'olive-grey, near neutral');
+  assert.equal(WATER_TINT.opacity, 0.5);
   // The light's floor still lifts in 25 steps across FLOOR_Q.
   const values = new Set();
   for (let q = 0; q <= 1; q += 0.0005) values.add(silverFloorAt(q));
   assert.ok(values.size <= 26);
   assert.equal(silverFloorAt(0.12), 0);
   assert.equal(silverFloorAt(0.32), 1);
-  // A thin atmosphere: the limb's blend narrow, the air a pale blue.
+  // A thin atmosphere in the site's palette: the limb a quiet bone hairline,
+  // the night the page's ink.
   assert.ok(SILVER_FOG['horizon-blend'] <= 0.02);
-  assert.ok(PLANET_LIGHT.paper[2] > PLANET_LIGHT.paper[0], 'the air is blue, not paper');
-  assert.ok(PLANET_LIGHT.nightColor[2] > PLANET_LIGHT.nightColor[0], 'the night is blue-black, not olive');
+  assert.match(SILVER_FOG['high-color'], /^rgba\(220, 218, 200, 0\.08\)$/);
+  assert.equal(SILVER_FOG_LITE['high-color'], 'rgba(220, 218, 200, 0.18)');
+  assert.deepEqual([PLANET_LIGHT.rim, PLANET_LIGHT.rimWidth, PLANET_LIGHT.glow, PLANET_LIGHT.spec], [0.28, 0.028, 0.12, 0.06]);
+  assert.deepEqual(PLANET_LIGHT.paper, [0.957, 0.957, 0.929]);
+  assert.ok(PLANET_LIGHT.paper[0] >= PLANET_LIGHT.paper[2], 'the air is bone, not blue');
+  assert.deepEqual(PLANET_LIGHT.nightColor, [0.09, 0.106, 0.082]);
+  const [nr, ng, nb] = PLANET_LIGHT.nightColor;
+  assert.ok(ng > nr && nr > nb, 'the night is the page\'s olive ink, not blue-black');
 });
 
 test('the reader\'s map carries the photograph whole, the seas tinted, under a clear air', () => {
@@ -129,13 +146,21 @@ test('the reader\'s map carries the photograph whole, the seas tinted, under a c
   const id = /const WATER_TINT_LAYER = '([^']+)';/.exec(source)?.[1];
   assert.ok(id && !id.includes('water'), id);
   assert.ok(source.indexOf('addWaterTint(map, firstLabel);') < source.indexOf('map.addLayer(light, firstLabel);'));
-  // The archive's air: no grey-olive haze, a narrow limb.
+  // The archive's air: no grey-olive haze, no blue; a narrow bone limb and
+  // the space the page's ink a step under its ground.
   const fog = source.slice(source.indexOf('const GLOBE_FOG = {'), source.indexOf('};', source.indexOf('const GLOBE_FOG = {')));
   assert.doesNotMatch(fog, /#555a4a/);
-  assert.match(fog, /'horizon-blend': 0\.012/);
-  // The reading tone is a whisper now.
+  assert.doesNotMatch(fog, /190, 214, 226|80, 130, 180/);
+  assert.match(fog, /color: 'rgba\(170, 170, 154, 0\.55\)'/);
+  assert.match(fog, /'high-color': 'rgba\(214, 212, 196, 0\.14\)'/);
+  assert.match(fog, /'space-color': '#1d2117'/);
+  assert.match(fog, /'horizon-blend': 0\.01,/);
+  // The reading tone: the page's olive ink at 0.16 (a whisper, 0.04, under
+  // the bright pass); the rail's shade and the readout's shadow lighter again.
   const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
-  assert.match(css, /\.route-atlas-rest-tone \{[^}]*background: rgba\(9, 12, 8, 0\.04\);/);
+  assert.match(css, /\.route-atlas-rest-tone \{[^}]*background: rgba\(30, 36, 22, 0\.16\);/);
+  assert.match(css, /\.explorer-rail::before \{[^}]*rgba\(14, 17, 11, 0\.34\) 0%, rgba\(14, 17, 11, 0\.2\) 52%, rgba\(14, 17, 11, 0\.05\) 82%/);
+  assert.match(css, /\.viewfinder__readout \{[^}]*text-shadow: 0 0 6px rgba\(12, 15, 10, 0\.66\);/);
 });
 
 test('channel and wiring', () => {
