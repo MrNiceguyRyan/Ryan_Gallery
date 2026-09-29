@@ -1,53 +1,44 @@
 /* ── The opening film (src/components/home/OpeningFilm.tsx) ────────────────
-   A word hunt through many texts; the schedule, the entrances, the camera
-   and the landings are src/lib/openingFilm.ts. This sheet is the film's
-   MATERIALS: the overlay, the code rain, the finder, the frame counter, a
-   whip's ghosts, and one block per scene. Sheets are drawn at the
-   desktop's scale (a found word's cap height is about 64 px); the island's
-   camera scales and places them. Type as material — engraving, paint in a
-   lens ring's grooves, a halftone screen, stencil spray, an LED matrix,
-   letterpress, chalk, typewriter ink on a photocopy — in our own faces
-   (Fraunces, Space Grotesk) and system stacks, each with a fallback: nothing
-   is downloaded for the film (his photographs are fetched after the first
-   paint, at low priority). No lime but the finder; no yellow anywhere. The
-   dark grounds are lifted off black toward the site's olive, and the light
-   and dark shots come in blocks: a grade, not a strobe of black and white. */
+   A retro editorial type film; the acts, the machines, the scenes and the
+   burn's frames are data in src/lib/openingFilm.ts, and the island only
+   times what this sheet draws. This sheet is the film's MATERIALS: eight
+   machines the typed line is relayed across; the bone paper of the match
+   cuts with its lime anchor, the editorial page and twelve pieces of printed
+   matter; the burn's dark and its leader; the dark of the end.
+   Faces: Fraunces (font-serif, roman 400–900 and italic 400–600) and Space
+   Grotesk (font-ui) — loaded before the clock starts — and one monospace
+   (of-mono, a system face). The one accent is lime, one element a frame at
+   most; the other colours are the site's own (bone, ink, olive and the
+   ticket stocks). Never pure black or white. Everything that moves moves by
+   transform or opacity. */
 
 .opening {
-  /* The found word's cap height on screen (src/lib/openingFilm.ts capFor). */
-  --of-cap: clamp(36px, min(6.4vh, 3.9vw), 96px);
-  /* Where the code scene locks ARCHIVE (FOCUS.archive). */
-  --of-fx: 50vw;
-  --of-fy: 46vh;
-  /* The locked letters' scale while they sit in the rain (the rain's own
-     glyphs are this size: at 0.3 its jargon reads — ISO400, F/2.8, LAT25.76N). */
-  --of-k0: 0.3;
-  --of-mono: Menlo, "SF Mono", Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
-  --of-georgia: Georgia, "Times New Roman", Times, serif;
-  --of-times: "Times New Roman", Times, Georgia, serif;
-  --of-old: Baskerville, "Baskerville Old Face", "Libre Baskerville", Georgia, "Times New Roman", serif;
-  --of-didone: Didot, "Bodoni 72", "Bodoni MT", "Bodoni 72 Oldstyle", Georgia, serif;
-  --of-helv: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --of-type: "American Typewriter", "Courier New", Courier, monospace;
-  --of-courier: Courier, "Courier New", monospace;
-  /* The heavy condensed of a newspaper flag and a wood-type poster. */
-  --of-impact: Impact, "Haettenschweiler", "Avenir Next Condensed", "Arial Narrow", "Franklin Gothic Bold", sans-serif;
-  /* Wide engraved capitals: a camera's nameplate. */
-  --of-copper: Copperplate, "Copperplate Gothic Light", "Copperplate Gothic", "Academy Engraved LET", "Trajan Pro", Georgia, serif;
-  /* A lens maker's geometric sans, in paint. */
-  --of-geo: Futura, "Futura PT", "Century Gothic", "Avenir Next", "Trebuchet MS", sans-serif;
-  /* Stencil and flap numerals: a condensed engineering sans. */
-  --of-din: "DIN Condensed", "DIN Alternate", "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
-  /* Wood type: a fat Clarendon. */
-  --of-clarendon: SuperClarendon, "Clarendon", Rockwell, "Rockwell Extra Bold", "Bookman Old Style", Georgia, serif;
-  --of-chalk: Chalkduster, "Chalkboard SE", "Comic Sans MS", "Marker Felt", cursive;
   --of-lime: #d2ff00;
   --of-bone: #f4f4ed;
-  --of-ink: #16190f;
-  /* Wood's grain, along the plank: fine dark lines, stretched noise. */
-  --of-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='300'><defs><pattern id='a' width='1400' height='11' patternUnits='userSpaceOnUse'><rect width='1400' height='1.3' fill='rgba(36,35,33,0.55)'/></pattern><pattern id='b' width='1400' height='17' patternUnits='userSpaceOnUse'><rect y='6' width='1400' height='2.4' fill='rgba(36,35,33,0.3)'/></pattern><filter id='w' x='-5%' y='-20%' width='110%' height='140%'><feTurbulence type='fractalNoise' baseFrequency='0.0016 0.018' numOctaves='3' seed='8' result='t'/><feDisplacementMap in='SourceGraphic' in2='t' scale='70' xChannelSelector='R' yChannelSelector='G'/></filter></defs><g filter='url(%23w)'><rect width='1400' height='300' fill='url(%23a)'/><rect width='1400' height='300' fill='url(%23b)'/><ellipse cx='930' cy='150' rx='60' ry='16' fill='none' stroke='rgba(36,35,33,0.5)' stroke-width='4'/><ellipse cx='930' cy='150' rx='30' ry='7' fill='rgba(36,35,33,0.45)'/><ellipse cx='260' cy='90' rx='34' ry='9' fill='none' stroke='rgba(36,35,33,0.45)' stroke-width='3'/></g></svg>");
-  /* Paper's grain: a still noise tile (multiplied over light stock). */
-  --of-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.44  0 0 0 0 0.42  0 0 0 0.55 0'/></filter><rect width='300' height='300' filter='url(%23n)'/></svg>");
+  --of-ink: #171b15;
+  /* The ticket stocks (src/lib/ticketStock.ts). */
+  --of-maroon: #562f2e;
+  --of-blue: #223b55;
+  --of-plum: #492d43;
+  --of-green: #20423a;
+  --of-rust: #593d1b;
+  --of-slate: #35383e;
+  --of-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
+  /* The screen's short side (the giant words and the leader are set on it). */
+  --of-short: min(100vw, 100vh);
+  /* The typed line of act 1: where it starts and its size (the same on
+     every machine). The finished line is centred on the frame (twenty
+     cells of the monospace, 0.602 em each). */
+  --line-x: max(16px, calc(50vw - 10 * 0.602 * var(--line-size)));
+  --line-y: 52vh;
+  --line-size: clamp(22px, 3.4vw, 60px);
+  /* The giant words' drift, as a share of the data's (DRIFT_SCALE in
+     src/lib/openingFilm.ts): their blur copies step by it too. */
+  --drift-k: 1;
+  /* Grain: a small still tile (a bitmap, decoded once), moved every frame by
+     the island while its act is on screen. */
+  --of-noise: url("../assets/film/grain-ink.png");
+  --of-noise-light: url("../assets/film/grain-bone.png");
 
   position: fixed;
   inset: 0;
@@ -55,17 +46,20 @@
   display: none;
   overflow: hidden;
   contain: strict;
-  background: #15180f;
+  background: #171b15;
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
 }
 @media (max-width: 1023px) {
   .opening {
-    --of-fy: 44vh;
-    --of-k0: 0.34;
+    --line-y: 50vh;
+    --line-size: clamp(16px, 6.3vw, 30px);
+    --drift-k: 0.6;
   }
 }
+.of-mono { font-family: var(--of-mono); }
+
 /* The head script writes html[data-opening] before the first paint when the
    film plays (src/lib/reelVisit.ts); without it — a second view, no
    scripts — the film is not there at all. */
@@ -102,176 +96,2344 @@ html[data-film-lock] body { overflow: clip !important; }
   inset: 0;
 }
 .of-flight { pointer-events: none; }
-
-/* A scene: its ground, and depth for its entrance (a swing of the text
-   plane turns about the found word: the island puts the perspective's
-   origin there). */
-.of-scene {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  opacity: 0;
-  contain: strict;
-  perspective: 1800px;
-}
-.of-scene--code { opacity: 1; }
-.of-sheet {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: 0 0;
-  will-change: transform;
-}
-.of-find {
-  white-space: nowrap;
-}
 .of-bl {
   display: inline-block;
   width: 0;
   height: 0;
   vertical-align: baseline;
 }
-/* His photographs (fetched after the first paint): each fills a box of its
-   own ratio, so `cover` crops nothing; the drawn stand-in shows until one
-   has arrived and decoded. */
+.of-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* Everything the island shows and hides is a layer of its own. It is
+   hidden (visibility) until a quarter second before its turn, when the
+   island lets it be drawn (so a cut never waits on a first raster, and the
+   film never holds every scene in memory at once); its opacity is timed on
+   the compositor. */
+.of-act,
+.of-mat,
+.of-burnground,
+.of-frame,
+.of-leader,
+.of-end {
+  position: absolute;
+  inset: 0;
+}
+.of-mat,
+.of-burnground,
+.of-leader,
+.of-end,
+.of-frame__paper,
+.of-frame__soft,
+.of-frame__grain,
+.of-frame__vignette,
+.of-frame__sepia,
+.of-frame__veil,
+.of-burn,
+.of-cut,
+.of-chrome,
+.of-key,
+.of-perfrow {
+  opacity: 0;
+  will-change: opacity;
+}
+.of-mat--crt { opacity: 1; }
+.of-mat:not(.of-mat--crt),
+.of-burnground,
+.of-leader,
+.of-end,
+.of-frame__paper,
+.of-frame__soft,
+.of-frame__grain,
+.of-frame__vignette,
+.of-frame__sepia,
+.of-frame__veil,
+.of-frame__next,
+.of-burn,
+.of-cut,
+.of-chrome,
+.of-key,
+.of-perfrow {
+  visibility: hidden;
+}
+
+/* His photographs: at their own ratio, never cropped or stretched. */
 .of-pic {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 160ms var(--ease-arrive);
+  aspect-ratio: var(--ratio, 1.5);
+  -webkit-user-drag: none;
 }
-.of-pic.is-in { opacity: 1; }
-/* What moves inside a shot (data-kick) moves on the compositor. */
-.opening [data-kick] { will-change: transform; }
+.of-pic--none { background: #3b3f36; }
 
-/* A whip's motion blur: ghosts of the sheet itself (copies the island makes
-   of its markup), faint, trailing it on the side it came from — the words
-   smear as they pass, instead of a plate of streaks over the frame. Seen
-   only for the whip's first ~120 ms (the island times them). */
-.of-ghost {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* ── The film's furniture ─────────────────────────────────────────────── */
-/* Grain: a still tile of noise, jumped four times a second (it jumped twelve
-   times at 8.5%: over a dark ground it read as a flicker — the entrance's
-   calm pass, 2026-09-28). */
-.of-grain {
-  position: absolute;
-  inset: -40%;
-  pointer-events: none;
-  opacity: 0.06;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 1.6 -0.35'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
-  background-size: 240px 240px;
-  animation: of-grain 1.5s steps(1) infinite;
-  will-change: transform;
-}
-@keyframes of-grain {
-  0% { transform: translate3d(0, 0, 0); }
-  17% { transform: translate3d(-37px, 21px, 0); }
-  33% { transform: translate3d(52px, -44px, 0); }
-  50% { transform: translate3d(-18px, -71px, 0); }
-  67% { transform: translate3d(66px, 38px, 0); }
-  83% { transform: translate3d(-61px, 9px, 0); }
-}
-.of-vignette {
+/* ── Act 1: the typewriter relay ──────────────────────────────────────── */
+/* The same line on every machine: one monospace, one size, one place. The
+   reveal is a window moved over it (and its content moved back), so the
+   letters never move; its padding gives the glow and the pushed words room.
+   What grows with the typing (a pill, a marker, a bar) is drawn inside the
+   window and clipped at the typed end, and its end rides with the cursor. */
+.of-mat__ground,
+.of-mat__over {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse 78% 72% at 50% 48%, transparent 52%, rgba(6, 7, 5, 0.34) 100%);
 }
-
-/* The finder, the one lime on screen, in an ink casing so it reads on paper
-   as well as on the dark. Its default look is a READING RULE under the word
-   (data-look="rule": 2 px of lime, the word's ink width + 8 px, 6 px under
-   its baseline); ?finder=frame gives four thin viewfinder corners instead.
-   The island moves them (transforms only: the rule is 100 px scaled to the
-   word, the corners never scale). */
-.of-finder {
+.of-line {
+  position: absolute;
+  left: var(--line-x);
+  top: var(--line-y);
+  white-space: nowrap;
+  line-height: 1;
+  font-size: var(--line-size);
+}
+.of-reveal {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  overflow: hidden;
+  padding: 50vh 1em;
+  margin: -50vh -1em;
+  /* Before the island: nothing typed yet. */
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+}
+.of-reveal__in {
+  position: relative;
+  display: inline-block;
+  transform: translate3d(100%, 0, 0);
+  will-change: transform;
+}
+.of-typed {
+  position: relative;
+  display: inline-block;
+  font-size: var(--line-size);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  font-synthesis: none;
+}
+.of-cursor {
   position: absolute;
   left: 0;
   top: 0;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
+  width: 0.6em;
+  height: 1em;
+  font-size: var(--line-size);
+  will-change: transform, opacity;
 }
-.of-finder__rule {
+/* Its ink blinks (530 ms, steps): from the first paint by this sheet, and
+   from the clock's start on the film's clock (the island: solid while it
+   types, blinking before and after). */
+.of-cursor__ink {
+  position: absolute;
+  inset: 0;
+  animation: of-blink 530ms steps(1) infinite;
+}
+@keyframes of-blink {
+  50% { opacity: 0; }
+}
+/* Once the film's clock runs, its blink is the island's (a sheet blink left
+   running under it showed a false blink in held frames and kept the
+   compositor asking for frames). */
+.opening[data-clock] .of-cursor__ink { animation: none; }
+/* A thin caret (a word processor's), where a machine has one. */
+.of-mat--deep .of-cursor__ink,
+.of-mat--pill .of-cursor__ink,
+.of-mat--beige .of-cursor__ink,
+.of-mat--bone .of-cursor__ink,
+.of-mat--grid .of-cursor__ink {
+  left: 0.04em;
+  right: auto;
+  top: -0.08em;
+  bottom: -0.1em;
+  width: 0.09em;
+}
+/* What grows with the typing: its body inside the window (clipped at the
+   typed end), its end outside, riding with the cursor. */
+.of-grow {
+  position: absolute;
+  z-index: -1;
+}
+.of-reveal__in { isolation: isolate; }
+.of-grow-end {
   position: absolute;
   left: 0;
-  top: -1px;
-  width: 100px;
-  height: 4px;
-  transform-origin: 0 0;
-  background: linear-gradient(180deg, rgba(8, 10, 6, 0.55) 0 1px, var(--of-lime) 1px 3px, rgba(8, 10, 6, 0.55) 3px);
   will-change: transform;
 }
-.of-finder__c { display: none; }
-.of-finder[data-look='frame'] .of-finder__rule { display: none; }
-.of-finder[data-look='frame'] .of-finder__c { display: block; }
-.of-finder__c {
+
+/* ① A dark CRT: a curved tube, 2 px scanlines, the colour guns a hair
+   apart, a glow, and the letters as phosphor dots. */
+.of-mat--crt .of-mat__ground {
+  background:
+    radial-gradient(ellipse 70% 62% at 50% 50%, rgba(62, 72, 56, 0.34) 0%, transparent 70%),
+    radial-gradient(ellipse 95% 88% at 50% 50%, #1b2019 0%, #151912 62%, #0d100b 100%);
+}
+.of-mat--crt .of-mat__over {
+  border-radius: 4.5vmin;
+  background:
+    repeating-linear-gradient(180deg, rgba(10, 12, 9, 0.34) 0 1px, transparent 1px 2px),
+    radial-gradient(ellipse 72% 66% at 50% 50%, transparent 58%, rgba(10, 12, 9, 0.7) 100%);
+  box-shadow:
+    inset 0 0 0 1.6vmin #0c0f0a,
+    inset 0 0 7vmin 1vmin rgba(10, 12, 9, 0.92);
+}
+.of-mat--crt .of-typed:not(.of-typed--bloom) {
+  color: #e6ede7;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #171b15 0 40%, transparent 48%);
+  mask-image: radial-gradient(circle at 50% 50%, #171b15 0 40%, transparent 48%);
+  -webkit-mask-size: calc(var(--line-size) / 12) calc(var(--line-size) / 12);
+  mask-size: calc(var(--line-size) / 12) calc(var(--line-size) / 12);
+}
+.of-mat--crt .of-typed--bloom {
   position: absolute;
   left: 0;
   top: 0;
-  width: 22px;
-  height: 22px;
-  border: 0 solid var(--of-lime);
-  filter: drop-shadow(0 0 0.6px rgba(8, 10, 6, 0.95)) drop-shadow(0 0 0.6px rgba(8, 10, 6, 0.95));
-  will-change: transform;
+  color: #cfe0d4;
+  opacity: 0.55;
+  filter: blur(3px);
+  text-shadow:
+    -1.2px 0 rgba(255, 86, 72, 0.6),
+    1.2px 0 rgba(82, 150, 255, 0.6);
 }
-.of-finder__c--tl { border-top-width: 2px; border-left-width: 2px; }
-.of-finder__c--tr { border-top-width: 2px; border-right-width: 2px; }
-.of-finder__c--bl { border-bottom-width: 2px; border-left-width: 2px; }
-.of-finder__c--br { border-bottom-width: 2px; border-right-width: 2px; }
-@media (max-width: 1023px) {
-  .of-finder__c { width: 14px; height: 14px; }
+.of-mat--crt .of-cursor__ink {
+  background: #e6ede7;
+  box-shadow: 0 0 12px rgba(230, 237, 231, 0.6);
 }
 
-/* A camera's frame counter, bottom left, on an ink pill (FR 01/36: one
-   frame of the roll a cut); the Skip pill bottom right. The digits run on a
-   strip (a transform the island steps on every cut). */
-.of-hud {
+/* ② A deep screen: the blue ticket stock deepening to ink, the letters
+   pale and fine. */
+.of-mat--deep .of-mat__ground {
+  background: radial-gradient(ellipse 85% 75% at 50% 56%, #223b55 0%, #1b2c3d 42%, #151d22 78%, #121614 100%);
+}
+.of-mat--deep .of-mat__over {
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 60%, rgba(10, 12, 9, 0.5) 100%);
+}
+.of-mat--deep .of-typed {
+  color: #cad9e4;
+  opacity: 0.92;
+  text-shadow: 0 0 14px rgba(160, 196, 222, 0.28);
+}
+.of-mat--deep .of-cursor__ink { background: #cad9e4; }
+/* Its status line: a terminal's, in the phosphor, small, at the screen's
+   top left, over a hairline. */
+.of-deep__status {
   position: absolute;
-  left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
-  bottom: max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom));
+  left: max(20px, 5vw);
+  right: max(20px, 5vw);
+  top: max(22px, 6vh);
+  padding-bottom: 0.7em;
+  border-bottom: 1px solid rgba(202, 217, 228, 0.16);
+  font-size: calc(var(--line-size) * 0.35);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: rgba(202, 217, 228, 0.72);
+  text-shadow: 0 0 8px rgba(160, 196, 222, 0.35);
+}
+
+/* ③ A photocopy on maroon: the maroon ticket stock as the paper, each
+   line in a toner bar with the letters knocked out of it, all with the
+   copier's ragged edge, specks and grain. */
+.of-mat--bars .of-mat__ground {
+  background-color: #562f2e;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(23, 27, 21, 0.55) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 71% 64%, rgba(23, 27, 21, 0.5) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 38% 82%, rgba(23, 27, 21, 0.45) 0 0.8px, transparent 1.4px);
+  background-size: 310px 270px, 380px 330px, 290px 350px;
+}
+.of-mat--bars .of-mat__ground::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--of-noise);
+  background-size: 160px 160px;
+  opacity: 0.5;
+}
+.of-mat--bars .of-mat__over {
+  background:
+    linear-gradient(90deg, rgba(23, 27, 21, 0.3) 0%, transparent 6%, transparent 94%, rgba(23, 27, 21, 0.34) 100%),
+    radial-gradient(ellipse 90% 85% at 50% 50%, transparent 58%, rgba(23, 27, 21, 0.32) 100%);
+}
+.of-mat--bars .of-line { filter: url(#of-copy-edge); }
+.of-grow--bars,
+.of-grow-end--bars {
+  top: -0.3em;
+  height: 1.62em;
+  background: #171b15;
+}
+.of-grow--bars {
+  left: -0.4em;
+  right: -1em;
+}
+.of-grow-end--bars { width: 0.95em; }
+.of-mat--bars .of-typed { color: #efe8dc; }
+.of-mat--bars .of-cursor__ink { background: #efe8dc; }
+
+/* ④ A pill over life: one of his photographs, out of focus and dimmed, and
+   the line in a stock-blue pill that grows with it. */
+.of-mat--pill .of-mat__ground { background: #2a3a45; }
+.of-pill__life {
+  position: absolute;
+  inset: -4vh -4vw;
   display: flex;
   align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.of-pic--life {
+  height: 100%;
+  width: auto;
+  max-width: none;
+  filter: blur(14px) saturate(0.85) brightness(0.62);
+  transform: scale(1.08);
+}
+.of-mat--pill .of-mat__over { background: radial-gradient(ellipse 80% 75% at 50% 50%, rgba(23, 27, 21, 0.1) 30%, rgba(23, 27, 21, 0.52) 100%); }
+.of-grow--pill,
+.of-grow-end--pill {
+  top: -0.46em;
+  height: 1.92em;
+  background: #223b55;
+  box-shadow: 0 0.3em 1.2em rgba(12, 16, 20, 0.28);
+}
+.of-grow--pill {
+  left: -0.8em;
+  right: -1em;
+  border-radius: 1em 0 0 1em;
+}
+.of-grow-end--pill {
+  width: 1em;
+  border-radius: 0 1em 1em 0;
+}
+.of-mat--pill .of-typed {
+  color: #f4f4ed;
+  font-weight: 700;
+}
+.of-mat--pill .of-cursor__ink { background: #f4f4ed; }
+
+/* ⑤ A beige monitor: the case, a curved screen with a word processor's bar
+   and ruler, the letters dark grey and bold; scanlines, a moiré and the
+   tube's darker edges. */
+.of-mat--beige .of-mat__ground {
+  background:
+    linear-gradient(180deg, rgba(244, 244, 237, 0.4), transparent 22%, transparent 78%, rgba(90, 80, 60, 0.18)),
+    #d3ccbb;
+}
+.of-beige__screen,
+.of-mat--beige .of-mat__over {
+  position: absolute;
+  inset: 6vmin 6.5vmin 11vmin;
+  border-radius: 4vmin / 5vmin;
+}
+.of-beige__screen {
+  overflow: hidden;
+  background: #eeede5;
+  box-shadow:
+    0 0 0 1.2vmin #bdb5a2,
+    0 0 0 1.5vmin #a79f8b,
+    inset 0 0 5vmin rgba(60, 55, 40, 0.24);
+}
+.of-beige__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1vh;
+  padding: 2.2vh 3vw 1.4vh;
+  background: #deddd3;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.18);
+}
+.of-beige__menu {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(23, 27, 21, 0.7);
+}
+.of-beige__tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.of-beige__tools i {
+  width: 16px;
+  height: 14px;
+  border-radius: 2px;
+  background: rgba(23, 27, 21, 0.16);
+}
+.of-beige__tools b {
+  width: 18px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  color: rgba(23, 27, 21, 0.72);
+}
+.of-beige__u { text-decoration: underline; }
+.of-beige__font {
+  margin-left: 12px;
+  padding: 2px 8px;
+  border: 1px solid rgba(23, 27, 21, 0.28);
+  background: #f4f4ed;
+  font-size: 11px;
+  color: rgba(23, 27, 21, 0.7);
+}
+.of-beige__ruler {
+  position: absolute;
+  left: 3vw;
+  right: 3vw;
+  top: calc(2.2vh + 12px + 1.1vh + 16px + 1.4vh + 10px);
+  height: 8px;
+  background: repeating-linear-gradient(90deg, rgba(23, 27, 21, 0.34) 0 1px, transparent 1px 12px);
+  opacity: 0.7;
+}
+.of-mat--beige .of-mat__over {
+  background:
+    repeating-linear-gradient(180deg, rgba(23, 27, 21, 0.06) 0 1px, transparent 1px 2px),
+    repeating-radial-gradient(circle at 28% 36%, rgba(23, 27, 21, 0.035) 0 1px, transparent 1px 3px),
+    repeating-radial-gradient(circle at 71% 62%, rgba(23, 27, 21, 0.035) 0 1px, transparent 1px 3.2px),
+    radial-gradient(ellipse 78% 74% at 50% 50%, transparent 62%, rgba(60, 55, 40, 0.34) 100%);
+}
+.of-mat--beige .of-typed {
+  color: #2d322b;
+  font-weight: 700;
+}
+.of-mat--beige .of-cursor__ink { background: #2d322b; }
+
+/* ⑥ A bare page: bone, the letters fine, a lime caret (the frame's one
+   lime). */
+.of-mat--bone .of-mat__ground { background: #f1f1ea; }
+.of-mat--bone .of-typed { color: rgba(23, 27, 21, 0.86); }
+.of-mat--bone .of-cursor__ink {
+  width: 0.12em;
+  background: var(--of-lime);
+}
+
+/* ⑦ Grid paper: a lime marker under the line (the frame's one lime), a
+   small black-and-white print of his taped at the corner, a hand-drawn
+   looping arrow, and a pointer at the words. */
+.of-mat--grid .of-mat__ground {
+  background:
+    linear-gradient(rgba(23, 27, 21, 0.09) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(23, 27, 21, 0.09) 1px, transparent 1px) 0 0 / 28px 28px,
+    #f2f1ea;
+}
+.of-mat--grid .of-mat__ground::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--of-noise);
+  background-size: 160px 160px;
+  opacity: 0.22;
+}
+.of-grow--grid,
+.of-grow-end--grid {
+  top: 0.08em;
+  height: 0.98em;
+  background: var(--of-lime);
+}
+.of-grow--grid {
+  left: -0.25em;
+  right: -1em;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 8 C 60 4 130 9 200 5 S 340 3 400 7 L 400 94 C 330 97 260 93 200 96 S 70 98 2 93 L 0.5 70 L 3 45 L 0 22 Z' fill='%23171b15'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 8 C 60 4 130 9 200 5 S 340 3 400 7 L 400 94 C 330 97 260 93 200 96 S 70 98 2 93 L 0.5 70 L 3 45 L 0 22 Z' fill='%23171b15'/></svg>");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.of-grow-end--grid {
+  width: 0.7em;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 100' preserveAspectRatio='none'><path d='M0 7 L 20 6 L 26 14 L 22 26 L 30 38 L 25 52 L 33 64 L 27 78 L 31 94 L 0 94 Z' fill='%23171b15'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 100' preserveAspectRatio='none'><path d='M0 7 L 20 6 L 26 14 L 22 26 L 30 38 L 25 52 L 33 64 L 27 78 L 31 94 L 0 94 Z' fill='%23171b15'/></svg>");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.of-mat--grid .of-typed {
+  color: #171b15;
+  font-weight: 700;
+}
+.of-mat--grid .of-cursor__ink { background: #171b15; }
+.of-grid__print {
+  position: absolute;
+  right: 8vw;
+  top: 9vh;
+  width: 19vw;
+  padding: 0.7vw 0.7vw 2.2vw;
+  background: #f7f6ef;
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.2), 0 10px 26px rgba(23, 27, 21, 0.16);
+  transform: rotate(3deg);
+}
+.of-pic--print {
+  width: 100%;
+  height: auto;
+  filter: grayscale(1) contrast(1.06);
+}
+.of-grid__tape {
+  position: absolute;
+  left: 34%;
+  top: -1.2vw;
+  width: 32%;
+  height: 2.4vw;
+  background: rgba(244, 244, 237, 0.62);
+  box-shadow: 0 0 0 1px rgba(23, 27, 21, 0.06);
+  transform: rotate(-4deg);
+}
+.of-grid__arrow {
+  position: absolute;
+  left: max(16px, calc(var(--line-x) - 5vw));
+  top: calc(var(--line-y) + 1.7 * var(--line-size));
+  width: 18vw;
+  height: calc(18vw * 200 / 280);
+  overflow: visible;
+}
+.of-grid__arrow path {
+  fill: none;
+  stroke: #171b15;
+  stroke-width: 2.4px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+.of-grid__pointer {
+  position: absolute;
+  left: calc(var(--line-x) + 15.4 * 0.602 * var(--line-size));
+  top: calc(var(--line-y) + 1.08 * var(--line-size));
+  width: 26px;
+  height: 39px;
+  overflow: visible;
+}
+.of-grid__pointer path {
+  fill: #171b15;
+  stroke: #f4f4ed;
+  stroke-width: 1.8px;
+  stroke-linejoin: round;
+}
+
+/* ⑧ Typewriter paper: a warmer, older stock than the bare page, the
+   machine's platen (olive, its rollers) across the head, a fibre, and the
+   ribbon's uneven strike, struck hard. */
+.of-mat--paper .of-mat__ground { background-color: #ece6d6; }
+.of-mat--paper .of-mat__over::before,
+.of-mat--paper .of-mat__over::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.of-mat--paper .of-mat__over::before {
+  top: 0;
+  height: 16%;
+  background: linear-gradient(180deg, #1c1f17 0%, #282c20 48%, #343a2b 80%, #1f2219 100%);
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.4), 0 8px 22px rgba(23, 27, 21, 0.26);
+}
+.of-mat--paper .of-mat__over::after {
+  top: calc(16% - 1.3vh);
+  height: 2.6vh;
+  background:
+    radial-gradient(3.2vw 1.3vh at 28% 50%, #4a5039 0 55%, #1c1f17 60%, transparent 66%),
+    radial-gradient(3.2vw 1.3vh at 72% 50%, #4a5039 0 55%, #1c1f17 60%, transparent 66%);
+}
+.of-mat--paper .of-mat__ground::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--of-noise);
+  background-size: 160px 160px;
+  opacity: 0.4;
+}
+.of-mat--paper .of-mat__ground::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 85% 80% at 50% 50%, transparent 60%, rgba(23, 27, 21, 0.16) 100%);
+}
+.of-mat--paper .of-typed {
+  color: #171b15;
+  font-weight: 700;
+}
+.of-paper__word {
+  position: relative;
+  display: inline-block;
+  white-space: pre;
+  will-change: transform, opacity;
+}
+.of-strike {
+  position: relative;
+  left: var(--dx);
+  top: var(--dy);
+  opacity: var(--ink);
+  text-shadow: 0 0 0.7px rgba(23, 27, 21, 0.7);
+}
+.of-mat--paper .of-cursor {
+  top: 1.04em;
+  height: 0.09em;
+}
+.of-mat--paper .of-cursor__ink { background: #171b15; }
+
+@media (max-width: 1023px) {
+  .of-beige__screen,
+  .of-mat--beige .of-mat__over { inset: 5vmin 4vmin 12vmin; }
+  .of-beige__menu { font-size: 10px; }
+  .of-beige__tools i:nth-child(n + 4) { display: none; }
+  .of-grid__print {
+    right: 6vw;
+    top: 8vh;
+    width: 44vw;
+  }
+  .of-grid__arrow {
+    left: 4vw;
+    width: 40vw;
+    height: calc(40vw * 200 / 280);
+  }
+  .of-grid__pointer {
+    width: 20px;
+    height: 30px;
+  }
+}
+
+/* ── Act 3: the frame ─────────────────────────────────────────────────── */
+/* One piece of film: its paper, every cut's page, the anchor on top, the
+   soft edge, the grain and the vignette — and, for the burn, the sepia,
+   the canvas and (past its foot) the frame line a slip shows. The island
+   moves the whole frame in the burn (the weave, the slip, the slide out). */
+.of-frame {
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.of-frame__paper {
+  position: absolute;
+  inset: 0;
+  background: #f1efe7;
+}
+/* A cut's page. The island tells it where the block is: --bl / --br / --bt
+   / --bb (its edges, px) and --cap (the anchor's cap height). */
+.of-cut {
+  --gap: max(14px, calc(var(--cap, 120px) * 0.22));
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #171b15;
+}
+.of-sheet__ground {
+  position: absolute;
+  inset: 0;
+  background: var(--sheet-bg, #f1efe7);
+}
+/* A giant word: Fraunces at 30–45% of the short side, cropped by the frame;
+   its motion blur is its copies, behind it. (The island sets its size and
+   place, measured, before the clock starts.) */
+.of-giant {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  line-height: 1;
+  color: #171b15;
+  will-change: transform;
+}
+.of-giant__word,
+.of-giant__copy {
+  display: block;
+  letter-spacing: -0.02em;
+  /* A little ink bled into the paper. */
+  text-shadow: 0 0 1px rgba(23, 27, 21, 0.45);
+}
+.of-giant__copy {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.of-face--f900 { font-weight: 900; }
+.of-face--f400 { font-weight: 400; }
+.of-face--fit {
+  font-style: italic;
+  font-weight: 500;
+}
+.of-face--sg700 {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.of-face--mono { font-weight: 700; }
+
+/* The words on the anchor's line: left of the block (ending a gap before
+   it) or right of it (a gap after it), set on the anchor's baseline by the
+   island (--base-align: 1); a line above or below it. */
+.of-row,
+.of-side {
+  --base-align: 1;
+  position: absolute;
+  top: calc(50% - 0.6em);
+  margin: 0;
+  white-space: nowrap;
+  line-height: 1.12;
+  color: #171b15;
+}
+.of-row--l,
+.of-side--l {
+  right: calc(100% - var(--bl, 30vw) + var(--gap));
+  text-align: right;
+}
+.of-row--r,
+.of-side--r {
+  left: calc(var(--br, 70vw) + var(--gap));
+  max-width: calc(100% - var(--br, 70vw) - var(--gap) - 4vw);
+}
+.of-side--rowup {
+  top: auto;
+  bottom: calc(100% - var(--bt, 40vh) + 4px);
+}
+.of-side--rowdown { top: calc(var(--bb, 60vh) + 6px); }
+.of-side--caps {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-side--italic {
+  font-size: max(20px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-side--thin {
+  font-size: max(15px, calc(var(--cap, 120px) * 0.17));
+  font-weight: 400;
+}
+/* A small word ringed by hand (the island places it clear of the rest). */
+.of-ringed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1;
+  color: #171b15;
+}
+.of-ring {
+  position: absolute;
+  left: -0.7em;
+  top: -0.55em;
+  width: calc(100% + 1.4em);
+  height: calc(100% + 1.1em);
+  overflow: visible;
+}
+.of-ring path,
+.of-edge__ring path {
+  fill: none;
+  stroke: #171b15;
+  stroke-width: 1.6px;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+/* Grey texture: tiny paragraphs, too small to read. */
+.of-texture {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--tw);
+  margin: 0;
+  font-size: 6.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: justify;
+  color: rgba(23, 27, 21, 0.46);
+}
+/* An editorial cut's print on the frame's edge (its own layer, over the
+   soft edge). */
+.of-chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.of-meta,
+.of-credit {
+  position: absolute;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(23, 27, 21, 0.76);
+  background: #f1efe7;
+}
+.of-meta { top: max(16px, 3vh); }
+.of-meta--l { left: max(14px, 3vw); }
+.of-meta--r { right: max(14px, 3vw); }
+.of-credit {
+  left: 50%;
+  bottom: max(20px, 3vh);
+  transform: translateX(-50%);
+}
+
+/* ── The printed matter ───────────────────────────────────────────────── */
+/* Each sheet is laid round the anchor: its words on the anchor's line, what
+   is printed above the block (its foot a gap over --bt) and below it (its
+   head a gap under --bb). The frame crops every sheet like a close-up. */
+
+/* A newspaper: the masthead cropped by the frame's head, the edition line
+   and a double rule, the section flag round the anchor, a headline and five
+   columns. */
+.of-sheet--newspaper { --sheet-bg: #e9e5d8; }
+.of-news__edition {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  bottom: calc(100% - var(--bt, 40vh) + 30px);
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-top: 1px solid #171b15;
+  border-bottom: 4px double #171b15;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-news__from {
+  font-size: max(22px, calc(var(--cap, 120px) * 0.42));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-news__sect {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: normal;
+  max-width: 12vw;
+  line-height: 1.5;
+}
+.of-news__below {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  top: calc(var(--bb, 60vh) + 16px);
+  bottom: 0;
+  overflow: hidden;
+  border-top: 4px solid #171b15;
+}
+.of-news__hed {
+  margin: 12px 0 12px;
+  font-size: clamp(22px, 2.3vw, 40px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.of-news__cols {
+  height: 100%;
+  columns: 5;
+  column-gap: 22px;
+  column-rule: 1px solid rgba(23, 27, 21, 0.3);
+  column-fill: auto;
+  font-size: 7px;
+  line-height: 1.4;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.82);
+}
+.of-news__cols p {
+  margin: 0 0 6px;
+  text-indent: 1.2em;
+}
+.of-news__dateline {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.of-news__photo {
+  display: block;
+  height: 13vh;
+  margin: 4px 0 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(23, 27, 21, 0.85) 0 32%, transparent 36%) 0 0 / 5px 5px,
+    linear-gradient(160deg, rgba(233, 229, 216, 0.95) 10%, rgba(233, 229, 216, 0.25) 55%, rgba(233, 229, 216, 0.8) 90%);
+  break-inside: avoid;
+}
+
+/* A dictionary: the running head, the entries before, the headword as the
+   anchor with its etymology on its line, the senses under it. Webster's
+   1913. */
+.of-sheet--dictionary { --sheet-bg: #efe9d8; }
+.of-dict__head {
+  position: absolute;
+  left: 8vw;
+  right: 8vw;
+  top: 4.5vh;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-dict__above,
+.of-dict__below {
+  position: absolute;
+  font-size: clamp(12px, 0.9vw, 16px);
+  line-height: 1.45;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.86);
+}
+.of-dict__above {
+  left: 8vw;
+  right: 8vw;
+  top: calc(4.5vh + 40px);
+  bottom: calc(100% - var(--bt, 40vh) + 18px);
+  overflow: hidden;
+  columns: 2;
+  column-gap: 5vw;
+  column-rule: 1px solid rgba(23, 27, 21, 0.2);
+}
+.of-dict__below {
+  left: max(34vw, var(--bl, 30vw));
+  right: 8vw;
+  top: calc(var(--bb, 60vh) + 14px);
+}
+.of-dict__above p,
+.of-dict__below p {
+  margin: 0 0 8px;
+  padding-left: 1.4em;
+  text-indent: -1.4em;
+}
+.of-dict__above b,
+.of-dict__below b { font-weight: 700; }
+.of-dict__def {
+  max-width: min(34ch, calc(100% - var(--br, 70vw) - 32px));
+  font-size: clamp(14px, 1.05vw, 19px);
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* A catalogue card: ruled card stock on the drawer's desk, its call number,
+   the entry typed round the anchor, the tracings, the rod's hole. */
+.of-sheet--catalogue { --sheet-bg: #cfc8b6; }
+.of-card {
+  position: absolute;
+  left: 7vw;
+  right: 7vw;
+  top: 7vh;
+  bottom: 7vh;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 34px, rgba(34, 59, 85, 0.1) 34px 35px),
+    #f5f0e2;
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.2), 0 18px 40px rgba(23, 27, 21, 0.16);
+}
+.of-card__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 13%;
+  height: 2px;
+  background: #562f2e;
+}
+.of-card__hole {
+  position: absolute;
+  left: 50%;
+  bottom: 5%;
+  width: 3.4vmin;
+  height: 3.4vmin;
+  margin-left: -1.7vmin;
+  border-radius: 50%;
+  background: #cfc8b6;
+  box-shadow: inset 0 1px 3px rgba(23, 27, 21, 0.35);
+}
+.of-card__call {
+  position: absolute;
+  left: 10vw;
+  top: calc(7vh + 86vh * 0.13 + 22px);
+  display: flex;
+  flex-direction: column;
+  font-size: clamp(13px, 0.95vw, 17px);
+  line-height: 1.3;
+}
+.of-card__above,
+.of-card__below {
+  position: absolute;
+  left: 22vw;
+  right: 12vw;
+  font-size: clamp(13px, 1vw, 18px);
+  line-height: 1.5;
+}
+.of-card__above { bottom: calc(100% - var(--bt, 40vh) + 22px); }
+.of-card__below { top: calc(var(--bb, 60vh) + 22px); }
+.of-card__above p,
+.of-card__below p { margin: 0; }
+.of-card__above p + p,
+.of-card__below p { text-indent: 2em; }
+.of-card__row {
+  font-size: clamp(13px, 1vw, 18px);
+  white-space: normal;
+  max-width: calc(88vw - var(--br, 70vw) - var(--gap));
+}
+
+/* A magazine spread: his photograph on the left page, the feature's kicker
+   and deck on the right, CAMERA (the anchor) across the gutter, obscura on
+   its line, two columns and the folios. */
+.of-sheet--magazine { --sheet-bg: #ebe8df; }
+.of-mag__pages {
+  position: absolute;
+  inset: 0;
+}
+.of-mag__page {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.of-mag__page--l {
+  left: 0;
+  width: 50%;
+  background: linear-gradient(270deg, rgba(23, 27, 21, 0.14), transparent 8%), #ebe8df;
+}
+.of-mag__page--r {
+  left: 50%;
+  right: 0;
+  background: linear-gradient(90deg, rgba(23, 27, 21, 0.16), transparent 7%), #f4f2eb;
+}
+.of-mag__plate {
+  position: absolute;
+  left: 5vw;
+  top: 50%;
+  width: 40vw;
+  transform: translateY(-50%);
+}
+.of-pic--plate {
+  width: 100%;
+  height: auto;
+}
+.of-mag__caption {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(23, 27, 21, 0.7);
+}
+.of-mag__above {
+  position: absolute;
+  left: calc(50% + 5vw);
+  right: 6vw;
+  bottom: calc(100% - var(--bt, 40vh) + 22px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.of-mag__kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #562f2e;
+}
+.of-mag__deck {
+  font-size: clamp(18px, 1.9vw, 34px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.1;
+}
+.of-mag__obscura {
+  font-size: max(20px, calc(var(--cap, 120px) * 0.5));
+  font-style: italic;
+  font-weight: 400;
+}
+.of-mag__body {
+  position: absolute;
+  left: calc(50% + 5vw);
+  right: 6vw;
+  top: calc(var(--bb, 60vh) + 26px);
+  columns: 2;
+  column-gap: 22px;
+  font-size: 8.5px;
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.82);
+}
+.of-mag__body p { margin: 0 0 6px; }
+.of-mag__folio {
+  position: absolute;
+  bottom: 3vh;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.of-mag__folio--l { left: 3vw; }
+.of-mag__folio--r { right: 3vw; }
+
+/* A slate: white acrylic in its black frame, the striped sticks at its head,
+   the production line in marker, the camera's roll and take round the
+   anchor, the cells, the word TAKE cropped at its foot. */
+.of-sheet--slate { --sheet-bg: #efefe8; }
+.of-sheet--slate .of-sheet__ground { box-shadow: inset 0 0 0 1.8vmin #171b15; }
+.of-slate__sticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 18vh;
+}
+.of-slate__stick {
+  position: absolute;
+  left: -2vw;
+  right: -2vw;
+  background: repeating-linear-gradient(-55deg, #171b15 0 3.6vw, #efefe8 3.6vw 7.2vw);
+  box-shadow: 0 2px 0 #171b15;
+}
+.of-slate__stick--top {
+  top: 1.2vh;
+  height: 7.4vh;
+  transform: rotate(-2.4deg);
+  transform-origin: 0 100%;
+}
+.of-slate__stick--base {
+  top: 10vh;
+  height: 6vh;
+  background-position: 3.6vw 0;
+}
+.of-slate__prod {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  bottom: calc(100% - var(--bt, 40vh) + 26px);
+  display: flex;
+  align-items: baseline;
+  gap: 2vw;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #171b15;
+}
+.of-slate__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-slate__hand {
+  font-size: clamp(20px, 2.4vw, 42px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.of-slate__cells {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  top: calc(var(--bb, 60vh) + 22px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 2px solid #171b15;
+}
+.of-slate__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-right: 2px solid #171b15;
+}
+.of-slate__cell:last-child { border-right: 0; }
+
+/* A strip of film on a contact sheet: the perforations, two of his frames
+   either side of the anchor, the edge print, a china marker's notes. */
+.of-sheet--edge { --sheet-bg: #edece5; }
+.of-edge__strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--bt, 40vh) - 8.5vh);
+  bottom: calc(100% - var(--bb, 60vh) - 8.5vh);
+  background: #1c1f19;
+}
+.of-edge__perfs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+}
+.of-edge__perfs--t { top: 1.4vh; }
+.of-edge__perfs--b { bottom: 1.4vh; }
+.of-edge__perfs i {
+  width: 1.6vw;
+  height: 2.8vh;
+  border-radius: 0.35vw;
+  background: #e9e5d6;
+}
+.of-edge__frame {
+  position: absolute;
+  top: 6.8vh;
+  bottom: 6.8vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #2a2d27;
+}
+.of-edge__frame--l {
+  left: 2vw;
+  right: calc(100% - var(--bl, 30vw) + 3vw);
+}
+.of-edge__frame--r {
+  left: calc(var(--br, 70vw) + 3vw);
+  right: 2vw;
+}
+.of-pic--frame {
+  height: 100%;
+  width: auto;
+  filter: grayscale(1) contrast(1.05);
+}
+.of-edge__print {
+  position: absolute;
+  margin: 0;
+  top: calc(var(--bb, 60vh) + 8.5vh - 6.4vh);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  white-space: pre;
+  color: rgba(233, 229, 214, 0.72);
+}
+.of-edge__print--l { left: 3vw; }
+.of-edge__print--r { left: calc(var(--br, 70vw) + 3vw); }
+.of-edge__note {
+  position: absolute;
+  margin: 0;
+  font-size: clamp(20px, 1.8vw, 32px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  color: #562f2e;
+}
+.of-edge__note--a {
+  left: 8vw;
+  bottom: calc(100% - var(--bt, 40vh) + 8.5vh + 7vh);
+}
+.of-edge__note--b {
+  right: 12vw;
+  top: calc(var(--bb, 60vh) + 8.5vh + 8vh);
+}
+.of-edge__ring {
+  position: absolute;
+  left: -0.5em;
+  top: -0.5em;
+  width: calc(100% + 1em);
+  height: calc(100% + 1em);
+  overflow: visible;
+}
+.of-edge__ring path { stroke: #562f2e; }
+
+/* A ticket: pale stock with a guilloche, its stub at the perforation, the
+   journey printed round the anchor. */
+.of-sheet--ticket { --sheet-bg: #e6e2d6; }
+.of-ticket {
+  position: absolute;
+  left: 7vw;
+  right: 7vw;
+  top: calc(var(--bt, 40vh) - 17vh);
+  bottom: calc(100% - var(--bb, 60vh) - 21vh);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(115deg, rgba(34, 59, 85, 0.06) 0 2px, transparent 2px 7px),
+    #dfe4d2;
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.18), 0 16px 36px rgba(23, 27, 21, 0.14);
+}
+.of-ticket__perf {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18%;
+  border-left: 2px dashed rgba(23, 27, 21, 0.35);
+}
+.of-ticket__stub {
+  position: absolute;
+  left: 9vw;
+  width: calc(86vw * 0.18 - 4vw);
+  top: calc(var(--bt, 40vh) - 17vh + 3vh);
+  bottom: calc(100% - var(--bb, 60vh) - 21vh + 3vh);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__no {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.of-ticket__head,
+.of-ticket__route,
+.of-ticket__fine {
+  position: absolute;
+  left: calc(7vw + 86vw * 0.18 + 3vw);
+  right: 10vw;
+}
+.of-ticket__head {
+  top: calc(var(--bt, 40vh) - 17vh + 3vh);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.35);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__valid {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__only {
+  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-ticket__route {
+  top: calc(var(--bb, 60vh) + 3vh);
+  display: flex;
+  gap: 6vw;
+}
+.of-ticket__stop {
+  display: flex;
+  align-items: baseline;
   gap: 14px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 9999px;
-  background: rgba(22, 25, 15, 0.82);
-  box-shadow: 0 0 0 1px rgba(244, 244, 237, 0.08);
-  font-family: var(--font-ui);
+}
+.of-ticket__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__place {
+  font-size: clamp(20px, 1.8vw, 32px);
+  font-style: italic;
+  font-weight: 400;
+}
+.of-ticket__fine {
+  bottom: calc(100% - var(--bb, 60vh) - 21vh + 2.6vh);
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(23, 27, 21, 0.6);
+}
+
+/* A book: a page of Stevenson's, its gutter's shadow, the line the anchor
+   sits in, the lines before and after, the running foot. */
+.of-sheet--book { --sheet-bg: #efe7d3; }
+.of-book__gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9vw;
+  background: linear-gradient(90deg, rgba(23, 27, 21, 0.22), transparent);
+}
+.of-book__above,
+.of-book__below {
+  position: absolute;
+  left: 29vw;
+  right: 29vw;
+}
+.of-book__above { bottom: calc(100% - var(--bt, 40vh) + 8px); }
+.of-book__below { top: calc(var(--bb, 60vh) + 8px); }
+.of-book__line,
+.of-book__row {
+  font-size: clamp(16px, 1.7vw, 30px);
+  font-weight: 400;
+  line-height: 1.55;
+  color: rgba(23, 27, 21, 0.88);
+}
+.of-book__line {
+  display: block;
+  text-align: justify;
+  text-align-last: justify;
+}
+.of-book__above .of-book__line { text-align-last: right; }
+.of-sheet--book .of-row { --gap: 0.5em; }
+.of-book__folio {
+  position: absolute;
+  left: 26vw;
+  right: 26vw;
+  bottom: 5vh;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  line-height: 1;
-  color: rgba(244, 244, 237, 0.72);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-.of-digits {
-  display: inline-block;
-  height: 1em;
-  overflow: hidden;
-  vertical-align: top;
-}
-.of-digits__strip {
-  display: block;
-  white-space: pre;
-  line-height: 1;
-}
-.of-digits__strip { will-change: transform; }
-.of-hud__of { color: rgba(244, 244, 237, 0.42); }
-@media (max-width: 1023px) {
-  .of-hud__label { display: none; }
 }
 
+/* A passport's page: a guilloche, rubber stamps in the ticket stocks' inks,
+   the machine line at its foot, and — the egg — a park's cancellation stamp
+   in its corner. */
+.of-sheet--passport { --sheet-bg: #e3e6d9; }
+.of-pass__guilloche {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-radial-gradient(circle at 20% 110%, rgba(34, 59, 85, 0.07) 0 1px, transparent 1px 9px),
+    repeating-radial-gradient(circle at 90% -10%, rgba(73, 45, 67, 0.06) 0 1px, transparent 1px 11px);
+}
+.of-pass__stamp {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+.of-pass__stamp--a {
+  left: 9vw;
+  top: calc(var(--bb, 60vh) + 6vh);
+  padding: 10px 22px;
+  border: 5px double #562f2e;
+  font-size: 22px;
+  color: #562f2e;
+  transform: rotate(-7deg);
+}
+.of-pass__stamp--b {
+  left: 42vw;
+  top: calc(var(--bb, 60vh) + 4vh);
+  width: 150px;
+  height: 150px;
+  gap: 6px;
+  border: 3px solid #223b55;
+  border-radius: 50%;
+  font-size: 18px;
+  color: #223b55;
+  transform: rotate(8deg);
+}
+.of-pass__no {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+.of-pass__stamp--c {
+  right: 10vw;
+  top: calc(var(--bb, 60vh) + 10vh);
+  padding: 8px 20px;
+  border: 3px solid #20423a;
+  border-radius: 12px;
+  font-size: 26px;
+  color: #20423a;
+  transform: rotate(-3deg);
+}
+.of-pass__park {
+  position: absolute;
+  right: 2.6vw;
+  top: 3.4vh;
+  width: 66px;
+  height: 66px;
+  overflow: visible;
+  opacity: 0.8;
+  transform: rotate(-12deg);
+}
+.of-pass__park circle {
+  fill: none;
+  stroke: #492d43;
+  stroke-width: 1.6px;
+}
+.of-pass__park text {
+  font-size: 7.6px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  fill: #492d43;
+}
+.of-pass__visas {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-pass__end {
+  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-pass__mrz {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 5vh;
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(12px, 0.95vw, 17px);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: rgba(23, 27, 21, 0.75);
+}
+.of-pass__page {
+  position: absolute;
+  right: 5vw;
+  bottom: 2.2vh;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* A telegram: a buff form, its fields, and the message on pasted tape — the
+   anchor on the middle strip. */
+.of-sheet--telegram { --sheet-bg: #ebe0c2; }
+.of-wire__form {
+  position: absolute;
+  inset: 3vmin;
+  border: 1px solid rgba(86, 47, 46, 0.4);
+}
+.of-wire__fields {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  bottom: calc(100% - var(--bt, 40vh) + 12vh);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(86, 47, 46, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(86, 47, 46, 0.9);
+}
+.of-wire__tape,
+.of-wire__rowr {
+  font-size: clamp(15px, 1.5vw, 26px);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.of-wire__tape {
+  position: absolute;
+  margin: 0;
+  padding: 0.3em 0.7em;
+  white-space: nowrap;
+  background: #f8f3e3;
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.18);
+}
+.of-wire__tape--above {
+  left: 12vw;
+  bottom: calc(100% - var(--bt, 40vh) + 3.6vh);
+}
+.of-wire__tape--below {
+  left: 12vw;
+  top: calc(var(--bb, 60vh) + 3.6vh);
+}
+.of-wire__tape--row {
+  left: 6vw;
+  right: 6vw;
+  top: calc(50% + var(--cap, 120px) / 2 - 1.22em);
+  height: 1.64em;
+  padding: 0;
+}
+
+/* A notebook: ruled, a margin line in the maroon ink, a hand (Fraunces's
+   italic) round the anchor. */
+.of-sheet--notebook { --sheet-bg: #f3f1e8; }
+.of-note__ruled {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent calc(10vw - 3px), rgba(86, 47, 46, 0.5) calc(10vw - 3px) calc(10vw - 2px), transparent calc(10vw - 2px) 10vw, rgba(86, 47, 46, 0.5) 10vw calc(10vw + 1px), transparent calc(10vw + 1px)),
+    repeating-linear-gradient(180deg, transparent 0 43px, rgba(34, 59, 85, 0.16) 43px 44px);
+}
+.of-note__hand {
+  margin: 0;
+  font-size: clamp(20px, 2.1vw, 36px);
+  font-style: italic;
+  font-weight: 400;
+  color: #1f2621;
+}
+.of-note__above {
+  position: absolute;
+  left: 13vw;
+  bottom: calc(100% - var(--bt, 40vh) + 16px);
+}
+.of-note__below {
+  position: absolute;
+  left: 13vw;
+  right: 8vw;
+  top: calc(var(--bb, 60vh) + 14px);
+}
+.of-note__aside {
+  margin-top: 10px;
+  font-size: 0.72em;
+  opacity: 0.75;
+}
+
+/* A postcard's back: POST CARD cropped at its head, the stamp and its
+   postmark, the address lines, the message round the anchor. */
+.of-sheet--postcard { --sheet-bg: #f1eadb; }
+.of-post__divider {
+  position: absolute;
+  left: 76vw;
+  top: 25vh;
+  bottom: 8vh;
+  width: 1px;
+  background: rgba(23, 27, 21, 0.45);
+}
+.of-post__stamp {
+  position: absolute;
+  right: 5vw;
+  top: 23vh;
+  width: 7.4vw;
+  height: 9.2vw;
+  padding: 8px;
+  background: radial-gradient(circle, transparent 3px, #f8f4ea 3.5px) -5px -5px / 10px 10px;
+}
+.of-post__stamp-face {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 6px;
+  background: #492d43;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #efe8dc;
+}
+.of-post__mark {
+  position: absolute;
+  right: 9vw;
+  top: calc(23vh + 4.6vw);
+  width: 12vw;
+  overflow: visible;
+}
+.of-post__mark circle,
+.of-post__mark path {
+  fill: none;
+  stroke: rgba(23, 27, 21, 0.55);
+  stroke-width: 1.4px;
+  vector-effect: non-scaling-stroke;
+}
+.of-post__mark text {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: rgba(23, 27, 21, 0.6);
+}
+.of-post__address {
+  position: absolute;
+  left: 79vw;
+  right: 5vw;
+  top: calc(var(--bb, 60vh) + 2vh);
+}
+.of-post__address i {
+  display: block;
+  height: 1px;
+  margin-bottom: 5.4vh;
+  background: rgba(23, 27, 21, 0.4);
+}
+.of-post__hand,
+.of-post__msg {
+  font-style: italic;
+  font-weight: 400;
+  color: #1f2621;
+}
+.of-post__hand { font-size: max(20px, calc(var(--cap, 120px) * 0.34)); }
+.of-post__msg {
+  position: absolute;
+  left: 8vw;
+  right: 28vw;
+  top: calc(var(--bb, 60vh) + 22px);
+  margin: 0;
+  font-size: clamp(17px, 1.7vw, 30px);
+  line-height: 1.35;
+}
+
+/* The phone: the words of the anchor's line go over and under it (centred),
+   the rest of each page is thinned to what a narrow frame holds. */
+@media (max-width: 1023px) {
+  .of-row,
+  .of-side {
+    --base-align: 0;
+    left: 6vw;
+    right: 6vw;
+    max-width: none;
+    text-align: center;
+    white-space: normal;
+  }
+  .of-row--l,
+  .of-side--l {
+    top: auto;
+    bottom: calc(100% - var(--bt, 40vh) + 12px);
+  }
+  .of-row--r,
+  .of-side--r { top: calc(var(--bb, 60vh) + 10px); }
+  .of-side--rowup,
+  .of-side--rowdown { display: none; }
+  .of-side--italic { font-size: 22px; }
+  .of-texture { display: none; }
+  .of-texture[data-texture='0'] {
+    display: block;
+    width: 38vw;
+  }
+  .of-meta--r { display: none; }
+  /* Above the Skip pill (44 px tall at the frame's foot), never under it. */
+  .of-credit {
+    font-size: 9px;
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
+  }
+
+  .of-news__edition {
+    left: 5vw;
+    right: 5vw;
+    bottom: calc(100% - var(--bt, 40vh) + 70px);
+    font-size: 8px;
+  }
+  .of-news__edition span:nth-child(2),
+  .of-news__sect { display: none; }
+  .of-news__from { font-size: 22px; }
+  .of-news__below {
+    left: 5vw;
+    right: 5vw;
+    top: calc(var(--bb, 60vh) + 18px);
+  }
+  .of-news__hed { font-size: 20px; }
+  .of-news__cols { columns: 2; }
+
+  .of-dict__head {
+    left: 6vw;
+    right: 6vw;
+    font-size: 9px;
+  }
+  .of-dict__above {
+    left: 6vw;
+    right: 6vw;
+    columns: 1;
+    bottom: calc(100% - var(--bt, 40vh) + 20px);
+    font-size: 11px;
+  }
+  .of-dict__def { font-size: 12px; }
+  .of-dict__below {
+    left: 6vw;
+    right: 6vw;
+    top: calc(var(--bb, 60vh) + 72px);
+    font-size: 12px;
+  }
+
+  .of-card {
+    left: 4vw;
+    right: 4vw;
+  }
+  .of-card__call { left: 8vw; }
+  .of-card__above,
+  .of-card__below {
+    left: 9vw;
+    right: 9vw;
+    font-size: 12px;
+  }
+  .of-card__above { bottom: calc(100% - var(--bt, 40vh) + 20px); }
+  .of-card__below { top: calc(var(--bb, 60vh) + 60px); }
+  .of-card__row { font-size: 12px; }
+
+  .of-mag__page--l { width: 100%; }
+  .of-mag__page--r { display: none; }
+  .of-mag__plate {
+    left: 8vw;
+    top: 13vh;
+    width: 84vw;
+    transform: none;
+  }
+  /* On a short phone the plate gives way (its own ratio kept): its caption
+     clears the kicker, and the kicker the block. */
+  .of-pic--plate {
+    width: auto;
+    max-width: 100%;
+    height: min(calc(84vw / var(--ratio, 1.5)), calc(var(--bt, 40vh) - 13vh - 66px));
+  }
+  .of-mag__above {
+    left: 8vw;
+    right: 8vw;
+    bottom: calc(100% - var(--bt, 40vh) + 16px);
+  }
+  .of-mag__deck { display: none; }
+  .of-mag__obscura { font-size: 26px; }
+  .of-mag__body {
+    left: 8vw;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 54px);
+  }
+
+  .of-slate__prod {
+    left: 7vw;
+    right: 7vw;
+    bottom: calc(100% - var(--bt, 40vh) + 52px);
+  }
+  .of-slate__hand { font-size: 20px; }
+  .of-slate__cells {
+    left: 7vw;
+    right: 7vw;
+    top: calc(var(--bb, 60vh) + 52px);
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .of-slate__cell:nth-child(2) { border-right: 0; }
+  .of-slate__cell:nth-child(n + 3) { border-top: 2px solid #171b15; }
+
+  /* A narrow strip: the perforations and the edge print only (a band of
+     film a third of a tall frame would darken it all at once). */
+  .of-edge__strip {
+    top: calc(var(--bt, 40vh) - 7vh);
+    bottom: calc(100% - var(--bb, 60vh) - 7vh);
+  }
+  .of-edge__perfs--t { top: 0.9vh; }
+  .of-edge__perfs--b { bottom: 0.9vh; }
+  .of-edge__perfs i {
+    width: 3.2vw;
+    height: 1.8vh;
+  }
+  .of-edge__frame { display: none; }
+  .of-edge__print--l {
+    left: 6vw;
+    top: calc(var(--bt, 40vh) - 4.1vh);
+  }
+  .of-edge__print--r {
+    left: auto;
+    right: 6vw;
+    top: calc(var(--bb, 60vh) + 2.4vh);
+  }
+  .of-edge__note--a {
+    left: 10vw;
+    bottom: auto;
+    top: calc(var(--bb, 60vh) + 16vh);
+  }
+  .of-edge__note--b { display: none; }
+
+  .of-ticket {
+    left: 5vw;
+    right: 5vw;
+    top: calc(var(--bt, 40vh) - 20vh);
+    bottom: calc(100% - var(--bb, 60vh) - 22vh);
+  }
+  /* The perforation between the stub's line and the head's (never through
+     the head's words on a short phone). */
+  .of-ticket__perf {
+    left: 0;
+    right: 0;
+    top: calc(5vh + 6px);
+    bottom: auto;
+    border-left: 0;
+    border-top: 2px dashed rgba(23, 27, 21, 0.35);
+  }
+  .of-ticket__stub {
+    left: 9vw;
+    right: 9vw;
+    width: auto;
+    top: calc(var(--bt, 40vh) - 20vh + 2vh);
+    bottom: auto;
+    flex-direction: row;
+    font-size: 11px;
+  }
+  .of-ticket__head {
+    left: 9vw;
+    right: 9vw;
+    top: calc(var(--bt, 40vh) - 20vh + 8vh);
+    font-size: 9px;
+  }
+  .of-ticket__route,
+  .of-ticket__fine {
+    left: 9vw;
+    right: 9vw;
+  }
+  .of-ticket__route {
+    top: calc(var(--bb, 60vh) + 56px);
+    flex-direction: column;
+    gap: 6px;
+  }
+  .of-ticket__place { font-size: 20px; }
+
+  .of-book__above,
+  .of-book__below,
+  .of-book__folio {
+    left: 7vw;
+    right: 7vw;
+  }
+  .of-book__above { bottom: calc(100% - var(--bt, 40vh) + 44px); }
+  .of-book__below { top: calc(var(--bb, 60vh) + 44px); }
+  .of-book__line,
+  .of-book__row { font-size: 15px; }
+  /* The page's lines flow on a narrow frame (a line set for the desktop's
+     measure would break twice). */
+  .of-book__line {
+    display: inline;
+    text-align-last: auto;
+  }
+  .of-book__above,
+  .of-book__below {
+    text-align: justify;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  .of-pass__stamp--a {
+    left: 6vw;
+    top: calc(var(--bb, 60vh) + 60px);
+    font-size: 15px;
+    padding: 6px 14px;
+  }
+  .of-pass__stamp--b {
+    left: auto;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 90px);
+    width: 104px;
+    height: 104px;
+    font-size: 13px;
+  }
+  .of-pass__stamp--c { display: none; }
+  .of-pass__mrz {
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
+    font-size: 11px;
+  }
+  .of-pass__end { font-size: 20px; }
+
+  .of-wire__fields {
+    left: 6vw;
+    right: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 16vh);
+    font-size: 8px;
+  }
+  .of-wire__fields span:nth-child(3) { display: none; }
+  .of-wire__tape,
+  .of-wire__rowr { font-size: 12px; }
+  .of-wire__tape--above {
+    left: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 7vh);
+  }
+  .of-wire__tape--below {
+    left: 6vw;
+    top: calc(var(--bb, 60vh) + 7vh);
+  }
+  .of-wire__rowr {
+    padding: 0.3em 0.7em;
+    background: #f8f3e3;
+  }
+  .of-wire__tape--row { display: none; }
+
+  .of-note__above {
+    left: 14vw;
+    right: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 50px);
+    font-size: 18px;
+  }
+  .of-note__below { left: 14vw; top: calc(var(--bb, 60vh) + 52px); }
+  .of-note__hand { font-size: 18px; }
+
+  .of-post__divider,
+  .of-post__address { display: none; }
+  .of-post__stamp {
+    right: 7vw;
+    top: 22vh;
+    width: 16vw;
+    height: 20vw;
+  }
+  .of-post__mark {
+    right: 20vw;
+    top: calc(22vh + 10vw);
+    width: 26vw;
+  }
+  .of-post__hand { font-size: 22px; }
+  .of-post__msg {
+    left: 8vw;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 54px);
+    font-size: 16px;
+  }
+}
+
+/* The anchor: a lime block (a marker's rough ends) with its word in ink,
+   one per cut, all on one centre, one height, one cap height. */
+.of-anchor {
+  position: absolute;
+  inset: 0;
+}
+.of-key {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50vw 50vh;
+}
+.of-key[data-key='0'] { will-change: transform, opacity; }
+.of-key__clip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.of-key__clip-in {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.of-key[data-key='0'] .of-key__clip,
+.of-key[data-key='0'] .of-key__clip-in { will-change: transform; }
+/* The marker's leading edge is a marker's: ragged, a little slanted (the
+   sweep's window carries this edge with it; open, it lies past the block). */
+.of-key[data-key='0'] .of-key__clip {
+  -webkit-mask:
+    linear-gradient(#171b15, #171b15) left / calc(100% - var(--of-edge, 18px)) 100% no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 100' preserveAspectRatio='none'><path d='M0 0 H9 L8 33.5 L11.5 34.6 L9.4 36.2 L12.8 37.9 L10.1 39.6 L13.6 41.8 L11 43.4 L14.2 45.6 L12.1 47.4 L15.3 49.3 L12.6 51.2 L15.8 53.3 L13.2 55.1 L16.4 57.2 L13.9 59.1 L17 61 L14.4 62.9 L17.4 64.7 L15 66.3 L16.3 67 L15.6 100 H0 Z' fill='%23171b15'/></svg>") right / var(--of-edge, 18px) 100% no-repeat;
+  mask:
+    linear-gradient(#171b15, #171b15) left / calc(100% - var(--of-edge, 18px)) 100% no-repeat,
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 100' preserveAspectRatio='none'><path d='M0 0 H9 L8 33.5 L11.5 34.6 L9.4 36.2 L12.8 37.9 L10.1 39.6 L13.6 41.8 L11 43.4 L14.2 45.6 L12.1 47.4 L15.3 49.3 L12.6 51.2 L15.8 53.3 L13.2 55.1 L16.4 57.2 L13.9 59.1 L17 61 L14.4 62.9 L17.4 64.7 L15 66.3 L16.3 67 L15.6 100 H0 Z' fill='%23171b15'/></svg>") right / var(--of-edge, 18px) 100% no-repeat;
+}
+.of-key__block {
+  position: absolute;
+  background: var(--of-lime);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 5 C 60 2.5 130 5 200 3.5 S 340 2 397 5.5 L 399.5 19 L 397.5 33 L 400 47 L 398 62 L 399.5 76 L 397 95 C 330 97.5 260 95.5 200 97 S 70 98.5 3.5 95.5 L 0.5 81 L 2.5 66 L 0 52 L 2 37 L 0.5 22 Z' fill='%23171b15'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 5 C 60 2.5 130 5 200 3.5 S 340 2 397 5.5 L 399.5 19 L 397.5 33 L 400 47 L 398 62 L 399.5 76 L 397 95 C 330 97.5 260 95.5 200 97 S 70 98.5 3.5 95.5 L 0.5 81 L 2.5 66 L 0 52 L 2 37 L 0.5 22 Z' fill='%23171b15'/></svg>");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.of-key__word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0;
+  color: #171b15;
+  text-shadow: 0 0 0.8px rgba(23, 27, 21, 0.5);
+  will-change: transform, opacity;
+}
+.of-key__word.of-face--f900,
+.of-key__glyphs.of-face--f900 { letter-spacing: -0.01em; }
+/* The typewriter's word, struck as hard as the paper's line. */
+.of-key__word--from,
+.of-key__glyphs--from {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+/* A word as its letters (a morph): each letter a box on its pen, its
+   transform's origin on the pen at the baseline (the island). */
+.of-gm {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.of-gm__face {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: pre;
+  line-height: 1;
+  will-change: opacity;
+}
+.of-key__glyphs {
+  color: #171b15;
+  text-shadow: 0 0 0.8px rgba(23, 27, 21, 0.5);
+}
+.of-g {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  white-space: pre;
+}
+
+/* The lens: the page sharp in the middle and a little out of focus at its
+   edges (a still mask over a still blur; nothing animates it). */
+.of-frame__soft {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(2.2px);
+  backdrop-filter: blur(2.2px);
+  -webkit-mask-image: radial-gradient(ellipse 68% 66% at 50% 50%, transparent 52%, #171b15 100%);
+  mask-image: radial-gradient(ellipse 68% 66% at 50% 50%, transparent 52%, #171b15 100%);
+}
+/* Grain on the paper: a small tile, moved every frame (60 a second). */
+.of-frame__grain,
+.of-end__grain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.of-grain__tile {
+  position: absolute;
+  inset: -80px;
+  background-image: var(--of-noise);
+  background-size: 160px 160px;
+  opacity: 0.06;
+  will-change: transform;
+}
+.of-grain__tile--light {
+  background-image: var(--of-noise-light);
+  opacity: 0.07;
+}
+.of-frame__vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 76% at 50% 50%, transparent 54%, rgba(23, 27, 21, 0.3) 100%);
+}
+/* The burn: the frame outside it turns sepia (a colour blend: its light and
+   dark kept, its hue a toned print's), and the canvas draws the burn. */
+.of-frame__sepia {
+  position: absolute;
+  inset: 0;
+  background: #7d4e24;
+  mix-blend-mode: color;
+  pointer-events: none;
+}
+.of-burn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* Without WebGL the frame still darkens (no burn is drawn). */
+.of-frame__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 60% 44%, #3a1408 0%, #140d08 60%);
+}
+/* Past the frame's foot: the frame line and its perforations, and the top
+   of the next frame (seen only in the slip). */
+.of-frame__next {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 45vh;
+}
+.of-frame__line {
+  position: relative;
+  height: 7vh;
+  background: #171b15;
+}
+.of-frame__perfs {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  gap: 2.4vh;
+  transform: translateY(-50%);
+}
+.of-frame__perfs--l { left: 1.6vw; }
+.of-frame__perfs--r { right: 1.6vw; }
+.of-frame__perfs i {
+  width: 2.6vh;
+  height: 3.6vh;
+  border-radius: 0.6vh;
+  background: #e8e2d2;
+}
+.of-frame__below {
+  height: 38vh;
+  background: #efe7d6;
+}
+
+/* ── Act 4: the burn's dark, the leader and the lit perforations ────────── */
+.of-burnground { background: #120d09; }
+/* A leader card: projected light on the dark — a little soft, with a halo
+   (its shadows alone: a filter on the card cost a frame as it came up). */
+.of-leader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ddd5c3;
+  text-shadow:
+    0 0 1.2px rgba(221, 213, 195, 0.9),
+    0 0 3px rgba(221, 213, 195, 0.55),
+    0 0 22px rgba(221, 213, 195, 0.35);
+}
+.of-leader__head,
+.of-leader__v,
+.of-leader__reel,
+.of-leader__word,
+.of-leader__n {
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.of-leader__head { font-size: min(calc(var(--of-short) * 0.4), 31vw); }
+.of-leader__v {
+  font-size: calc(var(--of-short) * 0.15);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0;
+}
+.of-leader__reel { font-size: calc(var(--of-short) * 0.13); }
+.of-leader__word { font-size: calc(var(--of-short) * 0.12); }
+.of-leader__dial {
+  position: absolute;
+  width: calc(var(--of-short) * 0.72);
+  height: calc(var(--of-short) * 0.72);
+  overflow: visible;
+}
+.of-leader__dial circle,
+.of-leader__dial path {
+  fill: none;
+  stroke: rgba(221, 213, 195, 0.72);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.of-leader__n {
+  position: relative;
+  font-size: calc(var(--of-short) * 0.34);
+}
+/* The lit perforations: a row of warm light carrying the picture into the
+   dark (the island steps it up the screen, a frame at a time). */
+.of-perfrow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2.2vw;
+  filter: blur(2px);
+  will-change: transform, opacity;
+}
+.of-perfrow i {
+  width: 4.2vw;
+  height: calc(4.2vw * 0.68);
+  border-radius: 0.9vw;
+  background: #f1e3c6;
+  box-shadow: 0 0 22px 6px rgba(241, 227, 198, 0.45);
+}
+@media (max-width: 1023px) {
+  .of-perfrow i {
+    width: 6.4vw;
+    height: calc(6.4vw * 0.68);
+    border-radius: 1.4vw;
+  }
+}
+
+/* ── Acts 5–6: the dark, typed; the end title ─────────────────────────── */
+.of-end__ground {
+  position: absolute;
+  inset: 0;
+  background: #171b15;
+}
+.of-end__edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 1.2vw;
+  opacity: 0.05;
+}
+.of-end__edge--top { top: 1.4vh; }
+.of-end__edge--bottom { bottom: 1.4vh; }
+.of-end__edge i {
+  width: 1.9vw;
+  height: calc(1.9vw * 0.68);
+  border-radius: 0.4vw;
+  background: #f4f4ed;
+}
+.of-end__title {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 9vh;
+  text-align: center;
+}
+.of-title {
+  position: relative;
+  will-change: transform;
+}
+/* His name in the cover's face (entrance.css .ec-xl: Fraunces 400), in
+   capitals: the cover sets it "Ryan Xu", so only its case turns on the way
+   home (landing A's letter morph, as the credits'). */
+.of-title__face {
+  font-size: clamp(60px, 8.2vw, 156px);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #f4f4ed;
+}
+@media (max-width: 639px) {
+  .of-title__face { font-size: clamp(48px, 15vw, 76px); }
+}
+.of-title__name {
+  display: inline-block;
+  opacity: 0;
+}
+.of-title__glyphs--from {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #f4f4ed;
+}
+.of-title__typed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 12px;
+  margin: 0;
+}
+.of-title__mono {
+  position: relative;
+  display: inline-block;
+  font-weight: 400;
+  line-height: 1;
+  white-space: pre;
+  color: #f4f4ed;
+  will-change: transform, opacity;
+}
+.of-title__cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--of-lime);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.of-title__sub,
+.of-title__you {
+  margin: 0;
+  white-space: nowrap;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.of-title__sub {
+  margin-top: clamp(18px, 3.2vh, 34px);
+  font-size: clamp(10px, 0.78vw, 13px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: rgba(244, 244, 237, 0.86);
+}
+.of-title__dot { color: rgba(244, 244, 237, 0.4); }
+.of-title__you {
+  margin-top: clamp(14px, 2.2vh, 22px);
+  font-size: clamp(11px, 0.78vw, 13px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.72);
+}
+.of-title__you [data-fly='you'] {
+  font-weight: 700;
+  color: #f4f4ed;
+}
+
+/* ── The Skip pill ──────────────────────────────────────────────────────── */
 .of-skip {
   position: fixed;
   right: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right));
@@ -284,7 +2446,7 @@ html[data-film-lock] body { overflow: clip !important; }
   padding: 0 18px;
   border-radius: 9999px;
   border: 1px solid rgba(244, 244, 237, 0.12);
-  background: rgba(22, 25, 15, 0.82);
+  background: rgba(23, 27, 21, 0.82);
   font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 600;
@@ -294,7 +2456,7 @@ html[data-film-lock] body { overflow: clip !important; }
   cursor: pointer;
   transition: background-color var(--dur-in) var(--ease-arrive), opacity var(--dur-out) var(--ease-fade);
 }
-.of-skip:hover { background: rgba(22, 25, 15, 0.94); }
+.of-skip:hover { background: rgba(23, 27, 21, 0.94); }
 .of-skip:focus-visible {
   outline: 2px solid var(--of-lime);
   outline-offset: 3px;
@@ -304,1601 +2466,6 @@ html[data-reel='skip'] .of-skip { display: none; }
 .of-skip.is-gone {
   opacity: 0;
   pointer-events: none;
-}
-
-/* ── 1. Code ──────────────────────────────────────────────────────────── */
-/* Black and white from the first frame (the owner: the opening in black-and-
-   white type): grey jargon falling on near-black, the locked word in bone. */
-.of-scene--code {
-  background: radial-gradient(ellipse 70% 60% at 50% 46%, #1f1f1d 0%, #131312 70%);
-  --of-lockfs: calc(var(--of-cap) / 0.729);
-  --of-pitch: calc(var(--of-lockfs) * 0.602 * var(--of-k0));
-}
-.of-rain {
-  position: absolute;
-  inset: 0;
-  transform-origin: var(--of-fx) var(--of-fy);
-  will-change: transform, opacity;
-}
-.of-rain__col {
-  position: absolute;
-  top: 0;
-  left: calc(var(--of-fx) + var(--i) * var(--of-pitch) - var(--of-pitch) / 2);
-  width: var(--of-pitch);
-  font-family: var(--of-mono);
-  font-size: calc(var(--of-pitch) / 0.602 * 0.8);
-  line-height: 1.24;
-  text-align: center;
-  word-break: break-all;
-  white-space: normal;
-  background: linear-gradient(180deg, rgba(136, 136, 131, 0) 0%, rgba(136, 136, 131, 0.28) 40%, rgba(170, 170, 164, 0.85) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: of-rain var(--fall) linear infinite;
-  animation-delay: calc(var(--phase) * var(--fall) * -1);
-  will-change: transform;
-}
-.of-rain__head {
-  color: #ecebe5;
-  text-shadow: 0 0 9px rgba(236, 235, 229, 0.4);
-}
-@keyframes of-rain {
-  from { transform: translate3d(0, -100%, 0); }
-  to { transform: translate3d(0, 100vh, 0); }
-}
-@media (max-width: 1023px) {
-  /* A phone shows a fraction of the columns; the rest stay out of the tree. */
-  .of-rain__col:nth-child(-n + 44),
-  .of-rain__col:nth-child(n + 98) { display: none; }
-}
-.of-lock {
-  position: absolute;
-  left: var(--of-fx);
-  top: var(--of-fy);
-  width: 0;
-  height: 0;
-}
-.of-lock__cells,
-.of-lock__word {
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-family: var(--of-mono);
-  font-size: var(--of-lockfs);
-  line-height: 1;
-  white-space: nowrap;
-  transform: translate(-50%, -50%) scale(var(--of-k0));
-  transform-origin: 50% 50%;
-  will-change: transform;
-}
-.of-lock__word {
-  display: inline-block;
-  color: var(--of-bone);
-}
-.of-lock__cells { display: flex; }
-.of-lock__cell {
-  display: block;
-  width: 1ch;
-  height: 1.14em;
-  margin-top: -0.07em;
-  background: #171716;
-}
-.of-lock__slot {
-  position: relative;
-  display: inline-block;
-  vertical-align: top;
-  width: 1ch;
-  height: 1em;
-  overflow: hidden;
-}
-.of-lock__strip {
-  display: block;
-  width: 1ch;
-  /* One character a line (the word above is nowrap: without this the strip
-     is one clipped line and the scramble shows as a blank slot). */
-  white-space: normal;
-  word-break: break-all;
-  line-height: 1;
-  color: #9a9a94;
-  /* CODE_BEATS (src/lib/openingFilm.ts): scramble 140 + k × 55, lock 220 later. */
-  animation: of-scramble 220ms steps(7, end) both;
-  animation-delay: calc(140ms + var(--k) * 55ms);
-}
-@keyframes of-scramble {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(0, -7em, 0); }
-}
-.of-lock__letter {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1ch;
-  line-height: 1;
-  color: var(--of-bone);
-  text-shadow: 0 0 0.12em rgba(244, 244, 237, 0.28);
-  opacity: 0;
-  animation: of-lock-on 80ms linear both;
-  animation-delay: calc(360ms + var(--k) * 55ms);
-}
-@keyframes of-lock-on { to { opacity: 1; } }
-/* The word's depth: copies stacked behind it (the island steps them back,
-   down and to the right, darker as they go back — the word's extruded side
-   — and closes them up into the word as it lands). Unseen until the lift. */
-.of-lock__depth {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-}
-.of-lock__layer {
-  position: absolute;
-  left: 0;
-  top: 0;
-  line-height: 1;
-  white-space: nowrap;
-  opacity: 0;
-  transform-origin: 50% 50%;
-  /* Nearest (d 1) a mid grey, the deepest (d 8) all but the ground: the
-     extruded side, in shade. */
-  color: rgb(calc(104 - var(--d) * 9) calc(104 - var(--d) * 9) calc(100 - var(--d) * 8.6));
-  will-change: transform, opacity;
-}
-
-/* ── 2. Dictionary ────────────────────────────────────────────────────── */
-.of-scene--dictionary { background: #171716; }
-.of-dict {
-  width: 3400px;
-  height: 2500px;
-  background:
-    radial-gradient(ellipse 50% 40% at 34% 40%, rgba(255, 255, 255, 0.5), transparent 70%),
-    #e7e6e1;
-  color: #151515;
-  font-family: var(--of-georgia);
-}
-/* The page's fibre, multiplied in. */
-.of-dict::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--of-noise);
-  background-size: 300px 300px;
-  mix-blend-mode: multiply;
-  opacity: 0.4;
-  pointer-events: none;
-}
-.of-dict__head {
-  position: absolute;
-  left: 860px;
-  top: 520px;
-  width: 1900px;
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 18px;
-  border-bottom: 2px solid rgba(21, 21, 21, 0.55);
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-.of-dict__cols {
-  position: absolute;
-  left: 860px;
-  top: 620px;
-  width: 1900px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 96px;
-}
-.of-dict__col {
-  border-right: 0;
-}
-.of-dict__col + .of-dict__col {
-  box-shadow: -48px 0 0 -46.5px rgba(21, 21, 21, 0.4);
-}
-.of-dict p {
-  margin: 0 0 14px;
-  padding-left: 44px;
-  text-indent: -44px;
-  font-size: 40px;
-  line-height: 1.42;
-  text-align: justify;
-  hyphens: auto;
-}
-.of-dict__hw {
-  font-size: 92px;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.01em;
-}
-.of-dict__pos { font-style: italic; }
-
-/* ── 3. Newspaper, in black and white ─────────────────────────────────── */
-.of-scene--newspaper { background: #151514; }
-.of-news {
-  width: 3600px;
-  height: 2700px;
-  background:
-    radial-gradient(ellipse 58% 48% at 42% 36%, rgba(255, 255, 255, 0.4), transparent 72%),
-    #e3e1da;
-  color: #0e0e0d;
-  font-family: var(--of-times);
-}
-/* Newsprint's fibre, multiplied in. */
-.of-news::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--of-noise);
-  background-size: 300px 300px;
-  mix-blend-mode: multiply;
-  opacity: 0.55;
-  pointer-events: none;
-}
-.of-news__mast {
-  position: absolute;
-  left: 700px;
-  top: 300px;
-  width: 2300px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 18px 0 16px;
-  border-top: 3px solid #0e0e0d;
-  border-bottom: 7px double #0e0e0d;
-  font-size: 26px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.of-news__name {
-  font-size: 92px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  text-transform: none;
-  font-style: italic;
-}
-/* The flag: a heavy condensed capital, set solid under a thick rule. */
-.of-news__flag {
-  position: absolute;
-  left: 700px;
-  top: 500px;
-  width: 2300px;
-  padding-top: 24px;
-  border-top: 14px solid #0e0e0d;
-  font-family: var(--of-impact);
-  font-size: 81px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-}
-.of-news__hed {
-  position: absolute;
-  left: 700px;
-  top: 630px;
-  width: 1600px;
-  font-size: 50px;
-  font-style: italic;
-  line-height: 1.1;
-}
-/* The halftone: his photograph (or the drawn stand-in) under a 45° screen of
-   dots, multiplied and thresholded — dots that grow in the shadows. The box
-   takes the photograph's own ratio (the island's picture keeps it). */
-.of-news__fig {
-  position: absolute;
-  left: 700px;
-  top: 740px;
-  width: 1360px;
-}
-.of-news__halftone {
-  position: relative;
-  display: block;
-  width: 100%;
-  aspect-ratio: 3 / 2;
-  overflow: hidden;
-  isolation: isolate;
-  background: #fff;
-  filter: grayscale(1) contrast(12);
-}
-.of-news__plate {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.95) 0 6%, transparent 18%),
-    linear-gradient(180deg, #e8e8e8 0%, #b9b9b9 44%, #4a4a4a 45%, #7c7c7c 58%, #2b2b2b 76%, #111 100%);
-}
-.of-news__plate .of-pic {
-  filter: blur(1.4px) brightness(1.12);
-}
-.of-news__screen {
-  position: absolute;
-  inset: -40%;
-  background: radial-gradient(circle closest-side, #000 0%, #fff 72%) 0 0 / 12px 12px;
-  transform: rotate(45deg);
-  mix-blend-mode: multiply;
-}
-.of-news__credit {
-  display: block;
-  margin-top: 14px;
-  font-size: 22px;
-  font-style: italic;
-  letter-spacing: 0.02em;
-  color: #2a2a28;
-}
-.of-news__cols {
-  position: absolute;
-  left: 2130px;
-  top: 740px;
-  width: 870px;
-  height: 1400px;
-  columns: 2;
-  column-gap: 40px;
-  column-rule: 1px solid rgba(14, 14, 13, 0.4);
-  column-fill: auto;
-  font-size: 27px;
-  line-height: 1.36;
-  text-align: justify;
-  hyphens: auto;
-}
-.of-news__cols p {
-  margin: 0 0 12px;
-  text-indent: 1.4em;
-}
-
-/* ── 4. A camera's top plate ──────────────────────────────────────────── */
-.of-scene--topplate {
-  background: radial-gradient(ellipse 80% 70% at 50% 30%, #2a2b28 0%, #121311 70%);
-}
-.of-top {
-  width: 2600px;
-  height: 1600px;
-  transform-style: preserve-3d;
-}
-/* The camera is a solid: the dials and knobs sit back on its top, the lens
-   stands out of the front (depth for the swing; the plate, with the word,
-   is at z = 0). */
-.of-top__body {
-  position: absolute;
-  left: 100px;
-  top: 260px;
-  width: 2400px;
-  height: 1300px;
-  transform-style: preserve-3d;
-}
-/* Brushed chrome: a studio's soft bands across the curve of the plate, and
-   the brush's own hairlines along it. */
-.of-top__plate {
-  position: absolute;
-  left: 0;
-  top: 200px;
-  width: 2400px;
-  height: 420px;
-  border-radius: 90px 90px 12px 12px / 70px 70px 12px 12px;
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 1px, rgba(0, 0, 0, 0.05) 1px 2px, transparent 2px 5px),
-    linear-gradient(180deg, #fbfbf9 0%, #dcddda 9%, #a9aba7 30%, #e7e8e5 47%, #c6c8c4 60%, #9c9e9a 84%, #7d7f7b 100%);
-  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.7), inset 0 -4px 6px rgba(0, 0, 0, 0.35), 0 10px 18px rgba(0, 0, 0, 0.4);
-}
-/* The name, engraved and filled with black paint: the groove's lower lip
-   catches the light, its upper edge is in shadow. */
-.of-top__name {
-  position: absolute;
-  left: 380px;
-  top: 150px;
-  font-family: var(--of-copper);
-  font-size: 122px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  color: #131312;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.9), 0 -1.5px 0 rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.5);
-}
-.of-top__serial {
-  position: absolute;
-  left: 1010px;
-  top: 300px;
-  font-family: var(--of-copper);
-  font-size: 34px;
-  letter-spacing: 0.08em;
-  color: #1b1b1a;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
-}
-.of-top__window {
-  position: absolute;
-  border-radius: 16px;
-  box-shadow: 0 0 0 10px #2a2b29, 0 0 0 12px rgba(255, 255, 255, 0.35), inset 0 6px 14px rgba(0, 0, 0, 0.7);
-}
-.of-top__window--vf,
-.of-top__window--rf {
-  top: 110px;
-  width: 230px;
-  height: 170px;
-  background:
-    linear-gradient(128deg, transparent 30%, rgba(255, 255, 255, 0.28) 38%, transparent 46%),
-    radial-gradient(ellipse at 30% 25%, rgba(190, 200, 205, 0.4), transparent 45%),
-    linear-gradient(135deg, #2c3134 0%, #0a0c0d 62%, #1d2326 100%);
-}
-.of-top__window--vf { left: 70px; }
-.of-top__window--rf { left: 1330px; width: 190px; }
-.of-top__window--frame {
-  left: 1010px;
-  top: 120px;
-  width: 250px;
-  height: 130px;
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 60%),
-    repeating-linear-gradient(90deg, #f2f2ee 0 7px, #d4d4ce 7px 10px, #e6e6e1 10px 14px);
-}
-/* On top: the rewind knob, the accessory shoe, the release, and the
-   shutter-speed dial — a short knurled cylinder, its speeds round its skirt,
-   which turns to its setting on the beat. */
-.of-top__rewind,
-.of-top__release,
-.of-top__shoe {
-  position: absolute;
-  background: linear-gradient(90deg, #6d6f6b 0%, #eeefec 30%, #b7b9b5 55%, #5b5d59 100%);
-}
-.of-top__rewind { left: 40px; top: 110px; width: 190px; height: 100px; border-radius: 12px 12px 0 0; transform: translateZ(-70px); }
-.of-top__shoe { left: 560px; top: 168px; width: 320px; height: 40px; border-radius: 6px 6px 0 0; transform: translateZ(-50px); }
-.of-top__release { left: 1560px; top: 140px; width: 70px; height: 70px; border-radius: 10px 10px 0 0; transform: translateZ(-70px); }
-.of-top__dial {
-  position: absolute;
-  left: 1160px;
-  top: 50px;
-  transform: translateZ(-70px);
-  width: 320px;
-  height: 160px;
-  overflow: hidden;
-  border-radius: 12px 12px 2px 2px;
-  background: #d6d7d3;
-}
-.of-top__dial-knurl {
-  position: absolute;
-  left: -600px;
-  top: 0;
-  width: 1600px;
-  height: 58px;
-  background: repeating-linear-gradient(90deg, #4b4d49 0 5px, #f4f4f1 5px 9px, #9fa19d 9px 14px);
-}
-.of-top__dial-band {
-  position: absolute;
-  left: -815px;
-  top: 64px;
-  display: flex;
-  font-family: var(--of-geo);
-  font-size: 50px;
-  font-weight: 500;
-  line-height: 90px;
-  color: #141413;
-  white-space: nowrap;
-}
-.of-top__dial-n {
-  flex: none;
-  width: 120px;
-  text-align: center;
-}
-.of-top__dial-shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.15) 22%, rgba(255, 255, 255, 0.28) 42%, rgba(255, 255, 255, 0) 56%, rgba(0, 0, 0, 0.2) 78%, rgba(0, 0, 0, 0.8) 100%);
-}
-/* The body below: black leatherette, pebbled; the lens mount's rings. */
-.of-top__leather {
-  position: absolute;
-  left: 0;
-  top: 620px;
-  width: 2400px;
-  height: 680px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.06) 0 1px, transparent 2px) 0 0 / 7px 7px,
-    linear-gradient(180deg, #1c1c1b, #0f0f0e);
-}
-.of-top__mount {
-  position: absolute;
-  left: 400px;
-  top: 610px;
-  transform: translateZ(90px);
-  width: 760px;
-  height: 760px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, #050505 0 44%, #2d2d2c 45% 47%, #0c0c0c 48% 60%, #d9dad6 61% 62.5%, #1a1a1a 63.5% 70%, #9fa19d 71% 72%, #111 73%);
-  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.6);
-}
-.of-top__mount-ring {
-  position: absolute;
-  inset: 12%;
-  border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, #1a1a19 0 1.2deg, #3b3b39 1.2deg 2deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 78%, #000 79% 100%);
-  mask: radial-gradient(circle, transparent 0 78%, #000 79% 100%);
-}
-.of-top__mount-scale {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 118px;
-  text-align: center;
-  font-family: var(--of-geo);
-  font-size: 30px;
-  letter-spacing: 0.04em;
-  color: rgba(236, 235, 229, 0.85);
-}
-
-/* ── 5. The lens, its rings ───────────────────────────────────────────── */
-.of-scene--lens {
-  background: radial-gradient(ellipse 70% 80% at 50% 20%, #262724 0%, #0f100e 72%);
-}
-.of-lens {
-  width: 2400px;
-  height: 1800px;
-}
-.of-lens__barrel {
-  position: absolute;
-  left: 480px;
-  top: 120px;
-  width: 1440px;
-  height: 1560px;
-}
-/* The barrel's top face, seen a little from above: the filter thread and the
-   front glass. */
-.of-lens__barrel::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: -90px;
-  width: 1440px;
-  height: 180px;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse 30% 30% at 36% 42%, rgba(255, 255, 255, 0.35), transparent 70%),
-    radial-gradient(ellipse 50% 50% at 50% 50%, #151a1d 0 55%, #3a3d3e 58% 60%, #0b0b0b 62% 90%, #a8aaa6 93% 96%, #2a2a29 98%);
-}
-.of-lens__band {
-  position: absolute;
-  left: 0;
-  width: 1440px;
-  overflow: hidden;
-  background: #121212;
-}
-.of-lens__band--lip { top: 0; height: 70px; background: linear-gradient(90deg, #3c3d3a 0%, #d9dad6 30%, #f3f3f0 40%, #9d9f9b 60%, #3a3b38 100%); }
-.of-lens__band--name { top: 70px; height: 260px; background: #111; }
-.of-lens__band--aperture { top: 330px; height: 230px; background: #141414; border-top: 3px solid #050505; }
-.of-lens__band--dof { top: 560px; height: 120px; background: #1d1d1c; border-top: 3px solid #050505; }
-.of-lens__band--focus { top: 680px; height: 880px; background: #121212; border-top: 3px solid #050505; }
-/* The cylinder's light: dark at the silhouette, a soft highlight a third of
-   the way across, laid over the painted scales (they darken as they turn
-   away). */
-.of-lens__shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.4) 12%, rgba(255, 255, 255, 0.1) 30%, rgba(255, 255, 255, 0.16) 38%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0.18) 72%, rgba(0, 0, 0, 0.94) 100%);
-}
-.of-lens__knurl {
-  position: absolute;
-  left: -300px;
-  top: 0;
-  width: 2040px;
-  height: 72px;
-  background: repeating-linear-gradient(90deg, #050505 0 7px, #3a3a39 7px 10px, #151515 10px 16px);
-}
-.of-lens__knurl--grip {
-  top: 170px;
-  height: 600px;
-  background: repeating-linear-gradient(90deg, #070707 0 12px, #2f2f2e 12px 17px, #141414 17px 26px);
-}
-/* A ring of type round the barrel: flat plates at their angles about the
-   axis (the barrel's centre line), turned by the kick; the one at the front
-   rests at z = 0, exactly where its layout is. */
-.of-ring {
-  position: absolute;
-  left: 0;
-  width: 1440px;
-  perspective: 2600px;
-  perspective-origin: 720px 50%;
-}
-.of-ring__turn {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  transform: translateZ(-720px);
-}
-.of-ring__plate {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1440px;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  font-family: var(--of-geo);
-  font-weight: 500;
-  color: #eeede6;
-  white-space: nowrap;
-}
-.of-ring__plate--tight {
-  left: 720px;
-  width: auto;
-  transform-origin: 0 50%;
-}
-.of-ring--name { top: 0; height: 260px; }
-.of-ring--name .of-ring__plate { font-size: 58px; letter-spacing: 0.04em; color: rgba(238, 237, 230, 0.86); }
-.of-lens__name {
-  font-size: 85px;
-  letter-spacing: 0.08em;
-  color: #f1f0ea;
-  text-shadow: 0 0 1px rgba(255, 255, 255, 0.4);
-}
-.of-ring--aperture { top: 90px; height: 130px; }
-.of-ring--aperture .of-ring__plate { font-size: 56px; color: rgba(236, 235, 228, 0.9); }
-.of-ring--aperture .of-ring__plate.is-set { color: #fff; }
-.of-ring--focus { top: 20px; height: 110px; }
-.of-ring--focus .of-ring__plate { font-size: 60px; }
-.of-lens__dof {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 38px;
-  font-family: var(--of-geo);
-  font-size: 40px;
-  color: rgba(226, 225, 218, 0.82);
-}
-.of-lens__index {
-  display: block;
-  width: 5px;
-  height: 64px;
-  background: #f4f3ee;
-}
-
-/* ── 6. Slices ────────────────────────────────────────────────────────── */
-.of-scene--slices { background: #0b0b0a; }
-.of-slices {
-  width: 2600px;
-  height: 1700px;
-}
-.of-slice {
-  position: absolute;
-  top: 0;
-  width: 96px;
-  height: 1760px;
-  margin-top: -30px;
-  contain: strict;
-  overflow: hidden;
-  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.55), inset -1px 0 0 rgba(255, 255, 255, 0.06);
-}
-.of-slice--chrome {
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 4px),
-    linear-gradient(90deg, #7c7e7a 0%, #e9eae7 40%, #b3b5b1 70%, #8a8c88 100%);
-}
-.of-slice--news {
-  background: #dcdad2;
-  color: #1a1a19;
-}
-.of-slice--wood {
-  background:
-    var(--of-grain) 0 0 / 1400px 300px,
-    linear-gradient(90deg, rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.08) 50%, rgba(0, 0, 0, 0.2)),
-    #a29f97;
-}
-.of-slice--steel {
-  background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 4px),
-    linear-gradient(90deg, #262725 0%, #5d5f5b 42%, #3b3c3a 70%, #1d1e1c 100%);
-}
-.of-slice--film { background: #0b0b0b; }
-.of-slice--led { background: #080908; }
-.of-slice--card {
-  background: #eee7d8;
-  color: #1c1b19;
-}
-.of-slice--board {
-  background:
-    radial-gradient(ellipse 60% 20% at 40% 30%, rgba(255, 255, 255, 0.07), transparent 70%),
-    #1f2320;
-}
-/* What a strip carries besides its stock, on a layer the size of the strip;
-   on the strips round the word it is cleared out of the word's band (the
-   band's top and bottom in the strip, less the strip's own offset --rest),
-   with a short fade, so no half letter is left at its edge. */
-.of-slice__ink {
-  position: absolute;
-  inset: 0;
-  --bt: calc(var(--band-top) - var(--rest, 0px));
-  --bb: calc(var(--band-bottom) - var(--rest, 0px));
-}
-.of-slice__ink.is-banded {
-  -webkit-mask: linear-gradient(180deg, #000 0 calc(var(--bt) - 12px), transparent var(--bt) var(--bb), #000 calc(var(--bb) + 12px));
-  mask: linear-gradient(180deg, #000 0 calc(var(--bt) - 12px), transparent var(--bt) var(--bb), #000 calc(var(--bb) + 12px));
-}
-.of-slices {
-  /* The word's band, in a strip's own coordinates (phone: the strips start
-     30 px above the sheet). */
-  --band-top: 750px;
-  --band-bottom: 980px;
-}
-.of-slice__news {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  top: 0;
-  font-family: var(--of-times);
-  font-size: 13px;
-  line-height: 1.3;
-  text-align: justify;
-  white-space: normal;
-  word-break: break-word;
-  hyphens: auto;
-}
-.of-slice__dots {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(240, 240, 232, 0.14) 0 2px, transparent 2.5px) 0 0 / 12px 12px;
-}
-.of-slice__big {
-  position: absolute;
-  left: -40px;
-  top: 990px;
-  font-family: var(--of-clarendon);
-  font-size: 520px;
-  line-height: 1;
-  color: #1c1b19;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.5);
-}
-.of-slice__chalk {
-  position: absolute;
-  left: 8px;
-  top: 300px;
-  font-family: var(--of-chalk);
-  font-size: 34px;
-  color: rgba(236, 236, 228, 0.7);
-  writing-mode: vertical-rl;
-}
-.of-slice__stencil {
-  position: absolute;
-  left: 10px;
-  top: 1100px;
-  font-family: var(--of-din);
-  font-size: 110px;
-  color: rgba(16, 16, 16, 0.85);
-  writing-mode: vertical-rl;
-}
-.of-slice__perfs {
-  position: absolute;
-  left: 28px;
-  width: 40px;
-  top: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(180deg, transparent 0 26px, #d8d7d1 26px 60px);
-  -webkit-mask: repeating-linear-gradient(180deg, #000 0 60px);
-  border-radius: 6px;
-}
-.of-slice__screw {
-  position: absolute;
-  left: 30px;
-  top: 360px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff, #8d8f8b 60%, #444 100%);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.35);
-}
-/* A desktop frame sees only the strips' middle: they are cut to it (less to
-   draw as they slam). */
-@media (min-width: 1024px) {
-  .of-slices {
-    --band-top: 460px;
-    --band-bottom: 690px;
-  }
-  .of-slice {
-    height: 1240px;
-    margin-top: 260px;
-  }
-  .of-slice__news { top: -290px; }
-  /* (Below the word's band: a big letter cut by the band left a stray
-     stroke by the word.) */
-  .of-slice__big { top: 700px; }
-  .of-slice__chalk { top: 40px; }
-  .of-slice__stencil { top: 840px; }
-  .of-slice__screw { top: 100px; }
-}
-/* As the word can be read, the strips either side of it go down under a
-   veil (the island fades it in); the word's own six strips stay lit. */
-.of-slices__veil {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  background: rgba(5, 5, 4, 0.45);
-  opacity: 0;
-  pointer-events: none;
-}
-.of-slices__veil--l { left: 0; width: 1012px; }
-.of-slices__veil--r { left: 1588px; right: 0; }
-/* The frame's edge falls into the dark; the word's six strips stay lit. */
-.of-slices__shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(5, 5, 4, 0.72) 0%, rgba(5, 5, 4, 0) 38%, rgba(5, 5, 4, 0) 62%, rgba(5, 5, 4, 0.72) 100%),
-    radial-gradient(ellipse 26% 70% at 50% 50%, transparent 45%, rgba(5, 5, 4, 0.85) 100%);
-}
-/* The word: six cells, one per strip, on one baseline; each letter in its
-   strip's face and finish. The cells move with their strips. */
-.of-slices__word {
-  position: absolute;
-  left: 1012px;
-  top: 780px;
-  display: inline-flex;
-  align-items: baseline;
-}
-.of-slices__cell {
-  flex: none;
-  display: block;
-  width: 96px;
-  text-align: center;
-  line-height: 1;
-}
-.of-slices__cell--chrome {
-  font-family: var(--of-copper);
-  font-size: 118px;
-  color: #141413;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.9), 0 -1.5px 0 rgba(0, 0, 0, 0.4);
-}
-/* A halftone letter: filled with a screen of dots. Heavy, so a phone
-   without Impact (iOS: Avenir Next Condensed) takes its Heavy face — a
-   regular stroke under a 7 px screen does not read; never a faked bold of
-   Impact's one weight. */
-.of-slices__cell--news .of-slices__letter {
-  font-family: var(--of-impact);
-  font-size: 81px;
-  font-weight: 800;
-  font-synthesis: none;
-  background: radial-gradient(circle, #111 0 50%, transparent 56%) 0 0 / 7px 7px;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-/* A stencil letter: sprayed, its bridge cut through. */
-.of-slices__cell--wood .of-slices__letter {
-  display: inline-block;
-  font-family: var(--of-din);
-  font-size: 90px;
-  color: rgba(14, 14, 14, 0.9);
-  text-shadow: 0 0 5px rgba(0, 0, 0, 0.35);
-  -webkit-mask: linear-gradient(90deg, #000 0 45%, transparent 45% 55%, #000 55%);
-  mask: linear-gradient(90deg, #000 0 45%, transparent 45% 55%, #000 55%);
-}
-/* An LED letter: lit dots of a matrix, with their glow. */
-.of-slices__cell--led .of-slices__letter {
-  display: inline-block;
-  font-family: var(--of-mono);
-  font-size: 88px;
-  font-weight: 700;
-  color: #f7f5ea;
-  text-shadow: 0 0 10px rgba(247, 245, 234, 0.8);
-  -webkit-mask: radial-gradient(circle, #000 0 2.6px, transparent 3.2px) 0 0 / 7px 7px;
-  mask: radial-gradient(circle, #000 0 2.6px, transparent 3.2px) 0 0 / 7px 7px;
-}
-/* A letterpress letter: pressed into the card. */
-.of-slices__cell--card {
-  font-family: var(--of-clarendon);
-  font-size: 86px;
-  color: #1a1918;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.7), 0 -1px 1px rgba(0, 0, 0, 0.3);
-}
-.of-slices__cell--board {
-  font-family: var(--of-chalk);
-  font-size: 85px;
-  color: rgba(240, 240, 232, 0.92);
-}
-
-/* ── 7. Departure board ───────────────────────────────────────────────── */
-.of-scene--board { background: #16181a; }
-.of-board {
-  width: 3200px;
-  height: 2200px;
-  background:
-    radial-gradient(ellipse 50% 45% at 45% 40%, rgba(255, 255, 255, 0.04), transparent 70%),
-    #1c1e21;
-  font-family: var(--of-helv);
-  color: #efeee6;
-}
-.of-board__title {
-  position: absolute;
-  left: 860px;
-  top: 560px;
-  display: flex;
-  align-items: flex-end;
-  gap: 48px;
-}
-.of-board__word {
-  display: inline-flex;
-  gap: 8px;
-}
-.of-flap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 66px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #2a2c30 0%, #222428 49.4%, #0c0d0e 49.4%, #0c0d0e 50.6%, #1b1c20 50.6%, #16171a 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 0 rgba(0, 0, 0, 0.6);
-  font-size: 46px;
-  font-weight: 500;
-  line-height: 1;
-}
-.of-flap--big {
-  width: 86px;
-  height: 128px;
-  border-radius: 6px;
-  font-size: 90px;
-}
-/* A big flap: its new letter's top half shows at once; the bottom half is
-   the leaf that falls on the beat, hinged at the middle — foreshortened from
-   edge-on to flat (a squash from the hinge: the fall without a 3D layer;
-   until it lands the bottom half is blank). */
-.of-flap__top,
-.of-flap__leaf {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 50%;
-  overflow: hidden;
-}
-.of-flap__top { top: 0; border-radius: 6px 6px 0 0; }
-.of-flap__leaf {
-  top: 50%;
-  border-radius: 0 0 6px 6px;
-  transform-origin: 50% 0;
-  background: linear-gradient(180deg, #1d1e22 0%, #16171a 100%);
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.8);
-}
-.of-flap__top > span,
-.of-flap__leaf > span {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 200%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.of-flap__top > span { top: 0; }
-.of-flap__leaf > span { top: -100%; }
-/* The word's leaves fall in depth (a perspective in their own transform,
-   rotateX from the hinge): their back is never seen. */
-.of-flap__leaf--3d {
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-/* The small flaps' leaves (one row changes as the shot lands). */
-.of-flap:not(.of-flap--big) .of-flap__leaf { border-radius: 0 0 4px 4px; }
-.of-board__label {
-  padding-bottom: 12px;
-  font-family: var(--font-ui);
-  font-size: 26px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(239, 238, 230, 0.55);
-}
-.of-board__rows {
-  position: absolute;
-  left: 860px;
-  top: 730px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.of-board__row {
-  display: flex;
-  gap: 34px;
-}
-.of-flaps {
-  display: inline-flex;
-  gap: 4px;
-}
-
-/* ── 8. Book ──────────────────────────────────────────────────────────── */
-.of-scene--book { background: #1d1a14; }
-.of-book {
-  width: 3600px;
-  height: 2600px;
-  background:
-    radial-gradient(ellipse 45% 40% at 50% 45%, rgba(255, 251, 238, 0.5), transparent 75%),
-    #ece3cd;
-  color: #2a241d;
-  font-family: var(--of-old);
-}
-.of-book__text {
-  position: absolute;
-  left: 760px;
-  top: 560px;
-  width: 2120px;
-  font-size: 86px;
-  line-height: 1.5;
-}
-.of-book__line {
-  display: block;
-  white-space: nowrap;
-  text-align: justify;
-  text-align-last: justify;
-}
-.of-book__line--near {
-  color: rgba(42, 36, 29, 0.55);
-  text-shadow: 0 0 2px rgba(42, 36, 29, 0.55);
-}
-.of-book__line--far {
-  color: transparent;
-  text-shadow: 0 0 8px rgba(42, 36, 29, 0.66);
-}
-.of-book__folio {
-  position: absolute;
-  left: 760px;
-  top: 420px;
-  font-size: 40px;
-  font-style: italic;
-  letter-spacing: 0.04em;
-  color: transparent;
-  text-shadow: 0 0 9px rgba(42, 36, 29, 0.6);
-}
-.of-book__gutter {
-  position: absolute;
-  left: 470px;
-  top: 0;
-  width: 240px;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(40, 32, 22, 0.55), rgba(40, 32, 22, 0) 100%);
-}
-
-/* ── 9. A telegram, typed, then photocopied ──────────────────────────── */
-.of-scene--typewriter { background: #1a1a19; }
-.of-type {
-  width: 3200px;
-  height: 2200px;
-  background:
-    radial-gradient(ellipse 55% 45% at 40% 40%, rgba(255, 255, 255, 0.5), transparent 72%),
-    #ecebe7;
-  color: #0f0f0f;
-}
-/* The copier's dark edge (the lid not quite down) and a drum streak. */
-.of-type__edge {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 420px;
-  height: 100%;
-  background:
-    linear-gradient(90deg, #0b0b0b 0%, #1b1b1b 55%, rgba(40, 40, 40, 0.6) 80%, rgba(80, 80, 80, 0) 100%);
-}
-.of-type__edge::after {
-  content: '';
-  position: absolute;
-  left: 1480px;
-  top: 0;
-  width: 3px;
-  height: 100%;
-  background: rgba(20, 20, 20, 0.18);
-}
-/* The printed form: a heavy slab title and its fields, crisp black. */
-.of-type__head {
-  position: absolute;
-  left: 640px;
-  top: 470px;
-  width: 2100px;
-  display: flex;
-  align-items: baseline;
-  gap: 80px;
-  padding-bottom: 20px;
-  border-bottom: 4px solid #111;
-}
-.of-type__title {
-  font-family: var(--of-clarendon);
-  font-size: 84px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.of-type__field {
-  font-family: var(--of-times);
-  font-size: 28px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-/* The typed lines: every letter struck a little harder or softer, a little
-   high or low, and the ribbon's ink bled into the fibres. */
-.of-type__lines {
-  position: absolute;
-  left: 640px;
-  top: 650px;
-  display: flex;
-  flex-direction: column;
-  gap: 42px;
-  font-family: var(--of-type);
-  font-size: 95px;
-  line-height: 1.12;
-  white-space: nowrap;
-}
-.of-type__line { display: block; }
-.of-typed {
-  position: relative;
-  top: var(--lift);
-  opacity: var(--ink);
-  text-shadow: 0 0 0.8px rgba(0, 0, 0, 0.95), 0.5px 0.3px 1.2px rgba(0, 0, 0, 0.4);
-}
-/* A struck letter (the island strikes it on the film's clock: a size too
-   big, pressed flat); invisible until struck. */
-.of-typed__key {
-  display: inline-block;
-  opacity: 0;
-  transform-origin: 50% 80%;
-}
-/* The toner: specks, and a faint mottle over everything, as a copy has. */
-.of-type__toner {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><filter id='t'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 14 -9.4'/></filter><rect width='400' height='400' filter='url(%23t)'/></svg>"),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='0.006' numOctaves='3' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.3  0 0 0 0 0.3  0 0 0 0 0.3  0 0 0 0.35 -0.08'/></filter><rect width='800' height='800' filter='url(%23m)'/></svg>");
-  background-size: 400px 400px, 800px 800px;
-  mix-blend-mode: multiply;
-}
-
-/* ── 10. A letterpress poster ─────────────────────────────────────────── */
-.of-scene--poster { background: #1b1916; }
-.of-poster {
-  width: 2600px;
-  height: 2000px;
-  background:
-    radial-gradient(ellipse 60% 50% at 45% 40%, rgba(255, 255, 255, 0.35), transparent 72%),
-    #ebe3d2;
-  color: #151413;
-}
-.of-poster::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--of-noise);
-  background-size: 300px 300px;
-  mix-blend-mode: multiply;
-  opacity: 0.5;
-}
-/* The second ink: a riso red, multiplied, a hair out of register. */
-.of-poster__giant {
-  position: absolute;
-  left: -40px;
-  top: 150px;
-  font-family: var(--of-clarendon);
-  font-size: 1500px;
-  line-height: 1;
-  color: #c2442e;
-  opacity: 0.88;
-  mix-blend-mode: multiply;
-}
-.of-poster__rule {
-  position: absolute;
-  left: 980px;
-  width: 1340px;
-  height: 22px;
-  border-top: 12px solid #151413;
-  border-bottom: 3px solid #151413;
-}
-.of-poster__rule--top { top: 330px; }
-.of-poster__rule--bottom { top: 1560px; }
-.of-poster__set {
-  position: absolute;
-  left: 980px;
-  top: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  white-space: nowrap;
-  text-transform: uppercase;
-}
-/* Pressed in: a light lip under each letter, a shade on its top edge. */
-.of-poster__l {
-  display: block;
-  line-height: 1;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.55), 0 -1px 1px rgba(0, 0, 0, 0.3);
-}
-.of-poster__l--1 {
-  font-family: var(--of-clarendon);
-  font-size: 86px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-}
-.of-poster__a {
-  font-family: var(--of-didone);
-  font-style: italic;
-  font-weight: 400;
-  text-transform: none;
-  font-size: 110px;
-}
-.of-poster__word {
-  /* The black a hair off the red under it. */
-  text-shadow: 5px 3px 0 rgba(194, 68, 46, 0.85), 0 2px 0 rgba(255, 255, 255, 0.55);
-}
-.of-poster__l--2 {
-  font-family: var(--of-impact);
-  font-size: 170px;
-  letter-spacing: 0.01em;
-}
-.of-poster__l--3 {
-  font-family: var(--of-copper);
-  font-size: 128px;
-  letter-spacing: 0.06em;
-}
-.of-poster__l--4 {
-  font-family: var(--of-didone);
-  font-style: italic;
-  font-size: 160px;
-  text-transform: none;
-}
-.of-poster__l--5 {
-  font-family: var(--of-clarendon);
-  font-size: 210px;
-  font-weight: 900;
-  color: #c2442e;
-  mix-blend-mode: multiply;
-  transform: translate3d(4px, -3px, 0);
-}
-.of-poster__stars {
-  position: absolute;
-  left: 980px;
-  top: 1620px;
-  font-size: 60px;
-  color: #c2442e;
-}
-
-/* ── 11. The edge of a strip of film, on a contact sheet ──────────────── */
-.of-scene--contact { background: #efeee9; }
-.of-film {
-  width: 3400px;
-  height: 1500px;
-}
-.of-film__strip {
-  position: absolute;
-  left: 0;
-  top: 90px;
-  width: 3400px;
-  height: 1200px;
-  background: #0b0b0b;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-}
-.of-film__perfs {
-  position: absolute;
-  left: 40px;
-  right: 0;
-  height: 112px;
-  display: flex;
-  gap: 110px;
-}
-.of-film__perfs i {
-  flex: none;
-  display: block;
-  width: 78px;
-  height: 112px;
-  border-radius: 12px;
-  background: #efeee9;
-}
-.of-film__perfs--top { top: 40px; }
-.of-film__perfs--bottom { bottom: 40px; }
-/* The edge print, exposed through the rebate: light grey on black. */
-.of-film__edge {
-  position: absolute;
-  left: 260px;
-  top: 172px;
-  display: flex;
-  align-items: baseline;
-  gap: 140px;
-  font-family: var(--font-ui);
-  font-size: 91px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  color: #d9d8d2;
-  white-space: nowrap;
-}
-.of-film__edge > span:not(.of-film__print) {
-  font-size: 58px;
-  color: rgba(217, 216, 210, 0.7);
-}
-.of-film__frames {
-  position: absolute;
-  left: 60px;
-  top: 300px;
-  display: flex;
-  gap: 90px;
-}
-.of-film__frame {
-  display: block;
-  flex: none;
-  width: 1000px;
-  height: 640px;
-  overflow: hidden;
-}
-/* His frames as a contact print makes them: black and white. */
-.of-film__frame .of-pic { filter: grayscale(1) contrast(1.12) brightness(0.98); }
-.of-film__frame--a { background: linear-gradient(170deg, #6e6e6e 0%, #3a3a3a 60%, #202020 100%); }
-.of-film__frame--b { background: linear-gradient(190deg, #8a8a8a 0%, #4a4a4a 55%, #1e1e1e 100%); }
-.of-film__frame--c { background: linear-gradient(175deg, #767676 0%, #3d3d3d 60%, #1a1a1a 100%); }
-.of-film__numbers {
-  position: absolute;
-  left: 60px;
-  top: 966px;
-  display: flex;
-  font-family: var(--font-ui);
-  font-size: 46px;
-  font-weight: 600;
-  color: rgba(217, 216, 210, 0.75);
-}
-.of-film__numbers span { width: 1090px; }
-/* A china-marker circle round the middle frame: the one picked. */
-.of-film__mark {
-  position: absolute;
-  left: 1060px;
-  top: 300px;
-  width: 1160px;
-  height: 760px;
-  overflow: visible;
-  fill: none;
-  stroke: #c2442e;
-  stroke-width: 10;
-  stroke-linecap: round;
-  opacity: 0.9;
-  vector-effect: non-scaling-stroke;
-}
-.of-film__mark path { vector-effect: non-scaling-stroke; }
-
-/* The loupe: a chrome ring standing on the sheet, the print seen through
-   its glass (a highlight across it, darker at its rim), its shadow thrown on
-   the print outside it (it stands above the sheet: the island's kick trails
-   it on the whip). */
-.of-film__loupe {
-  position: absolute;
-  left: 1420px;
-  top: 470px;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  box-shadow: 24px 32px 36px rgba(0, 0, 0, 0.6);
-}
-.of-film__loupe::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(from 200deg, #6f716d, #f2f2ef 12%, #9c9e9a 24%, #4d4f4b 38%, #d8d9d5 52%, #7c7e7a 66%, #f5f5f2 80%, #8a8c88 90%, #6f716d);
-  -webkit-mask: radial-gradient(circle, transparent 0 169px, #000 170px);
-  mask: radial-gradient(circle, transparent 0 169px, #000 170px);
-}
-.of-film__loupe-glass {
-  position: absolute;
-  inset: 30px;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse 58% 30% at 36% 22%, rgba(255, 255, 255, 0.3), transparent 70%),
-    radial-gradient(circle, transparent 0 60%, rgba(8, 8, 8, 0.45) 100%);
-  box-shadow: inset 0 0 0 5px rgba(0, 0, 0, 0.7), inset 0 0 0 7px rgba(255, 255, 255, 0.18);
-}
-
-/* ── 12. The clapperboard ─────────────────────────────────────────────── */
-.of-scene--slate {
-  background: radial-gradient(ellipse 60% 60% at 42% 42%, #22261c 0%, #14170f 78%);
-}
-.of-slate {
-  width: 1180px;
-  height: 830px;
-  color: #efeee4;
-  font-family: var(--font-ui);
-  /* A still frame without the island (reduced motion, first paint): the
-     board in the middle of the screen. */
-  transform: translate3d(calc(50vw - 590px), calc(50vh - 415px), 0);
-}
-.of-slate__sticks {
-  position: relative;
-  height: 118px;
-}
-.of-slate__stick {
-  position: absolute;
-  left: 0;
-  width: 1180px;
-  height: 52px;
-  border-radius: 4px;
-  background: repeating-linear-gradient(-58deg, #ecebe2 0 54px, #151713 54px 108px);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
-}
-.of-slate__stick--top {
-  top: 4px;
-  transform-origin: 26px 50%;
-  transform: rotate(-17deg);
-}
-.of-slate__stick--base { top: 62px; }
-.of-slate__board {
-  height: 712px;
-  padding: 36px 44px 30px;
-  border-radius: 6px;
-  background:
-    radial-gradient(ellipse 70% 60% at 40% 40%, rgba(255, 255, 255, 0.05), transparent 70%),
-    #171915;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
-  display: flex;
-  flex-direction: column;
-}
-.of-slate__row {
-  display: flex;
-  align-items: baseline;
-  gap: 28px;
-  border-bottom: 1.5px solid rgba(239, 238, 228, 0.3);
-}
-.of-slate__row--name { padding: 30px 0 40px; }
-.of-slate__row--prod { padding: 30px 0 36px; }
-.of-slate__label {
-  flex: none;
-  width: 118px;
-  font-size: 18px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(239, 238, 228, 0.58);
-}
-.of-slate__name {
-  font-size: 91px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.01em;
-}
-.of-slate__prod {
-  font-size: 34px;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: 0.04em;
-}
-.of-slate__found {
-  position: relative;
-  display: inline-block;
-}
-/* The chalk: drawn in the SVG's own units (a non-scaling stroke made
-   Chrome size the dash on screen: lines stopped short of their words). The
-   box is about as tall as its viewBox, so a unit is about a pixel and the
-   stroke about 2.4 px. */
-.of-chalk {
-  position: absolute;
-  left: -2%;
-  bottom: -0.34em;
-  width: 104%;
-  height: 0.3em;
-  overflow: visible;
-  fill: none;
-  stroke: #efeee4;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  opacity: 0.85;
-}
-/* The ring round CAMERA (the label's text, not its column). */
-.of-slate__ringed {
-  position: relative;
-  display: inline-block;
-  color: rgba(239, 238, 228, 0.9);
-}
-.of-chalk--ring {
-  left: -19%;
-  top: -0.95em;
-  bottom: auto;
-  width: 138%;
-  height: 3.1em;
-  stroke-width: 2.1;
-}
-.of-slate__o {
-  display: inline-block;
-  width: 0.74em;
-  height: 0.72em;
-  margin: 0 0.02em;
-  vertical-align: baseline;
-}
-/* The word's own letter, unseen (the circle is drawn): it keeps the word
-   whole as text — THOUGHT, not TH_UGHT — for what reads it (the landing's
-   clone of the word). */
-.of-slate__o { position: relative; }
-.of-slate__o-ch {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  overflow: hidden;
-  color: transparent;
-}
-.of-slate__o svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 12;
-}
-.of-slate__row--grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  padding: 0;
-}
-.of-slate__cell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 26px 0 30px 0;
-}
-.of-slate__cell + .of-slate__cell {
-  padding-left: 26px;
-  border-left: 1.5px solid rgba(239, 238, 228, 0.3);
-}
-.of-slate__val {
-  font-size: 48px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-}
-.of-slate__foot {
-  display: flex;
-  gap: 40px;
-  margin-top: auto;
-  font-size: 16px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(239, 238, 228, 0.5);
-}
-/* A phone's board stands upright, everything on its centre line. */
-@media (max-width: 1023px) {
-  .of-slate {
-    width: 680px;
-    height: 1160px;
-    transform: translate3d(calc(50vw - 190px), calc(50vh - 325px), 0) scale(0.56);
-  }
-  .of-slate__stick { width: 680px; }
-  .of-slate__board {
-    height: 1042px;
-    padding: 30px 40px 28px;
-  }
-  .of-slate__row {
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    text-align: center;
-  }
-  .of-slate__label { width: auto; }
-  .of-slate__prod {
-    max-width: 560px;
-    font-size: 42px;
-    line-height: 1.55;
-  }
-  /* (The line wraps here: a line under ARCHIVE must sit under it, not read
-     as a line over THOUGHT below.) */
-  .of-slate__prod .of-chalk { bottom: -0.16em; }
-  .of-slate__row--grid { grid-template-columns: repeat(2, 1fr); }
-  .of-slate__cell { align-items: center; }
-  .of-slate__cell + .of-slate__cell { padding-left: 0; }
-  .of-slate__cell:nth-child(3) { border-left: 0; }
-  .of-slate__cell:nth-child(n + 3) { border-top: 1.5px solid rgba(239, 238, 228, 0.3); }
-  .of-slate__foot { justify-content: center; }
 }
 
 /* ── Landing A: the flight's clones ───────────────────────────────────── */
@@ -1922,19 +2489,20 @@ html[data-reel='skip'] .of-skip { display: none; }
   will-change: transform;
 }
 
-/* ── Reduced motion: no montage ───────────────────────────────────────────
-   The clapperboard as a still (the film's poster), then a calm crossfade
-   into the first screen (the island times it). Values, not structure: the
-   same scenes are there; only which one shows differs. */
+/* ── Reduced motion: no film ──────────────────────────────────────────────
+   The end title as a still, then a calm crossfade into the first screen
+   (the island times it). Values, not structure: the same scenes are there;
+   only which one shows differs. */
 @media (prefers-reduced-motion: reduce) {
-  .of-scene--code { opacity: 0; }
-  .of-scene--slate { opacity: 1; }
-  .of-slate__stick--top { transform: none; }
-  .of-grain,
-  .of-rain__col,
-  .of-lock__strip,
-  .of-lock__letter { animation: none; }
-  .of-hud { display: none; }
-  .of-chalk { stroke-dashoffset: 0; }
+  .of-mat--crt { opacity: 0; }
+  .of-end,
+  .of-title__name,
+  .of-title__sub,
+  .of-title__you { opacity: 1; }
+  .of-end { visibility: visible; }
+  .of-title__typed,
+  .of-title__cursor,
+  .of-title__gm { visibility: hidden; }
+  .of-cursor__ink { animation: none; }
   .opening { transition: opacity 700ms var(--ease-fade); }
 }

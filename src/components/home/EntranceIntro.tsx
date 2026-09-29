@@ -159,16 +159,22 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
     const reel = () => root.dataset.reel ?? '';
     const waiting = () => reel() === 'reel' || reel() === 'flight';
     // The words the film carries home (its slate has them: landing A flies
-    // every word it finds on both sides) are home once it lands; any other
-    // word of ours (one the film does not carry, the first stop) sets itself
-    // with its block, like the rest.
+    // every word it finds on both sides whose place is on the first screen,
+    // src/components/home/OpeningFilm.tsx landA — read once, as it does) are
+    // home once it lands; any other word of ours (one the film does not
+    // carry, one below a short screen, the first stop) sets itself with its
+    // block, like the rest.
     let flownMarked = false;
     const markFlown = () => {
       if (flownMarked) return;
       flownMarked = true;
+      const vh = window.innerHeight;
       section.querySelectorAll<HTMLElement>('[data-open-land]').forEach((el) => {
         const word = el.dataset.openLand;
-        if (word && document.querySelector(`[data-fly="${word}"]`)) el.setAttribute('data-flown', '');
+        if (!word || !document.querySelector(`[data-fly="${word}"]`) || !el.getClientRects().length) return;
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > vh) return;
+        el.setAttribute('data-flown', '');
       });
     };
     let observer: MutationObserver | null = null;

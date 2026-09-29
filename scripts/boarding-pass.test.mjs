@@ -236,7 +236,10 @@ test('the cover\'s words: punctuation stays with its word, a landed word never r
   assert.match(css, /\.entrance\[data-compose='play'\] :is\(\.ec-w, \.ec-found:not\(\[data-flown\]\)\) \{\s*animation: ec-rise/);
   assert.doesNotMatch(css, /\.ec-f[\s,{:][^{]*\{[^}]*animation/);
   assert.doesNotMatch(css.replace(/\.ec-found:not\(\[data-flown\]\)/g, ''), /\.ec-found[^{]*\{[^}]*animation: ec-/);
-  assert.match(intro, /if \(word && document\.querySelector\(`\[data-fly="\$\{word\}"\]`\)\) el\.setAttribute\('data-flown', ''\);/);
+  // (Home only where the film lands it: its word on the slate, and its
+  // place on the first screen — the film's own rule, OpeningFilm landA.)
+  assert.match(intro, /if \(!word \|\| !document\.querySelector\(`\[data-fly="\$\{word\}"\]`\) \|\| !el\.getClientRects\(\)\.length\) return;/);
+  assert.match(intro, /if \(r\.bottom < 0 \|\| r\.top > vh\) return;\s*el\.setAttribute\('data-flown', ''\);/);
 });
 
 // ── The reveal ──
