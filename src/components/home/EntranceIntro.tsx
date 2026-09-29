@@ -3,9 +3,9 @@ import type Lenis from 'lenis';
 import BoardingPass, { type PassHandle, type TearHow } from './BoardingPass';
 import {
   ARRIVAL_EASE,
+  ARRIVAL_SECONDS,
   PASS_PIN,
   PASS_TEAR_AT,
-  arrivalSeconds,
   passFields,
   passRise,
   scrollStrain,
@@ -24,13 +24,15 @@ import { EASE, bezierFn } from '../../lib/motion';
 // white boarding pass rises into view with the scroll (BoardingPass.tsx):
 // it can be picked up and looked at, torn along its perforation, or scanned.
 // Its frame holds (sticky) for a short stretch below it, where the scroll
-// itself starts to pull at the stub; scrolled on past PASS_TEAR_AT of that
-// stretch the pass tears for the reader, so nobody is ever stuck. Torn — by
-// hand, button, key, tap or scroll — the page goes on in one calm glide: the
+// itself pulls at the stub and peels it; scrolled on past PASS_TEAR_AT of
+// that stretch the pass tears for the reader, so nobody is ever stuck. Torn
+// — by hand, button, key or scroll — the page goes on in one calm glide: the
 // pass's main part slides away up the screen as the globe rises over the
-// lower edge into its familiar first pose (the prologue), its reveal (fade,
-// dawn, settle) played on the way. On a phone the glide lands on the
-// phone's own opener. Reduced motion: the stub fades, nothing moves the page.
+// lower edge into its familiar first pose (the prologue), fading in and
+// lit by its dawn on the way, but not turning (one move at a time: its
+// settle is skipped and its drift waits for the landing). On a phone the
+// glide lands on the phone's own opener. Reduced motion: the stub fades,
+// nothing moves the page.
 //
 // The geometry is derived (document offsets once per layout, the scroll
 // position per frame); nothing reads a rect per frame.
@@ -64,9 +66,11 @@ const GO_ON_AFTER_HAND_MS = 260;
 const GO_ON_AFTER_TOSS_MS = 380;
 const GO_ON_MAX_MS = 900;
 // Torn by the scroll, the reader is already on the move: the page (held
-// while the paper tears, SCROLL_HOLD_S) goes on as soon as the stub is off.
-const GO_ON_AFTER_SCROLL_MS = 90;
-const SCROLL_HOLD_S = 0.6;
+// while the paper tears, SCROLL_HOLD_S) goes on as soon as the stub, let go
+// downward, has fallen off the screen — at most GO_ON_AFTER_SCROLL_MAX_MS
+// after it is let go — so it never crosses the rising globe.
+const GO_ON_AFTER_SCROLL_MAX_MS = 450;
+const SCROLL_HOLD_S = 0.35;
 // On a touch screen the page's own momentum must be over before the glide.
 const TOUCH_IDLE_MS = 140;
 const arrivalCurve = bezierFn(ARRIVAL_EASE);
@@ -177,7 +181,7 @@ export default function EntranceIntro({ years, first, lenisRef, nextTop, onArriv
       // holds the pass, the page above is out of view): the page is set at
       // the pin's end at once — unseen — so every frame of the glide moves.
       const from = y >= passTop && y < pinEnd ? pinEnd : y;
-      const duration = arrivalSeconds(next - from);
+      const duration = ARRIVAL_SECONDS;
       state.gliding = true;
       const lenis = lenisRef.current;
       if (lenis) {
@@ -227,9 +231,11 @@ export default function EntranceIntro({ years, first, lenisRef, nextTop, onArriv
       state.glided = true;
       window.clearTimeout(goTimer);
       letGoAt = performance.now();
-      // Torn by the scroll, the reader is already on the move: go on at once.
+      // Torn by the scroll, the reader is already on the move: go on as soon
+      // as the stub is off the screen.
       if (how === 'scroll') {
-        goTimer = window.setTimeout(() => go(0), GO_ON_AFTER_SCROLL_MS);
+        minWait = 0;
+        goTimer = window.setTimeout(() => go(0), stubOut || reduce.matches ? 0 : GO_ON_AFTER_SCROLL_MAX_MS);
         return;
       }
       minWait = how === 'hand' ? GO_ON_AFTER_HAND_MS : GO_ON_AFTER_TOSS_MS;

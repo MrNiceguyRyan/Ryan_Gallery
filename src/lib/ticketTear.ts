@@ -267,27 +267,34 @@ const REST: TearPose = {
  * The pose `ms` into the score. `smooth`: the hand's tip, no catches (a pull,
  * a re-seat). `reduced`: values, not structure — the face fades in place over
  * TEAR_REDUCED_MS, the stub dims, the pad goes; no hinge, fibre or aside.
+ * Two knobs for a paper pulled by hand (the entrance's boarding pass; the
+ * covers leave them at their defaults): `hinge` scales the hinge's angle
+ * (a longer lever keeps the grabbed point with the hand), and `tipFloor` is
+ * how far the rip has already run — what has torn stays torn when the
+ * paper is let lie back down (its clock at 0: flat, the rip still there).
  */
 export function tearPose(
   ms: number,
   frame: TearFrame,
-  { smooth = false, reduced = false }: { smooth?: boolean; reduced?: boolean } = {},
+  { smooth = false, reduced = false, hinge = 1, tipFloor = 0 }: { smooth?: boolean; reduced?: boolean; hinge?: number; tipFloor?: number } = {},
 ): TearPose {
-  if (!(ms > 0)) return { ...REST };
+  const floor = reduced ? 0 : clampUnit(tipFloor);
+  if (!(ms > 0) && floor <= 0) return { ...REST };
   if (reduced) {
     // A fade-out eases in, like every other going in the house.
     const k = fade(clampUnit(ms / TEAR_MS));
     return { ...REST, op: 1 - k, stubOp: 1 - 0.45 * k, padOp: 1 - k };
   }
   const { w, h, vw } = frame;
+  const hingeDeg = HINGE_DEG * hinge;
   const tE = clampUnit(ms / TEAR_TENSION_MS) ** 2;
   const u = clampUnit((ms - TEAR_TENSION_MS) / TEAR_RIP_MS);
   const hand = tipSmooth(u);
   const dip = DIP_PX * tE;
   if (ms < TEAR_FREE_MS) {
     // The rip: the face hinges about the running tip at (w, tip·h).
-    const tip = smooth ? hand : tipStepped(u);
-    const theta = HINGE_DEG * Math.pow(hand, HINGE_EXP);
+    const tip = Math.max(floor, smooth ? hand : tipStepped(u));
+    const theta = hingeDeg * Math.pow(hand, HINGE_EXP);
     return {
       m: chain(translate(w, dip + tip * h), rotate(-theta), translate(-w, -tip * h)),
       tip,
@@ -307,7 +314,7 @@ export function tearPose(
   const r = Math.min(ms, TEAR_MS) - TEAR_FREE_MS;
   const rel = easeOutCubic(clampUnit(r / TEAR_SNAP_MS));
   const post = clampUnit(r / (TEAR_SNAP_MS + TEAR_ASIDE_MS));
-  const released = chain(translate(w, DIP_PX + h), rotate(-(HINGE_DEG + KICK_DEG * rel)), translate(-w, -h));
+  const released = chain(translate(w, DIP_PX + h), rotate(-(hingeDeg + KICK_DEG * rel)), translate(-w, -h));
   const osc = Math.exp(-r / RECOIL_TAU_MS) * Math.cos((2 * Math.PI * r) / RECOIL_PERIOD_MS);
   const e = 0.75 * easeOutQuad(post) + 0.25 * post;
   // The straightening waits out the snap's kick, then decelerates on the
@@ -319,7 +326,7 @@ export function tearPose(
   return {
     m: chain(
       translate(KICK_X * rel - ASIDE_VW * vw * e + gx, KICK_Y * rel + ASIDE_Y * e + gy),
-      rotate((HINGE_DEG + KICK_DEG - ASIDE_REST_DEG) * straighten),
+      rotate((hingeDeg + KICK_DEG - ASIDE_REST_DEG) * straighten),
       scale(s),
       translate(-gx, -gy),
       released,

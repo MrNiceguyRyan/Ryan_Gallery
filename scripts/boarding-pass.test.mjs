@@ -5,11 +5,14 @@
 // invented origin), the QR code (a real one: every block a valid
 // Reed–Solomon codeword, the codewords read back out of the matrix in
 // placement order, the format information BCH-valid, the finders and timing
-// where a reader looks), the hand (the tilt and sway caps, the rest area it
-// always comes back into from anywhere, the rubber band that keeps it on
-// screen), the tear (the paper resists for 40 px, then the rip follows the
-// hand to the bottom notch; let go early it springs back, late or flicked it
-// tears on), the stub's fall, and the page's scroll score round it.
+// where a reader looks), the hand (the tilt and sway caps, the hand's speed
+// going still when the hand does, the place it always comes back to from
+// anywhere, a hair past and settled, the rubber band that keeps most of it on
+// screen), the tear (the paper resists for 22 px — 18 under a finger — then
+// the rip follows the hand to the bottom notch over a short pull; let go early
+// the stub lies back down but the rip stays, late or flicked it tears on; a
+// tap only peels it), the stub's fall, and the page's scroll score round it
+// (the scroll strains, then peels the stub before it tears).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as P from '../src/lib/boardingPass.ts';
@@ -198,15 +201,43 @@ test('the sway: from the hand\'s sideways speed, never more than 12°, settling 
   assert.ok(Math.abs(s.s) < 0.05 && Math.abs(s.v) < 1, `settled at ${s.s}`);
 });
 
-test('the areas: the rest area keeps the pass on screen; the reach is wider', () => {
-  for (const [fw, fh, pw, ph] of [[1728, 1000, 860, 352], [1280, 800, 690, 282], [390, 844, 340, 550], [375, 667, 271, 440]]) {
+test('the areas: its place is the middle (or the torn main part\'s middle); held, most of it stays on screen', () => {
+  for (const [fw, fh, pw, ph] of [[1728, 1000, 860, 344], [1280, 800, 640, 256], [390, 844, 300, 486], [375, 667, 208, 337]]) {
     const { rest, reach } = P.passAreas(fw, fh, pw, ph);
-    assert.ok(rest.x1 >= 0 && rest.x0 === -rest.x1 && rest.y0 === -rest.y1);
-    // Anywhere in the rest area the whole pass is on screen.
-    assert.ok(pw / 2 + rest.x1 <= fw / 2, `${fw}: x`);
-    assert.ok(ph / 2 + rest.y1 <= fh / 2, `${fw}: y`);
-    assert.ok(reach.x1 > rest.x1 && reach.y1 > rest.y1);
+    // Its place: the middle of its frame, a point (every throw used to end
+    // on the edge of a rest area, ~100 px off the centred prompt).
+    assert.deepEqual([rest.x0, rest.x1, rest.y0, rest.y1], [0, 0, 0, 0]);
+    assert.ok(reach.x1 > 0 && reach.x0 === -reach.x1 && reach.y0 === -reach.y1);
+    // Held anywhere — the hand as far past the screen as it likes — the
+    // rubber band keeps at least three quarters of the pass on screen each
+    // way.
+    const visible = (x, w, f) => Math.max(0, Math.min(f / 2, x + w / 2) - Math.max(-f / 2, x - w / 2)) / w;
+    for (const d of [0, 200, 600, 5000, 1e6]) {
+      const x = P.rubberBand(reach.x1 + d, reach.x0, reach.x1, P.passAreas(fw, fh, pw, ph).band.x);
+      const y = P.rubberBand(reach.y1 + d, reach.y0, reach.y1, P.passAreas(fw, fh, pw, ph).band.y);
+      assert.ok(visible(x, pw, fw) >= 0.75 && visible(y, ph, fh) >= 0.75, `${fw}: ${d} px past, x ${visible(x, pw, fw).toFixed(2)} y ${visible(y, ph, fh).toFixed(2)}`);
+      if (d <= 600) assert.ok(visible(x, pw, fw) >= 0.76 && visible(y, ph, fh) >= 0.76, `${fw}: ${d} px past`);
+    }
   }
+  // Torn, the main part's middle is its place: the areas shift with it.
+  const shifted = P.passAreas(1728, 1000, 860, 344, [116, 0]);
+  assert.deepEqual([shifted.rest.x0, shifted.rest.x1, shifted.rest.y0], [116, 116, 0]);
+});
+
+test('the hand\'s speed: its last moves only; a hand held still has none', () => {
+  // Moving right at 875 px/s, a move every 16 ms.
+  const samples = Array.from({ length: 12 }, (_, i) => [1000 + i * 16, 100 + i * 14, 200]);
+  const lastT = samples[samples.length - 1][0];
+  const [vx, vy] = P.recentVelocity(samples, lastT);
+  assert.ok(Math.abs(vx - 875) < 1 && vy === 0, `moving: ${vx}`);
+  // The hand stops: no new moves come. Within a frame or two it is still
+  // (the sway settles, a let-go sets the pass down instead of throwing it).
+  for (const after of [50, 150, 300, 1000]) assert.deepEqual(P.recentVelocity(samples, lastT + after), [0, 0]);
+  assert.ok(P.recentVelocity(samples, lastT + 30)[0] > 0, 'a frame late it is still the hand\'s speed');
+  // Only the last 90 ms count: a fast start then a slow finish reads slow.
+  const slowing = [[0, 0, 0], [16, 60, 0], [32, 120, 0], [150, 130, 0], [166, 132, 0], [182, 134, 0]];
+  assert.ok(Math.abs(P.recentVelocity(slowing, 182)[0] - 125) < 1);
+  assert.deepEqual(P.recentVelocity([[0, 0, 0]], 0), [0, 0]);
 });
 
 test('the rubber band: 1:1 inside, never past its dimension outside', () => {
@@ -226,10 +257,10 @@ test('the rubber band: 1:1 inside, never past its dimension outside', () => {
   }
 });
 
-test('let go anywhere, at any speed: it glides, slows, and comes to rest inside its rest area', () => {
-  const { rest, reach } = P.passAreas(1728, 1000, 860, 352);
+test('let go anywhere, at any speed: it glides, slows, and is set back down in its place', () => {
+  const { rest, reach } = P.passAreas(1728, 1000, 860, 344);
   const starts = [];
-  for (const x of [reach.x0 * 1.5, rest.x0, 0, rest.x1 * 0.5, reach.x1 * 1.5]) {
+  for (const x of [reach.x0 * 1.5, reach.x0 * 0.3, 0, reach.x1 * 0.5, reach.x1 * 1.5]) {
     for (const y of [reach.y0 * 1.5, 0, reach.y1 * 1.5]) {
       for (const [vx, vy] of [[0, 0], [4200, 0], [-4200, 1300], [900, -3000], [99999, 99999]]) {
         starts.push({ x, y, vx, vy });
@@ -253,9 +284,18 @@ test('let go anywhere, at any speed: it glides, slows, and comes to rest inside 
     const [tx, ty] = P.clampToArea(body.x, body.y, rest);
     assert.ok(Math.hypot(body.x - tx, body.y - ty) < 0.5);
   }
-  // Still, inside the area, it stays exactly where it was put.
-  const still = P.stepBody({ x: rest.x1 / 2, y: 0, vx: 0, vy: 0 }, 1 / 60, rest);
-  assert.deepEqual([still.x, still.y], [rest.x1 / 2, 0]);
+  // Still, in its place, it stays exactly where it was put.
+  const still = P.stepBody({ x: 0, y: 0, vx: 0, vy: 0 }, 1 / 60, rest);
+  assert.deepEqual([still.x, still.y], [0, 0]);
+  // Set back down: a hair past its place (about 3 %) and settled — never a
+  // bounce, never a crawl.
+  let back = { x: 500, y: 0, vx: 0, vy: 0 };
+  let under = 0;
+  for (let i = 0; i < 240; i += 1) {
+    back = P.stepBody(back, 1 / 60, rest);
+    under = Math.min(under, back.x);
+  }
+  assert.ok(-under / 500 > 0.01 && -under / 500 < 0.05, `overshoot ${(-under / 5).toFixed(1)} %`);
   // The same path at any frame rate.
   const at60 = Array.from({ length: 60 }).reduce((b) => P.stepBody(b, 1 / 60, rest), { x: 700, y: 300, vx: 0, vy: 0 });
   const at120 = Array.from({ length: 120 }).reduce((b) => P.stepBody(b, 1 / 120, rest), { x: 700, y: 300, vx: 0, vy: 0 });
@@ -263,13 +303,18 @@ test('let go anywhere, at any speed: it glides, slows, and comes to rest inside 
 });
 
 // ── The tear ──
-test('the tear: the paper resists for 40 px, then the rip follows the hand to the notch', () => {
-  const span = P.tearSpan(352);
-  assert.ok(span >= 130 && span <= 230);
+test('the tear: the paper resists for 22 px, then the rip follows the hand to the notch over a short pull', () => {
+  const span = P.tearSpan(344);
+  // Short: a real stub stays in the fingers (a 256 px pull left the hand
+  // out on the olive ground, a 140 px one just off the stub's far edge).
+  // At most ~95 px from the grab to free.
+  assert.ok(span >= 56 && span <= 72);
+  assert.ok(P.TEAR_RESIST_PX + P.tearSpan(9999) <= 95);
+  assert.ok(P.TEAR_RESIST_TOUCH_PX + P.tearSpan(9999, true) <= 85);
   assert.equal(P.tearClock(0, span), 0);
   assert.equal(P.tearClock(-30, span), 0);
   // Resisting: only the strain, never the rip.
-  for (const t of [1, 10, 20, 39.9]) {
+  for (const t of [1, 10, 20, P.TEAR_RESIST_PX - 0.1]) {
     assert.ok(P.tearClock(t, span) < TEAR_TENSION_MS);
     assert.equal(P.tearTip(t, span), 0);
   }
@@ -287,15 +332,40 @@ test('the tear: the paper resists for 40 px, then the rip follows the hand to th
   assert.equal(P.tearClock(P.TEAR_RESIST_PX + span * 3, span), TEAR_FREE_MS);
   // The pass gives a little while it resists, and settles as the rip runs.
   assert.ok(P.tearGive(P.TEAR_RESIST_PX, span) <= P.TEAR_GIVE_PX + 1e-9);
-  assert.ok(P.tearGive(P.TEAR_RESIST_PX, span) > P.tearGive(20, span));
-  assert.equal(P.tearGive(P.TEAR_RESIST_PX + span, span), 0);
+  assert.ok(P.tearGive(P.TEAR_RESIST_PX, span) > P.tearGive(P.TEAR_RESIST_PX * 0.7, span));
+  assert.ok(close(P.tearGive(P.TEAR_RESIST_PX + span, span), 0));
   // Let go: early springs back; most of the way, or a flick, tears on.
   assert.equal(P.tearCommits(P.TEAR_RESIST_PX - 1, span, 5), false);
   assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.5, span, 0.1), false);
   assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.5, span, 1.2), true);
   assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.9, span, 0), true);
-  // A finger's pull is shorter.
+  // A finger's pull is shorter, and resists less.
   assert.ok(P.tearSpan(340, true) <= P.tearSpan(340));
+  assert.ok(P.tearResist(true) < P.tearResist(false));
+  // A rip already started resists no more (resist 0): the hand's travel is
+  // the rip at once.
+  assert.ok(P.tearClock(1, span, 0) > TEAR_TENSION_MS);
+  assert.equal(P.tearGive(10, span, 0) >= 0, true);
+  // A thumb pulling a perforation drifts sideways: under a finger a pull
+  // along the diagonal (0.45, 1) counts in full; a mouse's is its projection.
+  assert.equal(P.pullTravel(100, 40, false), 100);
+  assert.ok(close(P.pullTravel(100, 45, true), Math.hypot(100, 45)));
+  assert.ok(P.pullTravel(100, 200, true) <= 100 + 0.45 * 200 + 1e-9);
+  assert.equal(P.pullTravel(-10, 80, true), 0);
+  assert.equal(P.pullTravel(0, 80, true), 0);
+});
+
+test('a tap on the stub only peels it: up a few degrees and back down', () => {
+  assert.equal(P.peekAngle(0), 0);
+  assert.ok(Math.abs(P.peekAngle(1)) < 1e-9);
+  let peak = 0;
+  for (let k = 0; k <= 1; k += 0.01) {
+    const a = P.peekAngle(k);
+    assert.ok(a >= -1e-9 && a <= P.PEEK_DEG + 1e-9);
+    peak = Math.max(peak, a);
+  }
+  assert.ok(close(peak, P.PEEK_DEG, 0.05));
+  assert.ok(P.PEEK_MS >= 300 && P.PEEK_MS <= 450);
 });
 
 test('the torn edge across: the same profile turned about the diagonal', () => {
@@ -312,6 +382,19 @@ test('the torn edge across: the same profile turned about the diagonal', () => {
 });
 
 test('the stub\'s fall: down, faster and faster, and gone below the screen', () => {
+  // Torn by the scroll the page is about to move up: the stub is let go
+  // downward, heavier, and is below a 1000 px screen from its middle in
+  // about half a second (it never crosses the rising globe).
+  let f = { x: 0, y: 500, vx: P.STUB_FALL.scrollToss[0], vy: P.STUB_FALL.scrollToss[1], a: 0, va: P.STUB_FALL.scrollToss[2] };
+  assert.ok(f.vy > 0, 'let go downward');
+  let tf = 0;
+  while (f.y < 1000 + 210 && tf < 2) {
+    const next = P.stepFall(f, 1 / 60, P.STUB_FALL.scrollGravity);
+    assert.ok(next.y > f.y);
+    f = next;
+    tf += 1 / 60;
+  }
+  assert.ok(tf < 0.62, `scroll-torn stub gone in ${tf.toFixed(2)} s`);
   let s = { x: 0, y: 0, vx: P.STUB_FALL.toss[0], vy: P.STUB_FALL.toss[1], a: 0, va: P.STUB_FALL.toss[2] };
   let lastVy = s.vy;
   let t = 0;
@@ -325,17 +408,42 @@ test('the stub\'s fall: down, faster and faster, and gone below the screen', () 
   assert.ok(t < 1.4);
 });
 
-test('the page round it: the rise, the scroll\'s strain, the tear point, the glide', () => {
+test('the page round it: the rise, the scroll\'s strain and peel, the tear point, the glide', () => {
   const vh = 1000;
   const pin = 1000;
   assert.equal(P.passRise(0, pin, vh), 0);
   assert.equal(P.passRise(pin * P.PASS_RISE[0] - 1, pin, vh), 0);
   assert.equal(P.passRise(pin, pin, vh), 1);
   assert.equal(P.scrollStrain(pin, pin, vh), 0);
-  assert.equal(P.scrollStrain(pin + vh * P.PASS_PIN * P.PASS_TEAR_AT, pin, vh), 1);
+  assert.ok(close(P.scrollStrain(pin + vh * P.PASS_PIN * P.PASS_TEAR_AT, pin, vh), 1));
   assert.ok(P.PASS_TEAR_AT < 1, 'it tears while still pinned');
-  for (const d of [200, 1000, 1600, 4000]) {
-    const s = P.arrivalSeconds(d);
-    assert.ok(s >= 1.2 && s <= 1.6);
+  // A short pin: the wheel is never long without something to show.
+  assert.ok(P.PASS_PIN * P.PASS_TEAR_AT * vh <= 260);
+  // The scroll pulls as a hand would: the strain first, then the rip runs
+  // (and shows) — a third of the seam at most — before the tear takes over.
+  const span = P.tearSpan(344);
+  let lastClock = -1;
+  for (let s = 0; s <= 1.0001; s += 0.05) {
+    const travel = P.scrollTravel(s, span);
+    const clock = P.tearClock(travel, span);
+    assert.ok(clock >= lastClock - 1e-9, 'only ever onward');
+    lastClock = clock;
   }
+  assert.equal(P.tearTip(P.scrollTravel(0.2, span), span), 0, 'the strain alone at first');
+  const peel = P.tearTip(P.scrollTravel(1, span), span);
+  assert.ok(close(peel, P.SCROLL_PEEL, 1e-6) && peel < P.TEAR_COMMIT_TIP);
+  assert.ok(P.tearTip(P.scrollTravel(0.6, span), span) > 0.05, 'visibly peeling well before the tear');
+  // The glide: one calm length, a soft start and a long soft landing.
+  assert.ok(P.ARRIVAL_SECONDS >= 1.2 && P.ARRIVAL_SECONDS <= 1.6);
+  const [x1, y1, x2, y2] = P.ARRIVAL_EASE;
+  const bez = (t, a, b) => 3 * (1 - t) * (1 - t) * t * a + 3 * (1 - t) * t * t * b + t * t * t;
+  let peakSpeed = 0;
+  for (let t = 0.001; t < 1; t += 0.001) {
+    const dx = bez(t + 1e-4, x1, x2) - bez(t, x1, x2);
+    const dy = bez(t + 1e-4, y1, y2) - bez(t, y1, y2);
+    if (dx > 1e-9) peakSpeed = Math.max(peakSpeed, dy / dx);
+  }
+  // Peak ≤ 2.6× the mean (the old curve's was 2.96× over a shorter glide).
+  assert.ok(peakSpeed <= 2.6, `peak ${peakSpeed.toFixed(2)}× the mean speed`);
+  assert.ok((peakSpeed * 1000) / P.ARRIVAL_SECONDS < 1700, 'a 1000 px glide peaks under 1700 px/s');
 });

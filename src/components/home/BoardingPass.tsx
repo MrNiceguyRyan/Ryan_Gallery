@@ -4,14 +4,20 @@ import { encodeQr, qrPath } from '../../lib/qrCode';
 import {
   PASS_URL,
   PASS_HAND,
+  PASS_HINGE,
+  PEEK_MS,
   STUB_FALL,
-  TEAR_RESIST_PX,
   approach,
   barcodeBars,
   bodyAtRest,
+  clampToArea,
   destinationScale,
   passAreas,
+  peekAngle,
+  pullTravel,
+  recentVelocity,
   rubberBand,
+  scrollTravel,
   stepBody,
   stepFall,
   stepSway,
@@ -19,6 +25,7 @@ import {
   tearClock,
   tearCommits,
   tearGive,
+  tearResist,
   tearSpan,
   throwVelocity,
   tiltFor,
@@ -32,6 +39,7 @@ import {
   TEAR_REDUCED_MS,
   TEAR_TENSION_MS,
   affineCss,
+  handTipAt,
   mirrorAffine,
   tearPose,
   tornEdge,
@@ -45,24 +53,28 @@ import { EASE, bezierFn, smootherstep } from '../../lib/motion';
 // them. It can be picked up — pointer or finger, anywhere on it — and moved
 // about: it follows the grab point one to one, tilts toward it, sways with
 // the hand's sideways speed, lifts (its shadow deepens) while held, and let
-// go it glides on, slows, and settles back into its rest area; it can never
+// go it glides on, slows, and is set back down in its place; it can never
 // be lost off the screen. Its stub tears off along the perforation: grab it
 // and pull away from the pass — the paper resists, then the rip runs down
 // the holes following the hand (the site's own tear, src/lib/ticketTear.ts:
 // the hinge about the running tip, the torn fibres on both edges), and the
-// stub is in the hand; let go, it falls. The Tear button, Enter or Space on
-// the pass, a tap on the stub, or scrolling on past the pass tear it for the
-// reader (a scripted tear: the paper's own catches, then a small toss).
-// Reduced motion: no physics — the pass stays put and the stub fades.
+// stub springs into the hand; let go, it falls. Let go early, the stub lies
+// back down but the rip stays. The Tear button, Enter or Space on the pass,
+// or scrolling on past the pass tear it for the reader (a scripted tear:
+// the paper's own catches, then a small toss); a tap on the stub only peels
+// it a little (people click to pick things up). Reduced motion: no physics
+// — the pass stays put and the stub fades.
 //
 // On a phone the pass stands upright (its stub below, the perforation
-// across): the same score, turned about the diagonal.
+// across): the same score, turned about the diagonal. There a thumb that
+// swipes up the pass scrolls the page: the pass is picked up by a sideways
+// move or a short press-and-hold, and its stub (touch-action: none) tears.
 //
 // One writer, off one clock: every pose is written straight onto the nodes
 // in a rAF loop that runs only while something moves, never through React
 // state. React state is only what the words say.
 
-export type TearHow = 'hand' | 'tap' | 'button' | 'key' | 'scroll';
+export type TearHow = 'hand' | 'button' | 'key' | 'scroll';
 
 export interface PassHandle {
   /** Tear the stub off for the reader (a scripted tear). */
@@ -91,9 +103,22 @@ interface Props {
 const SLOP = 6;
 // A pull on the stub is a tear when it runs this much along the pull axis.
 const PULL_BIAS = 0.55;
-// Let go early: the paper springs back over this long.
+// A finger on the pass's main part (a phone, where a swipe must scroll the
+// page): it picks the pass up by a sideways move past TOUCH_PICK_PX (more
+// than TOUCH_SIDEWAYS × its vertical travel), or by holding still for
+// TOUCH_HOLD_MS. A vertical swipe is the page's.
+const TOUCH_PICK_PX = 8;
+const TOUCH_SIDEWAYS = 1.4;
+const TOUCH_HOLD_MS = 220;
+// Let go early: the stub lies back down over this long (the rip stays).
 const SPRING_BACK_MS = 340;
 const arrive = bezierFn(EASE.arrive);
+// Free in the hand, the stub springs from where the rip left it to the
+// fingers (the strain let go), at this rate per second.
+const CATCH_RATE = 15;
+// A tap's peel: about a point just below the top notch, so the stub's top
+// corner comes away and lies back.
+const PEEK_PIVOT = 0.2;
 // The seed of this pass's torn edge (the same profile every time).
 const EDGE_SEED = 11;
 // A white paper's torn fibres: its own white, with a faint shade line so
@@ -112,6 +137,15 @@ const SEAM_CLIP_TOP =
 /** S·m·S, S the swap of x and y: the canonical (seam down, pull right) pose
  *  turned for a pass that stands upright (seam across, pull down). */
 const turnAffine = (m: Affine): Affine => [m[3], m[2], m[1], m[0], m[5], m[4]];
+/** A · B: B first, then A. */
+const mulAffine = (A: Affine, B: Affine): Affine => [
+  A[0] * B[0] + A[2] * B[1],
+  A[1] * B[0] + A[3] * B[1],
+  A[0] * B[2] + A[2] * B[3],
+  A[1] * B[2] + A[3] * B[3],
+  A[0] * B[4] + A[2] * B[5] + A[4],
+  A[1] * B[4] + A[3] * B[5] + A[5],
+];
 
 type Press = {
   id: number;
@@ -120,6 +154,9 @@ type Press = {
   x: number;
   y: number;
   touch: boolean;
+  /** A finger on a screen that scrolls under it: the pass waits to be
+   *  picked up (sideways, or held) and lets a vertical swipe go. */
+  pan: boolean;
   onStub: boolean;
   mode: 'pending' | 'drag' | 'tear' | 'hand';
   /** The grab point in the body's own box (px), and as −1…1 from its middle. */
@@ -127,11 +164,17 @@ type Press = {
   gy: number;
   nx: number;
   ny: number;
+  /** The grab point in the stub's own box (px): where the fingers hold it. */
+  sx: number;
+  sy: number;
   /** The body's home (its box at rest) on screen, read once per press. */
   homeX: number;
   homeY: number;
-  /** The hand's travel for the whole rip (a finger's is shorter). */
+  /** The paper's resistance and the hand's travel for the whole rip (a
+   *  finger's are shorter; a rip already started resists no more). */
+  resist: number;
   span: number;
+  holdTimer: number;
   samples: Array<[number, number, number]>;
 };
 
@@ -140,14 +183,18 @@ type Hand = {
   cx: number;
   cy: number;
   theta: number;
-  /** Held: the middle's offset from the hand when it came free. */
+  /** Held: the middle's offset from the hand, easing from where the rip
+   *  left it (rx, ry) to where the fingers hold it (tx, ty). */
   held: boolean;
   rx: number;
   ry: number;
+  tx: number;
+  ty: number;
   theta0: number;
   sway: { s: number; v: number };
   fall: FallState | null;
   fallStart: number;
+  gravity: number;
   how: TearHow;
 };
 
@@ -209,6 +256,9 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
     if (!root || !body || !main || !mainHalf || !seat || !stubHalf || !stub || !stubLift) return;
     const reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const uprightQuery = window.matchMedia('(max-width: 639px)');
+    // Where the pass's main part lets a vertical swipe scroll the page
+    // (entrance.css: touch-action pan-y under a coarse pointer).
+    const coarseQuery = window.matchMedia('(pointer: coarse)');
     const fibres = [main, stub].map((half) => half.querySelector<HTMLElement>(':scope > .bp-fibre'));
     const strains = [main, stub].map((half) => half.querySelector<HTMLElement>(':scope > .bp-strain'));
 
@@ -231,6 +281,37 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       }
     };
 
+    // ── State ──
+    let bodyState: Body = { x: 0, y: 0, vx: 0, vy: 0 };
+    let sway = { s: 0, v: 0 };
+    // The pick-up (0 → 1 while held: tilt, a hair of scale, the deep
+    // shadow) and the hover's answer (the shadow only, never the type's
+    // transform: a mouse resting on the pass reads crisp print).
+    let lift = 0;
+    let hoverLift = 0;
+    let hovering = false;
+    let tiltN = { nx: 0, ny: 0 };
+    let give = 0;
+    let press: Press | null = null;
+    let tearPhase: 'whole' | 'free' | 'gone' = 'whole';
+    let clock = 0;
+    let smooth = true;
+    let strain = 0;
+    // How far the rip has run for good: what has torn stays torn.
+    let floor = 0;
+    let rise = 1;
+    let risen: boolean | null = null;
+    // A tap's peel: its start (ms) while it plays.
+    let peekStart = -1;
+    // Once the stub is off, the main part is centred in its frame.
+    let restShift: [number, number] = [0, 0];
+    let play: { from: number; to: number; start: number; dur: number; ease?: (x: number) => number; done?: () => void } | null = null;
+    let hand: Hand | null = null;
+    let raf = 0;
+    let last = 0;
+    let disposed = false;
+    const reduced = () => reduceQuery.matches;
+
     // ── Layout: read once per resize, never per frame ──
     const L = {
       upright: false,
@@ -242,11 +323,13 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       frameH: window.innerHeight,
       rest: { x0: 0, x1: 0, y0: 0, y1: 0 },
       reach: { x0: 0, x1: 0, y0: 0, y1: 0 },
-      span: 180,
+      band: { x: 1, y: 1 },
+      span: 100,
       seam: 0,
       along: 0,
       edgeKey: '',
     };
+    const axis = () => (L.upright ? { x: 0, y: 1 } : { x: 1, y: 0 });
     const measure = () => {
       L.upright = uprightQuery.matches;
       L.w = body.offsetWidth || L.w;
@@ -256,9 +339,11 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       const frame = root.parentElement;
       L.frameW = frame?.clientWidth || window.innerWidth;
       L.frameH = frame?.clientHeight || window.innerHeight;
-      const areas = passAreas(L.frameW, L.frameH, L.w, L.h);
+      if (tearPhase !== 'whole' && !reduced()) restShift = L.upright ? [0, L.seatH / 2] : [L.seatW / 2, 0];
+      const areas = passAreas(L.frameW, L.frameH, L.w, L.h, restShift);
       L.rest = areas.rest;
       L.reach = areas.reach;
+      L.band = areas.band;
       L.seam = L.upright ? L.seatW : L.seatH;
       L.along = L.upright ? L.seatH : L.seatW;
       const key = `${L.upright ? 'u' : 'l'}${Math.round(L.seam)}`;
@@ -272,30 +357,10 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       }
       L.span = tearSpan(L.seam, false);
       root.dataset.orient = L.upright ? 'upright' : 'landscape';
-      // A pass left outside its (new) rest area comes back into it.
+      // A pass left away from its (new) place comes back to it.
       wake();
       drawAll();
     };
-
-    // ── State ──
-    let bodyState: Body = { x: 0, y: 0, vx: 0, vy: 0 };
-    let sway = { s: 0, v: 0 };
-    let lift = 0;
-    let tiltN = { nx: 0, ny: 0 };
-    let give = 0;
-    let press: Press | null = null;
-    let tearPhase: 'whole' | 'free' | 'gone' = 'whole';
-    let clock = 0;
-    let smooth = true;
-    let strain = 0;
-    let rise = 1;
-    let play: { from: number; to: number; start: number; dur: number; ease?: (x: number) => number; done?: () => void } | null = null;
-    let hand: Hand | null = null;
-    let raf = 0;
-    let last = 0;
-    let disposed = false;
-    const reduced = () => reduceQuery.matches;
-    const axis = () => (L.upright ? { x: 0, y: 1 } : { x: 1, y: 0 });
 
     // ── Drawing ──
     const drawBody = () => {
@@ -315,22 +380,46 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         );
       }
       put(body, 'will-change', moving || press ? 'transform' : null);
+      const shadow = Math.max(lift, hoverLift);
       liftRefs.current.forEach((el) => {
-        put(el, 'opacity', lift > 0.002 ? lift.toFixed(3) : null);
-        put(el, 'transform', lift > 0.002 ? `translateY(${(10 * lift).toFixed(2)}px)` : null);
+        put(el, 'opacity', shadow > 0.002 ? shadow.toFixed(3) : null);
+        put(el, 'transform', shadow > 0.002 ? `translateY(${(10 * shadow).toFixed(2)}px)` : null);
       });
     };
 
     const canonFrame = () => ({ w: L.along, h: L.seam, vw: L.along * 4 });
+    const turned = (m: Affine) => {
+      const mc = mirrorAffine(m, L.along);
+      return L.upright ? turnAffine(mc) : mc;
+    };
     const drawTear = () => {
       if (tearPhase !== 'whole') return;
       const r = reduced();
-      const pose = tearPose(clock, canonFrame(), { smooth, reduced: r });
-      const m = mirrorAffine(pose.m, L.along);
-      put(stubHalf, 'transform', r || clock <= 0 ? null : affineCss(L.upright ? turnAffine(m) : m));
+      const pose = tearPose(clock, canonFrame(), { smooth, reduced: r, hinge: PASS_HINGE, tipFloor: floor });
+      let m = pose.m;
+      let seamCut = pose.seam;
+      let lifted = pose.lift;
+      // A tap's peel: the stub's top corner comes away about a point just
+      // below the notch, and lies back down — on top of whatever the scroll
+      // is already pulling (the pinned pass is rarely without its strain).
+      if (peekStart >= 0 && !r) {
+        const deg = peekAngle((performance.now() - peekStart) / PEEK_MS);
+        const t = (deg * Math.PI) / 180;
+        const px = L.along;
+        const py = PEEK_PIVOT * L.seam;
+        // T(p) · R(−deg) · T(−p): the canonical face's hinge, at the pivot,
+        // then the pose.
+        const cos = Math.cos(-t);
+        const sin = Math.sin(-t);
+        m = mulAffine(m, [cos, sin, -sin, cos, px - (cos * px - sin * py), py - (sin * px + cos * py)]);
+        seamCut = seamCut || deg > 0.01;
+        lifted = Math.max(lifted, 0.5 * (deg / 4));
+      }
+      const still = r || (clock <= 0 && !(peekStart >= 0));
+      put(stubHalf, 'transform', still ? null : affineCss(turned(m)));
       put(stubHalf, 'opacity', pose.op >= 1 ? null : pose.op.toFixed(3));
-      put(seat, 'clip-path', pose.seam ? (L.upright ? SEAM_CLIP_TOP : SEAM_CLIP_LEFT) : null);
-      put(stubLift, 'opacity', pose.lift > 0 ? (0.8 * Math.min(1, pose.lift)).toFixed(3) : null);
+      put(seat, 'clip-path', seamCut ? (L.upright ? SEAM_CLIP_TOP : SEAM_CLIP_LEFT) : null);
+      put(stubLift, 'opacity', lifted > 0 ? (0.8 * Math.min(1, lifted)).toFixed(3) : null);
       const torn = pose.tip > 0 ? `${(pose.tip * L.seam).toFixed(1)}px` : null;
       put(main, '--bp-torn', torn);
       put(stub, '--bp-torn', torn);
@@ -340,14 +429,14 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         put(fibre, 'clip-path', pose.tip > 0 ? (L.upright ? `inset(0 ${reveal}% 0 0)` : `inset(0 0 ${reveal}% 0)`) : null);
         put(fibre, 'opacity', pose.tip > 0 ? '1' : null);
       });
-      // The strain: the scroll's pull or the hand's, on the seam below the tip.
-      const amount = Math.max(pose.strain, strain * 0.85);
+      // The strain: the hand's pull (or the scroll's), on the seam below the tip.
+      const amount = pose.strain;
       strains.forEach((el, index) => {
         const a = amount * (index === 0 ? 0.9 : 1);
         put(el, 'clip-path', a > 0 ? (L.upright ? `inset(0 0 0 ${below}%)` : `inset(${below}% 0 0 0)`) : null);
         put(el, 'opacity', a > 0 ? a.toFixed(3) : null);
       });
-      put(stubHalf, 'will-change', clock > 0 && clock < TEAR_FREE_MS ? 'transform' : null);
+      put(stubHalf, 'will-change', (clock > 0 && clock < TEAR_FREE_MS) || peekStart >= 0 ? 'transform' : null);
     };
 
     const drawHand = () => {
@@ -374,6 +463,15 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
 
     const drawRise = () => {
       const e = smootherstep(Math.max(0, Math.min(1, rise)));
+      // Not in place yet, it cannot be picked up: a finger swiping the page
+      // up over the rising pass scrolls the page (and a grab mid-rise would
+      // miss its point under the turn).
+      const inPlace = rise >= 0.98;
+      if (inPlace !== risen) {
+        risen = inPlace;
+        if (inPlace) root.setAttribute('data-risen', '');
+        else root.removeAttribute('data-risen');
+      }
       if (e >= 0.999) {
         put(root, 'transform', null);
         put(root, 'opacity', null);
@@ -397,13 +495,6 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       last = 0;
       raf = requestAnimationFrame(tick);
     };
-    const sampleVelocity = (samples: Array<[number, number, number]>) => {
-      if (samples.length < 2) return [0, 0] as [number, number];
-      const [t0, x0, y0] = samples[0];
-      const [t1, x1, y1] = samples[samples.length - 1];
-      const dt = Math.max(1, t1 - t0) / 1000;
-      return [(x1 - x0) / dt, (y1 - y0) / dt] as [number, number];
-    };
     const tick = (now: number) => {
       raf = 0;
       if (disposed) return;
@@ -418,16 +509,24 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         if (!bodyAtRest(bodyState, L.rest)) {
           bodyState = stepBody(bodyState, dt, L.rest);
           moving = true;
-        } else if (bodyState.vx !== 0 || bodyState.vy !== 0) {
-          bodyState = { ...bodyState, vx: 0, vy: 0 };
+        } else if (bodyState.vx !== 0 || bodyState.vy !== 0 || bodyState.x !== L.rest.x0 || bodyState.y !== L.rest.y0) {
+          // Set down exactly in its place (no half-pixel left over).
+          const [x, y] = clampToArea(bodyState.x, bodyState.y, L.rest);
+          bodyState = { x, y, vx: 0, vy: 0 };
         }
       }
       const liftTarget = held ? 1 : 0;
       lift = approach(lift, liftTarget, PASS_HAND.liftRate, dt);
       if (Math.abs(lift - liftTarget) < 0.002) lift = liftTarget;
       else moving = true;
-      const vx = held && press ? sampleVelocity(press.samples)[0] : 0;
-      const target = held && press ? swayTarget(vx, press.ny) : 0;
+      const hoverTarget =
+        !r && tearPhase === 'whole' && interactiveRef.current && (hovering || press?.mode === 'pending') ? PASS_HAND.hoverLift : 0;
+      hoverLift = approach(hoverLift, hoverTarget, PASS_HAND.liftRate, dt);
+      if (Math.abs(hoverLift - hoverTarget) < 0.002) hoverLift = hoverTarget;
+      else moving = true;
+      // The hand's speed now: a hand held still has none.
+      const [hvx] = press ? recentVelocity(press.samples, now) : [0];
+      const target = held && press ? swayTarget(hvx, press.ny) : 0;
       sway = stepSway(sway, target, dt);
       if (Math.abs(sway.s - target) > 0.01 || Math.abs(sway.v) > 0.05) moving = true;
       else if (!held) sway = { s: 0, v: 0 };
@@ -439,7 +538,7 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       }
       if (!held && lift === 0) tiltN = { nx: 0, ny: 0 };
 
-      // A scripted stretch of the tear's clock (a tear, a spring back).
+      // A scripted stretch of the tear's clock (a tear, a lying back down).
       if (play) {
         if (play.start < 0) play.start = now;
         const k = play.dur > 0 ? Math.min(1, (now - play.start) / play.dur) : 1;
@@ -450,19 +549,27 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
           done?.();
         } else moving = true;
       }
+      // A tap's peel.
+      if (peekStart >= 0) {
+        if (performance.now() - peekStart >= PEEK_MS || play || press?.mode === 'tear') peekStart = -1;
+        else moving = true;
+      }
 
       // The stub in the hand, or falling.
       if (hand) {
         if (hand.held && press) {
-          const [hvx] = sampleVelocity(press.samples);
           hand.sway = stepSway(hand.sway, swayTarget(hvx, -0.4), dt);
+          // From where the rip left it to where the fingers hold it.
+          const catchUp = 1 - Math.exp(-CATCH_RATE * dt);
+          hand.rx += (hand.tx - hand.rx) * catchUp;
+          hand.ry += (hand.ty - hand.ry) * catchUp;
           const t = (hand.sway.s * Math.PI) / 180;
           hand.cx = press.x + Math.cos(t) * hand.rx - Math.sin(t) * hand.ry;
           hand.cy = press.y + Math.sin(t) * hand.rx + Math.cos(t) * hand.ry;
           hand.theta = hand.theta0 + hand.sway.s;
           moving = true;
         } else if (hand.fall) {
-          hand.fall = stepFall(hand.fall, dt);
+          hand.fall = stepFall(hand.fall, dt, hand.gravity);
           hand.cx = hand.fall.x;
           hand.cy = hand.fall.y;
           hand.theta = hand.fall.a;
@@ -495,15 +602,21 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       root.dataset.stub = 'free';
       setPhase('torn');
       clock = TEAR_FREE_MS;
-      const pose = tearPose(TEAR_FREE_MS, canonFrame(), { smooth });
-      const mc = mirrorAffine(pose.m, L.along);
-      const m = L.upright ? turnAffine(mc) : mc;
+      floor = 1;
+      peekStart = -1;
+      const m = turned(tearPose(TEAR_FREE_MS, canonFrame(), { smooth, hinge: PASS_HINGE }).m);
       const box = seat.getBoundingClientRect();
       const theta = (Math.atan2(m[1], m[0]) * 180) / Math.PI;
       const hx = L.seatW / 2;
       const hy = L.seatH / 2;
       const cx = box.left + m[0] * hx + m[2] * hy + m[4];
       const cy = box.top + m[1] * hx + m[3] * hy + m[5];
+      // Where the fingers hold it: the grabbed point of the stub, under the
+      // hand, the stub turned as it came free.
+      const cos = m[0];
+      const sin = m[1];
+      const ox = heldBy ? hx - heldBy.sx : 0;
+      const oy = heldBy ? hy - heldBy.sy : 0;
       hand = {
         cx,
         cy,
@@ -511,10 +624,13 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         held: !!heldBy,
         rx: heldBy ? cx - heldBy.x : 0,
         ry: heldBy ? cy - heldBy.y : 0,
+        tx: cos * ox - sin * oy,
+        ty: sin * ox + cos * oy,
         theta0: theta,
         sway: { s: 0, v: 0 },
         fall: null,
         fallStart: 0,
+        gravity: STUB_FALL.gravity,
         how,
       };
       // The hand's copy of the stub prints the same torn edge.
@@ -535,17 +651,28 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       put(seat, 'clip-path', null);
       put(stubHalf, 'visibility', 'hidden');
       put(stubHalf, 'will-change', null);
+      put(stubLift, 'opacity', null);
       give = 0;
+      // The main part, alone now, eases to the middle of its frame (where
+      // the prompt was centred), and stays there.
+      if (!reduced()) {
+        restShift = L.upright ? [0, L.seatH / 2] : [L.seatW / 2, 0];
+        L.rest = passAreas(L.frameW, L.frameH, L.w, L.h, restShift).rest;
+      }
       callbacks.current.onFree?.(how);
       wake();
     };
 
     const toss = (how: TearHow) => {
       if (!hand) return;
-      const [along, up, spin] = STUB_FALL.toss;
+      // Torn by the scroll the page is about to move up: the stub goes DOWN,
+      // and fast, off the screen before the page sets off.
+      const scroll = how === 'scroll';
+      const [along, up, spin] = scroll ? STUB_FALL.scrollToss : STUB_FALL.toss;
       hand.held = false;
+      hand.gravity = scroll ? STUB_FALL.scrollGravity : STUB_FALL.gravity;
       hand.fall = L.upright
-        ? { x: hand.cx, y: hand.cy, vx: along * 0.7, vy: up * 0.75, a: hand.theta, va: spin }
+        ? { x: hand.cx, y: hand.cy, vx: scroll ? along : along * 0.7, vy: scroll ? up : up * 0.75, a: hand.theta, va: spin }
         : { x: hand.cx, y: hand.cy, vx: along, vy: up, a: hand.theta, va: spin };
       hand.fallStart = performance.now();
       callbacks.current.onLetGo?.(how);
@@ -565,6 +692,7 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
     const scriptedTear = (how: TearHow) => {
       if (tearPhase !== 'whole') return;
       if (press && (press.mode === 'tear' || press.mode === 'hand')) return;
+      peekStart = -1;
       if (reduced()) {
         // Values, not structure: the stub fades in place, the pass stays.
         smooth = false;
@@ -586,14 +714,22 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
 
     // ── The hand ──
     const preventSelection = (event: Event) => event.preventDefault();
-    const release = (id: number) => {
+    const release = (current: Press) => {
+      window.clearTimeout(current.holdTimer);
       root.removeAttribute('data-held');
       document.removeEventListener('selectstart', preventSelection, true);
       try {
-        if (body.hasPointerCapture(id)) body.releasePointerCapture(id);
+        if (body.hasPointerCapture(current.id)) body.releasePointerCapture(current.id);
       } catch {
         // Already released.
       }
+    };
+    const pickUp = (current: Press) => {
+      current.mode = 'drag';
+      tiltN = { nx: current.nx, ny: current.ny };
+      root.setAttribute('data-held', 'drag');
+      document.addEventListener('selectstart', preventSelection, true);
+      wake();
     };
     const onPointerDown = (event: PointerEvent) => {
       if (!interactiveRef.current || press || event.button !== 0 || !event.isPrimary) return;
@@ -611,29 +747,47 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       const t = (-sway.s * Math.PI) / 180;
       const gx = cx + Math.cos(t) * px - Math.sin(t) * py;
       const gy = cy + Math.sin(t) * px + Math.cos(t) * py;
-      press = {
+      // The stub's own box: the seat, beside (or below) the main part.
+      const seatX = L.upright ? 0 : L.w - L.seatW;
+      const seatY = L.upright ? L.h - L.seatH : 0;
+      const touch = event.pointerType === 'touch';
+      const current: Press = {
         id: event.pointerId,
         x0: event.clientX,
         y0: event.clientY,
         x: event.clientX,
         y: event.clientY,
-        touch: event.pointerType === 'touch',
+        touch,
+        pan: touch && coarseQuery.matches && !onStub,
         onStub,
         mode: 'pending',
         gx,
         gy,
         nx: Math.max(-1, Math.min(1, (gx - cx) / Math.max(1, cx))),
         ny: Math.max(-1, Math.min(1, (gy - cy) / Math.max(1, cy))),
+        sx: Math.max(0, Math.min(L.seatW, gx - seatX)),
+        sy: Math.max(0, Math.min(L.seatH, gy - seatY)),
         homeX: home.left,
         homeY: home.top,
-        span: event.pointerType === 'touch' ? tearSpan(L.seam, true) : L.span,
+        // A rip already started resists no more.
+        resist: floor > 0 ? 0 : tearResist(touch),
+        span: touch ? tearSpan(L.seam, true) : L.span,
+        holdTimer: 0,
         samples: [[event.timeStamp, event.clientX, event.clientY]],
       };
+      press = current;
+      // A finger that holds still picks the pass up.
+      if (current.pan && !reduced()) {
+        current.holdTimer = window.setTimeout(() => {
+          if (press === current && current.mode === 'pending') pickUp(current);
+        }, TOUCH_HOLD_MS);
+      }
       try {
         body.setPointerCapture(event.pointerId);
       } catch {
         // Capture only keeps the moves coming once the hand leaves the pass.
       }
+      wake();
     };
 
     const followHand = (current: Press) => {
@@ -647,11 +801,18 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       const rawX = current.x - current.homeX - cx - rx;
       const rawY = current.y - current.homeY - cy - ry;
       bodyState = {
-        x: rubberBand(rawX, L.reach.x0, L.reach.x1, L.frameW * 0.3),
-        y: rubberBand(rawY, L.reach.y0, L.reach.y1, L.frameH * 0.3),
+        x: rubberBand(rawX, L.reach.x0, L.reach.x1, L.band.x),
+        y: rubberBand(rawY, L.reach.y0, L.reach.y1, L.band.y),
         vx: 0,
         vy: 0,
       };
+    };
+
+    const travelOf = (current: Press) => {
+      const a = axis();
+      const dx = current.x - current.x0;
+      const dy = current.y - current.y0;
+      return pullTravel(dx * a.x + dy * a.y, dx * a.y - dy * a.x, current.touch);
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -660,7 +821,7 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       current.x = event.clientX;
       current.y = event.clientY;
       current.samples.push([event.timeStamp, event.clientX, event.clientY]);
-      while (current.samples.length > 2 && event.timeStamp - current.samples[0][0] > 90) current.samples.shift();
+      while (current.samples.length > 2 && event.timeStamp - current.samples[0][0] > PASS_HAND.velocityWindowMs) current.samples.shift();
       const dx = event.clientX - current.x0;
       const dy = event.clientY - current.y0;
       if (current.mode === 'pending') {
@@ -669,16 +830,30 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         const a = axis();
         const along = dx * a.x + dy * a.y;
         if (current.onStub && tearPhase === 'whole' && along >= PULL_BIAS * Math.hypot(dx, dy)) {
+          window.clearTimeout(current.holdTimer);
           current.mode = 'tear';
           strain = 0;
           smooth = true;
           play = null;
+          peekStart = -1;
+          root.setAttribute('data-held', 'tear');
+          document.addEventListener('selectstart', preventSelection, true);
+        } else if (current.pan) {
+          // A finger on a page that scrolls: sideways picks the pass up; a
+          // swipe up or down is the page's (the browser takes it).
+          if (Math.abs(dx) >= TOUCH_PICK_PX && Math.abs(dx) > TOUCH_SIDEWAYS * Math.abs(dy)) {
+            window.clearTimeout(current.holdTimer);
+            pickUp(current);
+          } else if (Math.abs(dy) >= TOUCH_PICK_PX && Math.abs(dy) >= Math.abs(dx)) {
+            press = null;
+            release(current);
+            wake();
+            return;
+          } else return;
         } else {
-          current.mode = 'drag';
-          tiltN = { nx: current.nx, ny: current.ny };
+          window.clearTimeout(current.holdTimer);
+          pickUp(current);
         }
-        root.setAttribute('data-held', current.mode);
-        document.addEventListener('selectstart', preventSelection, true);
       }
       if (current.mode === 'drag') {
         followHand(current);
@@ -687,10 +862,9 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         return;
       }
       if (current.mode === 'tear') {
-        const a = axis();
-        const travel = Math.max(0, dx * a.x + dy * a.y);
-        clock = tearClock(travel, current.span);
-        give = tearGive(travel, current.span);
+        const travel = travelOf(current);
+        clock = tearClock(travel, current.span, current.resist);
+        give = current.resist > 0 ? tearGive(travel, current.span, current.resist) : 0;
         if (clock >= TEAR_FREE_MS) {
           current.mode = 'hand';
           root.setAttribute('data-held', 'hand');
@@ -708,12 +882,17 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       const current = press;
       if (!current || event.pointerId !== current.id) return;
       press = null;
-      release(current.id);
+      release(current);
       const cancelled = event.type !== 'pointerup';
-      const [vx, vy] = sampleVelocity(current.samples);
+      // The hand's speed as it lets go: none if it had stopped.
+      const [vx, vy] = recentVelocity(current.samples, event.timeStamp);
       if (current.mode === 'pending') {
-        // A tap on the stub tears it for a one-tap reader.
-        if (!cancelled && current.onStub && tearPhase === 'whole') scriptedTear('tap');
+        // A tap on the stub peels it a little: the tear itself is a pull,
+        // or the Tear button's (Enter's, Space's).
+        if (!cancelled && current.onStub && tearPhase === 'whole' && !play && !reduced()) {
+          peekStart = performance.now();
+        }
+        wake();
         return;
       }
       if (current.mode === 'drag') {
@@ -724,19 +903,37 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       }
       if (current.mode === 'tear') {
         const a = axis();
-        const travel = Math.max(0, (current.x - current.x0) * a.x + (current.y - current.y0) * a.y);
+        const travel = travelOf(current);
         const speed = (vx * a.x + vy * a.y) / 1000;
         give = 0;
-        if (!cancelled && tearCommits(travel, current.span, speed)) {
+        if (!cancelled && tearCommits(travel, current.span, speed, current.resist)) {
           smooth = true;
           run(TEAR_FREE_MS, Math.max(90, (TEAR_FREE_MS - clock) * 0.7), undefined, () => free('hand', null));
           return;
         }
+        // Let go early: what has torn stays torn; the stub lies back down.
+        if (clock > TEAR_TENSION_MS) floor = Math.max(floor, handTipAt(clock));
         smooth = true;
         run(0, SPRING_BACK_MS, arrive);
         return;
       }
       if (current.mode === 'hand') letGo(cancelled ? 0 : vx, cancelled ? 0 : vy);
+    };
+
+    // A thumb that has picked the pass up (or is tearing its stub) keeps
+    // the page still under it.
+    const onTouchMove = (event: TouchEvent) => {
+      if (press && press.mode !== 'pending' && event.cancelable) event.preventDefault();
+    };
+    const onPointerEnter = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+      hovering = true;
+      wake();
+    };
+    const onPointerLeave = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+      hovering = false;
+      wake();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -752,6 +949,9 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
     body.addEventListener('pointerup', onPointerEnd);
     body.addEventListener('pointercancel', onPointerEnd);
     body.addEventListener('lostpointercapture', onPointerEnd);
+    body.addEventListener('pointerenter', onPointerEnter);
+    body.addEventListener('pointerleave', onPointerLeave);
+    body.addEventListener('touchmove', onTouchMove, { passive: false });
     body.addEventListener('keydown', onKeyDown);
     body.addEventListener('dragstart', noDrag);
 
@@ -769,11 +969,15 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
         if (Math.abs(next - strain) < 0.002) return;
         strain = next;
         if (tearPhase !== 'whole' || press?.mode === 'tear' || play) return;
-        // The scroll pulls on the stub: the paper's strain, the pass giving
-        // a little toward the pull.
+        // The scroll pulls on the stub as a hand would: the strain, then the
+        // first of the rip (which, like a hand's, stays torn); the pass
+        // gives a little toward the pull.
+        peekStart = -1;
         smooth = true;
-        clock = TEAR_TENSION_MS * strain;
-        give = tearGive(strain * TEAR_RESIST_PX, L.span);
+        const travel = scrollTravel(strain, L.span, floor > 0 ? 0 : tearResist(false));
+        clock = tearClock(travel, L.span, floor > 0 ? 0 : tearResist(false));
+        if (clock > TEAR_TENSION_MS) floor = Math.max(floor, handTipAt(clock));
+        give = floor > 0 ? 0 : tearGive(travel, L.span);
         drawBody();
         drawTear();
       },
@@ -789,6 +993,7 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
     return () => {
       disposed = true;
       if (raf) cancelAnimationFrame(raf);
+      if (press) window.clearTimeout(press.holdTimer);
       resize?.disconnect();
       window.removeEventListener('resize', onViewport);
       uprightQuery.removeEventListener('change', onViewport);
@@ -798,10 +1003,14 @@ export default function BoardingPass({ fields, handle, interactive, onFree, onLe
       body.removeEventListener('pointerup', onPointerEnd);
       body.removeEventListener('pointercancel', onPointerEnd);
       body.removeEventListener('lostpointercapture', onPointerEnd);
+      body.removeEventListener('pointerenter', onPointerEnter);
+      body.removeEventListener('pointerleave', onPointerLeave);
+      body.removeEventListener('touchmove', onTouchMove);
       body.removeEventListener('keydown', onKeyDown);
       body.removeEventListener('dragstart', noDrag);
       written.forEach((props, element) => props.forEach((_value, property) => element.style.removeProperty(property)));
       written.clear();
+      root.removeAttribute('data-risen');
     };
   }, []);
 

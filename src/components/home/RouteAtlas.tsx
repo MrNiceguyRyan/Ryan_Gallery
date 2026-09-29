@@ -158,6 +158,10 @@ interface Props {
    *  boarding pass is torn, so they play as the page's glide brings the
    *  globe up the screen. */
   holdReveal?: boolean;
+  /** The page's glide brings the globe up the screen as it is revealed:
+   *  it fades in and dawns but does not turn (its settle is skipped) — one
+   *  move at a time; turning while it travelled 1000 px read as dizzying. */
+  arrivalGlide?: boolean;
   /** Count the atlas as engaged although it is below the fold: the film and
    *  the entrance lie above it, and the camera should hold the first pose
    *  (its tiles loading, its poses warmed) by the time the glide brings it
@@ -1152,6 +1156,7 @@ export default function RouteAtlas({
   onNavigate,
   eager = false,
   holdReveal = false,
+  arrivalGlide = false,
   engage = false,
   covered = false,
 }: Props) {
@@ -1909,6 +1914,8 @@ export default function RouteAtlas({
   // settle then play as the page's glide brings the globe up the screen.
   const holdRevealRef = useRef(holdReveal);
   holdRevealRef.current = holdReveal;
+  const arrivalGlideRef = useRef(arrivalGlide);
+  arrivalGlideRef.current = arrivalGlide;
   const reelCoveredRef = useRef(covered);
   reelCoveredRef.current = covered;
   useEffect(() => {
@@ -1962,7 +1969,11 @@ export default function RouteAtlas({
         map?.triggerRepaint();
         return;
       }
-      settle = animate(globeIntro, 0, { duration: 2.6, ease: EASE.arrive });
+      // Brought up by the page's glide, the globe arrives already settled
+      // (the jump is made at opacity 0, on warmed tiles): it fades and dawns
+      // while it travels, and turns only once it has landed (its drift).
+      if (arrivalGlideRef.current) globeIntro.set(0);
+      else settle = animate(globeIntro, 0, { duration: 2.6, ease: EASE.arrive });
       const dawnStart = performance.now();
       const intervals: number[] = [];
       let last = 0;

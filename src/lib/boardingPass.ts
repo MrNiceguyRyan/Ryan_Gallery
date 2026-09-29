@@ -8,9 +8,10 @@
 //
 // Everything here is pure (no DOM), so scripts/boarding-pass.test.mjs holds
 // it: what the pass prints (from the first chapter, never invented), the
-// hand's physics (the tilt and sway caps, the rest area it always comes back
-// into, the rubber band that keeps it on screen), the tear's resistance and
-// how the rip follows the hand, and the stub's fall.
+// hand's physics (the tilt and sway caps, the hand's speed going still when
+// the hand does, the place it always comes back to, the rubber band that
+// keeps it on screen), the tear's resistance and how the rip follows the
+// hand, the stub's fall, and the scroll's pull.
 
 // With its extension: the tests import this module through esbuild, and the
 // site through Vite; both resolve it.
@@ -106,17 +107,49 @@ export const PASS_HAND = {
   liftRate: 14,
   /** Let go: the pass glides on and slows (the velocity falls by e^−f·t). */
   friction: 4.2,
-  /** …and anything outside its rest area is drawn back into it. */
-  springK: 95,
-  springC: 17,
+  /** …and it is drawn back to its place (the middle of its frame): set back
+   *  down on the table, a hair past and settled (about 3 % over). The
+   *  friction damps the spring too: springC + friction (16.4 /s) is the
+   *  spring's whole damping, ζ ≈ 0.75. */
+  springK: 120,
+  springC: 12.2,
   /** Past its reach the pass follows the hand less and less (a rubber band
    *  of this constant, iOS's): it can never be dragged off the screen. */
   rubber: 0.55,
+  /** The reach past the room round the pass, and the rubber band's own
+   *  length past it, both as shares of the pass: held anywhere, however far
+   *  past the screen the hand goes, at least three quarters of it stays on
+   *  the screen each way (a band as long as a share of the frame let a
+   *  short pass slip nearly half off a tall screen). */
+  reachShare: 0.12,
+  bandShare: 0.12,
   /** A thrown pass is never faster than this, px/s. */
   maxSpeed: 4200,
   /** At rest: inside the area and slower than this, px/s. */
   restSpeed: 6,
+  /** The hand's speed is read from its last this-many ms of moves… */
+  velocityWindowMs: 90,
+  /** …and a hand that has not moved for this long is still (a pass held
+   *  still and let go is set down, not thrown). */
+  velocityStaleMs: 40,
+  /** A mouse over the pass (or a press not yet a drag) lifts it this much
+   *  of a pick-up: the shadow answers before the hand moves. */
+  hoverLift: 0.35,
 } as const;
+
+/** The hand's velocity (px/s) at `now` from its recent moves ([t ms, x, y],
+ *  oldest first): only the last velocityWindowMs count, and a hand that has
+ *  been still for velocityStaleMs is still — the moves before it stopped
+ *  are history, not speed. */
+export function recentVelocity(samples: ReadonlyArray<readonly [number, number, number]>, now: number): [number, number] {
+  const recent = samples.filter((s) => now - s[0] <= PASS_HAND.velocityWindowMs);
+  if (recent.length < 2) return [0, 0];
+  const [t0, x0, y0] = recent[0];
+  const [t1, x1, y1] = recent[recent.length - 1];
+  if (now - t1 > PASS_HAND.velocityStaleMs) return [0, 0];
+  const dt = Math.max(1, t1 - t0) / 1000;
+  return [(x1 - x0) / dt, (y1 - y0) / dt];
+}
 
 export interface Box2 {
   x0: number;
@@ -128,23 +161,25 @@ export interface Box2 {
 const clamp = (value: number, lo: number, hi: number) => (value < lo ? lo : value > hi ? hi : value);
 const clamp01 = (value: number) => clamp(value, 0, 1);
 
-/** Where the pass may come to rest and how far the hand may take it, as
- *  offsets from its home (the centre of its frame): the rest area keeps the
- *  whole pass on screen with room round it; the reach keeps at least most
- *  of it on screen. From the frame's and the pass's sizes (px), never
- *  measured per frame. */
-export function passAreas(frameW: number, frameH: number, passW: number, passH: number) {
+/** Where the pass comes to rest and how far the hand may take it, as
+ *  offsets from its home (the centre of its frame), shifted by `shift` (the
+ *  torn pass's main part, centred once its stub is off): the rest is its
+ *  place, the middle, where the prompt and the Tear button are centred (a
+ *  rest area let every throw end on its edge, ~100 px off to one side, and
+ *  the pass read as dropped, not placed); the reach keeps at least about
+ *  three quarters of it on screen. From the frame's and the pass's sizes
+ *  (px), never measured per frame. */
+export function passAreas(frameW: number, frameH: number, passW: number, passH: number, shift: readonly [number, number] = [0, 0]) {
   const roomX = Math.max(0, (frameW - passW) / 2);
   const roomY = Math.max(0, (frameH - passH) / 2);
-  // Small: let go, it glides and comes to rest near the middle (a pass left
-  // off to one side read as dropped, not placed).
-  const restX = Math.max(0, Math.min(frameW * 0.06, roomX - 16));
-  const restY = Math.max(0, Math.min(frameH * 0.04, roomY - 24));
-  const reachX = roomX + passW * 0.3;
-  const reachY = roomY + passH * 0.25;
+  const reachX = roomX + passW * PASS_HAND.reachShare;
+  const reachY = roomY + passH * PASS_HAND.reachShare;
+  const [sx, sy] = shift;
   return {
-    rest: { x0: -restX, x1: restX, y0: -restY, y1: restY } as Box2,
+    rest: { x0: sx, x1: sx, y0: sy, y1: sy } as Box2,
     reach: { x0: -reachX, x1: reachX, y0: -reachY, y1: reachY } as Box2,
+    /** The rubber band's length past the reach, px (rubberBand's dimension). */
+    band: { x: passW * PASS_HAND.bandShare, y: passH * PASS_HAND.bandShare },
   };
 }
 
@@ -264,13 +299,25 @@ export function approach(value: number, target: number, rate: number, dt: number
 
 // ── The tear ─────────────────────────────────────────────────────────────
 // Grab the stub and pull it away from the pass, across the perforation. The
-// paper resists first: over the first TEAR_RESIST_PX of the hand's travel it
+// paper resists first: over the first `resist` px of the hand's travel it
 // only takes the strain (the score's tension, src/lib/ticketTear.ts); past
-// that the rip runs down the perforation following the hand, one to one —
-// the rip's tip is the hand's share of `span` — and when it reaches the
-// bottom notch the stub is free, in the hand. Let go before that: past most
-// of the rip (or with a flick) it tears on; otherwise the paper springs back.
-export const TEAR_RESIST_PX = 40;
+// that the rip runs down the perforation following the hand — the rip's tip
+// is the hand's share of `span` — and when it reaches the bottom notch the
+// stub is free, in the hand. The pull is short (a real stub stays in the
+// fingers: at 256 px of pull the grabbed point had moved 14 px and the hand
+// was out on the olive ground), and the pass's stub hinges wider than a
+// cover's (PASS_HINGE). A stub hinged at the rip's tip can only swing, so
+// the hand always runs a little ahead of the paper (about two thirds of the
+// pull): the pull is kept short enough that the hand stays on the stub it
+// holds all the way to the notch (a ~140 px pull let it slip off the far
+// edge; ~90 px at 1728, ~80 at 1280, keeps it on the paper). Let go
+// before the end: past most of the rip (or with a flick) it tears on;
+// otherwise the stub lies back down — but what has torn stays torn.
+export const TEAR_RESIST_PX = 22;
+/** A finger's resistance (a thumb has less travel to give). */
+export const TEAR_RESIST_TOUCH_PX = 18;
+/** The pass's hinge against a cover's (ticketTear's HINGE_DEG, scaled). */
+export const PASS_HINGE = 1.6;
 /** Released with the rip this far down, the tear completes. */
 export const TEAR_COMMIT_TIP = 0.82;
 /** A flick (px/ms along the pull) completes it once the rip is this far. */
@@ -280,44 +327,78 @@ export const TEAR_FLICK_SPEED = 0.7;
  *  most: the paper takes the strain, the hand feels it. */
 export const TEAR_GIVE_PX = 6;
 
+/** The resistance for a pointer (px). */
+export const tearResist = (touch = false) => (touch ? TEAR_RESIST_TOUCH_PX : TEAR_RESIST_PX);
+
 /** The hand's travel for the whole rip, from the seam's length (px): a
- *  longer perforation takes a longer pull, within a hand's reach. */
+ *  longer perforation takes a longer pull, within a short reach (the rip
+ *  runs about five times the hand's speed down the holes, as a perforation
+ *  gives). */
 export function tearSpan(seam: number, touch = false): number {
-  return touch ? clamp(seam * 0.55, 110, 170) : clamp(seam * 0.62, 130, 230);
+  return touch ? clamp(seam * 0.2, 50, 64) : clamp(seam * 0.2, 56, 72);
+}
+
+/** The hand's travel along the pull (px) for a move (along, across) the
+ *  perforation's pull axis. A finger pulling a stub drifts sideways (a
+ *  thumb's arc): on a touch screen a pull within the diagonal (0.45, 1)
+ *  counts in full. A mouse's travel is its projection on the axis. */
+export function pullTravel(along: number, across: number, touch = false): number {
+  if (!(along > 0)) return 0;
+  if (!touch) return along;
+  return Math.min(Math.hypot(along, across), along + 0.45 * Math.abs(across));
 }
 
 /** The tear's clock (ms of the score, ticketTear's) for `travel` px of the
- *  hand along the pull: the strain up to TEAR_RESIST_PX, then the rip. */
-export function tearClock(travel: number, span: number): number {
+ *  hand along the pull: the strain up to `resist`, then the rip. */
+export function tearClock(travel: number, span: number, resist: number = TEAR_RESIST_PX): number {
   if (!(travel > 0)) return 0;
-  if (travel < TEAR_RESIST_PX) return TEAR_TENSION_MS * (travel / TEAR_RESIST_PX);
-  return Math.min(TEAR_FREE_MS, msAtTip((travel - TEAR_RESIST_PX) / Math.max(1, span)));
+  if (travel < resist) return TEAR_TENSION_MS * (travel / resist);
+  return Math.min(TEAR_FREE_MS, msAtTip((travel - resist) / Math.max(1, span)));
 }
 
 /** The rip's share of the seam for `travel` (0 while it resists). */
-export function tearTip(travel: number, span: number): number {
-  return clamp01((travel - TEAR_RESIST_PX) / Math.max(1, span));
+export function tearTip(travel: number, span: number, resist: number = TEAR_RESIST_PX): number {
+  return clamp01((travel - resist) / Math.max(1, span));
 }
 
 /** How far the pass gives toward the pull (px): it follows the hand a
  *  little while the paper resists, and settles back as the rip runs. */
-export function tearGive(travel: number, span: number): number {
+export function tearGive(travel: number, span: number, resist: number = TEAR_RESIST_PX): number {
   if (!(travel > 0)) return 0;
-  const strain = clamp01(travel / TEAR_RESIST_PX);
-  return TEAR_GIVE_PX * strain * strain * (1 - tearTip(travel, span));
+  const strain = clamp01(travel / Math.max(1, resist));
+  return TEAR_GIVE_PX * strain * strain * (1 - tearTip(travel, span, resist));
 }
 
 /** Let go at `travel` with `speed` (px/ms along the pull): does it tear on? */
-export function tearCommits(travel: number, span: number, speed: number): boolean {
-  const tip = tearTip(travel, span);
+export function tearCommits(travel: number, span: number, speed: number, resist: number = TEAR_RESIST_PX): boolean {
+  const tip = tearTip(travel, span, resist);
   return tip >= TEAR_COMMIT_TIP || (tip >= TEAR_FLICK_TIP && speed >= TEAR_FLICK_SPEED);
+}
+
+/** A tap on the stub is not a tear (people click to pick things up): the
+ *  stub peels a little at its top notch and lies back down, and the one-tap
+ *  tear is the Tear button's (and Enter's, and Space's). The peel's angle
+ *  (deg) `k` (0 → 1) of the way through PEEK_MS: up quickly, down softly. */
+export const PEEK_DEG = 4;
+export const PEEK_MS = 380;
+export function peekAngle(k: number): number {
+  const t = clamp01(k);
+  const up = 0.32;
+  if (t <= up) {
+    const a = t / up;
+    return PEEK_DEG * (1 - (1 - a) * (1 - a));
+  }
+  const b = (t - up) / (1 - up);
+  return PEEK_DEG * (1 - b * b * (3 - 2 * b));
 }
 
 // ── The stub's fall ──────────────────────────────────────────────────────
 // Once free the stub is in the hand (it follows it one to one and sways);
 // let go, it falls: gravity, a little air, its spin slowing. A scripted tear
-// (the button, a key, the scroll) hands it a small lift first, then lets it
-// fall the same way. It goes once it is below the screen.
+// (the button, a key) hands it a small lift first, then lets it fall the
+// same way. Torn by the scroll, the page is about to move up: the stub is
+// let go DOWN and falls faster, off the screen before the page sets off, so
+// it never crosses the rising globe. It goes once it is below the screen.
 export const STUB_FALL = {
   gravity: 3000,
   air: 0.7,
@@ -325,6 +406,9 @@ export const STUB_FALL = {
   /** The scripted tear's toss: px/s along the pull, px/s up, deg/s — a
    *  small lift off the pass, then the fall. */
   toss: [150, -240, 30] as const,
+  /** Torn by the scroll: let go downward, and a heavier fall. */
+  scrollToss: [60, 180, 20] as const,
+  scrollGravity: 4200,
   /** The longest a fall is kept, ms. */
   maxMs: 2200,
 } as const;
@@ -338,14 +422,14 @@ export interface FallState {
   va: number;
 }
 
-export function stepFall(state: FallState, dt: number): FallState {
+export function stepFall(state: FallState, dt: number, gravity: number = STUB_FALL.gravity): FallState {
   const steps = Math.max(1, Math.ceil(dt / (1 / 240)));
   const h = dt / steps;
   let { x, y, vx, vy, a, va } = state;
   const air = Math.exp(-STUB_FALL.air * h);
   const spin = Math.exp(-STUB_FALL.spinDecay * h);
   for (let i = 0; i < steps; i += 1) {
-    vy += STUB_FALL.gravity * h;
+    vy += gravity * h;
     vx *= air;
     vy *= air;
     va *= spin;
@@ -360,10 +444,17 @@ export function stepFall(state: FallState, dt: number): FallState {
 // EntranceIntro's scroll score, in viewport heights: the intro is one
 // screen; the pass's frame pins for PASS_PIN of a screen below it; scrolled
 // PASS_TEAR_AT of the way through the pin the pass tears for the reader
-// (nobody is ever stuck behind it); it rises into view over PASS_RISE.
-export const PASS_PIN = 0.6;
-export const PASS_TEAR_AT = 0.72;
+// (nobody is ever stuck behind it); it rises into view over PASS_RISE. The
+// pin is short and every bit of it shows: the scroll first strains the
+// stub, then peels it (SCROLL_PEEL of the rip) before the tear takes over —
+// no stretch of the wheel does nothing.
+export const PASS_PIN = 0.4;
+export const PASS_TEAR_AT = 0.55;
 export const PASS_RISE: readonly [number, number] = [0.28, 1];
+/** How much of the rip the scroll itself runs before the tear takes over. */
+export const SCROLL_PEEL = 0.3;
+/** The share of the scroll's strain that is only tension (then the peel). */
+const SCROLL_TENSION = 0.25;
 
 /** How far the pass has risen into place (0 → 1) at scroll `y` (px) with the
  *  frame pinned at `pinTop` (px) in a viewport `vh` tall: over PASS_RISE of
@@ -379,10 +470,19 @@ export function scrollStrain(y: number, pinTop: number, vh: number): number {
   return clamp01((y - pinTop) / Math.max(1, vh * PASS_PIN * PASS_TEAR_AT));
 }
 
-/** The glide after the tear (the globe comes in): its length from the
- *  distance, s. */
-export function arrivalSeconds(distance: number): number {
-  return clamp(1.1 + Math.abs(distance) / 2600, 1.2, 1.6);
+/** The scroll's strain `s` (0 → 1) as a hand's travel along the pull (px):
+ *  the tension over the first SCROLL_TENSION of it, then the rip runs to
+ *  SCROLL_PEEL of the seam — the scroll pulls at the stub as a hand would,
+ *  so tearClock, tearTip and tearGive read it the same way. */
+export function scrollTravel(s: number, span: number, resist: number = TEAR_RESIST_PX): number {
+  const k = clamp01(s);
+  if (k < SCROLL_TENSION) return resist * (k / SCROLL_TENSION);
+  return resist + ((k - SCROLL_TENSION) / (1 - SCROLL_TENSION)) * SCROLL_PEEL * span;
 }
-/** Its curve: slow to leave, long and soft to land. */
-export const ARRIVAL_EASE = [0.45, 0, 0.18, 1] as const;
+
+/** The glide after the tear (the globe comes in): one length, s. */
+export const ARRIVAL_SECONDS = 1.6;
+/** Its curve: a soft start and a long, soft landing. Its peak is 2.56× the
+ *  mean speed — about 1600 px/s over a 1000 px glide; the old 0.45,0,0.18,1
+ *  over 1.45 s (2.96×) peaked near 2000 px/s. */
+export const ARRIVAL_EASE = [0.3, 0, 0.2, 1] as const;

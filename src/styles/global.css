@@ -155,6 +155,14 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .globe-prologue[data-arrival] .prologue-cap { animation: none; opacity: 1; }
 }
+/* The first stop's name (and its region and year) waits for its place to
+   turn into view: the globe arrives facing the far side of the planet, and
+   the scroll turns the place round (GlobePrologue's NAME_Q writes the share,
+   0 → 1). A scroll-linked value, so reduced motion keeps it too. */
+.globe-prologue .prologue-name {
+  opacity: var(--prologue-name, 1);
+  transform: translateY(calc((1 - var(--prologue-name, 1)) * 8px));
+}
 /* ── The opening film (OpeningFilm; its own sheet is opening.css) ────────
    It lies over the entrance's opening words until it lands (<html
    data-reel>, written before the first paint by index.astro's head script

@@ -23,6 +23,18 @@ interface Props {
 // EGG_HOLD_MS opens the shutter until it is let go, a tap of Space spins.
 const EGG_Q_MAX = 0.2;
 const EGG_HOLD_MS = 450;
+// The first stop's name waits for its place to come round. The globe
+// arrives facing the far side of the planet (PROLOGUE_TURN: the scroll turns
+// it 195° westward to the first chapter), so a line naming the place beside
+// it on arrival contradicted it (the review saw "The route begins in
+// Miami." beside India). The name comes up with the scroll as the place
+// turns to face the reader: from NAME_Q[0] of the prologue, whole by
+// NAME_Q[1] (the Americas in view).
+const NAME_Q: readonly [number, number] = [0.42, 0.6];
+const nameShare = (q: number) => {
+  const k = Math.max(0, Math.min(1, (q - NAME_Q[0]) / (NAME_Q[1] - NAME_Q[0])));
+  return k * k * (3 - 2 * k);
+};
 const sendGlobeEgg = (type: 'spin' | 'bulb-start' | 'bulb-end') =>
   window.dispatchEvent(new CustomEvent('archive:globe-egg', { detail: { type } }));
 
@@ -33,7 +45,8 @@ const sendGlobeEgg = (type: 'spin' | 'bulb-start' | 'bulb-end') =>
  * His name and the opening words are the entrance's now (EntranceIntro,
  * above): the globe arrives here once the boarding pass is torn, lit, low in
  * the bottom-right corner, and this screen only says where the route begins
- * — a quiet caption, never a second title. About a screen of scroll on, the
+ * — a quiet caption, never a second title, whose place name comes up as the
+ * scroll turns that place into view (NAME_Q). About a screen of scroll on, the
  * globe glides to the atlas's focal point and dives straight into the first
  * chapter. The globe itself is the RouteAtlas map (driven by
  * `prologueProgress`); this component is only the type.
@@ -47,6 +60,26 @@ export default function GlobePrologue({ years, progress, covered = false, first 
   const eggKeyTabRef = useRef(0);
   const spaceHoldRef = useRef<{ timer: number; bulb: boolean } | null>(null);
   const eggKeyAtRef = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The name's share, written straight onto the caption (never React state
+  // per scroll frame).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !progress) return;
+    let last = -1;
+    const write = (q: number) => {
+      const share = Math.round(nameShare(q) * 1000) / 1000;
+      if (share === last) return;
+      last = share;
+      root.style.setProperty('--prologue-name', String(share));
+    };
+    write(progress.get());
+    const unsubscribe = progress.on('change', write);
+    return () => {
+      unsubscribe();
+      root.style.removeProperty('--prologue-name');
+    };
+  }, [progress]);
   useEffect(() => {
     if (reduce || !progress) {
       setEggKey(false);
@@ -80,6 +113,7 @@ export default function GlobePrologue({ years, progress, covered = false, first 
 
   return (
     <div
+      ref={rootRef}
       className="globe-prologue pointer-events-none absolute inset-x-0 top-0 z-30 hidden lg:block"
       data-arrival={arrival === 'none' ? undefined : arrival}
     >
@@ -99,25 +133,33 @@ export default function GlobePrologue({ years, progress, covered = false, first 
         {first && (
           <>
             {/* PROPOSED copy, awaiting the owner. Data-driven: the route's
-                first stop (Miami today; Washington once it is stop 01). */}
+                first stop (Miami today; Washington once it is stop 01).
+                It waits for its place to turn into view (NAME_Q above; the
+                share is --prologue-name, global.css). */}
             <p className="prologue-cap prologue-cap--2 mt-5 max-w-[16em] font-serif text-[clamp(30px,2.9vw,50px)] leading-[1.12] text-[#F4F4ED]">
-              The route begins in <em>{first.name}</em>.
+              <span className="prologue-name block">
+                The route begins in <em>{first.name}</em>.
+              </span>
             </p>
             <p className="prologue-cap prologue-cap--3 mt-5 flex items-center gap-3 font-ui text-[11px] uppercase tracking-[0.1em] text-white/55">
               <span className="tabular-nums">
                 Stop 01{stops > 0 ? ` / ${String(stops).padStart(2, '0')}` : ''}
               </span>
-              {first.region && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{first.region}</span>
-                </>
-              )}
-              {first.year != null && String(first.year).trim() !== '' && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="tabular-nums">{String(first.year).trim()}</span>
-                </>
+              {(first.region || (first.year != null && String(first.year).trim() !== '')) && (
+                <span className="prologue-name flex items-center gap-3">
+                  {first.region && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{first.region}</span>
+                    </>
+                  )}
+                  {first.year != null && String(first.year).trim() !== '' && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="tabular-nums">{String(first.year).trim()}</span>
+                    </>
+                  )}
+                </span>
               )}
             </p>
           </>

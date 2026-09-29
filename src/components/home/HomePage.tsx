@@ -191,11 +191,14 @@ interface DeferredRouteAtlasProps {
   eager?: boolean;
   /** Hold the globe's reveal until the entrance's boarding pass is torn. */
   holdReveal?: boolean;
+  /** The page's glide brings the globe up: its reveal only fades and
+   *  dawns, it does not turn (no settle) while it moves. */
+  arrivalGlide?: boolean;
   /** Count the atlas as engaged while the film or the entrance lies above
    *  it, and through the glide that brings the globe up. */
   engage?: boolean;
-  /** The globe is not up yet (the film, the pass still whole): its life
-   *  waits. */
+  /** The globe is not up yet, or not landed (the film, the pass still
+   *  whole, the glide): its life — the drift, the lean — waits. */
   covered?: boolean;
 }
 
@@ -1942,8 +1945,9 @@ export default function HomePage({ collections }: Props) {
                 onNavigate={navigateFromAtlas}
                 eager={atlasEager}
                 holdReveal={entrance === 'held'}
+                arrivalGlide={entranceGlide}
                 engage={atlasEager && (reelCovering || entrance !== 'done')}
-                covered={reelCovering || entrance === 'held'}
+                covered={reelCovering || entrance !== 'done'}
               />
               {/* The covers' dock: each chapter's cover rides here, on the
                   atlas, beside its place's shield (ArchiveChapter portals it
