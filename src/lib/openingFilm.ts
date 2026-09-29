@@ -1,39 +1,45 @@
-// ── The opening film: a retro editorial type film (v5) ──
+// ── The opening film: a retro editorial type film (v6) ──
 // The homepage opens on a short film (src/components/home/OpeningFilm.tsx,
 // its scenes in OpeningScenes.tsx, its materials in src/styles/opening.css).
 // The owner's spec (2026-09-28, "复古编辑部动态排版") and his changes of
-// 2026-09-29 (no place names — keep the suspense; a typed line relayed across
-// machines; match cuts through many kinds of printed matter round a fixed
-// lime anchor; no limit on the length), in six acts:
+// 2026-09-29 (no place names — keep the suspense; match cuts through many
+// kinds of printed matter round a fixed lime anchor; a typed line relayed
+// across machines; no limit on the length; the single words FIRST, then the
+// relay — "先单独的字，再轮到打字接力"; richer, more layered pages; black-and-
+// white pages and a stronger colour rhythm, in runs, never abrupt), in six
+// acts:
 //
-//   1. A typewriter relay (3 s): "an archive of travel" is typed, and every
-//      few letters the whole frame hard-cuts to another machine — a dark CRT,
-//      a deep stock-coloured screen, maroon photocopy bars, a pill over one of
-//      his photographs, a beige monitor with a toolbar, a bare bone page, grid
-//      paper with a lime marker, typewriter paper — slow to fast, while the
-//      typed letters and the cursor never move (one monospace grid for all).
-//   2. The word is found: a lime marker sweeps "archive" on the paper; the
-//      rest of the line is pushed away and the word, struck in capitals,
-//      glides to the middle of the frame, each typewriter capital turning
-//      into its Fraunces capital in one shared ink box (swapped in one
-//      instant, never a double image).
-//   3. Match cuts round a fixed lime anchor (5.7 s, 25 scenes on a sixth of
+//   1. Match cuts round a fixed lime anchor (5.7 s, 25 scenes on a sixth of
 //      a second; the sheets meant to be read hold two): ARCHIVE → CAMERA →
-//      TRAVEL → THOUGHT → YOU. The block's
-//      centre, its height and the word's cap height never move; only the word
-//      and its face change (Fraunces 900, Fraunces italic, Space Grotesk 700,
-//      Fraunces 400, the monospace). Round it the frame is recomposed every
-//      cut, alternating an editorial page (giant cropped Fraunces words
-//      drifting with a motion blur of pre-drawn copies, words beside the
-//      anchor, a ringed word, grey texture, meta, a credit) and a piece of
-//      printed matter built round the word (a newspaper, a dictionary, a
-//      catalogue card, a magazine spread, a slate, a strip of film, a ticket,
-//      a book, a passport page, a telegram, a notebook, a postcard).
-//   4. A film burn, stepped at 24 fps: flicker, scratches and gate weave, a
-//      frame slip, a burn spreading from the anchor on an fbm mask (a WebGL
-//      shader on its own canvas), the frame darkening and sliding out at 6°,
-//      two black frames, six leader cards one frame each, and a row of lit
-//      sprocket holes that carries the picture into the dark.
+//      TRAVEL → THOUGHT → YOU. The server's markup is its first page (the
+//      first paint). The block's centre, its height and the word's cap
+//      height never move; only the word and its face change (Fraunces 900,
+//      Fraunces italic, Space Grotesk 700, Fraunces 400, the monospace).
+//      Round it the frame is recomposed every cut, alternating an editorial
+//      page (giant cropped Fraunces words drifting with a motion blur of
+//      pre-drawn copies; words beside the anchor; layered print — a taped
+//      photograph, a torn clipping, a receipt, a stamp, a margin note, a pull
+//      quote, registration marks) and a piece of printed matter built round
+//      the word (a newspaper, a dictionary, a catalogue card, a magazine, a
+//      slate, a strip of negatives, a ticket, a passport, a book, a telegram,
+//      a notebook, a postcard). The colour comes in runs: paper for ARCHIVE,
+//      black and white for CAMERA, the ticket stocks' browns, maroon and plum
+//      for TRAVEL, paper again for THOUGHT and YOU.
+//   2. The hand-off: the page cuts away under the anchor; the lime block
+//      alone glides and shrinks into the first machine's cursor.
+//   3. A typewriter relay (3 s): "an archive of travel" is typed, and every
+//      few letters the whole frame hard-cuts to another machine — a 1-bit
+//      desktop computer, a dark terminal, a strip of film on a lightbox, a
+//      label maker's tape, a word processor, a bare page, grid paper, a
+//      typewriter — slow to fast, each in its own face (a bitmap, a dot
+//      matrix, an edge print, embossed capitals, a sans, a serif, a hand, the
+//      typewriter's), all on one left edge, one baseline, one cap height; the
+//      typed count carries on across every cut.
+//   4. A film burn, stepped at 24 fps, on the typewriter's paper: flicker,
+//      scratches and gate weave, a frame slip, a burn spreading from the
+//      line on an fbm mask (a WebGL shader on its own canvas), the frame
+//      darkening and sliding out at 6°, two black frames, six leader cards
+//      one frame each, and a row of lit sprocket holes into the dark.
 //   5. The dark: "ryan xu" is typed on the film's base, with a lime block
 //      cursor (the act's one lime) that blinks once more when done.
 //   6. The end title: that line is struck in capitals and turns, letter by
@@ -52,13 +58,14 @@
 // the keyword, never centred.
 //
 // Smooth, by the spec's definition: every hard cut falls on its act's grid —
-// act 1 and 2 on the twelfth of a second (FRAME12_MS, 5 vsyncs at 60 Hz), act
-// 3 on the sixth (CUT_MS: 10 vsyncs at 60 Hz, 20 at 120 Hz), the burn on the
-// 24th, the dark and the title on the eighth (BEAT_MS); the anchor never
-// moves; the drift runs on across a cut (the same way or a quarter turn); no
-// fallback face, no blank frame, no dropped frame at a cut (the fonts and his
-// photographs are in before the clock starts, and everything is transform
-// and opacity on one clock).
+// the match cuts on the sixth of a second (CUT_MS: 10 vsyncs at 60 Hz, 20 at
+// 120 Hz), the hand-off and the relay on the twelfth (FRAME12_MS), the burn
+// on the 24th, the dark and the title on the eighth (BEAT_MS); the anchor
+// never moves; the drift runs on across a cut (the same way or a quarter
+// turn); no fallback face, no blank frame, no dropped frame at a cut (the
+// fonts and his photographs are in before the clock starts, every page is
+// drawn a quarter second before its cut, and everything is transform and
+// opacity on one clock).
 //
 // It plays once a tab session (src/lib/reelVisit.ts). While it plays, ONLY
 // the Skip pill skips it (to the end title and a hurried landing — never a
@@ -67,10 +74,10 @@
 // end title as a still and a calm crossfade.
 //
 // Everything in this module is pure (no DOM): the whole film is DATA here —
-// the acts, the machines, the scenes (each {face, giants, side words,
-// decorations} or a sheet of printed matter), the burn's frames — and the
-// island only samples it by time. scripts/opening-film.test.mjs holds it to
-// account offline.
+// the acts, the scenes (each {face, ground, giants, side words, layers} or a
+// sheet of printed matter), the machines, the burn's frames — and the island
+// only samples it by time. scripts/opening-film.test.mjs holds it to account
+// offline.
 
 import { bezierFn, type Bezier } from './motion';
 
@@ -100,13 +107,13 @@ declare global {
 }
 
 // ── The clocks ─────────────────────────────────────────────────────────────
-/** Acts 1–2: the relay and the find cut on the twelfth of a second (five
- *  vsyncs at 60 Hz, ten at 120 Hz). */
-export const FRAME12_MS = 1000 / 12;
-/** Act 3: a match cut every sixth of a second (the guidance's 5 frames at 30
- *  fps; ten vsyncs at 60 Hz, twenty at 120 Hz — never a judder). */
+/** The match cuts: one every sixth of a second (the guidance's 5 frames at
+ *  30 fps; ten vsyncs at 60 Hz, twenty at 120 Hz — never a judder). */
 export const CUT_MS = 1000 / 6;
-/** Acts 5–6 and the landing: the eighth of a second. */
+/** The hand-off and the relay cut on the twelfth of a second (five vsyncs at
+ *  60 Hz, ten at 120 Hz). */
+export const FRAME12_MS = 1000 / 12;
+/** The dark, the title and the landing: the eighth of a second. */
 export const BEAT_MS = 125;
 /** The burn is stepped at 24 fps. */
 export const FRAME24_MS = 1000 / 24;
@@ -114,7 +121,9 @@ export const FRAME24_MS = 1000 / 24;
 export const PHONE_MAX_WIDTH = 1023;
 
 export type FilmLayout = 'desktop' | 'phone';
-export type Tone = 'light' | 'dark';
+/** How a frame reads, for the flash budget: light, dark, or a mid ground (a
+ *  sheet of paper on a stock-coloured desk) that turns nothing over. */
+export type Tone = 'light' | 'mid' | 'dark';
 export type Vec2 = readonly [number, number];
 export interface Box {
   x: number;
@@ -127,142 +136,7 @@ export interface Span {
   end: number;
 }
 
-// ── Act 1: the typewriter relay ───────────────────────────────────────────
-
-/** The typed line, lower case, and where its found word sits in it
- *  (PROPOSED copy). */
-export const TYPED = 'an archive of travel';
-export const FOUND_RANGE = [3, 10] as const;
-export const FOUND_WORD = TYPED.slice(FOUND_RANGE[0], FOUND_RANGE[1]);
-
-/** The machines the line is typed on, in order, how long each is on screen
- *  (twelfths of a second) and how many keys it strikes: slow to fast, then
- *  the paper holds (the last letter, the cursor blinking, the find). Dark
- *  ones first, light ones after: the relay turns the picture over once.
- *  Every machine strikes a visible letter (never only a space), and its
- *  first key falls on its own cut (RELAY_KEYS). */
-export type StyleId = 'crt' | 'deep' | 'bars' | 'pill' | 'beige' | 'bone' | 'grid' | 'paper';
-export const STYLES: readonly { id: StyleId; frames: number; keys: number; tone: Tone }[] = [
-  { id: 'crt', frames: 9, keys: 4, tone: 'dark' },
-  { id: 'deep', frames: 5, keys: 4, tone: 'dark' },
-  { id: 'bars', frames: 4, keys: 3, tone: 'dark' },
-  { id: 'pill', frames: 3, keys: 2, tone: 'dark' },
-  { id: 'beige', frames: 3, keys: 2, tone: 'light' },
-  { id: 'bone', frames: 3, keys: 2, tone: 'light' },
-  { id: 'grid', frames: 3, keys: 2, tone: 'light' },
-  { id: 'paper', frames: 6, keys: 1, tone: 'light' },
-];
-export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
-/** The style the word is found on (the last). */
-export const FIND_STYLE: StyleId = 'paper';
-
-/** The cursor's blink period (steps, half on and half off). */
-export const CURSOR_MS = 530;
-/** The blink on the film's clock: on at `start`, then off and on every half
- *  period until `end` (the times it changes, and to what). */
-export function blinkSteps(start: number, end: number, period = CURSOR_MS): [number, 0 | 1][] {
-  const out: [number, 0 | 1][] = [];
-  const half = period / 2;
-  for (let k = 1; start + k * half < end; k += 1) out.push([start + k * half, k % 2 === 0 ? 1 : 0]);
-  return out;
-}
-/** The first letter three twelfths in (the cursor alone first). */
-export const TYPE_AT = 3 * FRAME12_MS;
-/** The relay's keys: each machine's first on its own cut (a new machine
- *  arrives with a new letter, never a keystroke a frame before a cut), the
- *  rest evenly across its time — about eight letters a second. A key at
- *  least `jitterClear` ms from both of its machine's cuts is nudged by up
- *  to ±`jitter` ms (seeded); none falls in the `quiet` ms before a cut. */
-export const RELAY_KEYS = { jitter: 20, jitterClear: 70, quiet: 50, seed: 41 } as const;
-
-/** When each character of `text` appears: the first at `start`, the last
- *  at `last` (neither nudged), evenly between, each nudged by a seeded
- *  jitter of up to ±`jitter` ms (never so far that two swap). */
-export function typeTimes(text: string, start: number, last: number, jitter: number, seed: number) {
-  const n = text.length;
-  const interval = n > 1 ? (last - start) / (n - 1) : 0;
-  const j = Math.min(jitter, interval * 0.4);
-  const rand = seeded(seed);
-  const out: number[] = [];
-  for (let i = 0; i < n; i += 1) {
-    const nudge = i === 0 || i === n - 1 ? 0 : (rand() * 2 - 1) * j;
-    // Not rounded: the first key must fall exactly on its time (a dark
-    // act may start on a sixth, not a whole millisecond).
-    out.push(start + i * interval + nudge);
-  }
-  return out;
-}
-
-/** When each character of TYPED appears in the relay: machine by machine,
- *  as many keys as it strikes (STYLES), its first on its cut (the crt's at
- *  TYPE_AT), the rest evenly spaced up to its end; the middle keys nudged
- *  (RELAY_KEYS). */
-export function relayTimes(styles: readonly (Span & { id: StyleId })[]) {
-  const rand = seeded(RELAY_KEYS.seed);
-  const out: number[] = [];
-  styles.forEach((m, k) => {
-    const n = STYLES[k].keys;
-    const first = k === 0 ? TYPE_AT : m.start;
-    const step = (m.end - first) / n;
-    for (let i = 0; i < n; i += 1) {
-      const t = first + i * step;
-      const clear = i > 0 && t - m.start >= RELAY_KEYS.jitterClear && m.end - t >= RELAY_KEYS.jitterClear;
-      const nudge = clear ? (rand() * 2 - 1) * RELAY_KEYS.jitter : 0;
-      // Exact (a key on a cut is the cut's own time, to the last bit).
-      out.push(t + nudge);
-    }
-  });
-  return out;
-}
-
-/** How each typed character of the paper looks: its ribbon strength (0.75–1)
- *  and how far it was struck off true (±0.5 px). Seeded: the server and the
- *  client draw the same page. */
-export function ribbon(text: string, seed = 23) {
-  const rand = seeded(seed);
-  return text.split('').map(() => ({
-    ink: Math.round((0.75 + rand() * 0.25) * 100) / 100,
-    dx: Math.round((rand() - 0.5) * 100) / 100,
-    dy: Math.round((rand() - 0.5) * 100) / 100,
-  }));
-}
-
-// ── Act 2: the word is found ──────────────────────────────────────────────
-/** A curve that is off the mark at once and settles long (the spec's). */
-export const GLIDE_EASE = [0.2, 0.7, 0.1, 1] as const;
-/** A face turning into another, letter by letter (act 2, act 6): every
- *  letter of the one face and its letter in the other are held to ONE ink
- *  box, which goes from the first face's to the second's across `box` (a
- *  share of the move), and the two faces are SWAPPED at `fade` — one
- *  instant (a zero-width window) near the middle of it, at the move's
- *  fastest, where the two letters are the same size in the same place: one
- *  frame shows the one face, the next the other, never both (a crossfade,
- *  however short, showed two words for two or three frames). The words are
- *  in the same case on both sides (capitals). */
-export const GLYPH_MORPH = {
-  box: [0.06, 0.5] as const,
-  fade: [0.29, 0.29] as const,
-} as const;
-export const FIND = {
-  /** The lime marker sweeps the word, left to right, in two twelfths. */
-  sweepMs: 2 * FRAME12_MS,
-  /** The glide starts as the sweep ends and ends with the act; as it
-   *  starts, the word is struck again in capitals (a hard cut, the letters
-   *  in the same cells). */
-  glideMs: 4 * FRAME12_MS,
-  /** The two faces cross in this share of the glide (one window). */
-  swap: GLYPH_MORPH.fade,
-  /** The shared ink boxes go from the typewriter's to Fraunces's here. */
-  morph: GLYPH_MORPH.box,
-  /** The rest of the line is pushed this far (a share of the viewport's
-   *  height), up or down, and is gone by this share of the glide. */
-  push: 0.2,
-  pushGone: 0.7,
-} as const;
-/** Which way each other word of the line is pushed: up (−1) or down (+1). */
-export const PUSH_DIR: Record<string, -1 | 1> = { an: -1, of: 1, travel: 1 };
-
-// ── Act 3: the fixed anchor and its match cuts ────────────────────────────
+// ── Act 1: the fixed anchor and its match cuts ────────────────────────────
 
 export type Keyword = 'ARCHIVE' | 'CAMERA' | 'TRAVEL' | 'THOUGHT' | 'YOU';
 /** The anchor's faces (the guidance's Didone / script / heavy caps / thin
@@ -288,6 +162,9 @@ export const ANCHOR = {
   maxWidth: { desktop: 0.78, phone: 0.86 },
   block: 1.56,
   pad: 0.34,
+  /** The reading zone: the block and this much round it (shares of the cap
+   *  height) is kept clear of every page's print but the words on its line. */
+  clear: 0.3,
 } as const;
 
 /** The anchor's cap height: 12% of the height, unless the widest keyword
@@ -309,6 +186,11 @@ export function keyBox(vw: number, vh: number, cap: number, inkW: number) {
   const h = cap * ANCHOR.block;
   const w = inkW + 2 * cap * ANCHOR.pad;
   return { cx, cy, block: { x: cx - w / 2, y: cy - h / 2, w, h }, inkX: cx - inkW / 2, baseline: cy + cap / 2 };
+}
+/** The reading zone round a block (kept clear of the page's print). */
+export function readingZone(block: Box, cap: number): Box {
+  const m = cap * ANCHOR.clear;
+  return { x: block.x - m, y: block.y - m, w: block.w + 2 * m, h: block.h + 2 * m };
 }
 
 /** Which way the giant words drift in a cut. */
@@ -375,6 +257,85 @@ export interface Deco {
   metaL: string;
   metaR: string;
 }
+
+/** The page's ground: paper (bone, a warmer stock, a photocopy's grey-
+ *  white), the dark neutrals (ink, olive, the new-york slate) and the ticket
+ *  stocks (the rust brown, the maroon, the plum) — the site's own, deep and
+ *  desaturated, in runs. */
+export type Ground = 'bone' | 'warm' | 'copy' | 'ink' | 'olive' | 'slate' | 'rust' | 'maroon' | 'plum';
+/** An ink a light page may print its giant words, a duotone or a stamp in. */
+export type Stock = 'ink' | 'maroon' | 'blue' | 'plum' | 'green' | 'rust' | 'slate' | 'bone';
+export const GROUND_TONE: Record<Ground, Tone> = {
+  bone: 'light',
+  warm: 'light',
+  copy: 'light',
+  ink: 'dark',
+  olive: 'dark',
+  slate: 'dark',
+  rust: 'dark',
+  maroon: 'dark',
+  plum: 'dark',
+};
+/** The grounds' colours (and the stocks', src/lib/ticketStock.ts). */
+export const GROUND_HEX: Record<Ground, string> = {
+  bone: '#f1efe7',
+  warm: '#e8dfcb',
+  copy: '#eeeee8',
+  ink: '#1b1f19',
+  olive: '#282c20',
+  slate: '#35383e',
+  rust: '#593d1b',
+  maroon: '#562f2e',
+  plum: '#492d43',
+};
+
+/** An editorial page's layers (drawn under the giant words, over its
+ *  ground; each placed by the island clear of the anchor's reading zone,
+ *  the words on its line and the frame's print — at its place when that is
+ *  clear, else the nearest clear place, else not at all). `at` is where it
+ *  wants to be (shares of the viewport), `w` its width (a share of the
+ *  width). Copy is PROPOSED (decorative; nothing in it is a fact about him).
+ *  `phone`: kept on the phone (the rest thins out there). */
+export interface Print {
+  /** Which of his photographs (OpeningPicture index), at its own ratio. */
+  pic: 0 | 1 | 2;
+  treat: 'halftone' | 'duotone' | 'negative' | 'blown';
+  ink?: Stock;
+  at: Vec2;
+  w: number;
+  rot: number;
+  caption: string;
+  tape?: boolean;
+  phone?: boolean;
+}
+export interface Layers {
+  /** A crowded collage or a calm page with fine detail (the rhythm
+   *  breathes). */
+  density: 'dense' | 'calm';
+  /** The running head across the page's top: its title and its folio. */
+  run?: readonly [string, string];
+  print?: Print;
+  /** A torn clipping laid on the page: its headline and a paragraph
+   *  (TEXTURE index). */
+  clip?: { head: string; text: number; at: Vec2; w: number; rot: number; phone?: boolean };
+  /** A pull quote between rules. */
+  pull?: { text: string; at: Vec2; w: number; phone?: boolean };
+  /** A margin note in a hand (Fraunces italic) with an arrow. */
+  note?: { text: string; at: Vec2; rot: number; arrow: 'l' | 'r' | 'u' | 'd'; phone?: boolean };
+  /** A rubber stamp in a stock's ink. */
+  stamp?: { text: string; sub: string; shape: 'round' | 'box'; ink: Stock; at: Vec2; rot: number; phone?: boolean };
+  /** A slip of receipt paper, typed. */
+  receipt?: { lines: readonly string[]; at: Vec2; rot: number };
+  /** A circled number and what it points at. */
+  num?: { n: string; text: string; at: Vec2 };
+  /** A barcode sticker and its number. */
+  barcode?: { code: string; at: Vec2 };
+  /** Index tabs down the frame's right edge (the first one pulled). */
+  tabs?: readonly string[];
+  /** Registration marks, crop marks and a grey colour bar (a proof). */
+  marks?: boolean;
+}
+
 /** The printed matter (each drawn by its own sheet in OpeningScenes). */
 export type SheetKind =
   | 'newspaper'
@@ -389,6 +350,21 @@ export type SheetKind =
   | 'telegram'
   | 'notebook'
   | 'postcard';
+/** How each sheet reads (its paper, or the dark it is laid on). */
+export const SHEET_TONE: Record<SheetKind, Tone> = {
+  newspaper: 'light',
+  dictionary: 'light',
+  catalogue: 'mid',
+  magazine: 'dark',
+  slate: 'dark',
+  edge: 'dark',
+  ticket: 'mid',
+  passport: 'mid',
+  book: 'light',
+  telegram: 'light',
+  notebook: 'light',
+  postcard: 'light',
+};
 export interface Scene {
   word: Keyword;
   face: AnchorFace;
@@ -399,13 +375,20 @@ export interface Scene {
   driftPx: number;
   /** The giant words: 1–2, cropped by the frame. */
   giants: readonly Giant[];
-  /** An editorial page: the words beside the anchor and its small print.
-   *  A piece of printed matter: its sheet (the words round the anchor are
-   *  the sheet's own, in SHEETS). */
+  /** Their ink on a light page (a second colour, printed); bone on a dark
+   *  one. */
+  ink?: Stock;
+  /** An editorial page: its ground, the words beside the anchor, its small
+   *  print and its layers. A piece of printed matter: its sheet (the words
+   *  round the anchor are the sheet's own, in SHEETS). */
+  ground?: Ground;
   side?: readonly Side[];
   deco?: Deco;
+  layers?: Layers;
   sheet?: SheetKind;
 }
+/** How a scene reads (the flash budget is counted on this). */
+export const sceneTone = (s: Scene): Tone => (s.sheet ? SHEET_TONE[s.sheet] : GROUND_TONE[s.ground ?? 'bone']);
 
 /** The grey texture: tiny paragraphs, too small to read (the film's own
  *  words, PROPOSED; no place in them). */
@@ -415,6 +398,9 @@ export const TEXTURE = [
   'Read in order, the frames make a route. Read out of order, they make something closer to a mind: the same corner of light, again and again, in different countries.',
   'A camera is a patient machine. It waits for the light as long as its keeper does, and forgets nothing it was shown, not even the things he did not mean to show it.',
   'The road is mostly waiting: for a bus, for the weather, for the one minute in an afternoon when a street arranges itself and the shutter can be let go.',
+  'A print is a decision made twice: once at the window, once in the dark. The second is slower, and kinder, and it is the one that is kept.',
+  'Grain is the weather of a photograph. Push the film and it thickens like a coming storm; pull it and the frame goes still as a held breath.',
+  'The envelope says what the negatives cannot: which roll, which month, which of the thirty-six was worth a second look under the loupe.',
 ] as const;
 
 /** The credit along the foot of every editorial page (centred). */
@@ -428,10 +414,21 @@ export const CREDIT = 'Ryan Xu · A personal archive of travel and thought';
 export const SHEETS = {
   newspaper: {
     edition: ['Saturday Edition', 'No. 1,204', 'Two Cents'],
+    ears: ['Fair, the light holding late', 'Late final'],
     row: ['From the', 'Photographs, letters and notes'],
     headline: 'What a drawer of negatives remembers',
+    deck: 'Thirty-six frames to a roll, and the ones worth a second look',
     dateline: 'MIAMI —',
-    body: [0, 1, 2, 3, 4],
+    body: [0, 1, 2, 3, 4, 5],
+    pull: 'The labels moved from pencil into ink.',
+    caption: 'A contact sheet, printed full frame.',
+    jump: 'Continued, col. 6',
+    index: [
+      ['Letters', '4'],
+      ['Notes', '6'],
+      ['Frames', '9'],
+    ],
+    folio: 'A1',
   },
   dictionary: {
     head: ['Archipelago', '79', 'Archly'],
@@ -446,12 +443,19 @@ export const SHEETS = {
       'Ar′chi·vist, n. A keeper of archives or records.',
       'Ar′chi·volt, n. (Arch.) The architectural member surrounding the curved opening of an arch.',
     ],
+    tabs: ['A', 'B', 'C', 'D', 'E', 'F'],
+    fig: 'Fig. 12. — A press of drawers.',
+    key: 'ā, as in fāte; ă, as in făt; ä, as in fär; ē, as in mēte; ĭ, as in ĭn; ō, as in ōld; ŏ, as in nŏt',
+    note: 'cf. record',
   },
   catalogue: {
     above: ['Xu, Ryan.', 'A personal archive of travel and thought / photographs by Ryan Xu.'],
     row: ['', '— Personal. 1 v. : ill. ; 35 mm.'],
     below: ['1. Travel photography.  2. Archives.  I. Title.'],
     call: ['TR', '790', '.X8'],
+    stamp: ['Archive copy', 'Not to be taken'],
+    pencil: 'drawer 3',
+    code: '0 417 0025',
   },
   magazine: {
     kicker: 'The Picture Issue — Feature',
@@ -461,7 +465,9 @@ export const SHEETS = {
       'A film is mostly forgotten on the way home. What stays is a frame or two: a face turned to a window, a road seen through a windscreen, the exact grey of a harbour at five.',
       'A photograph works the other way round. It is the one frame, chosen and kept; the film it came from, the walk and the waiting and the weather, is the part the viewer supplies.',
     ],
+    pull: 'The one frame, chosen and kept.',
     caption: 'Photograph: Ryan Xu',
+    runs: ['The Picture Issue', 'Feature'],
     folios: ['42', '43'],
   },
   slate: {
@@ -474,10 +480,12 @@ export const SHEETS = {
       ['Fps', '24'],
     ],
     foot: ['35 mm', 'Sync', 'Day'],
+    tape: 'mos',
   },
   edge: {
     row: ['▸ 23A', '▸ 24   Safety film'],
     notes: ['print this one', 'keep'],
+    label: ['Roll 07', 'Sheet 2 of 3'],
   },
   ticket: {
     head: ['Single journey', 'Second class'],
@@ -489,6 +497,14 @@ export const SHEETS = {
     no: 'Nº 004127',
     fine: 'Keep this ticket. Not valid for re-entry.',
     stub: 'Admit one',
+    seat: [
+      ['Coach', 'C'],
+      ['Seat', '14'],
+      ['Class', '2'],
+    ],
+    punch: 'Checked',
+    receipt: ['Fare', '1 × single', 'Paid', 'Thank you'],
+    code: '4127 0417 11',
   },
   book: {
     head: ['Travels with a Donkey', '63'],
@@ -502,30 +518,38 @@ export const SHEETS = {
       'our life more nearly; to come down off this feather-',
       'bed of civilisation, and find the globe granite',
     ],
+    chapter: 'Our Lady of the Snows',
+    note: 'yes.',
   },
   passport: {
     row: ['Visas', 'Endorsements'],
     stamps: ['Admitted', 'Entry', 'Exit', 'No. 36'],
     park: 'ZION NATIONAL PARK · UT',
     mrz: 'P<ARCHIVE<<TRAVEL<<THOUGHT<<<<<<<<<<<<<<<<',
+    mrz2: '0417002536<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<04',
     page: '17',
+    serial: '0417025',
   },
   telegram: {
     fields: ['Received at 16.40', 'Words 17', 'Charges paid'],
     above: 'ARRIVED STOP LIGHT HOLDING STOP',
     row: ['', 'OF THE SEA ALL DAY STOP'],
     below: 'MORE FILM TOMORROW STOP',
+    stamp: ['Received', '16.40'],
+    clerk: 'ck 14',
   },
   notebook: {
     above: 'tuesday — the ferry late again, the light good.',
     row: ['a', ', written down,'],
     below: ['is a place you can go back to.', '(frame 14: the rope, not the boat)'],
+    list: ['light', 'wait', 'go'],
   },
   postcard: {
     row: ['thinking of', '— as ever,'],
     below: 'Wish you were here. The light holds late; I keep missing the last bus to photograph it.',
     stamp: 'Postage',
     mark: 'Post office',
+    airmail: 'Par avion · By air mail',
   },
 } as const;
 
@@ -538,13 +562,21 @@ export const EGGS = [
 /** The places on his route: named nowhere in the film but the eggs. */
 export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New York', 'Florida', 'Arizona', 'Utah', 'Manhattan', 'Washington'] as const;
 
+/** Receipts' lines (PROPOSED, decorative). */
+const RECEIPT_LAB = ['DEV + CONTACT', '135 · 36 EXP', '1 ROLL', 'PUSH +1', 'TOTAL  ——', 'THANK YOU'] as const;
+const RECEIPT_STUB = ['ADMIT ONE', 'ROW —  SEAT —', 'NOT TRANSFERABLE', 'KEEP THIS STUB'] as const;
+const RECEIPT_ROAD = ['1 × SINGLE', 'OUT  ——', 'RETURN  ——', 'PAID', 'KEEP FOR INSPECTION'] as const;
+
 /** Every scene, in order. The drift turns only by a quarter between
  *  neighbours, so the motion runs on across every cut; the face changes at
- *  every cut. Slow to fast: the first two hold two sixths, the last (YOU,
- *  before the burn) four; the four sheets whose words are there to be read
- *  (the magazine, the ticket, the telegram, the postcard) hold two. */
+ *  every cut. The first two hold two sixths (the first is also the first
+ *  paint), the last (YOU, before the hand-off) four; the four sheets whose
+ *  words are there to be read (the magazine, the ticket, the telegram, the
+ *  postcard) hold two. The colour in runs: ARCHIVE on paper, CAMERA in black
+ *  and white, TRAVEL in the ticket stocks (rust, maroon, plum), THOUGHT and
+ *  YOU on paper again with a second ink. */
 export const SCENES: readonly Scene[] = [
-  // ── ARCHIVE ──
+  // ── ARCHIVE: paper ──
   {
     word: 'ARCHIVE',
     face: 'f900',
@@ -560,6 +592,8 @@ export const SCENES: readonly Scene[] = [
     slots: 2,
     drift: 'right',
     driftPx: 40,
+    ground: 'bone',
+    ink: 'maroon',
     giants: [
       { text: 'NEGA', face: 'f900', cap: 0.42, x: -0.03, y: 0.34, align: 'l' },
       { text: 'TIVE', face: 'f900', cap: 0.42, x: 1.03, y: 1, yCap: 0.16, align: 'r' },
@@ -579,6 +613,14 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive · Vol. I',
       metaR: 'Roll 01 · Frame 02',
     },
+    layers: {
+      density: 'dense',
+      run: ['The Archive — Vol. I', '12'],
+      print: { pic: 0, treat: 'duotone', ink: 'maroon', at: [0.68, 0.1], w: 0.17, rot: 2.5, caption: 'Plate 2 · a contact print', tape: true, phone: true },
+      clip: { head: 'Found in a drawer', text: 1, at: [0.05, 0.72], w: 0.19, rot: -2.2 },
+      note: { text: 'sharper than the last', at: [0.05, 0.58], rot: -4, arrow: 'r' },
+      marks: true,
+    },
   },
   {
     word: 'ARCHIVE',
@@ -595,6 +637,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'down',
     driftPx: 34,
+    ground: 'warm',
     giants: [
       { text: 'GRAIN', face: 'f400', cap: 0.38, x: 0.02, y: 0.33, align: 'l' },
       { text: 'ROLL', face: 'f900', cap: 0.44, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
@@ -609,10 +652,15 @@ export const SCENES: readonly Scene[] = [
       ring: [0.9, 0.3],
       texture: [
         { at: [0.82, 0.62], text: 1, w: 140 },
-        { at: [0.035, 0.62], text: 3, w: 124 },
+        { at: [0.035, 0.62], text: 6, w: 124 },
       ],
       metaL: 'Contact sheet 04',
       metaR: 'Frame 04',
+    },
+    layers: {
+      density: 'calm',
+      run: ['Selected works', '19'],
+      num: { n: '2', text: 'see the edge', at: [0.84, 0.72] },
     },
   },
   {
@@ -630,6 +678,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'right',
     driftPx: 42,
+    ground: 'bone',
     giants: [
       { text: 'EXPO', face: 'f900', cap: 0.43, x: 1.04, y: 0.32, align: 'r' },
       { text: 'SURE', face: 'f900', cap: 0.43, x: -0.04, y: 1, yCap: 0.2, align: 'l' },
@@ -649,8 +698,15 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive',
       metaR: 'Frame 06',
     },
+    layers: {
+      density: 'dense',
+      receipt: { lines: RECEIPT_LAB, at: [0.06, 0.07], rot: -3 },
+      stamp: { text: 'Received', sub: 'with thanks', shape: 'box', ink: 'maroon', at: [0.72, 0.72], rot: -6, phone: true },
+      clip: { head: 'Not a souvenir. A record.', text: 7, at: [0.66, 0.08], w: 0.17, rot: 1.4 },
+      num: { n: '4', text: 'print again, softer', at: [0.1, 0.8] },
+    },
   },
-  // ── CAMERA ──
+  // ── CAMERA: black and white ──
   {
     word: 'CAMERA',
     face: 'f900',
@@ -666,6 +722,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'up',
     driftPx: 36,
+    ground: 'olive',
     giants: [
       { text: 'SHUT', face: 'f900', cap: 0.43, x: -0.03, y: 0.33, align: 'l' },
       { text: 'TER', face: 'f400', cap: 0.4, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
@@ -685,6 +742,13 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive · Vol. II',
       metaR: 'Frame 08',
     },
+    layers: {
+      density: 'dense',
+      run: ['Visual archive — Vol. II', '31'],
+      print: { pic: 1, treat: 'halftone', at: [0.64, 0.08], w: 0.17, rot: -2, caption: 'Fig. 3 — at the window', tape: true, phone: true },
+      note: { text: 'the shutter, not the lens', at: [0.06, 0.78], rot: 3, arrow: 'u' },
+      marks: true,
+    },
   },
   {
     word: 'CAMERA',
@@ -701,6 +765,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'right',
     driftPx: 40,
+    ground: 'slate',
     giants: [
       { text: 'LENS', face: 'f900', cap: 0.45, x: 0.02, y: 0.35, align: 'l' },
       { text: 'FOCUS', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.1, align: 'r' },
@@ -715,10 +780,15 @@ export const SCENES: readonly Scene[] = [
       ring: [0.9, 0.32],
       texture: [
         { at: [0.82, 0.62], text: 2, w: 138 },
-        { at: [0.035, 0.64], text: 4, w: 130 },
+        { at: [0.035, 0.64], text: 7, w: 130 },
       ],
       metaL: 'Contact sheet 10',
       metaR: 'Frame 10',
+    },
+    layers: {
+      density: 'calm',
+      print: { pic: 2, treat: 'negative', at: [0.7, 0.7], w: 0.15, rot: 0, caption: 'Neg. 14 — reversed', phone: true },
+      barcode: { code: '0417 0010', at: [0.07, 0.08] },
     },
   },
   {
@@ -730,13 +800,14 @@ export const SCENES: readonly Scene[] = [
     sheet: 'edge',
     giants: [{ text: '24A', face: 'f900', cap: 0.4, x: 0.97, y: 0.27, align: 'r' }],
   },
-  // ── TRAVEL ──
+  // ── TRAVEL: the ticket stocks ──
   {
     word: 'TRAVEL',
     face: 'f900',
     slots: 1,
     drift: 'down',
     driftPx: 34,
+    ground: 'rust',
     giants: [
       { text: 'MILES', face: 'f900', cap: 0.42, x: -0.03, y: 0.33, align: 'l' },
       // Only its top half: the frame's foot cuts it through the middle.
@@ -757,6 +828,12 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive · Vol. III',
       metaR: 'Frame 12',
     },
+    layers: {
+      density: 'dense',
+      stamp: { text: 'Passed', sub: 'No. 7', shape: 'round', ink: 'bone', at: [0.8, 0.1], rot: 12, phone: true },
+      receipt: { lines: RECEIPT_ROAD, at: [0.08, 0.68], rot: 2.5 },
+      clip: { head: 'Notes from the road', text: 4, at: [0.72, 0.7], w: 0.18, rot: 1.8 },
+    },
   },
   {
     word: 'TRAVEL',
@@ -773,6 +850,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'left',
     driftPx: 40,
+    ground: 'maroon',
     giants: [
       { text: 'ROUTE', face: 'f900', cap: 0.43, x: 1.04, y: 0.33, align: 'r' },
       { text: 'NORTH', face: 'f400', cap: 0.34, x: -0.03, y: 1, yCap: 0.12, align: 'l' },
@@ -792,15 +870,21 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Contact sheet 14',
       metaR: 'Frame 14',
     },
+    layers: {
+      density: 'calm',
+      run: ['Between trains', '57'],
+      tabs: ['I', 'II', 'III', 'IV', 'V'],
+      clip: { head: 'The long way round', text: 4, at: [0.06, 0.1], w: 0.17, rot: -1.5, phone: true },
+    },
   },
   {
     word: 'TRAVEL',
-    face: 'f400',
+    face: 'f900',
     slots: 1,
     drift: 'up',
-    driftPx: 30,
-    sheet: 'book',
-    giants: [{ text: 'TRAVELS', face: 'f400', cap: 0.38, x: 0.5, y: 0.19, align: 'c' }],
+    driftPx: 36,
+    sheet: 'passport',
+    giants: [{ text: 'VISA', face: 'f900', cap: 0.44, x: -0.03, y: 0.3, align: 'l' }],
   },
   {
     word: 'TRAVEL',
@@ -808,6 +892,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'up',
     driftPx: 36,
+    ground: 'plum',
     giants: [
       { text: 'DUSK', face: 'f900', cap: 0.44, x: 1.03, y: 0.34, align: 'r' },
       { text: 'HOURS', face: 'f400', cap: 0.36, x: -0.03, y: 1, yCap: 0.12, align: 'l' },
@@ -822,28 +907,36 @@ export const SCENES: readonly Scene[] = [
       ring: [0.1, 0.66],
       texture: [
         { at: [0.82, 0.64], text: 1, w: 142 },
-        { at: [0.035, 0.34], text: 4, w: 124 },
+        { at: [0.035, 0.34], text: 6, w: 124 },
       ],
       metaL: 'Visual archive',
       metaR: 'Frame 16',
     },
+    layers: {
+      density: 'dense',
+      print: { pic: 0, treat: 'halftone', at: [0.06, 0.08], w: 0.16, rot: -3, caption: 'Plate 9 — the last light', tape: true, phone: true },
+      note: { text: 'again at dusk', at: [0.74, 0.8], rot: -3, arrow: 'l' },
+      marks: true,
+    },
   },
   {
     word: 'TRAVEL',
-    face: 'f900',
+    face: 'f400',
     slots: 1,
     drift: 'right',
-    driftPx: 38,
-    sheet: 'passport',
-    giants: [{ text: 'VISA', face: 'f900', cap: 0.44, x: -0.03, y: 0.3, align: 'l' }],
+    driftPx: 30,
+    sheet: 'book',
+    giants: [{ text: 'TRAVELS', face: 'f400', cap: 0.38, x: 0.5, y: 0.19, align: 'c' }],
   },
-  // ── THOUGHT ──
+  // ── THOUGHT: paper, a green second ink ──
   {
     word: 'THOUGHT',
     face: 'fit',
     slots: 1,
     drift: 'right',
     driftPx: 40,
+    ground: 'bone',
+    ink: 'green',
     giants: [
       { text: 'DAY', face: 'f900', cap: 0.43, x: -0.03, y: 0.34, align: 'l' },
       { text: 'BOOK', face: 'f400', cap: 0.38, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
@@ -858,10 +951,15 @@ export const SCENES: readonly Scene[] = [
       ring: [0.9, 0.3],
       texture: [
         { at: [0.82, 0.62], text: 2, w: 140 },
-        { at: [0.035, 0.62], text: 0, w: 126 },
+        { at: [0.035, 0.62], text: 5, w: 126 },
       ],
       metaL: 'Visual archive · Vol. IV',
       metaR: 'Frame 18',
+    },
+    layers: {
+      density: 'calm',
+      run: ['Day book', '88'],
+      pull: { text: 'Written down, it stays.', at: [0.64, 0.1], w: 0.2, phone: true },
     },
   },
   {
@@ -879,6 +977,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'down',
     driftPx: 36,
+    ground: 'copy',
     giants: [
       { text: 'STILL', face: 'f400', cap: 0.4, x: 1.03, y: 0.33, align: 'r' },
       { text: 'LIFE', face: 'f900', cap: 0.45, x: 0.36, y: 1, yCap: 0.48, align: 'c' },
@@ -898,6 +997,13 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Contact sheet 20',
       metaR: 'Frame 20',
     },
+    layers: {
+      density: 'dense',
+      print: { pic: 1, treat: 'blown', at: [0.06, 0.07], w: 0.17, rot: 0, caption: 'Copy 3 of 5 — overexposed', phone: true },
+      clip: { head: 'Still life, with window', text: 5, at: [0.74, 0.7], w: 0.17, rot: -1.6 },
+      num: { n: '3', text: 'too light — again', at: [0.03, 0.68] },
+      barcode: { code: '0417 0020', at: [0.07, 0.84] },
+    },
   },
   {
     word: 'THOUGHT',
@@ -914,6 +1020,7 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'right',
     driftPx: 40,
+    ground: 'bone',
     giants: [
       { text: 'INK', face: 'f900', cap: 0.45, x: -0.02, y: 0.35, align: 'l' },
       { text: 'PAPER', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.12, align: 'r' },
@@ -933,8 +1040,13 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive',
       metaR: 'Frame 22',
     },
+    layers: {
+      density: 'calm',
+      run: ['Second printing', '93'],
+      marks: true,
+    },
   },
-  // ── YOU ──
+  // ── YOU: paper, a blue second ink ──
   {
     word: 'YOU',
     face: 'fit',
@@ -950,6 +1062,8 @@ export const SCENES: readonly Scene[] = [
     slots: 1,
     drift: 'up',
     driftPx: 36,
+    ground: 'bone',
+    ink: 'blue',
     giants: [
       { text: 'DEAR', face: 'f900', cap: 0.44, x: -0.03, y: 0.34, align: 'l' },
       { text: 'READER', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.12, align: 'r' },
@@ -969,6 +1083,13 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive · Vol. V',
       metaR: 'Frame 24',
     },
+    layers: {
+      density: 'dense',
+      stamp: { text: 'Admitted', sub: 'one', shape: 'box', ink: 'blue', at: [0.7, 0.08], rot: 5, phone: true },
+      receipt: { lines: RECEIPT_STUB, at: [0.74, 0.7], rot: -2.4 },
+      note: { text: 'for the reader', at: [0.08, 0.78], rot: -3, arrow: 'r' },
+      barcode: { code: '0417 0024', at: [0.42, 0.08] },
+    },
   },
   {
     word: 'YOU',
@@ -976,6 +1097,7 @@ export const SCENES: readonly Scene[] = [
     slots: 4,
     drift: 'up',
     driftPx: 44,
+    ground: 'bone',
     giants: [
       { text: 'FIRST', face: 'f400', cap: 0.4, x: 0.5, y: 0.33, align: 'c' },
       { text: 'LIGHT', face: 'f900', cap: 0.45, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
@@ -995,16 +1117,152 @@ export const SCENES: readonly Scene[] = [
       metaL: 'Visual archive',
       metaR: 'Frame 25 · End of roll',
     },
+    layers: {
+      density: 'calm',
+      run: ['Visual archive — Vol. V', 'End of roll'],
+      print: { pic: 0, treat: 'halftone', at: [0.08, 0.74], w: 0.14, rot: -1.5, caption: 'Last frame', phone: false },
+    },
   },
 ];
 /** The scenes each layout plays (indices into SCENES): every one on both. */
-export const ACT3: Record<FilmLayout, readonly number[]> = {
+export const ACT_CUTS: Record<FilmLayout, readonly number[]> = {
   desktop: SCENES.map((_, i) => i),
   phone: SCENES.map((_, i) => i),
 };
 
+// ── Act 2: the hand-off ───────────────────────────────────────────────────
+/** A curve that is off the mark at once and settles long (the spec's). */
+export const GLIDE_EASE = [0.2, 0.7, 0.1, 1] as const;
+/** The last page cuts away under the anchor (a hard cut, on the sixth the
+ *  last scene ends); the lime block alone glides and shrinks into the first
+ *  machine's cursor across four twelfths, on the glide curve, and becomes it
+ *  (the same lime box, on the same frame). The anchor's word goes with the
+ *  page: never a word shrinking into a cursor. */
+export const HAND = {
+  frames: 4,
+  ease: GLIDE_EASE,
+} as const;
+
+// ── Act 3: the typewriter relay ───────────────────────────────────────────
+
+/** The typed line, lower case (PROPOSED copy). */
+export const TYPED = 'an archive of travel';
+
+/** The machines the line is typed on, in order, how long each is on screen
+ *  (twelfths of a second) and how many keys it strikes: slow to fast, then
+ *  the typewriter's paper holds (the last letter, the cursor blinking, the
+ *  burn). Each sets the line in its own face (the owner's "字体模范的切换"):
+ *  a 1-bit desktop's bitmap, a film's edge print, a terminal's dot matrix, a
+ *  label maker's embossed capitals, a word processor's sans, a bare page's
+ *  serif, a hand on grid paper, the typewriter's — on one left edge, one
+ *  baseline, one cap height. Light (the desktop, the lightbox), then the
+ *  dark run (the terminal, the tape on its desk), then light to the burn:
+ *  the relay turns the picture over twice. Every machine strikes a visible letter (never
+ *  only a space), and its first key falls on its own cut (RELAY_KEYS). */
+export type StyleId = 'mac' | 'film' | 'crt' | 'label' | 'beige' | 'bone' | 'grid' | 'paper';
+export type RelayFace = 'pixel' | 'dot' | 'edge' | 'emboss' | 'sans' | 'serif' | 'hand' | 'type';
+export const STYLES: readonly { id: StyleId; face: RelayFace; frames: number; keys: number; tone: Tone }[] = [
+  { id: 'mac', face: 'pixel', frames: 9, keys: 4, tone: 'light' },
+  { id: 'film', face: 'edge', frames: 5, keys: 4, tone: 'light' },
+  { id: 'crt', face: 'dot', frames: 4, keys: 3, tone: 'dark' },
+  { id: 'label', face: 'emboss', frames: 3, keys: 2, tone: 'dark' },
+  { id: 'beige', face: 'sans', frames: 3, keys: 2, tone: 'light' },
+  { id: 'bone', face: 'serif', frames: 3, keys: 2, tone: 'light' },
+  { id: 'grid', face: 'hand', frames: 3, keys: 2, tone: 'light' },
+  { id: 'paper', face: 'type', frames: 6, keys: 1, tone: 'light' },
+];
+export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
+/** The machine the burn takes (the last). */
+export const BURN_STYLE: StyleId = 'paper';
+
+/** The cursor's blink period (steps, half on and half off). */
+export const CURSOR_MS = 530;
+/** The blink on the film's clock: on at `start`, then off and on every half
+ *  period until `end` (the times it changes, and to what). */
+export function blinkSteps(start: number, end: number, period = CURSOR_MS): [number, 0 | 1][] {
+  const out: [number, 0 | 1][] = [];
+  const half = period / 2;
+  for (let k = 1; start + k * half < end; k += 1) out.push([start + k * half, k % 2 === 0 ? 1 : 0]);
+  return out;
+}
+/** The first letter three twelfths after the cursor has landed. */
+export const TYPE_AT = 3 * FRAME12_MS;
+/** The relay's keys: each machine's first on its own cut (a new machine
+ *  arrives with a new letter, never a keystroke a frame before a cut), the
+ *  rest evenly across its time — about eight letters a second. A key at
+ *  least `jitterClear` ms from both of its machine's cuts is nudged by up
+ *  to ±`jitter` ms (seeded); none falls in the `quiet` ms before a cut. */
+export const RELAY_KEYS = { jitter: 20, jitterClear: 70, quiet: 50, seed: 41 } as const;
+
+/** When each character of `text` appears: the first at `start`, the last
+ *  at `last` (neither nudged), evenly between, each nudged by a seeded
+ *  jitter of up to ±`jitter` ms (never so far that two swap). */
+export function typeTimes(text: string, start: number, last: number, jitter: number, seed: number) {
+  const n = text.length;
+  const interval = n > 1 ? (last - start) / (n - 1) : 0;
+  const j = Math.min(jitter, interval * 0.4);
+  const rand = seeded(seed);
+  const out: number[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const nudge = i === 0 || i === n - 1 ? 0 : (rand() * 2 - 1) * j;
+    // Not rounded: the first key must fall exactly on its time (a dark
+    // act may start on a sixth, not a whole millisecond).
+    out.push(start + i * interval + nudge);
+  }
+  return out;
+}
+
+/** When each character of TYPED appears in the relay: machine by machine,
+ *  as many keys as it strikes (STYLES), its first on its cut (the first
+ *  machine's TYPE_AT after its cut), the rest evenly spaced up to its end;
+ *  the middle keys nudged (RELAY_KEYS). */
+export function relayTimes(styles: readonly (Span & { id: StyleId })[]) {
+  const rand = seeded(RELAY_KEYS.seed);
+  const out: number[] = [];
+  styles.forEach((m, k) => {
+    const n = STYLES[k].keys;
+    const first = k === 0 ? m.start + TYPE_AT : m.start;
+    const step = (m.end - first) / n;
+    for (let i = 0; i < n; i += 1) {
+      const t = first + i * step;
+      const clear = i > 0 && t - m.start >= RELAY_KEYS.jitterClear && m.end - t >= RELAY_KEYS.jitterClear;
+      const nudge = clear ? (rand() * 2 - 1) * RELAY_KEYS.jitter : 0;
+      // Exact (a key on a cut is the cut's own time, to the last bit).
+      out.push(t + nudge);
+    }
+  });
+  return out;
+}
+
+/** How each typed character of the paper looks: its ribbon strength (0.75–1)
+ *  and how far it was struck off true (±0.5 px). Seeded: the server and the
+ *  client draw the same page. */
+export function ribbon(text: string, seed = 23) {
+  const rand = seeded(seed);
+  return text.split('').map(() => ({
+    ink: Math.round((0.75 + rand() * 0.25) * 100) / 100,
+    dx: Math.round((rand() - 0.5) * 100) / 100,
+    dy: Math.round((rand() - 0.5) * 100) / 100,
+  }));
+}
+
+/** A face turning into another, letter by letter (act 6, the landing):
+ *  every letter of the one face and its letter in the other are held to ONE
+ *  ink box, which goes from the first face's to the second's across `box`
+ *  (a share of the move), and the two faces are SWAPPED at `fade` — one
+ *  instant (a zero-width window) near the middle of it, at the move's
+ *  fastest, where the two letters are the same size in the same place: one
+ *  frame shows the one face, the next the other, never both (a crossfade,
+ *  however short, showed two words for two or three frames). The words are
+ *  in the same case on both sides (capitals). */
+export const GLYPH_MORPH = {
+  box: [0.06, 0.5] as const,
+  fade: [0.29, 0.29] as const,
+} as const;
+
 // ── Act 4: the film burn (24 fps) ─────────────────────────────────────────
-// Frame numbers are 0–23 from the act's start. The canvas (a fragment
+// On the typewriter's paper (the relay's last machine). Frame numbers are
+// 0–23 from the act's start. The canvas (a fragment
 // shader) is drawn only when the frame number changes; everything else is
 // held on the frame by stepped keyframes.
 export const BURN = {
@@ -1017,14 +1275,14 @@ export const BURN = {
    *  perforations. */
   slip: 3,
   slipShare: 0.25,
-  /** f4–8: the burn spreads from beside the anchor (its radius a share of
-   *  the frame's diagonal) and the frame outside it turns sepia. */
+  /** f4–8: the burn spreads from beside the typed line (its radius a share
+   *  of the frame's diagonal) and the frame outside it turns sepia. */
   burn: [4, 9] as const,
   radius: [0.025, 0.065, 0.12, 0.19, 0.27, 0.36, 0.45, 0.55] as const,
   sepia: [0.3, 0.45, 0.58, 0.7, 0.8, 0.86, 0.9, 0.9] as const,
   /** f9–11: all of it darkens to a deep brown-black and slides out at 6° —
-   *  UP, the way the last cut drifts and the slip went (the motion runs on;
-   *  a slide down would reverse it). */
+   *  UP, the way the slip went (the motion runs on; a slide down would
+   *  reverse it). */
   out: [9, 12] as const,
   darkness: [0.38, 0.68, 0.9] as const,
   slide: [-0.1, -0.38, -0.86] as const,
@@ -1117,10 +1375,12 @@ export const TITLE_YOU = { lead: 'Admit one', word: 'YOU' } as const;
 
 // ── Acts' lengths ─────────────────────────────────────────────────────────
 export const ACT_MS = {
-  /** Act 1: the machines' twelfths. */
+  /** Act 1: the match cuts' sixths. */
+  cuts: SCENES.reduce((s, x) => s + x.slots, 0) * CUT_MS,
+  /** Act 2: the hand-off's twelfths. */
+  hand: HAND.frames * FRAME12_MS,
+  /** Act 3: the machines' twelfths. */
   type: STYLES.reduce((s, x) => s + x.frames, 0) * FRAME12_MS,
-  /** Act 2: the sweep and the glide. */
-  find: FIND.sweepMs + FIND.glideMs,
   /** Act 4: 24 frames at 24 fps. */
   burn: 24 * FRAME24_MS,
   /** Act 5: the dark, typed (eight beats). */
@@ -1130,25 +1390,25 @@ export const ACT_MS = {
 } as const;
 
 // ── The plan: the whole film as spans on one clock ────────────────────────
-export type ActId = 'type' | 'find' | 'cuts' | 'burn' | 'dark' | 'title';
+/** The acts in the order they play. */
+export const ACT_ORDER = ['cuts', 'hand', 'type', 'burn', 'dark', 'title'] as const;
+export type ActId = (typeof ACT_ORDER)[number];
 export interface CutPlan extends Span {
   /** The scene (index into SCENES). */
   index: number;
   word: Keyword;
   face: AnchorFace;
   drift: Drift;
+  tone: Tone;
 }
 export interface FilmPlan {
   layout: FilmLayout;
   acts: Record<ActId, Span>;
-  styles: (Span & { id: StyleId })[];
-  /** Act 1: when each character of TYPED appears. */
-  typing: number[];
-  /** Act 2. */
-  sweep: Span;
-  glide: Span;
-  /** Act 3. */
+  /** Act 1. */
   cuts: CutPlan[];
+  /** Act 3: the machines, and when each character of TYPED appears. */
+  styles: (Span & { id: StyleId })[];
+  typing: number[];
   /** Act 5: when each character of DARK_TYPED appears; the blink after. */
   darkTyping: number[];
   blink: Span;
@@ -1160,25 +1420,25 @@ export interface FilmPlan {
 const onGrid = (n: number, unit: number) => Math.round(n * unit * 1e6) / 1e6;
 
 export function filmPlan(layout: FilmLayout): FilmPlan {
-  let f = 0;
+  const order = ACT_CUTS[layout];
+  let slot = 0;
+  const cuts: CutPlan[] = order.map((index) => {
+    const s = SCENES[index];
+    const start = onGrid(slot, CUT_MS);
+    slot += s.slots;
+    return { index, word: s.word, face: s.face, drift: s.drift, tone: sceneTone(s), start, end: onGrid(slot, CUT_MS) };
+  });
+  const cutsAct = { start: 0, end: cuts[cuts.length - 1].end };
+  const hand = { start: cutsAct.end, end: onGrid(cutsAct.end / FRAME12_MS + HAND.frames, FRAME12_MS) };
+  let f = hand.end / FRAME12_MS;
   const styles = STYLES.map((s) => {
     const span = { id: s.id, start: onGrid(f, FRAME12_MS), end: onGrid(f + s.frames, FRAME12_MS) };
     f += s.frames;
     return span;
   });
-  const typeEnd = onGrid(f, FRAME12_MS);
+  const type = { start: hand.end, end: styles[styles.length - 1].end };
   const typing = relayTimes(styles);
-  const find = { start: typeEnd, end: onGrid(typeEnd / FRAME12_MS + 6, FRAME12_MS) };
-  const order = ACT3[layout];
-  let slot = 0;
-  const cuts: CutPlan[] = order.map((index) => {
-    const s = SCENES[index];
-    const start = onGrid(find.end / CUT_MS + slot, CUT_MS);
-    slot += s.slots;
-    return { index, word: s.word, face: s.face, drift: s.drift, start, end: onGrid(find.end / CUT_MS + slot, CUT_MS) };
-  });
-  const cutsAct = { start: find.end, end: cuts[cuts.length - 1].end };
-  const burn = { start: cutsAct.end, end: onGrid(cutsAct.end / FRAME24_MS + 24, FRAME24_MS) };
+  const burn = { start: type.end, end: onGrid(type.end / FRAME24_MS + 24, FRAME24_MS) };
   const dark = { start: burn.end, end: burn.end + ACT_MS.dark };
   const title = { start: dark.end, end: dark.end + ACT_MS.title };
   const darkTyping = typeTimes(DARK_TYPED, dark.start + DARK_TYPE_AT, dark.start + DARK_TYPE_AT + ((DARK_TYPED.length - 1) * 1000) / DARK_CPS, 18, 77);
@@ -1186,36 +1446,35 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
   const blink = { start: title.start - CURSOR_MS / 2, end: title.start };
   return {
     layout,
-    acts: { type: { start: 0, end: typeEnd }, find, cuts: cutsAct, burn, dark, title },
+    acts: { cuts: cutsAct, hand, type, burn, dark, title },
+    cuts,
     styles,
     typing,
-    sweep: { start: find.start, end: onGrid(find.start / FRAME12_MS + 2, FRAME12_MS) },
-    glide: { start: onGrid(find.start / FRAME12_MS + 2, FRAME12_MS), end: find.end },
-    cuts,
     darkTyping,
     blink,
     length: title.end,
   };
 }
 
-/** The act-1 cursor on the film's clock: blinking before the first letter,
- *  solid while it types, blinking again after the last (until the glide
- *  carries it off). The times its ink changes, and to what. */
+/** The relay's cursor on the film's clock: it is the anchor's lime block,
+ *  landed (on at the relay's first frame), solid until and while it types,
+ *  blinking after the last letter until the burn has taken the frame. The
+ *  times its ink changes, and to what. */
 export function cursorSteps(plan: FilmPlan): [number, 0 | 1][] {
   const first = plan.typing[0];
   const last = plan.typing[plan.typing.length - 1];
-  const before = blinkSteps(0, first);
+  const before = blinkSteps(plan.acts.type.start, first);
   const out: [number, 0 | 1][] = [...before];
   if (before.length && before[before.length - 1][1] === 0) out.push([first, 1]);
-  return out.concat(blinkSteps(last, plan.glide.end));
+  return out.concat(blinkSteps(last, burnFrameStart(plan, BURN.out[1])));
 }
 
-/** Every hard cut of a plan: the machines, the acts, the match cuts. */
+/** Every hard cut of a plan: the match cuts, the acts, the machines. */
 export function hardCuts(plan: FilmPlan) {
   const out = new Set<number>();
-  plan.styles.forEach((m) => out.add(m.start));
-  Object.values(plan.acts).forEach((a) => out.add(a.start));
   plan.cuts.forEach((c) => out.add(c.start));
+  Object.values(plan.acts).forEach((a) => out.add(a.start));
+  plan.styles.forEach((m) => out.add(m.start));
   out.add(plan.length);
   return [...out].filter((t) => t > 0).sort((a, b) => a - b);
 }
@@ -1229,7 +1488,7 @@ export function burnFrameAt(plan: FilmPlan, t: number) {
 /** The start of burn frame f (film ms). */
 export const burnFrameStart = (plan: FilmPlan, f: number) => plan.acts.burn.start + f * FRAME24_MS;
 
-/** How the picture reads, light or dark, from start to end: the flash
+/** How the picture reads, light, mid or dark, from start to end: the flash
  *  budget is counted on this (scripts/opening-film.test.mjs). */
 export function toneTimeline(plan: FilmPlan): (Span & { tone: Tone })[] {
   const out: (Span & { tone: Tone })[] = [];
@@ -1238,19 +1497,32 @@ export function toneTimeline(plan: FilmPlan): (Span & { tone: Tone })[] {
     if (last && last.tone === tone && Math.abs(last.end - start) < 1e-6) last.end = end;
     else out.push({ start, end, tone });
   };
+  plan.cuts.forEach((c) => push(c.start, c.end, c.tone));
+  // The hand-off is on the first machine's screen.
+  push(plan.acts.hand.start, plan.acts.hand.end, STYLE_TONE[plan.styles[0].id]);
   plan.styles.forEach((m) => push(m.start, m.end, STYLE_TONE[m.id]));
-  push(plan.acts.find.start, plan.acts.cuts.end, 'light');
   // The burn stays light (a sepia frame, a local burn) until it darkens
   // and slides out; from there on it is the dark.
   push(plan.acts.burn.start, burnFrameStart(plan, BURN.out[0]), 'light');
   push(burnFrameStart(plan, BURN.out[0]), plan.length + LANDING_A.done, 'dark');
   return out;
 }
-/** The times the picture turns over, light to dark or back. */
+/** The times the picture turns over, light to dark or back (a mid ground in
+ *  between turns nothing over: light, mid, dark is one turn). */
 export function toneFlips(plan: FilmPlan) {
-  const tl = toneTimeline(plan);
-  return tl.slice(1).map((s) => s.start);
+  const out: number[] = [];
+  let side: Tone | null = null;
+  toneTimeline(plan).forEach((s) => {
+    if (s.tone === 'mid') return;
+    if (side && s.tone !== side) out.push(s.start);
+    side = s.tone;
+  });
+  return out;
 }
+/** The whole film's budget of turns (the owner allows more than the spec's
+ *  four now that the pages carry black and white and colour: never more than
+ *  three in any second). */
+export const FLIP_BUDGET = { total: 6, perSecond: 3 } as const;
 
 // ── Input: only the Skip pill ─────────────────────────────────────────────
 // While the film plays, the reader's wheel, touch, keys and clicks do
@@ -1291,8 +1563,8 @@ export const GLOBE_LEAD_MS = 2900;
 export const globeReleaseAt = (plan: FilmPlan) => Math.max(0, plan.length - GLOBE_LEAD_MS);
 
 // ── One ink box: a word turning from one face into another ────────────────
-// Act 2 (the typewriter's ARCHIVE into Fraunces's ARCHIVE), act 6 (the typed
-// RYAN XU into the title) and the landing hold both faces to ONE ink box: the
+// Act 6 (the typed RYAN XU into the title) and the landing hold both faces
+// to ONE ink box: the
 // same centre and height, and one shared width that goes from the first
 // face's to the second's — so the crossfade (one window, no blur) is a morph
 // of letterforms, never a double image.
@@ -1427,9 +1699,9 @@ export function sampleCurve(ease: Bezier, n = 14) {
 export const STILL = { hold: 1100, fade: 700 } as const;
 
 // ── His photographs ────────────────────────────────────────────────────────
-// Three of his frames play parts: the life behind the pill (blurred), the
-// small print pinned to the grid paper (black and white), the magazine's
-// picture page. Each at its own ratio (never cropped or stretched), one per
+// Three of his frames play parts: the prints taped to the pages and the
+// grid paper (a halftone, a duotone, blown out), the magazine's picture page
+// and the big halftones, the strip of negatives and the lightbox's frames. Each at its own ratio (never cropped or stretched), one per
 // chapter where there are enough.
 export interface OpeningPicture {
   src: string;
@@ -1441,10 +1713,10 @@ interface PictureSource {
   height?: number | null;
 }
 /** A photograph's ratio for the film: landscape-ish (a portrait frame
- *  would leave the pill's life a sliver and the magazine's plate a strip). */
+ *  would leave a strip's frame a sliver and the magazine's plate a strip). */
 export const PICTURE_RATIO = [1.2, 1.8] as const;
 /** Each role's width, px (the blurred life needs next to nothing). */
-export const PICTURE_W = [96, 480, 900] as const;
+export const PICTURE_W = [480, 900, 640] as const;
 export function pickPictures(groups: readonly { photos?: readonly PictureSource[] | null }[], count = 3): OpeningPicture[] {
   const usable = (p: PictureSource) => {
     if (!p.imageUrl || !p.width || !p.height) return false;
@@ -1467,10 +1739,13 @@ export function pickPictures(groups: readonly { photos?: readonly PictureSource[
 
 // ── The fonts, loaded before the clock starts ─────────────────────────────
 // Every face and weight the film sets (document.fonts.load each, with the
-// characters it sets, so the right subset comes). No cut may show a
-// fallback face: the clock waits for these (and for his photographs to be
-// decoded) at most FONT_WAIT_MS — past that the film plays on whatever has
-// come.
+// characters it sets, so the right subset comes). The clock waits for them
+// at most FONT_WAIT_MS after the island starts (the first page is on screen
+// meanwhile: the server's markup) and never for his photographs (they load
+// behind the film) — past that the film plays on whatever has come, and a
+// face that lands later has every word measured again on the same clock. A
+// reload never sits still: the clock is running a third of a second after
+// the island is.
 export const FONT_LOADS = [
   '900 100px Fraunces',
   '400 100px Fraunces',
@@ -1479,9 +1754,10 @@ export const FONT_LOADS = [
   '700 20px "Space Grotesk"',
   '600 20px "Space Grotesk"',
   '500 20px "Space Grotesk"',
+  '400 20px "Space Grotesk"',
 ] as const;
 export const FONT_SAMPLE = 'ARCHIVECMTLOUGYZNPBFRWDSK abcdefghijklmnopqrstuvwxyz 0123456789 ·°—/.,′’';
-export const FONT_WAIT_MS = 3500;
+export const FONT_WAIT_MS = 250;
 
 // ── Deterministic material ────────────────────────────────────────────────
 export function seeded(seed: number) {
