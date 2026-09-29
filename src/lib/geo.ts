@@ -49,3 +49,6 @@ export function chapterPoint(chapter: Placed): LngLat | undefined {
     points.reduce((sum, point) => sum + point.lat, 0) / points.length,
   ];
 }
+
+/** A longitude difference folded into -180..180 (the short way round). */
+export const wrap180 = (degrees: number) => ((((degrees + 180) % 360) + 360) % 360) - 180;

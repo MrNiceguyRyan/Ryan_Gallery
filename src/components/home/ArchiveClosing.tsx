@@ -184,7 +184,7 @@ interface Props {
   /** The issue's chapters, in the homepage's reading order (HomePage's
    *  `orderedCities`): the same list the ticket stubs are printed from. */
   collections: Collection[];
-  /** Back to the first screen (HomePage's voyage up the page). */
+  /** Back to the start: the entrance's opening words, a new pass (HomePage). */
   onBackToStart: () => void;
   /** Open a chapter's story from the sheet (HomePage owns the overlay). */
   onOpenStory?: (collectionId: string, request: ClosingStoryRequest) => void;

@@ -16,7 +16,7 @@ import ArchiveClosing, { type ClosingStoryRequest } from './ArchiveClosing';
 import EntranceIntro from './EntranceIntro';
 import ExplorerControls, { type ExplorerPlace } from './ExplorerControls';
 import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin, type PlateStub } from './MagazineLayout';
-import type { AtlasFlight, AtlasVoyage, RouteStop } from './RouteAtlas';
+import type { AtlasFlight, RouteStop } from './RouteAtlas';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import { storyFrames } from '../../lib/storyPlan';
 import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
@@ -136,7 +136,6 @@ function ticketStubOf(stubNode: HTMLElement): PlateStub | null {
 interface DeferredRouteAtlasProps {
   stops: RouteStop[];
   chapterIds?: string[];
-  prologueProgress?: MotionValue<number>;
   entryProgress?: MotionValue<number>;
   current: string | null;
   flight?: AtlasFlight | null;
@@ -147,7 +146,6 @@ interface DeferredRouteAtlasProps {
   mobile?: boolean;
   paused?: boolean;
   engagedChapterId?: string | null;
-  voyage?: AtlasVoyage | null;
   onEngage?: (chapterId: string | null) => void;
   onSelect?: (chapterId: string) => void;
   onDismiss?: () => void;
@@ -155,7 +153,6 @@ interface DeferredRouteAtlasProps {
   eager?: boolean;
   holdReveal?: boolean;
   engage?: boolean;
-  covered?: boolean;
 }
 
 function RouteAtlasFallback({ mobile = false, entryProgress }: {
@@ -344,19 +341,15 @@ export default function HomePage({ collections }: Props) {
   // ── The explorer (src/lib/explorer.ts) ──
   const [explorer, setExplorer] = useState<ExplorerState>(EXPLORER_START);
   const explorerRef = useRef(explorer);
-  // The desktop's clocks for the entry (RouteAtlas follows them). The
-  // prologue's is held at its end: the globe no longer sits in the first
-  // screen's corner facing India, to be turned half round the planet — it
-  // rises with the page already facing stop 01, where the prologue used to
-  // hand over — and the entry is the descent alone, on the entry's clock.
-  const prologueProgress = useMotionValue(1);
+  // The desktop's clock for the entry (RouteAtlas follows it): the descent
+  // alone. The globe no longer sits in a first screen's corner facing India,
+  // to be turned half round the planet first — it rises with the page
+  // already facing stop 01.
   const entryProgress = useMotionValue(0);
   const entryAnimRef = useRef<{ stop: () => void } | null>(null);
   const [flight, setFlight] = useState<AtlasFlight | null>(null);
   const flightTokenRef = useRef(0);
   const entryFlightRef = useRef<number | null>(null);
-  // The entry under way, for the globe's easter eggs.
-  const [entryVoyage, setEntryVoyage] = useState<AtlasVoyage | null>(null);
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
@@ -484,16 +477,12 @@ export default function HomePage({ collections }: Props) {
     entryAnimRef.current?.stop();
     const entered = () => {
       entryAnimRef.current = null;
-      setEntryVoyage(null);
       dispatchRef.current({ type: 'entered' });
     };
     if (!desktopLayout) {
       entryFlightRef.current = nextFlight('entry', id);
-      setEntryVoyage({ chapterId: id ?? '', duration: ENTRY.phoneMinMs, token: flightTokenRef.current });
       return;
     }
-    setEntryVoyage({ chapterId: id ?? '', duration: ENTRY.diveMs, token: Date.now() });
-    prologueProgress.set(1);
     if (reduce) {
       entryProgress.set(1);
       entered();
@@ -513,7 +502,7 @@ export default function HomePage({ collections }: Props) {
         dive.stop();
       },
     };
-  }, [desktopLayout, entryProgress, nextFlight, prologueProgress, reduce]);
+  }, [desktopLayout, entryProgress, nextFlight, reduce]);
 
   // ── The entrance (EntranceIntro) ──
   // On the page above the explorer until the explorer has it (`entranceOn`);
@@ -539,11 +528,9 @@ export default function HomePage({ collections }: Props) {
     entryAnimRef.current?.stop();
     entryAnimRef.current = null;
     entryFlightRef.current = null;
-    setEntryVoyage(null);
     setPageVeiled(true);
     window.setTimeout(() => {
       if (desktopLayout) {
-        prologueProgress.set(1);
         entryProgress.set(0);
       } else {
         nextFlight('home', null);
@@ -552,7 +539,7 @@ export default function HomePage({ collections }: Props) {
       setEntranceOn(true);
       window.setTimeout(() => setPageVeiled(false), 80);
     }, reduce ? 0 : DUR_MS.out);
-  }, [desktopLayout, entryProgress, nextFlight, prologueProgress, reduce]);
+  }, [desktopLayout, entryProgress, nextFlight, reduce]);
 
   const play = useCallback((effects: ExplorerEffect[], gesture: number) => {
     const step = (index: number) => {
@@ -636,7 +623,6 @@ export default function HomePage({ collections }: Props) {
   const onArrive = useCallback((token: number) => {
     if (token === entryFlightRef.current) {
       entryFlightRef.current = null;
-      setEntryVoyage(null);
       dispatchRef.current({ type: 'entered' });
     }
   }, []);
@@ -652,15 +638,13 @@ export default function HomePage({ collections }: Props) {
     if (desktopLayout) {
       entryAnimRef.current?.stop();
       entryAnimRef.current = null;
-      prologueProgress.set(1);
       entryProgress.set(1);
-      setEntryVoyage(null);
       dispatchRef.current({ type: 'entered' });
       return;
     }
     const id = explorerRef.current.current;
     if (id && entryFlightRef.current != null) entryFlightRef.current = nextFlight('cut', id);
-  }, [desktopLayout, entryProgress, nextFlight, prologueProgress]);
+  }, [desktopLayout, entryProgress, nextFlight]);
 
   // A window that crosses the phone/desktop line with the map in hand (a
   // tablet turned, a window dragged narrower): the other layout's camera is
@@ -676,14 +660,12 @@ export default function HomePage({ collections }: Props) {
     entryAnimRef.current?.stop();
     entryAnimRef.current = null;
     entryFlightRef.current = null;
-    setEntryVoyage(null);
     if (desktopLayout) {
-      prologueProgress.set(1);
       entryProgress.set(1);
     }
     if (state.phase === 'entering') dispatchRef.current({ type: 'entered' });
     if (state.current) nextFlight('cut', state.current);
-  }, [desktopLayout, entryProgress, nextFlight, prologueProgress]);
+  }, [desktopLayout, entryProgress, nextFlight]);
 
   // ── The hand-over: the explorer takes the page ──
   // Asked for through the seam (below): the boarding pass, torn, asks once
@@ -1146,7 +1128,6 @@ export default function HomePage({ collections }: Props) {
     <DeferredRouteAtlas
       stops={routeStops}
       chapterIds={orderedChapterIds}
-      prologueProgress={desktopLayout ? prologueProgress : undefined}
       entryProgress={desktopLayout ? entryProgress : undefined}
       current={current}
       flight={flight}
@@ -1157,7 +1138,6 @@ export default function HomePage({ collections }: Props) {
       mobile={!desktopLayout}
       paused={atlasPaused}
       engagedChapterId={engagedChapterId}
-      voyage={entryVoyage}
       onEngage={setEngagedChapterId}
       onSelect={select}
       onDismiss={() => dispatchRef.current({ type: 'dismiss' })}
@@ -1167,7 +1147,6 @@ export default function HomePage({ collections }: Props) {
       // The map is the page's second half: the camera holds the pose the
       // globe will rise in (its tiles loading) while the entrance is read.
       engage
-      covered={reelCovering || globeHeld}
     />
   );
 

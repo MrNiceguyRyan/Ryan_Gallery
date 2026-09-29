@@ -1,6 +1,6 @@
 // Run: node --test scripts/archive-entrance.test.mjs
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { entrancePhase, ARCHIVE_ENTRANCE_PHASES as phases } from '../src/lib/archiveEntrance.ts';
 
@@ -33,7 +33,6 @@ test('the entry\'s score is the map\'s visibility and the interface\'s only: no 
 test('the entry goes straight down onto stop 01: its cover is simply there, whole and live', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  const prologue = readFileSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url), 'utf8');
   const atlas = readFileSync(new URL('../src/components/home/RouteAtlas.tsx', import.meta.url), 'utf8');
   const closing = readFileSync(new URL('../src/components/home/ArchiveClosing.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
@@ -41,15 +40,18 @@ test('the entry goes straight down onto stop 01: its cover is simply there, whol
   // unnecessary): the globe dives straight into chapter 1. No count page, no
   // index, no roll — and nothing holds chapter 1's plate back for a landing.
   // Since 2026-09-28 his name and the opening words are the entrance's
-  // (EntranceIntro, above the globe: no globe there), where the opening
-  // film's words land; the globe's first pose keeps one quiet caption.
+  // (EntranceIntro: no globe there), where the opening film's words land.
+  // The globe's first screen went with it (GlobePrologue: his name over a
+  // corner globe facing India, then "The route begins in …" beside it): the
+  // torn pass brings the globe up already facing stop 01, and the explorer's
+  // rail says the place once the camera is down on it — one line, not two.
   const entrance = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
   assert.match(entrance, /data-open-land="ryan"/);
   assert.match(entrance, /data-open-land="xu"/);
   for (const word of ['camera', 'travel', 'archive', 'thought']) assert.match(entrance, new RegExp(`\\{ land: '${word}' \\}`));
-  assert.doesNotMatch(prologue, /data-open-land/);
-  assert.match(prologue, /The route begins in/);
-  assert.doesNotMatch(prologue, /bridge|archive-index|chapters · |\bframes\b/i);
+  assert.equal(existsSync(new URL('../src/components/home/GlobePrologue.tsx', import.meta.url)), false);
+  assert.doesNotMatch(home, /GlobePrologue|The route begins in|data-open-land/);
+  assert.doesNotMatch(css, /globe-prologue|prologue-cap/);
   assert.doesNotMatch(home, /rollFrames|rollGates|archive-index|Back to index/);
   assert.doesNotMatch(atlas, /rollGates|bridgeRoll|prologue-mark|archive-index/);
   assert.doesNotMatch(closing, /Back to index|onBackToIndex/);
@@ -84,9 +86,12 @@ test('the fallback and the live map share the entry\'s clock, which is time, not
   assert.match(home, /RouteAtlasFallback mobile=\{props\.mobile\} entryProgress=\{props\.entryProgress\}/);
   assert.match(home, /entrancePhase\(p, \.\.\.ARCHIVE_ENTRANCE_PHASES\.mapVisibility\)/);
   // The entry runs on time (src/lib/explorerCamera.ts ENTRY), never on the
-  // page's scroll: the page does not scroll.
-  assert.match(home, /prologueProgress\.set\(entryQ\(t, q0, 0\)\)/);
+  // page's scroll: the descent alone (no turn before it), and the explorer's
+  // page does not scroll. The entrance above it does, on Lenis, until the
+  // explorer has the page: then Lenis goes and the body is clipped.
   assert.match(home, /animate\(entryProgress, 1, \{\s*duration: ENTRY\.diveMs \/ 1000/);
-  assert.doesNotMatch(home, /archiveEntryProgress|window\.scrollY|startLenis/);
+  assert.doesNotMatch(home, /prologueProgress|entryQ|turnMs|archiveEntryProgress/);
+  assert.match(home, /if \(!entranceOn\) return;\s*const \{ lenis, destroy \} = startLenis\(\);/);
+  assert.match(home, /if \(entranceOn\) return;\s*document\.body\.style\.overflow = 'clip';/);
   assert.match(map, /entrancePhase\(Number\(entry\), \.\.\.ARCHIVE_ENTRANCE_PHASES\.interface\)/);
 });

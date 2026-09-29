@@ -8,45 +8,29 @@ import {
   SILVER_FLOOR,
   SILVER_RAMP,
   createGlobeChannel,
-  globeGraticule,
   globeLookAt,
-  prologueNaturalLongitude,
-  prologueTurnRemaining,
   silverFloorAt,
   silverPaint,
   silverRamp,
   STOCK_PAINT,
 } from '../src/lib/globeLook.ts';
 
-const TARGET = -80.19;
-
-test('the prologue turn never stalls or turns back, whatever the drift, and ends on the target', () => {
-  // It turns WEST (the eggs' pin and the BULB's hand-back go with it, see
-  // scripts/globe-egg.test.mjs): the centre's longitude only ever falls.
-  for (const drift of [0, 15, 30]) {
-    let previous = Infinity;
-    for (let step = 0; step <= 1000; step += 1) {
-      const q = step / 1000;
-      const center = prologueNaturalLongitude(TARGET, q, drift);
-      assert.ok(center < previous, `drift ${drift}: centre ${center} at q ${q} is not past ${previous}`);
-      previous = center;
-    }
-    assert.ok(Math.abs(prologueNaturalLongitude(TARGET, 1, drift) - TARGET) < 1e-9);
-    assert.equal(prologueTurnRemaining(1, drift), 0);
+test('the first screen\'s corner globe and its turn are gone: the globe rises facing stop 01', async () => {
+  // The globe left the first screen (2026-09-28: the entrance's opening
+  // words and boarding pass are there); the torn pass brings it up already
+  // facing stop 01. Nothing of the corner globe's turn (India's face turned
+  // ~195° west to the Americas), its drift or its graticule is left.
+  const look = await import('../src/lib/globeLook.ts');
+  for (const name of ['prologueTurnRemaining', 'prologueNaturalLongitude', 'prologueGlide', 'prologueRoll', 'PROLOGUE_TURN', 'globeGraticule']) {
+    assert.equal(name in look, false, name);
   }
-  // The first screen settles at ≈ 115°E and drifts on west over India to
-  // ≈ 85°E; the first paint is the settle's 24° further east.
-  assert.ok(Math.abs(prologueNaturalLongitude(TARGET, 0, 0) - 114.81) < 1e-9);
-  assert.ok(Math.abs(prologueNaturalLongitude(TARGET, 0, 30) - 84.81) < 1e-9);
-  assert.ok(Math.abs(prologueNaturalLongitude(TARGET, 0, 0, 24) - 138.81) < 1e-9);
 });
 
-test('the key light, the ambient floor and the graticule follow the measured schedule', () => {
+test('the key light and the ambient floor follow the measured schedule', () => {
   const near = (actual, expected, tolerance = 0.006) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} ≠ ${expected}`);
   const rest = globeLookAt(0);
   near(rest.azimuth, 150); near(rest.theta, 72); near(rest.ambient, 0.14); near(rest.nightTint, 0.55);
   assert.equal(rest.floor, 0);
-  assert.equal(rest.graticule, 0);
   assert.equal(globeLookAt(0, 0).theta, 128);
   const early = globeLookAt(0.2);
   assert.equal(early.floor, 0.36);
@@ -57,15 +41,15 @@ test('the key light, the ambient floor and the graticule follow the measured sch
   near(globeLookAt(0.25).floor, 0.72, 0.001);
   const mid = globeLookAt(0.42);
   assert.equal(mid.floor, 1);
-  near(mid.graticule, 0.1, 0.0001);
   near(mid.azimuth, 150);
   const index = globeLookAt(0.9);
   near(index.azimuth, 118); near(index.theta, 34); near(index.ambient, 0.34); near(index.nightTint, 0.25);
-  near(index.graticule, 0.1, 0.0001);
-  near(globeLookAt(0.965).graticule, 0.03, 0.0001);
-  assert.equal(globeLookAt(1).graticule, 0);
-  // Never on the first screen.
-  for (let q = 0; q <= 0.28; q += 0.01) assert.equal(globeLookAt(q).graticule, 0);
+  // The globe the pass brings up is drawn at q = 1: the light swung round
+  // onto the places, the floor lifted.
+  const planet = globeLookAt(1);
+  near(planet.azimuth, 118); near(planet.theta, 34);
+  assert.equal(planet.floor, 1);
+  assert.equal('graticule' in planet, false);
 });
 
 test('the first screen keeps the approved light, and eases to the under-way light across the floor lift', () => {
@@ -126,20 +110,25 @@ test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps t
   assert.equal(silverPaint(0)['raster-brightness-min'], 0);
 });
 
-test('graticule, channel and wiring', () => {
-  const graticule = globeGraticule();
-  assert.equal(graticule.features.length, 24 + 11);
+test('channel and wiring', () => {
   const channel = createGlobeChannel();
-  channel.offset = 12;
-  assert.equal(channel.compose(-100, 0), -88);
   assert.equal(channel.revealed, false);
+  // The globe rises already lit: the dawn at its end, no veil on the night
+  // side, and nothing (no egg) to hover it.
+  assert.equal(channel.dawn, 1);
+  assert.equal(channel.veil, 0);
+  assert.equal(channel.hover, 0);
+  assert.equal('compose' in channel, false);
   const source = readFileSync(new URL('../src/components/home/RouteAtlas.tsx', import.meta.url), 'utf8');
   // mapbox-gl 3 has no pixelRatio option: the prop was a no-op and is gone.
   assert.doesNotMatch(source, /pixelRatio=\{/);
   assert.doesNotMatch(source, /introSpin|introZoom/);
-  // The canvas is held until the reveal; the camera stays the only writer.
+  // The canvas is held until the reveal (the pass torn, the tiles in); the
+  // camera stays the only writer, and it draws the look at the planet's own.
   assert.match(source, /opacity: globeRevealed \? 1 : 0/);
-  assert.match(source, /globeChannel\.compose\(natural, q\)/);
+  assert.match(source, /if \(holdRevealRef\.current\) \{/);
+  assert.match(source, /const floor = silverFloorAt\(1\);/);
+  assert.doesNotMatch(source, /GlobeEggs|createEggExposure|prologue-graticule|lifeActive|globeIntro/);
 });
 
 test('the archive stays on the globe (owner decision, 2026-09-25)', () => {

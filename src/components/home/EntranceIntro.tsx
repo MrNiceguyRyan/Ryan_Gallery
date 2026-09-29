@@ -28,11 +28,12 @@ import { EASE, bezierFn } from '../../lib/motion';
 // that stretch the pass tears for the reader, so nobody is ever stuck. Torn
 // — by hand, button, key or scroll — the page goes on in one calm glide: the
 // pass's main part slides away up the screen as the globe rises over the
-// lower edge into its familiar first pose (the prologue), fading in and
-// lit by its dawn on the way, but not turning (one move at a time: its
-// settle is skipped and its drift waits for the landing). On a phone the
-// glide lands on the phone's own opener. Reduced motion: the stub fades,
-// nothing moves the page.
+// lower edge, the whole planet already facing stop 01, fading in lit but
+// not turning (one move at a time). Landed, the pass asks for the explorer
+// (HomePage: `requestExplore`, the seam) and the camera goes straight down
+// onto stop 01; the entrance is then taken off the page. On a phone the
+// glide brings up the map above stop 01 the same way. Reduced motion: the
+// stub fades, nothing moves the page (HomePage cuts to the explorer).
 //
 // The geometry is derived (document offsets once per layout, the scroll
 // position per frame); nothing reads a rect per frame.
@@ -92,13 +93,14 @@ interface Props {
   first: PassChapter | null;
   lenisRef: MutableRefObject<Lenis | null>;
   /** Where the page goes on to once the pass is torn (document px): the
-   *  globe's first pose on the desktop, the phone's opener. */
+   *  explorer's top, the globe (the map above stop 01 on a phone). */
   nextTop: () => number | null;
   /** The globe may come in: HomePage lets go of the atlas's held reveal.
-   *  `glide`: the page glides it into view (its first screen's line comes up
-   *  with it); false when the reader is already past the pass. */
+   *  `glide`: the page glides it into view; false when the reader is
+   *  already past the pass. */
   onArrive: (glide: boolean) => void;
-  /** The glide has landed (or there was none to make). */
+  /** The glide has landed (or there was none to make): the globe is up,
+   *  and HomePage asks for the explorer (the seam). */
   onArrived?: () => void;
   /** The opening film still lies over the page. */
   covered: boolean;

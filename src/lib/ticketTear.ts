@@ -1,8 +1,7 @@
 // ── The tear: how a ticket's face comes off, frame by frame ──
-// Every desktop cover is a ticket (ArchiveChapter, "The tear"), and the globe
-// egg's ADMIT ONE is the same object (GlobeEggs). Both tear on this one score,
-// kept pure (plain 2×3 affine arrays, no DOM) so scripts/ticket-latch.test.mjs
-// can hold it to its promises.
+// Every cover is a ticket (ArchiveChapter, "The tear"). It tears on this one
+// score, kept pure (plain 2×3 affine arrays, no DOM) so
+// scripts/ticket-latch.test.mjs can hold it to its promises.
 //
 // Held like a ticket in two hands. The right hand keeps the stub; the reader's
 // push is the left hand. It takes the strain first (the face dips a hair, the

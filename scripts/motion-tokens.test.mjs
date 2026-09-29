@@ -160,13 +160,18 @@ test('every curve is one a browser accepts, and the leaving curves ease in', () 
   for (const ms of Object.values(DUR_MS)) assert.ok(Number.isInteger(ms) && ms > 0);
 });
 
-test('the voyage\'s sine is the explorer\'s: its flights and its entry turn ride it', () => {
+test('the voyage\'s sine is the explorer\'s: its flights and its entry\'s descent ride it', () => {
   const sine = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
   for (let t = 0; t <= 1; t += 0.0625) assert.equal(voyageEase(t), sine(t));
-  // The page no longer scrolls on a voyage (the homepage is a map to roam):
-  // the voyage's clock went with it.
+  // The page no longer scrolls on a voyage (the explorer is a map to roam):
+  // the voyage's clock went with it. Only the entrance above it scrolls —
+  // the rest of the pass's glide on to the globe, and the wordmark back up
+  // to the opening words — on the pass's own glide curve.
   const home = readFileSync(join(ROOT, 'src/components/home/HomePage.tsx'), 'utf8');
-  assert.doesNotMatch(home, /voyageSeconds|lenis\.scrollTo/);
+  assert.doesNotMatch(home, /voyageSeconds/);
+  const scrolls = home.match(/lenis\.scrollTo\([^)]*\)/g) ?? [];
+  assert.equal(scrolls.length, 2);
+  for (const call of scrolls) assert.match(call, /easing: arrivalCurve/);
   const camera = readFileSync(join(ROOT, 'src/lib/explorerCamera.ts'), 'utf8');
   assert.match(camera, /import \{ voyageEase \} from '\.\/motion\.ts';/);
   const atlas = readFileSync(join(ROOT, 'src/components/home/RouteAtlas.tsx'), 'utf8');

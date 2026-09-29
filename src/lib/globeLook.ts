@@ -197,15 +197,13 @@ export interface GlobeLookValues {
   haze: number;
   hazeWidth: number;
   glow: number;
-  /** Opacity of the faint prologue graticule, quantised to 1/200. */
-  graticule: number;
 }
 
-/** The single source for everything that changes with the scroll: the key
- *  light starts upper left, from the name's side, and swings round onto the
- *  archive's places as the planet glides in; the ocean floor lifts once the page is
- *  under way; a faint graticule shows mid-prologue only (never on the first
- *  screen). `dawn` (0..1) sweeps the light in from behind the planet on load. */
+/** The look at the prologue's progress q: the key light from upper left
+ *  swung round onto the archive's places by q = 1, the ocean floor lifted.
+ *  The globe the torn pass brings up is drawn at q = 1 (RouteAtlas); the
+ *  curve is kept whole, as measured, for the light's own sake. `dawn` (0..1)
+ *  sweeps the light in from behind the planet. */
 export function globeLookAt(q: number, dawn = 1): GlobeLookValues {
   const swing = smootherstep(clamp01((q - 0.45) / (0.8 - 0.45)));
   const floor = silverFloorAt(q);
@@ -228,7 +226,6 @@ export function globeLookAt(q: number, dawn = 1): GlobeLookValues {
     haze: lerp(FIRST_SCREEN_LIGHT.haze, PLANET_LIGHT.haze, underway),
     hazeWidth: lerp(FIRST_SCREEN_LIGHT.hazeWidth, PLANET_LIGHT.hazeWidth, underway),
     glow: lerp(FIRST_SCREEN_LIGHT.glow, PLANET_LIGHT.glow, underway),
-    graticule: Math.round(200 * 0.1 * smoothstep(0.28, 0.42, q) * (1 - clamp01((q - 0.9) / 0.09))) / 200,
   };
 }
 
@@ -240,186 +237,38 @@ export function lightDirection(azimuthDeg: number, thetaDeg: number): [number, n
   return [Math.cos(az) * Math.sin(th), Math.sin(az) * Math.sin(th), Math.cos(th)];
 }
 
-// ── The turn ──
-/** The prologue's turn runs WEST: Asia, Africa, the Atlantic, the Americas,
- *  so the planet comes round onto the first chapter from the east as it
- *  glides in, and the eggs' pin and the BULB's hand-back turn with it. The
- *  centre is target + A·(1 − q)³ + B·(1 − q): quick while the planet sits in
- *  the corner, slow as it glides in. A + B is the whole turn, chosen so the first screen
- *  keeps its face: ≈ 115°E once the load-in has settled, drifting west over
- *  India toward ≈ 85°E, it faces 90–97°E through the first seconds, as the
- *  eastward drift did. `dir` is the way the centre's longitude goes as the
- *  page scrolls, for the eggs' pin (src/lib/globeEgg.ts). */
-export const PROLOGUE_TURN = { A: 121, B: 74, dir: -1 } as const;
-
-/** How many degrees of the prologue's turn are still to come at progress q
- *  (a magnitude; the turn goes PROLOGUE_TURN.dir). The idle drift is folded
- *  INTO the turn rather than faded out beside it: fading it out across
- *  q 0.28–0.5 ran against the scroll's own turn and the globe stalled, then
- *  turned back. The drift turns the same way as the scroll and is consumed by
- *  it, so the centre only ever moves one way for any drift below the whole
- *  turn, and the turn still ends exactly on the target at q = 1. */
-export function prologueTurnRemaining(q: number, drift: number) {
-  const u = 1 - clamp01(q);
-  const { A, B } = PROLOGUE_TURN;
-  return (A * u * u * u + B * u) * (1 - drift / (A + B));
-}
-
-/** How far the entry has brought the planet in from the corner at progress
- *  q: the share of the whole turn already made (the drift cancels out of the
- *  ratio). The glide runs on the turn's own clock, so the entry's two
- *  motions start, peak and end together (explorerCamera, `entryQ`, plays the
- *  turn on the house's sine: the glide is that same sine). Before the review
- *  of 2026-09-28 the glide was a smootherstep of q from 0.35: the turn and
- *  the glide first cancelled, then added, and the ground surged four times
- *  over within 350 ms nearly three seconds in — the lurch. */
-export function prologueGlide(q: number) {
-  const u = 1 - clamp01(q);
-  const { A, B } = PROLOGUE_TURN;
-  return 1 - (A * u * u * u + B * u) / (A + B);
-}
-
-/** The corner globe's axial tilt comes out over the first ENTRY_ROLL_SHARE of
- *  the entry's turn (its time, recovered from the glide, which is the
- *  house's sine of it), on a sine of its own: done before the turn is at its
- *  fastest (half-way), never on top of it. 14° over 45% of 3.8 s peaks at
- *  ~13°/s (the review measured 20°/s, the roll running through the turn). */
-export const ENTRY_ROLL_SHARE = 0.45;
-export function prologueRoll(glide: number) {
-  const t = Math.acos(1 - 2 * clamp01(glide)) / Math.PI;
-  const u = clamp01(t / ENTRY_ROLL_SHARE);
-  return (1 - Math.cos(Math.PI * u)) / 2;
-}
-
-/** The prologue globe's longitude before any egg: the
- *  target plus the turn still to come and the load-in settle, both of which
- *  it turns off westward. */
-export function prologueNaturalLongitude(targetLongitude: number, q: number, drift: number, settle = 0) {
-  return targetLongitude - PROLOGUE_TURN.dir * (prologueTurnRemaining(q, drift) + settle);
-}
-
-// ── The prologue graticule ──
-/** 24 meridians and 11 parallels, densified every 2.5° so they curve on the
- *  globe. Drawn in white ink under the route, never on the first screen. */
-export function globeGraticule() {
-  const features: Array<{
-    type: 'Feature';
-    properties: Record<string, never>;
-    geometry: { type: 'LineString'; coordinates: [number, number][] };
-  }> = [];
-  for (let longitude = -180; longitude < 180; longitude += 15) {
-    const coordinates: [number, number][] = [];
-    for (let latitude = -75; latitude <= 75; latitude += 2.5) coordinates.push([longitude, latitude]);
-    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } });
-  }
-  for (let latitude = -75; latitude <= 75; latitude += 15) {
-    const coordinates: [number, number][] = [];
-    for (let longitude = -180; longitude <= 180; longitude += 2.5) coordinates.push([longitude, latitude]);
-    features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } });
-  }
-  return { type: 'FeatureCollection' as const, features };
-}
-
 // ── The shared channel ──
-/** Where the BULB egg's photograph is. 'motion' is a fling under way (the
- *  shutter smear follows `spin` in every phase); 'wind' is the motor turning
- *  to the place before the shutter opens; 'open' is the long exposure itself;
- *  'develop' the frozen exposure developing back into the live globe from
- *  `closedAt`. `target` is the place it settles on (a route index), `u` the
- *  develop's progress, `still` reduced motion's exposure of a globe that does
- *  not move. Times are performance.now() ms. */
-export interface EggExposure {
-  phase: 'off' | 'motion' | 'wind' | 'open' | 'develop';
-  openedAt: number;
-  closedAt: number;
-  target: number;
-  u: number;
-  still: boolean;
-}
-
-/** The one object the prologue camera, the light and the globe's easter eggs
- *  share. RouteAtlas's draw loop stays the ONLY camera writer: an egg changes
- *  numbers here and calls `requestDraw()`; the light reads `hover`, `dawn` and
- *  `veil`, and the egg layers (src/lib/eggExposure.ts) read `spin`,
- *  `exposure`, `pool` and `wantPrint`, on their next render. Kept in a ref, so
- *  it survives the camera effect's restarts (resize, Story close). */
+/** The one object the globe's camera and its light share. RouteAtlas's draw
+ *  loop stays the ONLY camera writer; the light reads `hover`, `dawn` and
+ *  `veil` on its next render. Kept in a ref, so it survives the camera
+ *  effect's restarts (resize, Story close). (It carried the first screen's
+ *  easter eggs too — the spin, the pin, the long exposure — until the globe
+ *  left the first screen, 2026-09-28: the entrance's opening words and the
+ *  boarding pass are there now, and the globe only rises once the pass is
+ *  torn, on its way down to stop 01.) */
 export interface GlobeChannel {
-  /** Egg state; 'idle' when nobody is playing. */
-  mode: string;
-  /** Degrees added to the natural longitude. */
-  offset: number;
-  /** A longitude the globe is held on while the scroll catches up (NaN: none). */
-  pin: number;
-  /** A small give added outside everything else (the hint, a click's reply). */
-  wobble: number;
-  /** Freezes the idle drift while a hand is on the globe. */
-  driftFrozen: boolean;
-  /** The pointer's hover glow (0..1). */
+  /** The pointer's hover glow (0..1): none since the eggs went (the light
+   *  still reads it). */
   hover: number;
-  /** The globe's spin under an egg (°/s), written from the KNOWN motion — the
-   *  drag's samples, the coast's closed form, the motor — never from render
-   *  deltas. The shutter smears the print by |spin|/30 degrees. */
-  spin: number;
-  exposure: EggExposure;
-  /** The white-ink route and stop marks are cut (the camera applies it on a
-   *  change only): off the smeared print, and out of the photograph. */
-  marksHidden: boolean;
-  /** The darkroom dodge on a landed place (route index, 0..1, σ in degrees). */
-  pool: { index: number; amount: number; sigma: number };
-  /** Read the finished exposure back once, on the first frame after release,
-   *  for the BULB ticket's print (handed to `onPrint`). */
-  wantPrint: boolean;
-  onPrint: (image: ImageData) => void;
-  /** The egg layers may hold their render targets (a hand is near). */
-  warm: boolean;
-  /** His places, [lng, lat] in chapter order: what the exposure burns in and
-   *  the dodge finds. */
-  places: ReadonlyArray<readonly [number, number]>;
-  /** Written by the camera each prologue frame: the natural longitude (the
-   *  scroll's turn, the drift and the settle) and the degrees
-   *  of turn the scroll still has to make. */
-  natural: number;
-  remaining: number;
-  /** Idle drift in degrees, eased toward the prologue's driftMax. */
-  drift: number;
   /** The load-in: the canvas is shown once its first tiles are in; the dawn
-   *  sweeps the light round (0..1) while the veil (1..0) lifts off the night side. */
+   *  (0..1) and the veil (1..0) are the light's, at their ends now (the globe
+   *  rises already lit). */
   revealed: boolean;
   dawn: number;
   veil: number;
   /** The light's lighter pass is on (weak GPU). */
   lite: boolean;
-  /** The composed longitude (an egg replaces this; the default adds `offset`). */
-  compose: (natural: number, q: number) => number;
-  /** Ask the camera for a frame (and wake the idle loop). Set by the camera effect. */
+  /** Ask the camera for a frame. Set by the camera effect. */
   requestDraw: () => void;
 }
 
 export function createGlobeChannel(): GlobeChannel {
-  const channel: GlobeChannel = {
-    mode: 'idle',
-    offset: 0,
-    pin: Number.NaN,
-    wobble: 0,
-    driftFrozen: false,
+  return {
     hover: 0,
-    spin: 0,
-    exposure: { phase: 'off', openedAt: 0, closedAt: 0, target: -1, u: 0, still: false },
-    marksHidden: false,
-    pool: { index: -1, amount: 0, sigma: 10 },
-    wantPrint: false,
-    onPrint: () => {},
-    warm: false,
-    places: [],
-    natural: Number.NaN,
-    remaining: 0,
-    drift: 0,
     revealed: false,
-    dawn: 0,
-    veil: 1,
+    dawn: 1,
+    veil: 0,
     lite: false,
-    compose: (natural) => natural + channel.offset,
     requestDraw: () => {},
   };
-  return channel;
 }

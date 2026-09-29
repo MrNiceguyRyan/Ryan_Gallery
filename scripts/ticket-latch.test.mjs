@@ -7,7 +7,7 @@
 // (the homepage is a map to roam, src/lib/explorer.ts): every gesture that
 // lets a ticket go asks for its tear now, and goes on once the face is free.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   TEAR_BEAT_MS,
@@ -24,7 +24,6 @@ import {
   tipStepped,
   tornEdge,
 } from '../src/lib/ticketTear.ts';
-import { EGG } from '../src/lib/globeEgg.ts';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -60,16 +59,14 @@ test('the admission: the stub torn off to open the story, the score turned round
   assert.match(home, /const captured = collection \? captureStory\(collection\) : undefined;/);
 });
 
-test('the globe egg\'s ticket tears on the archive\'s own score', () => {
-  // No mirror: the egg imports the archive's score.
-  const eggs = source('src/components/home/GlobeEggs.tsx');
+test('every ticket tears on the archive\'s own score', () => {
+  // No mirror: the cover imports the score. (The globe egg's ADMIT ONE tore
+  // on it too, until the eggs went with the first screen's corner globe.)
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   const importsScore = (text) => /import \{[^}]*\btearPose\b[^}]*\} from '\.\.\/\.\.\/lib\/ticketTear'/.test(text);
-  assert.ok(importsScore(eggs), 'GlobeEggs imports tearPose from ticketTear');
   assert.ok(importsScore(chapter), 'ArchiveChapter imports tearPose from ticketTear');
-  assert.match(eggs, /TEAR_BEFORE_FLIGHT_MS\);/, 'the egg\'s voyage waits for the same gate');
-  assert.equal('TEAR' in EGG, false, 'globeEgg.ts keeps no copy of the score');
-  assert.doesNotMatch(source('src/lib/globeEgg.ts'), /export function tearPose/);
+  assert.equal(existsSync(new URL('../src/components/home/GlobeEggs.tsx', import.meta.url)), false);
+  assert.equal(existsSync(new URL('../src/lib/globeEgg.ts', import.meta.url)), false);
 });
 
 const FACE = { w: 729, h: 486, vw: 1728 };
@@ -103,7 +100,7 @@ test('the rip runs down the seam, catching, and is whole-torn exactly when free'
 
 test('torn, not fallen: after the snap the face is carried up and aside, slowing', () => {
   const after = TEAR_FREE_MS + TEAR_SNAP_MS;
-  // A landscape and a portrait face at 1728, and the egg's small ticket.
+  // A landscape and a portrait face at 1728, and a small ticket.
   for (const frame of [FACE, { w: 520, h: 780, vw: 1728 }, { w: 244, h: 160, vw: 586 }]) {
     for (let ms = after; ms < TEAR_MS; ms += 1) {
       const a = cornersAt(ms, frame);

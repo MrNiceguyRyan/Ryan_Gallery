@@ -13,12 +13,15 @@
 // comes before the move it opens — and the seam the entrance hands over by.
 
 // ── The seam ──
-// The first screen (or whatever entrance stands in front of the explorer)
-// hands the page over once the globe is on screen. Anyone can ask for it:
+// The entrance in front of the explorer hands the page over once the globe
+// is on screen: the boarding pass, torn, asks as the page's glide lands with
+// the globe risen (HomePage, `onEntranceArrived`), and nothing synthetic
+// follows the ask. Anyone can ask for it:
 //   import { requestExplore } from '../lib/explorer';
 //   requestExplore();            // or: window.dispatchEvent(new CustomEvent('archive:explore'))
-// The homepage answers by taking the camera in one calm move to stop 01 (the
-// first place by route order) and handing the map to the reader. It says
+// The homepage answers by taking the page to the explorer (if it is not
+// there yet), then the camera in one calm move to stop 01 (the first place
+// by route order) and handing the map to the reader. It says
 // where it is on window (`archive:explorer`, detail { phase, current }), and
 // keeps the last word on `window.__archiveExplorer` for anyone who listens
 // late. Asked before the map can move, the request waits for it.
@@ -34,7 +37,7 @@ export interface ExplorerDetail {
 }
 
 export interface ExploreRequest {
-  /** Who asked (for the record only: 'first-screen', 'boarding-pass', …). */
+  /** Who asked (for the record only: 'boarding-pass', …). */
   from?: string;
 }
 
@@ -71,7 +74,7 @@ export const EXPLORER_START: ExplorerState = { phase: 'globe', current: null };
 
 export type ExplorerAction =
   /** The entrance hands over: one calm move to stop 01 (or to the place
-   *  the first screen named: the globe's easter egg deals a ticket). */
+   *  asked for). */
   | { type: 'enter'; id?: string }
   /** The entry move is down. */
   | { type: 'entered' }
@@ -81,7 +84,7 @@ export type ExplorerAction =
   | { type: 'open'; id: string }
   /** The empty map, Escape: nothing in hand. */
   | { type: 'dismiss' }
-  /** Back to the first screen. */
+  /** Back to the start (the entrance's opening words). */
   | { type: 'leave' };
 
 export type ExplorerEffect =
@@ -99,7 +102,8 @@ export type ExplorerEffect =
   /** Let the ticket in hand go: its cover (torn) leaves the map. */
   | { type: 'release'; id: string }
   | { type: 'story'; id: string }
-  /** The camera back to the first screen's globe. */
+  /** Back to the start: the opening words again, and the camera back on
+   *  the globe the next tear will bring up. */
   | { type: 'home' };
 
 export interface ExplorerStep {

@@ -23,7 +23,6 @@
 // Pure: no DOM, no Mapbox. RouteAtlas plays what this plans.
 
 import { voyageEase } from './motion.ts';
-import { prologueTurnRemaining } from './globeLook.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -187,66 +186,41 @@ export function planFlight(w0: number, u1: number, dz: number, viewportW: number
 }
 
 // ── The entry ──
-// From the first screen's globe to stop 01, in one calm move. Two stretches
-// of the one clock: the planet turns to the Americas as it glides from the
-// corner to the focal point (the prologue's own clock, q 0 → 1), then the
-// camera goes down onto the place (the entrance's clock, 0 → 1). The turn is
-// no longer the scroll's front-loaded curve played on time — at the old
-// shape a glide over 2 s spun the planet 120°/s at the start — but the
-// house's sine on the angle itself: `entryQ` finds the prologue's q that
-// leaves exactly that share of the turn to come, and the glide rides the
-// same sine (globeLook, `prologueGlide`), so the two never cancel and then
-// add (the lurch the review measured 2.9 s in). Over 3.8 s the 165–195°
-// from the first screen's face to the Americas (less the idle drift already
-// turned) peaks at 68–81°/s, once, in the middle.
-// The reader can cut it short: a key, a press or a second turn of the wheel
+// From the globe the page brings up to stop 01, in one calm move. The torn
+// boarding pass (HomePage, EntranceIntro) glides the page on and the globe
+// rises over the lower edge with it — the whole planet on the atlas's focal
+// point, already facing stop 01 (RouteAtlas, `risePlanetZoom`) — and the
+// explorer's entry, asked for through the seam as the glide lands, takes the
+// camera straight down onto the place: the centre held, the zoom on the
+// house's sine, the tip to the oblique view over the last 70% (RouteAtlas,
+// `globeEntryPose`). There is no turn before it any more: the first screen's
+// corner globe (India's face, turned ~195° to the Americas over 3.8 s) went
+// with the first screen.
+// The reader can cut it short: a key, a press or a new turn of the wheel
 // sets the camera down on stop 01 at once (HomePage, `finishEntry`).
 export const ENTRY = {
-  /** The turn and the glide, ms. */
-  turnMs: 3800,
-  /** The descent onto stop 01, ms. Long enough that the zoom stays about
-   *  at FLIGHT.zoomPerS and the tip to the oblique view (EXPLORE_PITCH,
-   *  spread over the last 70% of the descent: RouteAtlas, GLOBE_TIP_FROM)
-   *  stays at 15°/s. Traced frame by frame on the live page at 1728: 2.7 s
-   *  gave a zoom of ~1.7 levels/s and a 40° tip at ~78°/s. */
+  /** The descent onto stop 01, ms. The rise planet's zoom is ~2.2 at
+   *  1728 × 1000 and ~1.9 at 1280 × 800, and a place rests at 5.05: on the
+   *  sine a descent of Δ levels over T peaks at π/2 · Δ / T, so 4.4 s keeps
+   *  the zoom at or under FLIGHT.zoomPerS down to an 800 px window (1.02 and
+   *  1.14 levels/s traced on the built page), and the 24° tip over its last
+   *  70% at ~12°/s. */
   diveMs: 4400,
-  /** The first screen's type goes over this long as the turn begins. */
-  typeOutMs: 700,
-  /** On a phone (no prologue): the camera waits under the opener card
-   *  above stop 01 at PHONE_APPROACH_ZOOM and goes down, at least this
-   *  long (it came down from the whole planet: 6.9 s, then a tip). */
+  /** On a phone: the camera waits above stop 01 at PHONE_APPROACH_ZOOM (the
+   *  page brings that view up) and goes down, at least this long. */
   phoneMinMs: 2400,
 } as const;
 
-/**
- * The prologue's q at `t` (0–1 of ENTRY.turnMs) for an entry that started at
- * `q0` with the idle drift at `drift`: the turn still to come is the sine's
- * share of what was to come at the start. Monotonic, 1 at t = 1.
- */
-export function entryQ(t: number, q0: number, drift: number) {
-  const start = clamp01(q0);
-  const total = prologueTurnRemaining(start, drift);
-  const want = total * (1 - voyageEase(clamp01(t)));
-  if (!(total > 1e-6)) return start + (1 - start) * voyageEase(clamp01(t));
-  let lo = start;
-  let hi = 1;
-  for (let step = 0; step < 40; step += 1) {
-    const mid = (lo + hi) / 2;
-    if (prologueTurnRemaining(mid, drift) > want) lo = mid;
-    else hi = mid;
-  }
-  return t >= 1 ? 1 : (lo + hi) / 2;
+/** The fastest the entry's descent changes the zoom, levels a second: from
+ *  `startZoom` to `restZoom` on the house's sine over `diveMs`. */
+export function entryZoomRate(startZoom: number, restZoom: number, diveMs: number = ENTRY.diveMs) {
+  return (Math.PI / 2) * Math.abs(restZoom - startZoom) / (diveMs / 1000);
 }
 
-/** The fastest the planet turns over an entry's turn, degrees a second. */
-export function entryTurnRate(q0: number, drift: number, turnMs: number = ENTRY.turnMs, steps = 240) {
-  let peak = 0;
-  let prev = prologueTurnRemaining(entryQ(0, q0, drift), drift);
-  const dt = turnMs / 1000 / steps;
-  for (let index = 1; index <= steps; index += 1) {
-    const now = prologueTurnRemaining(entryQ(index / steps, q0, drift), drift);
-    peak = Math.max(peak, Math.abs(prev - now) / dt);
-    prev = now;
-  }
-  return peak;
+/** Where the entry's descent starts: the whole planet fitted to the screen
+ *  (`fitted`), but never so far out that the descent to `restZoom` would
+ *  pass FLIGHT.zoomPerS — a tall, narrow window (a tablet held upright)
+ *  fits a smaller planet; it rises a little larger instead. */
+export function entryStartZoom(fitted: number, restZoom: number, diveMs: number = ENTRY.diveMs) {
+  return Math.max(fitted, restZoom - (FLIGHT.zoomPerS * (diveMs / 1000)) / (Math.PI / 2));
 }

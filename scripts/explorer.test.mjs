@@ -4,8 +4,10 @@
 // what every gesture does from every state (a tear always first), the entry
 // to stop 01 (data-driven: Washington, DC once it is the first by route
 // order), no six-chapter limit, and the camera's calm — every flight and the
-// entry's turn under the caps, with the numbers the scroll-driven chapters
-// had before, for the record.
+// entry's descent under the caps, with the numbers the scroll-driven chapters
+// had before, for the record. The entry is handed over by the entrance's
+// boarding pass (the seam): torn, it brings the globe up already facing
+// stop 01, and the camera goes straight down.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -27,7 +29,7 @@ const camera = await bundle('../src/lib/explorerCamera.ts');
 const look = await bundle('../src/lib/globeLook.ts');
 const order = await bundle('../src/lib/chapterOrder.ts');
 const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, PHONE_CARD } = explorer;
-const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, entryQ, entryTurnRate, flightPath, flightSpeeds, planFlight } = camera;
+const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, planFlight } = camera;
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
 
@@ -233,34 +235,44 @@ test('the reader\'s own zooms stay under the flights\' zoom cap', () => {
   assert.match(atlas, /duration: reducedMotion \? 0 : READER_ZOOM\.clickMs/);
 });
 
-test('the entry\'s glide rides the turn\'s own clock: one motion, one peak, no lurch', () => {
-  const { prologueGlide, prologueRoll, prologueTurnRemaining, ENTRY_ROLL_SHARE } = look;
-  for (const drift of [0, 12, 30]) {
-    const total = prologueTurnRemaining(0, drift);
-    for (let t = 0; t <= 1.0001; t += 0.02) {
-      const q = entryQ(t, 0, drift);
-      // The share of the turn made is the share of the glide made.
-      const turned = 1 - prologueTurnRemaining(q, drift) / total;
-      assert.ok(Math.abs(prologueGlide(q) - turned) < 1e-6, `drift ${drift}, t ${t.toFixed(2)}`);
-    }
-  }
-  assert.equal(prologueGlide(0), 0);
-  assert.equal(prologueGlide(1), 1);
-  // The axial tilt (14°) is out before the turn is at its fastest (half-way
-  // through its time, where the glide is 0.5), and gently.
-  assert.ok(ENTRY_ROLL_SHARE < 0.5);
-  assert.ok(Math.abs(prologueRoll(0.5) - 1) < 1e-9);
-  let peak = 0;
-  let prev = 0;
-  for (let i = 1; i <= 1000; i += 1) {
-    const roll = prologueRoll((1 - Math.cos(Math.PI * (i / 1000))) / 2);
-    peak = Math.max(peak, ((roll - prev) * 14) / (ENTRY.turnMs / 1000 / 1000));
-    prev = roll;
-  }
-  assert.ok(peak <= 14, `roll ${peak.toFixed(1)}°/s`);
+test('the globe rises already facing stop 01, and the entry is the descent alone', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  assert.match(atlas, /const glide = prologueGlide\(q\);/);
-  assert.doesNotMatch(atlas, /glideStart/);
+  // No first-screen corner globe to turn from (India's face, ~195° to the
+  // Americas): nothing of the turn is left, in the atlas or its look.
+  assert.doesNotMatch(atlas, /prologueGlide|prologueRoll|prologueTurnRemaining|prologueNaturalLongitude|PROLOGUE_GLOBE|cornerZoomFor|prologueProgress/);
+  assert.equal('prologueTurnRemaining' in look, false);
+  assert.equal('turnMs' in ENTRY, false);
+  // The descent holds its centre (nothing turns or slides: the planet only
+  // comes closer), its zoom on the house's sine, its tip over the last 70%.
+  const pose = atlas.slice(atlas.indexOf('function globeEntryPose('), atlas.indexOf('function isValidCoordinate('));
+  assert.match(pose, /center: target\.coordinate,/);
+  assert.match(pose, /startZoom \+ \(target\.zoom - startZoom\) \* voyageEase\(clamp01\(progress\)\)/);
+  assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(document\.documentElement\.clientWidth, viewportH\), aim\.zoom\);/);
+  // The rise's planet is whole on screen (DERIVED from the viewport, never
+  // measured): its limb's apparent radius clears the top by 7% of the height
+  // and stays within the atlas column. Mapbox below zoom 5: a sphere of
+  // 512·2^z/2π world px over cos 45°, seen from 1.5 canvas heights.
+  const limb = (vw, vh) => {
+    const r = Math.min((0.48 - 0.07) * vh, (0.78 * 0.78 * vw) / 2);
+    const D = 1.5 * (vh + 64);
+    const R = (r * (r + Math.sqrt(r * r + D * D))) / D;
+    const z = Math.log2((R * 2 * Math.PI * Math.SQRT1_2) / 512);
+    // back again: the limb a camera at D sees of the sphere at zoom z
+    const Rz = (512 * 2 ** z) / (2 * Math.PI) / Math.SQRT1_2;
+    return { r, z, seen: (D * Rz) / Math.sqrt(D * D + 2 * D * Rz) };
+  };
+  for (const [vw, vh] of [[1728, 1000], [1280, 800], [1024, 1366]]) {
+    const { r, z, seen } = limb(vw, vh);
+    assert.ok(Math.abs(seen - r) < 0.5, `${vw}×${vh}: limb ${seen.toFixed(1)} for ${r.toFixed(1)}`);
+    assert.ok(0.48 * vh - seen >= 0.069 * vh, 'the disc clears the top');
+    // The descent from it onto a place at rest (5.05) stays at the zoom cap
+    // (a tall, narrow window's planet rises a little larger for it).
+    const start = entryStartZoom(z, 5.05);
+    const rate = entryZoomRate(start, 5.05);
+    assert.ok(rate <= FLIGHT.zoomPerS + 1e-9, `${vw}×${vh}: from ${start.toFixed(2)} at ${rate.toFixed(2)} levels/s`);
+    if (process.env.EXPLORER_NUMBERS) console.log(`rise ${vw}×${vh}: zoom ${z.toFixed(3)} (starts ${start.toFixed(3)}), descent ${rate.toFixed(2)} levels/s over ${ENTRY.diveMs} ms`);
+  }
+  // Measured on the built page at 1728 × 1000: a limb of 408.8 px for 410.
 });
 
 test('the entry can be cut short, and the phone waits near stop 01', () => {
@@ -268,7 +280,9 @@ test('the entry can be cut short, and the phone waits near stop 01', () => {
   assert.match(home, /const finishEntry = useCallback/);
   assert.match(home, /explorer\.phase !== 'entering'/);
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  assert.match(atlas, /const cutShort = prologue && !still && !cutDown && entryPoseAt < 1/);
+  assert.match(atlas, /const cutShort = prologue && !still && !cutDown && entryPoseAt < ENTRY_CUT_BELOW/);
+  // The clock's own last frame is not a cut (no dip at a natural landing).
+  assert.match(atlas, /if \(!cutShort && entryPoseAt < 1\) \{\s*map\.jumpTo\(restPose\(entryIndex\)\);/);
   assert.match(atlas, /const PHONE_APPROACH_ZOOM = 3\.2;/);
   // From the approach the descent is short at the zoom cap.
   const plan = planFlight(844 + 0, 40, 5.05 - 3.2, 390);
@@ -309,27 +323,6 @@ test('the map holds its tone while it moves, and its veil never dips', () => {
   assert.equal(silverExitAt(SILVER_EXIT[1]), 1);
 });
 
-test('the entry turns the planet on the sine, under 85°/s, and ends on q = 1', () => {
-  for (const drift of [0, 12, 30]) {
-    let last = -1;
-    for (let t = 0; t <= 1.0001; t += 0.01) {
-      const q = entryQ(t, 0, drift);
-      assert.ok(q >= last - 1e-9 && q <= 1, 'monotonic');
-      last = q;
-    }
-    assert.equal(entryQ(1, 0, drift), 1);
-    assert.ok(Math.abs(entryQ(0, 0, drift)) < 1e-6);
-    const rate = entryTurnRate(0, drift);
-    // The planet's surface at the corner globe's radius (~650px at 1728) then
-    // crosses the screen at ≤ ~0.55 of its width a second: under the
-    // flights' own cap (FLIGHT.screenShare).
-    assert.ok(rate < 85, `drift ${drift}: ${rate.toFixed(1)}°/s`);
-    if (process.env.EXPLORER_NUMBERS) console.log(`entry turn (drift ${drift}): peak ${rate.toFixed(1)}°/s over ${ENTRY.turnMs} ms`);
-  }
-  // Entered from partway (a globe already turned), the rest of the turn.
-  assert.ok(entryQ(0.5, 0.4, 10) > 0.4);
-});
-
 test('the homepage hands the entrance a seam: an event, a function, a record', () => {
   const lib = source('src/lib/explorer.ts');
   assert.match(lib, /export const EXPLORE_EVENT = 'archive:explore'/);
@@ -337,6 +330,18 @@ test('the homepage hands the entrance a seam: an event, a function, a record', (
   const home = source('src/components/home/HomePage.tsx');
   assert.match(home, /EXPLORE_EVENT/);
   assert.match(home, /__archiveExploreAsked/, 'an ask made before the page mounted is kept');
+  // The boarding pass, torn, asks once the glide has brought the globe up —
+  // and nothing synthetic follows the ask (a real key, press or new wheel
+  // cuts the entry short).
+  assert.match(home, /const onEntranceArrived = useCallback\(\(\) => requestExplore\(\{ from: 'boarding-pass' \}\), \[\]\);/);
+  assert.match(home, /onArrived=\{onEntranceArrived\}/);
+  const handOver = home.slice(home.indexOf('handOverRef.current = (enter'), home.indexOf('// ── The seam: anyone may ask'));
+  assert.doesNotMatch(handOver, /dispatchEvent|new (Wheel|Keyboard|Pointer|Mouse)Event/);
+  // The explorer's first screen no longer listens for a first wheel or key:
+  // the entrance above it scrolls, and the pass is the one way in.
+  assert.doesNotMatch(home, /The first screen hands over on the reader's first move/);
+  // No opener card on the phone: the pass torn, straight into the entry.
+  assert.doesNotMatch(home, /explorer-opener|WalkIn|Enter the map/);
 });
 
 test('the fall from the whole planet onto a place stays near the zoom cap', () => {
@@ -349,7 +354,7 @@ test('the fall from the whole planet onto a place stays near the zoom cap', () =
     assert.ok(plan.speeds.zoomPerS <= 1.45, `${vw}: ${plan.speeds.zoomPerS.toFixed(2)} levels/s over ${plan.durationMs} ms`);
   }
   // The entry's descent is long enough for its own zoom and tip (see ENTRY).
-  assert.ok(ENTRY.diveMs >= 3600);
+  assert.ok(ENTRY.diveMs >= 4000);
 });
 
 test('a drag never turns the map; a camera set square tips only once it is down', () => {
