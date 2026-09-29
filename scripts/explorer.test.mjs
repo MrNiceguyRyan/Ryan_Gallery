@@ -1,13 +1,14 @@
 // Run offline: node --experimental-strip-types --test scripts/explorer.test.mjs
 //
 // The homepage as a map to roam (src/lib/explorer.ts, src/lib/explorerCamera.ts):
-// what every gesture does from every state (a tear always first), the entry
-// to stop 01 (data-driven: Washington, DC once it is the first by route
-// order), no six-chapter limit, and the camera's calm — every flight and the
-// entry's descent under the caps, with the numbers the scroll-driven chapters
-// had before, for the record. The entry is handed over by the entrance's
-// boarding pass (the seam): torn, it brings the globe up already facing
-// stop 01, and the camera goes straight down.
+// what every gesture does from every state — any place to any place, at
+// once, interruptible, nothing torn but the cover's admission — the entry to
+// stop 01 (data-driven: Washington, DC once it is the first by route order),
+// no six-chapter limit, the switch's turn (the reference's 1.4 s) and the
+// camera's calm elsewhere, with the numbers the scroll-driven chapters had
+// before, for the record. The entry is handed over by the entrance's
+// boarding pass (the seam, and the stub hand-off): torn, it brings the globe
+// up already facing stop 01, and the camera goes straight down.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -28,8 +29,8 @@ const explorer = await bundle('../src/lib/explorer.ts');
 const camera = await bundle('../src/lib/explorerCamera.ts');
 const look = await bundle('../src/lib/globeLook.ts');
 const order = await bundle('../src/lib/chapterOrder.ts');
-const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, PHONE_CARD } = explorer;
-const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, planFlight } = camera;
+const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, phoneStubRect, PHONE_CARD, ENTRY_LANDED_EVENT, STUB_LANDED_EVENT, STUB_WAIT_MS } = explorer;
+const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, SWITCH, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, planFlight, switchLift, switchMs } = camera;
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
 
@@ -59,49 +60,100 @@ test('the entry: one move to stop 01, then the map is the reader\'s', () => {
   assert.deepEqual(explore(EXPLORER_START, { type: 'enter' }, []).effects, [{ type: 'entry', id: null }]);
 });
 
-test('a shield: the ticket in hand tears first, then the flight', () => {
+test('a switch: any place, from any place, at once, and nothing tears', () => {
+  // Owner, 2026-09-28: 我想要的是任意的切换 … 地点之间的移动现在不需要撕票根动效.
   const { state, effects } = run([{ type: 'enter' }, { type: 'entered' }, { type: 'select', id: 'page' }]);
   assert.deepEqual(state, { phase: 'explore', current: 'page' });
-  assert.deepEqual(effects.slice(1), [
-    { type: 'tear', id: 'miami' },
-    { type: 'fly', id: 'page', from: 'miami' },
+  assert.deepEqual(effects.slice(1), [{ type: 'fly', id: 'page', from: 'miami' }], 'one turn, no tear before it');
+  // Any to any, in any order: from Page straight to the far end and back.
+  const far = run([{ type: 'select', id: 'new-york' }, { type: 'select', id: 'orlando' }, { type: 'select', id: 'zion' }], state);
+  assert.deepEqual(far.effects, [
+    { type: 'fly', id: 'new-york', from: 'page' },
+    { type: 'fly', id: 'orlando', from: 'new-york' },
+    { type: 'fly', id: 'zion', from: 'orlando' },
   ]);
-  // The one in hand again: the camera comes back onto it; nothing tears.
-  assert.deepEqual(explore(state, { type: 'select', id: 'page' }, ORDER).effects, [{ type: 'fly', id: 'page', from: 'page' }]);
+  assert.equal(far.state.current, 'zion');
+  // No effect of any gesture between places is a tear.
+  for (const effect of far.effects) assert.notEqual(effect.type, 'tear-stub');
+  assert.equal('tear' in Object.fromEntries(far.effects.map((e) => [e.type, 1])), false);
+  // The one in hand again: the camera comes back onto it.
+  assert.deepEqual(explore(far.state, { type: 'select', id: 'zion' }, ORDER).effects, [{ type: 'fly', id: 'zion', from: 'zion' }]);
   // A place the archive does not have: nothing.
-  assert.deepEqual(explore(state, { type: 'select', id: 'nowhere' }, ORDER).effects, []);
+  assert.deepEqual(explore(far.state, { type: 'select', id: 'nowhere' }, ORDER).effects, []);
 });
 
-test('the cover: its stub tears off, then the story opens', () => {
+test('a switch can be interrupted: a new choice mid-turn turns on from there', () => {
+  // The rule has no "in the air" state to wait on: a second choice before the
+  // first turn is down is simply the next turn, from the place now in hand
+  // (RouteAtlas starts Mapbox's flyTo from the live camera — no snap — and
+  // the cover arriving becomes the one leaving).
+  const entered = run([{ type: 'enter' }, { type: 'entered' }]).state;
+  const first = explore(entered, { type: 'select', id: 'bryce' }, ORDER);
+  const second = explore(first.state, { type: 'select', id: 'orlando' }, ORDER);
+  assert.deepEqual(second.effects, [{ type: 'fly', id: 'orlando', from: 'bryce' }]);
+  assert.equal(second.state.current, 'orlando');
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  // The turn cut off is over (no landing played for it); the new flyTo is
+  // Mapbox's own from the live camera; its moveend is not taken for the new one.
+  assert.match(atlas, /const cutOff = flying;\s+if \(cutOff\) \{\s+flying = null;\s+clearPlantTimers\(\);\s+onArriveRef\.current\?\.\(cutOff\.token, false\);/);
+  assert.match(atlas, /token != null && token !== flying\.token/);
+  // The pin glides on from where the ticket is (never snaps), and the cover
+  // shown becomes the one leaving.
+  assert.match(atlas, /pinRef\.current = \{ from: dockWrittenRef\.current \?\? to, to, t0: performance\.now\(\), ms: durationMs, ease: turnEase \};/);
+  assert.match(atlas, /dockSwitchRef\.current = \{ key: switchKeyRef\.current, from: shown, to: destId \};/);
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  // An arrival cut short prints its photograph whole before it leaves.
+  assert.match(chapter, /if \(was\?\.role === 'in' && was\.develop\) \{\s+was\.develop\.finish\(\);/);
+});
+
+test('the cover: its stub tears off, whole, then the story opens', () => {
   const { state } = run([{ type: 'enter' }, { type: 'entered' }]);
   const opened = explore(state, { type: 'open', id: 'miami' }, ORDER);
   assert.deepEqual(opened.effects, [{ type: 'tear-stub', id: 'miami' }, { type: 'story', id: 'miami' }]);
   assert.deepEqual(opened.state, state, 'the place stays in hand under the story');
   // Only the cover in hand opens (a cover still leaving is not a door).
   assert.deepEqual(explore(state, { type: 'open', id: 'page' }, ORDER).effects, []);
+  // Straight after a switch, the new cover is the door.
+  const switched = explore(state, { type: 'select', id: 'page' }, ORDER).state;
+  assert.deepEqual(explore(switched, { type: 'open', id: 'page' }, ORDER).effects, [{ type: 'tear-stub', id: 'page' }, { type: 'story', id: 'page' }]);
+  // HomePage opens the story from the stub's tear, which waits out the whole
+  // score (ArchiveChapter STORY_AFTER_MS = TEAR_MS).
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /case 'tear-stub': \{[\s\S]*?tearStub\(effect\.id, \(\) => \{[\s\S]*?openCollection\(collection, captured\);/);
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.match(chapter, /const STORY_AFTER_MS = TEAR_MS;/);
 });
 
-test('the empty map, Escape: the ticket tears away, nothing in hand', () => {
+test('the empty map, Escape: the ticket is let go calmly, nothing in hand', () => {
   const { state } = run([{ type: 'enter' }, { type: 'entered' }]);
   const dismissed = explore(state, { type: 'dismiss' }, ORDER);
   assert.deepEqual(dismissed.state, { phase: 'explore', current: null });
-  assert.deepEqual(dismissed.effects, [{ type: 'tear', id: 'miami' }, { type: 'release', id: 'miami' }], 'the cover goes once torn');
-  assert.deepEqual(explore(dismissed.state, { type: 'dismiss' }, ORDER).effects, [], 'nothing in hand, nothing to tear');
+  assert.deepEqual(dismissed.effects, [{ type: 'release', id: 'miami' }], 'its cover fades; nothing tears');
+  assert.deepEqual(explore(dismissed.state, { type: 'dismiss' }, ORDER).effects, [], 'nothing in hand, nothing to let go');
   // Roaming with nothing in hand, a shield flies from the open map.
   assert.deepEqual(explore(dismissed.state, { type: 'select', id: 'zion' }, ORDER).effects, [{ type: 'fly', id: 'zion', from: null }]);
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /if \(event\.key === 'Escape'\) \{\s+if \(explorerRef\.current\.current\) dispatchRef\.current\(\{ type: 'dismiss' \}\);/);
+  assert.match(home, /const dismissFromMap = useCallback\(\(\) => dispatchRef\.current\(\{ type: 'dismiss' \}\), \[\]\);/);
 });
 
-test('back to the first screen tears what is in hand, then goes home', () => {
+test('back to the first screen goes home, with nothing torn', () => {
   const { state } = run([{ type: 'enter' }, { type: 'entered' }, { type: 'select', id: 'bryce' }]);
   const left = explore(state, { type: 'leave' }, ORDER);
   assert.deepEqual(left.state, EXPLORER_START);
-  assert.deepEqual(left.effects, [{ type: 'tear', id: 'bryce' }, { type: 'home' }]);
+  assert.deepEqual(left.effects, [{ type: 'home' }]);
   assert.deepEqual(explore(EXPLORER_START, { type: 'leave' }, ORDER).effects, []);
-  // Mid-entry there is no ticket in hand yet.
   const entering = explore(EXPLORER_START, { type: 'enter' }, ORDER).state;
   assert.deepEqual(explore(entering, { type: 'leave' }, ORDER).effects, [{ type: 'home' }]);
 });
 
+test('the arrow keys step through the places, as the reference\'s do', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /if \(event\.key !== 'ArrowLeft' && event\.key !== 'ArrowRight'\) return;/);
+  // Not while the map itself has the keys (its arrows pan it), nor in the list.
+  assert.match(home, /closest\?\.\('input, textarea, select, \[contenteditable="true"\], \.mapboxgl-canvas, \.explorer-list'\)/);
+  assert.match(home, /stepToRef\.current\(event\.key === 'ArrowRight' \? 1 : -1\);/);
+});
 test('Prev / Next go round the route; from nothing in hand, Next is stop 01', () => {
   assert.equal(neighbour(ORDER, 'miami', 1), 'orlando');
   assert.equal(neighbour(ORDER, 'miami', -1), 'new-york', 'the first\'s previous is the last');
@@ -289,18 +341,77 @@ test('the entry can be cut short, and the phone waits near stop 01', () => {
   assert.ok(plan.speeds.zoomPerS <= FLIGHT.zoomPerS * 1.02 && plan.durationMs <= 3000, `${plan.durationMs} ms, ${plan.speeds.zoomPerS.toFixed(2)}/s`);
 });
 
-test('a flight waits for the torn face to have gone; taps in a row do not tear what was never dealt', () => {
-  const home = source('src/components/home/HomePage.tsx');
-  assert.match(home, /tearTicket\(effect\.id, 'tear-then', finish, effects\[index \+ 1\]\?\.type === 'fly'\)/);
-  assert.match(home, /const tearRunRef = useRef/);
-  const chapter = source('src/components/home/ArchiveChapter.tsx');
-  assert.match(chapter, /const GONE_GO_AFTER_MS = TEAR_MS;/);
-  assert.match(chapter, /reduce \? TEAR_REDUCED_MS : gone \? GONE_GO_AFTER_MS : PULL_GO_AFTER_MS/);
-  // The ticket's own "Next stop" goes the explorer's way (same tear, same clock).
-  const goNext = chapter.slice(chapter.indexOf('const goNext = () => {'), chapter.indexOf('// ── The sign turns into place'));
-  assert.doesNotMatch(goNext, /tearThen/);
+test('a switch is the reference\'s turn: 1.4 s, its ENTER curve, no climb to speak of', () => {
+  // 11 mois sans toi(t) (scratchpad wf29/ref/SPEC.md §2.2): flyTo 1400 ms on
+  // [.22,.61,.36,1], its own curve, the pitch held, whatever the distance —
+  // the planet turns under the board.
+  assert.equal(SWITCH.ms, 1400);
+  assert.equal(SWITCH.curve, 1.42);
+  for (const dz of [0, 0.4, -0.9, 1]) assert.equal(switchMs(dz), 1400, `a leg at the rest zooms (Δz ${dz})`);
+  // From far out (the reader zoomed to the planet) the turn takes longer,
+  // never past maxMs.
+  assert.ok(switchMs(3.45) > 1400 && switchMs(3.45) <= SWITCH.maxMs);
+  assert.equal(switchMs(12), SWITCH.maxMs);
+  // No big zoom-out apex between places: at the rest zooms every leg of the
+  // archive climbs well under a level on Mapbox's path (1728 and 1280, the
+  // canvas's larger side with its bleed).
+  const rows = [];
+  for (const vw of [1728, 1280]) {
+    const w0 = vw + 64;
+    for (const [from, to] of [...LEGS, ['new-york', 'page'], ['miami', 'zion']]) {
+      const lift = switchLift(w0, pxAt(PLACES[from], PLACES[to], 5.05));
+      assert.ok(lift < 0.8, `${vw} ${from}→${to}: climbs ${lift.toFixed(2)} levels`);
+      if (vw === 1728) rows.push(`${from}→${to} ${lift.toFixed(2)}`);
+    }
+  }
+  if (process.env.EXPLORER_NUMBERS) console.log(`switch lift at 1728: ${rows.join(', ')}`);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /durationMs = switchMs\(dest\.zoom - zoomNow\);\s+curve = SWITCH\.curve;\s+easing = turnEase;/);
+  // The shields: the one arrived at lifts at the click (the reference's
+  // active stop, 1.45 from its foot), the one left relaxes.
+  assert.match(atlas, /if \(next\.kind === 'fly'\) \{[\s\S]{0,200}markCurrentStop\(destId\);/);
 });
 
+test('the stub hand-off: a derived target, a landing event, a stub that waits', () => {
+  assert.equal(ENTRY_LANDED_EVENT, 'archive:entry-landed');
+  assert.equal(STUB_LANDED_EVENT, 'archive:stub-landed');
+  assert.ok(STUB_WAIT_MS >= 2000);
+  // The phone's card stub: where the card stands (centred, its foot 110 px
+  // above the screen's), right of the photograph, at the card's scale.
+  for (const [vw, vh] of [[390, 844], [375, 667]]) {
+    for (const ratio of [2 / 3, 1.5]) {
+      const card = phoneCard(vw, vh, ratio);
+      const rect = phoneStubRect(vw, vh, ratio);
+      const width = (card.photoW + PHONE_CARD.stub) * card.scale;
+      assert.ok(Math.abs(rect.x + rect.w - (vw / 2 + width / 2)) < 0.01, 'the stub is the card\'s right end');
+      assert.ok(Math.abs(rect.y + rect.h - (vh - PHONE_CARD.dockBottom - PHONE_CARD.below)) < 0.01, 'its foot is the card\'s');
+      assert.ok(Math.abs(rect.w - PHONE_CARD.stub * card.scale) < 0.01);
+      assert.equal(rect.rotate, 0);
+    }
+  }
+  const css = source('src/styles/global.css');
+  assert.match(css, new RegExp(`\\.archive-dock\\.archive-dock--phone \\{[^}]*bottom: calc\\(${PHONE_CARD.dockBottom}px`));
+  assert.match(css, new RegExp(`\\.archive-dock--phone \\.archive-dock__seat \\{[^}]*bottom: ${PHONE_CARD.below}px`));
+  // The atlas answers the target from its plan (never a rect read), and says
+  // when the entry is down, on every way the entry lands.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const target = atlas.slice(atlas.indexOf('window.__archiveCoverStubTarget = () => {'), atlas.indexOf('delete window.__archiveCoverStubTarget'));
+  assert.match(target, /coverStubRect\(planned\)/);
+  assert.match(target, /phoneStubRect\(window\.innerWidth, window\.innerHeight/);
+  assert.doesNotMatch(target, /getBoundingClientRect|offset(Width|Height|Top|Left)|client(Width|Height)/);
+  assert.equal((atlas.match(/entryLanded\(entryIndex\);/g) ?? []).length, 2, 'the descent down, and reduced motion\'s cut');
+  assert.match(atlas, /if \(done\.entry\) entryLanded\(done\.index\);/);
+  // HomePage keeps stop 01's stub waiting when asked with `stubHandoff`; the
+  // chapter shows its stub inside the entrance's event itself.
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /if \(ask\.stubHandoff && explorerRef\.current\.phase === 'globe'\) setStubAwaited\(stopOne\(placeIdsRef\.current\)\);/);
+  assert.match(home, /stubAwaited=\{stubAwaited === city\._id\}/);
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.match(chapter, /const landed = \(\) => plate\.removeAttribute\('data-stub-awaited'\);\s+window\.addEventListener\(STUB_LANDED_EVENT, landed\);/);
+  // Everything printed on the stub waits (its live "Next stop" says
+  // `visibility: visible` of its own, so the seat alone is not enough).
+  assert.match(css, /\.archive-plate\[data-stub-awaited\] :is\(\.archive-ticket-stub-seat, \.archive-ticket-stub-seat \*, \.archive-plate__caret\[data-half='stub'\]\) \{\s*visibility: hidden;/);
+});
 test('the map holds its tone while it moves, and its veil never dips', () => {
   const css = source('src/styles/global.css');
   assert.doesNotMatch(css, /data-atlas-camera='(locked|rest)'\] \.route-atlas-rest-tone/);

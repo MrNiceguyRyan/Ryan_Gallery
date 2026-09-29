@@ -71,7 +71,12 @@ test('the entry goes straight down onto stop 01: its cover is simply there, whol
 test('the phone deals its ticket whole: nothing wipes or zooms a photograph in', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(chapter, /DEVELOP_MASK|maskPosition/);
+  // A cover has no entrance: the one develop is a switch's (the next
+  // place's print developing inside the still ticket, owner, 2026-09-28:
+  // 切换中赋予我们现有的动效), never a cover appearing.
+  const switchIn = chapter.slice(chapter.indexOf('const switchIn = ('), chapter.indexOf('const switchOut = ('));
+  assert.match(switchIn, /maskPosition/);
+  assert.doesNotMatch(chapter.replace(switchIn, ''), /maskPosition|DEVELOP_MASK\b(?!,)/);
   // The phone's card is the same ticket (its tear, its stub), dealt at the
   // foot of the screen, sized from the photograph's own ratio.
   assert.match(chapter, /phoneCard\(window\.innerWidth, window\.innerHeight, cardRatio\)/);

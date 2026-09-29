@@ -27,20 +27,24 @@ import {
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('every tear gate is the face free plus the same beat', () => {
-  // src/lib/ticketTear.ts owns the score; the ticket goes on (a flight, the
-  // story) TEAR_BEFORE_FLIGHT_MS after it starts: the face free, then a beat.
+test('the one tear left is the admission, and the story waits for all of it', () => {
+  // src/lib/ticketTear.ts owns the score. Moving between places no longer
+  // tears (owner, 2026-09-28: 地点之间的移动现在不需要撕票根动效): the face
+  // tear, its latch-free "tear, then fly" and the pull to tear are gone. The
+  // cover clicked plays the stub's tear whole (完整的撕开票根动画), then the
+  // story opens.
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   assert.equal(TEAR_FREE_MS, 530);
   assert.equal(TEAR_BEAT_MS, 60);
   assert.equal(TEAR_BEFORE_FLIGHT_MS, TEAR_FREE_MS + TEAR_BEAT_MS);
-  assert.match(chapter, /const PULL_GO_AFTER_MS = TEAR_BEFORE_FLIGHT_MS;/);
-  // The tear asked for, and the admission, both go on after it — a flight
-  // only once the face has gone (the map never pans under a card still
-  // being laid aside).
-  assert.match(chapter, /\}, reduce \? TEAR_REDUCED_MS : gone \? GONE_GO_AFTER_MS : PULL_GO_AFTER_MS\);[\s\S]*\}, reduce \? TEAR_REDUCED_MS : PULL_GO_AFTER_MS\);/);
-  assert.match(chapter, /const GONE_GO_AFTER_MS = TEAR_MS;/);
-  assert.ok(TEAR_FREE_MS < TEAR_MS, 'the face is free before the tear is over');
+  assert.ok(TEAR_FREE_MS < TEAR_MS, 'the stub is free before the tear is over');
+  assert.match(chapter, /const STORY_AFTER_MS = TEAR_MS;/);
+  assert.match(chapter, /\}, reduce \? TEAR_REDUCED_MS : STORY_AFTER_MS\);/);
+  for (const gone of ['tearThen', 'archive:tear-then', 'tearClock', 'PULL_GO_AFTER_MS', 'GONE_GO_AFTER_MS', 'handlePullStart', 'pullHint', 'onTearAway', 'is-torn', 'archive-plate--pullable']) {
+    assert.ok(!chapter.includes(gone), `${gone} is gone`);
+  }
+  const css = source('src/styles/global.css');
+  assert.doesNotMatch(css, /--pull-hint|archive-plate--pullable|\.archive-plate\.is-torn|archive-plate__lift/);
   // The scroll's latch and its mirrors are gone with the scroll.
   assert.doesNotMatch(chapter, /stepLatch|TEAR_LINE_DOCKED|ticketLatch/);
   assert.doesNotMatch(source('src/components/home/RouteAtlas.tsx'), /TEAR_BEFORE_FLIGHT_MS|TEAR_HOLD_CAP_MS|heldHop/);
@@ -52,11 +56,16 @@ test('the admission: the stub torn off to open the story, the score turned round
   assert.match(chapter, /put\(stub, '--tear-stf', reduce \? null : affineCss\(mirrorAffine\(pose\.m, box\.w\)\)\);/);
   // Below the rip's tip the stub is still joined: its seat clips at the seam.
   assert.match(chapter, /put\(stubSeat, 'clip-path', pose\.seam \? STUB_SEAM_CLIP : null\);/);
-  // The explorer opens the story once the stub is free (HomePage).
+  // The explorer opens the story once the tear has played (HomePage).
   const home = source('src/components/home/HomePage.tsx');
-  assert.match(home, /tearTicket\(effect\.id, 'tear-stub', \(\) => \{/);
+  assert.match(home, /tearStub\(effect\.id, \(\) => \{/);
   // Its rest box (the half the reader keeps) is read before it tears.
   assert.match(home, /const captured = collection \? captureStory\(collection\) : undefined;/);
+  // Mid-switch, the switch ends first: the ticket under this one must not
+  // show through the tear's gap.
+  const tear = chapter.slice(chapter.indexOf('const tearStubThen = '), chapter.indexOf('const tearStubThenRef'));
+  assert.match(tear, /coverDock\.settle\(\);/);
+  assert.match(tear, /endSwitch\(true\);/);
 });
 
 test('every ticket tears on the archive\'s own score', () => {

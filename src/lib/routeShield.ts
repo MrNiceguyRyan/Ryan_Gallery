@@ -286,7 +286,7 @@ export function signNameSize(name: string): number {
 export const SHIELD_MAP_PX = 34;
 /** How a shield carries its state, as the CSS scales it (global.css, "The
  *  place shields"; scripts/route-shield.test.mjs holds the two together). */
-export const SHIELD_SCALE = { ahead: 0.9, past: 0.94, inbound: 1.1, current: 1.2 } as const;
+export const SHIELD_SCALE = { ahead: 0.9, past: 0.94, inbound: 1.1, current: 1.4 } as const;
 /** A shield showing less than this beyond the one in front of it (above,
  *  below or to either side) is buried: its head is lifted this far above
  *  the other's, px. */

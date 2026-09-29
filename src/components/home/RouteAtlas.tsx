@@ -38,16 +38,22 @@ import {
 } from '../../lib/routeShield';
 import {
   DOCK,
+  SWITCH_COVER,
   centreFor,
   coverDock,
+  coverStubRect,
   dockShown,
+  glideAt,
   planDock,
   railBox,
   type DockAsk,
   type DockCamera,
   type DockChapter,
   type DockEntry,
+  type DockSwitch,
+  type Point,
 } from '../../lib/coverDock';
+import { stockPaper } from '../../lib/ticketStock';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import {
@@ -67,7 +73,7 @@ import {
 } from '../../lib/globeLook';
 import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight';
 import { wrap180 } from '../../lib/geo';
-import { CSS_EASE, DUR_MS, EASE, smootherstep, voyageEase } from '../../lib/motion';
+import { CSS_EASE, DUR_MS, EASE, bezierFn, smootherstep, voyageEase } from '../../lib/motion';
 import {
   ENTRY,
   entryStartZoom,
@@ -75,9 +81,15 @@ import {
   EXPLORE_PITCH,
   EXPLORE_ZOOM,
   READER_ZOOM,
+  SWITCH,
   planFlight,
+  switchMs,
 } from '../../lib/explorerCamera';
-import { phoneFocalY } from '../../lib/explorer';
+import { ENTRY_LANDED_EVENT, phoneFocalY, phoneStubRect } from '../../lib/explorer';
+
+// A switch's turn and the covers' glide with it: the house's `turn` curve
+// (11 mois sans toi(t)'s ENTER), as a function for Mapbox and the pin.
+const turnEase = bezierFn(EASE.turn);
 
 export interface RouteStop {
   id: string;
@@ -106,9 +118,13 @@ export interface RouteStop {
  *  own clock, driven by HomePage), `cut` straight onto a place (under a
  *  story, turned to another place, an entry cut short), `home` the phone's
  *  camera back above stop 01 (Back to the start);
- *  `release` moves nothing: the ticket in hand (torn) leaves the map. */
+ *  `release` moves nothing: the ticket in hand is let go (its cover fades
+ *  from the map; nothing tears). */
 export interface AtlasFlight {
   kind: 'fly' | 'entry' | 'cut' | 'home' | 'release';
+  /** This move sets the entry down (the phone's cut, when the reader cuts
+   *  its entry short): its landing is the entry's (ENTRY_LANDED_EVENT). */
+  entry?: boolean;
   id: string | null;
   token: number;
 }
@@ -208,7 +224,7 @@ const HOP = {
   appearOut: 1.3,
   stayOut: 1.8,
   // A click on the empty map waits this long for a second (a double-click
-  // zooms; it does not tear the ticket in hand away).
+  // zooms; it does not let the ticket in hand go).
   dismissWaitMs: 260,
 } as const;
 
@@ -555,6 +571,47 @@ function globeEntryPose(
   };
 }
 
+/**
+ * Hands Mapbox its own camera back. react-map-gl wraps the map's transform
+ * in a Proxy so a controlled view state can override what Mapbox proposes;
+ * this atlas is uncontrolled (an initial view, then the map's own), and
+ * every read Mapbox makes of its camera — thousands a frame while it moves:
+ * the covering tiles, every tile's matrices, the markers — went through the
+ * proxy's trap (its `get` alone was the atlas's busiest function of its own
+ * on a profile of ten switches, 2026-09-28). The raw transform is the
+ * proxy's target: one of the methods the proxy forwards unwrapped
+ * (`_calcMatrices`) is called on it once, and seen from the inside.
+ * react-map-gl keeps its proxy for itself (it still wraps the same object);
+ * a change of the map's settings would wrap it again (they are constant
+ * here), and the next load unwraps it again.
+ */
+function unwrapTransform(map: { transform: unknown; painter?: { transform: unknown } }) {
+  type Calc = (...args: unknown[]) => unknown;
+  const proxied = map.transform as Record<string, unknown> | null;
+  if (!proxied || typeof proxied._calcMatrices !== 'function') return false;
+  // The method may be the instance's own (Mapbox binds some in its
+  // constructor) or its class's: the probe goes where the method lives. A
+  // descriptor read and a write reach the target through the proxy.
+  const own = Object.getOwnPropertyDescriptor(proxied, '_calcMatrices');
+  const holder = (own ? proxied : Object.getPrototypeOf(proxied)) as Record<string, unknown> | null;
+  const calc = (own ? own.value : holder?._calcMatrices) as Calc | undefined;
+  if (!holder || typeof calc !== 'function') return false;
+  let raw: unknown = null;
+  holder._calcMatrices = function unwrapProbe(this: unknown, ...args: unknown[]) {
+    raw = this;
+    return calc.apply(this, args);
+  };
+  try {
+    (proxied._calcMatrices as Calc)();
+  } finally {
+    holder._calcMatrices = calc;
+  }
+  if (!raw || raw === proxied) return false;
+  map.transform = raw;
+  if (map.painter) map.painter.transform = raw;
+  return true;
+}
+
 function isValidCoordinate(coordinates: unknown): coordinates is GeoCoordinate {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
   const [longitude, latitude] = coordinates;
@@ -867,7 +924,36 @@ export default function RouteAtlas({
     // they keep off the shields.
     const dockedId = dockAtRef.current;
     const dockedEntry = dockedId && !mobile ? dockPlanRef.current?.[dockedId] ?? null : null;
-    let dockedFoot: { x: number; y: number } | null = null;
+    // Where the cover stands this frame: pinned through a switch (where it
+    // was last written), else its shield's foot — projected here, not read
+    // from the last publish, which runs after this pass on the same event
+    // and would leave the box a frame behind a drag.
+    const dockedPlace = dockedEntry && !pinRef.current ? shieldPlaces.find((place) => place.id === dockedId) : null;
+    const dockedPoint = dockedPlace ? map.project(dockedPlace.coordinates) : null;
+    const dockedFoot: Point | null = !dockedEntry
+      ? null
+      : dockedPoint
+        ? { x: Math.round(dockedPoint.x) - bleed, y: Math.round(dockedPoint.y) - bleed }
+        : dockWrittenRef.current;
+    // The cover's own box (atlas px): a shield it lies over is not printed —
+    // one corner for every place can't keep every cover off every other
+    // shield in a cluster as tight as Utah's (Zion lies below-left of Bryce
+    // Canyon at its rest), and half a shield under a ticket's edge reads as
+    // a mistake. It comes back as soon as the ticket leaves it.
+    const coverBox = dockedEntry && dockedFoot
+      ? {
+          left: dockedFoot.x + dockedEntry.offset.x,
+          top: dockedFoot.y + dockedEntry.offset.y,
+          right: dockedFoot.x + dockedEntry.offset.x + dockedEntry.photoW + DOCK.stub,
+          bottom: dockedFoot.y + dockedEntry.offset.y + dockedEntry.photoH,
+        }
+      : null;
+    const underCover = (x: number, y: number, w: number, h: number) => {
+      if (!coverBox) return false;
+      const across = Math.min(x + w / 2, coverBox.right) - Math.max(x - w / 2, coverBox.left);
+      const down = Math.min(y, coverBox.bottom) - Math.max(y - h, coverBox.top);
+      return across > 0 && down > 0 && across * down > 0.4 * w * h;
+    };
     shieldPlaces.forEach((place) => {
       let pose = shieldPosesRef.current.get(place.id);
       if (!pose || !pose.el.isConnected) {
@@ -905,11 +991,10 @@ export default function RouteAtlas({
       const w = shieldPx * drawn;
       const h = w * place.ratio;
       const point = map.project(place.coordinates);
-      if (place.id === dockedId) dockedFoot = { x: point.x - bleed, y: point.y - bleed };
       // Under the rail, or up in the nav's band (a place on the planet's
       // far rim came up through the wordmark), a shield is not printed
       // unless its place is in hand or the camera is flying to it.
-      const under = rank === 0 && (point.x + w / 2 > underAt || point.y - bleed - h < NAV_BAND_PX);
+      const under = rank === 0 && (point.x + w / 2 > underAt || point.y - bleed - h < NAV_BAND_PX || underCover(point.x - bleed, point.y - bleed, w, h));
       unders.set(place.id, under);
       // On screen: inside the atlas, not merely the canvas — a shield out in
       // the bleed is off the page's edge.
@@ -934,7 +1019,7 @@ export default function RouteAtlas({
       boxes.push({ id: slot.id, left: x - slot.w / 2, top: foot - slot.h, right: x + slot.w / 2, bottom: foot });
     });
     if (dockedEntry && dockedFoot) {
-      const foot = dockedFoot as { x: number; y: number };
+      const foot = dockedFoot;
       const left = foot.x + dockedEntry.offset.x;
       const top = foot.y + dockedEntry.offset.y;
       boxes.push({
@@ -1033,6 +1118,14 @@ export default function RouteAtlas({
     window.addEventListener('resize', measure, { passive: true });
     return () => window.removeEventListener('resize', measure);
   }, [bleed, canvasExtension, classicEntrance, layoutRevision, mapLoaded, mobile, signs, viewportReady]);
+  // One pass a frame: the map fires `move` and then `render` in the same
+  // frame while it moves, and both used to place every shield (and publish
+  // every cover) twice. The camera's own state keys a pass; a change of
+  // the shields' states re-places them at once (markCurrentStop, …).
+  const cameraKey = (map: ReturnType<MapRef['getMap']>) => {
+    const centre = map.getCenter();
+    return `${centre.lng}|${centre.lat}|${map.getZoom()}|${map.getPitch()}|${map.getBearing()}`;
+  };
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
@@ -1040,27 +1133,47 @@ export default function RouteAtlas({
     // On `move` as well as `render`: the markers ride the camera on `move`,
     // and a pile placed a frame late left two shields overlapping with no
     // count at the viewport's edge.
-    const onRender = () => placeShieldsRef.current();
+    let placedAt = '';
+    const onRender = () => {
+      const key = cameraKey(map);
+      if (key === placedAt) return;
+      placedAt = key;
+      placeShieldsRef.current();
+    };
     map.on('move', onRender);
     map.on('render', onRender);
-    onRender();
+    placeShieldsRef.current();
     return () => {
       map.off('move', onRender);
       map.off('render', onRender);
     };
   }, [mapLoaded, shieldPlaces, signs]);
   // ── The covers' dock (src/lib/coverDock.ts) ──
-  // The plan — for each place the corner its cover takes beside its shield,
-  // where the camera sets the place, the cover's size — DERIVED once per
-  // layout from the viewport, each cover's ratio and region tab, and where
-  // its neighbours' shields stand on its resting camera. The camera reads it
-  // for where it sets each place; the chapters for their covers. The phone
-  // deals its card at the foot of the screen instead (no plan).
+  // The plan — every place set on the one dock point, its cover at the one
+  // corner of its shield, the cover's size — DERIVED once per layout from the
+  // viewport, each cover's ratio and region tab. The camera reads it for
+  // where it sets each place; the chapters for their covers. The phone deals
+  // its card at the foot of the screen instead (no plan).
   const dockPlanRef = useRef<Readonly<Record<string, DockEntry>> | null>(null);
   // The place whose cover shows (decided on publish, below), and what the
   // camera asks of it on its latest draw (`setDockAt`).
   const dockAtRef = useRef<string | null>(null);
   const dockAskRef = useRef<DockAsk | null>(null);
+  // Where the cover shown was last written (atlas px).
+  const dockWrittenRef = useRef<Point | null>(null);
+  // ── The switch (src/lib/coverDock.ts, "The switch") ──
+  // A switch under way — the cover leaving under the one arriving — until
+  // SWITCH_COVER.leaveMs after take-off; and the pin: where the covers are
+  // written instead of their place's foot, from take-off until the camera
+  // is down (the dock's point, or a glide to it on the camera's own curve
+  // when the reader had dragged the ticket away), and a short glide back
+  // onto the shield when the reader takes the map from a turn.
+  const dockSwitchRef = useRef<DockSwitch | null>(null);
+  const switchKeyRef = useRef(0);
+  const switchTimerRef = useRef(0);
+  type Pin = { from: Point; to: Point | 'foot'; t0: number; ms: number; ease: (k: number) => number };
+  const pinRef = useRef<Pin | null>(null);
+  const pinFrameRef = useRef(0);
   useLayoutEffect(() => {
     if (!signs || !viewportReady || mobile) {
       dockPlanRef.current = null;
@@ -1086,6 +1199,7 @@ export default function RouteAtlas({
             coordinates: other.stop.coordinates,
             ...shieldOf(other.stop.region, SHIELD_SCALE.ahead),
           }])),
+      stock: stockPaper(entry.stop.slug),
     }));
     // The place's camera at rest, as the camera effect sets it: its centre
     // on the atlas's focal point (FOCAL_PADDING and the reading line, the
@@ -1106,7 +1220,24 @@ export default function RouteAtlas({
   useEffect(() => () => {
     coverDock.setPlan(null);
     coverDock.publish({ at: null, points: {} });
+    window.clearTimeout(switchTimerRef.current);
+    cancelAnimationFrame(pinFrameRef.current);
   }, []);
+  // The stub hand-off (src/lib/explorer.ts): where stop 01's stub will rest
+  // once the entry is down — the entry's place on the dock (the desktop), or
+  // the phone's card at the foot of the screen. Derived, never measured.
+  useEffect(() => {
+    window.__archiveCoverStubTarget = () => {
+      const entry = chapterRoute[entryIndexRef.current] ?? chapterRoute[0];
+      if (!entry) return null;
+      if (mobile) return phoneStubRect(window.innerWidth, window.innerHeight, entry.stop.coverRatio ?? 1.5);
+      const planned = dockPlanRef.current?.[entry.stop.id];
+      return planned ? coverStubRect(planned) : null;
+    };
+    return () => {
+      delete window.__archiveCoverStubTarget;
+    };
+  }, [chapterRoute, mobile]);
   // Every place's foot this frame, and the place whose cover shows: handed
   // to the covers on the map's `move` and `render`, as the shields' markers
   // are placed (above), so a cover and its shield never part by a frame.
@@ -1114,21 +1245,52 @@ export default function RouteAtlas({
   // (`dockShown`): it APPEARS once the camera is down on its place (never
   // seen sliding into its seat: covers appear directly); once shown it STAYS
   // while its place is in hand, riding every move the reader makes of the
-  // map, and goes when the place is let go or the camera leaves.
+  // map, and goes when the place is let go or the camera leaves. Through a
+  // switch it is pinned instead (`pinRef`).
   // The viewfinder's readouts hang off the place in hand, wherever the
-  // reader has taken the map.
+  // reader has taken the map (or at the pin, through a switch).
+  const publishedKeyRef = useRef("");
   const publishDock = () => {
     const map = mapRef.current?.getMap();
     if (!map || !signs) return;
-    const points: Record<string, { x: number; y: number }> = {};
+    const points: Record<string, Point> = {};
     shieldPlaces.forEach((place) => {
       const point = map.project(place.coordinates);
       points[place.id] = { x: Math.round(point.x) - bleed, y: Math.round(point.y) - bleed };
     });
     const at = dockShown(dockAtRef.current, dockAskRef.current, (id) => !!points[id]);
     dockAtRef.current = at;
-    coverDock.publish({ at, points });
-    const held = currentStopRef.current ? points[currentStopRef.current] : null;
+    // The pin, this frame.
+    let pin: Point | null = null;
+    const pinned = pinRef.current;
+    if (pinned) {
+      const now = performance.now();
+      const live = pinned.to === 'foot' ? (at ? points[at] : null) : pinned.to;
+      if (!live) {
+        pinRef.current = null;
+      } else {
+        pin = glideAt(pinned.from, live, now - pinned.t0, pinned.ms, pinned.ease);
+        if (pinned.to === 'foot' && now - pinned.t0 >= pinned.ms) {
+          pinRef.current = null;
+          pin = null;
+        } else if (!pinFrameRef.current) {
+          // A glide goes on whether or not the map draws (a resting camera
+          // draws nothing): the next frame publishes again.
+          pinFrameRef.current = requestAnimationFrame(() => {
+            pinFrameRef.current = 0;
+            publishDockRef.current();
+          });
+        }
+      }
+    }
+    const written = pin ?? (at ? points[at] ?? null : null);
+    dockWrittenRef.current = written;
+    const sw = dockSwitchRef.current;
+    const key = `${cameraKey(map)}|${at}|${pin ? `${pin.x},${pin.y}` : '-'}|${sw ? sw.key : 0}|${coverDock.plan() ? 1 : 0}|${currentStopRef.current}`;
+    if (key === publishedKeyRef.current) return;
+    publishedKeyRef.current = key;
+    coverDock.publish({ at, points, switch: sw, pin });
+    const held = pin ?? (currentStopRef.current ? points[currentStopRef.current] : null);
     if (held) viewfinderRef.current?.focal(held);
   };
   const publishDockRef = useRef(publishDock);
@@ -1140,6 +1302,22 @@ export default function RouteAtlas({
     dockAskRef.current = ask;
     mapRef.current?.getMap()?.triggerRepaint();
   };
+  // A switch is over: the leaving cover goes (it lies under the new one).
+  const endSwitch = () => {
+    window.clearTimeout(switchTimerRef.current);
+    switchTimerRef.current = 0;
+    if (!dockSwitchRef.current) return;
+    dockSwitchRef.current = null;
+    publishDockRef.current();
+  };
+  // The arriving ticket is torn (its story): the one under it must not show
+  // through the gap, so the switch ends at once.
+  useEffect(() => {
+    coverDock.onSettle(endSwitch);
+    return () => coverDock.onSettle(null);
+    // endSwitch reads only refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!signs || !mapLoaded || !map) return;
@@ -1627,9 +1805,9 @@ export default function RouteAtlas({
 
     // ── The camera's state, told to the page ──
     // `data-atlas-camera` on <html> is 'flying' while the camera is on its
-    // way, 'locked' at a landing (for a beat), else 'rest'; the tickets read
-    // it (a ticket does not tear under a camera already in the air), and
-    // `data-atlas-landed-at` is when the camera last came down.
+    // way, 'locked' at a landing (for a beat), else 'rest' (the rail's idle
+    // words stand back while it flies), and `data-atlas-landed-at` is when
+    // the camera last came down.
     let cameraStateTimer = 0;
     const setCameraState = (state: 'flying' | 'locked' | 'rest') => {
       window.clearTimeout(cameraStateTimer);
@@ -1699,7 +1877,11 @@ export default function RouteAtlas({
       lookWrites.archive = mode === 'archive';
       lookWrites.opacity = Number.NaN;
       lookWrites.stockOpacity = Number.NaN;
-      ['prologue-route', 'prologue-stops-dot'].forEach((layerId) => {
+      // In the archive the silver print is out for good (its share of the
+      // veil is 0 there): not drawn, and — hidden rather than at opacity 0 —
+      // its source stops loading and uploading every tile the camera passes
+      // a second time beside the archive's own paint.
+      ['prologue-route', 'prologue-stops-dot', 'prologue-satellite'].forEach((layerId) => {
         if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', mode === 'archive' ? 'none' : 'visible');
       });
       map.setFog(mode === 'archive' ? GLOBE_FOG : prologueFog());
@@ -1753,9 +1935,12 @@ export default function RouteAtlas({
 
     // ── Flights (the reader's map) ──
     // A place asked for: the camera goes to its resting pose — the place on
-    // its point beside the covers' corner, the pitch the atlas's — on a
-    // Mapbox flight (the reader can take the map from it at any moment),
-    // DERIVED to stay under the explorer's caps. Bearing never turns.
+    // the dock's point under the cover's corner, the pitch the atlas's — on a
+    // Mapbox flight (the reader can take the map from it at any moment).
+    // Bearing never turns. A switch (from a cover on screen) is one turn of
+    // SWITCH on the house's `turn` curve, whatever the distance, and the
+    // ticket stays where it lies through it (`carry`); the phone's entry is
+    // a flight DERIVED to stay under the explorer's caps (planFlight).
     let flying: {
       token: number;
       kind: AtlasFlight['kind'];
@@ -1770,6 +1955,11 @@ export default function RouteAtlas({
        *  flight is down (see `flyTo`); null when there is nothing to tip. */
       tip: { pitch: number; bearing: number; ms: number } | null;
       tipping: boolean;
+      /** A cover was on screen at take-off: it stays, pinned, through the
+       *  turn, and becomes the destination's (the switch). */
+      carry: boolean;
+      /** Its landing is the entry's (the stub hand-off). */
+      entry: boolean;
     } | null = null;
     const restPose = (index: number) => ({
       center: restCenter(index),
@@ -1786,15 +1976,34 @@ export default function RouteAtlas({
       return Math.hypot(dx, dy);
     };
     // The cover in hand: asked for once the camera is down at its place and
-    // near its zoom; nothing while it flies.
-    const askFor = () => {
+    // near its zoom; through a switch, from take-off (it is carried); from
+    // the open map, nothing while the camera flies.
+    const askFor = (): DockAsk | null => {
       const held = currentRef.current;
-      if (!held || flying) return null;
+      if (!held) return null;
+      if (flying) {
+        const id = chapterRoute[flying.index]?.stop.id;
+        return flying.carry && id === held ? { id, appear: true, stay: true } : null;
+      }
       if (prologue && queuedEntry < 0.999) return null;
       const index = indexOf(held);
       if (index < 0) return null;
       const out = restZoom(index) - map.getZoom();
       return { id: held, appear: out <= HOP.appearOut, stay: out <= HOP.stayOut };
+    };
+    // The entry is down on stop 01 (the stub hand-off, src/lib/explorer.ts).
+    const entryLanded = (index: number) => {
+      const id = chapterRoute[index]?.stop.id;
+      if (id) window.dispatchEvent(new CustomEvent(ENTRY_LANDED_EVENT, { detail: { id } }));
+    };
+    // The pin lets go: the covers go back onto their shield's foot — at the
+    // landing that is the dock's point itself, so nothing moves; cut short by
+    // the reader's hand, a short glide to wherever the shield now stands.
+    const releasePin = () => {
+      const pinned = pinRef.current;
+      if (!pinned || pinned.to === 'foot') return;
+      const from = dockWrittenRef.current ?? pinned.to;
+      pinRef.current = { from, to: 'foot', t0: performance.now(), ms: reducedMotion ? 0 : DUR_MS.swap, ease: bezierFn(EASE.arrive) };
     };
     const land = (arrived: boolean) => {
       const done = flying;
@@ -1808,6 +2017,7 @@ export default function RouteAtlas({
         return;
       }
       writeRouteTrim(done.trimTo);
+      releasePin();
       const held = currentRef.current;
       const heldIndex = indexOf(held);
       if (arrived) {
@@ -1818,19 +2028,23 @@ export default function RouteAtlas({
         plantTimers.push(window.setTimeout(() => plant(held && heldIndex >= 0 ? held : null), HOP.lockSnapMs));
       } else {
         // Cut short by the reader's own hand: the place is still in hand, the
-        // map is theirs, its cover comes up where its shield now stands.
+        // map is theirs, its cover rides with its shield from where it is.
         setCameraState('rest');
         plant(held && heldIndex >= 0 ? held : null);
         const place = heldIndex >= 0 ? viewfinderPlace(heldIndex) : null;
         if (place) viewfinderRef.current?.settle(place);
       }
       setDockAt(askFor());
+      if (done.entry) entryLanded(done.index);
       onArriveRef.current?.(done.token, arrived);
     };
     const flyTo = (next: AtlasFlight) => {
       if (next.kind === 'release') {
-        // Nothing in hand: its cover goes (it has been torn), its shield
-        // steps back among the others, the viewfinder has nothing to read.
+        // Nothing in hand: its cover fades from the map (nothing tears), its
+        // shield steps back among the others, the viewfinder has nothing to
+        // read.
+        pinRef.current = null;
+        endSwitch();
         setDockAt(null);
         clearPlantTimers();
         markInboundStop(null);
@@ -1842,7 +2056,9 @@ export default function RouteAtlas({
       if (next.kind === 'home') {
         // The phone's way home: back above stop 01, out of sight below the
         // entrance's opening words (HomePage veils the swap).
-        flying = { token: next.token, kind: 'home', index: -1, from: -1, center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, origin: [0, 0], trimFrom: 0, trimTo: 0, tip: null, tipping: false };
+        flying = { token: next.token, kind: 'home', index: -1, from: -1, center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, origin: [0, 0], trimFrom: 0, trimTo: 0, tip: null, tipping: false, carry: false, entry: false };
+        pinRef.current = null;
+        endSwitch();
         setDockAt(null);
         markInboundStop(null);
         map.stop();
@@ -1855,11 +2071,25 @@ export default function RouteAtlas({
         onArriveRef.current?.(next.token, false);
         return;
       }
-      if (flying) land(false);
+      // A new choice mid-turn: the camera turns on from where it is (Mapbox's
+      // flyTo starts from the live camera, never snapping); the turn it cuts
+      // off is simply over.
+      const cutOff = flying;
+      if (cutOff) {
+        flying = null;
+        clearPlantTimers();
+        onArriveRef.current?.(cutOff.token, false);
+      }
       const dest = restPose(index);
       const from = indexOf(currentStopRef.current);
+      const destId = chapterRoute[index].stop.id;
       const live = map.getCenter();
       const origin: GeoCoordinate = [live.lng, live.lat];
+      // The switch: a cover on screen at take-off is carried through the
+      // turn (not on the phone's entry, and never under a cut, which is
+      // unseen).
+      const shown = dockAtRef.current;
+      const switching = next.kind === 'fly' && !!shown;
       flying = {
         token: next.token,
         kind: next.kind,
@@ -1872,19 +2102,29 @@ export default function RouteAtlas({
         trimTo: restRoute(index),
         tip: null,
         tipping: false,
+        carry: switching && !reducedMotion,
+        entry: next.kind === 'entry' || !!next.entry,
       };
-      setDockAt(null);
       setCameraState('flying');
       announce('atlas:depart', index, flying.from);
       clearPlantTimers();
-      const destId = chapterRoute[index].stop.id;
-      markInboundStop(destId);
-      if (currentStopRef.current && currentStopRef.current !== destId) {
-        plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
+      if (next.kind === 'fly') {
+        // The arriving place's shield lifts at once and the one left relaxes
+        // (the reference's active stop scales up on the click).
+        markCurrentStop(destId);
+      } else {
+        markInboundStop(destId);
+        if (currentStopRef.current && currentStopRef.current !== destId) {
+          plantTimers.push(window.setTimeout(() => plant(null), HOP.unplantDelay));
+        }
       }
       if (reducedMotion || next.kind === 'cut') {
         // Values, not structure: the camera is cut there (and under a story
-        // that covers the map, a cut is all anyone could see).
+        // that covers the map, a cut is all anyone could see); the cover in
+        // hand is the destination's at once.
+        pinRef.current = null;
+        endSwitch();
+        setDockAt(null);
         map.stop();
         map.jumpTo(dest);
         const place = viewfinderPlace(index);
@@ -1892,10 +2132,43 @@ export default function RouteAtlas({
         land(true);
         return;
       }
-      const w0 = Math.max(canvasSize.width, canvasSize.height);
-      const u1 = worldPx(origin, dest.center, map.getZoom());
-      const plan = planFlight(w0, u1, dest.zoom - map.getZoom(), window.innerWidth);
-      const durationMs = next.kind === 'entry' ? Math.max(ENTRY.phoneMinMs, plan.durationMs) : plan.durationMs;
+      const zoomNow = map.getZoom();
+      let durationMs: number;
+      let curve: number;
+      let easing: (t: number) => number;
+      if (next.kind === 'fly') {
+        durationMs = switchMs(dest.zoom - zoomNow);
+        curve = SWITCH.curve;
+        easing = turnEase;
+      } else {
+        const w0 = Math.max(canvasSize.width, canvasSize.height);
+        const u1 = worldPx(origin, dest.center, zoomNow);
+        const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        durationMs = next.kind === 'entry' ? Math.max(ENTRY.phoneMinMs, plan.durationMs) : plan.durationMs;
+        curve = plan.curve;
+        easing = voyageEase;
+      }
+      if (flying.carry && shown) {
+        // The ticket stays where it lies: pinned at the dock's point (or
+        // gliding back to it with the camera, if the reader had dragged it
+        // away), and, from another place's cover, the switch — the arriving
+        // cover laid over the leaving one until SWITCH_COVER.leaveMs.
+        const to = planFocal(index);
+        pinRef.current = { from: dockWrittenRef.current ?? to, to, t0: performance.now(), ms: durationMs, ease: turnEase };
+        window.clearTimeout(switchTimerRef.current);
+        if (shown !== destId) {
+          switchKeyRef.current += 1;
+          dockSwitchRef.current = { key: switchKeyRef.current, from: shown, to: destId };
+          switchTimerRef.current = window.setTimeout(endSwitch, SWITCH_COVER.leaveMs);
+        } else {
+          dockSwitchRef.current = null;
+        }
+        setDockAt({ id: destId, appear: true, stay: true });
+      } else {
+        pinRef.current = null;
+        endSwitch();
+        setDockAt(null);
+      }
       // Never a tip and a fall at once (有点晕): from the open planet (square
       // on) the flight keeps its pitch and bearing all the way down, and the
       // camera tips to the oblique view only once it is down, on the house's
@@ -1913,8 +2186,8 @@ export default function RouteAtlas({
         ...dest,
         ...(flying.tip ? { pitch: pitchNow, bearing: bearingNow } : null),
         duration: durationMs,
-        curve: plan.curve,
-        easing: voyageEase,
+        curve,
+        easing,
         essential: true,
       }, { explorerFlight: next.token });
     };
@@ -2105,6 +2378,7 @@ export default function RouteAtlas({
           setCameraState('locked');
           announce('atlas:arrive', entryIndex, null);
           plant(chapterRoute[entryIndex]?.stop.id ?? null);
+          entryLanded(entryIndex);
         } else if (prologue && still === 'archive' && !cutDown) {
           // Reduced motion: the entry is a cut, straight onto the place's
           // resting pose (values, not structure), once.
@@ -2116,6 +2390,7 @@ export default function RouteAtlas({
           const place = viewfinderPlace(entryIndex);
           if (place) viewfinderRef.current?.settle(place);
           writeRouteTrim(restRoute(entryIndex));
+          entryLanded(entryIndex);
         }
         cutDown = true;
         if (prologue && padded !== true && !flying) {
@@ -2224,6 +2499,9 @@ export default function RouteAtlas({
         const done = flying;
         flying = null;
         map.stop();
+        // The covers go back onto their shield (no pin outlives its turn).
+        pinRef.current = null;
+        endSwitch();
         onArriveRef.current?.(done.token, false);
       }
       unsubscribeEntry();
@@ -2391,6 +2669,455 @@ export default function RouteAtlas({
   }, [interfaceVisible]);
 
 
+  // The map itself, memoised: a switch (a new move asked for, a new place in
+  // hand) renders the atlas again, and its Sources, Layers and Markers — none
+  // of which it changes — were reconciled on every one, inside the click that
+  // starts the turn (a third of the switch's first long task, traced
+  // 2026-09-29). Its handlers read refs, or only run once (`onLoad`).
+  const mapElement = useMemo(() => (mapEligible ? (
+      <MapGL
+        ref={mapRef}
+        mapboxAccessToken={mapboxToken}
+        mapStyle={MAP_STYLE}
+        projection={{ name: 'globe' }}
+        initialViewState={mobile
+          ? phoneApproach
+          : chapterRoute[0]
+            ? {
+                longitude: chapterRoute[0].stop.coordinates[0],
+                latitude: chapterRoute[0].stop.coordinates[1],
+                zoom: GLOBE_START_ZOOM,
+                bearing: 0,
+                pitch: 0,
+              }
+            : { ...US_OVERVIEW, zoom: 3 }}
+        // The globe's canvas is held back until the pass is torn and the
+        // tiles of the pose it rises in are in, then fades in (see the
+        // load-in above).
+        style={{
+          width: '100%',
+          height: '100%',
+          ...(prologue
+            ? { opacity: globeRevealed ? 1 : 0, transition: `opacity 700ms ${CSS_EASE.arrive}` }
+            : null),
+        }}
+        attributionControl
+        trackResize={false}
+        renderWorldCopies={false}
+        // The basemap's names fade as they meet and part (Mapbox's own
+        // 300 ms; the reference's map keeps it too). At 0 they popped —
+        // and, worse, with no fade Mapbox places every label afresh on
+        // every frame the camera moves: ~0.5 ms a frame of a switch,
+        // up to 2 at its peaks (traced, 2026-09-29). Only symbols.
+        fadeDuration={300}
+        // The reader's map (the explorer's `explore`): drag, the wheel
+        // and a pinch zoom. A double-click and the keys are the atlas's
+        // own, calmer than Mapbox's (see "The reader's map" above).
+        // Never rotated, never tipped by hand: the pitch is held.
+        scrollZoom={readerHasMap}
+        dragPan={readerHasMap}
+        touchZoomRotate={readerHasMap}
+        doubleClickZoom={false}
+        keyboard={false}
+        dragRotate={false}
+        touchPitch={false}
+        boxZoom={false}
+        // No snap to north when a drag ends: Mapbox eased the atlas's
+        // -2° to 0° after every drag, a turn nobody asked for (and the
+        // next flight turned it back).
+        bearingSnap={0}
+        // Constant: a change of either makes react-map-gl wrap the map's
+        // transform in its proxy again, and nested proxies recursed to a
+        // stack overflow. The reader's range is set on the map itself
+        // (see "The reader's map").
+        minZoom={1}
+        maxZoom={EXPLORE_ZOOM.max}
+        // Full device pixels, deliberately (mapbox-gl 3 reads
+        // window.devicePixelRatio live; a weak GPU gets the planet light's
+        // lite pass instead).
+        // The basemap's labels avoid the places' keep-out (a symbol layer
+        // on its own source), so collisions run across sources.
+        crossSourceCollisions
+        onIdle={() => setMapSettled(true)}
+        onLoad={() => {
+          setMapLoaded(true);
+          setMapLoadDelayed(false);
+          const map = mapRef.current?.getMap();
+          if (!map) return;
+          unwrapTransform(map as never);
+          // Out of the tab order until the reader has the map (then it is
+          // a stop with its own keys, see "The reader's map").
+          map.getCanvas().tabIndex = -1;
+          map.getCanvas().setAttribute('aria-hidden', 'true');
+          {
+            const canvas = map.getCanvas();
+            let ground = canvas.parentElement?.querySelector<HTMLElement>(':scope > .route-atlas-ink-ground') ?? null;
+            if (!ground) {
+              ground = document.createElement('div');
+              ground.className = 'route-atlas-ink-ground';
+              ground.setAttribute('aria-hidden', 'true');
+              canvas.after(ground);
+            }
+            setInkGround(ground);
+          }
+          map.touchZoomRotate.disableRotation();
+          map.setTerrain(null);
+          // The prologue globe is photographic: satellite imagery at globe
+          // zooms, printed in silver (globeLook) and lit by one key light
+          // (planetLight). As the camera goes down it settles to a residual
+          // veil under the atlas's paper, and past SILVER_EXIT takes
+          // the archive's own paint back.
+          if (prologue && !map.getSource('prologue-satellite')) {
+            const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
+            const lookWrites = globeWritesRef.current;
+            lookWrites.lookQ = 1;
+            lookWrites.floor = silverFloorAt(1);
+            lookWrites.opacity = Math.round(satelliteOpacityAt(PROLOGUE_SATELLITE_OPACITY, map.getZoom()) * 500) / 500;
+            map.addSource('prologue-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+            map.addLayer({
+              id: 'prologue-satellite',
+              type: 'raster',
+              source: 'prologue-satellite',
+              paint: {
+                'raster-opacity': lookWrites.opacity,
+                'raster-opacity-transition': { duration: 0, delay: 0 },
+                ...silverPaint(lookWrites.floor),
+                'raster-fade-duration': 160,
+              } as never,
+            }, firstLabel);
+            // The archive's paint, over the print: it comes up across
+            // SILVER_EXIT and is the reader's map (writeSatelliteVeil).
+            // The same imagery through a source of its own: two raster
+            // layers on one source share the draped globe's overlap
+            // stencil, and wherever a new zoom level's tiles came in over
+            // their parents mid-dive the upper layer was masked out — a
+            // tile-shaped patch of bare ground flashing in the sea for a
+            // frame or two. (The browser's cache serves the second
+            // source's tiles: the same URLs.)
+            lookWrites.stockOpacity = 0;
+            map.addSource(SATELLITE_STOCK_LAYER, { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+            map.addLayer({
+              id: SATELLITE_STOCK_LAYER,
+              type: 'raster',
+              source: SATELLITE_STOCK_LAYER,
+              paint: {
+                'raster-opacity': 0,
+                'raster-opacity-transition': { duration: 0, delay: 0 },
+                ...STOCK_PAINT,
+                'raster-fade-duration': 160,
+              } as never,
+            }, firstLabel);
+            const light = createPlanetLight(map, () => ({
+              q: globeWritesRef.current.lookQ,
+              dawn: globeChannel.dawn,
+              veil: globeChannel.veil,
+              hover: globeChannel.hover,
+              archive: globeWritesRef.current.archive,
+              zoom: globeWritesRef.current.fadeZoom,
+            }));
+            light.setLite(globeChannel.lite);
+            planetLightRef.current = light;
+            map.addLayer(light, firstLabel);
+          }
+          map.setFog(prologue ? (globeChannel.lite ? PROLOGUE_FOG_LITE : PROLOGUE_FOG) : GLOBE_FOG);
+  
+          // ── A drawing, not a road map ──
+          // Five inks remain: paper (background), water, land, the state
+          // line and the river. Interstates drop to a whisper and every
+          // class below them is not drawn, so the white route is the
+          // loudest line on the map. /travel (MapboxMap.tsx) keeps its road
+          // hierarchy on purpose: do not "complete" this into a global
+          // cleanup (src/lib/atlasBasemap.ts).
+          const roadWhisper = 0.16;
+          map.getStyle().layers?.forEach((layer) => {
+            const id = layer.id.toLowerCase();
+            if (layer.type === 'fill-extrusion' || layer.type === 'hillshade') {
+              map.setLayoutProperty(layer.id, 'visibility', 'none');
+              return;
+            }
+            if (layer.type === 'background') {
+              map.setPaintProperty(layer.id, 'background-color', ATLAS_PAPER.background);
+              return;
+            }
+            if (layer.type === 'fill') {
+              if (id.includes('water')) {
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
+                map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
+              } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
+                map.setPaintProperty(layer.id, 'fill-opacity', mobile ? 0.36 : 0.38);
+              } else if (id.includes('building')) {
+                map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
+                map.setPaintProperty(layer.id, 'fill-opacity', mobile ? 0.1 : 0.12);
+              }
+              return;
+            }
+            if (layer.type === 'line') {
+              if (id.includes('admin') || id.includes('boundary')) {
+                map.setPaintProperty(layer.id, 'line-color', '#AEB6A9');
+                map.setPaintProperty(layer.id, 'line-width', mobile ? 0.62 : 0.74);
+                map.setPaintProperty(layer.id, 'line-opacity', mobile ? 0.28 : 0.4);
+              } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+                map.setPaintProperty(layer.id, 'line-color', '#8C9588');
+                map.setPaintProperty(layer.id, 'line-opacity', roadWhisper);
+              } else if (id.includes('secondary') || id.includes('tertiary')) {
+                map.setLayoutProperty(layer.id, 'visibility', 'none');
+              } else if (id.includes('road') || id.includes('street')) {
+                // dark-v11 folds the whole hierarchy into `road-simple`
+                // and tells the classes apart on the feature: interstates
+                // at a whisper, every class below them not drawn.
+                map.setPaintProperty(layer.id, 'line-color', '#8C9588');
+                map.setPaintProperty(layer.id, 'line-opacity', ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], roadWhisper, 0]);
+              } else if (id.includes('waterway')) {
+                map.setPaintProperty(layer.id, 'line-color', '#657168');
+                map.setPaintProperty(layer.id, 'line-opacity', mobile ? 0.18 : 0.3);
+              }
+              return;
+            }
+            if (layer.type !== 'symbol' || !('layout' in layer) || !layer.layout?.['text-field']) return;
+            const isBaseNavigationNoise =
+              id.includes('poi') ||
+              id.includes('transit') ||
+              id.includes('airport') ||
+              id.includes('building-number');
+            const isRoadLabel = id.includes('road') || id.includes('street');
+            const isPlaceLabel =
+              id.includes('settlement') ||
+              id.includes('place') ||
+              id.includes('city') ||
+              id.includes('town') ||
+              id.includes('village');
+            if (isBaseNavigationNoise || isRoadLabel) {
+              map.setLayoutProperty(layer.id, 'visibility', 'none');
+              return;
+            }
+            const isAtlasLabel =
+              id.includes('state-label') ||
+              id.includes('country-label') ||
+              id.includes('water-point') ||
+              id.includes('water-line');
+            // The basemap's own type sits BELOW the page's typography:
+            // geography stays legible, place names are the page's job.
+            const labelOpacity = isAtlasLabel
+              ? (mobile ? 0.2 : 0.24)
+              : isPlaceLabel
+                ? (mobile ? 0.2 : 0.26)
+                : (mobile ? 0.16 : 0.2);
+            // The prologue globe is unlabelled photography; names arrive
+            // with the descent.
+            map.setPaintProperty(
+              layer.id,
+              'text-opacity',
+              prologue
+                ? ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0] + 0.3, 0, PROLOGUE_SATELLITE_FADE[1] - 0.1, labelOpacity]
+                : labelOpacity,
+            );
+            map.setPaintProperty(layer.id, 'text-color', '#AEB5A6');
+            // Patterson's inversion: the ground softens behind the type,
+            // at half the paper's strength over the photograph.
+            map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(27, 35, 25, 0.5)');
+            map.setPaintProperty(layer.id, 'text-halo-width', 1.1);
+            map.setPaintProperty(layer.id, 'text-halo-blur', 1.5);
+            // The page caps uppercase tracking at 0.1em and the map is not
+            // exempt.
+            const tracking = layer.layout?.['text-letter-spacing'];
+            if (typeof tracking === 'number' ? tracking > 0.1 : Array.isArray(tracking)) {
+              try {
+                map.setLayoutProperty(layer.id, 'text-letter-spacing', typeof tracking === 'number' ? 0.1 : ['min', 0.1, tracking]);
+              } catch {
+                // A style whose tracking cannot be composed keeps its own.
+              }
+            }
+          });
+  
+          // The basemap does not name the places this archive is naming:
+          // each is signed already (its shield, its ticket).
+          silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
+          // The phone's map: the land as a photograph of itself, in the
+          // archive's own stock paint, under the labels and the route.
+          if (mobile && !map.getSource('phone-satellite')) {
+            const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
+            map.addSource('phone-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+            map.addLayer({
+              id: 'phone-satellite',
+              type: 'raster',
+              source: 'phone-satellite',
+              paint: {
+                'raster-opacity': PHONE_SATELLITE_OPACITY,
+                'raster-fade-duration': 240,
+                ...STOCK_PAINT,
+              } as never,
+            }, firstLabel);
+          }
+          // Keep-out, the /travel technique: an invisible icon on every
+          // place, so the basemap does not set a town's name across the
+          // ground a shield stands on.
+          if (!map.getLayer(ATLAS_KEEP_OUT.id)) {
+            if (!map.hasImage(ATLAS_KEEP_OUT.id)) {
+              map.addImage(ATLAS_KEEP_OUT.id, {
+                width: ATLAS_KEEP_OUT.width,
+                height: ATLAS_KEEP_OUT.height,
+                data: new Uint8Array(ATLAS_KEEP_OUT.width * ATLAS_KEEP_OUT.height * 4),
+              });
+            }
+            if (!map.getSource(ATLAS_KEEP_OUT.id)) {
+              map.addSource(ATLAS_KEEP_OUT.id, {
+                type: 'geojson',
+                data: {
+                  type: 'FeatureCollection',
+                  features: chapterRoute.map((entry) => ({
+                    type: 'Feature',
+                    properties: {},
+                    geometry: { type: 'Point', coordinates: entry.stop.coordinates },
+                  })),
+                },
+              });
+            }
+            map.addLayer({
+              id: ATLAS_KEEP_OUT.id,
+              type: 'symbol',
+              source: ATLAS_KEEP_OUT.id,
+              layout: {
+                'icon-image': ATLAS_KEEP_OUT.id,
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': false,
+                'icon-offset': [0, ATLAS_KEEP_OUT.offsetY],
+                'icon-pitch-alignment': 'viewport',
+                'icon-rotation-alignment': 'viewport',
+              },
+              paint: { 'icon-opacity': 0 },
+            });
+          }
+        }}
+      >
+        <Source key="atlas-graticule" id="atlas-graticule" type="geojson" data={NORTH_AMERICA_GRATICULE}>
+          <Layer
+            id="atlas-graticule-line"
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': '#AEB6A9',
+              'line-width': 0.55,
+              'line-opacity': mobile ? 0.055 : 0.045,
+            }}
+          />
+        </Source>
+        <Source key="route-all" id="route-all" type="geojson" data={fullRoute} lineMetrics>
+          <Layer
+            id="route-all-glow"
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': MAP_BURN,
+              'line-width': 4,
+              'line-opacity': atlasEngaged ? 0.16 : 0,
+              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
+              'line-blur': 3,
+              'line-trim-offset': [1, 1],
+            }}
+          />
+          <Layer
+            id="route-all-line"
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': MAP_INK,
+              'line-width': 1,
+              'line-dasharray': [3, 4],
+              'line-opacity': atlasEngaged ? 0.5 : 0,
+              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
+              'line-trim-offset': [1, 1],
+            }}
+          />
+          <Layer
+            id="route-travelled-glow"
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': MAP_BURN,
+              'line-width': 4.5,
+              'line-opacity': 0.22,
+              'line-blur': 3,
+              'line-trim-offset': initialRouteTrim,
+            }}
+          />
+          <Layer
+            id="route-travelled-line"
+            type="line"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{
+              'line-color': MAP_INK,
+              'line-width': 1.5,
+              'line-dasharray': [5, 2.5],
+              'line-opacity': 0.92,
+              'line-trim-offset': initialRouteTrim,
+            }}
+          />
+          {prologue && (
+            <Layer
+              id="prologue-route"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{
+                'line-color': MAP_INK,
+                'line-width': 1.15,
+                'line-dasharray': [3, 2.5],
+                // Seeded dark, once: the camera prints it in with the
+                // descent, and a value here that changed per render would
+                // be re-applied behind its back.
+                'line-opacity': 0,
+              }}
+            />
+          )}
+        </Source>
+        {prologue && (
+          <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
+            {/* Each place a small dot of white ink with a hard knockout of
+                burn round it, upright to the viewer. */}
+            <Layer
+              id="prologue-stops-dot"
+              type="circle"
+              paint={{
+                'circle-radius': 2.25,
+                'circle-color': MAP_INK,
+                'circle-stroke-color': MAP_BURN,
+                'circle-stroke-width': 1.25,
+                'circle-pitch-alignment': 'viewport',
+                'circle-opacity': 0,
+                'circle-stroke-opacity': 0,
+              }}
+            />
+          </Source>
+        )}
+  
+        {/* The places: one shield per place (PlaceShield), upright to the
+            camera, the point of its foot on the place itself. Every place
+            the archive has photographs of is here. */}
+        {shieldPlaces.map((place) => (
+          <Marker
+            key={`shield-${place.id}`}
+            longitude={place.coordinates[0]}
+            latitude={place.coordinates[1]}
+            anchor="bottom"
+            pitchAlignment="viewport"
+            rotationAlignment="viewport"
+          >
+            <PlaceShield
+              stop={place}
+              width={shieldPx}
+              initialCurrentId={currentStopRef.current}
+              engaged={engagedChapterId === place.id}
+              visibility={classicInterfaceOpacity}
+              onEngage={onEngage}
+              onNavigate={onSelect}
+            />
+          </Marker>
+        ))}
+      </MapGL>
+  ) : null),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [atlasEngaged, chapterRoute, classicInterfaceOpacity, engagedChapterId, fullRoute, globeChannel, globeRevealed, initialRouteTrim, mapEligible, mapboxToken, mobile, onEngage, onSelect, phoneApproach, prologue, prologueStops, readerHasMap, reducedMotion, shieldPlaces, shieldPx]);
+
   if (chapterRoute.length < 1 || !viewportReady) {
     return (
       <section
@@ -2427,6 +3154,18 @@ export default function RouteAtlas({
       data-no-place={current ? undefined : ''}
       onPointerMove={noteAtlasLook}
       onPointerLeave={endAtlasLook}
+      // A keyboard's focus inside the atlas brings its instruments up
+      // (global.css, "The instruments on demand"). Said by an attribute, not
+      // `:has(:focus-visible)`: with a `:has()` on it, every text node the
+      // readouts wrote in flight made the browser restyle the whole atlas.
+      onFocusCapture={(event) => {
+        const target = event.target as Element;
+        if (target.matches?.(':focus-visible')) event.currentTarget.setAttribute('data-atlas-focus', '');
+      }}
+      onBlurCapture={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (!next || !event.currentTarget.contains(next)) event.currentTarget.removeAttribute('data-atlas-focus');
+      }}
       className={`route-atlas relative isolate w-full ${prologue ? 'overflow-visible' : 'overflow-hidden'} bg-transparent ${mobile ? 'route-atlas--mobile h-full min-h-[100svh]' : 'h-full'}`}
     >
       <div className="absolute inset-0 bg-[#282c20]" aria-hidden="true" />
@@ -2465,441 +3204,7 @@ export default function RouteAtlas({
           </div>
         </motion.div>
 
-        {mapEligible && (
-          <MapGL
-            ref={mapRef}
-            mapboxAccessToken={mapboxToken}
-            mapStyle={MAP_STYLE}
-            projection={{ name: 'globe' }}
-            initialViewState={mobile
-              ? phoneApproach
-              : chapterRoute[0]
-                ? {
-                    longitude: chapterRoute[0].stop.coordinates[0],
-                    latitude: chapterRoute[0].stop.coordinates[1],
-                    zoom: GLOBE_START_ZOOM,
-                    bearing: 0,
-                    pitch: 0,
-                  }
-                : { ...US_OVERVIEW, zoom: 3 }}
-            // The globe's canvas is held back until the pass is torn and the
-            // tiles of the pose it rises in are in, then fades in (see the
-            // load-in above).
-            style={{
-              width: '100%',
-              height: '100%',
-              ...(prologue
-                ? { opacity: globeRevealed ? 1 : 0, transition: `opacity 700ms ${CSS_EASE.arrive}` }
-                : null),
-            }}
-            attributionControl
-            trackResize={false}
-            renderWorldCopies={false}
-            fadeDuration={0}
-            // The reader's map (the explorer's `explore`): drag, the wheel
-            // and a pinch zoom. A double-click and the keys are the atlas's
-            // own, calmer than Mapbox's (see "The reader's map" above).
-            // Never rotated, never tipped by hand: the pitch is held.
-            scrollZoom={readerHasMap}
-            dragPan={readerHasMap}
-            touchZoomRotate={readerHasMap}
-            doubleClickZoom={false}
-            keyboard={false}
-            dragRotate={false}
-            touchPitch={false}
-            boxZoom={false}
-            // No snap to north when a drag ends: Mapbox eased the atlas's
-            // -2° to 0° after every drag, a turn nobody asked for (and the
-            // next flight turned it back).
-            bearingSnap={0}
-            // Constant: a change of either makes react-map-gl wrap the map's
-            // transform in its proxy again, and nested proxies recursed to a
-            // stack overflow. The reader's range is set on the map itself
-            // (see "The reader's map").
-            minZoom={1}
-            maxZoom={EXPLORE_ZOOM.max}
-            // Full device pixels, deliberately (mapbox-gl 3 reads
-            // window.devicePixelRatio live; a weak GPU gets the planet light's
-            // lite pass instead).
-            // The basemap's labels avoid the places' keep-out (a symbol layer
-            // on its own source), so collisions run across sources.
-            crossSourceCollisions
-            onIdle={() => setMapSettled(true)}
-            onLoad={() => {
-              setMapLoaded(true);
-              setMapLoadDelayed(false);
-              const map = mapRef.current?.getMap();
-              if (!map) return;
-              // Out of the tab order until the reader has the map (then it is
-              // a stop with its own keys, see "The reader's map").
-              map.getCanvas().tabIndex = -1;
-              map.getCanvas().setAttribute('aria-hidden', 'true');
-              {
-                const canvas = map.getCanvas();
-                let ground = canvas.parentElement?.querySelector<HTMLElement>(':scope > .route-atlas-ink-ground') ?? null;
-                if (!ground) {
-                  ground = document.createElement('div');
-                  ground.className = 'route-atlas-ink-ground';
-                  ground.setAttribute('aria-hidden', 'true');
-                  canvas.after(ground);
-                }
-                setInkGround(ground);
-              }
-              map.touchZoomRotate.disableRotation();
-              map.setTerrain(null);
-              // The prologue globe is photographic: satellite imagery at globe
-              // zooms, printed in silver (globeLook) and lit by one key light
-              // (planetLight). As the camera goes down it settles to a residual
-              // veil under the atlas's paper, and past SILVER_EXIT takes
-              // the archive's own paint back.
-              if (prologue && !map.getSource('prologue-satellite')) {
-                const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
-                const lookWrites = globeWritesRef.current;
-                lookWrites.lookQ = 1;
-                lookWrites.floor = silverFloorAt(1);
-                lookWrites.opacity = Math.round(satelliteOpacityAt(PROLOGUE_SATELLITE_OPACITY, map.getZoom()) * 500) / 500;
-                map.addSource('prologue-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
-                map.addLayer({
-                  id: 'prologue-satellite',
-                  type: 'raster',
-                  source: 'prologue-satellite',
-                  paint: {
-                    'raster-opacity': lookWrites.opacity,
-                    'raster-opacity-transition': { duration: 0, delay: 0 },
-                    ...silverPaint(lookWrites.floor),
-                    'raster-fade-duration': 160,
-                  } as never,
-                }, firstLabel);
-                // The archive's paint, over the print: it comes up across
-                // SILVER_EXIT and is the reader's map (writeSatelliteVeil).
-                // The same imagery through a source of its own: two raster
-                // layers on one source share the draped globe's overlap
-                // stencil, and wherever a new zoom level's tiles came in over
-                // their parents mid-dive the upper layer was masked out — a
-                // tile-shaped patch of bare ground flashing in the sea for a
-                // frame or two. (The browser's cache serves the second
-                // source's tiles: the same URLs.)
-                lookWrites.stockOpacity = 0;
-                map.addSource(SATELLITE_STOCK_LAYER, { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
-                map.addLayer({
-                  id: SATELLITE_STOCK_LAYER,
-                  type: 'raster',
-                  source: SATELLITE_STOCK_LAYER,
-                  paint: {
-                    'raster-opacity': 0,
-                    'raster-opacity-transition': { duration: 0, delay: 0 },
-                    ...STOCK_PAINT,
-                    'raster-fade-duration': 160,
-                  } as never,
-                }, firstLabel);
-                const light = createPlanetLight(map, () => ({
-                  q: globeWritesRef.current.lookQ,
-                  dawn: globeChannel.dawn,
-                  veil: globeChannel.veil,
-                  hover: globeChannel.hover,
-                  archive: globeWritesRef.current.archive,
-                  zoom: globeWritesRef.current.fadeZoom,
-                }));
-                light.setLite(globeChannel.lite);
-                planetLightRef.current = light;
-                map.addLayer(light, firstLabel);
-              }
-              map.setFog(prologue ? (globeChannel.lite ? PROLOGUE_FOG_LITE : PROLOGUE_FOG) : GLOBE_FOG);
-
-              // ── A drawing, not a road map ──
-              // Five inks remain: paper (background), water, land, the state
-              // line and the river. Interstates drop to a whisper and every
-              // class below them is not drawn, so the white route is the
-              // loudest line on the map. /travel (MapboxMap.tsx) keeps its road
-              // hierarchy on purpose: do not "complete" this into a global
-              // cleanup (src/lib/atlasBasemap.ts).
-              const roadWhisper = 0.16;
-              map.getStyle().layers?.forEach((layer) => {
-                const id = layer.id.toLowerCase();
-                if (layer.type === 'fill-extrusion' || layer.type === 'hillshade') {
-                  map.setLayoutProperty(layer.id, 'visibility', 'none');
-                  return;
-                }
-                if (layer.type === 'background') {
-                  map.setPaintProperty(layer.id, 'background-color', ATLAS_PAPER.background);
-                  return;
-                }
-                if (layer.type === 'fill') {
-                  if (id.includes('water')) {
-                    map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.water);
-                    map.setPaintProperty(layer.id, 'fill-opacity', 0.92);
-                  } else if (id.includes('park') || id.includes('landuse') || id.includes('landcover')) {
-                    map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.land);
-                    map.setPaintProperty(layer.id, 'fill-opacity', mobile ? 0.36 : 0.38);
-                  } else if (id.includes('building')) {
-                    map.setPaintProperty(layer.id, 'fill-color', ATLAS_PAPER.building);
-                    map.setPaintProperty(layer.id, 'fill-opacity', mobile ? 0.1 : 0.12);
-                  }
-                  return;
-                }
-                if (layer.type === 'line') {
-                  if (id.includes('admin') || id.includes('boundary')) {
-                    map.setPaintProperty(layer.id, 'line-color', '#AEB6A9');
-                    map.setPaintProperty(layer.id, 'line-width', mobile ? 0.62 : 0.74);
-                    map.setPaintProperty(layer.id, 'line-opacity', mobile ? 0.28 : 0.4);
-                  } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
-                    map.setPaintProperty(layer.id, 'line-color', '#8C9588');
-                    map.setPaintProperty(layer.id, 'line-opacity', roadWhisper);
-                  } else if (id.includes('secondary') || id.includes('tertiary')) {
-                    map.setLayoutProperty(layer.id, 'visibility', 'none');
-                  } else if (id.includes('road') || id.includes('street')) {
-                    // dark-v11 folds the whole hierarchy into `road-simple`
-                    // and tells the classes apart on the feature: interstates
-                    // at a whisper, every class below them not drawn.
-                    map.setPaintProperty(layer.id, 'line-color', '#8C9588');
-                    map.setPaintProperty(layer.id, 'line-opacity', ['match', ['get', 'class'], ['motorway', 'trunk', 'primary'], roadWhisper, 0]);
-                  } else if (id.includes('waterway')) {
-                    map.setPaintProperty(layer.id, 'line-color', '#657168');
-                    map.setPaintProperty(layer.id, 'line-opacity', mobile ? 0.18 : 0.3);
-                  }
-                  return;
-                }
-                if (layer.type !== 'symbol' || !('layout' in layer) || !layer.layout?.['text-field']) return;
-                const isBaseNavigationNoise =
-                  id.includes('poi') ||
-                  id.includes('transit') ||
-                  id.includes('airport') ||
-                  id.includes('building-number');
-                const isRoadLabel = id.includes('road') || id.includes('street');
-                const isPlaceLabel =
-                  id.includes('settlement') ||
-                  id.includes('place') ||
-                  id.includes('city') ||
-                  id.includes('town') ||
-                  id.includes('village');
-                if (isBaseNavigationNoise || isRoadLabel) {
-                  map.setLayoutProperty(layer.id, 'visibility', 'none');
-                  return;
-                }
-                const isAtlasLabel =
-                  id.includes('state-label') ||
-                  id.includes('country-label') ||
-                  id.includes('water-point') ||
-                  id.includes('water-line');
-                // The basemap's own type sits BELOW the page's typography:
-                // geography stays legible, place names are the page's job.
-                const labelOpacity = isAtlasLabel
-                  ? (mobile ? 0.2 : 0.24)
-                  : isPlaceLabel
-                    ? (mobile ? 0.2 : 0.26)
-                    : (mobile ? 0.16 : 0.2);
-                // The prologue globe is unlabelled photography; names arrive
-                // with the descent.
-                map.setPaintProperty(
-                  layer.id,
-                  'text-opacity',
-                  prologue
-                    ? ['interpolate', ['linear'], ['zoom'], PROLOGUE_SATELLITE_FADE[0] + 0.3, 0, PROLOGUE_SATELLITE_FADE[1] - 0.1, labelOpacity]
-                    : labelOpacity,
-                );
-                map.setPaintProperty(layer.id, 'text-color', '#AEB5A6');
-                // Patterson's inversion: the ground softens behind the type,
-                // at half the paper's strength over the photograph.
-                map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(27, 35, 25, 0.5)');
-                map.setPaintProperty(layer.id, 'text-halo-width', 1.1);
-                map.setPaintProperty(layer.id, 'text-halo-blur', 1.5);
-                // The page caps uppercase tracking at 0.1em and the map is not
-                // exempt.
-                const tracking = layer.layout?.['text-letter-spacing'];
-                if (typeof tracking === 'number' ? tracking > 0.1 : Array.isArray(tracking)) {
-                  try {
-                    map.setLayoutProperty(layer.id, 'text-letter-spacing', typeof tracking === 'number' ? 0.1 : ['min', 0.1, tracking]);
-                  } catch {
-                    // A style whose tracking cannot be composed keeps its own.
-                  }
-                }
-              });
-
-              // The basemap does not name the places this archive is naming:
-              // each is signed already (its shield, its ticket).
-              silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
-              // The phone's map: the land as a photograph of itself, in the
-              // archive's own stock paint, under the labels and the route.
-              if (mobile && !map.getSource('phone-satellite')) {
-                const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
-                map.addSource('phone-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
-                map.addLayer({
-                  id: 'phone-satellite',
-                  type: 'raster',
-                  source: 'phone-satellite',
-                  paint: {
-                    'raster-opacity': PHONE_SATELLITE_OPACITY,
-                    'raster-fade-duration': 240,
-                    ...STOCK_PAINT,
-                  } as never,
-                }, firstLabel);
-              }
-              // Keep-out, the /travel technique: an invisible icon on every
-              // place, so the basemap does not set a town's name across the
-              // ground a shield stands on.
-              if (!map.getLayer(ATLAS_KEEP_OUT.id)) {
-                if (!map.hasImage(ATLAS_KEEP_OUT.id)) {
-                  map.addImage(ATLAS_KEEP_OUT.id, {
-                    width: ATLAS_KEEP_OUT.width,
-                    height: ATLAS_KEEP_OUT.height,
-                    data: new Uint8Array(ATLAS_KEEP_OUT.width * ATLAS_KEEP_OUT.height * 4),
-                  });
-                }
-                if (!map.getSource(ATLAS_KEEP_OUT.id)) {
-                  map.addSource(ATLAS_KEEP_OUT.id, {
-                    type: 'geojson',
-                    data: {
-                      type: 'FeatureCollection',
-                      features: chapterRoute.map((entry) => ({
-                        type: 'Feature',
-                        properties: {},
-                        geometry: { type: 'Point', coordinates: entry.stop.coordinates },
-                      })),
-                    },
-                  });
-                }
-                map.addLayer({
-                  id: ATLAS_KEEP_OUT.id,
-                  type: 'symbol',
-                  source: ATLAS_KEEP_OUT.id,
-                  layout: {
-                    'icon-image': ATLAS_KEEP_OUT.id,
-                    'icon-allow-overlap': true,
-                    'icon-ignore-placement': false,
-                    'icon-offset': [0, ATLAS_KEEP_OUT.offsetY],
-                    'icon-pitch-alignment': 'viewport',
-                    'icon-rotation-alignment': 'viewport',
-                  },
-                  paint: { 'icon-opacity': 0 },
-                });
-              }
-            }}
-          >
-            <Source key="atlas-graticule" id="atlas-graticule" type="geojson" data={NORTH_AMERICA_GRATICULE}>
-              <Layer
-                id="atlas-graticule-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': '#AEB6A9',
-                  'line-width': 0.55,
-                  'line-opacity': mobile ? 0.055 : 0.045,
-                }}
-              />
-            </Source>
-            <Source key="route-all" id="route-all" type="geojson" data={fullRoute} lineMetrics>
-              <Layer
-                id="route-all-glow"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': MAP_BURN,
-                  'line-width': 4,
-                  'line-opacity': atlasEngaged ? 0.16 : 0,
-                  'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-                  'line-blur': 3,
-                  'line-trim-offset': [1, 1],
-                }}
-              />
-              <Layer
-                id="route-all-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': MAP_INK,
-                  'line-width': 1,
-                  'line-dasharray': [3, 4],
-                  'line-opacity': atlasEngaged ? 0.5 : 0,
-                  'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-                  'line-trim-offset': [1, 1],
-                }}
-              />
-              <Layer
-                id="route-travelled-glow"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': MAP_BURN,
-                  'line-width': 4.5,
-                  'line-opacity': 0.22,
-                  'line-blur': 3,
-                  'line-trim-offset': initialRouteTrim,
-                }}
-              />
-              <Layer
-                id="route-travelled-line"
-                type="line"
-                layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                paint={{
-                  'line-color': MAP_INK,
-                  'line-width': 1.5,
-                  'line-dasharray': [5, 2.5],
-                  'line-opacity': 0.92,
-                  'line-trim-offset': initialRouteTrim,
-                }}
-              />
-              {prologue && (
-                <Layer
-                  id="prologue-route"
-                  type="line"
-                  layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-                  paint={{
-                    'line-color': MAP_INK,
-                    'line-width': 1.15,
-                    'line-dasharray': [3, 2.5],
-                    // Seeded dark, once: the camera prints it in with the
-                    // descent, and a value here that changed per render would
-                    // be re-applied behind its back.
-                    'line-opacity': 0,
-                  }}
-                />
-              )}
-            </Source>
-            {prologue && (
-              <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
-                {/* Each place a small dot of white ink with a hard knockout of
-                    burn round it, upright to the viewer. */}
-                <Layer
-                  id="prologue-stops-dot"
-                  type="circle"
-                  paint={{
-                    'circle-radius': 2.25,
-                    'circle-color': MAP_INK,
-                    'circle-stroke-color': MAP_BURN,
-                    'circle-stroke-width': 1.25,
-                    'circle-pitch-alignment': 'viewport',
-                    'circle-opacity': 0,
-                    'circle-stroke-opacity': 0,
-                  }}
-                />
-              </Source>
-            )}
-
-            {/* The places: one shield per place (PlaceShield), upright to the
-                camera, the point of its foot on the place itself. Every place
-                the archive has photographs of is here. */}
-            {shieldPlaces.map((place) => (
-              <Marker
-                key={`shield-${place.id}`}
-                longitude={place.coordinates[0]}
-                latitude={place.coordinates[1]}
-                anchor="bottom"
-                pitchAlignment="viewport"
-                rotationAlignment="viewport"
-              >
-                <PlaceShield
-                  stop={place}
-                  width={shieldPx}
-                  initialCurrentId={currentStopRef.current}
-                  engaged={engagedChapterId === place.id}
-                  visibility={classicInterfaceOpacity}
-                  onEngage={onEngage}
-                  onNavigate={onSelect}
-                />
-              </Marker>
-            ))}
-          </MapGL>
-        )}
+        {mapElement}
       </div>
 
       <motion.div

@@ -2,11 +2,22 @@
 // Owner, 2026-09-28: 我希望封面可以跟随路牌一起走，出现在路牌的右上角或者左上角
 // 或者右下角或者左下角 — the chapter's cover (the photograph and its ticket stub)
 // is attached to the current place's route shield on the map, the way the
-// reference's name board sits right over its stop's pin, at one of four
-// corners of the shield. Every camera frame the atlas projects the places
-// (the same projection the shields stand on) and hands the points over
+// reference's name board sits right over its stop's pin, at a corner of the
+// shield. Every camera frame the atlas projects the places (the same
+// projection the shields stand on) and hands the points over
 // (`coverDock.publish`); the chapter writes its cover there. The camera sets
 // each place where its cover fits (`centreFor`).
+//
+// One dock for every place (owner, later the same day: switching must be free
+// and like the reference's, whose board stays put while the planet turns
+// under it). The corner used to turn per chapter, so the cover jumped round
+// its shield on every move. Now every place stands on ONE point of the screen
+// with its cover at ONE corner of its shield — DOCK_QUADRANT, below-left:
+// the plate's top-right corner is the corner next to the shield, and that is
+// the stub's top-right, so the stub (the sign, whose name turns in place) is
+// the part of the ticket that never moves, whatever the photograph's shape.
+// On a switch the camera turns the next place in under that corner and the
+// ticket becomes the next place's where it lies ("The switch", below).
 //
 // Everything here is DERIVED from the viewport and the archive's own data —
 // the cover's ratio (from its file name), whether it carries its region's
@@ -15,9 +26,16 @@
 
 export type Quadrant = 'tr' | 'tl' | 'br' | 'bl';
 
-/** The order the corners are offered in, turned one step per chapter, so a
- *  run of stops goes round the shield rather than sitting on one side. */
-export const QUADRANT_ORDER: readonly Quadrant[] = ['tr', 'bl', 'tl', 'br'];
+/** Every corner a plate can take about its shield (the geometry is the same
+ *  for each; global.css draws a caret for each). */
+export const QUADRANTS: readonly Quadrant[] = ['tr', 'bl', 'tl', 'br'];
+
+/** The one corner the cover takes, for every place: below-left of the
+ *  shield. Its anchor — the plate's corner next to the shield — is the
+ *  stub's top-right, so the sign is still through a switch; below-right or
+ *  above-right would carry the stub sideways with the photograph's width,
+ *  above-left would move the sign up and down with its height. */
+export const DOCK_QUADRANT: Quadrant = 'bl';
 
 export const DOCK = {
   /** The stub's fixed measure (ArchiveChapter TICKET_STUB). */
@@ -201,11 +219,15 @@ export interface DockChapter {
   shield: Size;
   /** Every other place's shield, as drawn when not current. */
   neighbours: ReadonlyArray<{ coordinates: readonly [number, number] } & Size>;
+  /** The ticket's card stock (src/lib/ticketStock.ts): a switch eases the
+   *  ticket from the stock it leaves to this one. */
+  stock?: string;
 }
 
 export interface DockEntry {
   quadrant: Quadrant;
-  /** Where the camera sets this place (its shield's foot), viewport px. */
+  /** Where the camera sets this place (its shield's foot), viewport px: the
+   *  same point for every place (the single dock). */
   point: Point;
   /** The camera's centre that puts it there (`centreFor`). */
   centre: [number, number];
@@ -215,34 +237,11 @@ export interface DockEntry {
   photoW: number;
   photoH: number;
   tab: boolean;
+  stock?: string;
   /** How much of its neighbours' shields the cover would hide (px²) and how
    *  far past the stage it would reach (px): 0 and 0 when it sits clear. */
   covered: number;
   overflow: number;
-}
-
-/** Where a place and its cover stand on the stage for one corner: the pair
- *  (shield and cover with what it carries) centred on the stage, then kept
- *  inside it. `overflow` is what still could not fit (px, both axes). */
-export function placeAt(stage: Box, shield: Size, size: Size, quadrant: Quadrant, tab: boolean) {
-  const origin = { x: 0, y: 0 };
-  const plate = fitBox(plateRect(origin, shield, size, quadrant), tab);
-  const group: Box = {
-    left: Math.min(plate.left, -shield.w / 2),
-    top: Math.min(plate.top, -shield.h),
-    right: Math.max(plate.right, shield.w / 2),
-    bottom: Math.max(plate.bottom, 0),
-  };
-  const axis = (lo: number, hi: number, g0: number, g1: number) => {
-    const min = lo - g0;
-    const max = hi - g1;
-    const centred = (lo + hi) / 2 - (g0 + g1) / 2;
-    if (min <= max) return { at: clamp(centred, min, max), over: 0 };
-    return { at: centred, over: min - max };
-  };
-  const x = axis(stage.left, stage.right, group.left, group.right);
-  const y = axis(stage.top, stage.bottom, group.top, group.bottom);
-  return { point: { x: Math.round(x.at), y: Math.round(y.at) }, overflow: Math.round(x.over + y.over) };
 }
 
 /** The neighbours' shields a cover must keep off, on the camera that sets
@@ -261,53 +260,157 @@ function visibleNeighbours(chapter: DockChapter, centre: [number, number], camer
 
 /** Pads a box by `by` px each way. */
 const grow = (box: Box, by: number): Box => ({ left: box.left - by, top: box.top - by, right: box.right + by, bottom: box.bottom + by });
+const union = (a: Box, b: Box): Box => ({
+  left: Math.min(a.left, b.left),
+  top: Math.min(a.top, b.top),
+  right: Math.max(a.right, b.right),
+  bottom: Math.max(a.bottom, b.bottom),
+});
+
+/** The single dock's point: where every place stands on the screen, so that
+ *  every pair — its shield and its cover (at DOCK_QUADRANT, with what it
+ *  carries) — fits the stage. The union of all the pairs, their feet on one
+ *  point, centred on the stage and kept inside it; `overflow` is what still
+ *  could not fit (px, both axes: 0 by construction, since `coverSize` keeps
+ *  each cover inside the stage beside a shield at any corner). */
+export function dockPoint(stage: Box, pairs: ReadonlyArray<{ shield: Size; size: Size; tab: boolean }>, quadrant: Quadrant = DOCK_QUADRANT) {
+  const origin = { x: 0, y: 0 };
+  let group: Box | null = null;
+  for (const { shield, size, tab } of pairs) {
+    const plate = fitBox(plateRect(origin, shield, size, quadrant), tab);
+    const pair = union(plate, { left: -shield.w / 2, top: -shield.h, right: shield.w / 2, bottom: 0 });
+    group = group ? union(group, pair) : pair;
+  }
+  if (!group) return { point: { x: Math.round((stage.left + stage.right) / 2), y: Math.round((stage.top + stage.bottom) / 2) }, overflow: 0 };
+  const axis = (lo: number, hi: number, g0: number, g1: number) => {
+    const min = lo - g0;
+    const max = hi - g1;
+    const centred = (lo + hi) / 2 - (g0 + g1) / 2;
+    if (min <= max) return { at: clamp(centred, min, max), over: 0 };
+    return { at: centred, over: min - max };
+  };
+  const x = axis(stage.left, stage.right, group.left, group.right);
+  const y = axis(stage.top, stage.bottom, group.top, group.bottom);
+  return { point: { x: Math.round(x.at), y: Math.round(y.at) }, overflow: Math.round(x.over + y.over) };
+}
 
 /**
- * The plan: for each chapter in route order, the corner its cover takes,
- * where the camera sets its place (and the centre that does it) and the
- * cover's size. A corner is chosen among the four by, in order of weight:
- * the cover fitting the stage; the cover keeping off its neighbours'
- * shields; a corner other than the last stop's; and the turn of
- * QUADRANT_ORDER for this chapter (so the run goes round). Pure: the same
- * viewport and archive always plan the same way.
+ * The plan: for each chapter, where the camera sets its place — the single
+ * dock's point, the same for every place — and the centre that does it, and
+ * its cover's size (its photograph's own ratio, as large as the stage lets
+ * it be) at the single corner. `covered` says how much of the other places'
+ * shields the cover hides at that place's rest (scripts/cover-dock.test.mjs
+ * holds it at 0 for the archive). Pure: the same viewport and archive
+ * always plan the same way.
  */
-export function planDock(chapters: readonly DockChapter[], vw: number, vh: number, camera: DockCamera): Record<string, DockEntry> {
+export function planDock(chapters: readonly DockChapter[], vw: number, vh: number, camera: DockCamera, quadrant: Quadrant = DOCK_QUADRANT): Record<string, DockEntry> {
   const stage = stageBox(vw, vh);
+  const sizes = chapters.map((chapter) => coverSize(chapter.ratio, stage));
+  const { point, overflow } = dockPoint(stage, chapters.map((chapter, index) => ({ shield: chapter.shield, size: sizes[index], tab: chapter.tab })), quadrant);
   const plan: Record<string, DockEntry> = {};
-  let previous: Quadrant | null = null;
   chapters.forEach((chapter, index) => {
-    const size = coverSize(chapter.ratio, stage);
-    let best: (DockEntry & { score: number }) | null = null;
-    for (let rank = 0; rank < QUADRANT_ORDER.length; rank += 1) {
-      const quadrant = QUADRANT_ORDER[(index + rank) % QUADRANT_ORDER.length];
-      const { point, overflow } = placeAt(stage, chapter.shield, size, quadrant, chapter.tab);
-      const centre = centreFor(chapter.coordinates, point, chapter.zoom, camera);
-      const fit = grow(fitBox(plateRect(point, chapter.shield, size, quadrant), chapter.tab), 10);
-      const covered = visibleNeighbours(chapter, centre, camera, vw, vh).reduce((sum, box) => sum + area(fit, box), 0);
-      const score = overflow * 1e5 + covered * 4 + (quadrant === previous ? 6000 : 0) + rank * 400;
-      if (!best || score < best.score) {
-        const rel = plateRect({ x: 0, y: 0 }, chapter.shield, size, quadrant);
-        best = {
-          quadrant,
-          point,
-          centre,
-          offset: { x: Math.round(rel.left), y: Math.round(rel.top) },
-          photoW: size.photoW,
-          photoH: size.photoH,
-          tab: chapter.tab,
-          covered: Math.round(covered),
-          overflow,
-          score,
-        };
-      }
-    }
-    if (!best) return;
-    const { score: _score, ...entry } = best;
-    plan[chapter.id] = entry;
-    previous = entry.quadrant;
+    const size = sizes[index];
+    const centre = centreFor(chapter.coordinates, point, chapter.zoom, camera);
+    const fit = grow(fitBox(plateRect(point, chapter.shield, size, quadrant), chapter.tab), 10);
+    const covered = visibleNeighbours(chapter, centre, camera, vw, vh).reduce((sum, box) => sum + area(fit, box), 0);
+    const rel = plateRect({ x: 0, y: 0 }, chapter.shield, size, quadrant);
+    plan[chapter.id] = {
+      quadrant,
+      point,
+      centre,
+      offset: { x: Math.round(rel.left), y: Math.round(rel.top) },
+      photoW: size.photoW,
+      photoH: size.photoH,
+      tab: chapter.tab,
+      ...(chapter.stock ? { stock: chapter.stock } : null),
+      covered: Math.round(covered),
+      overflow,
+    };
   });
   return plan;
 }
+
+/** Where a docked cover's stub rests on the screen (viewport px) once its
+ *  place is down on the dock: right of the photograph, the photograph's
+ *  height, square on the screen. DERIVED from the plan (the entrance flies
+ *  the torn pass's stub onto it: src/lib/explorer.ts, "The stub hand-off"). */
+export function coverStubRect(entry: DockEntry) {
+  return {
+    x: entry.point.x + entry.offset.x + entry.photoW,
+    y: entry.point.y + entry.offset.y,
+    w: DOCK.stub,
+    h: entry.photoH,
+    rotate: 0,
+  };
+}
+
+// ── The switch ──
+// A move between places is one turn of the planet under the ticket, which
+// stays where it lies (the reference's board does not move; ours becomes
+// the next place's ticket in place). At take-off the arriving place's cover
+// is laid over the one leaving, both pinned at the dock's point, and the
+// house's own motions carry the change:
+//  - the paper: the card eases from the stock it leaves to its own
+//    (SWITCH_COVER.paperMs on the travel curve);
+//  - the shape: both plates are clipped to one outline that runs from the
+//    leaving plate's box to the arriving one's, anchored at the corner by
+//    the shield (the stub's top-right, which never moves) — `switchClip`;
+//    where the arriving photograph reaches past the leaving one, a mat of
+//    the card's dark ground lies under it until it develops (`matPolygon`);
+//  - the photograph: the arriving print develops in over the one leaving,
+//    from the corner by the stub outward (the house's develop mask, its
+//    sweep mirrored: `developSweep`);
+//  - the sign: its state, number and name turn like a departure board from
+//    the place left (src/lib/routeShield.ts, FLAP), at once;
+//  - the shields: the one left relaxes, the one arriving lifts (global.css).
+// Then the leaving cover goes (it is under the new one) and the tab, the
+// cue and the pad come in on the new outline. Nothing is placed per frame:
+// both covers are written at the dock's point (or glide to it with the
+// camera, when the reader had dragged the ticket away).
+export const SWITCH_COVER = {
+  /** The outline's change and the paper's. */
+  shapeMs: 720,
+  paperMs: 720,
+  /** The print's develop, and how long after take-off it starts. */
+  developMs: 900,
+  developDelay: 60,
+  /** The leaving cover stays under the arriving one until then. */
+  leaveMs: 1000,
+  /** The tab, the cue and the pad come in once the outline is set. */
+  extrasMs: 400,
+} as const;
+
+/** The outline a plate of size `own` is clipped to so that only `show` of
+ *  it (anchored at its top-right) is seen: CSS inset() lengths (top right
+ *  bottom left), px, with `pad` past the anchor's edges so the caret and
+ *  the joint keep their overhang. */
+export function switchClip(own: Size, show: Size, pad = 12) {
+  const bottom = Math.max(0, own.h - show.h);
+  const left = Math.max(0, own.w - show.w);
+  return `inset(${-pad}px ${-pad}px ${bottom.toFixed(1)}px ${left.toFixed(1)}px)`;
+}
+
+/** The mat under an arriving photograph of size `own` (anchored at its
+ *  top-right, as the one leaving is): the part the leaving photograph
+ *  `under` does not cover, as a CSS polygon, or null when it covers it all.
+ *  Until the arriving print has developed there, the mat is what shows. */
+export function matPolygon(own: Size, under: Size): string | null {
+  const ax = Math.max(0, own.w - under.w);
+  const ay = Math.min(own.h, under.h);
+  if (ax <= 0.5 && ay >= own.h - 0.5) return null;
+  const f = (n: number) => `${Math.round(n * 10) / 10}px`;
+  return `polygon(0 0, ${f(ax)} 0, ${f(ax)} ${f(ay)}, ${f(own.w)} ${f(ay)}, ${f(own.w)} ${f(own.h)}, 0 ${f(own.h)})`;
+}
+
+/** The develop's mask positions for a print of `ratio` (the house mask,
+ *  115° at 400%, global.css `.travel-ticket__photo img`, turned about the
+ *  vertical so it runs from the corner by the stub): from the first moment
+ *  its nearest corner is half printed to the moment its far corner is. */
+export function developSweep(ratio: number) {
+  const r = Math.max(0.45, Math.min(2.4, ratio || 1.5));
+  return { from: 36 - 7.46 / r, to: 80 + 9.34 / r } as const;
+}
+export const DEVELOP_MASK = 'linear-gradient(245deg, #000 40%, transparent 60%)';
 
 // ── When a cover shows ──
 // The atlas's camera asks, on every draw, for the cover of the place in hand
@@ -315,7 +418,9 @@ export function planDock(chapters: readonly DockChapter[], vw: number, vh: numbe
 // is never seen sliding into its seat — the owner's rule: covers appear
 // directly), `stay` while the place is in hand and the reader is still down
 // at it (they may drag and zoom the map; the cover rides with its shield).
-// The dock decides on every published frame, from what is shown and that ask.
+// A switch asks at take-off (`switch`: the cover in hand turns into the next
+// place's where it lies, see "The switch"). The dock decides on every
+// published frame, from what is shown and that ask.
 
 export interface DockAsk {
   id: string;
@@ -333,19 +438,42 @@ export function dockShown(shown: string | null, ask: DockAsk | null, placed: (id
   return at;
 }
 
+/** Where the covers are pinned `t` ms into a glide from `from` to `to` over
+ *  `ms` on `ease` (a switch's: the camera's own turn), px. */
+export function glideAt(from: Point, to: Point, t: number, ms: number, ease: (k: number) => number): Point {
+  const k = ms > 0 ? ease(clamp(t / ms, 0, 1)) : 1;
+  return { x: Math.round(from.x + (to.x - from.x) * k), y: Math.round(from.y + (to.y - from.y) * k) };
+}
+
 // ── The channel ──
 // The atlas is a lazy chunk and the chapters are in the page bundle, so the
 // two meet here: the atlas sets the plan once per layout and publishes, on
 // every camera frame it draws, where each place stands and which place's
-// cover shows (null in the air, with nothing in hand, or zoomed far out).
-// A chapter subscribes and writes its own cover. The last of each is kept,
-// so a chapter that mounts late is placed at once.
+// cover shows (null with nothing in hand, zoomed far out, or in the air on
+// the way down from the open map). A chapter subscribes and writes its own
+// cover. The last of each is kept, so a chapter that mounts late is placed
+// at once.
+
+export interface DockSwitch {
+  /** A new switch, a new key. */
+  key: number;
+  /** The place whose cover is leaving (under the arriving one). */
+  from: string;
+  to: string;
+}
 
 export interface DockFrame {
-  /** The place whose cover shows (in hand, the camera down at it), else null. */
+  /** The place whose cover shows (in hand, the camera down at it or turning
+   *  to it), else null. */
   at: string | null;
   /** Every place's foot this frame, viewport px. */
   points: Readonly<Record<string, Point>>;
+  /** A switch under way (until the leaving cover has gone). */
+  switch?: DockSwitch | null;
+  /** Where the covers are pinned this frame (the dock's point, or a glide
+   *  to it, or back onto the shield once the camera is down), instead of
+   *  their place's foot. */
+  pin?: Point | null;
 }
 
 type Listener<T> = (value: T) => void;
@@ -355,6 +483,7 @@ function createDockChannel() {
   let frame: DockFrame = { at: null, points: {} };
   const planListeners = new Set<() => void>();
   const frameListeners = new Set<Listener<DockFrame>>();
+  let settle: (() => void) | null = null;
   return {
     plan: () => plan,
     setPlan(next: Readonly<Record<string, DockEntry>> | null) {
@@ -375,10 +504,17 @@ function createDockChannel() {
       listener(frame);
       return () => { frameListeners.delete(listener); };
     },
+    /** Ends a switch at once (the arriving ticket is being torn: the one
+     *  under it must not show through). The atlas sets the handler. */
+    settle: () => settle?.(),
+    onSettle(handler: (() => void) | null) {
+      settle = handler;
+    },
   };
 }
 
 export const coverDock = createDockChannel();
+
 
 /** The docked cover of a chapter section (it lives on the atlas, not in its
  *  section): `[data-cover-for="<section id>"]`. */

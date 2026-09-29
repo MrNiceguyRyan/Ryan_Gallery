@@ -22,7 +22,7 @@
 //    (READER_ZOOM, RouteAtlas "The reader's map").
 // Pure: no DOM, no Mapbox. RouteAtlas plays what this plans.
 
-import { voyageEase } from './motion.ts';
+import { DUR_MS, voyageEase } from './motion.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
@@ -183,6 +183,46 @@ export function planFlight(w0: number, u1: number, dz: number, viewportW: number
   const needed = Math.max(probe.screenPxPerS / capPx, probe.zoomPerS / FLIGHT.zoomPerS) * 1000;
   const durationMs = Math.round(Math.min(FLIGHT.maxMs, Math.max(FLIGHT.minMs, needed)));
   return { durationMs, curve: FLIGHT.curve, speeds: flightSpeeds(path, u1, durationMs) };
+}
+
+// ── A switch: the planet turns under the still cover ──
+// Owner, 2026-09-28 (switching was 不是自由的，移动的也很卡顿 beside 11 mois sans
+// toi(t)): any place to any place, at once, with no tear, and the camera
+// moves the way the reference's does — one flyTo of DUR_MS.turn on EASE.turn
+// whatever the distance, its own curve (Mapbox's default; the reference
+// passes none), the pitch held, and every place set on the same point of the
+// screen, under the same corner of the cover (src/lib/coverDock.ts, the
+// single dock). At the places' rest zooms a leg across the archive climbs
+// only 0.16–0.75 of a level (scripts/explorer.test.mjs): the flight reads as
+// the planet turning under the ticket, not as a climb and a fall. A new
+// choice mid-turn starts from where the camera is (Mapbox's own flyTo does),
+// never snapping.
+// The derived flights above (planFlight) stay for the moves that are not a
+// switch: the phone's entry, the camera brought back onto the place in hand.
+export const SWITCH = {
+  /** One turn, ms, whatever the distance. */
+  ms: DUR_MS.turn,
+  /** Mapbox's `curve` (rho): its default, the reference's. */
+  curve: 1.42,
+  /** A switch that also has to come down from far out (the reader zoomed
+   *  out towards the planet) takes this much longer for each level past the
+   *  first, up to `maxMs`: the whole planet to a place (~3.5 levels) is a
+   *  2.4 s turn, not a 1.4 s dive. */
+  perLevelMs: 400,
+  maxMs: 2600,
+} as const;
+
+/** A switch's duration for a zoom change of `dz` levels. */
+export function switchMs(dz: number) {
+  const extra = Math.max(0, Math.abs(dz) - 1);
+  return Math.round(Math.min(SWITCH.maxMs, SWITCH.ms + SWITCH.perLevelMs * extra));
+}
+
+/** How far a switch climbs above its start, levels: the van Wijk path Mapbox
+ *  flies at SWITCH.curve (`w0` the canvas's larger side, `u1` the ground to
+ *  cover at the start zoom, px, `dz` the zoom change). */
+export function switchLift(w0: number, u1: number, dz = 0) {
+  return flightPath(w0, w0 / 2 ** dz, u1, SWITCH.curve).lift;
 }
 
 // ── The entry ──

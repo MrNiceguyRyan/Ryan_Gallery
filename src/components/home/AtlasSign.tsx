@@ -60,8 +60,8 @@ export interface ViewfinderHandle {
 // Geometry, measured from the atlas focal point (the place the camera rests on).
 const ARM = 168;
 const META_TOP = 84;
-// The leg's other line: above the current stop's shield (34 × 1.2 × the
-// tallest form's 1.08 ≈ 44px over the place, its landing accent ≈ 48), for a
+// The leg's other line: above the current stop's shield (34 × 1.4 × the
+// tallest form's 1.08 ≈ 51px over the place, its landing accent ≈ 56), for a
 // landing whose shield below the place would sit under the line below.
 const META_ABOVE = 66;
 // The readouts' boxes, DERIVED from their text (never measured: they are
@@ -106,6 +106,21 @@ const progress = (a: number, b: number, value: number) => clamp((value - a) / (b
  *  with them) on the site's travel curve, as the needle and the closing's
  *  square travel. */
 const travelEase = cubicBezier(...EASE.travel);
+
+/** Writes a readout's text into the text node it already has (a changed
+ *  string, no new node): `textContent =` put a new text node in the tree on
+ *  every frame of a flight, and each insertion made the browser re-check the
+ *  whole atlas for its `:has()` rules — the whole map's DOM restyled three
+ *  times a frame. */
+function setText(element: HTMLElement | null | undefined, text: string) {
+  if (!element) return;
+  const node = element.firstChild;
+  if (node && node.nodeType === 3 && !node.nextSibling) {
+    if (node.nodeValue !== text) node.nodeValue = text;
+    return;
+  }
+  element.textContent = text;
+}
 
 const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
 const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
@@ -367,8 +382,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (latRef.current && lonRef.current && to) {
       const latitude = from ? lerp(from.coordinates[1], to.coordinates[1], travel) : to.coordinates[1];
       const longitude = from ? lerp(from.coordinates[0], to.coordinates[0], travel) : to.coordinates[0];
-      latRef.current.textContent = latitudeLabel(latitude);
-      lonRef.current.textContent = longitudeLabel(longitude);
+      setText(latRef.current, latitudeLabel(latitude));
+      setText(lonRef.current, longitudeLabel(longitude));
       latRef.current.style.transform = `translate(${leftEnd}px, ${cy + 10}px)`;
       lonRef.current.style.transform = `translate(${rightEnd}px, ${cy + 10}px) translateX(-100%)`;
       const coordinateOpacity = huntingNow ? 0.68 : 1;
@@ -382,7 +397,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (switching && from && to && t >= 300) {
       setLegMeta(from, to);
       const covered = t < lock ? travel : 1;
-      if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(from.coordinates, to.coordinates) * covered)} KM`;
+      setText(s.legKm, `${formatKm(haversineKm(from.coordinates, to.coordinates) * covered)} KM`);
       if (metaRef.current) metaRef.current.style.opacity = progress(300, 520, t).toFixed(3);
     } else if (switching && metaRef.current) {
       // The first 300ms of a flight: the last trip's line is not this one's.

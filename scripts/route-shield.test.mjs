@@ -314,8 +314,13 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.doesNotMatch(atlas, /LivingShields|deckShields/);
   // No lime on the map's shields (the keyboard ring aside).
   assert.doesNotMatch(shieldCss.replace(/:focus-visible \{[^}]*\}/g, ''), /#D2FF00|210,\s*255,\s*0/i);
-  // Every printed shield is the place's: the band in its stock.
-  assert.match(chapter, /code=\{stateCode\(collection\.region\)\}\s+accent=\{stockPaper\(collection\.slug\)\}/);
+  // Every printed shield is the place's: the band in its stock. The ticket's
+  // own sign prints its band in the card it is printed on (`--stub-paper`,
+  // the chapter's stock, set on the plate), so a switch eases the band with
+  // the card; the other shields name their stock.
+  assert.match(chapter, /className="archive-ticket-sign__shield"\s+code=\{stateCode\(collection\.region\)\}\s+number=/);
+  assert.match(chapter, /\.\.\.stockStyle\(collection\.slug\),/);
+  assert.match(chapter, /const band = plate\.querySelector<SVGElement>\('\.archive-ticket-sign__shield \.route-shield__band'\);/);
   assert.match(chapter, /accent=\{stockPaper\(nextStop\.slug\)\}/);
   assert.match(home, /\{ name: next\.name, number: next\.number, region: next\.region, slug: next\.slug \}/);
   assert.match(story, /accent=\{stockPaper\(chapter\.slug\)\}/);
@@ -337,10 +342,13 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(css, /\.archive-ticket-sign__name \{\s*position: relative;/);
   // A flip is cut to its own cell, by a clip (overflow would move the baseline).
   assert.match(css, /\.flap-c\[data-show\] \{[^}]*clip-path: inset\(-0\.2em 0\)/);
-  // Every move lets the ticket in hand go first: the explorer tears it and
-  // goes on once the face is free — a flight once it has gone
-  // (src/lib/explorer.ts); the scroll's tear went with the scroll.
-  assert.match(home, /case 'tear': \{[\s\S]*?tearTicket\(effect\.id, 'tear-then', finish,/);
+  // No move between places tears (owner, 2026-09-28: 地点之间的移动现在不需要
+  // 撕票根动效): the sign turns in place while the planet does — at take-off
+  // on a switch, as soon as the cover is up.
+  assert.doesNotMatch(home, /case 'tear': \{|'tear-then'/);
+  assert.doesNotMatch(chapter, /archive:tear-then|tearThen\b/);
+  assert.match(chapter, /pending = detail\.from;\s+clearPrime = primeFlap\(root, detail\.from\);/);
+  assert.match(chapter, /if \(dockShownRef\.current\) start\(\);\s+else dockAppearRef\.current = start;/);
   assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.

@@ -155,7 +155,9 @@ html[data-reel='page'] nav[data-site-nav] {
    arrive: the house curve — entrances, settles, landings, hover in.
    leave: every fall and exit transform.
    fade: opacity reaching 0 after a hold (the leave curve's companion).
-   travel: A to B on a clock. plane: large opaque planes. develop: masks. */
+   travel: A to B on a clock. plane: large opaque planes. develop: masks.
+   turn: the planet turning under the still cover (a switch between places,
+   after 11 mois sans toi(t)'s ENTER: fast away, a long settle), on --dur-turn. */
 :root {
   --ease-arrive: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-leave: cubic-bezier(0.55, 0, 1, 0.45);
@@ -163,6 +165,7 @@ html[data-reel='page'] nav[data-site-nav] {
   --ease-travel: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-plane: cubic-bezier(0.76, 0, 0.24, 1);
   --ease-develop: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+  --ease-turn: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   --dur-flick: 120ms;
   --dur-in: 200ms;
@@ -174,6 +177,7 @@ html[data-reel='page'] nav[data-site-nav] {
   --dur-cover: 850ms;
   --dur-scene: 1000ms;
   --dur-atmos: 1300ms;
+  --dur-turn: 1400ms;
 }
 /* A voyage's passing. A ticket from the globe, a place on the atlas, a torn
    cover or Back to the start carries the page across several chapters in
@@ -240,13 +244,16 @@ html[data-voyage] .atlas-ticks__group[data-voyage-dest] .atlas-ticks__frames {
   pointer-events: none;
   /* A barely-there local scrim so the hairlines hold on pale ground — only
      while the readouts are printed (AtlasSign `report`, and the same "on
-     demand" states as the instruments): at rest it only dimmed the place. */
+     demand" states as the instruments): at rest it only dimmed the place.
+     A keyboard's focus in the atlas is `data-atlas-focus` (RouteAtlas), not
+     `:has(:focus-visible)`, which made every readout's text restyle the
+     whole atlas. */
   background: radial-gradient(closest-side, rgba(16, 20, 13, 0.34), rgba(16, 20, 13, 0.16) 55%, rgba(16, 20, 13, 0) 100%);
   opacity: 0;
   transition: opacity var(--dur-out) var(--ease-fade);
 }
 .viewfinder__scrim[data-report],
-.route-atlas:is([data-atlas-look], :has(:focus-visible)) .viewfinder__scrim,
+.route-atlas:is([data-atlas-look], [data-atlas-focus]) .viewfinder__scrim,
 html[data-voyage] .route-atlas .viewfinder__scrim {
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
@@ -347,9 +354,9 @@ html[data-voyage] .route-atlas .viewfinder__scrim {
   transition: opacity var(--dur-out) var(--ease-fade);
 }
 .viewfinder__instruments[data-report],
-.route-atlas:is([data-atlas-look], :has(:focus-visible)) .viewfinder__instruments,
+.route-atlas:is([data-atlas-look], [data-atlas-focus]) .viewfinder__instruments,
 html[data-voyage] .route-atlas .viewfinder__instruments,
-.route-atlas:not(.route-atlas--mobile):not(.route-atlas--living):is([data-atlas-look], :has(:focus-visible)) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks),
+.route-atlas:not(.route-atlas--mobile):not(.route-atlas--living):is([data-atlas-look], [data-atlas-focus]) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks),
 html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--living) :is(.route-atlas-header > *, .route-atlas-footer > .atlas-ticks) {
   opacity: 1;
   transition: opacity var(--dur-in) var(--ease-arrive);
@@ -401,8 +408,12 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
      visited (is-past)      .94,  ink .92
      flown to (is-inbound)  1.10, ink 1   — comes up as the camera takes off
      pointed at / focused / its cover engaged: 1.04, ink 1, and its name
-     the camera is on       1.20, ink 1, with a landing accent — no name (the
-                            ticket beside the map names it).
+     the camera is on       1.40, ink 1, with a landing accent — no name (the
+                            ticket beside the map names it). A switch
+                            makes the place it turns to the one the camera
+                            is on at the click, so the arriving shield lifts
+                            as the one left relaxes (after the reference's
+                            active stop, 1.45 from its foot).
    SHIELD_SCALE (src/lib/routeShield.ts) is this table: the atlas stacks the
    shields at these sizes. */
 .place-shield {
@@ -481,7 +492,7 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
    on the individual `scale`, so it stacks on the state's transform and never
    stops it transitioning. */
 .place-shield__sign.is-current {
-  transform: scale(1.2);
+  transform: scale(1.4);
   opacity: 1;
   cursor: default;
   transition:
@@ -719,9 +730,11 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 }
 /* ── The rail: the place in hand ──
    Down the right of the page, the width src/lib/coverDock.ts plans the
-   covers round (`RAIL`). One place at a time: the one in hand fades in once
-   the camera is down (never while it flies: one large motion at a time),
-   the others are out of sight and out of reach (`inert`, ArchiveChapter). */
+   covers round (`RAIL`). One place at a time: the one in hand fades in with
+   its cover (at a switch's click: the ticket turns into the next place's
+   where it lies), the others are out of sight and out of reach (`inert`,
+   ArchiveChapter). The one left is gone (--dur-in) before the one arriving
+   comes in, so two names are never printed over each other on the rail. */
 .explorer-rail {
   position: absolute;
   z-index: 20;
@@ -743,12 +756,12 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   padding-bottom: 6vh;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+  transition: opacity var(--dur-in) var(--ease-fade), visibility 0s linear var(--dur-in);
 }
 .explorer-place[data-shown] {
   opacity: 1;
   visibility: visible;
-  transition: opacity 520ms var(--ease-arrive) 80ms, visibility 0s;
+  transition: opacity 520ms var(--ease-arrive) var(--dur-in), visibility 0s;
 }
 .explorer-idle {
   position: absolute;
@@ -2663,6 +2676,11 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   opacity: 0;
   transition-timing-function: var(--ease-fade);
 }
+/* Not shown (the instruments at rest), the ticks change at once: a switch
+   ran thirty-odd colour transitions nobody saw, restyled every frame. */
+.route-atlas:not([data-atlas-look]):not([data-atlas-focus]) .atlas-ticks__group i {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .atlas-ticks__group i,
   .atlas-ticks__label { transition: none; }
@@ -2763,6 +2781,83 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   position: absolute;
   pointer-events: auto;
 }
+/* A switch (src/lib/coverDock.ts, "The switch"): the arriving cover lies over
+   the one leaving, both where the ticket lay; the one leaving is under it,
+   whole but out of the pointer's way, and goes at once when the switch is
+   over (`data-cut`: no fade, which would show its outline for a moment). The
+   phone's cards are dealt whole: the one leaving simply goes. */
+.archive-dock[data-at] {
+  z-index: 2;
+}
+.archive-dock[data-leaving] {
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+.archive-dock[data-leaving] .archive-dock__seat {
+  pointer-events: none;
+}
+.archive-dock[data-cut],
+.archive-dock--phone[data-leaving] {
+  transition: none;
+}
+.archive-dock--phone[data-leaving] {
+  visibility: hidden;
+}
+/* What hangs off the ticket's outline — the region's tab, "Open story", the
+   pad — waits out the change of outline and comes in on the new one; the
+   one leaving has none. The cue's ink is framer's (inline), so it is held
+   back with !important and brought in by an animation that ends on it. */
+.archive-dock[data-switch] :is(.archive-dock__tab, .archive-ticket-pad) {
+  opacity: 0;
+}
+.archive-dock[data-switch] .archive-plate__cue {
+  opacity: 0 !important;
+}
+.archive-dock[data-arrived] :is(.archive-dock__tab, .archive-ticket-pad, .archive-plate__cue) {
+  animation: dock-extra-in var(--dur-out) var(--ease-arrive) backwards;
+}
+@keyframes dock-extra-in {
+  from { opacity: 0; }
+}
+/* The one leaving keeps its card and outline for the new ticket to cover;
+   its own print on the stub (rows, the way on) is not read under the new
+   one's. */
+.archive-dock[data-switch='out'] .archive-ticket-stub > :not(.archive-ticket-fibre):not(.archive-ticket-strain) {
+  visibility: hidden;
+}
+/* The mat under an arriving photograph where it reaches past the one it
+   replaces (`matPolygon`): the card's dark ground, until the print has
+   developed there. */
+.archive-photo-frame__mat {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  background: color-mix(in oklab, var(--stub-paper, #30352a) 58%, #0b0e09);
+}
+.archive-photo-frame__mat[data-on] {
+  display: block;
+}
+/* The stub hand-off (src/lib/explorer.ts): stop 01's stub, and its caret,
+   wait for the torn pass's stub to land on them; the photograph shows.
+   Everything printed on the stub waits with it (its "Next stop" says
+   `visibility: visible` of its own once it is live). */
+.archive-plate[data-stub-awaited] :is(.archive-ticket-stub-seat, .archive-ticket-stub-seat *, .archive-plate__caret[data-half='stub']) {
+  visibility: hidden;
+}
+/* The pad stops under the photograph meanwhile (no shelf out under nothing),
+   and runs on under the stub the moment it lands. 190px: the stub's fixed
+   measure (ArchiveChapter TICKET_STUB). */
+.archive-plate[data-stub-awaited] .archive-ticket-pad {
+  right: calc(190px + 9px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-dock[data-arrived] :is(.archive-dock__tab, .archive-ticket-pad, .archive-plate__cue) {
+    animation: none;
+  }
+}
 /* No name is set over a docked photograph's foot (the name is in the rail),
    so the shades that held it are not drawn: the picture is printed clean. */
 .archive-dock :is(.archive-photo-shade-top, .archive-photo-shade-bottom) {
@@ -2804,10 +2899,6 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   left: calc(100% - 8px);
   top: -4px;
   clip-path: polygon(8px 12px, 8px 4px, 0 4px, 12px 0);
-}
-.archive-plate.is-torn .archive-plate__caret[data-half='face'] {
-  opacity: 0;
-  transition: opacity var(--dur-out) var(--ease-fade);
 }
 /* "Open story" goes on the plate's edge away from the shield. */
 .archive-dock[data-quadrant='tl'] .archive-plate__cue,
@@ -3697,13 +3788,12 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   display: flex;
   align-items: stretch;
 }
-/* The face's half of the ticket. `__tear` is the box it lies in and never
-   moves (while the rip runs it clips at the seam); `__face` carries the
-   tear — the hinge about the rip's tip, the snap, laid aside, the fade — as
-   one affine and an opacity, written per frame by ArchiveChapter off one
-   clock (src/lib/ticketTear.ts) as custom properties, and nothing else. At
-   rest nothing is written and the face is untransformed: the cover has no
-   entrance of its own, it is simply there. */
+/* The face's half of the ticket. It never tears (moving between places is a
+   switch: src/lib/coverDock.ts); while the stub is torn off for the story it
+   gives a hair about the left hand's grip (`--tear-tf`, written per frame by
+   ArchiveChapter off the stub's clock, src/lib/ticketTear.ts). At rest nothing
+   is written and the face is untransformed: the cover has no entrance of its
+   own, it is simply there. */
 .archive-plate__tear {
   position: relative;
   flex: 1 1 auto;
@@ -3713,82 +3803,8 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   position: relative;
   transform-origin: 0 0;
   transform: var(--tear-tf, none);
-  opacity: var(--tear-op, 1);
 }
-/* The face off the map: its shadow, under it in the tear box. The shadow is
-   rasterised once; the tear moves it with the face (plus the lift) and sets
-   how much of it shows. Nothing at rest. */
-.archive-plate__lift {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  transform-origin: 0 0;
-  box-shadow: 0 14px 30px rgba(3, 5, 2, 0.55), 0 3px 8px rgba(3, 5, 2, 0.4);
-}
-/* Torn, the face is gone — rotated, dropped, transparent — and the place it
-   lay is map, not a button. ArchiveChapter switches the cover's own box off
-   (the stub and the lede switch back on); the photograph needs saying by name
-   too, because the global image rule (Layout.astro) sets every <img> back to
-   `pointer-events: auto`, and an invisible photograph would otherwise still
-   catch the click, the hover cue and the cursor. */
-.archive-plate.is-torn .archive-plate__face,
-.archive-plate.is-torn .archive-plate__face img {
-  pointer-events: none;
-}
-/* Pull to tear. The active cover can be torn by hand: the right hand keeps
-   the stub, the left pulls the face DOWN, and ArchiveChapter drives the
-   tear's own clock from the drag. What says so is the hand — open over the
-   photograph, closed while it holds (`data-pull`, set for the length of a
-   press) — and, on hover, the face's top-left corner, where the left hand
-   will take it, coming up off the map a hair. Drawn, never moved: the face
-   keeps no transform for it, so its box (and the rect a story grows from)
-   stays exact and nothing swings into the stub. `::before` is the ground the
-   lifted corner shades — a wedge 2px out at the corner and nothing where the
-   paper still lies flat — laid UNDER the photograph, so only what falls
-   outside its edges shows. `::after` is the corner's own edge catching the
-   light as it rises, a hairline in the stub's ink. Both are scaled from the
-   corner by the lift, so it comes up from the corner rather than fading on
-   in place. `--pull-hint` is written per frame on the face from a spring; no
-   transition here. */
-.archive-plate--pullable .archive-photo-frame {
-  cursor: grab;
-}
-.archive-plate[data-pull] .archive-photo-frame {
-  cursor: grabbing;
-}
-.archive-plate--ticket .archive-plate__face::before,
-.archive-plate--ticket .archive-plate__face::after {
-  content: '';
-  position: absolute;
-  opacity: var(--pull-hint, 0);
-  transform: scale(var(--pull-hint, 0));
-  pointer-events: none;
-}
-.archive-plate--ticket .archive-plate__face::before {
-  top: -2px;
-  left: -2px;
-  width: 66px;
-  height: 66px;
-  clip-path: polygon(0 0, 100% 2px, 2px 2px, 2px 100%);
-  background: radial-gradient(circle at 2px 2px, rgba(8, 10, 7, 0.62), rgba(8, 10, 7, 0) 64px);
-  transform-origin: 2px 2px;
-}
-.archive-plate--ticket .archive-plate__face::after {
-  top: 0;
-  left: 0;
-  width: 44px;
-  height: 44px;
-  background:
-    linear-gradient(90deg, rgba(244, 244, 237, 0.24), rgba(244, 244, 237, 0)) 0 0 / 100% 1px no-repeat,
-    linear-gradient(180deg, rgba(244, 244, 237, 0.24), rgba(244, 244, 237, 0)) 0 0 / 1px 100% no-repeat;
-  transform-origin: 0 0;
-}
-/* The pad: the tickets still bound under this one. It is the whole ticket's
-   pad, so once the face has been torn away it goes with it — otherwise its
-   edge hangs in the air under the space where the photograph was. Its
-   opacity (`--tear-pop`) is written from the tear's clock: it goes as the
-   face is laid aside.
+/* The pad: the tickets still bound under this one.
    Each sheet is the NEXT chapters' stock (ArchiveChapter writes it inline
    from `padStocks`), so the next ticket's colour already shows as a sliver
    under this one; the olive here is only the fallback. */
@@ -3800,7 +3816,6 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   height: 14px;
   z-index: 1;
   pointer-events: none;
-  opacity: var(--tear-pop, 1);
 }
 .archive-ticket-pad i {
   position: absolute;
@@ -4057,8 +4072,8 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   .archive-plate__cue { display: inline-flex; }
 }
 /* ── "Next stop" (the stub's foot) ──
-   Live only on the ticket being read, while it is whole: a click tears it as
-   the reader's push does, and the page goes on once the face is free. The
+   Live only on the ticket being read, while it is whole: a click goes on to
+   the next place as Next does (the switch: the planet turns, nothing tears). The
    next stop's shield and name, and an arrow that steps on under the hand. */
 .archive-ticket-next {
   display: flex;

@@ -173,9 +173,16 @@ test('the voyage\'s sine is the explorer\'s: its flights and its entry\'s descen
   assert.equal(scrolls.length, 2);
   for (const call of scrolls) assert.match(call, /easing: arrivalCurve/);
   const camera = readFileSync(join(ROOT, 'src/lib/explorerCamera.ts'), 'utf8');
-  assert.match(camera, /import \{ voyageEase \} from '\.\/motion\.ts';/);
+  assert.match(camera, /import \{ DUR_MS, voyageEase \} from '\.\/motion\.ts';/);
   const atlas = readFileSync(join(ROOT, 'src/components/home/RouteAtlas.tsx'), 'utf8');
   assert.match(atlas, /easing: voyageEase,/);
+  // A switch between places is the reference's turn, on its own token: one
+  // DUR.turn on EASE.turn (11 mois sans toi(t)'s ENTER), the pin with it.
+  assert.deepEqual([...EASE.turn], [0.22, 0.61, 0.36, 1]);
+  assert.equal(DUR_MS.turn, 1400);
+  assert.match(camera, /ms: DUR_MS\.turn,/);
+  assert.match(atlas, /const turnEase = bezierFn\(EASE\.turn\);/);
+  assert.match(atlas, /easing = turnEase;/);
 });
 
 test('smootherstep is the quintic the scroll-owned values share', () => {

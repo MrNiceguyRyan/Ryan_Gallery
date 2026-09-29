@@ -53,6 +53,12 @@ export const EASE = {
   plane: [0.76, 0, 0.24, 1],
   /** Mask sweeps only. */
   develop: [0.455, 0.03, 0.515, 0.955],
+  /** The planet turning under the still cover: a switch between places
+   *  (src/lib/explorerCamera.ts, SWITCH), and the cover's glide back to its
+   *  dock with it. 11 mois sans toi(t)'s ENTER — away at once, a long
+   *  settle — so a click answers in the first frame and the place arrives
+   *  slowly under the ticket. */
+  turn: [0.22, 0.61, 0.36, 1],
 } as const satisfies Record<string, Bezier>;
 
 export type EaseName = keyof typeof EASE;
@@ -116,6 +122,9 @@ export const DUR_MS = {
   scene: 1000,
   /** Terrain settle, recede. */
   atmos: 1300,
+  /** A switch between places: one turn of the planet, whatever the
+   *  distance (the reference's 1400). */
+  turn: 1400,
 } as const;
 
 export type DurName = keyof typeof DUR_MS;

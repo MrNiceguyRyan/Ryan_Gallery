@@ -2,18 +2,27 @@
 //
 // The cover rides with its shield (src/lib/coverDock.ts): owner, 2026-09-28,
 // 封面可以跟随路牌一起走，出现在路牌的右上角或者左上角或者右下角或者左下角. On the
-// desktop a chapter's ticket lies on the atlas beside its place's shield, at
-// one of the shield's four corners, a joint's gap off it; the corner is
-// chosen per stop from geometry (the cover whole on the stage, clear of the
-// chapter's rail and of the other shields, a different corner from the last
-// stop's where there is a choice), and the camera sets each place where its
-// cover fits. Pinned here on the archive as Sanity serves it (a fixture).
+// desktop a chapter's ticket lies on the atlas beside its place's shield, a
+// joint's gap off one of its corners. One dock for every place (switching
+// like the reference's, whose board stays put while the planet turns): every
+// place stands on the same point of the screen, its cover below-left of its
+// shield, anchored at the stub's top-right, so a switch keeps the ticket
+// where it lies (the switch's outline, mat and develop maths are held here
+// too). Pinned on the archive as Sanity serves it (a fixture).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DOCK,
-  QUADRANT_ORDER,
+  DOCK_QUADRANT,
+  QUADRANTS,
+  SWITCH_COVER,
+  coverStubRect,
+  developSweep,
+  dockPoint,
+  glideAt,
+  matPolygon,
+  switchClip,
   RAIL,
   awaySide,
   centreFor,
@@ -22,7 +31,6 @@ import {
   coverSize,
   dockShown,
   fitBox,
-  placeAt,
   planDock,
   plateRect,
   projectAt,
@@ -123,7 +131,7 @@ test('a plate hangs a joint\'s gap off the shield\'s corner, in its quadrant', (
     br: [shield.w / 2, 0, 'left', 'top'],
     bl: [-shield.w / 2, 0, 'right', 'top'],
   };
-  for (const quadrant of QUADRANT_ORDER) {
+  for (const quadrant of QUADRANTS) {
     const plate = plateRect(point, shield, size, quadrant);
     const [cx, cy, sideX, sideY] = corner[quadrant];
     assert.ok(Math.abs(plate.right - plate.left - size.w) < 1e-9);
@@ -145,10 +153,10 @@ test('every corner fits the stage for every cover, on every desktop', () => {
     const stage = stageBox(vw, vh);
     for (const ratio of [2 / 3, 1.5, 2.4]) {
       const size = coverSize(ratio, stage);
-      for (const quadrant of QUADRANT_ORDER) {
+      for (const quadrant of QUADRANTS) {
         for (const tab of [false, true]) {
           const shield = { w: 40.8, h: 44 };
-          const { point, overflow } = placeAt(stage, shield, size, quadrant, tab);
+          const { point, overflow } = dockPoint(stage, [{ shield, size, tab }], quadrant);
           assert.equal(overflow, 0, `${vw}×${vh} ${ratio.toFixed(2)} ${quadrant}`);
           assert.ok(inside(fitBox(plateRect(point, shield, size, quadrant), tab), stage));
           assert.ok(inside(shieldBox(point, shield), stage));
@@ -182,43 +190,133 @@ test('the camera\'s centre sets a place on its point (the pinhole, run backwards
   assert.ok(camera.focal.y - far.y < near.y - camera.focal.y);
 });
 
-test('the archive\'s plan: every cover whole on the stage, off the rail and the other shields, round the four corners', () => {
+test('the archive\'s plan: one dock — every place on one point, every cover at one corner, whole, clear', () => {
   const chapters = archiveChapters();
   assert.deepEqual(chapters.map((c) => c.name), ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce Canyon', 'New York']);
   assert.deepEqual(chapters.map((c) => c.tab), [true, false, false, true, false, false], 'the region line rides on its region\'s first cover');
+  assert.equal(DOCK_QUADRANT, 'bl', 'below-left: the plate\'s corner by the shield is the stub\'s top-right');
+  const rows = [];
   for (const [vw, vh] of SCREENS) {
     const camera = cameraFor(vw, vh);
     const stage = stageBox(vw, vh);
     const rail = railBox(vw);
     const plan = planDock(chapters, vw, vh, camera);
-    const quadrants = chapters.map((c) => plan[c.id].quadrant);
+    const entries = chapters.map((c) => plan[c.id]);
+    // One point, one corner, one anchor (the stub's top-right), for all.
+    const point = entries[0].point;
+    const anchors = new Set();
     chapters.forEach((chapter, index) => {
-      const entry = plan[chapter.id];
+      const entry = entries[index];
+      assert.deepEqual(entry.point, point, `${vw}: ${chapter.name} stands on the dock's point`);
+      assert.equal(entry.quadrant, DOCK_QUADRANT);
       const size = { w: entry.photoW + DOCK.stub, h: entry.photoH };
       const plate = plateRect(entry.point, chapter.shield, size, entry.quadrant);
+      anchors.add(`${Math.round(plate.right)},${Math.round(plate.top)}`);
       const fit = fitBox(plate, entry.tab);
       assert.equal(entry.overflow, 0, `${vw}: ${chapter.name} fits`);
       assert.ok(inside(fit, stage), `${vw}: ${chapter.name} on the stage`);
       assert.ok(fit.right < rail.left, `${vw}: ${chapter.name} clear of its rail`);
       assert.ok(inside(shieldBox(entry.point, chapter.shield), stage), `${vw}: ${chapter.name}'s shield on the stage`);
-      assert.equal(entry.covered, 0, `${vw}: ${chapter.name} hides no other shield`);
+      if (vw === 1728) rows.push(`${chapter.name} covers ${entry.covered}px²`);
       // The plate's offset from the foot is its rect from a foot at 0.
       assert.equal(entry.offset.x, Math.round(plate.left - entry.point.x));
       assert.equal(entry.offset.y, Math.round(plate.top - entry.point.y));
       // The camera's centre for it puts the place on its point.
       const back = projectAt(chapter.coordinates, entry.centre, chapter.zoom, camera);
       assert.ok(Math.hypot(back.x - entry.point.x, back.y - entry.point.y) < 0.5);
-      if (index > 0) assert.notEqual(entry.quadrant, quadrants[index - 1], `${vw}: ${chapter.name} turns the corner`);
+      // The photograph keeps its own ratio.
+      assert.ok(Math.abs(entry.photoW / entry.photoH - chapter.ratio) < 0.012);
     });
-    assert.ok(new Set(quadrants).size >= 3, `${vw}: ${quadrants.join(' ')} goes round the shield`);
+    assert.equal(anchors.size, 1, `${vw}: one anchor (${[...anchors].join(' ')})`);
+    // One corner for every place can't keep every cover off every other
+    // shield in a cluster as tight as Utah's (Zion lies below-left of Bryce
+    // Canyon at its rest; a shield under the cover is not printed there,
+    // RouteAtlas `placeShields`): the corner chosen is the one that hides
+    // the fewest, on every screen.
+    const hidden = (q) => Object.values(planDock(chapters, vw, vh, camera, q)).reduce((sum, e) => sum + e.covered, 0);
+    const ours = hidden(DOCK_QUADRANT);
+    for (const q of QUADRANTS) assert.ok(ours <= hidden(q), `${vw}: ${DOCK_QUADRANT} hides ${ours}px², ${q} ${hidden(q)}`);
+    assert.ok(entries.filter((e) => e.covered > 0).length <= (vw > 1728 ? 2 : 1), `${vw}: one place at most hides a shield`);
     // Pure: the same screen plans the same way.
     assert.deepEqual(planDock(chapters, vw, vh, camera), plan);
   }
-  // Today, on the owner's screen.
+  if (process.env.DOCK_NUMBERS) console.log(rows.join(', '));
+  // Today, on the owner's screen: the place up and to the right of the stage,
+  // the ticket hanging below-left of it.
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
-  // (New York's corner is bottom-left under the 24° camera: at 40° it was
-  // top-left.)
-  assert.deepEqual(chapters.map((c) => plan[c.id].quadrant), ['tr', 'bl', 'br', 'bl', 'tr', 'bl']);
+  const p = plan[chapters[0].id].point;
+  assert.ok(p.x > 900 && p.x < 1184 && p.y > 104 && p.y < 300, `the dock at ${p.x},${p.y}`);
+});
+
+test('the stub hand-off\'s target is the resting stub, derived from the plan', () => {
+  const chapters = archiveChapters();
+  const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
+  for (const chapter of chapters) {
+    const entry = plan[chapter.id];
+    const rect = coverStubRect(entry);
+    const plate = plateRect(entry.point, chapter.shield, { w: entry.photoW + DOCK.stub, h: entry.photoH }, entry.quadrant);
+    // (The plate is written at whole pixels from its foot.)
+    assert.ok(Math.abs(rect.x + rect.w - plate.right) <= 0.5, 'the stub is the plate\'s right end');
+    assert.ok(Math.abs(rect.y - plate.top) <= 0.5);
+    assert.equal(rect.w, DOCK.stub);
+    assert.equal(rect.h, entry.photoH);
+    assert.equal(rect.rotate, 0);
+  }
+});
+
+test('a switch: one outline from the leaving ticket\'s to the arriving one\'s, anchored by the stub', () => {
+  const land = { w: 718 + DOCK.stub, h: 479 };
+  const port = { w: 432 + DOCK.stub, h: 649 };
+  // The arriving plate is first cut to the leaving one's box (anchored at its
+  // top-right: the bottom and left edges move), then shown whole.
+  assert.equal(switchClip(port, land), 'inset(-12px -12px 170.0px 0.0px)');
+  assert.equal(switchClip(land, port), 'inset(-12px -12px 0.0px 286.0px)');
+  assert.equal(switchClip(land, land), 'inset(-12px -12px 0.0px 0.0px)');
+  // The mat: what the arriving photograph covers beyond the leaving one's.
+  assert.equal(matPolygon({ w: 432, h: 649 }, { w: 718, h: 479 }), 'polygon(0 0, 0px 0, 0px 479px, 432px 479px, 432px 649px, 0 649px)');
+  assert.equal(matPolygon({ w: 718, h: 479 }, { w: 432, h: 649 }), 'polygon(0 0, 286px 0, 286px 479px, 718px 479px, 718px 479px, 0 479px)');
+  assert.equal(matPolygon({ w: 718, h: 479 }, { w: 718, h: 479 }), null, 'the same shape: nothing to mat');
+  // The develop runs from the corner by the stub, over the whole print: its
+  // mask positions mirror the house's (global.css .travel-ticket__photo).
+  for (const ratio of [2 / 3, 1.5, 2.4]) {
+    const { from, to } = developSweep(ratio);
+    assert.ok(Math.abs(from - (100 - (64 + 7.46 / ratio))) < 1e-9);
+    assert.ok(Math.abs(to - (100 - (20 - 9.34 / ratio))) < 1e-9);
+  }
+  // Every part of the switch is over before the camera is down (1.4 s), the
+  // leaving cover last.
+  assert.ok(SWITCH_COVER.shapeMs <= SWITCH_COVER.leaveMs);
+  assert.ok(SWITCH_COVER.developDelay + SWITCH_COVER.developMs <= SWITCH_COVER.leaveMs);
+  assert.ok(SWITCH_COVER.leaveMs < 1400);
+  // The pin: a glide from where the ticket lies to the dock, on the camera's
+  // own clock; nowhere to go, nothing moves.
+  const ease = (k) => k;
+  assert.deepEqual(glideAt({ x: 0, y: 0 }, { x: 100, y: 50 }, 700, 1400, ease), { x: 50, y: 25 });
+  assert.deepEqual(glideAt({ x: 1074, y: 200 }, { x: 1074, y: 200 }, 300, 1400, ease), { x: 1074, y: 200 });
+  assert.deepEqual(glideAt({ x: 0, y: 0 }, { x: 100, y: 50 }, 5000, 1400, ease), { x: 100, y: 50 });
+});
+
+test('a switch keeps the ticket where it lies: pinned, laid over, never re-placed per frame', () => {
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const css = source('src/styles/global.css');
+  // Through a switch the cover is carried: asked for from take-off.
+  assert.match(atlas, /return flying\.carry && id === held \? \{ id, appear: true, stay: true \} : null;/);
+  // Both covers are written at the pin (the dock's point), not at a moving
+  // foot; only a changed point is written.
+  assert.match(chapter, /const point = frame\.pin && \(at \|\| out\) \? frame\.pin : frame\.points\[me\];/);
+  assert.match(chapter, /if \(!point \|\| \(point\.x === lastX && point\.y === lastY\)\) return;/);
+  // The one leaving lies under the one arriving, out of the pointer's way,
+  // and goes at once when the switch is over.
+  assert.match(css, /\.archive-dock\[data-leaving\] \{\s*z-index: 1;\s*opacity: 1;\s*visibility: visible;\s*transition: none;/);
+  assert.match(css, /\.archive-dock\[data-cut\],/);
+  // Paint and composite only: a clip, three colours, a mask — no layout.
+  const switchIn = chapter.slice(chapter.indexOf('const switchIn = ('), chapter.indexOf('const switchOut = ('));
+  assert.match(switchIn, /clipPath: switchClip\(own, from\)/);
+  assert.match(switchIn, /paperFrom\(plate, fromStock, myStock, false\)/);
+  assert.doesNotMatch(switchIn, /getBoundingClientRect|offset(Width|Height)|style\.(width|height|left|top) =/);
+  // A publish per frame at most (the map fires move and render in one).
+  assert.match(atlas, /if \(key === publishedKeyRef\.current\) return;/);
 });
 
 test('the channel keeps the last plan and frame for a cover that mounts late', () => {
@@ -244,7 +342,6 @@ test('the channel keeps the last plan and frame for a cover that mounts late', (
 test('a ticket tears only while its cover is up, and is put back whole once it has gone', () => {
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // Nothing tears a cover no one can see (the explorer then simply goes on).
-  assert.match(chapter, /const tearThen = \(go: \(\) => void, gone = false\) => \{\s+const section = chapterRef\.current as HTMLElement \| null;\s+if \(!ticket \|\| !section \|\| !dockShownRef\.current\) return false;/);
   assert.match(chapter, /const tearStubThen = \(go: \(\) => void\) => \{\s+if \(!ticket \|\| !dockShownRef\.current\) return false;/);
   // Gone (its fade done), it is whole again for the next visit.
   assert.match(chapter, /reseatTimer = window\.setTimeout\(\(\) => reseatRef\.current\(\), DOCK_FADE_MS \+ 60\);/);
@@ -268,7 +365,7 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   // Shown or not is the gate's decision, on the camera's ask: the place in
   // hand, down at it (never in flight), near its zoom.
   assert.match(publish, /dockShown\(dockAtRef\.current, dockAskRef\.current,/);
-  assert.match(atlas, /const askFor = \(\) => \{\s+const held = currentRef\.current;\s+if \(!held \|\| flying\) return null;/);
+  assert.match(atlas, /const askFor = \(\): DockAsk \| null => \{\s+const held = currentRef\.current;\s+if \(!held\) return null;/);
   assert.match(atlas, /return \{ id: held, appear: out <= HOP\.appearOut, stay: out <= HOP\.stayOut \};/);
   // The camera moves a place by where it stands over the ground; its centre
   // on the screen stays the atlas's focal point.
@@ -307,13 +404,11 @@ test('the joint is a gap and a caret, never a line across it', () => {
   // the face's dark edge on the face's corners (the right-hand quadrants put
   // the photograph by the shield), the stub's stock on the stub's.
   assert.match(chapter, /className="archive-plate__caret"\s+data-half=\{quadrant === 'tr' \|\| quadrant === 'br' \? 'face' : 'stub'\}/);
-  for (const quadrant of QUADRANT_ORDER) {
+  for (const quadrant of QUADRANTS) {
     const rule = new RegExp(`\\.archive-dock\\[data-quadrant='${quadrant}'\\] \\.archive-plate__caret \\{[^}]*clip-path: polygon\\(`);
     assert.match(css, rule, quadrant);
   }
   assert.match(css, /\.archive-plate__caret\[data-half='stub'\] \{\s*background: var\(--stub-paper/);
-  // Torn, the face's caret goes with the face.
-  assert.match(css, /\.archive-plate\.is-torn \.archive-plate__caret\[data-half='face'\] \{\s*opacity: 0;/);
   // The caret's tip stays inside the gap: 4px out each way of the 8.
   const tip = /\.archive-dock\[data-quadrant='tr'\] \.archive-plate__caret \{\s*left: -4px;/;
   assert.match(css, tip);

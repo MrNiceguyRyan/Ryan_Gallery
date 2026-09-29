@@ -1,16 +1,23 @@
 // ── The explorer: the homepage as a map to roam ──
-// Owner, 2026-09-28: 到主页的时候…我想采用自由探索的形式，点开封面或者其他地方，
-// 产生撕掉票根特效 — and, asked to choose, "地图随便逛": the homepage is the
-// atlas itself, dragged and zoomed like 11 mois sans toi(t)'s map, every
-// place's shield on it. A shield takes the reader there (the ticket in hand
-// tears first); the cover at a shield opens its story (its stub tears off —
-// the admission); the empty map, or Escape, tears the ticket away and leaves
-// the reader roaming with nothing in hand. The wheel is the map's: it no
-// longer walks the archive chapter by chapter.
+// Owner, 2026-09-28: 到主页的时候…我想采用自由探索的形式 — and, asked to choose,
+// "地图随便逛": the homepage is the atlas itself, dragged and zoomed like 11
+// mois sans toi(t)'s map, every place's shield on it. Later the same day,
+// after seeing it: 地点之间的切换…不是自由的，移动的也很卡顿 … 我想要的是任意的
+// 切换，切换中赋予我们现有的动效 … 地点之间的移动现在不需要撕票根动效，当你点击
+// 对应的封面的时候，完整的撕开票根动画开启. So: any place to any place, at once
+// (a shield anywhere on the planet, Prev / Next, the list, the arrow keys),
+// and a choice made mid-turn simply turns on from where the camera is. The
+// ticket in hand does not tear to move on: it stays where it lies on the
+// screen while the planet turns under it and becomes the next place's ticket
+// in place (src/lib/coverDock.ts, "The switch"). The one tear left is the
+// admission: the cover clicked, its stub torn off whole, then the story.
+// The empty map, or Escape, lets the ticket go calmly (it fades; nothing
+// tears), as the reference's board goes when the globe itself is clicked.
+// The wheel is the map's: it does not walk the archive chapter by chapter.
 //
 // This module is the explorer's rule, pure, so scripts/explorer.test.mjs can
-// hold it: what each gesture does from each state, in order — a tear always
-// comes before the move it opens — and the seam the entrance hands over by.
+// hold it: what each gesture does from each state, in order, and the seams
+// the entrance hands over by.
 
 // ── The seam ──
 // The entrance in front of the explorer hands the page over once the globe
@@ -39,12 +46,48 @@ export interface ExplorerDetail {
 export interface ExploreRequest {
   /** Who asked (for the record only: 'boarding-pass', …). */
   from?: string;
+  /** The entrance brings stop 01's stub itself (the torn pass's stub, flown
+   *  onto the cover: "The stub hand-off" below): the cover's own stub waits,
+   *  hidden, for STUB_LANDED_EVENT. */
+  stubHandoff?: boolean;
+}
+
+// ── The stub hand-off (the entrance ↔ the explorer) ──
+// The torn boarding pass's stub becomes stop 01's cover stub. The explorer's
+// half of the contract:
+//  - asked with `stubHandoff`, it keeps stop 01's cover stub hidden (the
+//    photograph shows) until the entrance dispatches STUB_LANDED_EVENT on
+//    window, and shows it inside that event's dispatch — so the entrance,
+//    removing its copy in the same task, never leaves a frame with both
+//    stubs or with neither;
+//  - `window.__archiveCoverStubTarget()` is the screen rect (viewport px)
+//    where that stub will rest once the entry has landed: DERIVED from the
+//    entry's final camera and the dock's plan (coverDock.ts `coverStubRect`,
+//    `phoneStubRect` below), never read off a moving element. It answers as
+//    soon as the entry starts (null only before the map has planned);
+//  - ENTRY_LANDED_EVENT on window (detail { id }) says the camera is down on
+//    stop 01.
+// The entrance flies its stub along an arc onto the rect, lands it, and
+// dispatches STUB_LANDED_EVENT. A stub never landed is shown anyway
+// STUB_WAIT_MS after the entry lands, so no ticket is ever left without one.
+export const ENTRY_LANDED_EVENT = 'archive:entry-landed';
+export const STUB_LANDED_EVENT = 'archive:stub-landed';
+export const STUB_WAIT_MS = 4000;
+
+export interface CoverStubTarget {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Degrees (the cover lies square on the screen: 0). */
+  rotate: number;
 }
 
 declare global {
   interface Window {
     __archiveExplorer?: ExplorerDetail;
     __archiveExploreAsked?: ExploreRequest;
+    __archiveCoverStubTarget?: () => CoverStubTarget | null;
   }
 }
 
@@ -66,7 +109,7 @@ export function announceExplorer(detail: ExplorerDetail) {
 // ── The rule ──
 export interface ExplorerState {
   phase: ExplorerPhase;
-  /** The place in hand: the camera is on it or flying to it. */
+  /** The place in hand: the camera is on it or turning to it. */
   current: string | null;
 }
 
@@ -78,7 +121,8 @@ export type ExplorerAction =
   | { type: 'enter'; id?: string }
   /** The entry move is down. */
   | { type: 'entered' }
-  /** A shield, a row of the list, Prev / Next. */
+  /** A shield, a row of the list, Prev / Next, an arrow key: any place, from
+   *  any place, at any moment (mid-turn too). */
   | { type: 'select'; id: string }
   /** The cover (or its rail, from the keyboard): the story. */
   | { type: 'open'; id: string }
@@ -88,18 +132,17 @@ export type ExplorerAction =
   | { type: 'leave' };
 
 export type ExplorerEffect =
-  /** Tear the ticket in hand: the face comes off (ArchiveChapter's tear);
-   *  what follows waits for the face to be free. */
-  | { type: 'tear'; id: string }
-  /** Tear the stub off the ticket: the admission (the face stays whole and
-   *  grows into the story). What follows waits for the stub to be free. */
+  /** Tear the stub off the ticket: the admission, played whole (the face
+   *  stays and grows into the story). The story waits for it. */
   | { type: 'tear-stub'; id: string }
-  /** The camera goes to a place (`from`: the place it leaves, null from the
-   *  open map). The same place again brings the camera back onto it. */
+  /** The camera turns to a place (`from`: the place in hand it leaves, null
+   *  from the open map): the switch. The ticket in hand stays where it lies
+   *  and becomes this place's. The same place again brings the camera back
+   *  onto it. */
   | { type: 'fly'; id: string; from: string | null }
   /** The entry: the globe to stop 01. */
   | { type: 'entry'; id: string | null }
-  /** Let the ticket in hand go: its cover (torn) leaves the map. */
+  /** Let the ticket in hand go: its cover fades from the map (no tear). */
   | { type: 'release'; id: string }
   | { type: 'story'; id: string }
   /** Back to the start: the opening words again, and the camera back on
@@ -131,7 +174,8 @@ const same = (state: ExplorerState): ExplorerStep => ({ state, effects: [] });
 
 /**
  * What `action` does from `state`: the next state and the effects to play,
- * in order. A move always tears the ticket in hand first; nothing moves
+ * in order. Nothing tears on the way between places (a switch is one turn
+ * of the planet); the cover's admission is the one tear. Nothing moves
  * before the explorer has been entered.
  */
 export function explore(state: ExplorerState, action: ExplorerAction, order: readonly string[]): ExplorerStep {
@@ -145,15 +189,12 @@ export function explore(state: ExplorerState, action: ExplorerAction, order: rea
       return state.phase === 'entering' ? same({ ...state, phase: 'explore' }) : same(state);
     case 'select': {
       if (state.phase !== 'explore' || !order.includes(action.id)) return same(state);
-      if (action.id === state.current) {
-        // In hand already: the camera comes back onto it (the reader may have
-        // roamed off), nothing tears.
-        return { state, effects: [{ type: 'fly', id: action.id, from: action.id }] };
-      }
-      const effects: ExplorerEffect[] = [];
-      if (state.current) effects.push({ type: 'tear', id: state.current });
-      effects.push({ type: 'fly', id: action.id, from: state.current });
-      return { state: { ...state, current: action.id }, effects };
+      // In hand already: the camera comes back onto it (the reader may have
+      // roamed off). Else the turn, from the place in hand (or the open map).
+      return {
+        state: action.id === state.current ? state : { ...state, current: action.id },
+        effects: [{ type: 'fly', id: action.id, from: state.current }],
+      };
     }
     case 'open': {
       if (state.phase !== 'explore' || action.id !== state.current) return same(state);
@@ -161,17 +202,11 @@ export function explore(state: ExplorerState, action: ExplorerAction, order: rea
     }
     case 'dismiss': {
       if (state.phase !== 'explore' || !state.current) return same(state);
-      return {
-        state: { ...state, current: null },
-        effects: [{ type: 'tear', id: state.current }, { type: 'release', id: state.current }],
-      };
+      return { state: { ...state, current: null }, effects: [{ type: 'release', id: state.current }] };
     }
     case 'leave': {
       if (state.phase === 'globe') return same(state);
-      const effects: ExplorerEffect[] = [];
-      if (state.phase === 'explore' && state.current) effects.push({ type: 'tear', id: state.current });
-      effects.push({ type: 'home' });
-      return { state: { phase: 'globe', current: null }, effects };
+      return { state: { phase: 'globe', current: null }, effects: [{ type: 'home' }] };
     }
     default:
       return same(state);
@@ -182,8 +217,9 @@ export function explore(state: ExplorerState, action: ExplorerAction, order: rea
 // On a phone the ticket does not ride beside its shield (a 190px stub and a
 // photograph do not fit beside a shield on a 390px screen): it is dealt at
 // the foot of the screen, over the controls, whole — the same ticket, the
-// same tear — and the camera sets its place in the clear band above it.
-// DERIVED from the viewport and the photograph's own ratio, never measured.
+// same switch, the same admission — and the camera sets its place in the
+// clear band above it. DERIVED from the viewport and the photograph's own
+// ratio, never measured.
 export const PHONE_CARD = {
   /** The stub's fixed measure (ArchiveChapter TICKET_STUB). */
   stub: 190,
@@ -196,8 +232,10 @@ export const PHONE_CARD = {
   /** …and the whole ticket scaled down no further than this to fit across
    *  (a smaller photograph instead). */
   minScale: 0.72,
-  /** The controls' band under the card, px. */
+  /** The controls' band under the card, px (global.css `.archive-dock--phone`
+   *  stands the card this far up; its seat `below` further). */
   controls: 72,
+  dockBottom: 76,
   /** What hangs under the plate ("Open story"), px. */
   below: 34,
 } as const;
@@ -223,6 +261,23 @@ export function phoneCard(vw: number, vh: number, ratio: number): PhoneCard {
   }
   const photoW = Math.floor(photoH * r);
   return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) };
+}
+
+/** Where the phone card's stub rests on the screen (viewport px): the card
+ *  stands centred, its foot `dockBottom + below` above the screen's foot
+ *  (global.css `.archive-dock--phone`; a home-indicator inset is not
+ *  counted), scaled about its foot. */
+export function phoneStubRect(vw: number, vh: number, ratio: number): CoverStubTarget {
+  const card = phoneCard(vw, vh, ratio);
+  const width = (card.photoW + PHONE_CARD.stub) * card.scale;
+  const foot = vh - PHONE_CARD.dockBottom - PHONE_CARD.below;
+  return {
+    x: vw / 2 - width / 2 + card.photoW * card.scale,
+    y: foot - card.photoH * card.scale,
+    w: PHONE_CARD.stub * card.scale,
+    h: card.photoH * card.scale,
+    rotate: 0,
+  };
 }
 
 /** Where the camera sets a place on a phone: the middle of the clear band

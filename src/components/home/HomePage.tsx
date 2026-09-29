@@ -1,5 +1,6 @@
 import {
   lazy,
+  memo,
   Suspense,
   useState,
   useEffect,
@@ -28,19 +29,23 @@ import { ARRIVAL_EASE, ARRIVAL_SECONDS } from '../../lib/boardingPass';
 import { NOTES_LIVE } from '../../lib/notesNav';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
 import {
+  ENTRY_LANDED_EVENT,
   EXPLORE_EVENT,
   EXPLORER_START,
+  STUB_LANDED_EVENT,
+  STUB_WAIT_MS,
   announceExplorer,
   explore,
   neighbour,
   phoneCard,
   requestExplore,
+  stopOne,
+  type ExploreRequest,
   type ExplorerAction,
   type ExplorerEffect,
   type ExplorerState,
 } from '../../lib/explorer';
 import { ENTRY } from '../../lib/explorerCamera';
-import { TEAR_MS } from '../../lib/ticketTear';
 import { startLenis } from '../../lib/smoothScroll';
 import type Lenis from 'lenis';
 
@@ -192,7 +197,10 @@ function RouteAtlasFallback({ mobile = false, entryProgress }: {
   );
 }
 
-function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
+// Memoised: the page renders again on every switch (the place in hand, the
+// cover up), and the atlas only needs to when its own props change (the
+// move asked for, the place in hand).
+const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
   // The map is the page: it mounts at once (its chunk is warmed below).
   return (
     <div className="h-full w-full">
@@ -201,7 +209,7 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
       </Suspense>
     </div>
   );
-}
+});
 
 /* ═══════════════════════════════════════════════════════
  *  HomePage — the entrance, then the archive as a map to roam
@@ -214,8 +222,9 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
  * (the first place by route order — data-driven), and without a stop the
  * camera goes down onto it: the explorer's entry, asked for through the seam
  * (`requestExplore`, src/lib/explorer.ts). From there the map is the
- * reader's: drag it, zoom it, choose a shield. The ticket in hand tears
- * before anything moves on; its stub tears off to open its story. Once the
+ * reader's: drag it, zoom it, choose any shield, any time — the planet turns
+ * under the ticket in hand, which becomes the next place's where it lies (no
+ * tear); its stub tears off, whole, only to open its story. Once the
  * explorer has the page the entrance is taken off it (the page no longer
  * scrolls; the Index opens over the map); Back to the start (or the
  * wordmark) brings the opening words back, with a new pass. */
@@ -353,7 +362,7 @@ export default function HomePage({ collections }: Props) {
   const [engagedChapterId, setEngagedChapterId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
-  // A sequence per gesture: a gesture's later steps (after a tear) are
+  // A sequence per gesture: a gesture's later steps (after the admission) are
   // dropped when another gesture has come since.
   const gestureRef = useRef(0);
   const current = explorer.current;
@@ -446,23 +455,18 @@ export default function HomePage({ collections }: Props) {
   }, [captureStory]);
 
   // ── Playing a gesture's effects, in order ──
-  // `gone`: go on only once the torn face has left the screen (before a
-  // flight: the map never pans under a card still being laid aside — one
-  // large motion at a time), not merely once it is free.
-  const tearTicket = useCallback((id: string, kind: 'tear-then' | 'tear-stub', go: () => void, gone = false) => {
+  // The admission: the cover's stub tears off whole (ArchiveChapter, on the
+  // score of src/lib/ticketTear.ts), and only then does `go` open the story.
+  // A ticket that cannot tear (not on screen) simply goes on.
+  const tearStub = useCallback((id: string, go: () => void) => {
     const section = document.getElementById(`archive-item-${id}`);
-    const detail: { go: () => void; handled?: boolean; gone?: boolean } = { go, gone };
-    section?.dispatchEvent(new CustomEvent(`archive:${kind}`, { detail }));
+    const detail: { go: () => void; handled?: boolean } = { go };
+    section?.dispatchEvent(new CustomEvent('archive:tear-stub', { detail }));
     if (!detail.handled) go();
   }, []);
-  // The tear under way, if any: a gesture that comes while it runs (Next
-  // pressed three times over) does not tear the next tickets — never dealt —
-  // nor start the camera mid-tear; it waits for this tear and then plays its
-  // own moves (the last one asked for wins: its `then` replaces the rest).
-  const tearRunRef = useRef<{ then: (() => void) | null } | null>(null);
-  const nextFlight = useCallback((kind: AtlasFlight['kind'], id: string | null) => {
+  const nextFlight = useCallback((kind: AtlasFlight['kind'], id: string | null, entry = false) => {
     flightTokenRef.current += 1;
-    const next = { kind, id, token: flightTokenRef.current };
+    const next: AtlasFlight = { kind, id, token: flightTokenRef.current, ...(entry ? { entry: true } : null) };
     setFlight(next);
     return next.token;
   }, []);
@@ -548,33 +552,19 @@ export default function HomePage({ collections }: Props) {
       if (!effect) return;
       const next = () => step(index + 1);
       switch (effect.type) {
-        case 'tear': {
-          const run: { then: (() => void) | null } = { then: next };
-          tearRunRef.current = run;
-          let done = false;
-          const finish = () => {
-            if (done) return;
-            done = true;
-            window.clearTimeout(guard);
-            if (tearRunRef.current === run) tearRunRef.current = null;
-            run.then?.();
-          };
-          // Never held up for good by a tear that does not report back (its
-          // ticket re-seated under it).
-          const guard = window.setTimeout(finish, TEAR_MS + 600);
-          tearTicket(effect.id, 'tear-then', finish, effects[index + 1]?.type === 'fly');
-          return;
-        }
         case 'tear-stub': {
           const collection = orderedCities.find((city) => city._id === effect.id);
+          // What the story grows out of is read before the stub moves.
           const captured = collection ? captureStory(collection) : undefined;
-          tearTicket(effect.id, 'tear-stub', () => {
+          tearStub(effect.id, () => {
             if (gesture !== gestureRef.current || !collection) return;
             openCollection(collection, captured);
           });
           return;
         }
         case 'fly':
+          // The switch: any place, at once, no tear (RouteAtlas turns the
+          // planet under the ticket; a choice mid-turn turns on from there).
           nextFlight('fly', effect.id);
           next();
           return;
@@ -583,7 +573,7 @@ export default function HomePage({ collections }: Props) {
           next();
           return;
         case 'story': {
-          // Opened by its tear (above) once the stub is free.
+          // Opened by its tear (above), once the stub is torn off whole.
           next();
           return;
         }
@@ -599,13 +589,8 @@ export default function HomePage({ collections }: Props) {
           next();
       }
     };
-    const running = tearRunRef.current;
-    if (running && effects[0]?.type !== 'tear-stub') {
-      running.then = () => step(effects[0]?.type === 'tear' ? 1 : 0);
-      return;
-    }
     step(0);
-  }, [captureStory, goHome, nextFlight, openCollection, orderedCities, runEntry, tearTicket]);
+  }, [captureStory, goHome, nextFlight, openCollection, orderedCities, runEntry, tearStub]);
 
   const dispatch = useCallback((action: ExplorerAction) => {
     const step = explore(explorerRef.current, action, placeIds);
@@ -643,7 +628,7 @@ export default function HomePage({ collections }: Props) {
       return;
     }
     const id = explorerRef.current.current;
-    if (id && entryFlightRef.current != null) entryFlightRef.current = nextFlight('cut', id);
+    if (id && entryFlightRef.current != null) entryFlightRef.current = nextFlight('cut', id, true);
   }, [desktopLayout, entryProgress, nextFlight]);
 
   // A window that crosses the phone/desktop line with the map in hand (a
@@ -663,8 +648,9 @@ export default function HomePage({ collections }: Props) {
     if (desktopLayout) {
       entryProgress.set(1);
     }
-    if (state.phase === 'entering') dispatchRef.current({ type: 'entered' });
-    if (state.current) nextFlight('cut', state.current);
+    const entering = state.phase === 'entering';
+    if (entering) dispatchRef.current({ type: 'entered' });
+    if (state.current) nextFlight('cut', state.current, entering && !desktopLayout);
   }, [desktopLayout, entryProgress, nextFlight]);
 
   // ── The hand-over: the explorer takes the page ──
@@ -718,14 +704,42 @@ export default function HomePage({ collections }: Props) {
   };
   useEffect(() => () => cancelAnimationFrame(handOverTween.current), []);
 
+  // ── The stub hand-off (src/lib/explorer.ts) ──
+  // Asked with `stubHandoff`, stop 01's cover shows its photograph but not
+  // its stub until the entrance has flown the torn pass's stub onto it
+  // (STUB_LANDED_EVENT: the chapter shows its own stub inside that event,
+  // the same frame the entrance removes its copy). Never waited on for good:
+  // STUB_WAIT_MS after the entry lands, the stub is shown anyway.
+  const [stubAwaited, setStubAwaited] = useState<string | null>(null);
+  useEffect(() => {
+    if (!stubAwaited) return;
+    let timer = 0;
+    const landed = () => setStubAwaited(null);
+    const entryDown = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(landed, STUB_WAIT_MS);
+    };
+    window.addEventListener(STUB_LANDED_EVENT, landed);
+    window.addEventListener(ENTRY_LANDED_EVENT, entryDown);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(STUB_LANDED_EVENT, landed);
+      window.removeEventListener(ENTRY_LANDED_EVENT, entryDown);
+    };
+  }, [stubAwaited]);
+
   // ── The seam: anyone may ask for the explorer (src/lib/explorer.ts) ──
+  const placeIdsRef = useRef(placeIds);
+  placeIdsRef.current = placeIds;
   useEffect(() => {
     announceExplorer({ phase: explorerRef.current.phase, current: explorerRef.current.current });
     // An ask is answered once: consumed here, so a later visit to the page
     // in the same window (a client-side navigation back) starts on the
     // opening words again rather than on a stale ask.
-    const enter = () => {
+    const enter = (event?: Event) => {
+      const ask = ((event as CustomEvent<ExploreRequest> | undefined)?.detail ?? window.__archiveExploreAsked ?? {}) as ExploreRequest;
       delete window.__archiveExploreAsked;
+      if (ask.stubHandoff && explorerRef.current.phase === 'globe') setStubAwaited(stopOne(placeIdsRef.current));
       handOverRef.current(() => dispatchRef.current({ type: 'enter' }));
     };
     if (window.__archiveExploreAsked) enter();
@@ -781,13 +795,26 @@ export default function HomePage({ collections }: Props) {
     };
   }, [explorer.phase, finishEntry, reduce]);
 
-  // ── Escape: the ticket in hand tears away ──
+  // ── The keys ──
+  // Escape lets the ticket in hand go, calmly (its cover fades; nothing
+  // tears), as a click on the empty map does. ← and → step to the previous
+  // and next place, as the reference's keys do — from anywhere on the page
+  // but the map itself (its own arrows pan it), a field, the list or an
+  // open story or Index.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       if (storyOpenRef.current || indexOpen || listOpen) return;
-      if (explorerRef.current.phase !== 'explore' || !explorerRef.current.current) return;
-      dispatchRef.current({ type: 'dismiss' });
+      if (explorerRef.current.phase !== 'explore') return;
+      if (event.key === 'Escape') {
+        if (explorerRef.current.current) dispatchRef.current({ type: 'dismiss' });
+        return;
+      }
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      const target = event.target as Element | null;
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"], .mapboxgl-canvas, .explorer-list')) return;
+      event.preventDefault();
+      stepToRef.current(event.key === 'ArrowRight' ? 1 : -1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1075,6 +1102,10 @@ export default function HomePage({ collections }: Props) {
     window.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', onWheel, { capture: true });
   }, [free]);
+  // A click on the empty map: the ticket in hand is let go, calmly (its
+  // cover fades, its shield steps back; nothing tears) — as the reference's
+  // board goes when the globe itself is clicked.
+  const dismissFromMap = useCallback(() => dispatchRef.current({ type: 'dismiss' }), []);
   const select = useCallback((id: string) => {
     dispatchRef.current({ type: 'select', id });
   }, []);
@@ -1089,6 +1120,8 @@ export default function HomePage({ collections }: Props) {
     const id = neighbour(placeIds, explorerRef.current.current, direction);
     if (id) select(id);
   }, [placeIds, select]);
+  const stepToRef = useRef(stepTo);
+  stepToRef.current = stepTo;
   const leave = useCallback(() => {
     setIndexOpen(false);
     setListOpen(false);
@@ -1140,7 +1173,7 @@ export default function HomePage({ collections }: Props) {
       engagedChapterId={engagedChapterId}
       onEngage={setEngagedChapterId}
       onSelect={select}
-      onDismiss={() => dispatchRef.current({ type: 'dismiss' })}
+      onDismiss={dismissFromMap}
       onArrive={onArrive}
       eager
       holdReveal={globeHeld}
@@ -1150,6 +1183,16 @@ export default function HomePage({ collections }: Props) {
     />
   );
 
+  // Every chapter's props are stable between switches (the chapter is
+  // memoised): a switch renders again only the chapters it concerns — the
+  // place left and the place arrived at — not the whole archive (the
+  // click's React work was 6.5–8 ms of the switch's first frame, traced
+  // 2026-09-29).
+  const nextStops = useMemo(() => new Map(orderedCities.map((city) => {
+    const next = places.find((place) => place.id === neighbour(placeIds, city._id, 1));
+    return [city._id, next ? { name: next.name, number: next.number, region: next.region, slug: next.slug } : null] as const;
+  })), [orderedCities, placeIds, places]);
+  const stepNext = useCallback(() => stepTo(1), [stepTo]);
   const chapters = orderedCities.map((city, index) => (
     <ArchiveChapter
       key={city._id}
@@ -1157,13 +1200,16 @@ export default function HomePage({ collections }: Props) {
       collection={city}
       isActive={current === city._id}
       railShown={dockAt === city._id}
-      onClick={() => openFromCover(city)}
+      onClick={openFromCover}
       index={index}
       chapterIndex={index}
       chapterTotal={orderedCities.length}
       padStocks={chapterPadStocks[index]}
       preloadImageUrls={chapterPreloadUrls[index]}
-      prioritizeImage={currentIndex < 0 ? index === 0 : Math.abs(index - currentIndex) <= 1}
+      // Any place is a click away: the neighbours and the place pointed at
+      // are fetched first (a switch also waits a moment for its print to
+      // decode before it develops).
+      prioritizeImage={currentIndex < 0 ? index === 0 : Math.abs(index - currentIndex) <= 1 || engagedChapterId === city._id}
       onEngagementChange={setEngagedChapterId}
       highlighted={engagedChapterId === city._id}
       variant="cover"
@@ -1171,14 +1217,10 @@ export default function HomePage({ collections }: Props) {
       phone={!desktopLayout}
       dockHost={dockHost}
       regionTab={regionTabs.get(city._id) ?? null}
-      // A pull that tears the face away goes on to the next place; so does
-      // the stub's "Next stop" (the ticket is torn already: nothing tears
-      // twice).
-      onTearAway={() => stepTo(1)}
-      nextStop={(() => {
-        const next = places.find((place) => place.id === neighbour(placeIds, city._id, 1));
-        return next ? { name: next.name, number: next.number, region: next.region, slug: next.slug } : null;
-      })()}
+      // The stub's "Next stop": the next place, as Next does (no tear).
+      onNext={stepNext}
+      stubAwaited={stubAwaited === city._id}
+      nextStop={nextStops.get(city._id) ?? null}
     />
   ));
 
