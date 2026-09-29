@@ -191,11 +191,11 @@ export function planFlight(w0: number, u1: number, dz: number, viewportW: number
 // toi(t)): any place to any place, at once, with no tear, and the camera
 // moves the way the reference's does — one flyTo of DUR_MS.turn on EASE.turn
 // whatever the distance, its own curve (Mapbox's default; the reference
-// passes none), the pitch held, and every place set on the same point of the
-// screen, under the same corner of the cover (src/lib/coverDock.ts, the
-// single dock). At the places' rest zooms a leg across the archive climbs
-// only 0.16–0.75 of a level (scripts/explorer.test.mjs): the flight reads as
-// the planet turning under the ticket, not as a climb and a fall. A new
+// passes none), the pitch held, and every place set on its corner's point of
+// the screen (src/lib/coverDock.ts: places at one corner share it). At the
+// places' rest zooms a leg across the archive climbs only 0.16–0.75 of a
+// level (scripts/explorer.test.mjs): the flight reads as the planet turning
+// under the ticket, not as a climb and a fall. A new
 // choice mid-turn starts from where the camera is (Mapbox's own flyTo does),
 // never snapping.
 // The derived flights above (planFlight) stay for the moves that are not a

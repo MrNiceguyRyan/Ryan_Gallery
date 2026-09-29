@@ -267,6 +267,27 @@ export function signNameSize(name: string): number {
   const longest = Math.max(1, ...name.trim().split(/\s+/).map((word) => word.length));
   return Math.max(SIGN_NAME_MIN, Math.min(SIGN_NAME_MAX, Math.floor(SIGN_NAME_MEASURE / (longest * 0.66))));
 }
+/** How many lines the name takes inside the rule: a greedy wrap at
+ *  SIGN_NAME_MEASURE, at its own size (`signNameSize`), ~0.66em a bold
+ *  capital and ~0.3em a space — the same estimate the size is set by, never
+ *  measured. MIAMI, ORLANDO, PAGE and ZION take one line; BRYCE CANYON and
+ *  NEW YORK two. The ticket a cover folds into on a switch is cut to the
+ *  archive's tallest sign (src/lib/coverDock.ts, TICKET). */
+export function signLines(name: string): number {
+  const size = signNameSize(name);
+  const words = name.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return 1;
+  let lines = 1;
+  let run = 0;
+  words.forEach((word) => {
+    const w = word.length * 0.66 * size;
+    if (run > 0 && run + 0.3 * size + w > SIGN_NAME_MEASURE) {
+      lines += 1;
+      run = w;
+    } else run += (run > 0 ? 0.3 * size : 0) + w;
+  });
+  return lines;
+}
 
 // ── One shield per place, and how they stack ──
 // Each place's shield stands on the map with its foot's point on the place,
@@ -497,39 +518,58 @@ export interface FlapStep {
   flips: number;
 }
 
+/** A flap timed to its moment: `delay` before the board turns (FLAP.delay
+ *  by default: the landing registers first) and the `budget` it must land
+ *  in (FLAP.budget). A switch turns its ticket's name while the ticket is
+ *  in transit (src/lib/coverDock.ts, "The switch"): from the relay at once
+ *  (`delay: 0`), inside the transit (`budget`: expandAt − relayAt). */
+export interface FlapTiming {
+  delay?: number;
+  budget?: number;
+}
+/** A timed flap is never compressed past this flip tick, ms (below it the
+ *  board reads as a blur, not letters turning): a twelve-letter name in a
+ *  541 ms transit flips every ~18 ms. */
+export const FLAP_MIN_TICK = 16;
+
 /** The flap's plan for `count` characters (spaces included, which simply do
- *  not turn). Compressed evenly if a long word would run past the budget. */
-export function flapPlan(count: number): FlapStep[] {
+ *  not turn). Compressed evenly if a long word would run past the budget —
+ *  a timed flap (`timing.budget`) no further than FLAP_MIN_TICK a flip. */
+export function flapPlan(count: number, timing: FlapTiming = {}): FlapStep[] {
+  const delay = timing.delay ?? FLAP.delay;
+  const budget = timing.budget ?? FLAP.budget;
   const raw = Array.from({ length: count }, (_, index) => {
-    const start = FLAP.delay + FLAP.stagger * index;
+    const start = delay + FLAP.stagger * index;
     const flips = FLAP.base + index;
     return { start, flips, land: start + FLAP.tick * flips };
   });
   const last = raw.length ? raw[raw.length - 1].land : 0;
-  const limit = FLAP.delay + FLAP.budget;
+  const limit = delay + budget;
   if (last <= limit) return raw;
-  const k = (limit - FLAP.delay) / (last - FLAP.delay);
+  let k = (limit - delay) / (last - delay);
+  if (timing.budget != null) k = Math.max(k, FLAP_MIN_TICK / FLAP.tick);
   return raw.map((step) => ({
-    start: Math.round(FLAP.delay + (step.start - FLAP.delay) * k),
+    start: Math.round(delay + (step.start - delay) * k),
     flips: step.flips,
-    land: Math.round(FLAP.delay + (step.land - FLAP.delay) * k),
+    land: Math.round(delay + (step.land - delay) * k),
   }));
 }
 
-/** A name cell's turn: from FLAP.delay (when the name being left goes) to
- *  its planned landing, one flip each FLAP.turn. */
-export function nameStep(step: FlapStep): FlapStep {
+/** A name cell's turn: from the flap's delay (when the name being left
+ *  goes) to its planned landing, one flip each FLAP.turn. */
+export function nameStep(step: FlapStep, delay: number = FLAP.delay): FlapStep {
   return {
-    start: FLAP.delay,
+    start: delay,
     land: step.land,
-    flips: Math.max(2, Math.round((step.land - FLAP.delay) / FLAP.turn)),
+    flips: Math.max(2, Math.round((step.land - delay) / FLAP.turn)),
   };
 }
 
-/** The state's plan: each letter two quick flips, a stagger apart. */
-export function codePlan(count: number): FlapStep[] {
+/** The state's plan: each letter two quick flips, a stagger apart, from
+ *  the flap's delay. */
+export function codePlan(count: number, delay: number = FLAP.delay): FlapStep[] {
   return Array.from({ length: count }, (_, index) => {
-    const start = FLAP.delay + FLAP.stagger * index;
+    const start = delay + FLAP.stagger * index;
     return { start, flips: CODE_FLIPS, land: start + CODE_TICK * CODE_FLIPS };
   });
 }

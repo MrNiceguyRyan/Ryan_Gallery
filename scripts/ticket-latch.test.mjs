@@ -65,7 +65,7 @@ test('the admission: the stub torn off to open the story, the score turned round
   // show through the tear's gap.
   const tear = chapter.slice(chapter.indexOf('const tearStubThen = '), chapter.indexOf('const tearStubThenRef'));
   assert.match(tear, /coverDock\.settle\(\);/);
-  assert.match(tear, /endSwitch\(true\);/);
+  assert.match(tear, /if \(playRef\.current\) settlePlay\(true\);/);
 });
 
 test('every ticket tears on the archive\'s own score', () => {

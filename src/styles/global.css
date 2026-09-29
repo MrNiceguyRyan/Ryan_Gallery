@@ -774,8 +774,8 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 }
 /* In with its ticket: at a switch's click (the rail's own beat), or — the
    ticket arriving from the open map (src/lib/coverDock.ts, "The arrival") —
-   as that ticket starts (`--place-delay`, HomePage), rising the last 10px
-   on the arrive curve as the ticket unrolls. */
+   as that ticket opens (`--place-delay`, HomePage), rising the last 10px
+   on the arrive curve with it. */
 .explorer-place[data-shown] {
   opacity: 1;
   visibility: visible;
@@ -1171,6 +1171,17 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 .archive-dock--phone .archive-plate__caret {
   display: none;
+}
+/* The phone's card carries its state's tab too, on its top edge at the left
+   (the photograph's side): the boxed state only (15px on the card, 10.8–15px
+   on the screen at the card's scale). PHONE_CARD.tab (src/lib/explorer.ts)
+   counts it in the card's height. */
+.archive-dock--phone .archive-dock__tab :is(.archive-dock__tab-label, .archive-dock__tab-figures) {
+  display: none;
+}
+.archive-dock--phone .archive-dock__tab-state {
+  height: 22px;
+  font-size: 15px;
 }
 .explorer-controls--phone {
   left: 12px;
@@ -2897,10 +2908,13 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
    camera frame the atlas publishes where each place stands and the chapter
    writes its dock there (`translate3d`, at the shield's foot); the seat hangs
    the plate from that point. A cover shows while its place is in hand
-   (`data-at`); from the open map it arrives as the camera settles, unrolled
-   from its shield's corner (src/lib/coverDock.ts, "The arrival", played by
-   ArchiveChapter), and let go it folds back into that corner as it rides
-   away with its shield and fades on the fade curve (an exit eases in). */
+   (`data-at`); from the open map it arrives as the camera settles — its
+   ticket inked in beside the shield, opened, its tip put out
+   (src/lib/coverDock.ts, "The arrival", played by ArchiveChapter) — and let
+   go it puts its tip back, folds into its ticket as it rides away with its
+   shield, and fades on the fade curve as the fold ends (an exit eases in):
+   its ink from 200 ms over DUR.swap, gone by 520 (ArchiveChapter
+   DOCK_FADE_MS). */
 .archive-dock-host {
   position: absolute;
   inset: 0;
@@ -2915,7 +2929,7 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   height: 0;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
+  transition: opacity var(--dur-swap) var(--ease-fade) 200ms, visibility 0s linear 520ms;
 }
 .archive-dock[data-at] {
   opacity: 1;
@@ -2924,10 +2938,10 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 /* Let go because the reader's own hand has taken its place away
    (src/lib/explorerDrift.ts): the ticket rides off with its shield and
-   fades a little sooner than a dismissed one (the swap's 320 ms, not the
-   400 ms exit), so no ticket lingers over empty ground. */
+   fades sooner than a dismissed one (from 160 ms over DUR.in, gone by 360),
+   so no ticket lingers over empty ground. */
 .archive-dock-host[data-let-go] .archive-dock:not([data-at]):not([data-leaving]) {
-  transition: opacity var(--dur-swap) var(--ease-fade), visibility 0s linear var(--dur-swap);
+  transition: opacity var(--dur-in) var(--ease-fade) 160ms, visibility 0s linear 360ms;
 }
 .archive-dock__seat {
   position: absolute;
@@ -2938,11 +2952,12 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .archive-dock[data-arriving] .archive-dock__seat {
   pointer-events: none;
 }
-/* A switch (src/lib/coverDock.ts, "The switch"): the arriving cover lies over
-   the one leaving, both where the ticket lay; the one leaving is under it,
-   whole but out of the pointer's way, and goes at once when the switch is
-   over (`data-cut`: no fade, which would show its outline for a moment). The
-   phone's cards are dealt whole: the one leaving simply goes. */
+/* A switch (src/lib/coverDock.ts, "The switch"): the cover leaving folds
+   into its ticket, seen and out of the pointer's way (`data-leaving`); the
+   arriving cover is held in its ticket form, hidden (`data-ticket="wait"`),
+   until the relay lays it on the same pixels, and the one leaving goes at
+   once (`data-cut`: no fade). The phone's cards fold and relay the same way,
+   at the card's foot. */
 .archive-dock[data-at] {
   z-index: 2;
 }
@@ -2955,38 +2970,35 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .archive-dock[data-leaving] .archive-dock__seat {
   pointer-events: none;
 }
-.archive-dock[data-cut],
-.archive-dock--phone[data-leaving] {
+.archive-dock[data-cut] {
   transition: none;
 }
-.archive-dock--phone[data-leaving] {
-  visibility: hidden;
+.archive-dock[data-ticket='wait'],
+.archive-dock[data-ticket='wait'] .archive-ticket-next {
+  visibility: hidden !important;
 }
-/* What hangs off the ticket's outline — the region's tab, "Open story", the
-   pad — waits out the change of outline and comes in on the new one; the
-   one leaving has none. The cue's ink is framer's (inline), so it is held
-   back with !important and brought in by an animation that ends on it. */
-.archive-dock[data-switch] :is(.archive-dock__tab, .archive-ticket-pad) {
+/* What hangs off the cover — the state's tab, "Open story" (the phone's
+   "View story") — is not on the ticket: it fades with the tip going back (a
+   switch, a let-go) and comes in with the tip coming out. The cue's ink is
+   framer's (inline), so it is held back with !important and brought in by
+   an animation that ends on it. */
+.archive-dock:is([data-switch], :not([data-at])) :is(.archive-dock__tab, .archive-plate__view) {
   opacity: 0;
+  transition: opacity var(--dur-flick) var(--ease-fade);
 }
-.archive-dock[data-switch] .archive-plate__cue {
+.archive-dock:is([data-switch], :not([data-at])) .archive-plate__cue,
+.archive-dock[data-ticket] .archive-plate__cue {
   opacity: 0 !important;
+  transition: opacity var(--dur-flick) var(--ease-fade);
 }
-.archive-dock[data-arrived] :is(.archive-dock__tab, .archive-ticket-pad, .archive-plate__cue) {
+.archive-dock[data-arrived] :is(.archive-dock__tab, .archive-plate__cue, .archive-plate__view) {
   animation: dock-extra-in var(--dur-out) var(--ease-arrive) backwards;
 }
 @keyframes dock-extra-in {
   from { opacity: 0; }
 }
-/* The one leaving keeps its card and outline for the new ticket to cover;
-   its own print on the stub (rows, the way on) is not read under the new
-   one's. */
-.archive-dock[data-switch='out'] .archive-ticket-stub > :not(.archive-ticket-fibre):not(.archive-ticket-strain) {
-  visibility: hidden;
-}
-/* The mat under an arriving photograph where it reaches past the one it
-   replaces (`matPolygon`): the card's dark ground, until the print has
-   developed there. */
+/* The mat: the card's dark ground, what the ticket's face shows while its
+   print is away — folded to it, or not yet developed into the strip. */
 .archive-photo-frame__mat {
   position: absolute;
   inset: 0;
@@ -3009,18 +3021,20 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
    wait for the torn pass's stub to land on them; the photograph shows.
    Everything printed on the stub waits with it (its "Next stop" says
    `visibility: visible` of its own once it is live). */
-.archive-plate[data-stub-awaited] :is(.archive-ticket-stub-seat, .archive-ticket-stub-seat *, .archive-plate__caret[data-half='stub']) {
+.archive-plate[data-stub-awaited] :is(.archive-ticket-stub-seat, .archive-ticket-stub-seat *) {
   visibility: hidden;
 }
-/* The pad stops under the photograph meanwhile (no shelf out under nothing),
-   and runs on under the stub the moment it lands. 190px: the stub's fixed
-   measure (ArchiveChapter TICKET_STUB). */
-.archive-plate[data-stub-awaited] .archive-ticket-pad {
-  right: calc(190px + 9px);
+/* The tip waits too, whichever half it is cut from: it comes out of its
+   corner as the stub lands. */
+.archive-plate[data-stub-awaited] .archive-plate__caret {
+  visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .archive-dock[data-arrived] :is(.archive-dock__tab, .archive-ticket-pad, .archive-plate__cue) {
+  .archive-dock[data-arrived] :is(.archive-dock__tab, .archive-plate__cue, .archive-plate__view) {
     animation: none;
+  }
+  .archive-dock :is(.archive-dock__tab, .archive-plate__cue, .archive-plate__view) {
+    transition: none !important;
   }
 }
 /* No name is set over a docked photograph's foot (the name is in the rail),
@@ -3033,7 +3047,10 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
    plate's corner nearest its shield points at it instead, a caret cut from
    the card as the reference's board points at its stop: the photograph's
    dark edge on the face's corners, the stub's own stock on the stub's. It
-   goes with the face when the face is torn off. */
+   goes with the face when the face is torn off. Through a switch it goes
+   back into its corner and comes out of it once the cover is open
+   (ArchiveChapter: a scale about the point where it meets the plate, its
+   `transform-origin` here, per corner). */
 .archive-plate__caret {
   position: absolute;
   z-index: 2;
@@ -3049,21 +3066,25 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   left: -4px;
   top: calc(100% - 8px);
   clip-path: polygon(4px 0, 4px 8px, 12px 8px, 0 12px);
+  transform-origin: 4px 8px;
 }
 .archive-dock[data-quadrant='tl'] .archive-plate__caret {
   left: calc(100% - 8px);
   top: calc(100% - 8px);
   clip-path: polygon(8px 0, 8px 8px, 0 8px, 12px 12px);
+  transform-origin: 8px 8px;
 }
 .archive-dock[data-quadrant='br'] .archive-plate__caret {
   left: -4px;
   top: -4px;
   clip-path: polygon(4px 12px, 4px 4px, 12px 4px, 0 0);
+  transform-origin: 4px 4px;
 }
 .archive-dock[data-quadrant='bl'] .archive-plate__caret {
   left: calc(100% - 8px);
   top: -4px;
   clip-path: polygon(8px 12px, 8px 4px, 0 4px, 12px 0);
+  transform-origin: 8px 4px;
 }
 /* "Open story" goes on the plate's edge away from the shield. */
 .archive-dock[data-quadrant='tl'] .archive-plate__cue,
@@ -3071,16 +3092,18 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   right: auto;
   left: 0;
 }
-/* The region's line (owner: 保留), set as a tab on the ticket's top edge, as
-   the reference sets its STOP tabs over its board: "REGION FLORIDA · 2
-   PLACES · 32 FRAMES", on the edge away from the shield. */
+/* The state's tab on the ticket's top edge, as the reference sets its STOP
+   tabs over its board, on the edge away from the shield: "REGION [UTAH]",
+   the state boxed (owner, 2026-09-29: 封面的州名可以框起来，我想要这个更醒目一点),
+   and on a region's first place its figures too (owner: 保留), "REGION
+   [FLORIDA] 2 PLACES · 32 FRAMES". 30px: src/lib/coverDock.ts DOCK.tab. */
 .archive-dock__tab {
   position: absolute;
   bottom: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 26px;
+  height: 30px;
   padding: 0 12px;
   border-radius: 3px 3px 0 0;
   background: rgba(15, 18, 13, 0.9);
@@ -3094,11 +3117,28 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 .archive-dock__tab[data-side='left'] { left: 0; }
 .archive-dock__tab[data-side='right'] { right: 0; }
-.archive-dock__tab-region {
-  font-family: var(--font-display);
-  font-size: 14px;
-  letter-spacing: -0.01em;
-  color: #f4f4ed;
+/* The state, boxed in the sign's own enamel rule (the stub's boxed name,
+   `.archive-ticket-sign`): outlined, no fill and no lime — the view's one
+   lime stays in the controls — so it is prominent without glare. Bone caps
+   in a bone rule on the tab's dark ground (12:1 and more). */
+.archive-dock__tab-state {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #F4F4ED;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1.5px rgba(244, 244, 237, 0.86);
+  text-box: trim-both cap alphabetic;
+}
+@supports not (text-box: trim-both cap alphabetic) {
+  .archive-dock__tab-state { padding-top: 1px; }
 }
 /* The chapter's rail: its name and lede down the right of the page, on a
    soft ground of their own (Patterson's rule for type on a map: never
@@ -3981,34 +4021,10 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   transform-origin: 0 0;
   transform: var(--tear-tf, none);
 }
-/* The pad: the tickets still bound under this one.
-   Each sheet is the NEXT chapters' stock (ArchiveChapter writes it inline
-   from `padStocks`), so the next ticket's colour already shows as a sliver
-   under this one; the olive here is only the fallback. */
-.archive-ticket-pad {
-  position: absolute;
-  top: 100%;
-  left: 9px;
-  right: 9px;
-  height: 14px;
-  z-index: 1;
-  pointer-events: none;
-}
-.archive-ticket-pad i {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 10px;
-  display: block;
-  background: #333a2b;
-  box-shadow: inset 0 1px 0 rgba(244, 244, 237, 0.12), 0 1px 0 rgba(8, 10, 7, 0.55);
-}
-/* A press-drag that starts on the ticket's print, its pad or the nav lit a
-   selection flashing across the page under the hand (684 characters from the
-   pad at 1024). None of it is prose to copy; the ledes and captions stay
-   selectable. */
+/* A press-drag that starts on the ticket's print or the nav lit a
+   selection flashing across the page under the hand. None of it is prose
+   to copy; the ledes and captions stay selectable. */
 .archive-ticket-stub,
-.archive-ticket-pad,
 [data-site-nav] {
   -webkit-user-select: none;
   user-select: none;

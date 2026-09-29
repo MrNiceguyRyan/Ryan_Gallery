@@ -21,10 +21,11 @@ import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin, type Plat
 import type { AtlasFlight, RouteStop } from './RouteAtlas';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
 import { storyFrames } from '../../lib/storyPlan';
-import { TICKET_STOCK, stockPaper } from '../../lib/ticketStock';
+import { TICKET_STOCK } from '../../lib/ticketStock';
 import { activeChapters, chapterSections } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
-import { ARRIVAL, coverDock, coverOf, coverRatioOf } from '../../lib/coverDock';
+import { ARRIVAL, archiveTicketH, coverDock, coverOf, coverRatioOf } from '../../lib/coverDock';
+import { signLines } from '../../lib/routeShield';
 import { DUR, DUR_MS, EASE, bezierFn } from '../../lib/motion';
 import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardingPass';
 import { NOTES_LIVE } from '../../lib/notesNav';
@@ -323,26 +324,30 @@ export default function HomePage({ collections }: Props) {
     const covers = orderedCities.map((city) => city.coverImageUrl ?? city.photos?.[0]?.imageUrl ?? '');
     return covers.map((_, index) => [covers[index - 1], covers[index + 1]].filter(Boolean));
   }, [orderedCities]);
-  // The pad under each ticket: the card stock of the (up to three) tickets
-  // after it, nearest first.
-  const chapterPadStocks = useMemo(
-    () => orderedCities.map((_, index) =>
-      orderedCities.slice(index + 1, index + 4).map((city) => stockPaper(city.slug)),
-    ),
-    [orderedCities],
-  );
-  // A region of two or more places is headed "REGION FLORIDA · 2 PLACES · 32
-  // FRAMES" at its first place (owner, 2026-09-28: 保留): a tab on its cover.
-  const regionTabs = useMemo(() => {
-    const tabs = new Map<string, { region: string; places: number; frames: number }>();
+  // Every cover with a region carries its state on a tab, the name boxed
+  // (owner, 2026-09-29: 封面的州名可以框起来，我想要这个更醒目一点); the first
+  // place of a region of two or more keeps the region's figures on it,
+  // "REGION [FLORIDA] 2 PLACES · 32 FRAMES" (owner, 2026-09-28: 保留).
+  const stateTabs = useMemo(() => {
+    const tabs = new Map<string, { state: string; places?: number; frames?: number }>();
     sections.forEach((section) => {
-      const first = section.cities[0];
-      if (section.showHeader && section.region && first) {
-        tabs.set(first._id, { region: section.region, places: section.cities.length, frames: section.frameCount });
-      }
+      section.cities.forEach((city, index) => {
+        const state = section.region ?? city.region?.trim();
+        if (!state) return;
+        tabs.set(city._id, index === 0 && section.showHeader
+          ? { state, places: section.cities.length, frames: section.frameCount }
+          : { state });
+      });
     });
     return tabs;
   }, [sections]);
+  // The ticket a cover folds into on a switch is one height for the whole
+  // archive: its tallest sign's (src/lib/coverDock.ts, TICKET). The desktop
+  // reads it off the dock's plan; the phone's cards, from here.
+  const ticketHeight = useMemo(
+    () => archiveTicketH(orderedCities.map((city) => ({ name: city.name.trim(), lines: signLines(city.name) }))),
+    [orderedCities],
+  );
   const routeStops = useMemo<RouteStop[]>(
     () =>
       orderedCities.flatMap((city) => {
@@ -376,11 +381,11 @@ export default function HomePage({ collections }: Props) {
               locationLabel,
               coordinateLabel: routeCoordinateLabel(coordinates),
               coverRatio: coverRatioOf(city.coverImageUrl ?? city.photos?.[0]?.imageUrl) ?? undefined,
-              dockTab: regionTabs.has(city._id),
+              dockTab: stateTabs.has(city._id),
             }]
           : [];
       }),
-    [orderedCities, regionTabs],
+    [orderedCities, stateTabs],
   );
   // The route's first stop: the boarding pass's destination and date
   // (data-driven: Miami today, Washington once the owner adds it as stop 01).
@@ -1274,8 +1279,8 @@ export default function HomePage({ collections }: Props) {
   const [dockAt, setDockAt] = useState<string | null>(null);
   // A ticket arriving from the open map (src/lib/coverDock.ts, "The
   // arrival") is up from take-off but seen only as the camera settles: its
-  // rail's name and lede come in with it, this many ms after the take-off
-  // (null: the rail's own beat).
+  // rail's name and lede come in as it opens, this many ms after the
+  // take-off (null: the rail's own beat).
   const [railDelay, setRailDelay] = useState<number | null>(null);
   const dockAtSeenRef = useRef<string | null>(null);
   useEffect(() => coverDock.subscribe((frame) => {
@@ -1283,7 +1288,7 @@ export default function HomePage({ collections }: Props) {
     if (id !== dockAtSeenRef.current) {
       dockAtSeenRef.current = id;
       const arrive = frame.arrive;
-      setRailDelay(id && arrive && arrive.id === id ? Math.max(0, Math.round(arrive.at - performance.now())) : null);
+      setRailDelay(id && arrive && arrive.id === id ? Math.max(0, Math.round(arrive.expandAt - performance.now())) : null);
     }
     setDockAt((was) => (was === id ? was : id));
   }), []);
@@ -1457,7 +1462,6 @@ export default function HomePage({ collections }: Props) {
       index={index}
       chapterIndex={index}
       chapterTotal={orderedCities.length}
-      padStocks={chapterPadStocks[index]}
       preloadImageUrls={chapterPreloadUrls[index]}
       // Any place is a click away: the neighbours and the place pointed at
       // are fetched first (a switch also waits a moment for its print to
@@ -1469,7 +1473,8 @@ export default function HomePage({ collections }: Props) {
       desktopMotion
       phone={!desktopLayout}
       dockHost={dockHost}
-      regionTab={regionTabs.get(city._id) ?? null}
+      stateTab={stateTabs.get(city._id) ?? null}
+      ticketHeight={ticketHeight}
       // The stub's "Next stop": the next place, as Next does (no tear).
       onNext={stepNext}
       stubAwaited={stubAwaited === city._id}

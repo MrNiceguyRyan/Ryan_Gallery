@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import {
   FLAP,
+  type FlapTiming,
   type ShieldForm,
   codePlan,
   flapGlyph,
@@ -64,7 +65,8 @@ interface FlapColumn {
  * the stop number counting through the real stops between, its last step
  * landing with the name's last character.
  */
-function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): FlapColumn[] {
+function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>, timing: FlapTiming = {}): FlapColumn[] {
+  const delay = timing.delay ?? FLAP.delay;
   const words = Array.from(root.querySelectorAll<HTMLElement>('[data-flap]')).map((word) => {
     const role = word.dataset.flap ?? '';
     return {
@@ -75,10 +77,10 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       leaving: (from[role] ?? '').replace(/\s+/g, '').toUpperCase(),
     };
   });
-  let nameEnd: number = FLAP.delay;
+  let nameEnd: number = delay;
   words.forEach((word) => {
     if (word.role !== 'name') return;
-    const plan = flapPlan(word.chars.length);
+    const plan = flapPlan(word.chars.length, timing);
     if (plan.length) nameEnd = Math.max(nameEnd, plan[plan.length - 1].land);
   });
   const columns: FlapColumn[] = [];
@@ -94,7 +96,7 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
     if (word.role === 'num') {
       word.chars.forEach((el, index) => column(
         el,
-        (t) => flapNumber(finalWord, word.leaving, t, FLAP.delay, nameEnd)[index] ?? (el.dataset.flapC ?? ''),
+        (t) => flapNumber(finalWord, word.leaving, t, delay, nameEnd)[index] ?? (el.dataset.flapC ?? ''),
         nameEnd,
       ));
       return;
@@ -106,7 +108,7 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       // stock and the outline are the ticket's own print), and the old
       // state's letters on it — FL on Arizona's outline — read as a misprint.
       const still = !word.leaving || word.leaving === finalWord;
-      const plan = codePlan(word.chars.length);
+      const plan = codePlan(word.chars.length, delay);
       word.chars.forEach((el, index) => {
         const final = el.dataset.flapC ?? '';
         column(el, still ? () => final : (t) => flapGlyph(final, '', plan[index], t, index + wordIndex * 5), still ? 0 : plan[index].land);
@@ -128,16 +130,16 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       columns.push({
         el: was,
         final: '',
-        at: (t) => (t < FLAP.delay ? word.text : ''),
-        land: FLAP.delay,
+        at: (t) => (t < delay ? word.text : ''),
+        land: delay,
         shown: was.textContent || null,
         was: true,
       });
     }
-    const plan = flapPlan(word.chars.length);
+    const plan = flapPlan(word.chars.length, timing);
     word.chars.forEach((el, index) => {
       const final = el.dataset.flapC ?? '';
-      const step = nameStep(plan[index]);
+      const step = nameStep(plan[index], delay);
       column(el, (t) => flapGlyph(final, '', step, t, index + wordIndex * 5), step.land);
     });
   });
@@ -173,10 +175,11 @@ export function primeFlap(root: HTMLElement, from: Partial<Record<string, string
  * Turns every FlapWord under `root` into place from the words it is leaving
  * (`from[role]`), on one rAF loop that runs only for the flap and writes a
  * character only when it changes. Takes over a primed board where it
- * stands. Returns a stop that puts every word straight back.
+ * stands. `timing` times it to its moment (a switch's transit: at once, and
+ * down inside it). Returns a stop that puts every word straight back.
  */
-export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}): () => void {
-  const columns = flapColumns(root, from);
+export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}, timing: FlapTiming = {}): () => void {
+  const columns = flapColumns(root, from, timing);
   if (!columns.length) return () => {};
   const end = Math.max(...columns.map((column) => column.land));
   const start = performance.now();

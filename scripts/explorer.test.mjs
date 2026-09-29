@@ -97,13 +97,16 @@ test('a switch can be interrupted: a new choice mid-turn turns on from there', (
   // Mapbox's own from the live camera; its moveend is not taken for the new one.
   assert.match(atlas, /const cutOff = flying;\s+if \(cutOff\) \{\s+flying = null;\s+clearPlantTimers\(\);\s+onArriveRef\.current\?\.\(cutOff\.token, false\);/);
   assert.match(atlas, /token != null && token !== flying\.token/);
-  // The pin glides on from where the ticket is (never snaps), and the cover
-  // shown becomes the one leaving.
-  assert.match(atlas, /pinRef\.current = \{ from: dockWrittenRef\.current \?\? to, to, t0: performance\.now\(\), ms: durationMs, ease: easing \};/);
-  assert.match(atlas, /dockSwitchRef\.current = \{ key: switchKeyRef\.current, from: shown, to: destId \};/);
+  // The ticket glides on from where it lies (never snaps); the cover it
+  // carries by phase (src/lib/coverDock.ts, "The switch"), never stacking;
+  // the same place with nothing under way is pinned back to its dock.
+  assert.match(atlas, /pinRef\.current = \{ from: written \?\? to, to, t0: now, ms: durationMs, ease: easing \};/);
+  assert.match(atlas, /const lies = glideRef\.current\s+\? glideRef\.current\.at\(now\)/);
+  assert.match(atlas, /from: carrier,\s+to: destId,\s+mode,/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
-  // An arrival cut short prints its photograph whole before it leaves.
-  assert.match(chapter, /if \(was\?\.role === 'in' && was\.develop\) \{\s+was\.develop\.finish\(\);/);
+  // An arriving ticket that becomes the carrier holds (in transit) or folds
+  // back from where it is (opening).
+  assert.match(chapter, /\/\/ It was arriving: it carries now\./);
 });
 
 test('the cover: its stub tears off, whole, then the story opens', () => {
@@ -194,7 +197,19 @@ test('the phone\'s card fits the screen, its type legible, the place above it', 
       assert.ok(card.photoH * card.scale <= vh * PHONE_CARD.shareH + 1);
       const focal = phoneFocalY(vh, card.h);
       assert.ok(focal > 88 && focal < vh - PHONE_CARD.controls - card.h, `${vw}×${vh} @${ratio}: the place stands clear of the card`);
+      // Its height counts the state's tab on its top edge.
+      assert.equal(card.h, Math.ceil(card.photoH * card.scale + PHONE_CARD.below) + Math.ceil(PHONE_CARD.tab * card.scale));
+      // The boxed state is legible on the card (15px at its scale).
+      assert.ok(15 * card.scale >= 10.5);
     }
+  }
+  assert.equal(PHONE_CARD.tab, 30);
+  // The stub the entrance lands on does not move (the card's foot stays).
+  for (const ratio of [1.5, 0.667]) {
+    const rect = phoneStubRect(390, 844, ratio);
+    const card = phoneCard(390, 844, ratio);
+    assert.ok(Math.abs(rect.y + rect.h - (844 - PHONE_CARD.dockBottom - PHONE_CARD.below)) < 0.01);
+    assert.ok(Math.abs(rect.h - card.photoH * card.scale) < 0.01);
   }
 });
 
@@ -513,10 +528,14 @@ test('the stub hand-off: a derived target, a landing event, a stub that waits', 
   assert.match(home, /if \(ask\.stubHandoff && explorerRef\.current\.phase === 'globe'\) setStubAwaited\(stopOne\(placeIdsRef\.current\)\);/);
   assert.match(home, /stubAwaited=\{stubAwaited === city\._id\}/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
-  assert.match(chapter, /const landed = \(\) => plate\.removeAttribute\('data-stub-awaited'\);\s+window\.addEventListener\(STUB_LANDED_EVENT, landed\);/);
+  // The tip's pop is set up (held in, from the landing) before the stub
+  // shows, so no frame has the tip out while the stub is away.
+  assert.match(chapter, /const landed = \(\) => \{\s+if \(!reduce\) popTip\(null, performance\.now\(\)\);\s+plate\.removeAttribute\('data-stub-awaited'\);\s+\};\s+window\.addEventListener\(STUB_LANDED_EVENT, landed\);/);
   // Everything printed on the stub waits (its live "Next stop" says
-  // `visibility: visible` of its own, so the seat alone is not enough).
-  assert.match(css, /\.archive-plate\[data-stub-awaited\] :is\(\.archive-ticket-stub-seat, \.archive-ticket-stub-seat \*, \.archive-plate__caret\[data-half='stub'\]\) \{\s*visibility: hidden;/);
+  // `visibility: visible` of its own, so the seat alone is not enough), and
+  // the tip, whichever half it is cut from.
+  assert.match(css, /\.archive-plate\[data-stub-awaited\] :is\(\.archive-ticket-stub-seat, \.archive-ticket-stub-seat \*\) \{\s*visibility: hidden;/);
+  assert.match(css, /\.archive-plate\[data-stub-awaited\] \.archive-plate__caret \{\s*visibility: hidden;/);
 });
 test('the map holds its tone while it moves, and its veil never dips', () => {
   const css = source('src/styles/global.css');
