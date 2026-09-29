@@ -88,7 +88,8 @@ import {
   planFlight,
   planSwitch,
 } from '../../lib/explorerCamera';
-import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, entryLandsAt, phoneFocalY, phoneStubRect, setEntryLandsAt } from '../../lib/explorer';
+import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, PHONE_CARD, entryLandsAt, phoneFocalY, phoneStubRect, setEntryLandsAt } from '../../lib/explorer';
+import { drifted as viewDrifted, holds, mapView, offerOf, overLimb, phoneView, plateAt } from '../../lib/explorerDrift';
 
 // A switch's turn and the covers' glide with it: the house's `turn` curve
 // (11 mois sans toi(t)'s ENTER), as a function for Mapbox and the pin.
@@ -168,6 +169,13 @@ interface Props {
   onSelect?: (chapterId: string, options?: AtlasNavigateOptions) => void;
   /** The empty map was clicked: nothing in hand. */
   onDismiss?: () => void;
+  /** The reader's own drag or zoom has taken the place in hand out of what
+   *  they see (src/lib/explorerDrift.ts): let it go. Said on every such
+   *  move until it is let go. */
+  onLeave?: () => void;
+  /** Whether the view has drifted from the place in hand (said on a
+   *  change): the Recentre control shows. */
+  onDrift?: (drifted: boolean) => void;
   /** A camera move is over (`arrived` false: the reader took the map). */
   onArrive?: (token: number, arrived: boolean) => void;
   /** Create the map now, not when the atlas nears the viewport (HomePage
@@ -696,6 +704,8 @@ export default function RouteAtlas({
   onEngage,
   onSelect,
   onDismiss,
+  onLeave,
+  onDrift,
   onArrive,
   eager = false,
   holdReveal = false,
@@ -770,12 +780,22 @@ export default function RouteAtlas({
   onArriveRef.current = onArrive;
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
+  const onDriftRef = useRef(onDrift);
+  onDriftRef.current = onDrift;
   // The move asked for last, the last one the camera has taken up, and the
   // camera's taker (set by the camera effect while it runs; a move asked for
   // while it does not is taken up when it next starts).
   const flightRef = useRef<AtlasFlight | null>(null);
   const answeredFlightRef = useRef<number | null>(null);
   const flightHandlerRef = useRef<((next: AtlasFlight) => void) | null>(null);
+  // The move asked for as of the latest render (before its effect has taken
+  // it up): a reader's move read in between — the tail of a drag's inertia
+  // in the frame after a Recentre's click — must not let go of the place the
+  // move is about to fly to.
+  const askedFlightRef = useRef<AtlasFlight | null>(flight);
+  askedFlightRef.current = flight;
   // Mid-entry, the place the entry is going down onto (the explorer's
   // current then: stop 01, or the place asked for).
   const entryIndexRef = useRef(Math.max(0, currentIndex));
@@ -1781,6 +1801,67 @@ export default function RouteAtlas({
     // Where a place stands on the screen at rest (the viewfinder's readouts
     // hang off it until the reader moves the map).
     const planFocal = (index: number) => (!mobile && dockPlanRef.current?.[chapterRoute[index]?.stop.id ?? '']?.point) || focalPoint;
+    // ── The reader's view: held, drifted, let go (src/lib/explorerDrift.ts) ──
+    // What the reader sees of the map: the covers' stage on the desktop (clear
+    // of the nav, the rail and the controls), the band above the card (or
+    // above the controls, with no card up) on a phone. DERIVED from the
+    // viewport, as the dock's plan is.
+    const readerView = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      if (!mobile) return mapView(vw, vh, railBox(vw).left);
+      const cardH = dockAtRef.current ? phoneCardH : 0;
+      return phoneView(vw, vh, vh - PHONE_CARD.controls - cardH - 12);
+    };
+    let driftTold: boolean | null = null;
+    const tellDrift = (value: boolean) => {
+      if (value === driftTold) return;
+      driftTold = value;
+      onDriftRef.current?.(value);
+    };
+    // On every move the READER makes (never in a flight of ours): the place
+    // in hand's foot, from the map's own projection, against the hold
+    // region round the point the camera set it on.
+    const readDrift = () => {
+      if (!freeRef.current || flying) return;
+      const asked = askedFlightRef.current;
+      if (asked && asked.token !== answeredFlightRef.current) return;
+      const held = currentRef.current;
+      const index = indexOf(held);
+      if (!held || index < 0) {
+        tellDrift(false);
+        return;
+      }
+      const coordinates = chapterRoute[index].stop.coordinates;
+      const projected = map.project(coordinates);
+      const point = { x: projected.x - bleed, y: projected.y - bleed };
+      const centre = map.getCenter();
+      const zoom = map.getZoom();
+      const dock = planFocal(index);
+      const behind = overLimb(coordinates, [centre.lng, centre.lat], zoom, 1.5 * canvasSize.height);
+      // The ticket's box at this foot, from the plan (never read off the
+      // page); the phone's card does not ride the map.
+      const planned = !mobile ? dockPlanRef.current?.[held] : null;
+      const plate = planned ? plateAt(point, planned.offset, planned.photoW + DOCK.stub, planned.photoH) : null;
+      if (!holds({ point, view: readerView(), plate, behind })) {
+        tellDrift(true);
+        onLeaveRef.current?.();
+        return;
+      }
+      tellDrift(viewDrifted(point, dock, zoom, restZoom(index)));
+    };
+    // The place offered (nothing in hand, the map at rest near it): its
+    // shield lifts and prints its name, as when pointed at (global.css
+    // `[data-offered]`), written on the button, no re-render.
+    let offered: string | null = null;
+    const markOffered = (id: string | null) => {
+      if (id === offered) return;
+      offered = id;
+      routeAtlasRef.current?.querySelectorAll<HTMLElement>('[data-af-stop]').forEach((element) => {
+        if (element.dataset.afStop === id) element.setAttribute('data-offered', '');
+        else element.removeAttribute('data-offered');
+      });
+    };
     // ── Reduced motion: the still globe (see StillPose) ──
     // The pose the canvas shows, and the one the entry asks for; they differ
     // only while a swap runs. The swap never moves anything across the
@@ -2063,8 +2144,19 @@ export default function RouteAtlas({
       setDockAt(askFor());
       if (done.entry) entryLanded(done.index);
       onArriveRef.current?.(done.token, arrived);
+      readDrift();
     };
     const flyTo = (next: AtlasFlight) => {
+      // The reader's own move still running (a drag's inertia, a
+      // double-click's zoom) ends here, before this flight is on: Mapbox
+      // ends it synchronously inside flyTo with that move's event data (no
+      // token), which read as this flight's own end and landed it short —
+      // a Recentre or a switch just after a flick stopped a few frames in.
+      if (next.kind !== 'release' && !flying && map.isMoving()) map.stop();
+      // Our own move: nothing has drifted, nothing is offered (the reader's
+      // moves are read again once it is down: `readDrift`).
+      markOffered(null);
+      if (next.kind !== 'release') tellDrift(false);
       if (next.kind === 'release') {
         // Nothing in hand: its cover fades from the map (nothing tears), its
         // shield steps back among the others, the viewfinder has nothing to
@@ -2074,6 +2166,9 @@ export default function RouteAtlas({
         setDockAt(null);
         clearPlantTimers();
         markInboundStop(null);
+        // Its shield steps back among the others and its labels clear (the
+        // tick strip's "01 · MIAMI", the tallest shield): nothing is in hand.
+        markCurrentStop(null);
         plant(null);
         setCameraState('rest');
         onArriveRef.current?.(next.token, true);
@@ -2278,8 +2373,28 @@ export default function RouteAtlas({
     let dismissTimer = 0;
     const onFreeMove = () => {
       if (!freeRef.current) return;
+      readDrift();
       setDockAt(askFor());
       schedule();
+    };
+    // Settled with nothing in hand: the place near the view's middle is
+    // offered (its shield lifts, its name prints); any move takes it back.
+    const onReaderMoveStart = () => {
+      if (!flying) markOffered(null);
+    };
+    const onReaderMoveEnd = () => {
+      if (!freeRef.current || flying || currentRef.current) return;
+      const view = readerView();
+      const centre = map.getCenter();
+      const zoom = map.getZoom();
+      const points: Record<string, Point> = {};
+      const coordinates: Record<string, GeoCoordinate> = {};
+      shieldPlaces.forEach((place) => {
+        const p = map.project(place.coordinates);
+        points[place.id] = { x: p.x - bleed, y: p.y - bleed };
+        coordinates[place.id] = place.coordinates;
+      });
+      markOffered(offerOf(points, view, (id) => overLimb(coordinates[id], [centre.lng, centre.lat], zoom, 1.5 * canvasSize.height)));
     };
     const onClick = (event: { originalEvent?: Event }) => {
       if (!freeRef.current || flying) return;
@@ -2307,6 +2422,8 @@ export default function RouteAtlas({
       });
     };
     map.on('move', onFreeMove);
+    map.on('movestart', onReaderMoveStart);
+    map.on('moveend', onReaderMoveEnd);
     map.on('click', onClick);
     map.on('dblclick', onDoubleClick);
 
@@ -2573,6 +2690,8 @@ export default function RouteAtlas({
       map.off('moveend', onMoveEnd);
       map.off('move', onFlightMove);
       map.off('move', onFreeMove);
+      map.off('movestart', onReaderMoveStart);
+      map.off('moveend', onReaderMoveEnd);
       map.off('click', onClick);
       map.off('dblclick', onDoubleClick);
       if (flying) {

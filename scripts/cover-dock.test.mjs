@@ -377,7 +377,7 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(chapter, /dock\.style\.transform = `translate3d\(\$\{point\.x\}px, \$\{point\.y\}px, 0\)`/);
   assert.match(chapter, /data-cover-for=\{id\}/);
   assert.match(chapter, /createPortal\(/);
-  assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host" \/>/);
+  assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host"( data-let-go=\{[^}]*\})? \/>/);
   // The place in hand's rail shows with its cover (the dock's frame).
   assert.match(home, /coverDock\.subscribe\(\(frame\) => \{/);
   assert.match(home, /railShown=\{dockAt === city\._id\}/);
