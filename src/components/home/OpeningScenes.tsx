@@ -150,6 +150,13 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
             <Picture picture={pictures[0]} className="of-pic--life" />
           </span>
         )}
+        {id === 'deep' && (
+          // A terminal's status line: the screen is a machine, not a field
+          // of colour (PROPOSED copy).
+          <span className="of-deep__status of-mono" aria-hidden="true">
+            READY
+          </span>
+        )}
         {id === 'beige' && (
           <span className="of-beige__screen" aria-hidden="true">
             <span className="of-beige__bar">
@@ -281,8 +288,12 @@ function Giant({ g, s }: { g: Scene['giants'][number]; s: Scene }) {
           key={k.step}
           className={`of-giant__copy font-serif ${face}`}
           aria-hidden="true"
-          // A 2D translate: the copies are drawn into their word's own layer.
-          style={vars({ opacity: k.opacity, transform: `translate(${(-dx * step * k.step).toFixed(1)}px, ${(-dy * step * k.step).toFixed(1)}px)` })}
+          // A 2D translate: the copies are drawn into their word's own layer
+          // (scaled with the drift by the layout's --drift-k).
+          style={vars({
+            opacity: k.opacity,
+            transform: `translate(calc(var(--drift-k, 1) * ${(-dx * step * k.step).toFixed(1)}px), calc(var(--drift-k, 1) * ${(-dy * step * k.step).toFixed(1)}px))`,
+          })}
         >
           {g.text}
         </span>
@@ -405,7 +416,7 @@ function Dictionary() {
       <Row side="r" className="of-dict__def font-serif">
         {c.row[1]}
       </Row>
-      <div className="of-dict__below font-serif">
+      <div className="of-dict__below font-serif" data-clear="[data-base]">
         <p>{c.below[0]}</p>
         {c.below.slice(1).map((x) => (
           <Entry key={x} text={x} />
@@ -432,7 +443,7 @@ function Catalogue() {
       <Row side="r" className="of-card__row of-mono">
         {c.row[1]}
       </Row>
-      <div className="of-card__below of-mono">
+      <div className="of-card__below of-mono" data-clear="[data-base]">
         {c.below.map((x) => (
           <p key={x}>{x}</p>
         ))}
@@ -551,7 +562,9 @@ function Ticket() {
           </span>
         ))}
       </div>
-      <p className="of-ticket__fine font-ui">{c.fine}</p>
+      <p className="of-ticket__fine font-ui" data-clear=".of-ticket__route">
+        {c.fine}
+      </p>
     </>
   );
 }

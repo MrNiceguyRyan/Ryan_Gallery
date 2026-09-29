@@ -27,10 +27,14 @@
   /* The screen's short side (the giant words and the leader are set on it). */
   --of-short: min(100vw, 100vh);
   /* The typed line of act 1: where it starts and its size (the same on
-     every machine). */
-  --line-x: 12vw;
+     every machine). The finished line is centred on the frame (twenty
+     cells of the monospace, 0.602 em each). */
+  --line-x: max(16px, calc(50vw - 10 * 0.602 * var(--line-size)));
   --line-y: 52vh;
   --line-size: clamp(22px, 3.4vw, 60px);
+  /* The giant words' drift, as a share of the data's (DRIFT_SCALE in
+     src/lib/openingFilm.ts): their blur copies step by it too. */
+  --drift-k: 1;
   /* Grain: a small still tile (a bitmap, decoded once), moved every frame by
      the island while its act is on screen. */
   --of-noise: url("../assets/film/grain-ink.png");
@@ -49,9 +53,9 @@
 }
 @media (max-width: 1023px) {
   .opening {
-    --line-x: max(20px, 6vw);
     --line-y: 50vh;
     --line-size: clamp(16px, 6.3vw, 30px);
+    --drift-k: 0.6;
   }
 }
 .of-mono { font-family: var(--of-mono); }
@@ -232,6 +236,10 @@ html[data-film-lock] body { overflow: clip !important; }
 @keyframes of-blink {
   50% { opacity: 0; }
 }
+/* Once the film's clock runs, its blink is the island's (a sheet blink left
+   running under it showed a false blink in held frames and kept the
+   compositor asking for frames). */
+.opening[data-clock] .of-cursor__ink { animation: none; }
 /* A thin caret (a word processor's), where a machine has one. */
 .of-mat--deep .of-cursor__ink,
 .of-mat--pill .of-cursor__ink,
@@ -310,6 +318,22 @@ html[data-film-lock] body { overflow: clip !important; }
   text-shadow: 0 0 14px rgba(160, 196, 222, 0.28);
 }
 .of-mat--deep .of-cursor__ink { background: #cad9e4; }
+/* Its status line: a terminal's, in the phosphor, small, at the screen's
+   top left, over a hairline. */
+.of-deep__status {
+  position: absolute;
+  left: max(20px, 5vw);
+  right: max(20px, 5vw);
+  top: max(22px, 6vh);
+  padding-bottom: 0.7em;
+  border-bottom: 1px solid rgba(202, 217, 228, 0.16);
+  font-size: calc(var(--line-size) * 0.35);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: rgba(202, 217, 228, 0.72);
+  text-shadow: 0 0 8px rgba(160, 196, 222, 0.35);
+}
 
 /* ③ A photocopy on maroon: the maroon ticket stock as the paper, each
    line in a toner bar with the letters knocked out of it, all with the
@@ -589,8 +613,30 @@ html[data-film-lock] body { overflow: clip !important; }
   stroke-linejoin: round;
 }
 
-/* ⑧ Typewriter paper: bone, a fibre, and the ribbon's uneven strike. */
-.of-mat--paper .of-mat__ground { background-color: #f4f4ed; }
+/* ⑧ Typewriter paper: a warmer, older stock than the bare page, the
+   machine's platen (olive, its rollers) across the head, a fibre, and the
+   ribbon's uneven strike, struck hard. */
+.of-mat--paper .of-mat__ground { background-color: #ece6d6; }
+.of-mat--paper .of-mat__over::before,
+.of-mat--paper .of-mat__over::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.of-mat--paper .of-mat__over::before {
+  top: 0;
+  height: 16%;
+  background: linear-gradient(180deg, #1c1f17 0%, #282c20 48%, #343a2b 80%, #1f2219 100%);
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.4), 0 8px 22px rgba(23, 27, 21, 0.26);
+}
+.of-mat--paper .of-mat__over::after {
+  top: calc(16% - 1.3vh);
+  height: 2.6vh;
+  background:
+    radial-gradient(3.2vw 1.3vh at 28% 50%, #4a5039 0 55%, #1c1f17 60%, transparent 66%),
+    radial-gradient(3.2vw 1.3vh at 72% 50%, #4a5039 0 55%, #1c1f17 60%, transparent 66%);
+}
 .of-mat--paper .of-mat__ground::before {
   content: '';
   position: absolute;
@@ -605,7 +651,10 @@ html[data-film-lock] body { overflow: clip !important; }
   inset: 0;
   background: radial-gradient(ellipse 85% 80% at 50% 50%, transparent 60%, rgba(23, 27, 21, 0.16) 100%);
 }
-.of-mat--paper .of-typed { color: #171b15; }
+.of-mat--paper .of-typed {
+  color: #171b15;
+  font-weight: 700;
+}
 .of-paper__word {
   position: relative;
   display: inline-block;
@@ -958,6 +1007,7 @@ html[data-film-lock] body { overflow: clip !important; }
 .of-dict__above b,
 .of-dict__below b { font-weight: 700; }
 .of-dict__def {
+  max-width: min(34ch, calc(100% - var(--br, 70vw) - 32px));
   font-size: clamp(14px, 1.05vw, 19px);
   white-space: normal;
   line-height: 1.4;
@@ -1798,6 +1848,13 @@ html[data-film-lock] body { overflow: clip !important; }
     width: 84vw;
     transform: none;
   }
+  /* On a short phone the plate gives way (its own ratio kept): its caption
+     clears the kicker, and the kicker the block. */
+  .of-pic--plate {
+    width: auto;
+    max-width: 100%;
+    height: min(calc(84vw / var(--ratio, 1.5)), calc(var(--bt, 40vh) - 13vh - 66px));
+  }
   .of-mag__above {
     left: 8vw;
     right: 8vw;
@@ -1861,10 +1918,12 @@ html[data-film-lock] body { overflow: clip !important; }
     top: calc(var(--bt, 40vh) - 20vh);
     bottom: calc(100% - var(--bb, 60vh) - 22vh);
   }
+  /* The perforation between the stub's line and the head's (never through
+     the head's words on a short phone). */
   .of-ticket__perf {
     left: 0;
     right: 0;
-    top: 18%;
+    top: calc(5vh + 6px);
     bottom: auto;
     border-left: 0;
     border-top: 2px dashed rgba(23, 27, 21, 0.35);
@@ -2054,9 +2113,10 @@ html[data-film-lock] body { overflow: clip !important; }
 }
 .of-key__word.of-face--f900,
 .of-key__glyphs.of-face--f900 { letter-spacing: -0.01em; }
+/* The typewriter's word, struck as hard as the paper's line. */
 .of-key__word--from,
 .of-key__glyphs--from {
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0;
 }
 /* A word as its letters (a morph): each letter a box on its pen, its

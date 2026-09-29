@@ -8,6 +8,7 @@ import {
   BURN_RAMP,
   BURN_STOPS,
   DARK_TYPED,
+  DRIFT_SCALE,
   DRIFT_VEC,
   FF_RATE,
   FF_TAIL,
@@ -47,6 +48,7 @@ import {
   flightFor,
   flightPath,
   frameAt,
+  giantCap,
   globeReleaseAt,
   glyphFit,
   keyBox,
@@ -714,12 +716,60 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const cy = ANCHOR.y * H;
       const pad = cap * ANCHOR.pad;
 
+      // A word beside the anchor that would run off the frame (a narrow
+      // desktop: the block is wide, the margin short) is set a little
+      // smaller — at most by a quarter — and, past that, wraps inside the
+      // frame. Never clipped.
+      const EDGE = 16;
+      qa<HTMLElement>('[data-cut] .of-row, [data-cut] .of-side').forEach((el) => {
+        el.style.fontSize = '';
+        el.style.whiteSpace = '';
+        el.style.maxWidth = '';
+        el.style.removeProperty('text-wrap');
+        // (A line that wraps already keeps inside its measure.) Unclamped,
+        // the box is the line's own width.
+        if (getComputedStyle(el).whiteSpace !== 'nowrap') return;
+        el.style.maxWidth = 'none';
+        const w = el.offsetWidth;
+        if (!w) return;
+        const over = Math.max(0, el.offsetLeft + w - (W - EDGE), EDGE - el.offsetLeft);
+        if (!over) return;
+        const size = parseFloat(getComputedStyle(el).fontSize) || 16;
+        el.style.fontSize = px(size * Math.max(0.74, (w - over) / w));
+        const l = el.offsetLeft;
+        const r = l + el.offsetWidth;
+        if (r > W - EDGE || l < EDGE) {
+          el.style.whiteSpace = 'normal';
+          el.style.setProperty('text-wrap', 'balance');
+          el.style.maxWidth = px(r > W - EDGE ? W - EDGE - l : r - EDGE);
+        }
+      });
+
       // The words on the anchor's line sit on its baseline (where the sheet
       // says so: on the phone they go over and under it instead).
       qa<HTMLElement>('[data-cut] [data-base]').forEach((el) => {
         el.style.top = '';
         if (getComputedStyle(el).getPropertyValue('--base-align').trim() !== '1') return;
         el.style.top = px(anchorBase - baselineIn(el));
+      });
+
+      // Print that must start under something on its sheet (the senses
+      // under a wrapped etymology, a ticket's fine print under its route):
+      // pushed down to clear it where a small frame would set one over the
+      // other ([data-clear]: what to clear, in its cut).
+      qa<HTMLElement>('[data-cut] [data-clear]').forEach((el) => {
+        el.style.top = '';
+        el.style.bottom = '';
+        const cutEl = el.closest<HTMLElement>('[data-cut]');
+        if (!cutEl || !el.offsetWidth) return;
+        const l = el.offsetLeft;
+        const r = l + el.offsetWidth;
+        const refs = qa<HTMLElement>(el.dataset.clear!, cutEl).filter((ref) => ref !== el && ref.offsetWidth > 0 && ref.offsetLeft < r && l < ref.offsetLeft + ref.offsetWidth);
+        if (!refs.length) return;
+        const need = Math.max(...refs.map((ref) => ref.offsetTop + ref.offsetHeight)) + 0.6 * (parseFloat(getComputedStyle(el).fontSize) || 12);
+        if (el.offsetTop >= need) return;
+        el.style.top = px(need);
+        el.style.bottom = 'auto';
       });
 
       // Act 2: key 0 — the typewriter's word (as typed, then struck in
@@ -779,13 +829,14 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           const word = q('[data-giant-word]', g)!;
           g.style.fontSize = '100px';
           const ink = inkOf(word, spec.text);
-          const fontPx = (spec.cap * short) / Math.max(0.01, ink.cap / 100);
+          const capShare = giantCap(spec, plan.layout);
+          const fontPx = (capShare * short) / Math.max(0.01, ink.cap / 100);
           g.style.fontSize = px(fontPx);
           const w = word.offsetWidth;
           const left = spec.align === 'l' ? spec.x * W : spec.align === 'r' ? spec.x * W - w : spec.x * W - w / 2;
           g.style.left = px(left);
           g.style.top = '0px';
-          g.style.top = px(spec.y * H + (spec.yCap ?? 0) * spec.cap * short - baselineIn(word));
+          g.style.top = px(spec.y * H + (spec.yCap ?? 0) * capShare * short - baselineIn(word));
         });
       });
       placeSmallPrint(W, H, short, phoneLayout, blocks);
@@ -878,13 +929,14 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         const chrome = q(`[data-chrome="${index}"]`);
         if (chrome) qa<HTMLElement>('.of-meta, .of-credit', chrome).forEach((el) => el.offsetWidth && keep.push(grow(offsetBox(el), 10)));
         const cutMs = plan.cuts.find((x) => x.index === index);
-        const speed = (c.driftPx * 1000) / Math.max(1, cutMs ? cutMs.end - cutMs.start : 167);
+        const driftPx = c.driftPx * DRIFT_SCALE[plan.layout];
+        const speed = (driftPx * 1000) / Math.max(1, cutMs ? cutMs.end - cutMs.start : 167);
         const trail = (speed / 100) * BLUR_STEP_PER_SPEED * 3;
         qa<HTMLElement>('[data-giant]', cutEl).forEach((g, k) => {
           const word = q('[data-giant-word]', g)!;
           const base = g.offsetTop + baselineIn(word);
-          const capPx = c.giants[k].cap * short;
-          keep.push(grow({ x: g.offsetLeft, y: base - capPx, w: word.offsetWidth, h: capPx }, c.driftPx / 2 + trail + 10));
+          const capPx = giantCap(c.giants[k], plan.layout) * short;
+          keep.push(grow({ x: g.offsetLeft, y: base - capPx, w: word.offsetWidth, h: capPx }, driftPx / 2 + trail + 10));
         });
         const inBounds = (r: Rect) => r.x >= 14 && r.y >= 14 && r.x + r.w <= W - 14 && r.y + r.h <= H - 14;
         const place = (el: HTMLElement, want: Vec2, box: Rect, inset: Vec2) => {
@@ -1221,9 +1273,10 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         // with them); the last runs on into the burn a 24th at a time.
         const c = SCENES[index];
         const [dx, dy] = DRIFT_VEC[c.drift];
-        const v = c.driftPx / (cut.end - cut.start);
+        const driftPx = c.driftPx * DRIFT_SCALE[plan.layout];
+        const v = driftPx / (cut.end - cut.start);
         const pos = (t: number) => {
-          const d = -c.driftPx / 2 + v * (t - cut.start);
+          const d = -driftPx / 2 + v * (t - cut.start);
           return tx(dx * d, dy * d);
         };
         qa<HTMLElement>('[data-giant]', cutEl).forEach((giant) => {
@@ -1463,7 +1516,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const rate = hurried ? FF_RATE : 1;
       const ms = (v: number) => v / rate;
       const vh = window.innerHeight;
-      const pairs: { src: HTMLElement; dst: HTMLElement }[] = [];
+      const found: { src: HTMLElement; dst: HTMLElement; top: number; name: boolean }[] = [];
       FLY_ORDER.forEach((word) => {
         const src = endLayer.querySelector<HTMLElement>(LANDING_TARGETS[word].from);
         const dst = document.querySelector<HTMLElement>(LANDING_TARGETS[word].to);
@@ -1472,8 +1525,16 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         // and goes with the dark.
         const r = dst.getBoundingClientRect();
         if (r.bottom < 0 || r.top > vh) return;
-        pairs.push({ src, dst });
+        found.push({ src, dst, top: r.top, name: word === 'ryan' || word === 'xu' });
       });
+      // His name first (it is only moved); then the words leave by the line
+      // they land on, the deepest first: a word bound for a lower line drops
+      // ahead of the ones bound above it, so none drops through another on
+      // its way down (on one line, in the title's order).
+      const pairs = [
+        ...found.filter((p) => p.name),
+        ...found.filter((p) => !p.name).sort((a, b) => (Math.abs(a.top - b.top) < 4 ? 0 : b.top - a.top)),
+      ];
 
       overlay.classList.add('is-landing');
       html.setAttribute('data-open-fly', '');
@@ -1601,6 +1662,23 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         }),
       );
 
+      // YOU with no place on the page to fly to: its line is gone before the
+      // first flight reaches its row (no word flies across a half-faded
+      // line).
+      if (!placed.some(({ src }) => src.dataset.fly === 'you')) {
+        const youLine = q('[data-title-you]', endLayer);
+        if (youLine) {
+          track(
+            youLine.animate([{ opacity: 1 }, { opacity: 0 }], {
+              duration: ms(LANDING_A.youOut[1] - LANDING_A.youOut[0]),
+              delay: ms(LANDING_A.youOut[0]),
+              fill: 'both',
+              easing: FADE_CSS,
+            }),
+          );
+        }
+      }
+
       placed.forEach(({ wrap, source, target, flight, letters }) => {
         const timing = { duration: ms(flight.duration), delay: ms(flight.delay), fill: 'both' as FillMode, easing: 'linear' };
         track(
@@ -1681,6 +1759,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       burn?.resize(geo.W, geo.H);
       burn?.draw(null);
       phase = 'film';
+      // From here the cursor's blink is the film's clock's (the sheet's
+      // own blink, for the first paint, is let go).
+      overlay.setAttribute('data-clock', '');
       t0 = nowMs();
       if (pendingSkip) {
         hurried = true;

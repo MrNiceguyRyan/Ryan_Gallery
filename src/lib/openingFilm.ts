@@ -15,10 +15,11 @@
 //   2. The word is found: a lime marker sweeps "archive" on the paper; the
 //      rest of the line is pushed away and the word, struck in capitals,
 //      glides to the middle of the frame, each typewriter capital turning
-//      into its Fraunces capital in one shared ink box (a morph, never a
-//      double image).
-//   3. Match cuts round a fixed lime anchor (5 s, 25 scenes on a sixth of a
-//      second): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU. The block's
+//      into its Fraunces capital in one shared ink box (swapped in one
+//      instant, never a double image).
+//   3. Match cuts round a fixed lime anchor (5.7 s, 25 scenes on a sixth of
+//      a second; the sheets meant to be read hold two): ARCHIVE → CAMERA →
+//      TRAVEL → THOUGHT → YOU. The block's
 //      centre, its height and the word's cap height never move; only the word
 //      and its face change (Fraunces 900, Fraunces italic, Space Grotesk 700,
 //      Fraunces 400, the monospace). Round it the frame is recomposed every
@@ -134,20 +135,22 @@ export const TYPED = 'an archive of travel';
 export const FOUND_RANGE = [3, 10] as const;
 export const FOUND_WORD = TYPED.slice(FOUND_RANGE[0], FOUND_RANGE[1]);
 
-/** The machines the line is typed on, in order, and how long each is on
- *  screen (twelfths of a second): slow to fast, then the paper holds (the
- *  last letter, the cursor blinking, the find). Dark ones first, light ones
- *  after: the relay turns the picture over once. */
+/** The machines the line is typed on, in order, how long each is on screen
+ *  (twelfths of a second) and how many keys it strikes: slow to fast, then
+ *  the paper holds (the last letter, the cursor blinking, the find). Dark
+ *  ones first, light ones after: the relay turns the picture over once.
+ *  Every machine strikes a visible letter (never only a space), and its
+ *  first key falls on its own cut (RELAY_KEYS). */
 export type StyleId = 'crt' | 'deep' | 'bars' | 'pill' | 'beige' | 'bone' | 'grid' | 'paper';
-export const STYLES: readonly { id: StyleId; frames: number; tone: Tone }[] = [
-  { id: 'crt', frames: 9, tone: 'dark' },
-  { id: 'deep', frames: 5, tone: 'dark' },
-  { id: 'bars', frames: 4, tone: 'dark' },
-  { id: 'pill', frames: 3, tone: 'dark' },
-  { id: 'beige', frames: 3, tone: 'light' },
-  { id: 'bone', frames: 3, tone: 'light' },
-  { id: 'grid', frames: 3, tone: 'light' },
-  { id: 'paper', frames: 6, tone: 'light' },
+export const STYLES: readonly { id: StyleId; frames: number; keys: number; tone: Tone }[] = [
+  { id: 'crt', frames: 9, keys: 4, tone: 'dark' },
+  { id: 'deep', frames: 5, keys: 4, tone: 'dark' },
+  { id: 'bars', frames: 4, keys: 3, tone: 'dark' },
+  { id: 'pill', frames: 3, keys: 2, tone: 'dark' },
+  { id: 'beige', frames: 3, keys: 2, tone: 'light' },
+  { id: 'bone', frames: 3, keys: 2, tone: 'light' },
+  { id: 'grid', frames: 3, keys: 2, tone: 'light' },
+  { id: 'paper', frames: 6, keys: 1, tone: 'light' },
 ];
 export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
 /** The style the word is found on (the last). */
@@ -163,11 +166,14 @@ export function blinkSteps(start: number, end: number, period = CURSOR_MS): [num
   for (let k = 1; start + k * half < end; k += 1) out.push([start + k * half, k % 2 === 0 ? 1 : 0]);
   return out;
 }
-/** The first letter three twelfths in (the cursor alone first); the last a
- *  twelfth into the paper. About eight letters a second, each ±24 ms. */
+/** The first letter three twelfths in (the cursor alone first). */
 export const TYPE_AT = 3 * FRAME12_MS;
-export const TYPE_LAST_FRAMES = 1;
-export const TYPE_JITTER_MS = 24;
+/** The relay's keys: each machine's first on its own cut (a new machine
+ *  arrives with a new letter, never a keystroke a frame before a cut), the
+ *  rest evenly across its time — about eight letters a second. A key at
+ *  least `jitterClear` ms from both of its machine's cuts is nudged by up
+ *  to ±`jitter` ms (seeded); none falls in the `quiet` ms before a cut. */
+export const RELAY_KEYS = { jitter: 20, jitterClear: 70, quiet: 50, seed: 41 } as const;
 
 /** When each character of `text` appears: the first at `start`, the last
  *  at `last` (neither nudged), evenly between, each nudged by a seeded
@@ -180,8 +186,32 @@ export function typeTimes(text: string, start: number, last: number, jitter: num
   const out: number[] = [];
   for (let i = 0; i < n; i += 1) {
     const nudge = i === 0 || i === n - 1 ? 0 : (rand() * 2 - 1) * j;
-    out.push(Math.round(start + i * interval + nudge));
+    // Not rounded: the first key must fall exactly on its time (a dark
+    // act may start on a sixth, not a whole millisecond).
+    out.push(start + i * interval + nudge);
   }
+  return out;
+}
+
+/** When each character of TYPED appears in the relay: machine by machine,
+ *  as many keys as it strikes (STYLES), its first on its cut (the crt's at
+ *  TYPE_AT), the rest evenly spaced up to its end; the middle keys nudged
+ *  (RELAY_KEYS). */
+export function relayTimes(styles: readonly (Span & { id: StyleId })[]) {
+  const rand = seeded(RELAY_KEYS.seed);
+  const out: number[] = [];
+  styles.forEach((m, k) => {
+    const n = STYLES[k].keys;
+    const first = k === 0 ? TYPE_AT : m.start;
+    const step = (m.end - first) / n;
+    for (let i = 0; i < n; i += 1) {
+      const t = first + i * step;
+      const clear = i > 0 && t - m.start >= RELAY_KEYS.jitterClear && m.end - t >= RELAY_KEYS.jitterClear;
+      const nudge = clear ? (rand() * 2 - 1) * RELAY_KEYS.jitter : 0;
+      // Exact (a key on a cut is the cut's own time, to the last bit).
+      out.push(t + nudge);
+    }
+  });
   return out;
 }
 
@@ -203,14 +233,15 @@ export const GLIDE_EASE = [0.2, 0.7, 0.1, 1] as const;
 /** A face turning into another, letter by letter (act 2, act 6): every
  *  letter of the one face and its letter in the other are held to ONE ink
  *  box, which goes from the first face's to the second's across `box` (a
- *  share of the move), and the two faces cross in `fade` — a short window
- *  centred in it, so at the crossing the two letters are the same size in
- *  the same place, and what is seen is one letter changing its face. The
- *  words are in the same case on both sides (capitals): a small letter
- *  never fades over a capital (no ghost ascenders, no dots). */
+ *  share of the move), and the two faces are SWAPPED at `fade` — one
+ *  instant (a zero-width window) near the middle of it, at the move's
+ *  fastest, where the two letters are the same size in the same place: one
+ *  frame shows the one face, the next the other, never both (a crossfade,
+ *  however short, showed two words for two or three frames). The words are
+ *  in the same case on both sides (capitals). */
 export const GLYPH_MORPH = {
   box: [0.06, 0.5] as const,
-  fade: [0.2, 0.36] as const,
+  fade: [0.29, 0.29] as const,
 } as const;
 export const FIND = {
   /** The lime marker sweeps the word, left to right, in two twelfths. */
@@ -294,6 +325,13 @@ export const BLUR_COPIES = [
 ] as const;
 /** One copy's step, px per 100 px/s of drift speed. */
 export const BLUR_STEP_PER_SPEED = 1.1;
+/** The drift (and its blur) as a share of the data's px, per layout: the
+ *  phone's frame is a quarter of the desktop's, and the same 30–40 px there
+ *  swept every giant's edge across so much of it that, cut after cut, the
+ *  same pixels turned light and dark more than four times a second (the
+ *  local flash budget). The stylesheet carries the same number
+ *  (--drift-k) for the blur copies drawn in the markup. */
+export const DRIFT_SCALE: Record<FilmLayout, number> = { desktop: 1, phone: 0.6 };
 
 export interface Giant {
   text: string;
@@ -310,6 +348,13 @@ export interface Giant {
   yCap?: number;
   align: 'l' | 'r' | 'c';
 }
+/** The giant words' largest cap height, a share of the short side, per
+ *  layout: on the phone the short side is the width, and a giant at 45% of
+ *  it filled the frame with a fragment whose every cut flipped the same
+ *  pixels (the phone's local flash budget); there they are held to 34%. */
+export const GIANT_CAP_MAX: Record<FilmLayout, number> = { desktop: 0.45, phone: 0.34 };
+export const giantCap = (g: Giant, layout: FilmLayout) => Math.min(g.cap, GIANT_CAP_MAX[layout]);
+
 /** A word beside the anchor: condensed heavy capitals (Space Grotesk 700),
  *  the script (Fraunces italic) or the thin serif (Fraunces 400); left or
  *  right of the block, on its middle, a line above it or a line below. */
@@ -496,7 +541,8 @@ export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New Yo
 /** Every scene, in order. The drift turns only by a quarter between
  *  neighbours, so the motion runs on across every cut; the face changes at
  *  every cut. Slow to fast: the first two hold two sixths, the last (YOU,
- *  before the burn) four. */
+ *  before the burn) four; the four sheets whose words are there to be read
+ *  (the magazine, the ticket, the telegram, the postcard) hold two. */
 export const SCENES: readonly Scene[] = [
   // ── ARCHIVE ──
   {
@@ -608,7 +654,7 @@ export const SCENES: readonly Scene[] = [
   {
     word: 'CAMERA',
     face: 'f900',
-    slots: 1,
+    slots: 2,
     drift: 'up',
     driftPx: 32,
     sheet: 'magazine',
@@ -715,7 +761,7 @@ export const SCENES: readonly Scene[] = [
   {
     word: 'TRAVEL',
     face: 'sg700',
-    slots: 1,
+    slots: 2,
     drift: 'left',
     driftPx: 36,
     sheet: 'ticket',
@@ -799,8 +845,8 @@ export const SCENES: readonly Scene[] = [
     drift: 'right',
     driftPx: 40,
     giants: [
-      { text: 'LIGHT', face: 'f900', cap: 0.43, x: -0.03, y: 0.34, align: 'l' },
-      { text: 'KEPT', face: 'f400', cap: 0.38, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
+      { text: 'DAY', face: 'f900', cap: 0.43, x: -0.03, y: 0.34, align: 'l' },
+      { text: 'BOOK', face: 'f400', cap: 0.38, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
     ],
     side: [
       { text: 'Untitled', role: 'caps', at: 'l', row: 0 },
@@ -821,7 +867,7 @@ export const SCENES: readonly Scene[] = [
   {
     word: 'THOUGHT',
     face: 'mono',
-    slots: 1,
+    slots: 2,
     drift: 'down',
     driftPx: 32,
     sheet: 'telegram',
@@ -892,7 +938,7 @@ export const SCENES: readonly Scene[] = [
   {
     word: 'YOU',
     face: 'fit',
-    slots: 1,
+    slots: 2,
     drift: 'up',
     driftPx: 32,
     sheet: 'postcard',
@@ -1121,8 +1167,7 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
     return span;
   });
   const typeEnd = onGrid(f, FRAME12_MS);
-  const findStyle = styles[styles.length - 1];
-  const typing = typeTimes(TYPED, TYPE_AT, findStyle.start + TYPE_LAST_FRAMES * FRAME12_MS, TYPE_JITTER_MS, 41);
+  const typing = relayTimes(styles);
   const find = { start: typeEnd, end: onGrid(typeEnd / FRAME12_MS + 6, FRAME12_MS) };
   const order = ACT3[layout];
   let slot = 0;
@@ -1302,15 +1347,21 @@ export const LANDING_A = {
   /** The shared ink boxes, letter by letter, title's → page's, as a share
    *  of the flight (a word whose face does not change is only moved). */
   morph: [0.3, 0.64] as const,
-  /** The crossfade (one window for both faces, centred in the morph, at
-   *  the flight's fastest), as a share of the flight. */
-  sourceOut: [0.42, 0.52] as const,
-  targetIn: [0.42, 0.52] as const,
+  /** The swap of the faces (Space Grotesk capitals → the page's Fraunces):
+   *  one instant, the same for both, in the middle of the morph at the
+   *  flight's fastest, where the two share one ink box — never a frame
+   *  with both (a 42 ms crossfade showed CAMERA over camera). */
+  sourceOut: [0.47, 0.47] as const,
+  targetIn: [0.47, 0.47] as const,
   /** The rest of the opening words (the line's other words, the kicker,
    *  the scroll cue, the nav last) comes up round the landed words — once
-   *  the last word is on its own line (so no word slides over another). */
-  rest: 450,
-  done: 600,
+   *  the last word is home (landingAEnd), so nothing comes up under a word
+   *  still sliding in ('that' under 'thought'). */
+  rest: 560,
+  done: 700,
+  /** The end title's YOU line, when the page has no place for YOU to fly
+   *  to: gone before the first flight reaches its row (never crossed). */
+  youOut: [0, 100] as const,
 } as const;
 /** The words that fly home, in the end title's order (his name, the
  *  credits, then YOU). YOU is optional: the entrance will give it a place

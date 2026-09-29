@@ -35,7 +35,7 @@ const onGrid = (t, unit, from = 0) => close((t - from) / unit, Math.round((t - f
 const PLANS = { desktop: F.filmPlan('desktop'), phone: F.filmPlan('phone') };
 const SOURCES = ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css'];
 
-test('the acts: contiguous from 0, in the spec\'s order; no limit on the length, the landing inside 0.6 s', () => {
+test('the acts: contiguous from 0, in the spec\'s order; no limit on the length, the landing inside 0.7 s', () => {
   for (const [layout, plan] of Object.entries(PLANS)) {
     const order = ['type', 'find', 'cuts', 'burn', 'dark', 'title'];
     let at = 0;
@@ -47,7 +47,8 @@ test('the acts: contiguous from 0, in the spec\'s order; no limit on the length,
     // Act 1 is the owner's two to three seconds of the relay.
     assert.ok(plan.acts.type.end >= 2000 && plan.acts.type.end <= 3000, `act 1 ${plan.acts.type.end} ms`);
     assert.ok(close(plan.acts.find.end - plan.acts.find.start, 500));
-    // Act 3 about five seconds (the guidance's 30 × a sixth).
+    // Act 3 about five and a half seconds (the guidance's 30 × a sixth, the
+    // sheets meant to be read held for two).
     const act3 = plan.acts.cuts.end - plan.acts.cuts.start;
     assert.ok(act3 >= 4000 && act3 <= 6500, `act 3 ${act3} ms`);
     assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, 1000), 'the burn: 24 frames at 24 fps');
@@ -112,11 +113,18 @@ test('act 1: the relay — eight machines, slow to fast, the typing continuous a
     assert.equal(times.length, F.TYPED.length);
     assert.ok(close(times[0], F.TYPE_AT));
     for (let i = 1; i < times.length; i += 1) assert.ok(times[i] > times[i - 1], 'in order');
-    // Every machine types a few letters; the last letter on the paper.
-    for (const s of plan.styles) {
-      const n = times.filter((t) => t >= s.start && t < s.end).length;
-      assert.ok(n >= 1, `${s.id} types ${n}`);
-    }
+    // Every machine strikes a letter that is seen: a visible one on screen
+    // at least two frames (33 ms) before its cut; its first key on its own
+    // cut (a new machine arrives with a new letter), and no key in the 50 ms
+    // before a cut (a keystroke and a cut on neighbouring frames stutter).
+    plan.styles.forEach((s, k) => {
+      const mine = times.map((t, i) => [t, F.TYPED[i]]).filter(([t]) => t >= s.start - 1e-6 && t < s.end - 1e-6);
+      assert.equal(mine.length, F.STYLES[k].keys, `${s.id} strikes ${mine.length}`);
+      assert.ok(mine.some(([t, ch]) => ch !== ' ' && t <= s.end - 33), `${s.id} shows a letter`);
+      if (k > 0) assert.ok(close(mine[0][0], s.start, 1e-3), `${s.id}: its first key on its cut`);
+      for (const [t] of mine) assert.ok(!(t > s.end - F.RELAY_KEYS.quiet && t < s.end), `${s.id}: a key ${Math.round(s.end - t)} ms before its cut`);
+    });
+    assert.equal(F.STYLES.reduce((n, s) => n + s.keys, 0), F.TYPED.length, 'every letter struck');
     const paper = plan.styles.at(-1);
     assert.ok(times.at(-1) >= paper.start && times.at(-1) < plan.sweep.start, 'the last letter on the paper, before the find');
     const cps = ((times.length - 1) * 1000) / (times.at(-1) - times[0]);
@@ -163,13 +171,15 @@ test('act 2: the marker sweeps, then the word glides to the anchor on the spec\'
     assert.equal(plan.cuts[0].face, 'f900', 'into the anchor\'s first face');
     assert.equal(plan.cuts[0].word, 'ARCHIVE');
   }
-  // One crossfade window, inside the letters' morph — short, and centred.
+  // The faces swapped in one instant (never a frame with both), inside
+  // the letters' morph, near its middle.
   assert.ok(F.FIND.morph[0] <= F.FIND.swap[0] && F.FIND.swap[1] <= F.FIND.morph[1]);
   const mid = (w) => (w[0] + w[1]) / 2;
-  for (const [box, fade] of [[F.FIND.morph, F.FIND.swap], [F.TITLE.box, F.TITLE.swap], [F.LANDING_A.morph, F.LANDING_A.sourceOut]]) {
+  for (const [box, fade] of [[F.FIND.morph, F.FIND.swap], [F.TITLE.box, F.TITLE.swap], [F.LANDING_A.morph, F.LANDING_A.sourceOut], [F.LANDING_A.morph, F.LANDING_A.targetIn]]) {
     assert.ok(Math.abs(mid(box) - mid(fade)) <= 0.03, `centred: ${box} / ${fade}`);
-    assert.ok(fade[1] - fade[0] <= 0.2, `tight: ${fade}`);
+    assert.equal(fade[1] - fade[0], 0, `one instant: ${fade}`);
   }
+  assert.deepEqual([...F.LANDING_A.sourceOut], [...F.LANDING_A.targetIn], 'one face out as the other comes in');
   // Capitals into capitals: no small letter fades over a capital.
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   assert.match(scenes, /text=\{FOUND_WORD\.toUpperCase\(\)\}/);
@@ -203,9 +213,12 @@ test('act 3: the keywords in the owner\'s order, a new face at every cut, 24–3
     for (let i = 1; i < plan.cuts.length; i += 1) assert.notEqual(plan.cuts[i].face, plan.cuts[i - 1].face, 'every cut changes the face');
     for (const face of F.FACE_ORDER) assert.ok(plan.cuts.some((c) => c.face === face), face);
   }
-  // Slow to fast, and YOU holds longest before the burn.
+  // Slow to fast, and YOU holds longest before the burn; in between, an
+  // editorial page holds one sixth, a sheet meant to be read two.
   const slots = S.map((s) => s.slots);
-  assert.ok(slots[0] >= 2 && slots.slice(2, -1).every((n) => n === 1));
+  assert.ok(slots[0] >= 2);
+  S.slice(2, -1).forEach((s, k) => assert.ok(s.sheet ? s.slots <= 2 : s.slots === 1, `${k + 2}: ${s.slots}`));
+  for (const kind of ['magazine', 'ticket', 'telegram', 'postcard']) assert.equal(S.find((s) => s.sheet === kind).slots, 2, `${kind} held to be read`);
   assert.equal(Math.max(...slots), slots.at(-1));
   assert.equal(F.faceText('ARCHIVE', 'fit'), 'Archive');
   assert.equal(F.faceText('YOU', 'sg700'), 'YOU');
@@ -311,6 +324,17 @@ test('act 3: the drift runs on across every cut (the same way, or a quarter turn
     assert.equal(plan.cuts.at(-1).drift, 'up');
   }
   for (const s of F.SCENES) assert.ok(s.driftPx >= 20 && s.driftPx <= 60, `${s.word} ${s.driftPx}`);
+  // The phone's drift and giants are scaled to its small frame (its local
+  // flash budget); the stylesheet's --drift-k (the blur copies) agrees.
+  assert.equal(F.DRIFT_SCALE.desktop, 1);
+  assert.ok(F.DRIFT_SCALE.phone > 0.4 && F.DRIFT_SCALE.phone < 1);
+  const css = read('../src/styles/opening.css');
+  assert.match(css, new RegExp(`\\.opening \\{[\\s\\S]*?--drift-k: ${F.DRIFT_SCALE.desktop};`));
+  assert.match(css, new RegExp(`@media \\(max-width: 1023px\\) \\{\\s*\\.opening \\{[^}]*--drift-k: ${F.DRIFT_SCALE.phone};`));
+  assert.equal(F.GIANT_CAP_MAX.desktop, 0.45);
+  assert.ok(F.GIANT_CAP_MAX.phone >= 0.3 && F.GIANT_CAP_MAX.phone < 0.45);
+  assert.equal(F.giantCap({ cap: 0.44 }, 'phone'), F.GIANT_CAP_MAX.phone);
+  assert.equal(F.giantCap({ cap: 0.44 }, 'desktop'), 0.44);
   assert.ok(F.BLUR_COPIES.length >= 3 && F.BLUR_COPIES.length <= 4);
   for (let i = 1; i < F.BLUR_COPIES.length; i += 1) assert.ok(F.BLUR_COPIES[i].opacity < F.BLUR_COPIES[i - 1].opacity);
 });
@@ -424,8 +448,19 @@ test('landing A: every word flies from its box to its glyph box, in order, insid
   assert.ok(close(f.k, 64 / 175));
   const delays = F.FLY_ORDER.map((_, i) => F.flightFor(src, dst, 1, 1, i).delay);
   for (let i = 1; i < delays.length; i += 1) assert.ok(delays[i] > delays[i - 1]);
-  assert.ok(F.LANDING_A.done <= 600);
+  assert.ok(F.LANDING_A.done <= 700);
+  // The rest of the words comes up (its fade's delay in entrance.css) only
+  // once every word that must fly is home: nothing under a word still
+  // sliding in.
+  const entrance = read('../src/styles/entrance.css');
+  const restDelay = Number(entrance.match(/html\[data-reel='landed'\] \.entrance-intro \.open-rest \{\s*animation: prologue-hero-fade \d+ms [^;]*? (\d+)ms backwards;/)?.[1]);
+  assert.ok(Number.isFinite(restDelay), 'the rest\'s delay');
+  const required = F.FLY_ORDER.filter((w) => !F.FLY_OPTIONAL.includes(w)).length;
+  assert.ok(F.LANDING_A.rest + restDelay >= F.landingAEnd(required), `${F.LANDING_A.rest} + ${restDelay} vs ${F.landingAEnd(required)}`);
   assert.ok(F.LANDING_A.rest < F.landingAEnd(F.FLY_ORDER.length));
+  // YOU's line, with no place to fly to, is gone before the first flight
+  // could reach it.
+  assert.ok(F.LANDING_A.youOut[1] <= 100);
   const path = F.flightPath(F.flightFor(src, dst, 64, 175, 0));
   assert.ok(close(path[0].x, 700 - 454) && close(path.at(-1).x, 0) && close(path.at(-1).s, 1));
 });
