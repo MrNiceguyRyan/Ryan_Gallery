@@ -14,9 +14,8 @@
 // word on the focus at the run's size; continuous across a match cut; dead
 // still once landed), the
 // finder's track (it searches while a shot moves and locks on when it can be
-// read; it travels between runs), landing A's flights, landing B's portal
-// (the counter at the start, the globe's disc at the end, a zoom about one
-// point), the landing choice, the flash safety of the cuts (and the
+// read; it travels between runs), landing A's flights and
+// its targets (the entrance's opening words), the flash safety of the cuts (and the
 // desktop's grade), the finder's looks, his photographs, and the seeded
 // material the server and client both draw.
 import assert from 'node:assert/strict';
@@ -522,40 +521,26 @@ test('landing A\'s morph: both faces hold one ink width at every moment, board\'
   }
 });
 
-test('landing B: the counter at the start, the globe\'s disc at the end, one zoom about one point', () => {
-  const c0 = [760, 640];
-  const r0 = 9;
-  const target = F.portalTarget(1728, 1000, false);
-  const globe = F.firstScreenGlobe(1728, 1000);
-  assert.deepEqual(target, globe);
-  assert.ok(close(globe.x, 0.84 * 1728) && close(globe.y, 930));
-  const a = F.portalAt(0, c0, r0, target);
-  assert.ok(close(a.x, c0[0]) && close(a.y, c0[1]) && close(a.r, r0));
-  const z = F.portalAt(1, c0, r0, target);
-  assert.ok(close(z.x, target.x, 1e-6) && close(z.y, target.y, 1e-6) && close(z.r, target.r, 1e-6));
-  // A zoom about a fixed pivot: (c - pivot) = (c0 - pivot) * zoom.
-  const Z = target.r / r0;
-  const pivot = [(Z * c0[0] - target.x) / (Z - 1), (Z * c0[1] - target.y) / (Z - 1)];
-  let lastR = 0;
-  for (let u = 0; u <= 1.0001; u += 0.05) {
-    const p = F.portalAt(u, c0, r0, target);
-    assert.ok(p.r >= lastR - 1e-9, 'the window only opens');
-    lastR = p.r;
-    assert.ok(close(p.x - pivot[0], (c0[0] - pivot[0]) * p.zoom, 1e-6));
-    assert.ok(close(p.y - pivot[1], (c0[1] - pivot[1]) * p.zoom, 1e-6));
+test('landing A\'s targets: his name, CAMERA and the line land in the entrance\'s opening words', () => {
+  // The first screen is the entrance's opening words now (no globe there),
+  // on a phone as on the desktop: every word flies there.
+  assert.deepEqual([...F.FLY_ORDER], ['ryan', 'xu', 'camera', 'archive', 'travel', 'thought']);
+  for (const word of F.FLY_ORDER) {
+    assert.equal(F.LANDING_TARGETS[word].from, `[data-fly="${word}"]`);
+    assert.equal(F.LANDING_TARGETS[word].to, `.entrance-intro [data-open-land="${word}"]`);
   }
-  // A phone has no globe on its first screen: an iris out past the corners.
-  const phone = F.portalTarget(390, 844, true);
-  assert.ok(phone.r >= Math.hypot(195, 422));
-  assert.ok(F.LANDING_B.rise < F.LANDING_B.done && F.LANDING_B.push <= F.LANDING_B.done);
-});
-
-test('the landing is chosen by the URL: ?open=b, otherwise A', () => {
-  assert.equal(F.landingFrom(''), 'a');
-  assert.equal(F.landingFrom('?open=a'), 'a');
-  assert.equal(F.landingFrom('?open=b'), 'b');
-  assert.equal(F.landingFrom('?x=1&open=b'), 'b');
-  assert.equal(F.landingFrom('?open=c'), 'a');
+  // Landing B (through the O into the globe's disc) went with the globe's
+  // place on the first screen.
+  assert.equal(F.LANDING_B, undefined);
+  assert.equal(F.landingFrom, undefined);
+  assert.equal(F.LANDING_A.globe, undefined);
+  // The entrance and the slate carry every word (the page's spans and the
+  // board's), so none of them is left behind.
+  const intro = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
+  const scenes = readFileSync(new URL('../src/components/home/OpeningScenes.tsx', import.meta.url), 'utf8');
+  for (const word of ['ryan', 'xu']) assert.ok(intro.includes(`data-open-land="${word}"`), word);
+  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(intro.includes(`{ land: '${word}' }`), word);
+  for (const word of F.FLY_ORDER) assert.ok(scenes.includes(`data-fly="${word}"`), `slate: ${word}`);
 });
 
 test('no strobe: at most three light/dark changes in any one second; the desktop a calm grade', () => {

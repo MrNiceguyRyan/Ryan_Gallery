@@ -725,8 +725,8 @@ function ContactScene({ pictures }: { pictures: readonly (OpeningPicture | undef
 // it, under its field label CAMERA; the line under it is the first screen's
 // own line. Every found word is chalked before the sticks come down — a ring
 // round CAMERA, a line under ARCHIVE, TRAVEL and THOUGHT. The O of THOUGHT is
-// a true circle drawn in the stroke's weight, so landing B can push through
-// its counter exactly. The board's fields are a roll of film's, not a
+// a true circle drawn in the stroke's weight. CAMERA, beside his name, flies
+// home too, into the entrance's opening words. The board's fields are a roll of film's, not a
 // film set's (the owner asked for a camera) — PROPOSED copy (awaiting the
 // owner): the labels Title, Roll, Frame, Exp., Date, their values, and the
 // foot "35 mm · B&W · 36 exp.".
@@ -760,7 +760,7 @@ function SlateScene() {
         </div>
         <div className="of-slate__board">
           <div className="of-slate__row of-slate__row--name">
-            <span className="of-slate__label">
+            <span className="of-slate__label" data-fly="camera">
               <span className="of-slate__ringed">
                 Camera
                 <ChalkRing />
@@ -779,7 +779,7 @@ function SlateScene() {
               <span className="of-slate__found" data-fly="travel">TRAVEL<Chalk /></span>{' '}
               AND{' '}
               <span className="of-slate__found" data-fly="thought">
-                TH<span className="of-slate__o" data-portal-o><span className="of-slate__o-ch">O</span><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
+                TH<span className="of-slate__o"><span className="of-slate__o-ch">O</span><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="42.5" /></svg></span>UGHT<Chalk />
               </span>
             </span>
           </div>

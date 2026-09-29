@@ -267,27 +267,34 @@ const REST: TearPose = {
  * The pose `ms` into the score. `smooth`: the hand's tip, no catches (a pull,
  * a re-seat). `reduced`: values, not structure — the face fades in place over
  * TEAR_REDUCED_MS, the stub dims, the pad goes; no hinge, fibre or aside.
+ * Two knobs for a paper pulled by hand (the entrance's boarding pass; the
+ * covers leave them at their defaults): `hinge` scales the hinge's angle
+ * (a longer lever keeps the grabbed point with the hand), and `tipFloor` is
+ * how far the rip has already run — what has torn stays torn when the
+ * paper is let lie back down (its clock at 0: flat, the rip still there).
  */
 export function tearPose(
   ms: number,
   frame: TearFrame,
-  { smooth = false, reduced = false }: { smooth?: boolean; reduced?: boolean } = {},
+  { smooth = false, reduced = false, hinge = 1, tipFloor = 0 }: { smooth?: boolean; reduced?: boolean; hinge?: number; tipFloor?: number } = {},
 ): TearPose {
-  if (!(ms > 0)) return { ...REST };
+  const floor = reduced ? 0 : clampUnit(tipFloor);
+  if (!(ms > 0) && floor <= 0) return { ...REST };
   if (reduced) {
     // A fade-out eases in, like every other going in the house.
     const k = fade(clampUnit(ms / TEAR_MS));
     return { ...REST, op: 1 - k, stubOp: 1 - 0.45 * k, padOp: 1 - k };
   }
   const { w, h, vw } = frame;
+  const hingeDeg = HINGE_DEG * hinge;
   const tE = clampUnit(ms / TEAR_TENSION_MS) ** 2;
   const u = clampUnit((ms - TEAR_TENSION_MS) / TEAR_RIP_MS);
   const hand = tipSmooth(u);
   const dip = DIP_PX * tE;
   if (ms < TEAR_FREE_MS) {
     // The rip: the face hinges about the running tip at (w, tip·h).
-    const tip = smooth ? hand : tipStepped(u);
-    const theta = HINGE_DEG * Math.pow(hand, HINGE_EXP);
+    const tip = Math.max(floor, smooth ? hand : tipStepped(u));
+    const theta = hingeDeg * Math.pow(hand, HINGE_EXP);
     return {
       m: chain(translate(w, dip + tip * h), rotate(-theta), translate(-w, -tip * h)),
       tip,
@@ -307,7 +314,7 @@ export function tearPose(
   const r = Math.min(ms, TEAR_MS) - TEAR_FREE_MS;
   const rel = easeOutCubic(clampUnit(r / TEAR_SNAP_MS));
   const post = clampUnit(r / (TEAR_SNAP_MS + TEAR_ASIDE_MS));
-  const released = chain(translate(w, DIP_PX + h), rotate(-(HINGE_DEG + KICK_DEG * rel)), translate(-w, -h));
+  const released = chain(translate(w, DIP_PX + h), rotate(-(hingeDeg + KICK_DEG * rel)), translate(-w, -h));
   const osc = Math.exp(-r / RECOIL_TAU_MS) * Math.cos((2 * Math.PI * r) / RECOIL_PERIOD_MS);
   const e = 0.75 * easeOutQuad(post) + 0.25 * post;
   // The straightening waits out the snap's kick, then decelerates on the
@@ -319,7 +326,7 @@ export function tearPose(
   return {
     m: chain(
       translate(KICK_X * rel - ASIDE_VW * vw * e + gx, KICK_Y * rel + ASIDE_Y * e + gy),
-      rotate((HINGE_DEG + KICK_DEG - ASIDE_REST_DEG) * straighten),
+      rotate((hingeDeg + KICK_DEG - ASIDE_REST_DEG) * straighten),
       scale(s),
       translate(-gx, -gy),
       released,
@@ -368,8 +375,46 @@ export interface TornEdge {
   stubFringe: string;
 }
 
+/** The fibres' ink: bone on the card stocks (a torn card shows its lighter
+ *  core). A white paper passes its own. */
+export const FIBRE_INK = { face: 'rgba(238,232,216,0.94)', stub: 'rgba(240,234,220,0.62)' } as const;
+
 /** The torn edge of a seam `h` px long, as four data-URI SVGs. */
-export function tornEdge(h: number, seed: number): TornEdge {
+export function tornEdge(h: number, seed: number, ink: { face: string; stub: string } = FIBRE_INK): TornEdge {
+  const { height, faceCut, stubCut, faceFringe, stubFringe } = tornEdgePaths(h, seed);
+  return {
+    faceCut: svgUrl(height, faceCut, '#000', 'xMaxYMin'),
+    stubCut: svgUrl(height, stubCut, '#000', 'xMinYMin'),
+    faceFringe: svgUrl(height, faceFringe, ink.face, 'xMaxYMin'),
+    stubFringe: svgUrl(height, stubFringe, ink.stub, 'xMinYMin'),
+  };
+}
+
+/**
+ * The same torn edge for a seam that runs ACROSS (a pass held upright, its
+ * stub below its face: the boarding pass on a phone): each strip turned
+ * about the diagonal, `w` px long and EDGE_W tall, the face's cut along its
+ * bottom edge and the stub's along its top, revealed from the left as the
+ * rip runs. The same profile, the same seed.
+ */
+export function tornEdgeAcross(w: number, seed: number, ink: { face: string; stub: string } = FIBRE_INK): TornEdge {
+  const { height, faceCut, stubCut, faceFringe, stubFringe } = tornEdgePaths(w, seed);
+  const across = (path: string, fill: string, align: 'xMinYMax' | 'xMinYMin') =>
+    `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${height}' height='${EDGE_W}' viewBox='0 0 ${height} ${EDGE_W}' preserveAspectRatio='${align} slice'><path transform='matrix(0 1 1 0 0 0)' d='${path}' fill='${fill}'/></svg>`,
+    )}")`;
+  return {
+    faceCut: across(faceCut, '#000', 'xMinYMax'),
+    stubCut: across(stubCut, '#000', 'xMinYMin'),
+    faceFringe: across(faceFringe, ink.face, 'xMinYMax'),
+    stubFringe: across(stubFringe, ink.stub, 'xMinYMin'),
+  };
+}
+
+/** The torn edge's four outlines (SVG paths in an EDGE_W-wide strip `height`
+ *  tall, the seam down its length): what `tornEdge` and `tornEdgeAcross`
+ *  draw. The face keeps the cut at its right, the stub at its left. */
+export function tornEdgePaths(h: number, seed: number) {
   const random = seeded(seed);
   const points: Array<[number, number, number, number]> = [];
   let depth = 1.6;
@@ -400,10 +445,5 @@ export function tornEdge(h: number, seed: number): TornEdge {
     .reverse()
     .map(([y, d, fibre]) => `L${f(d + fibre)} ${f(y)}`)
     .join(' ')} Z`;
-  return {
-    faceCut: svgUrl(height, faceCut, '#000', 'xMaxYMin'),
-    stubCut: svgUrl(height, stubCut, '#000', 'xMinYMin'),
-    faceFringe: svgUrl(height, faceFringe, 'rgba(238,232,216,0.94)', 'xMaxYMin'),
-    stubFringe: svgUrl(height, stubFringe, 'rgba(240,234,220,0.62)', 'xMinYMin'),
-  };
+  return { height, faceCut, stubCut, faceFringe, stubFringe };
 }

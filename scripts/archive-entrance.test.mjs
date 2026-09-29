@@ -60,15 +60,17 @@ test('the opening goes straight into chapter 1: the first film is simply there, 
   const closing = readFileSync(new URL('../src/components/home/ArchiveClosing.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   // The owner rejected the film-roll bridge (2026-09-27: repetitive and
-  // unnecessary): the first screen is his name, the globe and one line, and
-  // the globe dives straight into chapter 1. No count page, no index, no roll
-  // — and nothing holds chapter 1's plate back for a landing.
-  // (Its found words are spans of their own, where the opening film's words
-  // land; the line reads the same.)
-  const line = prologue.match(/prologue-hero-tagline[^>]*>([\s\S]*?)<\/p>/)[1].replace(/\n\s*/g, '').replace(/<[^>]+>/g, '');
-  assert.equal(line, 'A personal archive of travel and thought.');
-  assert.match(prologue, /<em data-open-land="travel">travel<\/em>/);
-  assert.match(prologue, /<em data-open-land="thought">thought<\/em>/);
+  // unnecessary): the globe dives straight into chapter 1. No count page, no
+  // index, no roll — and nothing holds chapter 1's plate back for a landing.
+  // Since 2026-09-28 his name and the opening words are the entrance's
+  // (EntranceIntro, above the globe: no globe there), where the opening
+  // film's words land; the globe's first pose keeps one quiet caption.
+  const entrance = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
+  assert.match(entrance, /data-open-land="ryan"/);
+  assert.match(entrance, /data-open-land="xu"/);
+  for (const word of ['camera', 'travel', 'archive', 'thought']) assert.match(entrance, new RegExp(`\\{ land: '${word}' \\}`));
+  assert.doesNotMatch(prologue, /data-open-land/);
+  assert.match(prologue, /The route begins in/);
   assert.doesNotMatch(prologue, /bridge|archive-index|chapters · |\bframes\b/i);
   assert.doesNotMatch(home, /rollFrames|rollGates|archive-index|Back to index/);
   assert.doesNotMatch(atlas, /rollGates|bridgeRoll|prologue-mark|archive-index/);

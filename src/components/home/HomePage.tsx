@@ -16,6 +16,7 @@ import WalkIn from './WalkIn';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveClosing, { type ClosingStoryRequest } from './ArchiveClosing';
 import GlobePrologue from './GlobePrologue';
+import EntranceIntro from './EntranceIntro';
 import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin, type PlateStub } from './MagazineLayout';
 import type { AtlasVoyage, RouteStop } from './RouteAtlas';
 import LivingAtlasStory from './LivingAtlasStory';
@@ -185,15 +186,19 @@ interface DeferredRouteAtlasProps {
   presentation?: 'classic' | 'living';
   /** `focus` false (a pointer's click on the atlas): keyboard focus stays. */
   onNavigate?: (chapterId: string, options?: { focus?: boolean }) => void;
-  /** Mount the map now (the opening film covers the first screen), not
-   *  when the atlas nears the viewport. */
+  /** Mount the map now (the desktop: the film and the entrance lie above
+   *  it), not when the atlas nears the viewport. */
   eager?: boolean;
-  /** Hold the globe's reveal while the opening film covers it (until the
-   *  film lets go, about three seconds before it lands on the globe). */
+  /** Hold the globe's reveal until the entrance's boarding pass is torn. */
   holdReveal?: boolean;
-  /** Count the atlas as engaged while the opening film covers it. */
+  /** The page's glide brings the globe up: its reveal only fades and
+   *  dawns, it does not turn (no settle) while it moves. */
+  arrivalGlide?: boolean;
+  /** Count the atlas as engaged while the film or the entrance lies above
+   *  it, and through the glide that brings the globe up. */
   engage?: boolean;
-  /** The opening film still lies over the globe: its life waits. */
+  /** The globe is not up yet, or not landed (the film, the pass still
+   *  whole, the glide): its life — the drift, the lean — waits. */
   covered?: boolean;
 }
 
@@ -728,10 +733,9 @@ export default function HomePage({ collections }: Props) {
   }, []);
 
   // ── The opening film (OpeningFilm, its own island above this one) ──
-  // While it covers the first screen the globe holds its reveal (until the
-  // film lets go of it, so the fade, the dawn and the tiles they ask for are
-  // done when the film lands on the globe) and the globe's key is out of the
-  // tab order; `null` means there is no film to wait for (a second view).
+  // While it covers the page the entrance's pass and the globe's key are out
+  // of the tab order; `null` means there is no film to wait for (a second
+  // view). The film lands on the entrance's opening words, not on the globe.
   const [opening, setOpening] = useState<OpeningDetail | null>(null);
   useEffect(() => {
     const root = document.documentElement;
@@ -743,7 +747,21 @@ export default function HomePage({ collections }: Props) {
     return () => window.removeEventListener(OPENING_EVENT, onOpening);
   }, []);
   const reelCovering = opening != null && opening.state !== 'page';
-  const reelFramed = opening?.globe ?? false;
+
+  // ── The entrance (EntranceIntro): opening words, the boarding pass, then
+  // the globe ── The globe is not on the first screen any more: it holds its
+  // reveal (hidden, its tiles loading and its poses warmed behind the page)
+  // until the pass is torn, then comes in with the page's glide — its fade,
+  // dawn and settle played as it rises into its first pose. 'held' until
+  // the tear (or until the reader is past the pass by any other way),
+  // 'arriving' through the glide, 'done' once it has landed.
+  const [entrance, setEntrance] = useState<'held' | 'arriving' | 'done'>('held');
+  const [entranceGlide, setEntranceGlide] = useState(false);
+  const onEntranceArrive = useCallback((glide: boolean) => {
+    setEntranceGlide(glide);
+    setEntrance((current) => (current === 'held' ? 'arriving' : current));
+  }, []);
+  const onEntranceArrived = useCallback(() => setEntrance('done'), []);
 
   // ── Lenis smooth scroll (landonorris-style weighty momentum) ──
   // Boots via the shared startLenis() helper (single source of truth for the
@@ -761,12 +779,12 @@ export default function HomePage({ collections }: Props) {
     };
   }, [reduce]);
 
-  // Warm Mapbox after the opening reveal has had its visual beat. Its WebGL
-  // canvas remains separately gated near the viewport — except behind the
-  // opening film: the map is created at once (its start-up is on the main
-  // thread while the film plays on the compositor), and its tiles are in
-  // long before the film lands on it.
-  const atlasEager = desktopLayout && opening != null;
+  // Warm Mapbox after the opening reveal has had its visual beat. On the
+  // desktop the map is created at once (its start-up is on the main thread
+  // while the film plays on the compositor, or while the reader is on the
+  // opening words): its globe is held hidden until the pass is torn, and its
+  // tiles are in long before the glide brings it up the screen.
+  const atlasEager = desktopLayout;
   useEffect(() => {
     let delay = 0;
     let idle = 0;
@@ -802,6 +820,8 @@ export default function HomePage({ collections }: Props) {
   // chapters render their covers into it once it is on the page.
   const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
   const desktopStageRef = useRef<HTMLDivElement>(null);
+  // The phone's opener (WalkIn): where the entrance's glide lands there.
+  const walkInRef = useRef<HTMLDivElement>(null);
   // The page's own root: gone from the document once a navigation (the
   // browser's Back with a story open) has swapped the page out.
   const pageRootRef = useRef<HTMLDivElement>(null);
@@ -982,6 +1002,17 @@ export default function HomePage({ collections }: Props) {
     });
     return tabs;
   }, [sections]);
+  // The route's first stop: the boarding pass's destination and the globe's
+  // first-screen line (data-driven: Miami today, Washington once the owner
+  // adds it as stop 01).
+  const firstStop = useMemo(() => {
+    const first = orderedCities[0];
+    return first ? { name: first.name.trim(), region: first.region?.trim() || null, year: first.year ?? null } : null;
+  }, [orderedCities]);
+  const entranceNextTop = useCallback(() => {
+    const node = desktopLayout ? desktopStageRef.current : walkInRef.current;
+    return node ? documentTop(node) : null;
+  }, [desktopLayout]);
   const cityDomId = (c: Collection) => `archive-item-${c._id}`;
   const mobileCityDomId = (c: Collection) => `mobile-archive-item-${c._id}`;
 
@@ -1256,8 +1287,11 @@ export default function HomePage({ collections }: Props) {
   const backToStart = useCallback(() => {
     const start = document.getElementById('main-content');
     const lenis = lenisRef.current;
-    // The start is the first screen — the top of this page's own content.
-    const startY = pageRootRef.current ? documentTop(pageRootRef.current) : 0;
+    // The start is the start of the route: the globe's first pose on the
+    // desktop (the prologue's top), the phone's opener — not the entrance's
+    // opening words and pass above them, which were the way in.
+    const startNode = desktopLayout ? desktopStageRef.current : walkInRef.current;
+    const startY = startNode ? documentTop(startNode) : pageRootRef.current ? documentTop(pageRootRef.current) : 0;
     if (!lenis || reduce) {
       window.scrollTo({ top: startY, behavior: 'auto' });
       start?.focus({ preventScroll: true });
@@ -1298,7 +1332,7 @@ export default function HomePage({ collections }: Props) {
       lock: true,
       onComplete: settle,
     });
-  }, [reduce, startPassing, endPassing]);
+  }, [desktopLayout, reduce, startPassing, endPassing]);
 
   // Keep the active city tied to the chapter nearest the visual reading line.
   // IntersectionObserver only fires when thresholds are crossed; during a
@@ -1740,8 +1774,8 @@ export default function HomePage({ collections }: Props) {
             aria-label="Ryan Xu — back to top"
             onClick={() => {
               setSelectedCollection(null);
-              // The top is the first screen (his name, the globe) — the start
-              // of the archive.
+              // The top is the first screen (his name and the opening words)
+              // — the start of the archive.
               const start = pageRootRef.current ? documentTop(pageRootRef.current) : 0;
               window.scrollTo({ top: start, behavior: reduce ? 'auto' : 'smooth' });
             }}
@@ -1807,12 +1841,26 @@ export default function HomePage({ collections }: Props) {
           </div>
         </nav>
 
-        {/* ── The opening — the original paper-to-olive entrance develops the
-             quiet editorial cover, then grows it to full bleed. ── */}
-        {/* Compact screens keep the WalkIn opener. On desktop the globe
-            prologue (inside the atlas section) replaces it; CSS hides it so the
-            server and every client render the same tree. */}
-        <div className="lg:hidden">
+        {/* ── The entrance: after the opening film, his opening words; a
+             little way down, a boarding pass to pick up, tear or scan; torn,
+             the page glides on to the globe (desktop) or the phone's opener.
+             Both trees, one markup. ── */}
+        <EntranceIntro
+          years={archiveYearSpan}
+          first={firstStop}
+          lenisRef={lenisRef}
+          nextTop={entranceNextTop}
+          onArrive={onEntranceArrive}
+          onArrived={onEntranceArrived}
+          covered={reelCovering}
+        />
+
+        {/* ── The phone's opener — the original paper-to-olive entrance
+             develops the quiet editorial cover, then grows it to full bleed.
+             On desktop the globe prologue (inside the atlas section) takes
+             its place; CSS hides it so the server and every client render the
+             same tree. ── */}
+        <div ref={walkInRef} className="lg:hidden">
           <WalkIn collections={walkInCollections} places={walkInCollections.length} />
         </div>
 
@@ -1856,7 +1904,14 @@ export default function HomePage({ collections }: Props) {
             className="relative pb-8 pt-24 lg:pt-0"
             style={{ ['--prologue-h' as never]: PROLOGUE_HEIGHT }}
           >
-          <GlobePrologue years={archiveYearSpan} progress={prologueProgress} covered={reelCovering} />
+          <GlobePrologue
+            years={archiveYearSpan}
+            progress={prologueProgress}
+            covered={reelCovering || entrance === 'held'}
+            first={firstStop}
+            stops={orderedCities.length}
+            arrival={!entranceGlide || entrance === 'held' ? 'none' : entrance === 'arriving' ? 'gliding' : 'landed'}
+          />
           {/* Where the archive proper begins: the entrance score is measured
               from here, exactly as it was from the section's top before the
               prologue was laid over the atlas. */}
@@ -1874,9 +1929,7 @@ export default function HomePage({ collections }: Props) {
             {/* A full-bleed Mapbox field anchors the archive. The photo column
                  overlaps its soft seam so map and work read as one editorial
                  spread instead of two adjacent widgets. */}
-            {/* `opening-atlas`: landing A lets the globe rise out of the dark
-                behind the words (global.css, "The opening film"). */}
-            <aside className="opening-atlas sticky top-0 z-10 hidden h-screen h-[100dvh] w-[78%] shrink-0 lg:block">
+            <aside className="sticky top-0 z-10 hidden h-screen h-[100dvh] w-[78%] shrink-0 lg:block">
               <DeferredRouteAtlas
                 stops={routeStops}
                 activeIndex={routeStops.findIndex((stop) => stop.id === orderedCities[activeRouteIndex]?._id)}
@@ -1891,9 +1944,10 @@ export default function HomePage({ collections }: Props) {
                 onEngage={setEngagedChapterId}
                 onNavigate={navigateFromAtlas}
                 eager={atlasEager}
-                holdReveal={reelCovering && !reelFramed}
-                engage={atlasEager && reelCovering}
-                covered={reelCovering}
+                holdReveal={entrance === 'held'}
+                arrivalGlide={entranceGlide}
+                engage={atlasEager && (reelCovering || entrance !== 'done')}
+                covered={reelCovering || entrance !== 'done'}
               />
               {/* The covers' dock: each chapter's cover rides here, on the
                   atlas, beside its place's shield (ArchiveChapter portals it

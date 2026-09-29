@@ -1,0 +1,841 @@
+/* ── The entrance (src/components/home/EntranceIntro.tsx, BoardingPass.tsx) ──
+   After the opening film: his name and a few opening words on the olive
+   ground (no globe); a little way down, a white boarding pass rises into
+   view — picked up, torn, or scanned — and once it is torn the page glides
+   on to the globe. Calm by rule: one thing moves at a time, on the house
+   curves; no blur, no strobe; the screen's one lime is the scroll cue's
+   sweep (the words) or the Tear button's dot (the pass). */
+
+/* ── The opening words ─────────────────────────────────────────────────── */
+.entrance {
+  position: relative;
+}
+.entrance-intro {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100svh;
+  min-height: 520px;
+  padding: 0 max(24px, 6vw);
+  text-align: center;
+}
+.entrance-intro__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* A touch above the middle: the eye's centre, with room for the cue. */
+  transform: translateY(-2.5svh);
+}
+.entrance-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.6);
+}
+.entrance-kicker__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #f4f4ed;
+}
+.entrance-kicker__years {
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 244, 237, 0.45);
+}
+/* His name, once, on one line: large, not monumental (the old first screen
+   set it at 15.2vw beside a lit planet — the glare the owner felt on
+   arrival). Each word rises out of its own mask. */
+.entrance-name {
+  margin-top: clamp(18px, 3.4svh, 34px);
+  font-family: var(--font-display);
+  font-size: clamp(60px, 8.2vw, 156px);
+  font-weight: 400;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #f4f4ed;
+}
+.entrance-line {
+  display: inline-block;
+  overflow: hidden;
+  padding: 0.04em 0.03em 0.1em;
+  margin: -0.04em -0.03em -0.1em;
+  vertical-align: top;
+}
+.entrance-rise {
+  display: inline-block;
+}
+/* The opening words (PROPOSED copy, EntranceIntro). Reading text: Fraunces,
+   a comfortable measure, balanced lines. The words the film found are full
+   ink; the rest of the line is a step quieter. */
+.entrance-words {
+  max-width: 29em;
+  margin-top: clamp(22px, 4.4svh, 48px);
+  font-family: var(--font-display);
+  font-size: clamp(19px, 1.5vw, 27px);
+  font-weight: 400;
+  line-height: 1.5;
+  text-wrap: balance;
+  color: rgba(244, 244, 237, 0.62);
+}
+.entrance-found {
+  color: #f4f4ed;
+}
+.entrance-cue {
+  position: absolute;
+  left: 50%;
+  bottom: max(28px, 5.5svh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-left: -40px;
+  width: 80px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.5);
+}
+.entrance-cue__line {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: 34px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+}
+@media (max-width: 639px) {
+  .entrance-name { font-size: clamp(48px, 15vw, 76px); }
+  .entrance-words {
+    max-width: 21em;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+}
+
+/* The words' entrance runs from the first paint (a second view: the film is
+   skipped), from the keyframes in global.css: the name's two words rise out
+   of their masks at 180 and 260 ms, the words follow at 480, the kicker at
+   640, the cue at 1000. */
+.entrance-rise { animation: prologue-hero-rise 950ms var(--ease-arrive) 180ms backwards; }
+.entrance-rise--late { animation-delay: 260ms; }
+.entrance-words { animation: prologue-hero-lift-14 800ms var(--ease-arrive) 480ms backwards; }
+.entrance-kicker { animation: prologue-hero-lift-10 700ms var(--ease-arrive) 640ms backwards; }
+.entrance-cue { animation: prologue-hero-fade 800ms var(--ease-arrive) 1000ms backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .entrance-rise,
+  .entrance-words,
+  .entrance-kicker,
+  .entrance-cue { animation: none; }
+}
+/* Under the film (html[data-reel], src/lib/reelVisit.ts) the entrance is
+   off — the finished words, unseen. Landing A (src/lib/openingFilm.ts): the
+   found words fly home to their spans; the rest of the line, the kicker and
+   the cue wait, then come up round them. */
+html[data-reel='reel'] .entrance-rise,
+html[data-reel='reel'] .entrance-words,
+html[data-reel='reel'] .entrance-kicker,
+html[data-reel='reel'] .entrance-cue,
+html[data-reel='flight'] .entrance-rise,
+html[data-reel='flight'] .entrance-words,
+html[data-reel='flight'] .entrance-kicker,
+html[data-reel='flight'] .entrance-cue,
+html[data-reel='landed'] .entrance-rise,
+html[data-reel='landed'] .entrance-words { animation: none; }
+html[data-reel='flight'] .entrance-intro .open-rest,
+html[data-reel='flight'] .entrance-kicker,
+html[data-reel='flight'] .entrance-cue { opacity: 0; }
+html[data-reel='landed'] .entrance-intro .open-rest {
+  animation: prologue-hero-fade 760ms var(--ease-arrive) 60ms backwards;
+}
+html[data-reel='landed'] .entrance-kicker {
+  animation: prologue-hero-lift-10 700ms var(--ease-arrive) 240ms backwards;
+}
+html[data-reel='landed'] .entrance-cue {
+  animation: prologue-hero-fade 700ms var(--ease-arrive) 420ms backwards;
+}
+/* Reduced motion's calm crossfade ('page'): the same entrance, sooner (only
+   the timing: under reduced motion there is no animation to time). */
+html[data-reel='page'] .entrance-rise { animation-duration: 760ms; animation-delay: 0ms; }
+html[data-reel='page'] .entrance-rise--late { animation-delay: 70ms; }
+html[data-reel='page'] .entrance-words { animation-duration: 640ms; animation-delay: 220ms; }
+html[data-reel='page'] .entrance-kicker { animation-duration: 560ms; animation-delay: 320ms; }
+html[data-reel='page'] .entrance-cue { animation-duration: 560ms; animation-delay: 420ms; }
+
+/* ── The pass's stage ────────────────────────────────────────────────────
+   A frame one screen tall that holds (sticky) for --pass-pin below the
+   words; the pass rises into it with the scroll (BoardingPass writes the
+   rise on the pass's root). */
+.entrance-pass {
+  position: relative;
+  height: calc(100svh + var(--pass-pin, 60svh));
+}
+.entrance-pass__frame {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(22px, 3.6svh, 42px);
+  height: 100svh;
+  padding-top: clamp(40px, 5svh, 64px);
+}
+.entrance-pass__prompt {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  opacity: var(--prompt-in, 0);
+}
+.entrance-pass[data-torn] .entrance-pass__prompt {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.entrance-pass__line {
+  font-family: var(--font-display);
+  font-size: clamp(15px, 1.1vw, 18px);
+  line-height: 1.45;
+  text-wrap: balance;
+  color: rgba(244, 244, 237, 0.7);
+}
+.entrance-pass__tear {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid rgba(244, 244, 237, 0.16);
+  border-radius: 9999px;
+  background: rgba(23, 27, 21, 0.62);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f4f4ed;
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: var(--dur-out);
+  transition-timing-function: var(--ease-arrive);
+}
+.entrance-pass__tear:hover {
+  background: rgba(23, 27, 21, 0.86);
+  border-color: rgba(244, 244, 237, 0.28);
+  transition-duration: var(--dur-in);
+}
+.entrance-pass__tear:active { transform: scale(0.97); }
+.entrance-pass__tear:focus-visible {
+  outline: 2px solid #d2ff00;
+  outline-offset: 3px;
+}
+/* The pass's screen's one lime. */
+.entrance-pass__tear-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #d2ff00;
+}
+@media (max-width: 639px) {
+  .entrance-pass__prompt {
+    flex-direction: column;
+    gap: 12px;
+    max-width: 300px;
+    text-align: center;
+  }
+  .entrance-pass__line { font-size: 15px; }
+}
+
+/* ── The boarding pass ───────────────────────────────────────────────────
+   White paper, crisp print, our type. Its sizes are all from --bp-w, which
+   the stub keeps once it is torn off and handed to its own fixed layer
+   (.bp-hand), so its print never changes size in the hand. Landscape on
+   wider screens (the stub on the right, the perforation down); upright on
+   a phone (the stub below, the perforation across). */
+.bp,
+.bp-hand {
+  --bp-paper: #f0ede4;
+  --bp-ink: #15180f;
+  --bp-muted: rgba(21, 24, 15, 0.58);
+  --bp-faint: rgba(21, 24, 15, 0.4);
+  --bp-rule: rgba(21, 24, 15, 0.14);
+  --bp-band: #1d2117;
+  --bp-band-ink: #f4f4ed;
+  /* Whole (even) pixels, so the halves meet on a pixel edge: a fractional
+     seat left a hairline between them. */
+  --bp-w: round(clamp(560px, 50vw, 860px), 2px);
+  --bp-h: calc(var(--bp-w) / 2.5);
+  --bp-u: calc(var(--bp-w) / 100);
+  /* Landscape: the stub's width. */
+  --bp-stub: round(calc(var(--bp-w) * 0.27), 1px);
+  --bp-pad: calc(var(--bp-u) * 2.9);
+  --bp-band-h: calc(var(--bp-h) * 0.12);
+  --bp-t-band: max(8px, calc(var(--bp-u) * 1.08));
+  --bp-t-label: max(8.5px, calc(var(--bp-u) * 0.98));
+  --bp-t-value: max(10px, calc(var(--bp-u) * 1.55));
+  --bp-t-city: calc(var(--bp-u) * 5.1 * var(--bp-to-scale, 1));
+  --bp-t-stub-city: calc(var(--bp-u) * 2.7 * var(--bp-to-scale, 1));
+  --bp-qr: calc(var(--bp-u) * 15);
+  /* A fine perforation (a bead chain at 2.3 px holes on a 9 px pitch). */
+  --bp-pitch: 6px;
+  --bp-hole: 1.3px;
+  --bp-notch: 7px;
+  /* The paper: a still grain (never animated) under a faint sheen. */
+  --bp-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.34 -0.1'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .bp,
+  .bp-hand { --bp-w: round(down, min(640px, calc(100vw - 64px)), 2px); }
+}
+@media (max-width: 639px) {
+  .bp,
+  .bp-hand {
+    /* Upright, and small enough that about two fifths of the screen round
+       it stays the page's to scroll (a thumb swiping up the pass scrolls
+       too, entrance.css below). */
+    --bp-w: round(down, min(300px, calc(100vw - 64px), calc((100svh - 330px) / 1.62)), 2px);
+    --bp-h: round(calc(var(--bp-w) * 1.62), 1px);
+    --bp-u: calc(var(--bp-w) / 38);
+    /* Upright: the stub's height. */
+    --bp-stub: round(calc(var(--bp-h) * 0.24), 1px);
+    --bp-pad: calc(var(--bp-u) * 2);
+    --bp-band-h: calc(var(--bp-h) * 0.075);
+    --bp-t-band: 8.5px;
+    --bp-t-label: 8.5px;
+    --bp-t-value: calc(var(--bp-u) * 1.42);
+    --bp-t-city: calc(var(--bp-u) * 4.6 * var(--bp-to-scale, 1));
+    --bp-t-stub-city: calc(var(--bp-u) * 1.9 * var(--bp-to-scale, 1));
+    --bp-qr: calc(var(--bp-u) * 11.5);
+    --bp-pitch: 5.5px;
+    --bp-hole: 1.2px;
+    --bp-notch: 6.5px;
+  }
+}
+
+.bp {
+  position: relative;
+  flex: none;
+  width: var(--bp-w);
+  height: var(--bp-h);
+}
+/* Not in place yet (rising with the scroll), it cannot be picked up: a
+   finger swiping the page up over it scrolls the page (BoardingPass writes
+   data-risen once it has risen). */
+.bp:not([data-risen]) { pointer-events: none; }
+.bp-body {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  transform-origin: 50% 50%;
+}
+.bp[data-held='drag'] .bp-body { cursor: grabbing; }
+/* A phone: a swipe up or down the pass's main part scrolls the page; the
+   pass is picked up by a sideways move or a press-and-hold (BoardingPass),
+   and its stub keeps every touch for the tear. */
+@media (pointer: coarse) {
+  .bp-body { touch-action: pan-y; }
+  .bp-seat { touch-action: none; }
+}
+.bp-body:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 6px;
+  outline: 2px solid #d2ff00;
+  pointer-events: none;
+}
+/* Torn (by Enter, say), the ring would outline an empty seat beside the
+   Tear button's lime: gone with the stub. */
+.bp[data-stub] .bp-body:focus-visible::after { display: none; }
+.bp-half {
+  position: relative;
+  z-index: 0;
+  display: flex;
+}
+.bp-half--main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.bp-seat {
+  position: relative;
+  flex: none;
+  width: var(--bp-stub);
+  /* Over the main part's edge by half a pixel: no hairline between the
+     halves at any offset the hand leaves the pass at. */
+  margin-left: -0.5px;
+  cursor: grab;
+}
+.bp[data-stub='free'] .bp-seat,
+.bp[data-stub='gone'] .bp-seat { cursor: inherit; }
+.bp-half--stub {
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+/* Each half carries its own shadow (a torn stub takes its shadow with it):
+   at rest, lifted (while held: BoardingPass writes its opacity and drop),
+   and the stub's own as it comes away. */
+.bp-shadow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 3px;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(5, 7, 3, 0.36), 0 14px 32px rgba(5, 7, 3, 0.3);
+}
+/* While the pass is whole the main part's shadows run on under the stub
+   and the stub casts none of its own at rest: one pass, one shadow (two
+   that met at the seam left a lighter line under it). As the stub comes
+   away it casts its tear shadow; torn, the main part's keep to its edge. */
+.bp-half--main > .bp-shadow { right: calc(var(--bp-stub) * -1); }
+.bp[data-stub] .bp-half--main > .bp-shadow { right: 0; }
+.bp:not([data-stub]) .bp-half--stub > .bp-shadow:not(.bp-shadow--tear) { visibility: hidden; }
+.bp-shadow--lift,
+.bp-shadow--tear { opacity: 0; }
+.bp-shadow--lift { box-shadow: 0 34px 70px rgba(5, 7, 3, 0.44), 0 10px 24px rgba(5, 7, 3, 0.3); }
+.bp-shadow--tear { box-shadow: 0 18px 36px rgba(3, 5, 2, 0.46), 0 4px 10px rgba(3, 5, 2, 0.3); }
+/* The stub's shadows never spill across the seam onto the main part. */
+.bp-half--stub > .bp-shadow { clip-path: inset(-90px -90px -90px 0); }
+
+/* The paper and its perforation. Each half punches its half of every hole
+   down the seam and a notch at each end; the fifth mask layer is the torn
+   edge (src/lib/ticketTear.ts: --bp-edge-main and its rough complement
+   --bp-edge-stub, set per layout), revealed down the seam as far as the rip
+   has run (--bp-torn, written from the tear's clock). Unset, it is nothing. */
+.bp-main,
+.bp-stub {
+  position: relative;
+  box-sizing: border-box;
+  height: 100%;
+  color: var(--bp-ink);
+  background:
+    var(--bp-grain) 0 0 / 160px 160px,
+    radial-gradient(120% 90% at 30% 20%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 62%),
+    var(--bp-paper);
+  -webkit-mask-size: 100% 100%, 100% var(--bp-pitch), 100% 100%, 100% 100%, 8px var(--bp-torn, 0px);
+  mask-size: 100% 100%, 100% var(--bp-pitch), 100% 100%, 100% 100%, 8px var(--bp-torn, 0px);
+  -webkit-mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat, no-repeat;
+  mask-repeat: no-repeat, repeat-y, no-repeat, no-repeat, no-repeat;
+  -webkit-mask-composite: source-out, source-over, source-over, source-over, source-over;
+  mask-composite: subtract, add, add, add, add;
+}
+.bp-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  column-gap: calc(var(--bp-u) * 3);
+  padding: 0 var(--bp-pad) var(--bp-pad);
+  border-radius: 3px 0 0 3px;
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 100% calc(var(--bp-pitch) / 2), #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+    radial-gradient(circle at 100% 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    radial-gradient(circle at 100% 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    var(--bp-edge-main, linear-gradient(transparent, transparent));
+  mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 100% calc(var(--bp-pitch) / 2), #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+    radial-gradient(circle at 100% 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    radial-gradient(circle at 100% 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    var(--bp-edge-main, linear-gradient(transparent, transparent));
+  -webkit-mask-position: 0 0, 0 0, 0 0, 0 0, 100% 0;
+  mask-position: 0 0, 0 0, 0 0, 0 0, 100% 0;
+}
+.bp-stub {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--bp-pad) var(--bp-pad);
+  border-radius: 0 3px 3px 0;
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--bp-pitch) / 2), #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    var(--bp-edge-stub, linear-gradient(transparent, transparent));
+  mask-image:
+    linear-gradient(#000, #000),
+    radial-gradient(circle at 0 calc(var(--bp-pitch) / 2), #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+    radial-gradient(circle at 0 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    radial-gradient(circle at 0 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+    var(--bp-edge-stub, linear-gradient(transparent, transparent));
+  -webkit-mask-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+  mask-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+}
+/* The torn seam: the fibres the rip pulls out of each edge (the torn edge's
+   fringes, set per layout), shown from the top notch down to the tip; below
+   the tip, the strain while the paper still holds. Nothing at rest. */
+.bp-fibre,
+.bp-strain {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 8px;
+  pointer-events: none;
+  opacity: 0;
+}
+.bp-fibre {
+  background-repeat: no-repeat;
+  background-size: 8px 100%;
+  clip-path: inset(0 0 100% 0);
+}
+.bp-main > .bp-fibre { right: 0; background-image: var(--bp-fringe-main, none); }
+.bp-stub > .bp-fibre { left: 0; background-image: var(--bp-fringe-stub, none); }
+.bp-main > .bp-strain {
+  right: 0;
+  width: 4px;
+  background: linear-gradient(270deg, rgba(21, 24, 15, 0.26) 0 1px, rgba(21, 24, 15, 0.08) 1px, rgba(21, 24, 15, 0) 4px);
+}
+.bp-stub > .bp-strain {
+  left: 0;
+  width: 6px;
+  background: linear-gradient(90deg, rgba(21, 24, 15, 0.3), rgba(21, 24, 15, 0));
+}
+
+/* The print. */
+.bp-band {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--bp-u) * 1.6);
+  height: var(--bp-band-h);
+  margin: 0 calc(var(--bp-pad) * -1);
+  padding: 0 var(--bp-pad);
+  background: var(--bp-band);
+  font-family: var(--font-ui);
+  font-size: var(--bp-t-band);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bp-band-ink);
+  white-space: nowrap;
+}
+.bp-band__mark {
+  font-family: var(--font-display);
+  font-size: calc(var(--bp-t-band) * 1.5);
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.bp-band__kind { color: rgba(244, 244, 237, 0.82); }
+.bp-band__flight {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 244, 237, 0.62);
+}
+.bp-field {
+  display: flex;
+  min-width: 0;
+}
+.bp-field--stack {
+  flex-direction: column;
+  gap: calc(var(--bp-u) * 0.45);
+}
+.bp-label {
+  font-family: var(--font-ui);
+  font-size: var(--bp-t-label);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bp-muted);
+}
+.bp-value {
+  font-family: var(--font-ui);
+  font-size: var(--bp-t-value);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--bp-ink);
+}
+.bp-route {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--bp-u) * 2.2);
+  /* Low in its band, near the fields it heads (centred it left a third of
+     the pass empty under it). */
+  align-self: end;
+  margin-bottom: calc(var(--bp-u) * 3.4);
+  min-width: 0;
+}
+.bp-city {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(var(--bp-u) * 0.9);
+  font-family: var(--font-display);
+  font-size: var(--bp-t-city);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  color: var(--bp-ink);
+}
+.bp-city--from {
+  font-size: calc(var(--bp-u) * 3);
+  color: var(--bp-muted);
+}
+.bp-code {
+  font-family: var(--font-ui);
+  font-size: var(--bp-t-label);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--bp-muted);
+}
+.bp-arrow {
+  flex: 0 1 calc(var(--bp-u) * 11);
+  min-width: calc(var(--bp-u) * 4);
+  height: 12px;
+  margin-bottom: calc(var(--bp-u) * 1.1);
+  overflow: visible;
+  fill: none;
+  stroke: var(--bp-faint);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.bp-arrow path { vector-effect: non-scaling-stroke; }
+.bp-grid {
+  grid-column: 1;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: calc(var(--bp-u) * 1.7) calc(var(--bp-u) * 2.4);
+  padding-top: calc(var(--bp-u) * 1.9);
+  border-top: 1px solid var(--bp-rule);
+}
+.bp-qr {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--bp-u) * 0.7);
+}
+.bp-qr__code {
+  display: block;
+  width: var(--bp-qr);
+  height: var(--bp-qr);
+  fill: var(--bp-ink);
+}
+.bp-qr__ground { fill: #fbfaf5; }
+.bp-qr__cap {
+  font-family: var(--font-ui);
+  font-size: var(--bp-t-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--bp-muted);
+}
+.bp-stub .bp-band {
+  flex: none;
+  margin-bottom: calc(var(--bp-u) * 1.8);
+}
+.bp-stub .bp-band__kind { overflow: hidden; text-overflow: ellipsis; }
+.bp-stub__fields {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--bp-u) * 1.5);
+  min-height: 0;
+}
+.bp-stub__pair {
+  display: flex;
+  gap: calc(var(--bp-u) * 2.6);
+}
+.bp-value--city {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(var(--bp-u) * 0.6);
+  font-family: var(--font-display);
+  font-size: var(--bp-t-stub-city);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.bp-barcode {
+  display: block;
+  width: 100%;
+  height: calc(var(--bp-h) * 0.15);
+  margin-top: auto;
+  fill: var(--bp-ink);
+  shape-rendering: crispEdges;
+}
+
+/* Upright (a phone): the stub below, the perforation across. */
+@media (max-width: 639px) {
+  .bp-body { flex-direction: column; }
+  .bp-half--main {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .bp-seat {
+    width: 100%;
+    height: var(--bp-stub);
+    margin-left: 0;
+    margin-top: -0.5px;
+  }
+  .bp-half--stub > .bp-shadow { clip-path: inset(0 -90px -90px -90px); }
+  .bp-half--main > .bp-shadow {
+    right: 0;
+    bottom: calc(var(--bp-stub) * -1);
+  }
+  .bp[data-stub] .bp-half--main > .bp-shadow { bottom: 0; }
+  .bp-main,
+  .bp-stub {
+    -webkit-mask-size: 100% 100%, var(--bp-pitch) 100%, 100% 100%, 100% 100%, var(--bp-torn, 0px) 8px;
+    mask-size: 100% 100%, var(--bp-pitch) 100%, 100% 100%, 100% 100%, var(--bp-torn, 0px) 8px;
+    -webkit-mask-repeat: no-repeat, repeat-x, no-repeat, no-repeat, no-repeat;
+    mask-repeat: no-repeat, repeat-x, no-repeat, no-repeat, no-repeat;
+  }
+  .bp-main {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--bp-u) * 1.9);
+    border-radius: 3px 3px 0 0;
+    -webkit-mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at calc(var(--bp-pitch) / 2) 100%, #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+      radial-gradient(circle at 0 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      radial-gradient(circle at 100% 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      var(--bp-edge-main, linear-gradient(transparent, transparent));
+    mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at calc(var(--bp-pitch) / 2) 100%, #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+      radial-gradient(circle at 0 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      radial-gradient(circle at 100% 100%, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      var(--bp-edge-main, linear-gradient(transparent, transparent));
+    -webkit-mask-position: 0 0, 0 0, 0 0, 0 0, 0 100%;
+    mask-position: 0 0, 0 0, 0 0, 0 0, 0 100%;
+  }
+  .bp-stub {
+    justify-content: flex-end;
+    padding-top: var(--bp-pad);
+    border-radius: 0 0 3px 3px;
+    -webkit-mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at calc(var(--bp-pitch) / 2) 0, #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+      radial-gradient(circle at 0 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      radial-gradient(circle at 100% 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      var(--bp-edge-stub, linear-gradient(transparent, transparent));
+    mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at calc(var(--bp-pitch) / 2) 0, #000 var(--bp-hole), transparent calc(var(--bp-hole) + 0.6px)),
+      radial-gradient(circle at 0 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      radial-gradient(circle at 100% 0, #000 var(--bp-notch), transparent calc(var(--bp-notch) + 0.7px)),
+      var(--bp-edge-stub, linear-gradient(transparent, transparent));
+  }
+  .bp-fibre,
+  .bp-strain {
+    top: auto;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 8px;
+  }
+  .bp-fibre {
+    background-size: 100% 8px;
+    clip-path: inset(0 100% 0 0);
+  }
+  .bp-main > .bp-fibre { bottom: 0; }
+  .bp-stub > .bp-fibre { top: 0; }
+  .bp-main > .bp-strain {
+    bottom: 0;
+    height: 4px;
+    background: linear-gradient(0deg, rgba(21, 24, 15, 0.26) 0 1px, rgba(21, 24, 15, 0.08) 1px, rgba(21, 24, 15, 0) 4px);
+  }
+  .bp-stub > .bp-strain {
+    top: 0;
+    height: 6px;
+    background: linear-gradient(180deg, rgba(21, 24, 15, 0.3), rgba(21, 24, 15, 0));
+  }
+  .bp-route {
+    align-self: stretch;
+    margin-top: calc(var(--bp-u) * 0.6);
+  }
+  .bp-arrow { flex-basis: calc(var(--bp-u) * 7); }
+  .bp-city--from { font-size: calc(var(--bp-u) * 2.3); }
+  .bp-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: calc(var(--bp-u) * 1.6) calc(var(--bp-u) * 1.6);
+    padding-top: calc(var(--bp-u) * 1.6);
+  }
+  .bp-grid__wide { grid-column: 1 / -1; }
+  .bp-qr {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-top: auto;
+  }
+  .bp-qr__cap { order: -1; }
+  /* The stub: the band's job is done above; a row of fields, the barcode. */
+  .bp-stub .bp-band { display: none; }
+  .bp-stub__fields {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: calc(var(--bp-u) * 1.2);
+  }
+  .bp-stub__fields > .bp-field:first-child { display: none; }
+  .bp-stub__pair { gap: calc(var(--bp-u) * 1.6); }
+  .bp-barcode {
+    height: calc(var(--bp-stub) * 0.3);
+    margin-top: calc(var(--bp-u) * 1.4);
+  }
+}
+
+/* The stub once it is torn off: in the hand, then falling — a fixed layer
+   above the page (under the opening film's), its pose written by
+   BoardingPass. Its torn edge is whole and its fibres out. */
+.bp-hand-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bp-hand {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  visibility: hidden;
+}
+.bp-hand > .bp-shadow--hand {
+  box-shadow: 0 26px 50px rgba(3, 5, 2, 0.48), 0 6px 14px rgba(3, 5, 2, 0.32);
+}
+.bp-stub--hand {
+  --bp-torn: 100%;
+  height: 100%;
+}
+.bp-stub--hand > .bp-fibre {
+  opacity: 1;
+  clip-path: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entrance-pass__tear:active { transform: none; }
+}

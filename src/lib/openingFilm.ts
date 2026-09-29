@@ -22,16 +22,16 @@
 // together — and then HOLDS dead still to be read. The finder waits, wide and
 // dim, while the shot moves, and locks on when it lands.
 //
-// Two ways to land, chosen by the URL (?open=a, the default, or ?open=b):
-//  A "words fly home": the clapperboard dissolves into the page's olive, and
-//    RYAN, XU, ARCHIVE, TRAVEL and THOUGHT glide into their own places in the
-//    first screen's name and line, their typeface turning into Fraunces on
-//    the way (both faces held to one ink box, so the change is a morph, never
-//    a double image); the globe rises out of the dark behind them, the nav
-//    last.
-//  B "through the o": the camera pushes into the O of THOUGHT; its round
-//    counter opens onto the page and grows into the Earth's own disc (a match
-//    cut on the circle), and the first screen rises round it.
+// It lands on the entrance's opening words (src/components/home/
+// EntranceIntro.tsx — no globe there: the globe comes in later, once the
+// boarding pass below them is torn). "Words fly home" (landing A): the
+// clapperboard dissolves into the page's olive, and RYAN, XU, CAMERA,
+// ARCHIVE, TRAVEL and THOUGHT glide into their own places in his name and
+// the opening words (LANDING_TARGETS), their typeface turning into Fraunces
+// on the way (both faces held to one ink box, so the change is a morph,
+// never a double image); the rest of the words come up round them, the nav
+// last. (Landing B, "through the o" into the globe's disc, went with the
+// globe's place on the first screen.)
 //
 // It plays once a tab session (src/lib/reelVisit.ts): a later view skips it
 // before the first paint. While it plays, ONLY the Skip pill skips it (to
@@ -41,8 +41,8 @@
 // a calm crossfade.
 //
 // Everything in this module is pure (no DOM), so scripts/opening-film.test.mjs
-// holds the schedule, the entrances, the skip, the camera, the landing and
-// the portal to account offline.
+// holds the schedule, the entrances, the skip, the camera and the landing
+// to account offline.
 
 import { EASE, bezierFn, type Bezier } from './motion';
 
@@ -50,19 +50,16 @@ export const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** 0 → 1 across [a, b], linear, clamped. */
 export const segment = (value: number, a: number, b: number) => clamp01((value - a) / (b - a));
-export const easeInOutCubic = (t: number) => {
-  const v = clamp01(t);
-  return v < 0.5 ? 4 * v * v * v : 1 - (-2 * v + 2) ** 3 / 2;
-};
 export const easeOutCubic = (t: number) => 1 - (1 - clamp01(t)) ** 3;
 
 // ── What the film tells the page ─────────────────────────────────────────
 // The film is its own island, above HomePage's. It says whether it covers
 // the first screen ('film'), is landing on it ('landing'), or has handed the
-// page over ('page'), and whether the globe may start to come up behind it
-// (HomePage then lets go of the atlas's held reveal, so the globe's fade and
-// dawn are done, under the film, before the landing shows it). The last word
-// is kept on window.__archiveOpening for anyone who starts listening late.
+// page over ('page'), and whether the globe may start to come up behind it.
+// (The page no longer waits on that last word: the globe is not on the first
+// screen, and it comes in when the entrance's boarding pass is torn —
+// HomePage, `entrance`.) The last word is kept on window.__archiveOpening for
+// anyone who starts listening late.
 
 export const OPENING_EVENT = 'archive:opening';
 export type OpeningState = 'film' | 'landing' | 'page';
@@ -74,9 +71,6 @@ export interface OpeningDetail {
 declare global {
   interface Window {
     __archiveOpening?: OpeningDetail;
-    /** RouteAtlas: are the first screen's globe tiles in? (The landing
-     *  waits a moment for them.) */
-    __archiveGlobeReady?: () => boolean;
   }
 }
 
@@ -459,14 +453,12 @@ export function fastForwardTarget(cuts: readonly Cut[], t: number): number | nul
 }
 
 // ── The globe behind ──────────────────────────────────────────────────────
-// The atlas holds the globe's reveal while the film covers it; it lets go
-// this long before the clap, so the fade, the dawn and the settle (2.6 s) are
-// done — under the film — before the landing shows the globe. A skip lets go
-// at once.
+// The film says the globe may come up this long before the clap (a skip
+// says so at once). Since the entrance's opening words took the first
+// screen, the page holds the globe until the boarding pass is torn instead,
+// whatever the film says.
 export const GLOBE_LEAD_MS = 2900;
 export const globeReleaseAt = (cuts: readonly Cut[]) => Math.max(0, filmLength(cuts) - GLOBE_LEAD_MS);
-/** At the clap the landing waits at most this long for the globe's tiles. */
-export const GLOBE_WAIT_MS = 700;
 
 // ── The camera ─────────────────────────────────────────────────────────────
 // Every scene is a SHEET designed at the desktop's scale (a found word's
@@ -701,13 +693,14 @@ export type KickEase = keyof typeof KICK_EASES;
 
 // ── Landing A: the words fly home ─────────────────────────────────────────
 // Each found word leaves the clapperboard from its own box and lands on its
-// own glyph box in the first screen (one continuous FLIP), a little after
-// the one before; the clapperboard's typeface turns into Fraunces on the way.
-// The two faces are held to ONE ink box the whole time — the same centre,
-// the same cap height, and one shared width that goes from the board's ink
-// width to the page's across `morph` — so the crossfade (one window, no blur)
-// is a morph of letterforms, never a double image. The words leave on the
-// clap itself (its jolt is beat enough). Landing ms.
+// own glyph box in the entrance's opening words (one continuous FLIP), a
+// little after the one before; the clapperboard's typeface turns into
+// Fraunces on the way. The two faces are held to ONE ink box the whole time
+// — the same centre, the same cap height, and one shared width that goes
+// from the board's ink width to the page's across `morph` — so the
+// crossfade (one window, no blur) is a morph of letterforms, never a double
+// image. The words leave on the clap itself (its jolt is beat enough).
+// Landing ms.
 export const LANDING_A = {
   /** The clapperboard dissolves into the page. */
   dissolve: [0, 420] as const,
@@ -716,7 +709,7 @@ export const LANDING_A = {
   /** Word i leaves at `start + i * stagger`, and flies `fly` ms; the fall
    *  leads the slide (`yLead`: the vertical move is done by that share of
    *  the flight), so words that land lower drop clear of the ones above
-   *  before they slide home — no word crosses another. */
+   *  before they slide home. */
   start: 0,
   stagger: 45,
   fly: 1000,
@@ -726,15 +719,22 @@ export const LANDING_A = {
   /** The crossfade (one window for both faces), as a share of the flight. */
   sourceOut: [0.4, 0.56] as const,
   targetIn: [0.4, 0.56] as const,
-  /** The globe rises out of the dark behind the flying words. */
-  globe: 380,
-  /** The rest of the first screen (the line's other words, the kicker, the
-   *  scroll cue, the nav last) comes up round the landed words. */
+  /** The rest of the opening words (the line's other words, the kicker,
+   *  the scroll cue, the nav last) comes up round the landed words. */
   rest: 900,
   done: 1500,
 } as const;
-export const FLY_ORDER = ['ryan', 'xu', 'archive', 'travel', 'thought'] as const;
+/** The words that fly home, in the clapperboard's order (his name, the
+ *  CAMERA it is credited to, then the line). */
+export const FLY_ORDER = ['ryan', 'xu', 'camera', 'archive', 'travel', 'thought'] as const;
 export type FlyWord = (typeof FLY_ORDER)[number];
+/** Where each word leaves from (on the clapperboard, the film's slate
+ *  scene) and where it lands (its span in the entrance's opening words,
+ *  src/components/home/EntranceIntro.tsx). A word missing on either side
+ *  simply does not fly: its place comes up with the rest of the words. */
+export const LANDING_TARGETS: Record<FlyWord, { from: string; to: string }> = Object.fromEntries(
+  FLY_ORDER.map((word) => [word, { from: `[data-fly="${word}"]`, to: `.entrance-intro [data-open-land="${word}"]` }]),
+) as Record<FlyWord, { from: string; to: string }>;
 
 /** The landing curve: an ease-in-out with a soft arrival, quick enough off
  *  the clap that the board never sits frozen after it (15% of the way at
@@ -759,7 +759,7 @@ export interface Flight {
   duration: number;
 }
 /** The FLIP from a word's box on the clapperboard to its glyph box on the
- *  first screen: sizes match on the cap height (`srcCap` / `dstCap`). */
+ *  page: sizes match on the cap height (`srcCap` / `dstCap`). */
 export function flightFor(src: Box, dst: Box, srcCap: number, dstCap: number, order: number): Flight {
   return {
     dx: src.x + src.w / 2 - (dst.x + dst.w / 2),
@@ -785,82 +785,9 @@ export function flightPath(f: Flight, samples = 24) {
 }
 export const landingAEnd = (words: number) => LANDING_A.start + Math.max(0, words - 1) * LANDING_A.stagger + LANDING_A.fly;
 
-// ── Landing B: through the o ───────────────────────────────────────────────
-// The camera pushes into the counter of the O in THOUGHT. The counter is a
-// window onto the page from the first frame; the push is exponential in
-// scale (every doubling takes the same time, so the dive neither lurches nor
-// crawls) and eased in and out, and ends with the counter exactly on the
-// Earth's disc (on a phone, where the first screen has no globe, on a circle
-// just past the screen's corners: an iris out).
-export const LANDING_B = {
-  push: 980,
-  /** The clapperboard itself fades out while the counter is this many times
-   *  its own size (past it only the O's ring and the olive round it are
-   *  left, drawn crisp at any scale): late enough that the push is seen
-   *  going THROUGH the letters. */
-  sheetFade: [6, 20] as const,
-  /** The ring: a white-ink hairline from the first frame (not the O's
-   *  stroke blown up), px. */
-  ring: 2.5,
-  /** The ground round the window: the page's own olive, so the dive never
-   *  goes black. */
-  ground: '#282c20',
-  /** Then the olive round the globe lifts, the ring goes, the name rises. */
-  surround: [960, 1480] as const,
-  ringOut: [900, 1360] as const,
-  rise: 900,
-  done: 1560,
-} as const;
-
-/** The first screen's globe, in screen px: RouteAtlas places it (PROLOGUE_GLOBE
- *  centre 0.84 / 0.93 of the viewport, `cornerZoomFor` scaling its radius
- *  with the width); the radius was measured off the live planet at 1280–1920
- *  wide (0.380w → 0.366w). */
-export function firstScreenGlobe(width: number, height: number) {
-  const w = Math.max(1080, width);
-  const ratio = 0.3797 - (w - 1280) * 2.22e-5;
-  return { x: 0.84 * width, y: 0.93 * height, r: ratio * w };
-}
-
-/** Where the portal lands: the globe's disc on the desktop, a circle past the
- *  screen's corners on a phone. */
-export function portalTarget(width: number, height: number, phone: boolean) {
-  if (phone) return { x: width / 2, y: height / 2, r: Math.hypot(width, height) / 2 + 24 };
-  return firstScreenGlobe(width, height);
-}
-
-export interface Portal {
-  x: number;
-  y: number;
-  /** The counter's radius (the window) and the scale on everything else. */
-  r: number;
-  zoom: number;
-}
-/** The portal at push progress `u` (0 → 1) from the counter (centre `c0`,
- *  radius `r0`) to the target circle. */
-export function portalAt(u: number, c0: Vec2, r0: number, target: { x: number; y: number; r: number }): Portal {
-  const e = easeInOutCubic(u);
-  const zoom = Math.exp(Math.log(target.r / Math.max(1e-6, r0)) * e);
-  // The centre travels so that the counter's centre is on the straight line
-  // from where it was to where it lands, in step with the zoom's own share
-  // (a zoom about a moving point: the page does not slide under the window).
-  const k = zoom <= 1.0001 ? 0 : (zoom - 1) / (target.r / Math.max(1e-6, r0) - 1);
-  return { x: lerp(c0[0], target.x, k), y: lerp(c0[1], target.y, k), r: r0 * zoom, zoom };
-}
-
 // ── Reduced motion ─────────────────────────────────────────────────────────
 // No montage: the clapperboard is shown still, then the page crossfades in.
 export const STILL = { hold: 1100, fade: 700 } as const;
-
-// ── Landing choice ─────────────────────────────────────────────────────────
-export type Landing = 'a' | 'b';
-export function landingFrom(search: string): Landing {
-  try {
-    return new URLSearchParams(search).get('open') === 'b' ? 'b' : 'a';
-  } catch {
-    return 'a';
-  }
-}
 
 // ── Deterministic material ────────────────────────────────────────────────
 // The code rain and the scrambles are drawn by the server and the client
