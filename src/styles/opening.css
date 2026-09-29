@@ -1,16 +1,18 @@
 /* ── The opening film (src/components/home/OpeningFilm.tsx) ────────────────
-   A retro editorial type film; the acts, the machines, the scenes and the
+   A retro editorial type film; the acts, the scenes, the machines and the
    burn's frames are data in src/lib/openingFilm.ts, and the island only
-   times what this sheet draws. This sheet is the film's MATERIALS: eight
-   machines the typed line is relayed across; the bone paper of the match
-   cuts with its lime anchor, the editorial page and twelve pieces of printed
-   matter; the burn's dark and its leader; the dark of the end.
+   times what this sheet draws. This sheet is the film's MATERIALS: the
+   match cuts' pages round the lime anchor (editorial pages on paper, on the
+   dark neutrals and on the ticket stocks, with their layered print, and
+   twelve pieces of printed matter); the hand-off's lime block; eight
+   machines the typed line is relayed across; the burn's dark and its
+   leader; the dark of the end.
    Faces: Fraunces (font-serif, roman 400–900 and italic 400–600) and Space
    Grotesk (font-ui) — loaded before the clock starts — and one monospace
    (of-mono, a system face). The one accent is lime, one element a frame at
    most; the other colours are the site's own (bone, ink, olive and the
-   ticket stocks). Never pure black or white. Everything that moves moves by
-   transform or opacity. */
+   ticket stocks, deep and desaturated, in runs). Never pure black or white.
+   Everything that moves moves by transform or opacity. */
 
 .opening {
   --of-lime: #d2ff00;
@@ -23,12 +25,14 @@
   --of-green: #20423a;
   --of-rust: #593d1b;
   --of-slate: #35383e;
+  --of-olive: #282c20;
   --of-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
   /* The screen's short side (the giant words and the leader are set on it). */
   --of-short: min(100vw, 100vh);
-  /* The typed line of act 1: where it starts and its size (the same on
-     every machine). The finished line is centred on the frame (twenty
-     cells of the monospace, 0.602 em each). */
+  /* The typed line of act 3: where it starts and its size (the island sets
+     every machine's own size and line from these). The finished line is
+     centred on the frame in the terminal's monospace (twenty cells, 0.602
+     em each). */
   --line-x: max(16px, calc(50vw - 10 * 0.602 * var(--line-size)));
   --line-y: 52vh;
   --line-size: clamp(22px, 3.4vw, 60px);
@@ -68,9 +72,13 @@ html[data-reel='skip'] .opening { display: none; }
 /* A failsafe: the island marks the film running (data-opening="run"). If it
    never does — its script failed or never came — the layer lets the page
    through after a while instead of covering it for good. */
-html[data-opening='']:not([data-reel='skip']) .opening,
-html[data-opening='']:not([data-reel='skip']) .of-skip {
+html[data-opening='']:not([data-reel='skip']) .opening {
   animation: of-failsafe 600ms var(--ease-fade) 12s both;
+}
+html[data-opening='']:not([data-reel='skip']) .of-skip {
+  animation:
+    of-skip-in 360ms var(--ease-arrive) 120ms backwards,
+    of-failsafe 600ms var(--ease-fade) 12s both;
 }
 html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
   animation: of-failsafe-in 600ms var(--ease-arrive) 12s both;
@@ -78,6 +86,20 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
 @keyframes of-failsafe {
   to { opacity: 0; visibility: hidden; }
 }
+/* The Skip pill, the one control while the film plays, comes up with the
+   first page (a first movement before the clock has started). */
+@keyframes of-skip-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+/* The first page's grain moves from the first paint (the island's own
+   grain takes over as the clock starts): the page is never a still. */
+@keyframes of-grain-first {
+  0% { transform: translate(0px, 0px); }
+  25% { transform: translate(-37px, 21px); }
+  50% { transform: translate(52px, -44px); }
+  75% { transform: translate(-18px, -71px); }
+}
+.opening:not([data-clock]) .of-frame__grain .of-grain__tile { animation: of-grain-first 200ms steps(1, end) infinite; }
 @keyframes of-failsafe-in {
   from { opacity: 0; }
   to { opacity: 1; pointer-events: auto; }
@@ -113,7 +135,8 @@ html[data-film-lock] body { overflow: clip !important; }
    hidden (visibility) until a quarter second before its turn, when the
    island lets it be drawn (so a cut never waits on a first raster, and the
    film never holds every scene in memory at once); its opacity is timed on
-   the compositor. */
+   the compositor. The first page is the first paint: it is drawn from the
+   start (and let go by the island once it has played). */
 .of-act,
 .of-mat,
 .of-burnground,
@@ -137,19 +160,15 @@ html[data-film-lock] body { overflow: clip !important; }
 .of-cut,
 .of-chrome,
 .of-key,
+.of-handoff,
 .of-perfrow {
   opacity: 0;
   will-change: opacity;
 }
-.of-mat--crt { opacity: 1; }
-.of-mat:not(.of-mat--crt),
+.of-mat,
 .of-burnground,
 .of-leader,
 .of-end,
-.of-frame__paper,
-.of-frame__soft,
-.of-frame__grain,
-.of-frame__vignette,
 .of-frame__sepia,
 .of-frame__veil,
 .of-frame__next,
@@ -157,8 +176,72 @@ html[data-film-lock] body { overflow: clip !important; }
 .of-cut,
 .of-chrome,
 .of-key,
+.of-handoff,
 .of-perfrow {
   visibility: hidden;
+}
+.of-frame__paper,
+.of-frame__soft,
+.of-frame__grain,
+.of-frame__vignette,
+.of-cut[data-cut='0'],
+.of-key[data-key='0'] {
+  opacity: 1;
+  visibility: visible;
+}
+/* The second page is drawn from the first paint too (unseen): its first
+   raster is done before the clock starts. */
+[data-early] { visibility: visible; }
+
+/* The first page is the first paint, before the island has measured a
+   word: the stylesheet sets its anchor, its giant word and the words on its
+   line where the island will (the island's own measure, as ratios of the
+   anchor's cap height --c0 and the short side, for the faces the film
+   loads), so the clock starts on the very frame the server painted. The
+   island's inline measure takes over from here. */
+.opening {
+  --c0: min(12vh, calc(78vw / 7.3));
+  --c0w: 7.062;
+  --c0l: 0.3578;
+  --c0b: 0.8585;
+  --g0: 0.5714;
+}
+@media (max-width: 1023px) {
+  .opening {
+    --c0: min(12vh, calc(86vw / 7.878));
+    --c0w: 7.63;
+    --c0l: 0.333;
+    --c0b: 0.839;
+    --g0: 0.4857;
+  }
+}
+.of-cut[data-cut='0'] {
+  --cap: var(--c0);
+  --bl: calc(50vw - var(--c0w) * var(--c0) / 2);
+  --br: calc(50vw + var(--c0w) * var(--c0) / 2);
+  --bt: calc(50vh - 0.78 * var(--c0));
+  --bb: calc(50vh + 0.78 * var(--c0));
+}
+.of-key[data-key='0'] .of-key__block {
+  left: calc(50vw - var(--c0w) * var(--c0) / 2);
+  top: calc(50vh - 0.78 * var(--c0));
+  width: calc(var(--c0w) * var(--c0));
+  height: calc(1.56 * var(--c0));
+}
+.of-key[data-key='0'] .of-key__word {
+  left: calc(50vw - var(--c0w) * var(--c0) / 2 + var(--c0l) * var(--c0));
+  top: calc(50vh + var(--c0) / 2 - var(--c0b) * var(--c0) / 0.7);
+  font-size: calc(var(--c0) / 0.7);
+}
+.of-cut[data-cut='0'] .of-giant {
+  left: calc(50vw - 1.9716em);
+  top: calc(20vh - 0.8604em);
+  font-size: calc(var(--g0) * var(--of-short));
+  transform: translate(calc(var(--drift-k) * -18px), 0);
+}
+@media (min-width: 1024px) {
+  .of-cut[data-cut='0'] .of-news__from { top: calc(50vh + var(--c0) / 2 - 0.915em); }
+  .of-cut[data-cut='0'] .of-news__sect { top: calc(50vh + var(--c0) / 2 - 12px); }
 }
 
 /* His photographs: at their own ratio, never cropped or stretched. */
@@ -168,13 +251,2632 @@ html[data-film-lock] body { overflow: clip !important; }
   -webkit-user-drag: none;
 }
 .of-pic--none { background: #3b3f36; }
+/* A photograph still on its way: its print's paper, a shade darker. */
+img.of-pic { background: rgba(23, 27, 21, 0.1); }
 
-/* ── Act 1: the typewriter relay ──────────────────────────────────────── */
-/* The same line on every machine: one monospace, one size, one place. The
-   reveal is a window moved over it (and its content moved back), so the
-   letters never move; its padding gives the glow and the pushed words room.
-   What grows with the typing (a pill, a marker, a bar) is drawn inside the
-   window and clipped at the typed end, and its end rides with the cursor. */
+/* ── Act 1: the frame ─────────────────────────────────────────────────── */
+/* One piece of film: its paper, every cut's page, the anchor on top, the
+   soft edge, the grain and the vignette; the relay's machines over them;
+   and, for the burn, the sepia, the canvas and (past its foot) the frame
+   line a slip shows. The island moves the whole frame in the burn (the
+   weave, the slip, the slide out). */
+.of-frame {
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.of-frame__paper {
+  position: absolute;
+  inset: 0;
+  background: #f1efe7;
+}
+/* A cut's page. The island tells it where the block is: --bl / --br / --bt
+   / --bb (its edges, px) and --cap (the anchor's cap height). Its ink is
+   --fg on its ground --pg (paper, a dark neutral or a ticket stock). */
+.of-cut {
+  --gap: max(14px, calc(var(--cap, 120px) * 0.22));
+  --fg: #171b15;
+  --pg: #f1efe7;
+  --hand: #6b3634;
+  /* The anchor's reading zone, above and below it (ANCHOR.clear): the
+     page's print keeps outside it; only the words on its line come in. */
+  --za: calc(var(--bt, 40vh) - var(--cap, 120px) * 0.3);
+  --zb: calc(var(--bb, 60vh) + var(--cap, 120px) * 0.3);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--fg);
+}
+.of-cut__ground,
+.of-sheet__ground {
+  position: absolute;
+  inset: 0;
+  background: var(--pg);
+}
+.of-sheet__ground { background: var(--sheet-bg, var(--pg)); }
+.of-ground--bone { --pg: #f1efe7; }
+.of-ground--warm { --pg: #e8dfcb; }
+.of-ground--copy { --pg: #eeeee8; }
+.of-ground--ink,
+.of-ground--olive,
+.of-ground--slate,
+.of-ground--rust,
+.of-ground--maroon,
+.of-ground--plum {
+  --fg: #ebe7dc;
+  --hand: #e3d3c0;
+}
+.of-ground--ink { --pg: #1b1f19; }
+.of-ground--olive { --pg: #282c20; }
+.of-ground--slate { --pg: #35383e; }
+.of-ground--rust { --pg: #593d1b; --fg: #efe6d6; }
+.of-ground--maroon { --pg: #562f2e; --fg: #efe4dc; }
+.of-ground--plum { --pg: #492d43; --fg: #ece2e6; }
+/* A warmer stock: fibres. A photocopy: the copier's shadow at the edges and
+   a toner speck or two. */
+.of-ground--warm .of-cut__ground::after,
+.of-ground--copy .of-cut__ground::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--of-noise);
+  background-size: 160px 160px;
+  opacity: 0.18;
+}
+.of-ground--copy .of-cut__ground {
+  background:
+    radial-gradient(circle at 18% 82%, rgba(23, 27, 21, 0.5) 0 1.2px, transparent 1.8px) 0 0 / 330px 290px,
+    radial-gradient(circle at 64% 22%, rgba(23, 27, 21, 0.45) 0 0.9px, transparent 1.5px) 0 0 / 270px 360px,
+    linear-gradient(90deg, rgba(23, 27, 21, 0.3) 0%, transparent 5%, transparent 95%, rgba(23, 27, 21, 0.34) 100%),
+    linear-gradient(180deg, rgba(23, 27, 21, 0.22) 0%, transparent 4%, transparent 96%, rgba(23, 27, 21, 0.24) 100%),
+    #eeeee8;
+}
+.of-ground--copy .of-giant__word,
+.of-ground--copy .of-giant__copy { filter: url(#of-copy-edge); }
+/* A second ink for the giant words on a light page (printed in a stock). */
+.of-inkg--maroon { --gi: #562f2e; }
+.of-inkg--green { --gi: #20423a; }
+.of-inkg--blue { --gi: #223b55; }
+.of-inkg--plum { --gi: #492d43; }
+
+/* A giant word: Fraunces at 30–45% of the short side, cropped by the frame;
+   its motion blur is its copies, behind it. (The island sets its size and
+   place, measured, before the clock starts.) */
+.of-giant {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  line-height: 1;
+  color: var(--gi, var(--fg));
+  will-change: transform;
+}
+.of-giant__word,
+.of-giant__copy {
+  display: block;
+  letter-spacing: -0.02em;
+  /* A little ink bled into the paper. */
+  text-shadow: 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+}
+.of-giant__copy {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.of-face--f900 { font-weight: 900; }
+.of-face--f400 { font-weight: 400; }
+.of-face--fit {
+  font-style: italic;
+  font-weight: 500;
+}
+.of-face--sg700 {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.of-face--mono { font-weight: 700; }
+
+/* The words on the anchor's line: left of the block (ending a gap before
+   it) or right of it (a gap after it), set on the anchor's baseline by the
+   island (--base-align: 1); a line above or below it. */
+.of-row,
+.of-side {
+  --base-align: 1;
+  position: absolute;
+  top: calc(50% - 0.6em);
+  margin: 0;
+  white-space: nowrap;
+  line-height: 1.12;
+  color: var(--fg);
+}
+.of-row--l,
+.of-side--l {
+  right: calc(100% - var(--bl, 30vw) + var(--gap));
+  text-align: right;
+}
+.of-row--r,
+.of-side--r {
+  left: calc(var(--br, 70vw) + var(--gap));
+  max-width: calc(100% - var(--br, 70vw) - var(--gap) - 4vw);
+}
+.of-side--rowup {
+  top: auto;
+  bottom: calc(100% - var(--za) + 4px);
+}
+.of-side--rowdown { top: calc(var(--zb) + 6px); }
+.of-side--caps {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-side--italic {
+  font-size: max(20px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-side--thin {
+  font-size: max(15px, calc(var(--cap, 120px) * 0.17));
+  font-weight: 400;
+}
+/* A small word ringed by hand (the island places it clear of the rest). */
+.of-ringed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--fg);
+}
+.of-ring {
+  position: absolute;
+  left: -0.7em;
+  top: -0.55em;
+  width: calc(100% + 1.4em);
+  height: calc(100% + 1.1em);
+  overflow: visible;
+}
+.of-ring path,
+.of-edge__ring path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6px;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+/* Grey texture: tiny paragraphs, too small to read. */
+.of-texture {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--tw);
+  margin: 0;
+  font-size: 6.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: justify;
+  color: color-mix(in srgb, var(--fg) 50%, transparent);
+}
+/* An editorial cut's print on the frame's edge (its own layer, over the
+   soft edge). */
+.of-chrome {
+  --fg: #171b15;
+  --pg: #f1efe7;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.of-meta,
+.of-credit {
+  position: absolute;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
+  background: var(--pg);
+}
+.of-meta { top: max(16px, 3vh); }
+.of-meta--l { left: max(14px, 3vw); }
+.of-meta--r { right: max(14px, 3vw); }
+.of-credit {
+  left: 50%;
+  bottom: max(20px, 3vh);
+  transform: translateX(-50%);
+}
+
+/* ── An editorial page's layers ──────────────────────────────────────────
+   Paper laid on the page (a taped print, a torn clipping, a receipt, a
+   barcode sticker), ink stamped or written on it (a stamp, a pull quote, a
+   margin note, a circled number), a running head, index tabs and a proof's
+   marks — all under the giant words. The island places each ([data-place],
+   its wish in --want-x / --want-y) clear of the anchor's reading zone. */
+[data-place] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: 0;
+  rotate: var(--rot, 0deg);
+}
+.of-run {
+  position: absolute;
+  left: max(14px, 3vw);
+  right: max(14px, 3vw);
+  top: calc(max(16px, 3vh) + 28px);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 55%, transparent);
+}
+.of-run__t {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--fg) 80%, transparent);
+}
+.of-run__f {
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1;
+}
+/* A print of his, taped on: his frame at its own ratio in a paper border,
+   treated as the page wants it (a halftone, a duotone in ink and a stock, a
+   negative, blown out on a copier), with its caption. */
+.of-print {
+  width: calc(var(--w) * 100vw);
+  padding: 0.55vw 0.55vw 0;
+  background: #f3f1e9;
+  box-shadow:
+    0 1px 1.5px rgba(23, 27, 21, 0.28),
+    0 10px 20px -8px rgba(23, 27, 21, 0.4);
+}
+.of-print__img {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+}
+.of-pic--print {
+  width: 100%;
+  height: auto;
+}
+.of-print__screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.of-print__cap {
+  display: block;
+  padding: 6px 2px 7px;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.2;
+  color: rgba(23, 27, 21, 0.72);
+}
+.of-print--halftone .of-pic,
+.of-mag__img .of-pic { filter: grayscale(1) contrast(1.6) brightness(1.04); }
+.of-print--halftone .of-print__screen,
+.of-mag__img .of-print__screen {
+  background: radial-gradient(circle, transparent 0 36%, rgba(243, 241, 233, 0.92) 64%) 0 0 / 4px 4px;
+  mix-blend-mode: lighten;
+}
+.of-print--duotone .of-pic { filter: grayscale(1) contrast(1.25); }
+.of-print--duotone .of-print__screen {
+  background: var(--duo, #6a3432);
+  mix-blend-mode: color;
+}
+.of-duo--maroon { --duo: #74403c; }
+.of-duo--blue { --duo: #2f5070; }
+.of-duo--green { --duo: #2c5a4d; }
+.of-duo--plum { --duo: #613b59; }
+.of-print--negative { background: #202420; }
+.of-print--negative .of-print__cap { color: rgba(235, 231, 220, 0.7); }
+.of-print--negative .of-pic { filter: grayscale(1) invert(1) contrast(1.08) brightness(0.92); }
+.of-print--blown .of-pic { filter: grayscale(1) brightness(1.5) contrast(1.9); }
+.of-print--blown .of-print__screen {
+  background: radial-gradient(circle, transparent 0 40%, rgba(238, 238, 232, 0.8) 70%) 0 0 / 3px 3px;
+  mix-blend-mode: lighten;
+}
+.of-tape {
+  position: absolute;
+  left: 32%;
+  top: -11px;
+  width: 36%;
+  height: 22px;
+  background: rgba(233, 229, 216, 0.72);
+  box-shadow: 0 0 0 1px rgba(23, 27, 21, 0.05);
+  rotate: -3deg;
+}
+/* A clipping torn from a newspaper, its shadow on the page. */
+.of-clip {
+  width: calc(var(--w) * 100vw);
+  filter: drop-shadow(0 3px 5px rgba(23, 27, 21, 0.3));
+}
+.of-clip__paper {
+  padding: 14px 15px 18px;
+  background: #ebe5d3;
+  clip-path: polygon(0 3%, 7% 0, 16% 2%, 27% 0, 39% 2.5%, 52% 0.5%, 64% 2%, 77% 0, 88% 2%, 100% 0.5%, 99% 30%, 100% 62%, 98.5% 100%, 86% 97.5%, 73% 100%, 60% 97%, 47% 99.5%, 33% 97%, 20% 100%, 8% 97.5%, 0 100%, 1.5% 64%, 0 33%);
+}
+.of-clip__head {
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.5);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.08;
+  color: #171b15;
+}
+.of-clip__body {
+  margin: 0;
+  columns: 2;
+  column-gap: 10px;
+  font-size: 7px;
+  line-height: 1.4;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.8);
+}
+/* A receipt: a slip of thin paper, typed, its foot torn on the teeth. */
+.of-receipt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 148px;
+  padding: 13px 12px 20px;
+  background: #f3f1ea;
+  font-size: 9px;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  white-space: pre;
+  color: rgba(23, 27, 21, 0.82);
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.22);
+  -webkit-mask:
+    linear-gradient(#171b15, #171b15) top / 100% calc(100% - 6px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%, #171b15 90deg, transparent 0) bottom / 10px 6px repeat-x;
+  mask:
+    linear-gradient(#171b15, #171b15) top / 100% calc(100% - 6px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%, #171b15 90deg, transparent 0) bottom / 10px 6px repeat-x;
+}
+.of-receipt span:first-child {
+  padding-bottom: 5px;
+  margin-bottom: 3px;
+  border-bottom: 1px dashed rgba(23, 27, 21, 0.4);
+  font-weight: 700;
+}
+/* A rubber stamp, in a stock's ink, a little worn. */
+.of-stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 16px;
+  border: 4px double var(--sc);
+  color: var(--sc);
+  opacity: 0.84;
+}
+.of-stamp--round {
+  width: 112px;
+  height: 112px;
+  padding: 0;
+  border: 2.5px solid var(--sc);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 5px transparent, inset 0 0 0 6.5px var(--sc);
+}
+.of-stamp__t {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-stamp__s {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-inkc--ink { --sc: #1d211b; }
+.of-inkc--maroon { --sc: #6b3634; }
+.of-inkc--blue { --sc: #2b4a6a; }
+.of-inkc--green { --sc: #285244; }
+.of-inkc--plum { --sc: #5a3753; }
+.of-inkc--rust { --sc: #6d4b22; }
+.of-inkc--slate { --sc: #3f434a; }
+.of-inkc--bone { --sc: #ece6d8; }
+/* A barcode sticker. */
+.of-barcode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 9px 5px;
+  background: #f3f1ea;
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.22);
+}
+.of-bars {
+  display: block;
+  width: 110px;
+  height: 32px;
+  fill: #171b15;
+}
+.of-barcode__n {
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: #171b15;
+}
+/* A pull quote between rules. */
+.of-pull {
+  width: calc(var(--w) * 100vw);
+  padding: 10px 0 11px;
+  border-top: 1.5px solid var(--fg);
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 50%, transparent);
+  font-size: clamp(17px, 1.45vw, 26px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.16;
+  color: var(--fg);
+}
+/* A margin note in a hand, with its arrow. */
+.of-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(17px, 1.35vw, 24px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--hand);
+}
+.of-arrow {
+  flex: none;
+  width: 52px;
+  height: 26px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.of-arrow--l { scale: -1 1; }
+.of-arrow--u { rotate: -70deg; }
+.of-arrow--d { rotate: 70deg; }
+/* A circled number and its word. */
+.of-num {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.of-circled {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8em;
+  height: 1.8em;
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+}
+.of-circled svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4px;
+  stroke-linecap: round;
+}
+.of-num__t {
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+}
+/* Index tabs down the right edge (the first pulled). */
+.of-tabs {
+  position: absolute;
+  right: 0;
+  top: 15vh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.of-tab {
+  display: block;
+  width: 32px;
+  padding: 6px 0 6px 10px;
+  border-radius: 4px 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 16%, var(--pg));
+}
+.of-tab--on {
+  width: 44px;
+  color: var(--pg);
+  background: var(--fg);
+}
+/* A proof's marks: crop marks at the corners, a registration mark at the
+   head, a grey step bar at the foot. */
+.of-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+}
+.of-crop {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+}
+.of-crop--tl { left: 0; top: 0; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; }
+.of-crop--tr { right: 0; top: 0; border-left: 1px solid currentColor; border-bottom: 1px solid currentColor; }
+.of-crop--bl { left: 0; bottom: 0; border-right: 1px solid currentColor; border-top: 1px solid currentColor; }
+.of-crop--br { right: 0; bottom: 0; border-left: 1px solid currentColor; border-top: 1px solid currentColor; }
+.of-reg {
+  position: absolute;
+  left: calc(50% - 13px);
+  top: 9px;
+  width: 26px;
+  height: 26px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1px;
+}
+.of-steps {
+  position: absolute;
+  left: max(14px, 3vw);
+  bottom: calc(max(20px, 3vh) + 30px);
+  display: flex;
+  outline: 1px solid color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.of-steps i {
+  width: 18px;
+  height: 11px;
+  background: var(--fg);
+  opacity: calc(0.08 + var(--k) * 0.13);
+}
+
+/* ── The printed matter ───────────────────────────────────────────────── */
+/* Each sheet is laid round the anchor: its words on the anchor's line, what
+   is printed above the block (its foot a gap over --bt) and below it (its
+   head a gap under --bb), what lies on it. The frame crops every sheet like
+   a close-up. Its --sheet-bg is its paper, or the dark it lies on. */
+
+/* A newspaper: the masthead (the giant word) cropped by the frame's head,
+   its ears and index under it, the edition line and a double rule, the
+   section flag round the anchor, a headline, a deck and five columns with a
+   halftone, a pull quote and a jump line. */
+.of-sheet--newspaper { --sheet-bg: #e9e5d8; }
+.of-news__band {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  bottom: calc(100% - var(--za) + 64px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2vw;
+}
+.of-news__ear {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 11vw;
+  padding: 7px 9px;
+  border: 1px solid rgba(23, 27, 21, 0.7);
+}
+.of-news__ear--r { text-align: right; }
+.of-news__ear-t {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-news__ear-b {
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.2;
+}
+.of-news__index {
+  display: flex;
+  gap: 1.6vw;
+  padding: 5px 0;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-news__index b {
+  margin-left: 6px;
+  font-weight: 700;
+  color: #562f2e;
+}
+.of-news__edition {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  bottom: calc(100% - var(--za) + 30px);
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-top: 1px solid #171b15;
+  border-bottom: 4px double #171b15;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-news__from {
+  font-size: max(22px, calc(var(--cap, 120px) * 0.42));
+  font-style: italic;
+  font-weight: 500;
+}
+.of-news__sect {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: normal;
+  max-width: 12vw;
+  line-height: 1.5;
+}
+.of-news__below {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  top: calc(var(--zb) + 16px);
+  bottom: 0;
+  overflow: hidden;
+  border-top: 4px solid #171b15;
+}
+.of-news__hed {
+  margin: 12px 0 4px;
+  font-size: clamp(22px, 2.3vw, 40px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.05;
+}
+.of-news__deck {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.45);
+  font-size: clamp(12px, 0.95vw, 16px);
+  font-weight: 400;
+  line-height: 1.2;
+  color: rgba(23, 27, 21, 0.82);
+}
+.of-news__cols {
+  height: 100%;
+  columns: 5;
+  column-gap: 22px;
+  column-rule: 1px solid rgba(23, 27, 21, 0.3);
+  column-fill: auto;
+  font-size: 7px;
+  line-height: 1.4;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.82);
+}
+.of-news__cols p {
+  margin: 0 0 6px;
+  text-indent: 1.2em;
+}
+.of-news__dateline {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.of-news__photo {
+  margin: 4px 0 8px;
+  break-inside: avoid;
+}
+.of-news__screen {
+  display: block;
+  height: 14vh;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(23, 27, 21, 0.86) 0 32%, transparent 36%) 0 0 / 4px 4px,
+    linear-gradient(160deg, rgba(233, 229, 216, 0.96) 8%, rgba(233, 229, 216, 0.2) 48%, rgba(233, 229, 216, 0.7) 70%, rgba(233, 229, 216, 0.1) 92%);
+}
+.of-news__cap {
+  display: block;
+  padding-top: 3px;
+  font-size: 7px;
+  font-style: italic;
+  line-height: 1.3;
+  text-indent: 0;
+}
+.of-news__pull {
+  margin: 6px 0 10px;
+  padding: 7px 0;
+  border-top: 2px solid #171b15;
+  border-bottom: 1px solid #171b15;
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.12;
+  text-align: left;
+  break-inside: avoid;
+  color: #171b15;
+}
+.of-news__jump {
+  margin: 0 0 8px;
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+  text-indent: 0;
+}
+.of-news__folio {
+  position: absolute;
+  right: 4vw;
+  bottom: calc(100% - var(--za) + 30px - 18px);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  display: none;
+}
+
+/* A dictionary: the running head, the entries before, the headword as the
+   anchor with its etymology on its line, the senses under it (a pencil
+   under the first, a note in the margin), an engraving, the thumb index,
+   the pronunciation key at the foot. Webster's 1913. */
+.of-sheet--dictionary { --sheet-bg: #efe9d8; }
+.of-dict__head {
+  position: absolute;
+  left: 8vw;
+  right: 8vw;
+  top: 4.5vh;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-dict__above,
+.of-dict__below {
+  position: absolute;
+  font-size: clamp(12px, 0.9vw, 16px);
+  line-height: 1.45;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(23, 27, 21, 0.86);
+}
+.of-dict__above {
+  left: 8vw;
+  right: 8vw;
+  top: calc(4.5vh + 40px);
+  bottom: calc(100% - var(--za) + 18px);
+  overflow: hidden;
+  columns: 2;
+  column-gap: 5vw;
+  column-rule: 1px solid rgba(23, 27, 21, 0.2);
+}
+.of-dict__below {
+  left: max(34vw, var(--bl, 30vw));
+  right: 30vw;
+  top: calc(var(--zb) + 14px);
+}
+.of-dict__above p,
+.of-dict__below p {
+  margin: 0 0 8px;
+  padding-left: 1.4em;
+  text-indent: -1.4em;
+}
+.of-dict__above b,
+.of-dict__below b { font-weight: 700; }
+.of-dict__pencil {
+  text-decoration: underline 1.6px rgba(86, 47, 46, 0.7);
+  text-underline-offset: 3px;
+}
+.of-dict__below .of-dict__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0;
+  text-indent: 0;
+  font-size: clamp(16px, 1.3vw, 22px);
+  font-style: italic;
+  font-weight: 500;
+  color: #6b3634;
+}
+.of-dict__arrow {
+  width: 44px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6px;
+  stroke-linecap: round;
+  scale: -1 1;
+}
+.of-dict__def {
+  max-width: min(34ch, calc(100% - var(--br, 70vw) - 32px));
+  font-size: clamp(14px, 1.05vw, 19px);
+  white-space: normal;
+  line-height: 1.4;
+}
+.of-dict__fig {
+  position: absolute;
+  right: 8vw;
+  top: calc(var(--zb) + 18px);
+  width: 18vw;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(23, 27, 21, 0.35);
+}
+.of-dict__fig svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.of-dict__hatch {
+  fill: url(#of-hatch);
+  stroke: #171b15;
+  stroke-width: 1px;
+}
+#of-hatch path {
+  stroke: rgba(23, 27, 21, 0.55);
+  stroke-width: 0.8px;
+}
+.of-dict__drawer {
+  fill: #efe9d8;
+  stroke: #171b15;
+  stroke-width: 0.8px;
+}
+.of-dict__cap {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  font-style: italic;
+  line-height: 1.25;
+  text-align: center;
+}
+.of-dict__tabs {
+  position: absolute;
+  right: 0;
+  top: 14vh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.of-dict__tab {
+  width: 26px;
+  padding: 6px 0 6px 9px;
+  border-radius: 5px 0 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(23, 27, 21, 0.6);
+  background: #dcd4bf;
+}
+.of-dict__tab--on {
+  width: 38px;
+  color: #efe9d8;
+  background: #171b15;
+}
+.of-dict__key {
+  position: absolute;
+  left: 8vw;
+  right: 8vw;
+  bottom: 2.6vh;
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid rgba(23, 27, 21, 0.4);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-align: center;
+  color: rgba(23, 27, 21, 0.72);
+}
+
+/* A catalogue card on an olive desk: a second card under it, ruled card
+   stock, its call number, the entry typed round the anchor, the tracings,
+   the rod's hole, a library's stamp, a pencilled note, a barcode, a clip. */
+.of-sheet--catalogue { --sheet-bg: #282c20; }
+.of-card {
+  position: absolute;
+  left: 7vw;
+  right: 7vw;
+  top: 7vh;
+  bottom: 7vh;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 34px, rgba(34, 59, 85, 0.1) 34px 35px),
+    #f5f0e2;
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.3), 0 18px 40px rgba(10, 12, 9, 0.45);
+}
+.of-card--under {
+  left: 5vw;
+  right: 9vw;
+  top: 4vh;
+  bottom: 10vh;
+  background: #e6dfcc;
+  rotate: -2.2deg;
+  box-shadow: 0 10px 30px rgba(10, 12, 9, 0.4);
+}
+.of-card__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 13%;
+  height: 2px;
+  background: #562f2e;
+}
+.of-card__hole {
+  position: absolute;
+  left: 50%;
+  bottom: 5%;
+  width: 3.4vmin;
+  height: 3.4vmin;
+  margin-left: -1.7vmin;
+  border-radius: 50%;
+  background: #282c20;
+  box-shadow: inset 0 1px 3px rgba(10, 12, 9, 0.5);
+}
+.of-card__clip {
+  position: absolute;
+  right: 16vw;
+  top: calc(7vh - 26px);
+  width: 30px;
+  height: 80px;
+  overflow: visible;
+  fill: none;
+  stroke: #8c8f86;
+  stroke-width: 2.4px;
+  stroke-linecap: round;
+}
+.of-card__call {
+  position: absolute;
+  left: 10vw;
+  top: calc(7vh + 86vh * 0.13 + 22px);
+  display: flex;
+  flex-direction: column;
+  font-size: clamp(13px, 0.95vw, 17px);
+  line-height: 1.3;
+}
+.of-card__above,
+.of-card__below {
+  position: absolute;
+  left: 22vw;
+  right: 12vw;
+  font-size: clamp(13px, 1vw, 18px);
+  line-height: 1.5;
+}
+.of-card__above { bottom: calc(100% - var(--za) + 22px); }
+.of-card__below { top: calc(var(--zb) + 22px); }
+.of-card__above p,
+.of-card__below p { margin: 0; }
+.of-card__above p + p,
+.of-card__below p { text-indent: 2em; }
+.of-card__row {
+  font-size: clamp(13px, 1vw, 18px);
+  white-space: normal;
+  max-width: calc(88vw - var(--br, 70vw) - var(--gap));
+}
+.of-card__stamp {
+  position: absolute;
+  right: 12vw;
+  bottom: 14vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 128px;
+  height: 128px;
+  border: 2.5px solid var(--sc);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 6px transparent, inset 0 0 0 7.5px var(--sc);
+  color: var(--sc);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.8;
+  rotate: -14deg;
+}
+.of-card__stamp-s {
+  max-width: 80px;
+  font-size: 8px;
+  font-weight: 600;
+}
+.of-card__pencil {
+  position: absolute;
+  left: 10vw;
+  bottom: 12vh;
+  margin: 0;
+  font-size: clamp(16px, 1.3vw, 22px);
+  font-style: italic;
+  font-weight: 400;
+  color: rgba(53, 56, 62, 0.8);
+  rotate: -3deg;
+}
+.of-card__code {
+  position: absolute;
+  right: 10vw;
+  top: calc(7vh + 18px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px 4px;
+  background: #fbf8ee;
+  box-shadow: 0 0 0 1px rgba(23, 27, 21, 0.12);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+/* A magazine spread, in black and white: his photograph as a coarse
+   halftone on the left page, the running heads, the feature's kicker and
+   deck on the right, CAMERA (the anchor) across the gutter, obscura on its
+   line, a drop cap and a pull quote in two columns, the folios, a proof's
+   marks. */
+.of-sheet--magazine {
+  --sheet-bg: #1b1f19;
+  --fg: #ebe7dc;
+}
+.of-mag__pages {
+  position: absolute;
+  inset: 0;
+}
+.of-mag__page {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.of-mag__page--l {
+  left: 0;
+  width: 50%;
+  background: linear-gradient(270deg, rgba(10, 12, 9, 0.55), transparent 8%), #1b1f19;
+}
+.of-mag__page--r {
+  left: 50%;
+  right: 0;
+  background: linear-gradient(90deg, rgba(10, 12, 9, 0.55), transparent 7%), #20241d;
+}
+.of-mag__runs {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  top: 4.4vh;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(235, 231, 220, 0.66);
+}
+.of-mag__lede {
+  position: absolute;
+  left: 5vw;
+  right: 56vw;
+  top: 12vh;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 2px solid #ebe7dc;
+  font-size: clamp(26px, 2.9vw, 50px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.04;
+  color: #ebe7dc;
+}
+.of-mag__plate {
+  position: absolute;
+  left: 5vw;
+  top: calc(var(--zb) + 14px);
+}
+.of-mag__img {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  isolation: isolate;
+}
+.of-pic--plate {
+  width: auto;
+  height: min(calc(36vw / var(--ratio, 1.5)), calc(100vh - var(--zb) - 64px));
+}
+.of-mag__caption {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(235, 231, 220, 0.66);
+}
+.of-mag__above {
+  position: absolute;
+  left: calc(50% + 5vw);
+  right: 6vw;
+  bottom: calc(100% - var(--za) + 22px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.of-mag__kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(235, 231, 220, 0.7);
+}
+.of-mag__deck {
+  font-size: clamp(18px, 1.9vw, 34px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.1;
+}
+.of-mag__obscura {
+  font-size: max(20px, calc(var(--cap, 120px) * 0.5));
+  font-style: italic;
+  font-weight: 400;
+}
+.of-mag__body {
+  position: absolute;
+  left: calc(50% + 5vw);
+  right: 6vw;
+  top: calc(var(--zb) + 26px);
+  columns: 2;
+  column-gap: 22px;
+  column-rule: 1px solid rgba(235, 231, 220, 0.18);
+  font-size: 8.5px;
+  line-height: 1.5;
+  text-align: justify;
+  hyphens: auto;
+  color: rgba(235, 231, 220, 0.76);
+}
+.of-mag__body p { margin: 0 0 6px; }
+.of-mag__drop {
+  float: left;
+  margin: 2px 5px 0 0;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 0.8;
+  color: #ebe7dc;
+}
+.of-mag__folio {
+  position: absolute;
+  bottom: 3vh;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.of-mag__folio--l { left: 3vw; }
+.of-mag__folio--r { right: 3vw; }
+
+/* A slate: black board in its frame, the striped sticks at its head, the
+   production line in chalk, the camera's roll and take round the anchor,
+   the cells, a grey step wedge, a strip of tape, the word TAKE cropped at
+   its foot. */
+.of-sheet--slate {
+  --sheet-bg: #1c201a;
+  --fg: #e9e6dc;
+}
+.of-sheet--slate .of-sheet__ground { box-shadow: inset 0 0 0 1.8vmin #2b2f27, inset 0 0 0 calc(1.8vmin + 2px) #11140f; }
+.of-slate__sticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 18vh;
+}
+.of-slate__stick {
+  position: absolute;
+  left: -2vw;
+  right: -2vw;
+  background: repeating-linear-gradient(-55deg, #11140f 0 3.6vw, #e9e6dc 3.6vw 7.2vw);
+  box-shadow: 0 2px 0 #11140f;
+}
+.of-slate__stick--top {
+  top: 1.2vh;
+  height: 7.4vh;
+  transform: rotate(-2.4deg);
+  transform-origin: 0 100%;
+}
+.of-slate__stick--base {
+  top: 10vh;
+  height: 6vh;
+  background-position: 3.6vw 0;
+}
+.of-slate__prod {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  bottom: calc(100% - var(--za) + 26px);
+  display: flex;
+  align-items: baseline;
+  gap: 2vw;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(233, 230, 220, 0.8);
+}
+.of-slate__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-slate__hand {
+  font-size: clamp(20px, 2.4vw, 42px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.of-slate__tape {
+  margin-left: auto;
+  padding: 4px 16px 6px;
+  background: #d9d3c2;
+  color: #1d211b;
+  font-size: clamp(16px, 1.5vw, 26px);
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1;
+  rotate: 3deg;
+}
+.of-slate__cells {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  top: calc(var(--zb) + 22px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 2px solid rgba(233, 230, 220, 0.8);
+}
+.of-slate__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-right: 2px solid rgba(233, 230, 220, 0.8);
+}
+.of-slate__cell:last-child { border-right: 0; }
+.of-slate__wedge {
+  position: absolute;
+  right: 6vw;
+  bottom: 6vh;
+  display: flex;
+  outline: 2px solid rgba(233, 230, 220, 0.6);
+}
+.of-slate__wedge i {
+  width: 2.2vw;
+  height: 3.4vh;
+  background: #e9e6dc;
+  opacity: calc(0.06 + var(--k) * 0.104);
+}
+.of-slate__foot {
+  position: absolute;
+  left: 6vw;
+  bottom: 6vh;
+  display: flex;
+  gap: 2.4vw;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(233, 230, 220, 0.72);
+}
+
+/* A strip of negatives on the dark, as a contact sheet's: a second strip
+   cropped at the head, the perforations, two of his frames reversed either
+   side of the anchor, the edge print, the sheet's label, a china marker's
+   notes and a loupe's ring. */
+.of-sheet--edge {
+  --sheet-bg: #1b1f19;
+  --fg: #ebe7dc;
+}
+.of-edge__strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--za) - 8.5vh);
+  bottom: calc(100% - var(--zb) - 8.5vh);
+  background: #4b4e45;
+}
+.of-edge__strip--ghost {
+  top: -6vh;
+  bottom: auto;
+  height: 17vh;
+  rotate: 1.2deg;
+  background: #3d4038;
+}
+.of-edge__perfs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+}
+.of-edge__perfs--t { top: 1.4vh; }
+.of-edge__perfs--b { bottom: 1.4vh; }
+.of-edge__perfs i {
+  width: 1.6vw;
+  height: 2.8vh;
+  border-radius: 0.35vw;
+  background: #1b1f19;
+}
+.of-edge__frame {
+  position: absolute;
+  top: 6.8vh;
+  bottom: 6.8vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #5a5d53;
+}
+.of-edge__frame--l {
+  left: 2vw;
+  right: calc(100% - var(--bl, 30vw) + 3vw);
+}
+.of-edge__frame--r {
+  left: calc(var(--br, 70vw) + 3vw);
+  right: 2vw;
+}
+.of-pic--frame {
+  height: 100%;
+  width: auto;
+  filter: grayscale(1) invert(1) contrast(1.05) brightness(0.92);
+}
+.of-edge__print {
+  position: absolute;
+  margin: 0;
+  top: calc(var(--zb) + 8.5vh - 6.4vh);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  white-space: pre;
+  color: rgba(235, 231, 220, 0.72);
+}
+.of-edge__print--l { left: 3vw; }
+.of-edge__print--r { left: calc(var(--br, 70vw) + 3vw); }
+.of-edge__label {
+  position: absolute;
+  left: 4vw;
+  top: calc(var(--za) - 8.5vh - 10vh);
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  padding: 6px 12px;
+  background: #d9d3c2;
+  color: #1d211b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  rotate: -1.5deg;
+}
+.of-edge__note {
+  position: absolute;
+  margin: 0;
+  font-size: clamp(20px, 1.8vw, 32px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  color: #e7dccd;
+}
+.of-edge__note--a {
+  left: 8vw;
+  top: calc(var(--zb) + 8.5vh + 6vh);
+}
+.of-edge__note--b {
+  right: 12vw;
+  top: calc(var(--zb) + 8.5vh + 8vh);
+}
+.of-edge__ring {
+  position: absolute;
+  left: -0.5em;
+  top: -0.5em;
+  width: calc(100% + 1em);
+  height: calc(100% + 1em);
+  overflow: visible;
+}
+.of-edge__loupe {
+  position: absolute;
+  right: 6vw;
+  top: calc(var(--za) - 8.5vh - 16vh);
+  width: 13vh;
+  height: 13vh;
+  overflow: visible;
+  fill: none;
+  stroke: rgba(235, 231, 220, 0.55);
+  stroke-width: 2px;
+}
+
+/* A ticket on a brown desk: a second, torn stub under it, pale stock with a
+   guilloche, its stub at the perforation, a punched hole, the journey
+   printed round the anchor, the coach and seat, a barcode, a checker's
+   stamp and the fare's receipt laid over its corner. */
+.of-sheet--ticket { --sheet-bg: #593d1b; }
+.of-ticket {
+  position: absolute;
+  left: 7vw;
+  right: 7vw;
+  top: calc(var(--za) - 17vh);
+  bottom: calc(100% - var(--zb) - 21vh);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(115deg, rgba(34, 59, 85, 0.06) 0 2px, transparent 2px 7px),
+    #dfe4d2;
+  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.3), 0 16px 36px rgba(10, 12, 9, 0.4);
+}
+.of-ticket--under {
+  left: 3vw;
+  right: 58vw;
+  top: calc(var(--za) - 23vh);
+  bottom: calc(100% - var(--zb) - 12vh);
+  background: #cfc7b3;
+  rotate: -5deg;
+}
+.of-ticket__perf {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18%;
+  border-left: 2px dashed rgba(23, 27, 21, 0.35);
+}
+.of-ticket__hole {
+  position: absolute;
+  left: 9%;
+  top: 12%;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #593d1b;
+  box-shadow: inset 0 1px 2px rgba(10, 12, 9, 0.6);
+}
+.of-ticket__stub {
+  position: absolute;
+  left: 9vw;
+  width: calc(86vw * 0.18 - 4vw);
+  top: calc(var(--za) - 17vh + 3vh);
+  bottom: calc(100% - var(--zb) - 21vh + 3vh);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__no {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.of-ticket__head,
+.of-ticket__route,
+.of-ticket__fine {
+  position: absolute;
+  left: calc(7vw + 86vw * 0.18 + 3vw);
+  right: 10vw;
+}
+.of-ticket__head {
+  top: calc(var(--za) - 17vh + 3vh);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(23, 27, 21, 0.35);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__valid {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #efe6d6;
+}
+.of-ticket__only {
+  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+  color: #171b15;
+}
+.of-ticket__route {
+  top: calc(var(--zb) + 3vh);
+  display: flex;
+  align-items: baseline;
+  gap: 5vw;
+}
+.of-ticket__stop,
+.of-ticket__cell {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.of-ticket__seat {
+  display: flex;
+  gap: 2vw;
+  margin-left: auto;
+}
+.of-ticket__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-ticket__place {
+  font-size: clamp(20px, 1.8vw, 32px);
+  font-style: italic;
+  font-weight: 400;
+}
+.of-ticket__v {
+  font-size: clamp(16px, 1.3vw, 22px);
+  font-weight: 700;
+}
+.of-ticket__fine {
+  bottom: calc(100% - var(--zb) - 21vh + 2.6vh);
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(23, 27, 21, 0.6);
+}
+.of-ticket__code {
+  position: absolute;
+  right: 10vw;
+  top: calc(var(--za) - 17vh + 7.4vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+.of-ticket__code .of-bars { width: 120px; height: 26px; }
+.of-ticket__punch {
+  position: absolute;
+  left: 31vw;
+  top: calc(var(--zb) + 8vh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border: 2.5px solid var(--sc);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 5px transparent, inset 0 0 0 6.5px var(--sc);
+  color: var(--sc);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  rotate: 16deg;
+}
+.of-ticket__receipt {
+  position: absolute;
+  right: 3.2vw;
+  bottom: 7vh;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 150px;
+  padding: 14px 13px 30px;
+  background: #f3f1ea;
+  font-size: 9px;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(23, 27, 21, 0.8);
+  box-shadow: 0 6px 16px rgba(10, 12, 9, 0.4);
+  rotate: 4deg;
+}
+
+/* A book: a page of Stevenson's, its gutter's shadow, a ribbon, the chapter
+   at its head, the line the anchor sits in, a pencil under one sentence and
+   "yes." in the margin, the running foot. */
+.of-sheet--book { --sheet-bg: #efe7d3; }
+.of-book__gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9vw;
+  background: linear-gradient(90deg, rgba(23, 27, 21, 0.22), transparent);
+}
+.of-book__ribbon {
+  position: absolute;
+  left: 18vw;
+  top: 0;
+  width: 1.4vw;
+  height: 72vh;
+  background: linear-gradient(90deg, #4a2725, #562f2e 45%, #6a3a38);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 96%, 0 100%);
+  box-shadow: 2px 0 4px rgba(23, 27, 21, 0.2);
+}
+.of-book__chapter {
+  position: absolute;
+  left: 29vw;
+  right: 29vw;
+  top: calc(var(--za) - 22vh);
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: rgba(23, 27, 21, 0.7);
+}
+.of-book__above,
+.of-book__below {
+  position: absolute;
+  left: 29vw;
+  right: 29vw;
+}
+.of-book__above { bottom: calc(100% - var(--za) + 8px); }
+.of-book__below { top: calc(var(--zb) + 8px); }
+.of-book__line,
+.of-book__row {
+  font-size: clamp(16px, 1.7vw, 30px);
+  font-weight: 400;
+  line-height: 1.55;
+  color: rgba(23, 27, 21, 0.88);
+}
+.of-book__line {
+  display: block;
+  text-align: justify;
+  text-align-last: justify;
+}
+.of-book__above .of-book__line { text-align-last: right; }
+.of-book__pencil {
+  text-decoration: underline 2px rgba(53, 56, 62, 0.55);
+  text-underline-offset: 4px;
+}
+.of-book__note {
+  position: absolute;
+  left: 21vw;
+  top: calc(var(--zb) + 8px);
+  margin: 0;
+  font-size: clamp(20px, 1.7vw, 30px);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.55;
+  color: rgba(53, 56, 62, 0.72);
+  rotate: -4deg;
+}
+.of-sheet--book .of-row { --gap: 0.5em; }
+.of-book__folio {
+  position: absolute;
+  left: 26vw;
+  right: 26vw;
+  bottom: 5vh;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* A passport open on its maroon cover: the cover's inside with its foil
+   emblem and a serial number punched in holes; the visa page with its
+   guilloche, rubber stamps in the ticket stocks' inks, two machine lines at
+   its foot and — the egg — a park's cancellation stamp in its corner. */
+.of-sheet--passport { --sheet-bg: #562f2e; }
+.of-pass__cover {
+  position: absolute;
+  left: 38vw;
+  right: 3vw;
+  top: 4vh;
+  bottom: 4vh;
+  border-radius: 0 8px 8px 0;
+  background: #e3e6d9;
+  box-shadow: -3px 0 0 rgba(23, 27, 21, 0.25), 0 14px 30px rgba(10, 12, 9, 0.35);
+}
+.of-pass__guilloche {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    repeating-radial-gradient(circle at 20% 110%, rgba(34, 59, 85, 0.08) 0 1px, transparent 1px 9px),
+    repeating-radial-gradient(circle at 90% -10%, rgba(73, 45, 67, 0.07) 0 1px, transparent 1px 11px);
+}
+.of-pass__emblem {
+  position: absolute;
+  left: 9vw;
+  top: 12vh;
+  width: 13vw;
+  height: 13vw;
+  overflow: visible;
+  fill: none;
+  stroke: rgba(222, 200, 170, 0.55);
+  stroke-width: 1.4px;
+}
+.of-pass__serial {
+  position: absolute;
+  left: 4vw;
+  bottom: 10vh;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.of-pass__holes {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: #562f2e;
+  -webkit-text-stroke: 1px rgba(233, 222, 205, 0.55);
+}
+.of-pass__stamp {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+.of-pass__stamp--a {
+  left: 44vw;
+  top: calc(var(--zb) + 6vh);
+  padding: 10px 22px;
+  border: 5px double #562f2e;
+  font-size: 22px;
+  color: #562f2e;
+  transform: rotate(-7deg);
+}
+.of-pass__stamp--b {
+  left: 64vw;
+  top: calc(var(--zb) + 4vh);
+  width: 150px;
+  height: 150px;
+  gap: 6px;
+  border: 3px solid #223b55;
+  border-radius: 50%;
+  font-size: 18px;
+  color: #223b55;
+  transform: rotate(8deg);
+}
+.of-pass__no {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+.of-pass__stamp--c {
+  right: 8vw;
+  top: calc(var(--za) - 20vh);
+  padding: 8px 20px;
+  border: 3px solid #20423a;
+  border-radius: 12px;
+  font-size: 26px;
+  color: #20423a;
+  transform: rotate(-3deg);
+}
+.of-pass__park {
+  position: absolute;
+  right: 5vw;
+  bottom: 12vh;
+  width: 66px;
+  height: 66px;
+  overflow: visible;
+  opacity: 0.8;
+  transform: rotate(-12deg);
+}
+.of-pass__park circle {
+  fill: none;
+  stroke: #492d43;
+  stroke-width: 1.6px;
+}
+.of-pass__park text {
+  font-size: 7.6px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  fill: #492d43;
+}
+.of-pass__visas {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #efe4dc;
+}
+.of-pass__end {
+  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
+  font-style: italic;
+  font-weight: 500;
+  color: #171b15;
+}
+.of-pass__mrz {
+  position: absolute;
+  left: 41vw;
+  right: 6vw;
+  bottom: 6vh;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(11px, 0.85vw, 15px);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: rgba(23, 27, 21, 0.75);
+}
+.of-pass__page {
+  position: absolute;
+  right: 5vw;
+  top: 6vh;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(23, 27, 21, 0.7);
+}
+
+/* A telegram: a buff form, its fields, the message on pasted tape — the
+   anchor on the middle strip — the office's received stamp, a clerk's
+   pencil, the counter's boxes. */
+.of-sheet--telegram { --sheet-bg: #ebe0c2; }
+.of-wire__form {
+  position: absolute;
+  inset: 3vmin;
+  border: 1px solid rgba(86, 47, 46, 0.4);
+  background: linear-gradient(180deg, transparent calc(100% - 9vh), rgba(86, 47, 46, 0.06) calc(100% - 9vh));
+}
+.of-wire__fields {
+  position: absolute;
+  left: 6vw;
+  right: 6vw;
+  bottom: calc(100% - var(--za) + 12vh);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(86, 47, 46, 0.5);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(86, 47, 46, 0.9);
+}
+.of-wire__tape,
+.of-wire__rowr {
+  font-size: clamp(15px, 1.5vw, 26px);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.of-wire__tape {
+  position: absolute;
+  margin: 0;
+  padding: 0.3em 0.7em;
+  white-space: nowrap;
+  background: #f8f3e3;
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.18);
+}
+.of-wire__tape--above {
+  left: 12vw;
+  bottom: calc(100% - var(--za) + 3.6vh);
+}
+.of-wire__tape--below {
+  left: 12vw;
+  top: calc(var(--zb) + 3.6vh);
+}
+.of-wire__tape--row {
+  left: 6vw;
+  right: 6vw;
+  top: calc(50% + var(--cap, 120px) / 2 - 1.22em);
+  height: 1.64em;
+  padding: 0;
+}
+.of-wire__stamp {
+  position: absolute;
+  right: 9vw;
+  top: calc(var(--zb) + 8vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 120px;
+  height: 120px;
+  border: 2.5px solid var(--sc);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 6px transparent, inset 0 0 0 7.5px var(--sc);
+  color: var(--sc);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.82;
+  rotate: -10deg;
+}
+.of-wire__stamp-t { font-size: 18px; letter-spacing: 0.04em; }
+.of-wire__clerk {
+  position: absolute;
+  left: 12vw;
+  bottom: 8vh;
+  margin: 0;
+  font-size: clamp(20px, 1.7vw, 30px);
+  font-style: italic;
+  font-weight: 400;
+  color: rgba(53, 56, 62, 0.8);
+  rotate: -3deg;
+}
+.of-wire__boxes {
+  position: absolute;
+  left: 6vw;
+  top: calc(var(--za) - 30vh);
+  display: flex;
+}
+.of-wire__boxes span {
+  width: 30px;
+  padding: 6px 0;
+  border: 1px solid rgba(86, 47, 46, 0.5);
+  border-left-width: 0;
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+  color: #171b15;
+}
+.of-wire__boxes span:first-child { border-left-width: 1px; }
+
+/* A notebook: ruled, a margin line in the maroon ink, a hand (Fraunces's
+   italic) round the anchor, a print of his taped in, a numbered list, an
+   arrow and a cup's ring. */
+.of-sheet--notebook { --sheet-bg: #f3f1e8; }
+.of-note__ruled {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent calc(10vw - 3px), rgba(86, 47, 46, 0.5) calc(10vw - 3px) calc(10vw - 2px), transparent calc(10vw - 2px) 10vw, rgba(86, 47, 46, 0.5) 10vw calc(10vw + 1px), transparent calc(10vw + 1px)),
+    repeating-linear-gradient(180deg, transparent 0 43px, rgba(34, 59, 85, 0.16) 43px 44px);
+}
+.of-note__ring {
+  position: absolute;
+  left: 58vw;
+  top: calc(var(--zb) + 5vh);
+  width: 17vh;
+  height: 17vh;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 3px rgba(89, 61, 27, 0.18),
+    inset 0 0 0 7px rgba(89, 61, 27, 0.05),
+    0 0 0 1px rgba(89, 61, 27, 0.1);
+}
+.of-note__print {
+  position: absolute;
+  right: 7vw;
+  top: 8vh;
+  width: 17vw;
+  margin: 0;
+  padding: 0.5vw 0.5vw 1.8vw;
+  background: #f7f5ee;
+  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.22), 0 10px 22px rgba(23, 27, 21, 0.14);
+  rotate: 4deg;
+}
+.of-note__print .of-pic { filter: grayscale(1) contrast(1.1); }
+.of-note__hand {
+  margin: 0;
+  font-size: clamp(20px, 2.1vw, 36px);
+  font-style: italic;
+  font-weight: 400;
+  color: #1f2621;
+}
+.of-note__above {
+  position: absolute;
+  left: 13vw;
+  bottom: calc(100% - var(--za) + 16px);
+}
+.of-note__below {
+  position: absolute;
+  left: 13vw;
+  right: 44vw;
+  top: calc(var(--zb) + 14px);
+}
+.of-note__aside {
+  margin-top: 10px;
+  font-size: 0.72em;
+  opacity: 0.75;
+}
+.of-note__list {
+  position: absolute;
+  left: 13vw;
+  bottom: 5vh;
+  display: flex;
+  gap: 2.4vw;
+  color: #2b4a6a;
+}
+.of-note__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.of-note__item .of-note__hand {
+  font-size: clamp(17px, 1.4vw, 24px);
+  color: #2b4a6a;
+}
+.of-note__arrow {
+  position: absolute;
+  right: 22vw;
+  top: calc(var(--zb) + 18vh);
+  width: 70px;
+  height: 35px;
+  overflow: visible;
+  fill: none;
+  stroke: #2b4a6a;
+  stroke-width: 1.8px;
+  stroke-linecap: round;
+  rotate: -40deg;
+}
+
+/* A postcard's back: an airmail border, POST CARD cropped at its head, two
+   stamps (one a frame of his) and a postmark, the air mail label, the
+   address lines, the message round the anchor. */
+.of-sheet--postcard { --sheet-bg: #f1eadb; }
+.of-post__border {
+  position: absolute;
+  inset: 0;
+  border: 1.6vmin solid transparent;
+  border-image: repeating-linear-gradient(-45deg, #562f2e 0 14px, #f1eadb 14px 22px, #223b55 22px 36px, #f1eadb 36px 44px) 30;
+}
+.of-post__stamp {
+  position: absolute;
+  right: 5vw;
+  top: 23vh;
+  width: 7.4vw;
+  height: 9.2vw;
+  padding: 8px;
+  background: radial-gradient(circle, transparent 3px, #f8f4ea 3.5px) -5px -5px / 10px 10px;
+}
+.of-post__stamp--b {
+  right: 13.5vw;
+  top: 25vh;
+  rotate: -4deg;
+}
+.of-post__stamp-face {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 6px;
+  background: #492d43;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #efe8dc;
+}
+.of-post__stamp-face--pic {
+  align-items: center;
+  padding: 4px;
+  overflow: hidden;
+  background: #20423a;
+}
+.of-pic--stamp {
+  width: 100%;
+  height: auto;
+  filter: grayscale(1) contrast(1.2) brightness(1.05);
+  mix-blend-mode: luminosity;
+}
+.of-post__mark {
+  position: absolute;
+  right: 9vw;
+  top: calc(23vh + 4.6vw);
+  width: 12vw;
+  overflow: visible;
+}
+.of-post__mark circle,
+.of-post__mark path {
+  fill: none;
+  stroke: rgba(23, 27, 21, 0.55);
+  stroke-width: 1.4px;
+  vector-effect: non-scaling-stroke;
+}
+.of-post__mark text {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: rgba(23, 27, 21, 0.6);
+}
+.of-post__air {
+  position: absolute;
+  left: 8vw;
+  top: 25vh;
+  padding: 6px 12px;
+  border: 1.5px solid #223b55;
+  color: #223b55;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.of-post__address {
+  position: absolute;
+  left: 79vw;
+  right: 5vw;
+  top: calc(var(--zb) + 2vh);
+}
+.of-post__address i {
+  display: block;
+  height: 1px;
+  margin-bottom: 5.4vh;
+  background: rgba(23, 27, 21, 0.4);
+}
+.of-post__hand,
+.of-post__msg {
+  font-style: italic;
+  font-weight: 400;
+  color: #1f2621;
+}
+.of-post__hand { font-size: max(20px, calc(var(--cap, 120px) * 0.34)); }
+.of-post__msg {
+  position: absolute;
+  left: 8vw;
+  right: 28vw;
+  top: calc(var(--zb) + 22px);
+  margin: 0;
+  font-size: clamp(17px, 1.7vw, 30px);
+  line-height: 1.35;
+}
+
+/* The phone: the words of the anchor's line go over and under it (centred),
+   the rest of each page is thinned to what a narrow frame holds — one layer
+   an editorial page (the one marked for the phone), a sheet's quieter
+   furniture let go. */
+@media (max-width: 1023px) {
+  .of-row,
+  .of-side {
+    --base-align: 0;
+    left: 6vw;
+    right: 6vw;
+    max-width: none;
+    text-align: center;
+    white-space: normal;
+  }
+  .of-row--l,
+  .of-side--l {
+    top: auto;
+    bottom: calc(100% - var(--bt, 40vh) + 12px);
+  }
+  .of-row--r,
+  .of-side--r { top: calc(var(--bb, 60vh) + 10px); }
+  .of-side--rowup,
+  .of-side--rowdown { display: none; }
+  .of-side--italic { font-size: 22px; }
+  .of-texture { display: none; }
+  .of-texture[data-texture='0'] {
+    display: block;
+    width: 38vw;
+  }
+  .of-meta--r { display: none; }
+  /* Above the Skip pill (44 px tall at the frame's foot), never under it. */
+  .of-credit {
+    font-size: 9px;
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
+  }
+  [data-place]:not([data-phone]),
+  .of-run,
+  .of-tabs,
+  .of-reg,
+  .of-steps { display: none; }
+  .of-print { width: 42vw; }
+  .of-clip { width: 48vw; }
+  .of-pull { width: 64vw; font-size: 17px; }
+  .of-note { font-size: 16px; }
+  .of-stamp { padding: 6px 12px; }
+  .of-stamp--round { width: 86px; height: 86px; padding: 0; }
+  .of-stamp__t { font-size: 13px; }
+  .of-crop { width: 14px; height: 14px; }
+
+  .of-news__band { display: none; }
+  .of-news__edition {
+    left: 5vw;
+    right: 5vw;
+    bottom: calc(100% - var(--bt, 40vh) + 70px);
+    font-size: 8px;
+  }
+  .of-news__edition span:nth-child(2),
+  .of-news__sect { display: none; }
+  .of-news__from { font-size: 22px; }
+  .of-news__below {
+    left: 5vw;
+    right: 5vw;
+    top: calc(var(--bb, 60vh) + 18px);
+  }
+  .of-news__hed { font-size: 20px; }
+  .of-news__deck { font-size: 11px; }
+  .of-news__cols { columns: 2; }
+  .of-news__pull { font-size: 13px; }
+
+  .of-dict__head {
+    left: 6vw;
+    right: 6vw;
+    font-size: 9px;
+  }
+  .of-dict__above {
+    left: 6vw;
+    right: 6vw;
+    columns: 1;
+    bottom: calc(100% - var(--bt, 40vh) + 20px);
+    font-size: 11px;
+  }
+  .of-dict__def { font-size: 12px; }
+  .of-dict__below {
+    left: 6vw;
+    right: 6vw;
+    top: calc(var(--bb, 60vh) + 72px);
+    font-size: 12px;
+  }
+  .of-dict__fig,
+  .of-dict__tabs,
+  .of-dict__key { display: none; }
+
+  .of-card {
+    left: 4vw;
+    right: 4vw;
+  }
+  .of-card--under {
+    left: 2vw;
+    right: 8vw;
+  }
+  .of-card__call { left: 8vw; }
+  .of-card__above,
+  .of-card__below {
+    left: 9vw;
+    right: 9vw;
+    font-size: 12px;
+  }
+  .of-card__above { bottom: calc(100% - var(--bt, 40vh) + 20px); }
+  .of-card__below { top: calc(var(--bb, 60vh) + 60px); }
+  .of-card__row { font-size: 12px; }
+  .of-card__code,
+  .of-card__pencil,
+  .of-card__clip { display: none; }
+  .of-card__stamp {
+    right: 9vw;
+    bottom: 11vh;
+    width: 92px;
+    height: 92px;
+    font-size: 10px;
+  }
+
+  .of-mag__page--l { width: 100%; }
+  .of-mag__page--r { display: none; }
+  .of-mag__runs,
+  .of-sheet--magazine .of-marks { display: none; }
+  .of-mag__lede { display: none; }
+  .of-mag__plate {
+    left: 8vw;
+    top: 13vh;
+    width: 84vw;
+  }
+  /* On a short phone the plate gives way (its own ratio kept): its caption
+     clears the kicker, and the kicker the block. */
+  .of-pic--plate {
+    width: auto;
+    max-width: 100%;
+    height: min(calc(84vw / var(--ratio, 1.5)), calc(var(--bt, 40vh) - 13vh - 66px));
+  }
+  .of-mag__above {
+    left: 8vw;
+    right: 8vw;
+    bottom: calc(100% - var(--bt, 40vh) + 16px);
+  }
+  .of-mag__deck { display: none; }
+  .of-mag__obscura { font-size: 26px; }
+  .of-mag__body {
+    left: 8vw;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 54px);
+  }
+
+  .of-slate__prod {
+    left: 7vw;
+    right: 7vw;
+    bottom: calc(100% - var(--bt, 40vh) + 52px);
+  }
+  .of-slate__hand { font-size: 20px; }
+  .of-slate__tape { font-size: 15px; }
+  .of-slate__cells {
+    left: 7vw;
+    right: 7vw;
+    top: calc(var(--bb, 60vh) + 52px);
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .of-slate__cell:nth-child(2) { border-right: 0; }
+  .of-slate__cell:nth-child(n + 3) { border-top: 2px solid rgba(233, 230, 220, 0.8); }
+  .of-slate__foot { display: none; }
+  .of-slate__wedge {
+    left: 7vw;
+    right: auto;
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 60px);
+  }
+  .of-slate__wedge i { width: 5vw; height: 2.4vh; }
+
+  /* A narrow strip: the perforations and the edge print only (a band of
+     film a third of a tall frame would darken it all at once). */
+  .of-edge__strip {
+    top: calc(var(--bt, 40vh) - 7vh);
+    bottom: calc(100% - var(--bb, 60vh) - 7vh);
+  }
+  .of-edge__strip--ghost,
+  .of-edge__loupe { display: none; }
+  .of-edge__perfs--t { top: 0.9vh; }
+  .of-edge__perfs--b { bottom: 0.9vh; }
+  .of-edge__perfs i {
+    width: 3.2vw;
+    height: 1.8vh;
+  }
+  .of-edge__frame { display: none; }
+  .of-edge__label {
+    left: 6vw;
+    top: calc(var(--bt, 40vh) - 7vh - 9vh);
+  }
+  .of-edge__print--l {
+    left: 6vw;
+    top: calc(var(--bt, 40vh) - 4.1vh);
+  }
+  .of-edge__print--r {
+    left: auto;
+    right: 6vw;
+    top: calc(var(--bb, 60vh) + 2.4vh);
+  }
+  .of-edge__note--a {
+    left: 10vw;
+    top: calc(var(--bb, 60vh) + 16vh);
+  }
+  .of-edge__note--b { display: none; }
+
+  .of-ticket {
+    left: 5vw;
+    right: 5vw;
+    top: calc(var(--bt, 40vh) - 20vh);
+    bottom: calc(100% - var(--bb, 60vh) - 22vh);
+  }
+  .of-ticket--under,
+  .of-ticket__code,
+  .of-ticket__seat,
+  .of-ticket__receipt { display: none; }
+  /* The perforation between the stub's line and the head's (never through
+     the head's words on a short phone). */
+  .of-ticket__perf {
+    left: 0;
+    right: 0;
+    top: calc(5vh + 6px);
+    bottom: auto;
+    border-left: 0;
+    border-top: 2px dashed rgba(23, 27, 21, 0.35);
+  }
+  .of-ticket__hole { left: auto; right: 6%; top: 3%; width: 16px; height: 16px; }
+  .of-ticket__stub {
+    left: 9vw;
+    right: 9vw;
+    width: auto;
+    top: calc(var(--bt, 40vh) - 20vh + 2vh);
+    bottom: auto;
+    flex-direction: row;
+    font-size: 11px;
+  }
+  .of-ticket__head {
+    left: 9vw;
+    right: 9vw;
+    top: calc(var(--bt, 40vh) - 20vh + 8vh);
+    font-size: 9px;
+  }
+  .of-ticket__route,
+  .of-ticket__fine {
+    left: 9vw;
+    right: 9vw;
+  }
+  .of-ticket__route {
+    top: calc(var(--bb, 60vh) + 56px);
+    flex-direction: column;
+    gap: 6px;
+  }
+  .of-ticket__place { font-size: 20px; }
+  .of-ticket__valid { color: #171b15; }
+  .of-ticket__punch {
+    left: auto;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 7vh);
+    width: 70px;
+    height: 70px;
+    font-size: 10px;
+  }
+
+  .of-book__above,
+  .of-book__below,
+  .of-book__folio,
+  .of-book__chapter {
+    left: 7vw;
+    right: 7vw;
+  }
+  .of-book__ribbon { left: auto; right: 8vw; width: 4vw; height: 22vh; }
+  .of-book__note { display: none; }
+  .of-book__chapter { top: calc(var(--bt, 40vh) - 18vh); }
+  .of-book__above { bottom: calc(100% - var(--bt, 40vh) + 44px); }
+  .of-book__below { top: calc(var(--bb, 60vh) + 44px); }
+  .of-book__line,
+  .of-book__row { font-size: 15px; }
+  /* The page's lines flow on a narrow frame (a line set for the desktop's
+     measure would break twice). */
+  .of-book__line {
+    display: inline;
+    text-align-last: auto;
+  }
+  .of-book__above,
+  .of-book__below {
+    text-align: justify;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  .of-pass__cover {
+    left: 3vw;
+    top: 30vh;
+    border-radius: 8px;
+  }
+  .of-pass__emblem {
+    left: auto;
+    right: 8vw;
+    top: 5vh;
+    width: 34vw;
+    height: 34vw;
+  }
+  .of-pass__serial { display: none; }
+  .of-pass__stamp--a {
+    left: 6vw;
+    top: calc(var(--bb, 60vh) + 60px);
+    font-size: 15px;
+    padding: 6px 14px;
+  }
+  .of-pass__stamp--b {
+    left: auto;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 90px);
+    width: 104px;
+    height: 104px;
+    font-size: 13px;
+  }
+  .of-pass__stamp--c { display: none; }
+  .of-pass__park { right: 7vw; bottom: auto; top: 33vh; }
+  .of-pass__mrz {
+    left: 6vw;
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
+    font-size: 10px;
+  }
+  .of-pass__mrz span:last-child { display: none; }
+  .of-pass__page { top: 32vh; }
+  .of-pass__end { font-size: 20px; }
+  .of-pass__visas { color: #171b15; }
+
+  .of-wire__fields {
+    left: 6vw;
+    right: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 16vh);
+    font-size: 8px;
+  }
+  .of-wire__fields span:nth-child(3) { display: none; }
+  .of-wire__tape,
+  .of-wire__rowr { font-size: 12px; }
+  .of-wire__tape--above {
+    left: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 7vh);
+  }
+  .of-wire__tape--below {
+    left: 6vw;
+    top: calc(var(--bb, 60vh) + 7vh);
+  }
+  .of-wire__rowr {
+    padding: 0.3em 0.7em;
+    background: #f8f3e3;
+  }
+  .of-wire__tape--row,
+  .of-wire__boxes,
+  .of-wire__clerk { display: none; }
+  .of-wire__stamp {
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 14vh);
+    width: 84px;
+    height: 84px;
+    font-size: 10px;
+  }
+  .of-wire__stamp-t { font-size: 13px; }
+
+  .of-note__above {
+    left: 14vw;
+    right: 6vw;
+    bottom: calc(100% - var(--bt, 40vh) + 50px);
+    font-size: 18px;
+  }
+  .of-note__below {
+    left: 14vw;
+    right: 6vw;
+    top: calc(var(--bb, 60vh) + 52px);
+  }
+  .of-note__hand { font-size: 18px; }
+  .of-note__print {
+    right: 6vw;
+    top: 6vh;
+    width: 40vw;
+  }
+  .of-note__ring,
+  .of-note__arrow { display: none; }
+  .of-note__list {
+    left: 14vw;
+    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 60px);
+  }
+
+  .of-post__address,
+  .of-post__stamp--b,
+  .of-post__air { display: none; }
+  .of-post__stamp {
+    right: 7vw;
+    top: 22vh;
+    width: 16vw;
+    height: 20vw;
+  }
+  .of-post__mark {
+    right: 20vw;
+    top: calc(22vh + 10vw);
+    width: 26vw;
+  }
+  .of-post__hand { font-size: 22px; }
+  .of-post__msg {
+    left: 8vw;
+    right: 8vw;
+    top: calc(var(--bb, 60vh) + 54px);
+    font-size: 16px;
+  }
+}
+
+/* ── Act 2: the hand-off ──────────────────────────────────────────────── */
+/* The anchor's lime block, alone: set on the last block by the island and
+   carried (transform) into the first machine's cursor. */
+.of-handoff {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--of-lime);
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 5 C 60 2.5 130 5 200 3.5 S 340 2 397 5.5 L 399.5 19 L 397.5 33 L 400 47 L 398 62 L 399.5 76 L 397 95 C 330 97.5 260 95.5 200 97 S 70 98.5 3.5 95.5 L 0.5 81 L 2.5 66 L 0 52 L 2 37 L 0.5 22 Z' fill='%23171b15'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 5 C 60 2.5 130 5 200 3.5 S 340 2 397 5.5 L 399.5 19 L 397.5 33 L 400 47 L 398 62 L 399.5 76 L 397 95 C 330 97.5 260 95.5 200 97 S 70 98.5 3.5 95.5 L 0.5 81 L 2.5 66 L 0 52 L 2 37 L 0.5 22 Z' fill='%23171b15'/></svg>");
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+}
+
+/* ── Act 3: the typewriter relay ──────────────────────────────────────── */
+/* The same line on every machine, each in its own face: the island sets
+   each machine's size (its capitals as tall as the terminal's) and its line
+   (one baseline, one left edge). The reveal is a window moved over it (and
+   its content moved back), so the letters never move; its padding gives the
+   glow room. What grows with the typing (a tape, a marker) is drawn inside
+   the window and clipped at the typed end, and its end rides with the
+   cursor. */
 .of-mat__ground,
 .of-mat__over {
   position: absolute;
@@ -205,11 +2907,12 @@ html[data-film-lock] body { overflow: clip !important; }
   display: inline-block;
   transform: translate3d(100%, 0, 0);
   will-change: transform;
+  isolation: isolate;
 }
 .of-typed {
   position: relative;
   display: inline-block;
-  font-size: var(--line-size);
+  font-size: 1em;
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
@@ -222,51 +2925,162 @@ html[data-film-lock] body { overflow: clip !important; }
   top: 0;
   width: 0.6em;
   height: 1em;
-  font-size: var(--line-size);
   will-change: transform, opacity;
 }
-/* Its ink blinks (530 ms, steps): from the first paint by this sheet, and
-   from the clock's start on the film's clock (the island: solid while it
-   types, blinking before and after). */
+/* Its ink blinks on the film's clock (solid while it types). It is the
+   anchor's lime, landed — but where a machine's own lime is already in the
+   frame (the grid's marker) or on the typewriter, it is ink. */
 .of-cursor__ink {
   position: absolute;
   inset: 0;
-  animation: of-blink 530ms steps(1) infinite;
+  background: var(--of-lime);
 }
-@keyframes of-blink {
-  50% { opacity: 0; }
-}
-/* Once the film's clock runs, its blink is the island's (a sheet blink left
-   running under it showed a false blink in held frames and kept the
-   compositor asking for frames). */
-.opening[data-clock] .of-cursor__ink { animation: none; }
-/* A thin caret (a word processor's), where a machine has one. */
-.of-mat--deep .of-cursor__ink,
-.of-mat--pill .of-cursor__ink,
+/* A thin caret, where a machine has one. */
+.of-mat--film .of-cursor__ink,
 .of-mat--beige .of-cursor__ink,
 .of-mat--bone .of-cursor__ink,
 .of-mat--grid .of-cursor__ink {
-  left: 0.04em;
+  left: 0.05em;
   right: auto;
-  top: -0.08em;
-  bottom: -0.1em;
-  width: 0.09em;
+  top: 0.02em;
+  bottom: 0.02em;
+  width: 0.1em;
 }
-/* What grows with the typing: its body inside the window (clipped at the
-   typed end), its end outside, riding with the cursor. */
 .of-grow {
   position: absolute;
   z-index: -1;
 }
-.of-reveal__in { isolation: isolate; }
 .of-grow-end {
   position: absolute;
   left: 0;
   will-change: transform;
 }
+/* The faces the machines imitate. */
+.of-rf--pixel { font-weight: 700; }
+.of-rf--dot { font-weight: 400; }
+.of-rf--edge {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.of-rf--emboss {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.of-rf--sans { font-weight: 400; }
+.of-rf--serif { font-weight: 400; }
+.of-rf--hand {
+  font-style: italic;
+  font-weight: 500;
+}
+.of-rf--type { font-weight: 700; }
 
-/* ① A dark CRT: a curved tube, 2 px scanlines, the colour guns a hair
-   apart, a glow, and the letters as phosphor dots. */
+/* ① A 1-bit desktop: a putty case round a black-and-white screen — the
+   desktop's dither, a menu bar, a window with a striped title bar — and the
+   line in a bitmap (the letters sampled on a coarse grid, each sample all
+   ink or none). The anchor's lime block lands here as the cursor. */
+.of-mat--mac .of-mat__ground { background: linear-gradient(180deg, #d8d3c4, #cbc5b3 70%, #bdb6a2); }
+.of-mac__screen {
+  position: absolute;
+  inset: 6vmin 8vmin 12vmin;
+  overflow: hidden;
+  border-radius: 2.2vmin;
+  background: repeating-conic-gradient(#2a2e27 0 25%, #e4e4dc 0 50%) 0 0 / 4px 4px;
+  box-shadow:
+    0 0 0 1.3vmin #bfb9a8,
+    0 0 0 1.6vmin #a39d8a,
+    inset 0 0 0 2px #1d211b;
+}
+.of-mac__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  gap: 22px;
+  height: 24px;
+  padding: 0 18px;
+  align-items: center;
+  background: #eeeee8;
+  border-bottom: 2px solid #1d211b;
+  font-size: 12px;
+  line-height: 1;
+  color: #1d211b;
+}
+.of-mac__menu b { font-weight: 700; }
+.of-mac__window {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 16%;
+  bottom: 14%;
+  background: #eeeee8;
+  border: 2px solid #1d211b;
+  box-shadow: 5px 5px 0 #1d211b;
+}
+.of-mac__title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  border-bottom: 2px solid #1d211b;
+  background: repeating-linear-gradient(180deg, #1d211b 0 1px, #eeeee8 1px 3px) 0 4px / 100% calc(100% - 8px) no-repeat, #eeeee8;
+}
+.of-mac__close {
+  position: absolute;
+  left: 12px;
+  top: 5px;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid #1d211b;
+  background: #eeeee8;
+}
+.of-mac__name {
+  padding: 0 10px;
+  background: #eeeee8;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1d211b;
+}
+.of-mac__icon {
+  position: absolute;
+  right: 2.4%;
+  width: 34px;
+  height: 28px;
+  border: 2px solid #1d211b;
+  background: #eeeee8;
+}
+.of-mac__icon--a { top: 7%; }
+.of-mac__icon--b {
+  top: auto;
+  bottom: 4%;
+  width: 28px;
+  height: 34px;
+  background: repeating-linear-gradient(90deg, #eeeee8 0 4px, #1d211b 4px 6px);
+}
+.of-mat--mac .of-typed {
+  color: #1d211b;
+  filter: url(#of-pixel-4);
+}
+.of-mat--mac .of-cursor__ink {
+  top: 0.1em;
+  bottom: 0.1em;
+}
+.of-mat--mac .of-mat__over {
+  inset: 6vmin 8vmin 12vmin;
+  border-radius: 2.2vmin;
+  background: radial-gradient(ellipse 90% 80% at 40% 30%, rgba(244, 244, 237, 0.1), transparent 60%);
+  box-shadow: inset 0 0 4vmin rgba(23, 27, 21, 0.22);
+}
+
+/* ② A dark terminal: a curved tube, 2 px scanlines, the colour guns a hair
+   apart, a glow, the letters as phosphor dots (a dot matrix), a status
+   line. */
 .of-mat--crt .of-mat__ground {
   background:
     radial-gradient(ellipse 70% 62% at 50% 50%, rgba(62, 72, 56, 0.34) 0%, transparent 70%),
@@ -285,8 +3099,8 @@ html[data-film-lock] body { overflow: clip !important; }
   color: #e6ede7;
   -webkit-mask-image: radial-gradient(circle at 50% 50%, #171b15 0 40%, transparent 48%);
   mask-image: radial-gradient(circle at 50% 50%, #171b15 0 40%, transparent 48%);
-  -webkit-mask-size: calc(var(--line-size) / 12) calc(var(--line-size) / 12);
-  mask-size: calc(var(--line-size) / 12) calc(var(--line-size) / 12);
+  -webkit-mask-size: calc(1em / 12) calc(1em / 12);
+  mask-size: calc(1em / 12) calc(1em / 12);
 }
 .of-mat--crt .of-typed--bloom {
   position: absolute;
@@ -299,124 +3113,151 @@ html[data-film-lock] body { overflow: clip !important; }
     -1.2px 0 rgba(255, 86, 72, 0.6),
     1.2px 0 rgba(82, 150, 255, 0.6);
 }
-.of-mat--crt .of-cursor__ink {
-  background: #e6ede7;
-  box-shadow: 0 0 12px rgba(230, 237, 231, 0.6);
-}
-
-/* ② A deep screen: the blue ticket stock deepening to ink, the letters
-   pale and fine. */
-.of-mat--deep .of-mat__ground {
-  background: radial-gradient(ellipse 85% 75% at 50% 56%, #223b55 0%, #1b2c3d 42%, #151d22 78%, #121614 100%);
-}
-.of-mat--deep .of-mat__over {
-  background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 60%, rgba(10, 12, 9, 0.5) 100%);
-}
-.of-mat--deep .of-typed {
-  color: #cad9e4;
-  opacity: 0.92;
-  text-shadow: 0 0 14px rgba(160, 196, 222, 0.28);
-}
-.of-mat--deep .of-cursor__ink { background: #cad9e4; }
-/* Its status line: a terminal's, in the phosphor, small, at the screen's
-   top left, over a hairline. */
-.of-deep__status {
+.of-crt__status {
   position: absolute;
   left: max(20px, 5vw);
   right: max(20px, 5vw);
   top: max(22px, 6vh);
   padding-bottom: 0.7em;
-  border-bottom: 1px solid rgba(202, 217, 228, 0.16);
+  border-bottom: 1px solid rgba(230, 237, 231, 0.16);
   font-size: calc(var(--line-size) * 0.35);
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0.1em;
-  color: rgba(202, 217, 228, 0.72);
-  text-shadow: 0 0 8px rgba(160, 196, 222, 0.35);
+  color: rgba(230, 237, 231, 0.7);
+  text-shadow: 0 0 8px rgba(200, 220, 205, 0.35);
 }
 
-/* ③ A photocopy on maroon: the maroon ticket stock as the paper, each
-   line in a toner bar with the letters knocked out of it, all with the
-   copier's ragged edge, specks and grain. */
-.of-mat--bars .of-mat__ground {
-  background-color: #562f2e;
-  background-image:
-    radial-gradient(circle at 12% 18%, rgba(23, 27, 21, 0.55) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 71% 64%, rgba(23, 27, 21, 0.5) 0 1.2px, transparent 1.8px),
-    radial-gradient(circle at 38% 82%, rgba(23, 27, 21, 0.45) 0 0.8px, transparent 1.4px);
-  background-size: 310px 270px, 380px 330px, 290px 350px;
+/* ③ A strip of film on a lightbox: the warm glow, the strip across it with
+   its perforations lit from under, two of his frames in it, the frame
+   numbers, and the line in the strip as edge print (the light through the
+   clear letters). */
+.of-mat--film .of-mat__ground {
+  background: radial-gradient(ellipse 85% 75% at 50% 50%, #f1e8d5 0%, #e5d7bb 58%, #b8a787 100%);
 }
-.of-mat--bars .of-mat__ground::before {
+.of-mat--film .of-mat__ground::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(25vw - 1px), rgba(89, 61, 27, 0.12) calc(25vw - 1px) 25vw);
+}
+.of-film__strip {
+  position: absolute;
+  left: -2vw;
+  right: -2vw;
+  top: calc(var(--line-y) - 1.3 * var(--line-size));
+  height: calc(3.6 * var(--line-size));
+  background: linear-gradient(180deg, #23261f, #2c2f27 50%, #23261f);
+  box-shadow: 0 0.2em 1.2em rgba(40, 30, 14, 0.4);
+  font-size: var(--line-size);
+}
+.of-film__perfs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.4em;
+}
+.of-film__perfs--t { top: 0.16em; }
+.of-film__perfs--b { bottom: 0.16em; }
+.of-film__perfs i {
+  width: 0.34em;
+  height: 0.46em;
+  border-radius: 0.07em;
+  background: #efe5cf;
+  box-shadow: 0 0 0.3em rgba(239, 229, 207, 0.5);
+}
+.of-film__frame {
+  position: absolute;
+  top: 0.8em;
+  bottom: 0.8em;
+  display: flex;
+  overflow: hidden;
+  background: #3a3d34;
+}
+.of-film__frame--l {
+  width: 13em;
+  left: max(0.4em, calc(var(--line-x) + 2vw - 14.4em));
+}
+.of-film__frame--r {
+  left: calc(var(--line-x) + 2vw + 13.2em);
+  width: 13em;
+}
+.of-pic--film {
+  height: 100%;
+  width: auto;
+  filter: grayscale(1) contrast(1.1) brightness(0.95);
+}
+.of-film__num {
+  position: absolute;
+  bottom: 0.66em;
+  font-size: 0.2em;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: rgba(239, 229, 207, 0.72);
+}
+.of-film__num--a { left: calc(var(--line-x) + 2vw - 1em); }
+.of-film__num--b { left: calc(var(--line-x) + 2vw + 55em); }
+.of-mat--film .of-typed {
+  color: #f1e6cc;
+  text-shadow: 0 0 0.3em rgba(241, 230, 204, 0.35);
+}
+.of-mat--film .of-mat__over { background: radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(89, 61, 27, 0.28) 100%); }
+
+/* ④ A label maker's tape on a brown desk: the ink tape grows with each
+   letter, its end cut with a notch; the letters pressed up out of it in
+   bone, embossed. */
+.of-mat--label .of-mat__ground {
+  background:
+    radial-gradient(ellipse 80% 70% at 50% 50%, #62441f 0%, #593d1b 55%, #3f2b13 100%);
+}
+.of-mat--label .of-mat__ground::before {
   content: '';
   position: absolute;
   inset: 0;
   background-image: var(--of-noise);
   background-size: 160px 160px;
-  opacity: 0.5;
+  opacity: 0.4;
 }
-.of-mat--bars .of-mat__over {
-  background:
-    linear-gradient(90deg, rgba(23, 27, 21, 0.3) 0%, transparent 6%, transparent 94%, rgba(23, 27, 21, 0.34) 100%),
-    radial-gradient(ellipse 90% 85% at 50% 50%, transparent 58%, rgba(23, 27, 21, 0.32) 100%);
+.of-grow--label,
+.of-grow-end--label {
+  top: -0.44em;
+  height: 1.86em;
+  background: linear-gradient(180deg, #2b2f28 0%, #1d211b 30%, #171b15 72%, #111410 100%);
+  box-shadow: 0 0.14em 0.36em rgba(10, 12, 9, 0.5);
 }
-.of-mat--bars .of-line { filter: url(#of-copy-edge); }
-.of-grow--bars,
-.of-grow-end--bars {
-  top: -0.3em;
-  height: 1.62em;
-  background: #171b15;
-}
-.of-grow--bars {
-  left: -0.4em;
+.of-grow--label {
+  left: -0.6em;
   right: -1em;
+  border-radius: 0.06em 0 0 0.06em;
 }
-.of-grow-end--bars { width: 0.95em; }
-.of-mat--bars .of-typed { color: #efe8dc; }
-.of-mat--bars .of-cursor__ink { background: #efe8dc; }
-
-/* ④ A pill over life: one of his photographs, out of focus and dimmed, and
-   the line in a stock-blue pill that grows with it. */
-.of-mat--pill .of-mat__ground { background: #2a3a45; }
-.of-pill__life {
+.of-grow-end--label {
+  width: 0.9em;
+  clip-path: polygon(0 0, 100% 0, 76% 50%, 100% 100%, 0 100%);
+}
+.of-mat--label .of-typed {
+  color: #e7e3d6;
+  text-shadow:
+    0 1px 0 rgba(10, 12, 9, 0.95),
+    0 -1px 0 rgba(244, 244, 237, 0.3),
+    0 0 1px rgba(231, 227, 214, 0.5);
+}
+.of-mat--label .of-cursor__ink {
+  top: 0.14em;
+  bottom: 0.06em;
+  left: 0.12em;
+  right: 0.02em;
+}
+.of-label__gloss {
   position: absolute;
-  inset: -4vh -4vw;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 40% at 30% 30%, rgba(244, 244, 237, 0.06), transparent 70%);
 }
-.of-pic--life {
-  height: 100%;
-  width: auto;
-  max-width: none;
-  filter: blur(14px) saturate(0.85) brightness(0.62);
-  transform: scale(1.08);
-}
-.of-mat--pill .of-mat__over { background: radial-gradient(ellipse 80% 75% at 50% 50%, rgba(23, 27, 21, 0.1) 30%, rgba(23, 27, 21, 0.52) 100%); }
-.of-grow--pill,
-.of-grow-end--pill {
-  top: -0.46em;
-  height: 1.92em;
-  background: #223b55;
-  box-shadow: 0 0.3em 1.2em rgba(12, 16, 20, 0.28);
-}
-.of-grow--pill {
-  left: -0.8em;
-  right: -1em;
-  border-radius: 1em 0 0 1em;
-}
-.of-grow-end--pill {
-  width: 1em;
-  border-radius: 0 1em 1em 0;
-}
-.of-mat--pill .of-typed {
-  color: #f4f4ed;
-  font-weight: 700;
-}
-.of-mat--pill .of-cursor__ink { background: #f4f4ed; }
+.of-mat--label .of-mat__over { background: radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(10, 12, 9, 0.4) 100%); }
 
 /* ⑤ A beige monitor: the case, a curved screen with a word processor's bar
-   and ruler, the letters dark grey and bold; scanlines, a moiré and the
+   and ruler, the letters dark grey in its sans; scanlines, a moiré and the
    tube's darker edges. */
 .of-mat--beige .of-mat__ground {
   background:
@@ -498,23 +3339,23 @@ html[data-film-lock] body { overflow: clip !important; }
     repeating-radial-gradient(circle at 71% 62%, rgba(23, 27, 21, 0.035) 0 1px, transparent 1px 3.2px),
     radial-gradient(ellipse 78% 74% at 50% 50%, transparent 62%, rgba(60, 55, 40, 0.34) 100%);
 }
-.of-mat--beige .of-typed {
-  color: #2d322b;
-  font-weight: 700;
-}
-.of-mat--beige .of-cursor__ink { background: #2d322b; }
+.of-mat--beige .of-typed { color: #2d322b; }
 
-/* ⑥ A bare page: bone, the letters fine, a lime caret (the frame's one
-   lime). */
+/* ⑥ A bare page: bone, the letters in a book's serif, a margin rule, a
+   lime caret (the frame's one lime). */
 .of-mat--bone .of-mat__ground { background: #f1f1ea; }
 .of-mat--bone .of-typed { color: rgba(23, 27, 21, 0.86); }
-.of-mat--bone .of-cursor__ink {
-  width: 0.12em;
-  background: var(--of-lime);
+.of-bone__margin {
+  position: absolute;
+  left: 9vw;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(86, 47, 46, 0.35);
 }
 
-/* ⑦ Grid paper: a lime marker under the line (the frame's one lime), a
-   small black-and-white print of his taped at the corner, a hand-drawn
+/* ⑦ Grid paper: a lime marker under the line (the frame's one lime), the
+   line in a hand, a small print of his taped at the corner, a hand-drawn
    looping arrow, and a pointer at the words. */
 .of-mat--grid .of-mat__ground {
   background:
@@ -551,10 +3392,7 @@ html[data-film-lock] body { overflow: clip !important; }
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
-.of-mat--grid .of-typed {
-  color: #171b15;
-  font-weight: 700;
-}
+.of-mat--grid .of-typed { color: #171b15; }
 .of-mat--grid .of-cursor__ink { background: #171b15; }
 .of-grid__print {
   position: absolute;
@@ -651,16 +3489,7 @@ html[data-film-lock] body { overflow: clip !important; }
   inset: 0;
   background: radial-gradient(ellipse 85% 80% at 50% 50%, transparent 60%, rgba(23, 27, 21, 0.16) 100%);
 }
-.of-mat--paper .of-typed {
-  color: #171b15;
-  font-weight: 700;
-}
-.of-paper__word {
-  position: relative;
-  display: inline-block;
-  white-space: pre;
-  will-change: transform, opacity;
-}
+.of-mat--paper .of-typed { color: #171b15; }
 .of-strike {
   position: relative;
   left: var(--dx);
@@ -675,10 +3504,19 @@ html[data-film-lock] body { overflow: clip !important; }
 .of-mat--paper .of-cursor__ink { background: #171b15; }
 
 @media (max-width: 1023px) {
+  .of-mac__screen,
+  .of-mat--mac .of-mat__over { inset: 5vmin 4vmin 12vmin; }
+  .of-mac__menu { gap: 14px; padding: 0 12px; font-size: 11px; }
+  .of-mac__window { left: 3%; right: 3%; top: 22%; bottom: 20%; }
+  .of-mac__icon { display: none; }
+  .of-mat--mac .of-typed { filter: url(#of-pixel-2); }
+  .of-film__frame { display: none; }
+  .of-film__num--b { display: none; }
   .of-beige__screen,
   .of-mat--beige .of-mat__over { inset: 5vmin 4vmin 12vmin; }
   .of-beige__menu { font-size: 10px; }
   .of-beige__tools i:nth-child(n + 4) { display: none; }
+  .of-bone__margin { left: 5vw; }
   .of-grid__print {
     right: 6vw;
     top: 8vh;
@@ -695,1364 +3533,6 @@ html[data-film-lock] body { overflow: clip !important; }
   }
 }
 
-/* ── Act 3: the frame ─────────────────────────────────────────────────── */
-/* One piece of film: its paper, every cut's page, the anchor on top, the
-   soft edge, the grain and the vignette — and, for the burn, the sepia,
-   the canvas and (past its foot) the frame line a slip shows. The island
-   moves the whole frame in the burn (the weave, the slip, the slide out). */
-.of-frame {
-  transform-origin: 50% 50%;
-  will-change: transform;
-}
-.of-frame__paper {
-  position: absolute;
-  inset: 0;
-  background: #f1efe7;
-}
-/* A cut's page. The island tells it where the block is: --bl / --br / --bt
-   / --bb (its edges, px) and --cap (the anchor's cap height). */
-.of-cut {
-  --gap: max(14px, calc(var(--cap, 120px) * 0.22));
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  color: #171b15;
-}
-.of-sheet__ground {
-  position: absolute;
-  inset: 0;
-  background: var(--sheet-bg, #f1efe7);
-}
-/* A giant word: Fraunces at 30–45% of the short side, cropped by the frame;
-   its motion blur is its copies, behind it. (The island sets its size and
-   place, measured, before the clock starts.) */
-.of-giant {
-  position: absolute;
-  left: 0;
-  top: 0;
-  white-space: nowrap;
-  line-height: 1;
-  color: #171b15;
-  will-change: transform;
-}
-.of-giant__word,
-.of-giant__copy {
-  display: block;
-  letter-spacing: -0.02em;
-  /* A little ink bled into the paper. */
-  text-shadow: 0 0 1px rgba(23, 27, 21, 0.45);
-}
-.of-giant__copy {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-.of-face--f900 { font-weight: 900; }
-.of-face--f400 { font-weight: 400; }
-.of-face--fit {
-  font-style: italic;
-  font-weight: 500;
-}
-.of-face--sg700 {
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.of-face--mono { font-weight: 700; }
-
-/* The words on the anchor's line: left of the block (ending a gap before
-   it) or right of it (a gap after it), set on the anchor's baseline by the
-   island (--base-align: 1); a line above or below it. */
-.of-row,
-.of-side {
-  --base-align: 1;
-  position: absolute;
-  top: calc(50% - 0.6em);
-  margin: 0;
-  white-space: nowrap;
-  line-height: 1.12;
-  color: #171b15;
-}
-.of-row--l,
-.of-side--l {
-  right: calc(100% - var(--bl, 30vw) + var(--gap));
-  text-align: right;
-}
-.of-row--r,
-.of-side--r {
-  left: calc(var(--br, 70vw) + var(--gap));
-  max-width: calc(100% - var(--br, 70vw) - var(--gap) - 4vw);
-}
-.of-side--rowup {
-  top: auto;
-  bottom: calc(100% - var(--bt, 40vh) + 4px);
-}
-.of-side--rowdown { top: calc(var(--bb, 60vh) + 6px); }
-.of-side--caps {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-side--italic {
-  font-size: max(20px, calc(var(--cap, 120px) * 0.3));
-  font-style: italic;
-  font-weight: 500;
-}
-.of-side--thin {
-  font-size: max(15px, calc(var(--cap, 120px) * 0.17));
-  font-weight: 400;
-}
-/* A small word ringed by hand (the island places it clear of the rest). */
-.of-ringed {
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-size: 22px;
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1;
-  color: #171b15;
-}
-.of-ring {
-  position: absolute;
-  left: -0.7em;
-  top: -0.55em;
-  width: calc(100% + 1.4em);
-  height: calc(100% + 1.1em);
-  overflow: visible;
-}
-.of-ring path,
-.of-edge__ring path {
-  fill: none;
-  stroke: #171b15;
-  stroke-width: 1.6px;
-  vector-effect: non-scaling-stroke;
-  stroke-linecap: round;
-}
-/* Grey texture: tiny paragraphs, too small to read. */
-.of-texture {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: var(--tw);
-  margin: 0;
-  font-size: 6.5px;
-  font-weight: 400;
-  line-height: 1.4;
-  text-align: justify;
-  color: rgba(23, 27, 21, 0.46);
-}
-/* An editorial cut's print on the frame's edge (its own layer, over the
-   soft edge). */
-.of-chrome {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.of-meta,
-.of-credit {
-  position: absolute;
-  padding: 4px 6px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: rgba(23, 27, 21, 0.76);
-  background: #f1efe7;
-}
-.of-meta { top: max(16px, 3vh); }
-.of-meta--l { left: max(14px, 3vw); }
-.of-meta--r { right: max(14px, 3vw); }
-.of-credit {
-  left: 50%;
-  bottom: max(20px, 3vh);
-  transform: translateX(-50%);
-}
-
-/* ── The printed matter ───────────────────────────────────────────────── */
-/* Each sheet is laid round the anchor: its words on the anchor's line, what
-   is printed above the block (its foot a gap over --bt) and below it (its
-   head a gap under --bb). The frame crops every sheet like a close-up. */
-
-/* A newspaper: the masthead cropped by the frame's head, the edition line
-   and a double rule, the section flag round the anchor, a headline and five
-   columns. */
-.of-sheet--newspaper { --sheet-bg: #e9e5d8; }
-.of-news__edition {
-  position: absolute;
-  left: 4vw;
-  right: 4vw;
-  bottom: calc(100% - var(--bt, 40vh) + 30px);
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-top: 1px solid #171b15;
-  border-bottom: 4px double #171b15;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-news__from {
-  font-size: max(22px, calc(var(--cap, 120px) * 0.42));
-  font-style: italic;
-  font-weight: 500;
-}
-.of-news__sect {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: normal;
-  max-width: 12vw;
-  line-height: 1.5;
-}
-.of-news__below {
-  position: absolute;
-  left: 4vw;
-  right: 4vw;
-  top: calc(var(--bb, 60vh) + 16px);
-  bottom: 0;
-  overflow: hidden;
-  border-top: 4px solid #171b15;
-}
-.of-news__hed {
-  margin: 12px 0 12px;
-  font-size: clamp(22px, 2.3vw, 40px);
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1.05;
-}
-.of-news__cols {
-  height: 100%;
-  columns: 5;
-  column-gap: 22px;
-  column-rule: 1px solid rgba(23, 27, 21, 0.3);
-  column-fill: auto;
-  font-size: 7px;
-  line-height: 1.4;
-  text-align: justify;
-  hyphens: auto;
-  color: rgba(23, 27, 21, 0.82);
-}
-.of-news__cols p {
-  margin: 0 0 6px;
-  text-indent: 1.2em;
-}
-.of-news__dateline {
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.of-news__photo {
-  display: block;
-  height: 13vh;
-  margin: 4px 0 8px;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(23, 27, 21, 0.85) 0 32%, transparent 36%) 0 0 / 5px 5px,
-    linear-gradient(160deg, rgba(233, 229, 216, 0.95) 10%, rgba(233, 229, 216, 0.25) 55%, rgba(233, 229, 216, 0.8) 90%);
-  break-inside: avoid;
-}
-
-/* A dictionary: the running head, the entries before, the headword as the
-   anchor with its etymology on its line, the senses under it. Webster's
-   1913. */
-.of-sheet--dictionary { --sheet-bg: #efe9d8; }
-.of-dict__head {
-  position: absolute;
-  left: 8vw;
-  right: 8vw;
-  top: 4.5vh;
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(23, 27, 21, 0.5);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-dict__above,
-.of-dict__below {
-  position: absolute;
-  font-size: clamp(12px, 0.9vw, 16px);
-  line-height: 1.45;
-  text-align: justify;
-  hyphens: auto;
-  color: rgba(23, 27, 21, 0.86);
-}
-.of-dict__above {
-  left: 8vw;
-  right: 8vw;
-  top: calc(4.5vh + 40px);
-  bottom: calc(100% - var(--bt, 40vh) + 18px);
-  overflow: hidden;
-  columns: 2;
-  column-gap: 5vw;
-  column-rule: 1px solid rgba(23, 27, 21, 0.2);
-}
-.of-dict__below {
-  left: max(34vw, var(--bl, 30vw));
-  right: 8vw;
-  top: calc(var(--bb, 60vh) + 14px);
-}
-.of-dict__above p,
-.of-dict__below p {
-  margin: 0 0 8px;
-  padding-left: 1.4em;
-  text-indent: -1.4em;
-}
-.of-dict__above b,
-.of-dict__below b { font-weight: 700; }
-.of-dict__def {
-  max-width: min(34ch, calc(100% - var(--br, 70vw) - 32px));
-  font-size: clamp(14px, 1.05vw, 19px);
-  white-space: normal;
-  line-height: 1.4;
-}
-
-/* A catalogue card: ruled card stock on the drawer's desk, its call number,
-   the entry typed round the anchor, the tracings, the rod's hole. */
-.of-sheet--catalogue { --sheet-bg: #cfc8b6; }
-.of-card {
-  position: absolute;
-  left: 7vw;
-  right: 7vw;
-  top: 7vh;
-  bottom: 7vh;
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(180deg, transparent 0 34px, rgba(34, 59, 85, 0.1) 34px 35px),
-    #f5f0e2;
-  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.2), 0 18px 40px rgba(23, 27, 21, 0.16);
-}
-.of-card__rule {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 13%;
-  height: 2px;
-  background: #562f2e;
-}
-.of-card__hole {
-  position: absolute;
-  left: 50%;
-  bottom: 5%;
-  width: 3.4vmin;
-  height: 3.4vmin;
-  margin-left: -1.7vmin;
-  border-radius: 50%;
-  background: #cfc8b6;
-  box-shadow: inset 0 1px 3px rgba(23, 27, 21, 0.35);
-}
-.of-card__call {
-  position: absolute;
-  left: 10vw;
-  top: calc(7vh + 86vh * 0.13 + 22px);
-  display: flex;
-  flex-direction: column;
-  font-size: clamp(13px, 0.95vw, 17px);
-  line-height: 1.3;
-}
-.of-card__above,
-.of-card__below {
-  position: absolute;
-  left: 22vw;
-  right: 12vw;
-  font-size: clamp(13px, 1vw, 18px);
-  line-height: 1.5;
-}
-.of-card__above { bottom: calc(100% - var(--bt, 40vh) + 22px); }
-.of-card__below { top: calc(var(--bb, 60vh) + 22px); }
-.of-card__above p,
-.of-card__below p { margin: 0; }
-.of-card__above p + p,
-.of-card__below p { text-indent: 2em; }
-.of-card__row {
-  font-size: clamp(13px, 1vw, 18px);
-  white-space: normal;
-  max-width: calc(88vw - var(--br, 70vw) - var(--gap));
-}
-
-/* A magazine spread: his photograph on the left page, the feature's kicker
-   and deck on the right, CAMERA (the anchor) across the gutter, obscura on
-   its line, two columns and the folios. */
-.of-sheet--magazine { --sheet-bg: #ebe8df; }
-.of-mag__pages {
-  position: absolute;
-  inset: 0;
-}
-.of-mag__page {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-}
-.of-mag__page--l {
-  left: 0;
-  width: 50%;
-  background: linear-gradient(270deg, rgba(23, 27, 21, 0.14), transparent 8%), #ebe8df;
-}
-.of-mag__page--r {
-  left: 50%;
-  right: 0;
-  background: linear-gradient(90deg, rgba(23, 27, 21, 0.16), transparent 7%), #f4f2eb;
-}
-.of-mag__plate {
-  position: absolute;
-  left: 5vw;
-  top: 50%;
-  width: 40vw;
-  transform: translateY(-50%);
-}
-.of-pic--plate {
-  width: 100%;
-  height: auto;
-}
-.of-mag__caption {
-  display: block;
-  margin-top: 8px;
-  font-size: 11px;
-  font-style: italic;
-  color: rgba(23, 27, 21, 0.7);
-}
-.of-mag__above {
-  position: absolute;
-  left: calc(50% + 5vw);
-  right: 6vw;
-  bottom: calc(100% - var(--bt, 40vh) + 22px);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.of-mag__kicker {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #562f2e;
-}
-.of-mag__deck {
-  font-size: clamp(18px, 1.9vw, 34px);
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1.1;
-}
-.of-mag__obscura {
-  font-size: max(20px, calc(var(--cap, 120px) * 0.5));
-  font-style: italic;
-  font-weight: 400;
-}
-.of-mag__body {
-  position: absolute;
-  left: calc(50% + 5vw);
-  right: 6vw;
-  top: calc(var(--bb, 60vh) + 26px);
-  columns: 2;
-  column-gap: 22px;
-  font-size: 8.5px;
-  line-height: 1.5;
-  text-align: justify;
-  hyphens: auto;
-  color: rgba(23, 27, 21, 0.82);
-}
-.of-mag__body p { margin: 0 0 6px; }
-.of-mag__folio {
-  position: absolute;
-  bottom: 3vh;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-}
-.of-mag__folio--l { left: 3vw; }
-.of-mag__folio--r { right: 3vw; }
-
-/* A slate: white acrylic in its black frame, the striped sticks at its head,
-   the production line in marker, the camera's roll and take round the
-   anchor, the cells, the word TAKE cropped at its foot. */
-.of-sheet--slate { --sheet-bg: #efefe8; }
-.of-sheet--slate .of-sheet__ground { box-shadow: inset 0 0 0 1.8vmin #171b15; }
-.of-slate__sticks {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 18vh;
-}
-.of-slate__stick {
-  position: absolute;
-  left: -2vw;
-  right: -2vw;
-  background: repeating-linear-gradient(-55deg, #171b15 0 3.6vw, #efefe8 3.6vw 7.2vw);
-  box-shadow: 0 2px 0 #171b15;
-}
-.of-slate__stick--top {
-  top: 1.2vh;
-  height: 7.4vh;
-  transform: rotate(-2.4deg);
-  transform-origin: 0 100%;
-}
-.of-slate__stick--base {
-  top: 10vh;
-  height: 6vh;
-  background-position: 3.6vw 0;
-}
-.of-slate__prod {
-  position: absolute;
-  left: 6vw;
-  right: 6vw;
-  bottom: calc(100% - var(--bt, 40vh) + 26px);
-  display: flex;
-  align-items: baseline;
-  gap: 2vw;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #171b15;
-}
-.of-slate__label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-slate__hand {
-  font-size: clamp(20px, 2.4vw, 42px);
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1.1;
-}
-.of-slate__cells {
-  position: absolute;
-  left: 6vw;
-  right: 6vw;
-  top: calc(var(--bb, 60vh) + 22px);
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border-top: 2px solid #171b15;
-}
-.of-slate__cell {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 14px;
-  border-right: 2px solid #171b15;
-}
-.of-slate__cell:last-child { border-right: 0; }
-
-/* A strip of film on a contact sheet: the perforations, two of his frames
-   either side of the anchor, the edge print, a china marker's notes. */
-.of-sheet--edge { --sheet-bg: #edece5; }
-.of-edge__strip {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--bt, 40vh) - 8.5vh);
-  bottom: calc(100% - var(--bb, 60vh) - 8.5vh);
-  background: #1c1f19;
-}
-.of-edge__perfs {
-  position: absolute;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-around;
-}
-.of-edge__perfs--t { top: 1.4vh; }
-.of-edge__perfs--b { bottom: 1.4vh; }
-.of-edge__perfs i {
-  width: 1.6vw;
-  height: 2.8vh;
-  border-radius: 0.35vw;
-  background: #e9e5d6;
-}
-.of-edge__frame {
-  position: absolute;
-  top: 6.8vh;
-  bottom: 6.8vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: #2a2d27;
-}
-.of-edge__frame--l {
-  left: 2vw;
-  right: calc(100% - var(--bl, 30vw) + 3vw);
-}
-.of-edge__frame--r {
-  left: calc(var(--br, 70vw) + 3vw);
-  right: 2vw;
-}
-.of-pic--frame {
-  height: 100%;
-  width: auto;
-  filter: grayscale(1) contrast(1.05);
-}
-.of-edge__print {
-  position: absolute;
-  margin: 0;
-  top: calc(var(--bb, 60vh) + 8.5vh - 6.4vh);
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  white-space: pre;
-  color: rgba(233, 229, 214, 0.72);
-}
-.of-edge__print--l { left: 3vw; }
-.of-edge__print--r { left: calc(var(--br, 70vw) + 3vw); }
-.of-edge__note {
-  position: absolute;
-  margin: 0;
-  font-size: clamp(20px, 1.8vw, 32px);
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1;
-  color: #562f2e;
-}
-.of-edge__note--a {
-  left: 8vw;
-  bottom: calc(100% - var(--bt, 40vh) + 8.5vh + 7vh);
-}
-.of-edge__note--b {
-  right: 12vw;
-  top: calc(var(--bb, 60vh) + 8.5vh + 8vh);
-}
-.of-edge__ring {
-  position: absolute;
-  left: -0.5em;
-  top: -0.5em;
-  width: calc(100% + 1em);
-  height: calc(100% + 1em);
-  overflow: visible;
-}
-.of-edge__ring path { stroke: #562f2e; }
-
-/* A ticket: pale stock with a guilloche, its stub at the perforation, the
-   journey printed round the anchor. */
-.of-sheet--ticket { --sheet-bg: #e6e2d6; }
-.of-ticket {
-  position: absolute;
-  left: 7vw;
-  right: 7vw;
-  top: calc(var(--bt, 40vh) - 17vh);
-  bottom: calc(100% - var(--bb, 60vh) - 21vh);
-  border-radius: 10px;
-  background:
-    repeating-linear-gradient(115deg, rgba(34, 59, 85, 0.06) 0 2px, transparent 2px 7px),
-    #dfe4d2;
-  box-shadow: 0 1px 0 rgba(23, 27, 21, 0.18), 0 16px 36px rgba(23, 27, 21, 0.14);
-}
-.of-ticket__perf {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 18%;
-  border-left: 2px dashed rgba(23, 27, 21, 0.35);
-}
-.of-ticket__stub {
-  position: absolute;
-  left: 9vw;
-  width: calc(86vw * 0.18 - 4vw);
-  top: calc(var(--bt, 40vh) - 17vh + 3vh);
-  bottom: calc(100% - var(--bb, 60vh) - 21vh + 3vh);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-ticket__no {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-}
-.of-ticket__head,
-.of-ticket__route,
-.of-ticket__fine {
-  position: absolute;
-  left: calc(7vw + 86vw * 0.18 + 3vw);
-  right: 10vw;
-}
-.of-ticket__head {
-  top: calc(var(--bt, 40vh) - 17vh + 3vh);
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(23, 27, 21, 0.35);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-ticket__valid {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-ticket__only {
-  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
-  font-style: italic;
-  font-weight: 500;
-}
-.of-ticket__route {
-  top: calc(var(--bb, 60vh) + 3vh);
-  display: flex;
-  gap: 6vw;
-}
-.of-ticket__stop {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-}
-.of-ticket__label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-ticket__place {
-  font-size: clamp(20px, 1.8vw, 32px);
-  font-style: italic;
-  font-weight: 400;
-}
-.of-ticket__fine {
-  bottom: calc(100% - var(--bb, 60vh) - 21vh + 2.6vh);
-  margin: 0;
-  font-size: 10px;
-  font-weight: 500;
-  color: rgba(23, 27, 21, 0.6);
-}
-
-/* A book: a page of Stevenson's, its gutter's shadow, the line the anchor
-   sits in, the lines before and after, the running foot. */
-.of-sheet--book { --sheet-bg: #efe7d3; }
-.of-book__gutter {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 9vw;
-  background: linear-gradient(90deg, rgba(23, 27, 21, 0.22), transparent);
-}
-.of-book__above,
-.of-book__below {
-  position: absolute;
-  left: 29vw;
-  right: 29vw;
-}
-.of-book__above { bottom: calc(100% - var(--bt, 40vh) + 8px); }
-.of-book__below { top: calc(var(--bb, 60vh) + 8px); }
-.of-book__line,
-.of-book__row {
-  font-size: clamp(16px, 1.7vw, 30px);
-  font-weight: 400;
-  line-height: 1.55;
-  color: rgba(23, 27, 21, 0.88);
-}
-.of-book__line {
-  display: block;
-  text-align: justify;
-  text-align-last: justify;
-}
-.of-book__above .of-book__line { text-align-last: right; }
-.of-sheet--book .of-row { --gap: 0.5em; }
-.of-book__folio {
-  position: absolute;
-  left: 26vw;
-  right: 26vw;
-  bottom: 5vh;
-  display: flex;
-  justify-content: space-between;
-  margin: 0;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* A passport's page: a guilloche, rubber stamps in the ticket stocks' inks,
-   the machine line at its foot, and — the egg — a park's cancellation stamp
-   in its corner. */
-.of-sheet--passport { --sheet-bg: #e3e6d9; }
-.of-pass__guilloche {
-  position: absolute;
-  inset: 0;
-  background:
-    repeating-radial-gradient(circle at 20% 110%, rgba(34, 59, 85, 0.07) 0 1px, transparent 1px 9px),
-    repeating-radial-gradient(circle at 90% -10%, rgba(73, 45, 67, 0.06) 0 1px, transparent 1px 11px);
-}
-.of-pass__stamp {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  opacity: 0.78;
-}
-.of-pass__stamp--a {
-  left: 9vw;
-  top: calc(var(--bb, 60vh) + 6vh);
-  padding: 10px 22px;
-  border: 5px double #562f2e;
-  font-size: 22px;
-  color: #562f2e;
-  transform: rotate(-7deg);
-}
-.of-pass__stamp--b {
-  left: 42vw;
-  top: calc(var(--bb, 60vh) + 4vh);
-  width: 150px;
-  height: 150px;
-  gap: 6px;
-  border: 3px solid #223b55;
-  border-radius: 50%;
-  font-size: 18px;
-  color: #223b55;
-  transform: rotate(8deg);
-}
-.of-pass__no {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-}
-.of-pass__stamp--c {
-  right: 10vw;
-  top: calc(var(--bb, 60vh) + 10vh);
-  padding: 8px 20px;
-  border: 3px solid #20423a;
-  border-radius: 12px;
-  font-size: 26px;
-  color: #20423a;
-  transform: rotate(-3deg);
-}
-.of-pass__park {
-  position: absolute;
-  right: 2.6vw;
-  top: 3.4vh;
-  width: 66px;
-  height: 66px;
-  overflow: visible;
-  opacity: 0.8;
-  transform: rotate(-12deg);
-}
-.of-pass__park circle {
-  fill: none;
-  stroke: #492d43;
-  stroke-width: 1.6px;
-}
-.of-pass__park text {
-  font-size: 7.6px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  fill: #492d43;
-}
-.of-pass__visas {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.of-pass__end {
-  font-size: max(18px, calc(var(--cap, 120px) * 0.3));
-  font-style: italic;
-  font-weight: 500;
-}
-.of-pass__mrz {
-  position: absolute;
-  left: 5vw;
-  right: 5vw;
-  bottom: 5vh;
-  margin: 0;
-  overflow: hidden;
-  font-size: clamp(12px, 0.95vw, 17px);
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  color: rgba(23, 27, 21, 0.75);
-}
-.of-pass__page {
-  position: absolute;
-  right: 5vw;
-  bottom: 2.2vh;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-/* A telegram: a buff form, its fields, and the message on pasted tape — the
-   anchor on the middle strip. */
-.of-sheet--telegram { --sheet-bg: #ebe0c2; }
-.of-wire__form {
-  position: absolute;
-  inset: 3vmin;
-  border: 1px solid rgba(86, 47, 46, 0.4);
-}
-.of-wire__fields {
-  position: absolute;
-  left: 6vw;
-  right: 6vw;
-  bottom: calc(100% - var(--bt, 40vh) + 12vh);
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(86, 47, 46, 0.5);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(86, 47, 46, 0.9);
-}
-.of-wire__tape,
-.of-wire__rowr {
-  font-size: clamp(15px, 1.5vw, 26px);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-.of-wire__tape {
-  position: absolute;
-  margin: 0;
-  padding: 0.3em 0.7em;
-  white-space: nowrap;
-  background: #f8f3e3;
-  box-shadow: 0 1px 2px rgba(23, 27, 21, 0.18);
-}
-.of-wire__tape--above {
-  left: 12vw;
-  bottom: calc(100% - var(--bt, 40vh) + 3.6vh);
-}
-.of-wire__tape--below {
-  left: 12vw;
-  top: calc(var(--bb, 60vh) + 3.6vh);
-}
-.of-wire__tape--row {
-  left: 6vw;
-  right: 6vw;
-  top: calc(50% + var(--cap, 120px) / 2 - 1.22em);
-  height: 1.64em;
-  padding: 0;
-}
-
-/* A notebook: ruled, a margin line in the maroon ink, a hand (Fraunces's
-   italic) round the anchor. */
-.of-sheet--notebook { --sheet-bg: #f3f1e8; }
-.of-note__ruled {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent calc(10vw - 3px), rgba(86, 47, 46, 0.5) calc(10vw - 3px) calc(10vw - 2px), transparent calc(10vw - 2px) 10vw, rgba(86, 47, 46, 0.5) 10vw calc(10vw + 1px), transparent calc(10vw + 1px)),
-    repeating-linear-gradient(180deg, transparent 0 43px, rgba(34, 59, 85, 0.16) 43px 44px);
-}
-.of-note__hand {
-  margin: 0;
-  font-size: clamp(20px, 2.1vw, 36px);
-  font-style: italic;
-  font-weight: 400;
-  color: #1f2621;
-}
-.of-note__above {
-  position: absolute;
-  left: 13vw;
-  bottom: calc(100% - var(--bt, 40vh) + 16px);
-}
-.of-note__below {
-  position: absolute;
-  left: 13vw;
-  right: 8vw;
-  top: calc(var(--bb, 60vh) + 14px);
-}
-.of-note__aside {
-  margin-top: 10px;
-  font-size: 0.72em;
-  opacity: 0.75;
-}
-
-/* A postcard's back: POST CARD cropped at its head, the stamp and its
-   postmark, the address lines, the message round the anchor. */
-.of-sheet--postcard { --sheet-bg: #f1eadb; }
-.of-post__divider {
-  position: absolute;
-  left: 76vw;
-  top: 25vh;
-  bottom: 8vh;
-  width: 1px;
-  background: rgba(23, 27, 21, 0.45);
-}
-.of-post__stamp {
-  position: absolute;
-  right: 5vw;
-  top: 23vh;
-  width: 7.4vw;
-  height: 9.2vw;
-  padding: 8px;
-  background: radial-gradient(circle, transparent 3px, #f8f4ea 3.5px) -5px -5px / 10px 10px;
-}
-.of-post__stamp-face {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  padding-bottom: 6px;
-  background: #492d43;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #efe8dc;
-}
-.of-post__mark {
-  position: absolute;
-  right: 9vw;
-  top: calc(23vh + 4.6vw);
-  width: 12vw;
-  overflow: visible;
-}
-.of-post__mark circle,
-.of-post__mark path {
-  fill: none;
-  stroke: rgba(23, 27, 21, 0.55);
-  stroke-width: 1.4px;
-  vector-effect: non-scaling-stroke;
-}
-.of-post__mark text {
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  fill: rgba(23, 27, 21, 0.6);
-}
-.of-post__address {
-  position: absolute;
-  left: 79vw;
-  right: 5vw;
-  top: calc(var(--bb, 60vh) + 2vh);
-}
-.of-post__address i {
-  display: block;
-  height: 1px;
-  margin-bottom: 5.4vh;
-  background: rgba(23, 27, 21, 0.4);
-}
-.of-post__hand,
-.of-post__msg {
-  font-style: italic;
-  font-weight: 400;
-  color: #1f2621;
-}
-.of-post__hand { font-size: max(20px, calc(var(--cap, 120px) * 0.34)); }
-.of-post__msg {
-  position: absolute;
-  left: 8vw;
-  right: 28vw;
-  top: calc(var(--bb, 60vh) + 22px);
-  margin: 0;
-  font-size: clamp(17px, 1.7vw, 30px);
-  line-height: 1.35;
-}
-
-/* The phone: the words of the anchor's line go over and under it (centred),
-   the rest of each page is thinned to what a narrow frame holds. */
-@media (max-width: 1023px) {
-  .of-row,
-  .of-side {
-    --base-align: 0;
-    left: 6vw;
-    right: 6vw;
-    max-width: none;
-    text-align: center;
-    white-space: normal;
-  }
-  .of-row--l,
-  .of-side--l {
-    top: auto;
-    bottom: calc(100% - var(--bt, 40vh) + 12px);
-  }
-  .of-row--r,
-  .of-side--r { top: calc(var(--bb, 60vh) + 10px); }
-  .of-side--rowup,
-  .of-side--rowdown { display: none; }
-  .of-side--italic { font-size: 22px; }
-  .of-texture { display: none; }
-  .of-texture[data-texture='0'] {
-    display: block;
-    width: 38vw;
-  }
-  .of-meta--r { display: none; }
-  /* Above the Skip pill (44 px tall at the frame's foot), never under it. */
-  .of-credit {
-    font-size: 9px;
-    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
-  }
-
-  .of-news__edition {
-    left: 5vw;
-    right: 5vw;
-    bottom: calc(100% - var(--bt, 40vh) + 70px);
-    font-size: 8px;
-  }
-  .of-news__edition span:nth-child(2),
-  .of-news__sect { display: none; }
-  .of-news__from { font-size: 22px; }
-  .of-news__below {
-    left: 5vw;
-    right: 5vw;
-    top: calc(var(--bb, 60vh) + 18px);
-  }
-  .of-news__hed { font-size: 20px; }
-  .of-news__cols { columns: 2; }
-
-  .of-dict__head {
-    left: 6vw;
-    right: 6vw;
-    font-size: 9px;
-  }
-  .of-dict__above {
-    left: 6vw;
-    right: 6vw;
-    columns: 1;
-    bottom: calc(100% - var(--bt, 40vh) + 20px);
-    font-size: 11px;
-  }
-  .of-dict__def { font-size: 12px; }
-  .of-dict__below {
-    left: 6vw;
-    right: 6vw;
-    top: calc(var(--bb, 60vh) + 72px);
-    font-size: 12px;
-  }
-
-  .of-card {
-    left: 4vw;
-    right: 4vw;
-  }
-  .of-card__call { left: 8vw; }
-  .of-card__above,
-  .of-card__below {
-    left: 9vw;
-    right: 9vw;
-    font-size: 12px;
-  }
-  .of-card__above { bottom: calc(100% - var(--bt, 40vh) + 20px); }
-  .of-card__below { top: calc(var(--bb, 60vh) + 60px); }
-  .of-card__row { font-size: 12px; }
-
-  .of-mag__page--l { width: 100%; }
-  .of-mag__page--r { display: none; }
-  .of-mag__plate {
-    left: 8vw;
-    top: 13vh;
-    width: 84vw;
-    transform: none;
-  }
-  /* On a short phone the plate gives way (its own ratio kept): its caption
-     clears the kicker, and the kicker the block. */
-  .of-pic--plate {
-    width: auto;
-    max-width: 100%;
-    height: min(calc(84vw / var(--ratio, 1.5)), calc(var(--bt, 40vh) - 13vh - 66px));
-  }
-  .of-mag__above {
-    left: 8vw;
-    right: 8vw;
-    bottom: calc(100% - var(--bt, 40vh) + 16px);
-  }
-  .of-mag__deck { display: none; }
-  .of-mag__obscura { font-size: 26px; }
-  .of-mag__body {
-    left: 8vw;
-    right: 8vw;
-    top: calc(var(--bb, 60vh) + 54px);
-  }
-
-  .of-slate__prod {
-    left: 7vw;
-    right: 7vw;
-    bottom: calc(100% - var(--bt, 40vh) + 52px);
-  }
-  .of-slate__hand { font-size: 20px; }
-  .of-slate__cells {
-    left: 7vw;
-    right: 7vw;
-    top: calc(var(--bb, 60vh) + 52px);
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .of-slate__cell:nth-child(2) { border-right: 0; }
-  .of-slate__cell:nth-child(n + 3) { border-top: 2px solid #171b15; }
-
-  /* A narrow strip: the perforations and the edge print only (a band of
-     film a third of a tall frame would darken it all at once). */
-  .of-edge__strip {
-    top: calc(var(--bt, 40vh) - 7vh);
-    bottom: calc(100% - var(--bb, 60vh) - 7vh);
-  }
-  .of-edge__perfs--t { top: 0.9vh; }
-  .of-edge__perfs--b { bottom: 0.9vh; }
-  .of-edge__perfs i {
-    width: 3.2vw;
-    height: 1.8vh;
-  }
-  .of-edge__frame { display: none; }
-  .of-edge__print--l {
-    left: 6vw;
-    top: calc(var(--bt, 40vh) - 4.1vh);
-  }
-  .of-edge__print--r {
-    left: auto;
-    right: 6vw;
-    top: calc(var(--bb, 60vh) + 2.4vh);
-  }
-  .of-edge__note--a {
-    left: 10vw;
-    bottom: auto;
-    top: calc(var(--bb, 60vh) + 16vh);
-  }
-  .of-edge__note--b { display: none; }
-
-  .of-ticket {
-    left: 5vw;
-    right: 5vw;
-    top: calc(var(--bt, 40vh) - 20vh);
-    bottom: calc(100% - var(--bb, 60vh) - 22vh);
-  }
-  /* The perforation between the stub's line and the head's (never through
-     the head's words on a short phone). */
-  .of-ticket__perf {
-    left: 0;
-    right: 0;
-    top: calc(5vh + 6px);
-    bottom: auto;
-    border-left: 0;
-    border-top: 2px dashed rgba(23, 27, 21, 0.35);
-  }
-  .of-ticket__stub {
-    left: 9vw;
-    right: 9vw;
-    width: auto;
-    top: calc(var(--bt, 40vh) - 20vh + 2vh);
-    bottom: auto;
-    flex-direction: row;
-    font-size: 11px;
-  }
-  .of-ticket__head {
-    left: 9vw;
-    right: 9vw;
-    top: calc(var(--bt, 40vh) - 20vh + 8vh);
-    font-size: 9px;
-  }
-  .of-ticket__route,
-  .of-ticket__fine {
-    left: 9vw;
-    right: 9vw;
-  }
-  .of-ticket__route {
-    top: calc(var(--bb, 60vh) + 56px);
-    flex-direction: column;
-    gap: 6px;
-  }
-  .of-ticket__place { font-size: 20px; }
-
-  .of-book__above,
-  .of-book__below,
-  .of-book__folio {
-    left: 7vw;
-    right: 7vw;
-  }
-  .of-book__above { bottom: calc(100% - var(--bt, 40vh) + 44px); }
-  .of-book__below { top: calc(var(--bb, 60vh) + 44px); }
-  .of-book__line,
-  .of-book__row { font-size: 15px; }
-  /* The page's lines flow on a narrow frame (a line set for the desktop's
-     measure would break twice). */
-  .of-book__line {
-    display: inline;
-    text-align-last: auto;
-  }
-  .of-book__above,
-  .of-book__below {
-    text-align: justify;
-    font-size: 15px;
-    line-height: 1.55;
-  }
-
-  .of-pass__stamp--a {
-    left: 6vw;
-    top: calc(var(--bb, 60vh) + 60px);
-    font-size: 15px;
-    padding: 6px 14px;
-  }
-  .of-pass__stamp--b {
-    left: auto;
-    right: 8vw;
-    top: calc(var(--bb, 60vh) + 90px);
-    width: 104px;
-    height: 104px;
-    font-size: 13px;
-  }
-  .of-pass__stamp--c { display: none; }
-  .of-pass__mrz {
-    bottom: calc(max(clamp(1.25rem, 2.6vh, 2.25rem), env(safe-area-inset-bottom)) + 58px);
-    font-size: 11px;
-  }
-  .of-pass__end { font-size: 20px; }
-
-  .of-wire__fields {
-    left: 6vw;
-    right: 6vw;
-    bottom: calc(100% - var(--bt, 40vh) + 16vh);
-    font-size: 8px;
-  }
-  .of-wire__fields span:nth-child(3) { display: none; }
-  .of-wire__tape,
-  .of-wire__rowr { font-size: 12px; }
-  .of-wire__tape--above {
-    left: 6vw;
-    bottom: calc(100% - var(--bt, 40vh) + 7vh);
-  }
-  .of-wire__tape--below {
-    left: 6vw;
-    top: calc(var(--bb, 60vh) + 7vh);
-  }
-  .of-wire__rowr {
-    padding: 0.3em 0.7em;
-    background: #f8f3e3;
-  }
-  .of-wire__tape--row { display: none; }
-
-  .of-note__above {
-    left: 14vw;
-    right: 6vw;
-    bottom: calc(100% - var(--bt, 40vh) + 50px);
-    font-size: 18px;
-  }
-  .of-note__below { left: 14vw; top: calc(var(--bb, 60vh) + 52px); }
-  .of-note__hand { font-size: 18px; }
-
-  .of-post__divider,
-  .of-post__address { display: none; }
-  .of-post__stamp {
-    right: 7vw;
-    top: 22vh;
-    width: 16vw;
-    height: 20vw;
-  }
-  .of-post__mark {
-    right: 20vw;
-    top: calc(22vh + 10vw);
-    width: 26vw;
-  }
-  .of-post__hand { font-size: 22px; }
-  .of-post__msg {
-    left: 8vw;
-    right: 8vw;
-    top: calc(var(--bb, 60vh) + 54px);
-    font-size: 16px;
-  }
-}
-
 /* The anchor: a lime block (a marker's rough ends) with its word in ink,
    one per cut, all on one centre, one height, one cap height. */
 .of-anchor {
@@ -2064,32 +3544,6 @@ html[data-film-lock] body { overflow: clip !important; }
   inset: 0;
   transform-origin: 50vw 50vh;
 }
-.of-key[data-key='0'] { will-change: transform, opacity; }
-.of-key__clip {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-.of-key__clip-in {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-.of-key[data-key='0'] .of-key__clip,
-.of-key[data-key='0'] .of-key__clip-in { will-change: transform; }
-/* The marker's leading edge is a marker's: ragged, a little slanted (the
-   sweep's window carries this edge with it; open, it lies past the block). */
-.of-key[data-key='0'] .of-key__clip {
-  -webkit-mask:
-    linear-gradient(#171b15, #171b15) left / calc(100% - var(--of-edge, 18px)) 100% no-repeat,
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 100' preserveAspectRatio='none'><path d='M0 0 H9 L8 33.5 L11.5 34.6 L9.4 36.2 L12.8 37.9 L10.1 39.6 L13.6 41.8 L11 43.4 L14.2 45.6 L12.1 47.4 L15.3 49.3 L12.6 51.2 L15.8 53.3 L13.2 55.1 L16.4 57.2 L13.9 59.1 L17 61 L14.4 62.9 L17.4 64.7 L15 66.3 L16.3 67 L15.6 100 H0 Z' fill='%23171b15'/></svg>") right / var(--of-edge, 18px) 100% no-repeat;
-  mask:
-    linear-gradient(#171b15, #171b15) left / calc(100% - var(--of-edge, 18px)) 100% no-repeat,
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 100' preserveAspectRatio='none'><path d='M0 0 H9 L8 33.5 L11.5 34.6 L9.4 36.2 L12.8 37.9 L10.1 39.6 L13.6 41.8 L11 43.4 L14.2 45.6 L12.1 47.4 L15.3 49.3 L12.6 51.2 L15.8 53.3 L13.2 55.1 L16.4 57.2 L13.9 59.1 L17 61 L14.4 62.9 L17.4 64.7 L15 66.3 L16.3 67 L15.6 100 H0 Z' fill='%23171b15'/></svg>") right / var(--of-edge, 18px) 100% no-repeat;
-}
 .of-key__block {
   position: absolute;
   background: var(--of-lime);
@@ -2097,8 +3551,6 @@ html[data-film-lock] body { overflow: clip !important; }
   mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100' preserveAspectRatio='none'><path d='M3 5 C 60 2.5 130 5 200 3.5 S 340 2 397 5.5 L 399.5 19 L 397.5 33 L 400 47 L 398 62 L 399.5 76 L 397 95 C 330 97.5 260 95.5 200 97 S 70 98.5 3.5 95.5 L 0.5 81 L 2.5 66 L 0 52 L 2 37 L 0.5 22 Z' fill='%23171b15'/></svg>");
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
-  transform-origin: 50% 50%;
-  will-change: transform;
 }
 .of-key__word {
   position: absolute;
@@ -2109,16 +3561,8 @@ html[data-film-lock] body { overflow: clip !important; }
   letter-spacing: 0;
   color: #171b15;
   text-shadow: 0 0 0.8px rgba(23, 27, 21, 0.5);
-  will-change: transform, opacity;
 }
-.of-key__word.of-face--f900,
-.of-key__glyphs.of-face--f900 { letter-spacing: -0.01em; }
-/* The typewriter's word, struck as hard as the paper's line. */
-.of-key__word--from,
-.of-key__glyphs--from {
-  font-weight: 700;
-  letter-spacing: 0;
-}
+.of-key__word.of-face--f900 { letter-spacing: -0.01em; }
 /* A word as its letters (a morph): each letter a box on its pen, its
    transform's origin on the pen at the baseline (the island). */
 .of-gm {
@@ -2133,10 +3577,6 @@ html[data-film-lock] body { overflow: clip !important; }
   white-space: pre;
   line-height: 1;
   will-change: opacity;
-}
-.of-key__glyphs {
-  color: #171b15;
-  text-shadow: 0 0 0.8px rgba(23, 27, 21, 0.5);
 }
 .of-g {
   position: absolute;
@@ -2448,7 +3888,7 @@ html[data-film-lock] body { overflow: clip !important; }
   border: 1px solid rgba(244, 244, 237, 0.12);
   background: rgba(23, 27, 21, 0.82);
   font-family: var(--font-ui);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2461,7 +3901,10 @@ html[data-film-lock] body { overflow: clip !important; }
   outline: 2px solid var(--of-lime);
   outline-offset: 3px;
 }
-html[data-opening] .of-skip { display: inline-flex; }
+html[data-opening] .of-skip {
+  display: inline-flex;
+  animation: of-skip-in 360ms var(--ease-arrive) 120ms backwards;
+}
 html[data-reel='skip'] .of-skip { display: none; }
 .of-skip.is-gone {
   opacity: 0;
@@ -2492,9 +3935,15 @@ html[data-reel='skip'] .of-skip { display: none; }
 /* ── Reduced motion: no film ──────────────────────────────────────────────
    The end title as a still, then a calm crossfade into the first screen
    (the island times it). Values, not structure: the same scenes are there;
-   only which one shows differs. */
+   only which one shows differs (the first page is not drawn). */
 @media (prefers-reduced-motion: reduce) {
-  .of-mat--crt { opacity: 0; }
+  .of-frame { visibility: hidden; }
+  .of-frame__paper,
+  .of-frame__soft,
+  .of-frame__grain,
+  .of-frame__vignette,
+  .of-cut[data-cut='0'],
+  .of-key[data-key='0'] { opacity: 0; visibility: hidden; }
   .of-end,
   .of-title__name,
   .of-title__sub,
@@ -2503,6 +3952,5 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-title__typed,
   .of-title__cursor,
   .of-title__gm { visibility: hidden; }
-  .of-cursor__ink { animation: none; }
   .opening { transition: opacity 700ms var(--ease-fade); }
 }
