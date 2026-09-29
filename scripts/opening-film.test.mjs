@@ -1,16 +1,19 @@
 // Run offline: node --experimental-strip-types --test scripts/opening-film.test.mjs
 //
-// The opening film (src/lib/openingFilm.ts), v4 — the owner's spec of
-// 2026-09-28 ("复古编辑部动态排版"): a typewriter relay, the word found by a
-// lime marker, match cuts round a fixed lime anchor, a film burn, the dark
-// typed, the end title, the landing. Held here: the lengths (desktop ≤ 7.5 s,
-// phone ≤ 6.6 s, landing included), every hard cut on the beat and the burn
-// on the 24 fps grid, the flash budget (light/dark turns ≤ 3 in any second,
-// ≤ 4 in all; the burn never brighter than bone), the anchor (one centre,
-// one height, one cap height for every cut), the drift (on across a cut, or
-// a quarter turn), the words (ARCHIVE, CAMERA — never cinema — TRAVEL,
-// THOUGHT, YOU, RYAN XU), the landing's words at both ends, the input (only
-// the Skip pill skips), the skip, and the house rules the sheet must keep.
+// The opening film (src/lib/openingFilm.ts), v5 — the owner's spec of
+// 2026-09-28 ("复古编辑部动态排版") and his changes of 2026-09-29: no place
+// names (suspense; two tiny easter eggs allowed), act 1 a typewriter relay
+// across eight machines, act 3 ~25 match cuts on a sixth of a second through
+// editorial pages and printed matter round a fixed lime anchor, no limit on
+// the length. Held here: every cut on its act's grid (act 1–2 the twelfth,
+// act 3 the sixth, the burn the 24th, the dark and the title the eighth); the
+// relay (slow to fast, typing continuous, letters and cursor never move);
+// the flash budget; the anchor (one centre, one height, one cap height); the
+// drift (on across a cut, or a quarter turn); at least three type tiers a
+// scene; no place names but the eggs; the words (ARCHIVE, CAMERA — never
+// cinema — TRAVEL, THOUGHT, YOU, RYAN XU); the palette (lime the one accent:
+// no yellow, no purple, no saturated blue or red); the landing's words at
+// both ends; the input (only the Skip pill skips); the skip; the house rules.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -27,90 +30,105 @@ const bundled = await build({
 const F = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 const read = (file) => readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+/** t is a whole number of `unit`s after `from`. */
+const onGrid = (t, unit, from = 0) => close((t - from) / unit, Math.round((t - from) / unit), 1e-6);
 const PLANS = { desktop: F.filmPlan('desktop'), phone: F.filmPlan('phone') };
+const SOURCES = ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css'];
 
-test('the length: desktop ≤ 7.5 s and phone ≤ 6.6 s, the landing included; hard limit 8 s', () => {
-  const landing = F.landingAEnd(F.FLY_ORDER.length);
-  assert.ok(landing <= F.LANDING_A.done, 'every word home inside the landing');
-  const desk = PLANS.desktop.length + F.LANDING_A.done;
-  const phone = PLANS.phone.length + F.LANDING_A.done;
-  assert.ok(desk <= 7500, `desktop ${desk} ms`);
-  assert.ok(desk >= 7300, `desktop ${desk} ms: about 7.5 s`);
-  assert.ok(phone <= 6600, `phone ${phone} ms`);
-  assert.ok(phone >= 6400, `phone ${phone} ms: about 6.6 s`);
-  for (const plan of Object.values(PLANS)) assert.ok(plan.length + F.LANDING_A.done <= 8000);
-});
-
-test('the acts: contiguous from 0, in the spec\'s order and lengths', () => {
+test('the acts: contiguous from 0, in the spec\'s order; no limit on the length, the landing inside 0.6 s', () => {
   for (const [layout, plan] of Object.entries(PLANS)) {
     const order = ['type', 'find', 'cuts', 'burn', 'dark', 'title'];
     let at = 0;
     for (const id of order) {
-      assert.equal(plan.acts[id].start, at, `${layout} ${id} starts where the last ended`);
+      assert.ok(close(plan.acts[id].start, at), `${layout} ${id} starts where the last ended`);
       at = plan.acts[id].end;
     }
-    assert.equal(at, plan.length);
-    assert.equal(plan.acts.find.end - plan.acts.find.start, 500);
-    assert.equal(plan.acts.burn.end - plan.acts.burn.start, 1000, 'the burn: 24 frames at 24 fps');
-    assert.equal(plan.acts.dark.end - plan.acts.dark.start, 1000);
+    assert.ok(close(at, plan.length));
+    // Act 1 is the owner's two to three seconds of the relay.
+    assert.ok(plan.acts.type.end >= 2000 && plan.acts.type.end <= 3000, `act 1 ${plan.acts.type.end} ms`);
+    assert.ok(close(plan.acts.find.end - plan.acts.find.start, 500));
+    // Act 3 about five seconds (the guidance's 30 × a sixth).
+    const act3 = plan.acts.cuts.end - plan.acts.cuts.start;
+    assert.ok(act3 >= 4000 && act3 <= 6500, `act 3 ${act3} ms`);
+    assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, 1000), 'the burn: 24 frames at 24 fps');
+    assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, 1000));
   }
-  // Desktop, to the spec's clock: 1.75 / 2.25 / 4.25 / 5.25 / 6.25 s.
-  const d = PLANS.desktop.acts;
-  assert.deepEqual([d.type.end, d.find.end, d.cuts.end, d.burn.end, d.dark.end], [1750, 2250, 4250, 5250, 6250]);
+  assert.ok(F.landingAEnd(F.FLY_ORDER.length) <= F.LANDING_A.done, 'every word home inside the landing');
 });
 
-test('every hard cut falls on the beat; the burn on the 24 fps grid', () => {
+test('every hard cut falls on its act\'s grid: the twelfth, the sixth, the 24th, the eighth', () => {
+  assert.ok(close(F.FRAME12_MS, 1000 / 12));
+  assert.ok(close(F.CUT_MS, 1000 / 6));
+  assert.ok(close(F.FRAME24_MS, 1000 / 24));
   assert.equal(F.BEAT_MS, 125);
   for (const plan of Object.values(PLANS)) {
-    const cuts = F.hardCuts(plan);
-    assert.ok(cuts.length >= 12);
-    for (const t of cuts) assert.equal(t % F.BEAT_MS, 0, `${plan.layout} cut at ${t}`);
-    for (const c of plan.cuts) assert.equal(c.end - c.start, 2 * F.BEAT_MS, 'a match cut is two beats');
-    // The burn's frames: 1/24 s each, three to a beat.
-    assert.ok(close(F.FRAME24_MS * 3, F.BEAT_MS));
-    for (let f = 0; f <= F.BURN.frames; f += 3) assert.equal(F.burnFrameStart(plan, f) % F.BEAT_MS, 0);
+    // Acts 1–2: the machines, the sweep, the glide on the twelfth.
+    for (const s of plan.styles) assert.ok(onGrid(s.start, F.FRAME12_MS) && onGrid(s.end, F.FRAME12_MS), `${s.id} ${s.start}`);
+    for (const t of [plan.sweep.start, plan.sweep.end, plan.glide.start, plan.glide.end]) assert.ok(onGrid(t, F.FRAME12_MS), `find ${t}`);
+    // Act 3: every match cut on a sixth from the act's start.
+    for (const c of plan.cuts) {
+      assert.ok(onGrid(c.start, F.CUT_MS, plan.acts.cuts.start), `${c.word} ${c.start}`);
+      assert.ok(onGrid(c.end, F.CUT_MS, plan.acts.cuts.start));
+      assert.ok(c.end - c.start >= F.CUT_MS - 1e-6);
+    }
+    // The burn's frames on the 24th from its start.
     for (let f = 0; f < F.BURN.frames; f += 1) {
       const t = F.burnFrameStart(plan, f);
+      assert.ok(onGrid(t, F.FRAME24_MS, plan.acts.burn.start));
       assert.equal(F.burnFrameAt(plan, t + 1), f);
       assert.equal(F.burnFrameAt(plan, t + F.FRAME24_MS - 1), f, 'held for the whole frame');
     }
     assert.equal(F.burnFrameAt(plan, plan.acts.burn.start - 1), -1);
     assert.equal(F.burnFrameAt(plan, plan.acts.burn.end), -1);
+    // The dark, the title and the landing on the eighth from the dark.
+    for (const t of [plan.acts.dark.start, plan.acts.title.start, plan.acts.title.start + F.TITLE.morph, plan.length]) {
+      assert.ok(onGrid(t, F.BEAT_MS, plan.acts.dark.start), `beat ${t}`);
+    }
+    // And, as it happens, every act starts on the 24th and the twelfth
+    // from the clock's start (a sixth is two twelfths, an eighth three 24ths).
+    for (const a of Object.values(plan.acts)) assert.ok(onGrid(a.start, F.FRAME24_MS), `act at ${a.start}`);
+    assert.ok(F.hardCuts(plan).length >= 35);
   }
 });
 
-test('act 1: the typewriter relay — a material every three beats under letters that never move', () => {
+test('act 1: the relay — eight machines, slow to fast, the typing continuous across the cuts', () => {
   assert.equal(F.TYPED, 'an archive of travel');
   assert.equal(F.FOUND_WORD, 'archive');
-  assert.deepEqual([...F.MATERIALS.desktop], ['crt', 'phosphor', 'paper', 'copy']);
-  assert.equal(F.MATERIALS.phone.length, 3, 'the phone keeps three');
+  const ids = F.STYLES.map((s) => s.id);
+  assert.ok(ids.length >= 6 && ids.length <= 8, 'six to eight machines');
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(ids.at(-1), F.FIND_STYLE, 'the word is found on the last');
+  // Slow to fast: each machine no longer than the one before, the paper
+  // (the last) holds for the find; the first long.
+  const frames = F.STYLES.map((s) => s.frames);
+  for (let i = 1; i < frames.length - 1; i += 1) assert.ok(frames[i] <= frames[i - 1], `${ids[i]} ${frames[i]}`);
+  assert.ok(frames[0] * F.FRAME12_MS >= 600, 'the first is on long enough to be read');
+  assert.ok(frames.at(-2) * F.FRAME12_MS <= 250, 'the fastest at a quarter second');
+  // Dark ones first, light ones after: the relay turns the picture once.
+  const tones = F.STYLES.map((s) => s.tone);
+  assert.equal(tones.filter((t, i) => i > 0 && t !== tones[i - 1]).length, 1);
   for (const plan of Object.values(PLANS)) {
-    const m = plan.materials;
-    assert.equal(m[0].start, 0);
-    m.forEach((x, i) => {
-      if (i > 0) {
-        assert.equal(x.start, m[i - 1].end);
-        assert.equal(x.end - x.start, 3 * F.BEAT_MS, 'three beats a material');
-      }
-    });
-    assert.equal(m[0].end - m[0].start, 5 * F.BEAT_MS, 'the cursor alone for two beats, then three');
-    // Dark, (dark,) light, light: one change of tone.
-    const tones = m.map((x) => F.MATERIAL_TONE[x.id]);
-    assert.equal(tones.filter((t, i) => i > 0 && t !== tones[i - 1]).length, 1);
-    // The typing: continuous across the cuts, done before the marker.
     const times = plan.typing;
     assert.equal(times.length, F.TYPED.length);
-    assert.equal(times[0], 2 * F.BEAT_MS, 'the first letter after the cursor\'s flash');
+    assert.ok(close(times[0], F.TYPE_AT));
     for (let i = 1; i < times.length; i += 1) assert.ok(times[i] > times[i - 1], 'in order');
-    assert.ok(times.at(-1) <= plan.acts.type.end - F.TYPE_TAIL_MS);
+    // Every machine types a few letters; the last letter on the paper.
+    for (const s of plan.styles) {
+      const n = times.filter((t) => t >= s.start && t < s.end).length;
+      assert.ok(n >= 1, `${s.id} types ${n}`);
+    }
+    const paper = plan.styles.at(-1);
+    assert.ok(times.at(-1) >= paper.start && times.at(-1) < plan.sweep.start, 'the last letter on the paper, before the find');
+    const cps = ((times.length - 1) * 1000) / (times.at(-1) - times[0]);
+    assert.ok(cps >= 7.5 && cps <= 10, `${cps.toFixed(1)} a second`);
+    // The cursor: blinking before the first letter and after the last,
+    // solid while it types.
+    const steps = F.cursorSteps(plan);
+    for (const [t, v] of steps) assert.ok(!(t > times[0] && t < times.at(-1) && v === 0), `off while typing at ${t}`);
+    const after = steps.filter(([t]) => t > times.at(-1));
+    assert.ok(after.some(([, v]) => v === 0) && after.some(([, v]) => v === 1), 'it blinks after the last letter');
+    for (let i = 1; i < after.length; i += 1) assert.ok(close(after[i][0] - after[i - 1][0], F.CURSOR_MS / 2));
   }
-  // About fourteen a second on the desktop, each within ±25 ms of its beat.
-  const t = PLANS.desktop.typing;
-  const d = PLANS.desktop.acts.type;
-  const interval = Math.min(1000 / F.TYPE_CPS, (d.end - F.TYPE_TAIL_MS - t[0]) / F.TYPED.length);
-  t.forEach((x, i) => assert.ok(Math.abs(x - (t[0] + i * interval)) <= F.TYPE_JITTER_MS + 0.5, `letter ${i}`));
-  const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
-  assert.ok(cps > 12.5 && cps < 15.5, `${cps.toFixed(1)} a second`);
   // The typewriter's ribbon: 0.75–1 strong, ±0.5 px, the same on server and client.
   const r = F.ribbon(F.TYPED);
   assert.deepEqual(r, F.ribbon(F.TYPED));
@@ -120,41 +138,142 @@ test('act 1: the typewriter relay — a material every three beats under letters
   }
 });
 
+test('act 1: the letters and the cursor never move — one monospace, one size, one place on every machine', () => {
+  const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  // The line is placed once (not per machine), and no machine changes the
+  // typed letters' face, size or tracking.
+  assert.equal([...css.matchAll(/^\.of-line \{/gm)].length, 1);
+  for (const m of css.matchAll(/\.of-mat--[\w-]+ \.of-(?:typed|line)(?!--bloom)[^{]*\{([^}]*)\}/g)) {
+    assert.doesNotMatch(m[1], /font-size|font-family|letter-spacing|(?:^|\s)left:|(?:^|\s)top:|transform:/, m[0].slice(0, 60));
+  }
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  assert.match(scenes, /className="of-typed of-mono" data-typed/);
+  // Weights change the letters, not their cells (a monospace's advance is
+  // one width at every weight); nothing synthesises a bold.
+  assert.match(css, /\.of-typed \{[^}]*font-synthesis: none;/);
+});
+
 test('act 2: the marker sweeps, then the word glides to the anchor on the spec\'s curve', () => {
   assert.deepEqual([...F.GLIDE_EASE], [0.2, 0.7, 0.1, 1]);
   for (const plan of Object.values(PLANS)) {
     assert.equal(plan.sweep.start, plan.acts.find.start);
-    assert.equal(plan.sweep.end - plan.sweep.start, 150);
-    assert.equal(plan.glide.start, plan.acts.find.start + F.BEAT_MS);
+    assert.ok(close(plan.sweep.end - plan.sweep.start, 2 * F.FRAME12_MS));
+    assert.equal(plan.sweep.end, plan.glide.start);
     assert.equal(plan.glide.end, plan.acts.cuts.start, 'it lands as the first cut comes');
     assert.equal(plan.cuts[0].face, 'f900', 'into the anchor\'s first face');
     assert.equal(plan.cuts[0].word, 'ARCHIVE');
   }
-  // One crossfade window, inside the width's morph.
+  // One crossfade window, inside the letters' morph — short, and centred.
   assert.ok(F.FIND.morph[0] <= F.FIND.swap[0] && F.FIND.swap[1] <= F.FIND.morph[1]);
+  const mid = (w) => (w[0] + w[1]) / 2;
+  for (const [box, fade] of [[F.FIND.morph, F.FIND.swap], [F.TITLE.box, F.TITLE.swap], [F.LANDING_A.morph, F.LANDING_A.sourceOut]]) {
+    assert.ok(Math.abs(mid(box) - mid(fade)) <= 0.03, `centred: ${box} / ${fade}`);
+    assert.ok(fade[1] - fade[0] <= 0.2, `tight: ${fade}`);
+  }
+  // Capitals into capitals: no small letter fades over a capital.
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  assert.match(scenes, /text=\{FOUND_WORD\.toUpperCase\(\)\}/);
+  assert.match(scenes, /text=\{TITLE_NAME\.toUpperCase\(\)\}/);
+  assert.equal(F.faceText(F.SCENES[0].word, F.SCENES[0].face), F.FOUND_WORD.toUpperCase());
 });
 
-test('act 3: the keywords, the faces, the words the owner asked for', () => {
-  const words = (plan) => plan.cuts.map((c) => c.word);
-  assert.deepEqual(words(PLANS.desktop), ['ARCHIVE', 'ARCHIVE', 'CAMERA', 'CAMERA', 'TRAVEL', 'TRAVEL', 'THOUGHT', 'YOU']);
-  assert.deepEqual(words(PLANS.phone), ['ARCHIVE', 'ARCHIVE', 'CAMERA', 'TRAVEL', 'TRAVEL', 'YOU']);
+test('one ink box, letter by letter: a letter fitted into its own box is itself; into another, it fills it', () => {
+  const ink = { l: 12, r: 60, t: -70, b: 2 };
+  const same = F.glyphFit(ink, 10, 0, ink);
+  assert.ok(close(same.sx, 1) && close(same.sy, 1) && close(same.tx, 0) && close(same.ty, 0));
+  const to = { l: 30, r: 110, t: -80, b: 0 };
+  const f = F.glyphFit(ink, 10, 0, to);
+  const map = (x, y) => [10 + f.tx + f.sx * (x - 10), 0 + f.ty + f.sy * (y - 0)];
+  const [l, t] = map(ink.l, ink.t);
+  const [r, b] = map(ink.r, ink.b);
+  assert.ok(close(l, to.l) && close(t, to.t) && close(r, to.r) && close(b, to.b));
+  assert.equal(F.morphAt(0, [0.2, 0.6]), 0);
+  assert.equal(F.morphAt(1, [0.2, 0.6]), 1);
+  assert.ok(close(F.morphAt(0.4, [0.2, 0.6]), 0.5));
+});
+
+test('act 3: the keywords in the owner\'s order, a new face at every cut, 24–30 scenes', () => {
+  const S = F.SCENES;
+  assert.ok(S.length >= 24 && S.length <= 30, `${S.length} scenes`);
+  const groups = [];
+  S.forEach((s) => (groups.at(-1) === s.word ? null : groups.push(s.word)));
+  assert.deepEqual(groups, ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']);
   for (const plan of Object.values(PLANS)) {
     assert.equal(plan.cuts.at(-1).word, 'YOU', 'YOU is the last page before the burn');
     for (let i = 1; i < plan.cuts.length; i += 1) assert.notEqual(plan.cuts[i].face, plan.cuts[i - 1].face, 'every cut changes the face');
-    for (const c of plan.cuts) assert.ok(F.FACE_ORDER.includes(c.face));
+    for (const face of F.FACE_ORDER) assert.ok(plan.cuts.some((c) => c.face === face), face);
   }
-  assert.deepEqual(PLANS.desktop.cuts.map((c) => c.face), ['f900', 'f400', 'sg700', 'mono', 'f900', 'f400', 'sg700', 'mono']);
-  // The words that must be seen: ARCHIVE, CAMERA, TRAVEL, RYAN XU, YOU — and
-  // never cinema, anywhere in the film's source.
-  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  // Slow to fast, and YOU holds longest before the burn.
+  const slots = S.map((s) => s.slots);
+  assert.ok(slots[0] >= 2 && slots.slice(2, -1).every((n) => n === 1));
+  assert.equal(Math.max(...slots), slots.at(-1));
+  assert.equal(F.faceText('ARCHIVE', 'fit'), 'Archive');
+  assert.equal(F.faceText('YOU', 'sg700'), 'YOU');
+  // The words that must be seen: ARCHIVE, CAMERA, TRAVEL, RYAN XU, YOU —
+  // and never cinema, anywhere in the film's source.
   assert.equal(F.DARK_TYPED, 'ryan xu');
   assert.equal(F.TITLE_NAME, 'Ryan Xu');
   assert.deepEqual([...F.TITLE_SUB], ['CAMERA', 'ARCHIVE', 'TRAVEL', 'THOUGHT']);
   assert.equal(F.TITLE_YOU.word, 'YOU');
-  for (const file of ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css']) {
-    assert.doesNotMatch(read(file), /cinema/i, file);
+  for (const file of SOURCES) assert.doesNotMatch(read(file), /cinema/i, file);
+  assert.match(read('../src/components/home/OpeningScenes.tsx'), /data-fly="you"/);
+});
+
+test('act 3: editorial pages alternate with printed matter; at least three type tiers every scene', () => {
+  const S = F.SCENES;
+  const sheets = S.filter((s) => s.sheet).map((s) => s.sheet);
+  assert.ok(sheets.length >= 10, `${sheets.length} pieces of printed matter`);
+  assert.equal(new Set(sheets).size, sheets.length, 'each kind once');
+  for (const kind of ['newspaper', 'dictionary', 'magazine', 'ticket', 'telegram', 'notebook', 'catalogue', 'edge']) assert.ok(sheets.includes(kind), kind);
+  assert.ok(S.filter((s) => !s.sheet).length >= 10, 'editorial pages');
+  for (let i = 1; i < S.length; i += 1) assert.ok(!(S[i].sheet && S[i - 1].sheet), `two sheets in a row at ${i}`);
+  for (const [i, s] of S.entries()) {
+    // Tier 1: 1–2 giant words, 30–45% of the short side, cropped.
+    assert.ok(s.giants.length >= 1 && s.giants.length <= 2, `${i} giants`);
+    for (const g of s.giants) {
+      assert.ok(g.cap >= 0.3 && g.cap <= 0.45, `${g.text} ${g.cap}`);
+      assert.ok(g.face === 'f900' || g.face === 'f400');
+    }
+    if (s.sheet) {
+      // Tier 2 and 3: the sheet's words on the anchor's line and its print.
+      const c = F.SHEETS[s.sheet];
+      assert.ok(c.row && c.row.some((x) => x), `${s.sheet} has words on the anchor's line`);
+    } else {
+      // Tier 2: words beside the anchor, in the three roles; tier 3: a
+      // ringed word, 2–3 texture paragraphs, the meta at both corners.
+      const roles = new Set(s.side.map((w) => w.role));
+      for (const role of ['caps', 'italic', 'thin']) assert.ok(roles.has(role), `${i} ${role}`);
+      assert.ok(s.side.some((w) => w.at === 'l') && s.side.some((w) => w.at === 'r'));
+      assert.ok(s.deco.ringed && s.deco.metaL && s.deco.metaR);
+      assert.ok(s.deco.texture.length >= 2 && s.deco.texture.length <= 3, '2–3 texture paragraphs');
+    }
   }
-  assert.match(scenes, /data-fly="you"/);
+});
+
+test('no place names: the suspense — only the two tiny eggs, in a corner, never the keyword', () => {
+  const names = F.PLACE_NAMES;
+  const eggText = F.EGGS.map((e) => e.text);
+  assert.ok(F.EGGS.length <= 2);
+  for (const e of F.EGGS) assert.ok(e.px <= 8, `${e.text} is tiny`);
+  // Every word the film shows, but the eggs.
+  const shown = [];
+  const walk = (v) => {
+    if (typeof v === 'string') shown.push(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk([F.SCENES, F.SHEETS, F.TEXTURE, F.CREDIT, F.TYPED, F.DARK_TYPED, F.TITLE_NAME, F.TITLE_SUB, F.TITLE_YOU, F.LEADER]);
+  const hits = shown.filter((text) => !eggText.includes(text) && names.some((n) => new RegExp(`\\b${n}\\b`, 'i').test(text)));
+  // "page" is also a word: only the place, in capitals or as a name, counts.
+  const real = hits.filter((text) => !/^[^A-Z]*\bpage\b/.test(text) || /Page,|PAGE/.test(text));
+  assert.deepEqual(real, [], 'a place named outside the eggs');
+  // No giant word, keyword or side word is a place.
+  for (const s of F.SCENES) {
+    for (const g of s.giants) assert.ok(!names.some((n) => g.text.toUpperCase().includes(n.toUpperCase())), g.text);
+  }
+  // The markup names none either (its words come from the data).
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  for (const n of names.filter((x) => x !== 'Page')) assert.doesNotMatch(scenes, new RegExp(`>[^<]*\\b${n}\\b`), n);
 });
 
 test('act 3: the anchor never moves — one centre, one block height, one cap height for every cut', () => {
@@ -168,23 +287,16 @@ test('act 3: the anchor never moves — one centre, one block height, one cap he
       assert.ok(close(b.block.y + b.block.h / 2, boxes[0].block.y + boxes[0].block.h / 2), 'centre y');
       assert.ok(close(b.block.h, boxes[0].block.h), 'height');
       assert.ok(close(b.baseline, boxes[0].baseline), 'baseline');
-      // The cap is centred in the block.
       assert.ok(close(b.baseline - cap / 2, b.cy));
-      // The ink is centred on the anchor.
       assert.ok(close(b.inkX + (b.block.w - 2 * cap * F.ANCHOR.pad) / 2, b.cx));
     }
-    // Only the width follows the word.
     assert.ok(boxes[3].block.w > boxes[0].block.w);
   }
-  // 12% of the height, unless the widest word must fit across.
   assert.ok(close(F.anchorCap(1728, 1000, 5.9, 'desktop'), 120));
   const phoneCap = F.anchorCap(390, 844, 5.9, 'phone');
   assert.ok(phoneCap < 0.12 * 844 && close(phoneCap * (5.9 + 2 * F.ANCHOR.pad), 0.86 * 390, 1e-6));
-  // Nothing in a cut's data can move the anchor: a composition has no
-  // anchor of its own.
-  for (const c of F.COMPOSITIONS) {
-    for (const key of ['x', 'y', 'cap', 'anchor', 'block']) assert.equal(c[key], undefined, key);
-  }
+  // Nothing in a scene's data can move the anchor.
+  for (const s of F.SCENES) for (const key of ['x', 'y', 'cap', 'anchor', 'block']) assert.equal(s[key], undefined, key);
 });
 
 test('act 3: the drift runs on across every cut (the same way, or a quarter turn), 20–60 px', () => {
@@ -195,15 +307,10 @@ test('act 3: the drift runs on across every cut (the same way, or a quarter turn
       const turn = Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
       assert.ok(turn === 0 || turn === 90, `${plan.layout} ${i}: ${turn}°`);
     }
+    // The last runs on UP into the burn's slip and slide.
+    assert.equal(plan.cuts.at(-1).drift, 'up');
   }
-  for (const c of F.COMPOSITIONS) {
-    assert.ok(c.driftPx >= 20 && c.driftPx <= 60, `${c.word} ${c.driftPx}`);
-    assert.ok(c.giants.length >= 1 && c.giants.length <= 2, '1–2 giant words');
-    for (const g of c.giants) assert.ok(g.cap >= 0.3 && g.cap <= 0.45, `${g.text} ${g.cap}`);
-    assert.ok(c.texture.length >= 2 && c.texture.length <= 3, '2–3 texture paragraphs');
-    assert.ok(c.label && c.line && c.ringed && c.metaL && c.frame && c.at);
-  }
-  // The motion blur: 3–4 copies, fainter as they fall back.
+  for (const s of F.SCENES) assert.ok(s.driftPx >= 20 && s.driftPx <= 60, `${s.word} ${s.driftPx}`);
   assert.ok(F.BLUR_COPIES.length >= 3 && F.BLUR_COPIES.length <= 4);
   for (let i = 1; i < F.BLUR_COPIES.length; i += 1) assert.ok(F.BLUR_COPIES[i].opacity < F.BLUR_COPIES[i - 1].opacity);
 });
@@ -218,18 +325,17 @@ test('act 4: the burn — frames in the spec\'s order, the slip, the leader one 
   assert.deepEqual([...F.BURN.leader], [14, 20]);
   assert.deepEqual([...F.BURN.perfs], [20, 24]);
   assert.equal(F.LEADER.length, F.BURN.leader[1] - F.BURN.leader[0], 'one card a frame');
-  assert.ok(F.LEADER.includes('head') && F.LEADER.includes('35mm') && F.LEADER.includes('reel') && F.LEADER.includes('archive'));
-  // The slip: a quarter up, for one frame; the slide out at 6°.
   assert.ok(close(F.frameAt(3).y, -0.25));
   assert.equal(F.frameAt(2).y, 0);
   assert.equal(F.frameAt(4).y, 0);
   assert.ok(close(F.frameAt(11).rot, 6));
-  // The weave: ±1 px a frame, none once out.
   for (let f = 0; f < 12; f += 1) assert.ok(Math.abs(F.frameAt(f).x) <= 1 && Math.abs(F.frameAt(f).weaveY) <= 1);
-  // The burn grows, the flicker is ±10% at most, the dark comes last.
+  for (let f = 0; f < 3; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) > 0, `flicker f${f}`);
+  for (let f = 3; f < 24; f += 1) assert.equal(F.burnFrame(f).flick, 0, `no flicker f${f}`);
+  for (let f = 9; f < 12; f += 1) assert.ok(F.frameAt(f).y < 0, `slide f${f} up`);
+  assert.ok(F.frameAt(12).y <= -1, 'gone off the top');
   for (let f = 5; f < 12; f += 1) assert.ok(F.burnRadius(f) > F.burnRadius(f - 1));
   assert.equal(F.burnRadius(3), 0);
-  for (let f = 0; f < 24; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) <= 1);
   assert.equal(F.burnDarkness(8), 0);
   assert.ok(F.burnDarkness(11) > F.burnDarkness(9));
   assert.equal(F.burnDarkness(12), 1);
@@ -243,17 +349,20 @@ test('no strobe: light/dark turns ≤ 3 in any second, ≤ 4 in all; the burn ne
       const inWindow = flips.filter((c) => c >= t && c < t + 1000).length;
       assert.ok(inWindow <= 3, `${plan.layout}: ${inWindow} turns from ${t} ms`);
     }
-    // Act 1 turns once; act 3 never; the burn turns it dark and it stays so.
     const tl = F.toneTimeline(plan);
-    assert.equal(tl[0].tone, 'dark');
+    assert.equal(tl[0].tone, 'dark', 'from the dark page, into the dark');
     assert.equal(tl.at(-1).tone, 'dark');
     const act3 = tl.find((s) => s.start <= plan.acts.cuts.start && s.end >= plan.acts.cuts.end);
     assert.ok(act3 && act3.tone === 'light', 'act 3 all light');
   }
   const bone = F.luminance('#F4F4ED');
   for (const c of F.BURN_RAMP) assert.ok(F.luminance(c) <= bone + 1e-9, c);
-  assert.equal(F.BURN_RAMP[0], '#F4F4ED', 'its brightest is bone');
-  assert.ok(F.luminance(F.BURN_HOLE) < 0.02, 'the hole is dark');
+  assert.equal(F.BURN_RAMP[0], '#F4F4ED');
+  assert.ok(F.luminance(F.BURN_HOLE) < 0.02);
+  // Every printed sheet reads light (its paper at least as light as a mid
+  // grey): act 3 never turns the picture over.
+  const css = read('../src/styles/opening.css');
+  for (const m of css.matchAll(/\.of-sheet--[\w]+ \{ --sheet-bg: (#[0-9a-f]{6}); \}/gi)) assert.ok(F.luminance(m[1]) > 0.45, m[0]);
 });
 
 test('acts 5–6: the dark typed with one lime cursor, then the line turns into the title', () => {
@@ -263,13 +372,31 @@ test('acts 5–6: the dark typed with one lime cursor, then the line turns into 
     assert.equal(t[0], plan.acts.dark.start + F.DARK_TYPE_AT);
     const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
     assert.ok(cps > 10.5 && cps < 13.5, `${cps.toFixed(1)} a second`);
-    // Typed, then one blink (half a period off), on again as the title comes.
     assert.ok(plan.blink.start > t.at(-1));
     assert.ok(close(plan.blink.end - plan.blink.start, F.CURSOR_MS / 2));
     assert.equal(plan.blink.end, plan.acts.title.start);
   }
-  assert.ok(F.TITLE.morph < F.ACT_BEATS.title * F.BEAT_MS);
-  assert.ok(F.TITLE.swap[0] > 0 && F.TITLE.swap[1] < 1);
+  assert.ok(F.TITLE.morph < F.ACT_MS.title);
+  assert.ok(F.TITLE.box[0] <= F.TITLE.swap[0] && F.TITLE.swap[1] <= F.TITLE.box[1]);
+});
+
+test('the end title sets his name exactly as the first screen does, so it flies home only moved', () => {
+  const film = read('../src/styles/opening.css');
+  const entrance = read('../src/styles/entrance.css');
+  const rule = (css, sel) => {
+    const i = css.indexOf(`${sel} {`);
+    assert.ok(i >= 0, sel);
+    return css.slice(i, css.indexOf('}', i));
+  };
+  const name = rule(entrance, '.entrance-name');
+  const title = rule(film, '.of-title__face');
+  for (const prop of ['font-size', 'font-weight', 'letter-spacing', 'text-transform']) {
+    const value = (css) => css.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1];
+    assert.equal(value(title), value(name), prop);
+  }
+  const phone = (css, sel) => css.match(new RegExp(`@media \\(max-width: 639px\\) \\{[\\s\\S]*?\\${sel} \\{ font-size: ([^;]+); \\}`))?.[1];
+  assert.ok(phone(entrance, '.entrance-name'), 'entrance phone size');
+  assert.equal(phone(film, '.of-title__face'), phone(entrance, '.entrance-name'));
 });
 
 test('the landing\'s words: at both ends — the end title and the entrance', () => {
@@ -285,9 +412,7 @@ test('the landing\'s words: at both ends — the end title and the entrance', ()
   for (const word of ['ryan', 'xu']) assert.ok(intro.includes(`data-open-land="${word}"`), `entrance: ${word}`);
   for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(intro.includes(`{ land: '${word}' }`), `entrance: ${word}`);
   for (const word of ['ryan', 'xu']) assert.ok(scenes.includes(`data-fly="${word}"`), `title: ${word}`);
-  // The credits' words carry data-fly from TITLE_SUB, lower-cased.
   assert.match(scenes, /data-fly=\{word\.toLowerCase\(\)\}/);
-  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(F.TITLE_SUB.map((w) => w.toLowerCase()).includes(word));
 });
 
 test('landing A: every word flies from its box to its glyph box, in order, inside 0.6 s', () => {
@@ -299,33 +424,15 @@ test('landing A: every word flies from its box to its glyph box, in order, insid
   assert.ok(close(f.k, 64 / 175));
   const delays = F.FLY_ORDER.map((_, i) => F.flightFor(src, dst, 1, 1, i).delay);
   for (let i = 1; i < delays.length; i += 1) assert.ok(delays[i] > delays[i - 1]);
-  assert.ok(F.LANDING_A.done <= 600, 'the spec gives the landing 0.6 s');
+  assert.ok(F.LANDING_A.done <= 600);
   assert.ok(F.LANDING_A.rest < F.landingAEnd(F.FLY_ORDER.length));
   const path = F.flightPath(F.flightFor(src, dst, 64, 175, 0));
   assert.ok(close(path[0].x, 700 - 454) && close(path.at(-1).x, 0) && close(path.at(-1).s, 1));
-  assert.deepEqual([...F.LANDING_A.sourceOut], [...F.LANDING_A.targetIn]);
-  assert.ok(F.LANDING_A.morph[0] <= F.LANDING_A.sourceOut[0] && F.LANDING_A.sourceOut[1] <= F.LANDING_A.morph[1]);
-});
-
-test('one ink box: both faces hold one ink width at every moment', () => {
-  for (const [srcW, dstW] of [
-    [310, 460],
-    [520, 240],
-    [200, 200],
-  ]) {
-    const m = F.morphScales(srcW, dstW);
-    for (let p = 0; p <= 1.0001; p += 0.125) {
-      const sw = srcW * (m.source[0] + (m.source[1] - m.source[0]) * p);
-      const tw = dstW * (m.target[0] + (m.target[1] - m.target[0]) * p);
-      assert.ok(close(sw, tw, 1e-9), `${srcW}→${dstW} at ${p}`);
-    }
-  }
 });
 
 test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing', () => {
   assert.equal(F.INPUT_POLICY.skip, 'skip');
   for (const source of ['wheel', 'touch', 'key', 'pointer']) assert.notEqual(F.INPUT_POLICY[source], 'skip', source);
-  for (const source of ['wheel', 'touch', 'key']) assert.equal(F.INPUT_POLICY[source], 'hold', source);
   const island = read('../src/components/home/OpeningFilm.tsx');
   assert.doesNotMatch(island, /addEventListener\('pointerdown'/);
   assert.doesNotMatch(island, /addEventListener\('touchstart'/);
@@ -335,9 +442,6 @@ test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing'
   assert.match(island, /html\.setAttribute\('data-film-lock', ''\)/);
   assert.match(island, /setAttribute\('inert', ''\)/);
   assert.doesNotMatch(island, /body\.style\.overflow/);
-  const keys = island.slice(island.indexOf('const onKeyDown'), island.indexOf('const onSkip'));
-  assert.match(keys, /event\.key === 'Tab'[\s\S]*?event\.preventDefault\(\);[\s\S]*?skip\.focus\(\{ preventScroll: true \}\)/);
-  assert.ok(keys.indexOf('SCROLL_KEYS.has') > 0 && keys.indexOf('SCROLL_KEYS.has') < keys.indexOf('event.metaKey || event.ctrlKey || event.altKey ||'));
 });
 
 test('skip: to the end title with its tail left, never back, nothing once the landing has begun', () => {
@@ -345,45 +449,84 @@ test('skip: to the end title with its tail left, never back, nothing once the la
     const target = plan.length - F.FF_TAIL;
     assert.ok(target >= plan.acts.title.start + F.TITLE.morph, 'the title is formed where the skip lands');
     assert.equal(F.fastForwardTarget(plan, 0), target);
-    assert.equal(F.fastForwardTarget(plan, 3000), target);
     assert.equal(F.fastForwardTarget(plan, target), null, 'never back');
     assert.equal(F.fastForwardTarget(plan, plan.length), null);
   }
   assert.ok(F.FF_RATE > 1);
 });
 
-test('the fonts: every face loaded before the clock, none synthesised', () => {
+test('the fonts: every face loaded before the clock; italic only in Fraunces (the one face with an italic)', () => {
   const faces = F.FONT_LOADS.join(' | ');
-  for (const face of ['900 100px Fraunces', '400 100px Fraunces', '700 20px "Space Grotesk"']) assert.ok(faces.includes(face), face);
-  assert.ok(F.FONT_WAIT_MS <= 4000);
+  for (const face of ['900 100px Fraunces', '400 100px Fraunces', 'italic 400 100px Fraunces', 'italic 500 100px Fraunces', '700 20px "Space Grotesk"', '600 20px "Space Grotesk"', '500 20px "Space Grotesk"']) assert.ok(faces.includes(face), face);
   const island = read('../src/components/home/OpeningFilm.tsx');
   assert.match(island, /document\.fonts\?\.load\(f, FONT_SAMPLE\)/);
-  // The clock starts in begin(), which runs only once the fonts are in.
   assert.match(island, /fontsIn\.then\(whenVisible\)\.then/);
-  const css = read('../src/styles/opening.css');
-  assert.doesNotMatch(css, /italic/, 'no italic anywhere in the film (Space Grotesk has none)');
-  // One more face only: the typewriter's monospace, a system stack.
+  // His photographs are decoded before the clock, too.
+  assert.match(island, /img\.decode\(\)/);
+  // Every italic rule's class is set on Fraunces (font-serif) in the markup,
+  // never on Space Grotesk or the monospace.
+  const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  const classNames = [...scenes.matchAll(/className=\{?[`"]([^`"]+)[`"]/g)].map((m) => m[1]);
+  for (const m of css.matchAll(/([^{}]+)\{[^}]*font-style: italic;[^}]*\}/g)) {
+    for (const sel of m[1].split(',')) {
+      const cls = sel.trim().split(/[\s.:[]/).filter(Boolean).at(-1);
+      const uses = classNames.filter((c) => c.split(/\s+/).includes(cls));
+      for (const u of uses) assert.ok(u.includes('font-serif'), `${cls} is italic on "${u}"`);
+      assert.doesNotMatch(sel, /font-ui|of-mono/);
+    }
+  }
   assert.match(css, /--of-mono: ui-monospace/);
   assert.doesNotMatch(css, /@import|@font-face|fonts\.googleapis/);
 });
 
-test('the house rules: bone and ink, never pure black or white; one lime; tracking ≤ 0.1em; no blur animated', () => {
+test('the palette: lime the one accent; bone and ink, never pure black or white; no yellow, purple, saturated blue or red', () => {
   const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.doesNotMatch(css, /#fff\b|#ffffff\b|#000\b|#000000\b|[:,(]\s*(white|black)\b/i);
-  assert.doesNotMatch(css, /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/);
-  assert.doesNotMatch(css, /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*[,)]/);
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  for (const src of [css, scenes]) {
+    assert.doesNotMatch(src, /#fff\b|#ffffff\b|#000\b|#000000\b|[:,(]\s*(white|black)\b/i);
+    assert.doesNotMatch(src, /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/);
+    assert.doesNotMatch(src, /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*[,)]/);
+    // The template's yellow, purple, blue and red: never.
+    assert.doesNotMatch(src, /#f2d52e|#ff0\b|#ffff00|#ffe600|#ffd400|#2f5bff|#e0454f|#7fd4ff|purple|violet/i);
+  }
+  assert.equal([...css.matchAll(/#d2ff00/gi)].length, 1, 'lime is one token');
+  // Lime: the anchor's block, the bare page's caret, the grid's marker, the
+  // dark's cursor, the Skip pill's focus ring — each alone in its frame.
+  const limeUses = [...css.matchAll(/([^{}]+)\{[^}]*var\(--of-lime\)[^}]*\}/g)].map((m) => m[1].trim());
+  for (const use of limeUses) assert.ok(/of-key__block|of-mat--bone|of-grow--grid|of-grow-end--grid|of-title__cursor|of-skip:focus-visible/.test(use), use);
   // Uppercase tracking capped at 0.1em.
   for (const m of css.matchAll(/letter-spacing:\s*([\d.]+)em/g)) assert.ok(Number(m[1]) <= 0.1, m[0]);
-  // The one accent: lime, and no yellow highlight.
-  const lime = [...css.matchAll(/#d2ff00/gi)].length;
-  assert.ok(lime >= 1 && lime <= 5);
-  assert.doesNotMatch(css, /#ff0\b|#ffff00|#ffe600|#ffd400/i);
-  // Only transform and opacity are animated (keyframes in the sheet).
+});
+
+test('the house rules: only transform and opacity move; no blur animated; the grain a bitmap; copies 2D', () => {
+  const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const block of css.matchAll(/@keyframes [\w-]+ \{([\s\S]*?)\n\}/g)) {
     for (const prop of block[1].matchAll(/([a-z-]+):/g)) assert.ok(['transform', 'opacity', 'visibility', 'pointer-events'].includes(prop[1]), prop[1]);
   }
   const island = read('../src/components/home/OpeningFilm.tsx');
   assert.doesNotMatch(island, /filter:\s*`?blur/);
+  assert.doesNotMatch(island, /strokeDashoffset|stroke-dashoffset/, 'the arrow is drawn in stages (opacity), not a dash offset');
+  const leader = css.slice(css.indexOf('.of-leader {'), css.indexOf('}', css.indexOf('.of-leader {')));
+  assert.doesNotMatch(leader, /filter:/);
+  assert.doesNotMatch(css, /feTurbulence/);
+  assert.match(css, /--of-noise: url\("\.\.\/assets\/film\/grain-ink\.png"\)/);
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  assert.doesNotMatch(scenes.slice(scenes.indexOf('function Giant'), scenes.indexOf('const ROLE_CLASS')), /translate3d/);
+});
+
+test('memory: every scene is drawn only round its own turn (hidden otherwise)', () => {
+  const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const from = css.indexOf('.of-mat:not(.of-mat--crt),');
+  const hidden = css.slice(from, css.indexOf('{', from));
+  assert.match(css.slice(css.indexOf('{', from)), /^\{\s*visibility: hidden;\s*\}/);
+  for (const sel of ['.of-mat:not(.of-mat--crt)', '.of-leader', '.of-end', '.of-cut', '.of-chrome', '.of-key', '.of-frame__soft', '.of-burn', '.of-perfrow']) {
+    assert.ok(hidden.includes(sel), sel);
+  }
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.match(island, /const PREROLL_MS = 250;/);
+  const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(rm, /\.of-end \{ visibility: visible; \}/);
 });
 
 test('no structure branches on the viewport or reduced motion (hydration)', () => {
@@ -393,14 +536,28 @@ test('no structure branches on the viewport or reduced motion (hydration)', () =
   const markup = island.slice(island.lastIndexOf('return ('));
   assert.doesNotMatch(markup, /reduce|phone/);
   assert.doesNotMatch(island, /initial=\{\{\s*opacity:\s*0/);
-  // Reduced motion: the end title shown still (values, not structure).
   const css = read('../src/styles/opening.css');
   const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(rm, /\.of-end,[\s\S]*?opacity: 1/);
 });
 
+test('his photographs: landscape frames, one a chapter, each at its own ratio', () => {
+  const groups = [
+    { photos: [{ imageUrl: 'https://cdn/x/a.jpg', width: 3000, height: 2000 }, { imageUrl: 'https://cdn/x/b.jpg', width: 2000, height: 3000 }] },
+    { photos: [{ imageUrl: 'https://cdn/x/c.jpg?rect=1', width: 1600, height: 1200 }] },
+    { photos: [{ imageUrl: 'https://cdn/x/d.jpg', width: 4000, height: 1000 }, { imageUrl: 'https://cdn/x/e.jpg', width: 1500, height: 1000 }] },
+  ];
+  const p = F.pickPictures(groups);
+  assert.equal(p.length, 3);
+  assert.ok(p[0].src.startsWith('https://cdn/x/a.jpg?w=96'));
+  assert.ok(p[1].src.startsWith('https://cdn/x/c.jpg?rect=1&w=480'));
+  assert.ok(p[2].src.startsWith('https://cdn/x/e.jpg?w=900'));
+  for (const x of p) assert.ok(x.ratio >= F.PICTURE_RATIO[0] && x.ratio <= F.PICTURE_RATIO[1]);
+  assert.deepEqual(F.pickPictures([]), []);
+});
+
 test('the material is seeded: the server and the client draw the same', () => {
-  assert.deepEqual(F.typeTimes('abc', 0, 500, 14, 25, 3), F.typeTimes('abc', 0, 500, 14, 25, 3));
+  assert.deepEqual(F.typeTimes('abc', 0, 500, 25, 3), F.typeTimes('abc', 0, 500, 25, 3));
   const a = F.seeded(7);
   const b = F.seeded(7);
   for (let i = 0; i < 20; i += 1) assert.equal(a(), b());

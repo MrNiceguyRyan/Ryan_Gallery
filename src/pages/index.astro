@@ -5,6 +5,7 @@ import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
+import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
 import '../styles/entrance.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
@@ -63,6 +64,9 @@ const fetchedCollections = await fetchSanityWithRetry(() =>
 const collections = Array.isArray(fetchedCollections)
   ? fetchedCollections.map((collection) => withSampleChapters(collection))
   : fetchedCollections;
+// Three of his frames for the film (the pill's life, the grid paper's
+// print, the magazine's plate), each at its own ratio.
+const openingPictures = pickPictures(Array.isArray(collections) ? collections : []);
 ---
 
 <Layout dark={true}>
@@ -78,6 +82,6 @@ const collections = Array.isArray(fetchedCollections)
   {/* The opening film: a retro editorial type film, over the page. Its
       first frame (a dark CRT, a blinking cursor) is the server's markup, so
       it is the first paint. */}
-  <OpeningFilm client:load />
+  <OpeningFilm client:load pictures={openingPictures} />
   <HomePage client:load collections={collections} />
 </Layout>

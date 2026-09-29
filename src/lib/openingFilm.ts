@@ -1,22 +1,33 @@
-// ── The opening film: a retro editorial type film ──
+// ── The opening film: a retro editorial type film (v5) ──
 // The homepage opens on a short film (src/components/home/OpeningFilm.tsx,
 // its scenes in OpeningScenes.tsx, its materials in src/styles/opening.css).
-// The owner's spec (2026-09-28, "复古编辑部动态排版"), in six acts:
+// The owner's spec (2026-09-28, "复古编辑部动态排版") and his changes of
+// 2026-09-29 (no place names — keep the suspense; a typed line relayed across
+// machines; match cuts through many kinds of printed matter round a fixed
+// lime anchor; no limit on the length), in six acts:
 //
-//   1. A typewriter relay: "an archive of travel" is typed, and every three
-//      beats the MATERIAL is cut under it — a dark CRT, a phosphor dot
-//      matrix, typewriter paper, a photocopied black strip — while the typed
-//      letters and the cursor never move.
-//   2. The word is found: a lime marker sweeps over "archive"; the rest of
-//      the line is pushed away and the word glides to the middle of the
-//      frame, growing to the anchor's size and turning from the typewriter's
-//      face into Fraunces on the way (both faces held to one ink box).
-//   3. Match cuts round a fixed lime anchor: eight cuts of two beats; in
-//      every one the block's centre, its height and the word's cap height
-//      are the same — only the word and its face change — while the
-//      editorial page round it is recomposed each cut (giant cropped
-//      Fraunces words drifting in one direction, with a motion blur of
-//      pre-drawn copies; small labels, a ringed word, grey texture, meta).
+//   1. A typewriter relay (3 s): "an archive of travel" is typed, and every
+//      few letters the whole frame hard-cuts to another machine — a dark CRT,
+//      a deep stock-coloured screen, maroon photocopy bars, a pill over one of
+//      his photographs, a beige monitor with a toolbar, a bare bone page, grid
+//      paper with a lime marker, typewriter paper — slow to fast, while the
+//      typed letters and the cursor never move (one monospace grid for all).
+//   2. The word is found: a lime marker sweeps "archive" on the paper; the
+//      rest of the line is pushed away and the word, struck in capitals,
+//      glides to the middle of the frame, each typewriter capital turning
+//      into its Fraunces capital in one shared ink box (a morph, never a
+//      double image).
+//   3. Match cuts round a fixed lime anchor (5 s, 25 scenes on a sixth of a
+//      second): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU. The block's
+//      centre, its height and the word's cap height never move; only the word
+//      and its face change (Fraunces 900, Fraunces italic, Space Grotesk 700,
+//      Fraunces 400, the monospace). Round it the frame is recomposed every
+//      cut, alternating an editorial page (giant cropped Fraunces words
+//      drifting with a motion blur of pre-drawn copies, words beside the
+//      anchor, a ringed word, grey texture, meta, a credit) and a piece of
+//      printed matter built round the word (a newspaper, a dictionary, a
+//      catalogue card, a magazine spread, a slate, a strip of film, a ticket,
+//      a book, a passport page, a telegram, a notebook, a postcard).
 //   4. A film burn, stepped at 24 fps: flicker, scratches and gate weave, a
 //      frame slip, a burn spreading from the anchor on an fbm mask (a WebGL
 //      shader on its own canvas), the frame darkening and sliding out at 6°,
@@ -24,20 +35,29 @@
 //      sprocket holes that carries the picture into the dark.
 //   5. The dark: "ryan xu" is typed on the film's base, with a lime block
 //      cursor (the act's one lime) that blinks once more when done.
-//   6. The end title: that line turns into "Ryan Xu" in Fraunces, with
+//   6. The end title: that line is struck in capitals and turns, letter by
+//      letter, into his name in Fraunces capitals — set exactly as the first
+//      screen sets it, so it flies home without changing face — with
 //      CAMERA · ARCHIVE · TRAVEL · THOUGHT under it, and YOU.
 //
 // Then it lands (landing A, "words fly home"): the dark dissolves into the
 // first screen and RYAN, XU, CAMERA, ARCHIVE, TRAVEL, THOUGHT (and YOU, when
 // the page has a place for it) fly into their places in the entrance's
-// opening words (src/components/home/EntranceIntro.tsx), their face turning
-// into the page's on the way.
+// opening words (src/components/home/EntranceIntro.tsx).
 //
-// Smooth, by the spec's definition: hard cuts fall on the beat (BEAT_MS);
-// the anchor never moves; the drift runs on across a cut (the same way or a
-// quarter turn); no fallback face, no blank frame, no dropped frame at a
-// cut (the fonts are loaded before the clock starts, and everything is
-// transform and opacity on one clock).
+// No place names: the places are the archive's suspense. The only ones in
+// the film are two tiny easter eggs (EGGS: a dateline in a newspaper column,
+// a park's cancellation stamp in a passport's corner), never large, never
+// the keyword, never centred.
+//
+// Smooth, by the spec's definition: every hard cut falls on its act's grid —
+// act 1 and 2 on the twelfth of a second (FRAME12_MS, 5 vsyncs at 60 Hz), act
+// 3 on the sixth (CUT_MS: 10 vsyncs at 60 Hz, 20 at 120 Hz), the burn on the
+// 24th, the dark and the title on the eighth (BEAT_MS); the anchor never
+// moves; the drift runs on across a cut (the same way or a quarter turn); no
+// fallback face, no blank frame, no dropped frame at a cut (the fonts and his
+// photographs are in before the clock starts, and everything is transform
+// and opacity on one clock).
 //
 // It plays once a tab session (src/lib/reelVisit.ts). While it plays, ONLY
 // the Skip pill skips it (to the end title and a hurried landing — never a
@@ -46,7 +66,8 @@
 // end title as a still and a calm crossfade.
 //
 // Everything in this module is pure (no DOM): the whole film is DATA here —
-// the acts, the cuts, every cut's composition, the burn's frames — and the
+// the acts, the machines, the scenes (each {face, giants, side words,
+// decorations} or a sheet of printed matter), the burn's frames — and the
 // island only samples it by time. scripts/opening-film.test.mjs holds it to
 // account offline.
 
@@ -61,9 +82,7 @@ export const segment = (value: number, a: number, b: number) => clamp01((value -
 // The film is its own island, above HomePage's. It says whether it covers
 // the first screen ('film'), is landing on it ('landing'), or has handed the
 // page over ('page'), and whether the globe may start to come up behind it.
-// (The page no longer waits on that last word: the globe is not on the first
-// screen, and it comes in when the entrance's boarding pass is torn.) The
-// last word is kept on window.__archiveOpening for anyone who starts
+// The last word is kept on window.__archiveOpening for anyone who starts
 // listening late.
 
 export const OPENING_EVENT = 'archive:opening';
@@ -79,12 +98,17 @@ declare global {
   }
 }
 
-// ── The clock ──────────────────────────────────────────────────────────────
-/** Every hard cut falls on this beat (an eighth of a second: 120 bpm in
- *  sixteenths). */
+// ── The clocks ─────────────────────────────────────────────────────────────
+/** Acts 1–2: the relay and the find cut on the twelfth of a second (five
+ *  vsyncs at 60 Hz, ten at 120 Hz). */
+export const FRAME12_MS = 1000 / 12;
+/** Act 3: a match cut every sixth of a second (the guidance's 5 frames at 30
+ *  fps; ten vsyncs at 60 Hz, twenty at 120 Hz — never a judder). */
+export const CUT_MS = 1000 / 6;
+/** Acts 5–6 and the landing: the eighth of a second. */
 export const BEAT_MS = 125;
-/** The burn is stepped at 24 fps: three frames to a beat. */
-export const FRAME24_MS = BEAT_MS / 3;
+/** The burn is stepped at 24 fps. */
+export const FRAME24_MS = 1000 / 24;
 /** Below this width the page is the compact tree (HomePage's `lg`). */
 export const PHONE_MAX_WIDTH = 1023;
 
@@ -102,64 +126,60 @@ export interface Span {
   end: number;
 }
 
-/** How long each act is, in beats. The desktop runs 55 beats (6.875 s) to
- *  the landing and lands in 0.6 s (7.475 s); the phone 48 (6.0 s, landed at
- *  6.6 s): one material and two cuts fewer. */
-export const ACT_BEATS = {
-  /** Act 1: the cursor alone, then one material every three beats. */
-  idle: 2,
-  material: 3,
-  /** Act 2: the marker and the glide. */
-  find: 4,
-  /** Act 3: every cut two beats. */
-  cut: 2,
-  /** Act 4: 24 frames at 24 fps. */
-  burn: 8,
-  /** Act 5: the dark, typed. */
-  dark: 8,
-  /** Act 6: the end title. */
-  title: 5,
-} as const;
-
 // ── Act 1: the typewriter relay ───────────────────────────────────────────
 
-/** The typed line, lower case, and where its found word sits in it. */
+/** The typed line, lower case, and where its found word sits in it
+ *  (PROPOSED copy). */
 export const TYPED = 'an archive of travel';
 export const FOUND_RANGE = [3, 10] as const;
 export const FOUND_WORD = TYPED.slice(FOUND_RANGE[0], FOUND_RANGE[1]);
 
-/** The materials, cut every three beats under the unmoving letters. The
- *  phone keeps three. Dark, dark, light, light: one change of tone. */
-export type MaterialId = 'crt' | 'phosphor' | 'paper' | 'copy';
-export const MATERIALS: Record<FilmLayout, readonly MaterialId[]> = {
-  desktop: ['crt', 'phosphor', 'paper', 'copy'],
-  phone: ['crt', 'paper', 'copy'],
-};
-export const MATERIAL_TONE: Record<MaterialId, Tone> = {
-  crt: 'dark',
-  phosphor: 'dark',
-  paper: 'light',
-  copy: 'light',
-};
+/** The machines the line is typed on, in order, and how long each is on
+ *  screen (twelfths of a second): slow to fast, then the paper holds (the
+ *  last letter, the cursor blinking, the find). Dark ones first, light ones
+ *  after: the relay turns the picture over once. */
+export type StyleId = 'crt' | 'deep' | 'bars' | 'pill' | 'beige' | 'bone' | 'grid' | 'paper';
+export const STYLES: readonly { id: StyleId; frames: number; tone: Tone }[] = [
+  { id: 'crt', frames: 9, tone: 'dark' },
+  { id: 'deep', frames: 5, tone: 'dark' },
+  { id: 'bars', frames: 4, tone: 'dark' },
+  { id: 'pill', frames: 3, tone: 'dark' },
+  { id: 'beige', frames: 3, tone: 'light' },
+  { id: 'bone', frames: 3, tone: 'light' },
+  { id: 'grid', frames: 3, tone: 'light' },
+  { id: 'paper', frames: 6, tone: 'light' },
+];
+export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
+/** The style the word is found on (the last). */
+export const FIND_STYLE: StyleId = 'paper';
+
 /** The cursor's blink period (steps, half on and half off). */
 export const CURSOR_MS = 530;
-/** About fourteen characters a second, each ±25 ms. */
-export const TYPE_CPS = 14;
-export const TYPE_JITTER_MS = 25;
-/** The typed line is complete this long before the marker comes. */
-export const TYPE_TAIL_MS = 90;
+/** The blink on the film's clock: on at `start`, then off and on every half
+ *  period until `end` (the times it changes, and to what). */
+export function blinkSteps(start: number, end: number, period = CURSOR_MS): [number, 0 | 1][] {
+  const out: [number, 0 | 1][] = [];
+  const half = period / 2;
+  for (let k = 1; start + k * half < end; k += 1) out.push([start + k * half, k % 2 === 0 ? 1 : 0]);
+  return out;
+}
+/** The first letter three twelfths in (the cursor alone first); the last a
+ *  twelfth into the paper. About eight letters a second, each ±24 ms. */
+export const TYPE_AT = 3 * FRAME12_MS;
+export const TYPE_LAST_FRAMES = 1;
+export const TYPE_JITTER_MS = 24;
 
-/** When each character of `text` appears: from `start`, about `cps` a
- *  second (faster if it must, to be done by `end`), each nudged by a seeded
+/** When each character of `text` appears: the first at `start`, the last
+ *  at `last` (neither nudged), evenly between, each nudged by a seeded
  *  jitter of up to ±`jitter` ms (never so far that two swap). */
-export function typeTimes(text: string, start: number, end: number, cps: number, jitter: number, seed: number) {
+export function typeTimes(text: string, start: number, last: number, jitter: number, seed: number) {
   const n = text.length;
-  const interval = Math.min(1000 / cps, (end - start) / Math.max(1, n));
+  const interval = n > 1 ? (last - start) / (n - 1) : 0;
   const j = Math.min(jitter, interval * 0.4);
   const rand = seeded(seed);
   const out: number[] = [];
   for (let i = 0; i < n; i += 1) {
-    const nudge = i === 0 ? 0 : (rand() * 2 - 1) * j;
+    const nudge = i === 0 || i === n - 1 ? 0 : (rand() * 2 - 1) * j;
     out.push(Math.round(start + i * interval + nudge));
   }
   return out;
@@ -180,15 +200,29 @@ export function ribbon(text: string, seed = 23) {
 // ── Act 2: the word is found ──────────────────────────────────────────────
 /** A curve that is off the mark at once and settles long (the spec's). */
 export const GLIDE_EASE = [0.2, 0.7, 0.1, 1] as const;
+/** A face turning into another, letter by letter (act 2, act 6): every
+ *  letter of the one face and its letter in the other are held to ONE ink
+ *  box, which goes from the first face's to the second's across `box` (a
+ *  share of the move), and the two faces cross in `fade` — a short window
+ *  centred in it, so at the crossing the two letters are the same size in
+ *  the same place, and what is seen is one letter changing its face. The
+ *  words are in the same case on both sides (capitals): a small letter
+ *  never fades over a capital (no ghost ascenders, no dots). */
+export const GLYPH_MORPH = {
+  box: [0.06, 0.5] as const,
+  fade: [0.2, 0.36] as const,
+} as const;
 export const FIND = {
-  /** The lime marker sweeps the word, left to right. */
-  sweepMs: 150,
-  /** The glide starts one beat in and ends with the act. */
-  glideAt: BEAT_MS,
+  /** The lime marker sweeps the word, left to right, in two twelfths. */
+  sweepMs: 2 * FRAME12_MS,
+  /** The glide starts as the sweep ends and ends with the act; as it
+   *  starts, the word is struck again in capitals (a hard cut, the letters
+   *  in the same cells). */
+  glideMs: 4 * FRAME12_MS,
   /** The two faces cross in this share of the glide (one window). */
-  swap: [0.3, 0.62] as const,
-  /** The shared ink width goes from the typewriter's to Fraunces's here. */
-  morph: [0.12, 0.8] as const,
+  swap: GLYPH_MORPH.fade,
+  /** The shared ink boxes go from the typewriter's to Fraunces's here. */
+  morph: GLYPH_MORPH.box,
   /** The rest of the line is pushed this far (a share of the viewport's
    *  height), up or down, and is gone by this share of the glide. */
   push: 0.2,
@@ -200,10 +234,18 @@ export const PUSH_DIR: Record<string, -1 | 1> = { an: -1, of: 1, travel: 1 };
 // ── Act 3: the fixed anchor and its match cuts ────────────────────────────
 
 export type Keyword = 'ARCHIVE' | 'CAMERA' | 'TRAVEL' | 'THOUGHT' | 'YOU';
-/** The anchor's faces: Fraunces 900, Fraunces 400, Space Grotesk 700 in
- *  capitals, the typewriter's monospace — each held to one cap height. */
-export type AnchorFace = 'f900' | 'f400' | 'sg700' | 'mono';
-export const FACE_ORDER: readonly AnchorFace[] = ['f900', 'f400', 'sg700', 'mono'];
+/** The anchor's faces (the guidance's Didone / script / heavy caps / thin
+ *  serif, in the faces the site loads): Fraunces 900 at its largest optical
+ *  size, Fraunces italic 500 (title case: the script), Space Grotesk 700 in
+ *  capitals, Fraunces 400, the typewriter's monospace — each held to one cap
+ *  height. */
+export type AnchorFace = 'f900' | 'fit' | 'sg700' | 'f400' | 'mono';
+export const FACE_ORDER: readonly AnchorFace[] = ['f900', 'fit', 'sg700', 'f400', 'mono'];
+/** The word as a face sets it: the script in title case, the rest in
+ *  capitals. */
+export function faceText(word: Keyword, face: AnchorFace) {
+  return face === 'fit' ? word.charAt(0) + word.slice(1).toLowerCase() : word;
+}
 
 /** The anchor: its centre (a share of the viewport), its cap height (a
  *  share of the height, or less where the widest word must fit across), the
@@ -242,16 +284,16 @@ export function keyBox(vw: number, vh: number, cap: number, inkW: number) {
 export type Drift = 'right' | 'down' | 'left' | 'up';
 export const DRIFT_VEC: Record<Drift, Vec2> = { right: [1, 0], down: [0, 1], left: [-1, 0], up: [0, -1] };
 export const DRIFT_DEG: Record<Drift, number> = { right: 0, down: 90, left: 180, up: 270 };
-/** The motion blur of a drifting word: copies of it behind it (away from
- *  where it goes), each a step further and fainter. Drawn once; they ride
- *  with the word. */
+/** The motion blur of a drifting word (the guidance's single-axis blur, as
+ *  pre-drawn copies): copies of it behind it (away from where it goes), each
+ *  a step further and fainter. Drawn once; they ride with the word. */
 export const BLUR_COPIES = [
   { step: 1, opacity: 0.36 },
   { step: 2, opacity: 0.2 },
   { step: 3, opacity: 0.1 },
 ] as const;
 /** One copy's step, px per 100 px/s of drift speed. */
-export const BLUR_STEP_PER_SPEED = 1.9;
+export const BLUR_STEP_PER_SPEED = 1.1;
 
 export interface Giant {
   text: string;
@@ -268,234 +310,651 @@ export interface Giant {
   yCap?: number;
   align: 'l' | 'r' | 'c';
 }
-export interface Composition {
+/** A word beside the anchor: condensed heavy capitals (Space Grotesk 700),
+ *  the script (Fraunces italic) or the thin serif (Fraunces 400); left or
+ *  right of the block, on its middle, a line above it or a line below. */
+export type SideRole = 'caps' | 'italic' | 'thin';
+export interface Side {
+  text: string;
+  role: SideRole;
+  at: 'l' | 'r';
+  row: -1 | 0 | 1;
+}
+/** An editorial page's small print: a small word ringed by hand, tiny grey
+ *  paragraphs (index into TEXTURE) as texture, and the meta at the top
+ *  corners. */
+export interface Deco {
+  ringed: string;
+  ring: Vec2;
+  texture: readonly { at: Vec2; text: number; w: number }[];
+  metaL: string;
+  metaR: string;
+}
+/** The printed matter (each drawn by its own sheet in OpeningScenes). */
+export type SheetKind =
+  | 'newspaper'
+  | 'dictionary'
+  | 'catalogue'
+  | 'magazine'
+  | 'slate'
+  | 'edge'
+  | 'ticket'
+  | 'book'
+  | 'passport'
+  | 'telegram'
+  | 'notebook'
+  | 'postcard';
+export interface Scene {
   word: Keyword;
   face: AnchorFace;
+  /** How many sixths of a second it holds. */
+  slots: number;
   drift: Drift;
   /** How far the giant words drift in the cut, px (20–60). */
   driftPx: number;
+  /** The giant words: 1–2, cropped by the frame. */
   giants: readonly Giant[];
-  /** Beside the anchor: a label in Space Grotesk bold capitals (left) and
-   *  a line in Fraunces (right). */
-  label: string;
-  line: string;
-  /** A small word ringed by hand (a frame number, as a contact sheet's
-   *  china marker rings it), and where. */
-  ringed: string;
-  ring: Vec2;
-  /** Grey texture: tiny paragraphs (index into TEXTURE) and where. */
-  texture: readonly { at: Vec2; text: number; w: number }[];
-  /** The meta at the top corners. */
-  metaL: string;
-  /** The frame number and the place's coordinates (top right). */
-  frame: string;
-  at: string;
+  /** An editorial page: the words beside the anchor and its small print.
+   *  A piece of printed matter: its sheet (the words round the anchor are
+   *  the sheet's own, in SHEETS). */
+  side?: readonly Side[];
+  deco?: Deco;
+  sheet?: SheetKind;
 }
 
-/** The places on his route (the site's own content) with their
- *  coordinates, for the meta and the lines beside the anchor. */
-export const PLACES = {
-  miami: { name: 'Miami, Florida', at: '25.76° N  80.19° W' },
-  orlando: { name: 'Orlando, Florida', at: '28.54° N  81.38° W' },
-  page: { name: 'Page, Arizona', at: '36.91° N  111.46° W' },
-  zion: { name: 'Zion, Utah', at: '37.30° N  113.03° W' },
-  bryce: { name: 'Bryce Canyon, Utah', at: '37.59° N  112.19° W' },
-  newyork: { name: 'New York, New York', at: '40.71° N  74.01° W' },
-} as const;
-
-/** The grey texture (the film's own words, from the v3 cut's newspaper). */
+/** The grey texture: tiny paragraphs, too small to read (the film's own
+ *  words, PROPOSED; no place in them). */
 export const TEXTURE = [
   'Every archive begins as a drawer. Somewhere between the first roll and the hundredth, the pictures stop being souvenirs and start being a record: of light on one particular afternoon, of a street that has since changed its name.',
   'Nobody sets out to keep one. The contact sheets pile up, the envelopes are labelled in pencil and then in ink, and one winter the labels are moved into a ledger with the date, the place and the frame number beside each.',
   'Read in order, the frames make a route. Read out of order, they make something closer to a mind: the same corner of light, again and again, in different countries.',
+  'A camera is a patient machine. It waits for the light as long as its keeper does, and forgets nothing it was shown, not even the things he did not mean to show it.',
+  'The road is mostly waiting: for a bus, for the weather, for the one minute in an afternoon when a street arranges itself and the shutter can be let go.',
 ] as const;
 
-/** The credit along the foot of every cut. */
+/** The credit along the foot of every editorial page (centred). */
 export const CREDIT = 'Ryan Xu · A personal archive of travel and thought';
 
-/** Every cut's page, in the desktop's order. The drift turns only by a
- *  quarter between neighbours (right, right, down, down, right, right, up,
- *  up), so the motion runs on across every cut. The giant words sit in the
- *  bands above and below the anchor, cropped by the frame. */
-export const COMPOSITIONS: readonly Composition[] = [
+/** The printed matter's words (PROPOSED copy, except the dictionary, which
+ *  is Webster's 1913, and the book, which is Stevenson's Travels with a
+ *  Donkey, 1879 — both public domain). `row`: the words either side of the
+ *  anchor on its line; `above` / `below`: the lines over and under it. No
+ *  place in any of it, but for the two eggs (EGGS). */
+export const SHEETS = {
+  newspaper: {
+    edition: ['Saturday Edition', 'No. 1,204', 'Two Cents'],
+    row: ['From the', 'Photographs, letters and notes'],
+    headline: 'What a drawer of negatives remembers',
+    dateline: 'MIAMI —',
+    body: [0, 1, 2, 3, 4],
+  },
+  dictionary: {
+    head: ['Archipelago', '79', 'Archly'],
+    above: [
+      'Ar′chi·pel′a·go, n.; pl. -goes. Any sea or broad sheet of water interspersed with many islands or with a group of islands.',
+      'Ar′chi·tect, n. 1. A person skilled in the art of building; one who makes it his occupation to form plans and designs of buildings. 2. A contriver, designer, or maker.',
+      'Ar′chi·trave, n. (Arch.) The lower division of an entablature, or that part which rests immediately on the column.',
+    ],
+    row: ['', 'n.; pl. Archives. [F. archives, L. archivum, Gr. archeion government house.]'],
+    below: [
+      '1. pl. The place in which public records or historic documents are kept. 2. pl. Public records or documents preserved as evidence of facts; as, the archives of a country or family.',
+      'Ar′chi·vist, n. A keeper of archives or records.',
+      'Ar′chi·volt, n. (Arch.) The architectural member surrounding the curved opening of an arch.',
+    ],
+  },
+  catalogue: {
+    above: ['Xu, Ryan.', 'A personal archive of travel and thought / photographs by Ryan Xu.'],
+    row: ['', '— Personal. 1 v. : ill. ; 35 mm.'],
+    below: ['1. Travel photography.  2. Archives.  I. Title.'],
+    call: ['TR', '790', '.X8'],
+  },
+  magazine: {
+    kicker: 'The Picture Issue — Feature',
+    deck: 'Twenty-four frames a second, and the one that stays.',
+    row: ['', 'obscura'],
+    body: [
+      'A film is mostly forgotten on the way home. What stays is a frame or two: a face turned to a window, a road seen through a windscreen, the exact grey of a harbour at five.',
+      'A photograph works the other way round. It is the one frame, chosen and kept; the film it came from, the walk and the waiting and the weather, is the part the viewer supplies.',
+    ],
+    caption: 'Photograph: Ryan Xu',
+    folios: ['42', '43'],
+  },
+  slate: {
+    prod: ['Prod.', 'A personal archive'],
+    row: ['Roll 001', 'Scene 01 · Take 1'],
+    cells: [
+      ['Roll', '001'],
+      ['Scene', '01'],
+      ['Take', '1'],
+      ['Fps', '24'],
+    ],
+    foot: ['35 mm', 'Sync', 'Day'],
+  },
+  edge: {
+    row: ['▸ 23A', '▸ 24   Safety film'],
+    notes: ['print this one', 'keep'],
+  },
+  ticket: {
+    head: ['Single journey', 'Second class'],
+    row: ['Valid for', 'one journey only'],
+    route: [
+      ['From', 'here'],
+      ['To', 'anywhere'],
+    ],
+    no: 'Nº 004127',
+    fine: 'Keep this ticket. Not valid for re-entry.',
+    stub: 'Admit one',
+  },
+  book: {
+    head: ['Travels with a Donkey', '63'],
+    // The page is cropped mid-sentence: its first line (the sentence it
+    // finishes names two villages) is out of the frame.
+    above: ['is more than my much-inventing spirit can suppose.'],
+    row: ['For my part, I', 'not to go anywhere,'],
+    below: [
+      'but to go. I travel for travel’s sake. The great',
+      'affair is to move; to feel the needs and hitches of',
+      'our life more nearly; to come down off this feather-',
+      'bed of civilisation, and find the globe granite',
+    ],
+  },
+  passport: {
+    row: ['Visas', 'Endorsements'],
+    stamps: ['Admitted', 'Entry', 'Exit', 'No. 36'],
+    park: 'ZION NATIONAL PARK · UT',
+    mrz: 'P<ARCHIVE<<TRAVEL<<THOUGHT<<<<<<<<<<<<<<<<',
+    page: '17',
+  },
+  telegram: {
+    fields: ['Received at 16.40', 'Words 17', 'Charges paid'],
+    above: 'ARRIVED STOP LIGHT HOLDING STOP',
+    row: ['', 'OF THE SEA ALL DAY STOP'],
+    below: 'MORE FILM TOMORROW STOP',
+  },
+  notebook: {
+    above: 'tuesday — the ferry late again, the light good.',
+    row: ['a', ', written down,'],
+    below: ['is a place you can go back to.', '(frame 14: the rope, not the boat)'],
+  },
+  postcard: {
+    row: ['thinking of', '— as ever,'],
+    below: 'Wish you were here. The light holds late; I keep missing the last bus to photograph it.',
+    stamp: 'Postage',
+    mark: 'Post office',
+  },
+} as const;
+
+/** The easter eggs: the only place names in the film — tiny (6–7 px), in a
+ *  corner of a page, never the keyword, never large, never centred. */
+export const EGGS = [
+  { sheet: 'newspaper', text: SHEETS.newspaper.dateline, px: 7 },
+  { sheet: 'passport', text: SHEETS.passport.park, px: 6 },
+] as const;
+/** The places on his route: named nowhere in the film but the eggs. */
+export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New York', 'Florida', 'Arizona', 'Utah', 'Manhattan', 'Washington'] as const;
+
+/** Every scene, in order. The drift turns only by a quarter between
+ *  neighbours, so the motion runs on across every cut; the face changes at
+ *  every cut. Slow to fast: the first two hold two sixths, the last (YOU,
+ *  before the burn) four. */
+export const SCENES: readonly Scene[] = [
+  // ── ARCHIVE ──
   {
     word: 'ARCHIVE',
     face: 'f900',
+    slots: 2,
     drift: 'right',
-    driftPx: 40,
-    giants: [
-      { text: 'ARCH', face: 'f900', cap: 0.42, x: -0.03, y: 0.36, align: 'l' },
-      { text: 'IVE', face: 'f900', cap: 0.42, x: 1.03, y: 1, yCap: 0.15, align: 'r' },
-    ],
-    label: 'Fig. 01',
-    line: PLACES.miami.name,
-    ringed: '24A',
-    ring: [0.86, 0.43],
-    texture: [
-      { at: [0.035, 0.43], text: 0, w: 150 },
-      { at: [0.84, 0.62], text: 2, w: 132 },
-    ],
-    metaL: 'Visual archive',
-    frame: 'Frame 01/36',
-    at: PLACES.miami.at,
+    driftPx: 36,
+    sheet: 'newspaper',
+    giants: [{ text: 'LEDGER', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
   },
   {
     word: 'ARCHIVE',
-    face: 'f400',
+    face: 'fit',
+    slots: 2,
     drift: 'right',
-    driftPx: 36,
+    driftPx: 40,
     giants: [
-      { text: 'MIAMI', face: 'f900', cap: 0.44, x: -0.05, y: 0.33, align: 'l' },
-      { text: 'ORLANDO', face: 'f400', cap: 0.3, x: 1.02, y: 1, yCap: 0.12, align: 'r' },
+      { text: 'NEGA', face: 'f900', cap: 0.42, x: -0.03, y: 0.34, align: 'l' },
+      { text: 'TIVE', face: 'f900', cap: 0.42, x: 1.03, y: 1, yCap: 0.16, align: 'r' },
     ],
-    label: 'Fig. 02',
-    line: PLACES.orlando.name,
-    ringed: '07',
-    ring: [0.07, 0.56],
-    texture: [
-      { at: [0.8, 0.3], text: 1, w: 140 },
-      { at: [0.035, 0.6], text: 2, w: 124 },
+    side: [
+      { text: 'Collected', role: 'caps', at: 'l', row: 0 },
+      { text: 'kept by hand', role: 'italic', at: 'r', row: 0 },
+      { text: 'Plate I', role: 'thin', at: 'r', row: 1 },
     ],
-    metaL: 'Visual archive',
-    frame: 'Frame 02/36',
-    at: PLACES.orlando.at,
+    deco: {
+      ringed: 'The',
+      ring: [0.08, 0.64],
+      texture: [
+        { at: [0.8, 0.66], text: 0, w: 150 },
+        { at: [0.035, 0.42], text: 2, w: 132 },
+      ],
+      metaL: 'Visual archive · Vol. I',
+      metaR: 'Roll 01 · Frame 02',
+    },
   },
   {
-    word: 'CAMERA',
-    face: 'sg700',
+    word: 'ARCHIVE',
+    face: 'f900',
+    slots: 1,
     drift: 'down',
     driftPx: 30,
-    giants: [
-      { text: 'FRAME', face: 'f900', cap: 0.4, x: 0.02, y: 0.34, align: 'l' },
-      { text: 'PLATE', face: 'f400', cap: 0.36, x: 0.99, y: 1, yCap: 0.08, align: 'r' },
-    ],
-    label: 'Fig. 03',
-    line: PLACES.page.name,
-    ringed: '12',
-    ring: [0.86, 0.43],
-    texture: [
-      { at: [0.035, 0.66], text: 0, w: 138 },
-      { at: [0.82, 0.44], text: 1, w: 128 },
-      { at: [0.46, 0.8], text: 2, w: 120 },
-    ],
-    metaL: 'Visual archive',
-    frame: 'Frame 03/36',
-    at: PLACES.page.at,
+    sheet: 'dictionary',
+    giants: [{ text: 'A', face: 'f400', cap: 0.45, x: -0.03, y: 1, yCap: 0.3, align: 'l' }],
   },
   {
-    word: 'CAMERA',
-    face: 'mono',
+    word: 'ARCHIVE',
+    face: 'sg700',
+    slots: 1,
     drift: 'down',
     driftPx: 34,
     giants: [
-      { text: 'ZION', face: 'f900', cap: 0.45, x: 1.04, y: 1, yCap: 0.12, align: 'r' },
-      { text: 'PAGE', face: 'f400', cap: 0.32, x: -0.02, y: 0.3, align: 'l' },
+      { text: 'GRAIN', face: 'f400', cap: 0.38, x: 0.02, y: 0.33, align: 'l' },
+      { text: 'ROLL', face: 'f900', cap: 0.44, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
     ],
-    label: 'Fig. 04',
-    line: PLACES.zion.name,
-    ringed: '36',
-    ring: [0.07, 0.56],
-    texture: [
-      { at: [0.8, 0.24], text: 2, w: 136 },
-      { at: [0.035, 0.44], text: 1, w: 126 },
+    side: [
+      { text: 'Selected works', role: 'caps', at: 'l', row: 0 },
+      { text: 'one frame at a time', role: 'italic', at: 'r', row: 0 },
+      { text: 'Folio', role: 'thin', at: 'l', row: -1 },
     ],
-    metaL: 'Visual archive',
-    frame: 'Frame 04/36',
-    at: PLACES.zion.at,
+    deco: {
+      ringed: 'a',
+      ring: [0.9, 0.3],
+      texture: [
+        { at: [0.82, 0.62], text: 1, w: 140 },
+        { at: [0.035, 0.62], text: 3, w: 124 },
+      ],
+      metaL: 'Contact sheet 04',
+      metaR: 'Frame 04',
+    },
   },
+  {
+    word: 'ARCHIVE',
+    face: 'mono',
+    slots: 1,
+    drift: 'right',
+    driftPx: 38,
+    sheet: 'catalogue',
+    giants: [{ text: '025', face: 'f900', cap: 0.42, x: -0.04, y: 1, yCap: 0.35, align: 'l' }],
+  },
+  {
+    word: 'ARCHIVE',
+    face: 'f400',
+    slots: 1,
+    drift: 'right',
+    driftPx: 42,
+    giants: [
+      { text: 'EXPO', face: 'f900', cap: 0.43, x: 1.04, y: 0.32, align: 'r' },
+      { text: 'SURE', face: 'f900', cap: 0.43, x: -0.04, y: 1, yCap: 0.2, align: 'l' },
+    ],
+    side: [
+      { text: 'In transit', role: 'caps', at: 'l', row: 0 },
+      { text: 'as it was', role: 'italic', at: 'r', row: 0 },
+      { text: 'Edition of one', role: 'thin', at: 'l', row: 1 },
+    ],
+    deco: {
+      ringed: 'No.',
+      ring: [0.1, 0.3],
+      texture: [
+        { at: [0.83, 0.6], text: 4, w: 136 },
+        { at: [0.035, 0.6], text: 0, w: 128 },
+      ],
+      metaL: 'Visual archive',
+      metaR: 'Frame 06',
+    },
+  },
+  // ── CAMERA ──
+  {
+    word: 'CAMERA',
+    face: 'f900',
+    slots: 1,
+    drift: 'up',
+    driftPx: 32,
+    sheet: 'magazine',
+    giants: [{ text: '43', face: 'f400', cap: 0.4, x: 1.03, y: 0.24, align: 'r' }],
+  },
+  {
+    word: 'CAMERA',
+    face: 'fit',
+    slots: 1,
+    drift: 'up',
+    driftPx: 36,
+    giants: [
+      { text: 'SHUT', face: 'f900', cap: 0.43, x: -0.03, y: 0.33, align: 'l' },
+      { text: 'TER', face: 'f400', cap: 0.4, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
+    ],
+    side: [
+      { text: 'On film', role: 'caps', at: 'l', row: 0 },
+      { text: 'held to the eye', role: 'italic', at: 'r', row: 0 },
+      { text: 'Chapter two', role: 'thin', at: 'r', row: -1 },
+    ],
+    deco: {
+      ringed: 'The',
+      ring: [0.09, 0.66],
+      texture: [
+        { at: [0.82, 0.64], text: 3, w: 144 },
+        { at: [0.035, 0.42], text: 1, w: 126 },
+      ],
+      metaL: 'Visual archive · Vol. II',
+      metaR: 'Frame 08',
+    },
+  },
+  {
+    word: 'CAMERA',
+    face: 'sg700',
+    slots: 1,
+    drift: 'right',
+    driftPx: 34,
+    sheet: 'slate',
+    giants: [{ text: 'TAKE', face: 'f900', cap: 0.44, x: 0.5, y: 1, yCap: 0.52, align: 'c' }],
+  },
+  {
+    word: 'CAMERA',
+    face: 'f400',
+    slots: 1,
+    drift: 'right',
+    driftPx: 40,
+    giants: [
+      { text: 'LENS', face: 'f900', cap: 0.45, x: 0.02, y: 0.35, align: 'l' },
+      { text: 'FOCUS', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.1, align: 'r' },
+    ],
+    side: [
+      { text: 'Field notes', role: 'caps', at: 'l', row: 0 },
+      { text: 'after the rain', role: 'italic', at: 'r', row: 0 },
+      { text: 'Index', role: 'thin', at: 'l', row: 1 },
+    ],
+    deco: {
+      ringed: 'on',
+      ring: [0.9, 0.32],
+      texture: [
+        { at: [0.82, 0.62], text: 2, w: 138 },
+        { at: [0.035, 0.64], text: 4, w: 130 },
+      ],
+      metaL: 'Contact sheet 10',
+      metaR: 'Frame 10',
+    },
+  },
+  {
+    word: 'CAMERA',
+    face: 'mono',
+    slots: 1,
+    drift: 'down',
+    driftPx: 30,
+    sheet: 'edge',
+    giants: [{ text: '24A', face: 'f900', cap: 0.4, x: 0.97, y: 0.27, align: 'r' }],
+  },
+  // ── TRAVEL ──
   {
     word: 'TRAVEL',
     face: 'f900',
-    drift: 'right',
-    driftPx: 44,
+    slots: 1,
+    drift: 'down',
+    driftPx: 34,
     giants: [
-      { text: 'ROUTE', face: 'f900', cap: 0.43, x: -0.04, y: 0.31, align: 'l' },
-      { text: 'BRYCE', face: 'f400', cap: 0.33, x: 1.02, y: 1, yCap: 0.06, align: 'r' },
+      { text: 'MILES', face: 'f900', cap: 0.42, x: -0.03, y: 0.33, align: 'l' },
+      // Only its top half: the frame's foot cuts it through the middle.
+      { text: 'ROAD', face: 'f900', cap: 0.45, x: 0.62, y: 1, yCap: 0.5, align: 'c' },
     ],
-    label: 'Fig. 05',
-    line: PLACES.bryce.name,
-    ringed: '09',
-    ring: [0.86, 0.43],
-    texture: [
-      { at: [0.035, 0.62], text: 1, w: 146 },
-      { at: [0.84, 0.46], text: 0, w: 124 },
+    side: [
+      { text: 'Slow travel', role: 'caps', at: 'l', row: 0 },
+      { text: 'the long way round', role: 'italic', at: 'r', row: 0 },
+      { text: 'Part three', role: 'thin', at: 'r', row: 1 },
     ],
-    metaL: 'Visual archive',
-    frame: 'Frame 05/36',
-    at: PLACES.bryce.at,
+    deco: {
+      ringed: 'The',
+      ring: [0.09, 0.3],
+      texture: [
+        { at: [0.83, 0.3], text: 4, w: 140 },
+        { at: [0.035, 0.62], text: 2, w: 128 },
+      ],
+      metaL: 'Visual archive · Vol. III',
+      metaR: 'Frame 12',
+    },
+  },
+  {
+    word: 'TRAVEL',
+    face: 'sg700',
+    slots: 1,
+    drift: 'left',
+    driftPx: 36,
+    sheet: 'ticket',
+    giants: [{ text: 'SINGLE', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
+  },
+  {
+    word: 'TRAVEL',
+    face: 'fit',
+    slots: 1,
+    drift: 'left',
+    driftPx: 40,
+    giants: [
+      { text: 'ROUTE', face: 'f900', cap: 0.43, x: 1.04, y: 0.33, align: 'r' },
+      { text: 'NORTH', face: 'f400', cap: 0.34, x: -0.03, y: 1, yCap: 0.12, align: 'l' },
+    ],
+    side: [
+      { text: 'On foot', role: 'caps', at: 'l', row: 0 },
+      { text: 'between trains', role: 'italic', at: 'r', row: 0 },
+      { text: 'Appendix', role: 'thin', at: 'l', row: -1 },
+    ],
+    deco: {
+      ringed: 'a',
+      ring: [0.9, 0.64],
+      texture: [
+        { at: [0.82, 0.3], text: 0, w: 138 },
+        { at: [0.035, 0.66], text: 3, w: 128 },
+      ],
+      metaL: 'Contact sheet 14',
+      metaR: 'Frame 14',
+    },
   },
   {
     word: 'TRAVEL',
     face: 'f400',
+    slots: 1,
+    drift: 'up',
+    driftPx: 30,
+    sheet: 'book',
+    giants: [{ text: 'TRAVELS', face: 'f400', cap: 0.38, x: 0.5, y: 0.19, align: 'c' }],
+  },
+  {
+    word: 'TRAVEL',
+    face: 'sg700',
+    slots: 1,
+    drift: 'up',
+    driftPx: 36,
+    giants: [
+      { text: 'DUSK', face: 'f900', cap: 0.44, x: 1.03, y: 0.34, align: 'r' },
+      { text: 'HOURS', face: 'f400', cap: 0.36, x: -0.03, y: 1, yCap: 0.12, align: 'l' },
+    ],
+    side: [
+      { text: 'Night edition', role: 'caps', at: 'l', row: 0 },
+      { text: 'for the record', role: 'italic', at: 'r', row: 0 },
+      { text: 'Plate IX', role: 'thin', at: 'r', row: -1 },
+    ],
+    deco: {
+      ringed: 'No.',
+      ring: [0.1, 0.66],
+      texture: [
+        { at: [0.82, 0.64], text: 1, w: 142 },
+        { at: [0.035, 0.34], text: 4, w: 124 },
+      ],
+      metaL: 'Visual archive',
+      metaR: 'Frame 16',
+    },
+  },
+  {
+    word: 'TRAVEL',
+    face: 'f900',
+    slots: 1,
+    drift: 'right',
+    driftPx: 38,
+    sheet: 'passport',
+    giants: [{ text: 'VISA', face: 'f900', cap: 0.44, x: -0.03, y: 0.3, align: 'l' }],
+  },
+  // ── THOUGHT ──
+  {
+    word: 'THOUGHT',
+    face: 'fit',
+    slots: 1,
     drift: 'right',
     driftPx: 40,
     giants: [
-      // Only its top half: the frame's foot cuts it through the middle.
-      { text: 'TRAVEL', face: 'f900', cap: 0.45, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
-      { text: 'NEW YORK', face: 'f400', cap: 0.3, x: -0.03, y: 0.3, align: 'l' },
+      { text: 'LIGHT', face: 'f900', cap: 0.43, x: -0.03, y: 0.34, align: 'l' },
+      { text: 'KEPT', face: 'f400', cap: 0.38, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
     ],
-    label: 'Fig. 06',
-    line: PLACES.newyork.name,
-    ringed: '18',
-    ring: [0.07, 0.56],
-    texture: [
-      { at: [0.035, 0.42], text: 2, w: 130 },
-      { at: [0.83, 0.58], text: 1, w: 132 },
+    side: [
+      { text: 'Untitled', role: 'caps', at: 'l', row: 0 },
+      { text: 'in passing', role: 'italic', at: 'r', row: 0 },
+      { text: 'Volume II', role: 'thin', at: 'l', row: 1 },
     ],
-    metaL: 'Visual archive',
-    frame: 'Frame 06/36',
-    at: PLACES.newyork.at,
+    deco: {
+      ringed: 'The',
+      ring: [0.9, 0.3],
+      texture: [
+        { at: [0.82, 0.62], text: 2, w: 140 },
+        { at: [0.035, 0.62], text: 0, w: 126 },
+      ],
+      metaL: 'Visual archive · Vol. IV',
+      metaR: 'Frame 18',
+    },
   },
   {
     word: 'THOUGHT',
-    face: 'sg700',
+    face: 'mono',
+    slots: 1,
+    drift: 'down',
+    driftPx: 32,
+    sheet: 'telegram',
+    giants: [{ text: 'TELEGRAM', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
+  },
+  {
+    word: 'THOUGHT',
+    face: 'f900',
+    slots: 1,
+    drift: 'down',
+    driftPx: 36,
+    giants: [
+      { text: 'STILL', face: 'f400', cap: 0.4, x: 1.03, y: 0.33, align: 'r' },
+      { text: 'LIFE', face: 'f900', cap: 0.45, x: 0.36, y: 1, yCap: 0.48, align: 'c' },
+    ],
+    side: [
+      { text: 'First printing', role: 'caps', at: 'l', row: 0 },
+      { text: 'written down', role: 'italic', at: 'r', row: 0 },
+      { text: 'Frame', role: 'thin', at: 'r', row: 1 },
+    ],
+    deco: {
+      ringed: 'a',
+      ring: [0.1, 0.3],
+      texture: [
+        { at: [0.83, 0.62], text: 3, w: 136 },
+        { at: [0.035, 0.62], text: 1, w: 130 },
+      ],
+      metaL: 'Contact sheet 20',
+      metaR: 'Frame 20',
+    },
+  },
+  {
+    word: 'THOUGHT',
+    face: 'fit',
+    slots: 1,
+    drift: 'right',
+    driftPx: 34,
+    sheet: 'notebook',
+    giants: [{ text: 'NOTES', face: 'f400', cap: 0.4, x: 1.03, y: 1, yCap: 0.35, align: 'r' }],
+  },
+  {
+    word: 'THOUGHT',
+    face: 'f400',
+    slots: 1,
+    drift: 'right',
+    driftPx: 40,
+    giants: [
+      { text: 'INK', face: 'f900', cap: 0.45, x: -0.02, y: 0.35, align: 'l' },
+      { text: 'PAPER', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.12, align: 'r' },
+    ],
+    side: [
+      { text: 'Second printing', role: 'caps', at: 'l', row: 0 },
+      { text: 'still developing', role: 'italic', at: 'r', row: 0 },
+      { text: 'Folio', role: 'thin', at: 'l', row: -1 },
+    ],
+    deco: {
+      ringed: 'on',
+      ring: [0.9, 0.66],
+      texture: [
+        { at: [0.82, 0.3], text: 4, w: 138 },
+        { at: [0.035, 0.64], text: 2, w: 128 },
+      ],
+      metaL: 'Visual archive',
+      metaR: 'Frame 22',
+    },
+  },
+  // ── YOU ──
+  {
+    word: 'YOU',
+    face: 'fit',
+    slots: 1,
     drift: 'up',
     driftPx: 32,
-    giants: [
-      { text: 'ZION', face: 'f400', cap: 0.34, x: -0.02, y: 0.33, align: 'l' },
-      { text: 'PAGE', face: 'f900', cap: 0.42, x: 1.03, y: 1, yCap: 0.17, align: 'r' },
-    ],
-    label: 'Fig. 07',
-    line: PLACES.zion.name,
-    ringed: '31',
-    ring: [0.86, 0.43],
-    texture: [
-      { at: [0.82, 0.26], text: 0, w: 134 },
-      { at: [0.035, 0.46], text: 2, w: 128 },
-      { at: [0.6, 0.84], text: 1, w: 118 },
-    ],
-    metaL: 'Visual archive',
-    frame: 'Frame 07/36',
-    at: PLACES.zion.at,
+    sheet: 'postcard',
+    giants: [{ text: 'POST CARD', face: 'f900', cap: 0.36, x: 0.5, y: 0.19, align: 'c' }],
   },
   {
     word: 'YOU',
-    face: 'mono',
+    face: 'sg700',
+    slots: 1,
     drift: 'up',
-    driftPx: 38,
+    driftPx: 36,
     giants: [
-      { text: 'LIGHT', face: 'f900', cap: 0.45, x: 0.5, y: 0.35, align: 'c' },
-      { text: 'MIAMI', face: 'f400', cap: 0.32, x: 1.02, y: 1, yCap: 0.1, align: 'r' },
+      { text: 'DEAR', face: 'f900', cap: 0.44, x: -0.03, y: 0.34, align: 'l' },
+      { text: 'READER', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.12, align: 'r' },
     ],
-    label: 'Fig. 08',
-    line: PLACES.miami.name,
-    ringed: '01',
-    ring: [0.07, 0.56],
-    texture: [
-      { at: [0.035, 0.44], text: 1, w: 140 },
-      { at: [0.83, 0.6], text: 0, w: 126 },
+    side: [
+      { text: 'Admitted', role: 'caps', at: 'l', row: 0 },
+      { text: 'yours', role: 'italic', at: 'r', row: 0 },
+      { text: 'Appendix', role: 'thin', at: 'r', row: 1 },
     ],
-    metaL: 'Visual archive',
-    frame: 'Frame 08/36',
-    at: PLACES.miami.at,
+    deco: {
+      ringed: 'The',
+      ring: [0.1, 0.66],
+      texture: [
+        { at: [0.82, 0.62], text: 0, w: 140 },
+        { at: [0.035, 0.36], text: 3, w: 126 },
+      ],
+      metaL: 'Visual archive · Vol. V',
+      metaR: 'Frame 24',
+    },
+  },
+  {
+    word: 'YOU',
+    face: 'f900',
+    slots: 4,
+    drift: 'up',
+    driftPx: 44,
+    giants: [
+      { text: 'FIRST', face: 'f400', cap: 0.4, x: 0.5, y: 0.33, align: 'c' },
+      { text: 'LIGHT', face: 'f900', cap: 0.45, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
+    ],
+    side: [
+      { text: 'Admit one', role: 'caps', at: 'l', row: 0 },
+      { text: 'the passenger', role: 'italic', at: 'r', row: 0 },
+      { text: 'Last frame', role: 'thin', at: 'l', row: 1 },
+    ],
+    deco: {
+      ringed: 'a',
+      ring: [0.9, 0.3],
+      texture: [
+        { at: [0.82, 0.62], text: 1, w: 140 },
+        { at: [0.035, 0.62], text: 2, w: 130 },
+      ],
+      metaL: 'Visual archive',
+      metaR: 'Frame 25 · End of roll',
+    },
   },
 ];
-/** The cuts each layout plays (indices into COMPOSITIONS): the desktop all
- *  eight (ARCHIVE ×2, CAMERA ×2, TRAVEL ×2, THOUGHT, YOU); the phone six
- *  (ARCHIVE ×2, CAMERA, TRAVEL ×2, YOU) — YOU last on both. */
+/** The scenes each layout plays (indices into SCENES): every one on both. */
 export const ACT3: Record<FilmLayout, readonly number[]> = {
-  desktop: [0, 1, 2, 3, 4, 5, 6, 7],
-  phone: [0, 1, 2, 4, 5, 7],
+  desktop: SCENES.map((_, i) => i),
+  phone: SCENES.map((_, i) => i),
 };
 
 // ── Act 4: the film burn (24 fps) ─────────────────────────────────────────
@@ -517,10 +976,12 @@ export const BURN = {
   burn: [4, 9] as const,
   radius: [0.025, 0.065, 0.12, 0.19, 0.27, 0.36, 0.45, 0.55] as const,
   sepia: [0.3, 0.45, 0.58, 0.7, 0.8, 0.86, 0.9, 0.9] as const,
-  /** f9–11: all of it darkens to a deep brown-black and slides out at 6°. */
+  /** f9–11: all of it darkens to a deep brown-black and slides out at 6° —
+   *  UP, the way the last cut drifts and the slip went (the motion runs on;
+   *  a slide down would reverse it). */
   out: [9, 12] as const,
   darkness: [0.38, 0.68, 0.9] as const,
-  slide: [0.1, 0.38, 0.86] as const,
+  slide: [-0.1, -0.38, -0.86] as const,
   slideDeg: 6,
   /** f12–13 black; f14–19 the leader, one card a frame; f20–23 the lit
    *  perforations carry it into the dark. */
@@ -540,7 +1001,9 @@ export const BURN_HOLE = '#140D08';
 /** Frame f's flicker (−1 dark … 1 light) and gate weave (px), seeded. */
 export function burnFrame(f: number) {
   const rand = seeded(9000 + f * 31);
-  const flick = f < BURN.out[0] ? (f % 2 === 0 ? 1 : -1) * (0.45 + rand() * 0.55) : 0;
+  // The flicker is the burn's first three frames only (f0–2), as the spec
+  // has it: a short flutter, not a strobe running into the burn.
+  const flick = f < BURN.flicker[1] ? (f % 2 === 0 ? 1 : -1) * (0.45 + rand() * 0.55) : 0;
   const weave: Vec2 = f < BURN.out[1] ? [Math.round((rand() * 2 - 1) * BURN.weavePx), Math.round((rand() * 2 - 1) * BURN.weavePx)] : [0, 0];
   return { flick, weave };
 }
@@ -571,7 +1034,7 @@ export function frameAt(f: number) {
     rot = (BURN.slideDeg * (k + 1)) / (BURN.out[1] - BURN.out[0]);
   }
   if (f >= BURN.out[1]) {
-    y = 1.2;
+    y = -1.2;
     rot = BURN.slideDeg;
   }
   return { x: weave[0], y, rot, weaveY: weave[1] };
@@ -584,25 +1047,46 @@ export const DARK_CPS = 12;
 export const DARK_TYPE_AT = BEAT_MS;
 
 // ── Act 6: the end title ──────────────────────────────────────────────────
-/** The typed line turns into the title (one ink box: the two faces share a
- *  baseline and an x-height, and one width), the credits come up under it. */
+/** The typed line turns into the title: struck in capitals on the beat the
+ *  title begins (the letters in the same cells), then every typewriter
+ *  capital turns into its Fraunces capital in one shared ink box
+ *  (GLYPH_MORPH) as the line grows to the title's size; the credits come up
+ *  under it. */
 export const TITLE = {
   morph: 375,
-  swap: [0.28, 0.6] as const,
+  swap: GLYPH_MORPH.fade,
+  box: GLYPH_MORPH.box,
   cursorOut: 120,
   sub: [250, 480] as const,
-  you: [360, 560] as const,
+  you: [300, 500] as const,
   rise: 10,
 } as const;
-/** The end title's words (PROPOSED: the YOU line). */
+/** The end title's words (PROPOSED: the YOU line). His name is set in
+ *  capitals, exactly as the first screen sets it (Fraunces 400, capitals,
+ *  the same size and tracking), so the name flies home without changing
+ *  face: a word that is the same on both ends is only moved. */
 export const TITLE_NAME = 'Ryan Xu';
 export const TITLE_SUB = ['CAMERA', 'ARCHIVE', 'TRAVEL', 'THOUGHT'] as const;
 export const TITLE_YOU = { lead: 'Admit one', word: 'YOU' } as const;
 
+// ── Acts' lengths ─────────────────────────────────────────────────────────
+export const ACT_MS = {
+  /** Act 1: the machines' twelfths. */
+  type: STYLES.reduce((s, x) => s + x.frames, 0) * FRAME12_MS,
+  /** Act 2: the sweep and the glide. */
+  find: FIND.sweepMs + FIND.glideMs,
+  /** Act 4: 24 frames at 24 fps. */
+  burn: 24 * FRAME24_MS,
+  /** Act 5: the dark, typed (eight beats). */
+  dark: 8 * BEAT_MS,
+  /** Act 6: the end title (five beats). */
+  title: 5 * BEAT_MS,
+} as const;
+
 // ── The plan: the whole film as spans on one clock ────────────────────────
 export type ActId = 'type' | 'find' | 'cuts' | 'burn' | 'dark' | 'title';
 export interface CutPlan extends Span {
-  /** The composition (index into COMPOSITIONS). */
+  /** The scene (index into SCENES). */
   index: number;
   word: Keyword;
   face: AnchorFace;
@@ -611,11 +1095,9 @@ export interface CutPlan extends Span {
 export interface FilmPlan {
   layout: FilmLayout;
   acts: Record<ActId, Span>;
-  materials: (Span & { id: MaterialId })[];
-  /** Act 1: when each character of TYPED appears; the cursor's first
-   *  flash. */
+  styles: (Span & { id: StyleId })[];
+  /** Act 1: when each character of TYPED appears. */
   typing: number[];
-  cursorOn: number;
   /** Act 2. */
   sweep: Span;
   glide: Span;
@@ -628,39 +1110,42 @@ export interface FilmPlan {
   length: number;
 }
 
+/** A time on a grid, exact to a nanosecond (the film's clock is a float). */
+const onGrid = (n: number, unit: number) => Math.round(n * unit * 1e6) / 1e6;
+
 export function filmPlan(layout: FilmLayout): FilmPlan {
-  const b = (n: number) => n * BEAT_MS;
-  const mats = MATERIALS[layout];
-  const typeEnd = b(ACT_BEATS.idle + ACT_BEATS.material * mats.length);
-  const materials = mats.map((id, k) => ({
-    id,
-    start: k === 0 ? 0 : b(ACT_BEATS.idle + ACT_BEATS.material * k),
-    end: k === mats.length - 1 ? typeEnd : b(ACT_BEATS.idle + ACT_BEATS.material * (k + 1)),
-  }));
-  const typeAt = b(ACT_BEATS.idle);
-  const typing = typeTimes(TYPED, typeAt, typeEnd - TYPE_TAIL_MS, TYPE_CPS, TYPE_JITTER_MS, 41);
-  const find = { start: typeEnd, end: typeEnd + b(ACT_BEATS.find) };
-  const order = ACT3[layout];
-  const cutsAct = { start: find.end, end: find.end + b(ACT_BEATS.cut * order.length) };
-  const cuts: CutPlan[] = order.map((index, k) => {
-    const c = COMPOSITIONS[index];
-    return { index, word: c.word, face: c.face, drift: c.drift, start: cutsAct.start + b(ACT_BEATS.cut * k), end: cutsAct.start + b(ACT_BEATS.cut * (k + 1)) };
+  let f = 0;
+  const styles = STYLES.map((s) => {
+    const span = { id: s.id, start: onGrid(f, FRAME12_MS), end: onGrid(f + s.frames, FRAME12_MS) };
+    f += s.frames;
+    return span;
   });
-  const burn = { start: cutsAct.end, end: cutsAct.end + b(ACT_BEATS.burn) };
-  const dark = { start: burn.end, end: burn.end + b(ACT_BEATS.dark) };
-  const title = { start: dark.end, end: dark.end + b(ACT_BEATS.title) };
-  const darkTyping = typeTimes(DARK_TYPED, dark.start + DARK_TYPE_AT, dark.end, DARK_CPS, 18, 77);
-  // The blink: off half a period after the last letter's own beat… and on
-  // again as the title begins.
+  const typeEnd = onGrid(f, FRAME12_MS);
+  const findStyle = styles[styles.length - 1];
+  const typing = typeTimes(TYPED, TYPE_AT, findStyle.start + TYPE_LAST_FRAMES * FRAME12_MS, TYPE_JITTER_MS, 41);
+  const find = { start: typeEnd, end: onGrid(typeEnd / FRAME12_MS + 6, FRAME12_MS) };
+  const order = ACT3[layout];
+  let slot = 0;
+  const cuts: CutPlan[] = order.map((index) => {
+    const s = SCENES[index];
+    const start = onGrid(find.end / CUT_MS + slot, CUT_MS);
+    slot += s.slots;
+    return { index, word: s.word, face: s.face, drift: s.drift, start, end: onGrid(find.end / CUT_MS + slot, CUT_MS) };
+  });
+  const cutsAct = { start: find.end, end: cuts[cuts.length - 1].end };
+  const burn = { start: cutsAct.end, end: onGrid(cutsAct.end / FRAME24_MS + 24, FRAME24_MS) };
+  const dark = { start: burn.end, end: burn.end + ACT_MS.dark };
+  const title = { start: dark.end, end: dark.end + ACT_MS.title };
+  const darkTyping = typeTimes(DARK_TYPED, dark.start + DARK_TYPE_AT, dark.start + DARK_TYPE_AT + ((DARK_TYPED.length - 1) * 1000) / DARK_CPS, 18, 77);
+  // The blink: off half a period before the title… and on again as it begins.
   const blink = { start: title.start - CURSOR_MS / 2, end: title.start };
   return {
     layout,
     acts: { type: { start: 0, end: typeEnd }, find, cuts: cutsAct, burn, dark, title },
-    materials,
+    styles,
     typing,
-    cursorOn: BEAT_MS,
-    sweep: { start: find.start, end: find.start + FIND.sweepMs },
-    glide: { start: find.start + FIND.glideAt, end: find.end },
+    sweep: { start: find.start, end: onGrid(find.start / FRAME12_MS + 2, FRAME12_MS) },
+    glide: { start: onGrid(find.start / FRAME12_MS + 2, FRAME12_MS), end: find.end },
     cuts,
     darkTyping,
     blink,
@@ -668,10 +1153,22 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
   };
 }
 
-/** Every hard cut of a plan: the materials, the acts, the match cuts. */
+/** The act-1 cursor on the film's clock: blinking before the first letter,
+ *  solid while it types, blinking again after the last (until the glide
+ *  carries it off). The times its ink changes, and to what. */
+export function cursorSteps(plan: FilmPlan): [number, 0 | 1][] {
+  const first = plan.typing[0];
+  const last = plan.typing[plan.typing.length - 1];
+  const before = blinkSteps(0, first);
+  const out: [number, 0 | 1][] = [...before];
+  if (before.length && before[before.length - 1][1] === 0) out.push([first, 1]);
+  return out.concat(blinkSteps(last, plan.glide.end));
+}
+
+/** Every hard cut of a plan: the machines, the acts, the match cuts. */
 export function hardCuts(plan: FilmPlan) {
   const out = new Set<number>();
-  plan.materials.forEach((m) => out.add(m.start));
+  plan.styles.forEach((m) => out.add(m.start));
   Object.values(plan.acts).forEach((a) => out.add(a.start));
   plan.cuts.forEach((c) => out.add(c.start));
   out.add(plan.length);
@@ -693,10 +1190,10 @@ export function toneTimeline(plan: FilmPlan): (Span & { tone: Tone })[] {
   const out: (Span & { tone: Tone })[] = [];
   const push = (start: number, end: number, tone: Tone) => {
     const last = out[out.length - 1];
-    if (last && last.tone === tone && last.end === start) last.end = end;
+    if (last && last.tone === tone && Math.abs(last.end - start) < 1e-6) last.end = end;
     else out.push({ start, end, tone });
   };
-  plan.materials.forEach((m) => push(m.start, m.end, MATERIAL_TONE[m.id]));
+  plan.styles.forEach((m) => push(m.start, m.end, STYLE_TONE[m.id]));
   push(plan.acts.find.start, plan.acts.cuts.end, 'light');
   // The burn stays light (a sepia frame, a local burn) until it darkens
   // and slides out; from there on it is the dark.
@@ -749,11 +1246,36 @@ export const GLOBE_LEAD_MS = 2900;
 export const globeReleaseAt = (plan: FilmPlan) => Math.max(0, plan.length - GLOBE_LEAD_MS);
 
 // ── One ink box: a word turning from one face into another ────────────────
-// Act 2 (the typewriter's "archive" into Fraunces's ARCHIVE), act 6 (the
-// typed "ryan xu" into the title) and the landing hold both faces to ONE ink
-// box: the same centre and height, and one shared width that goes from the
-// first face's to the second's — so the crossfade (one window, no blur) is a
-// morph of letterforms, never a double image.
+// Act 2 (the typewriter's ARCHIVE into Fraunces's ARCHIVE), act 6 (the typed
+// RYAN XU into the title) and the landing hold both faces to ONE ink box: the
+// same centre and height, and one shared width that goes from the first
+// face's to the second's — so the crossfade (one window, no blur) is a morph
+// of letterforms, never a double image.
+/** A letter's ink box (px, in the frame both faces share). */
+export interface InkBox {
+  l: number;
+  r: number;
+  t: number;
+  b: number;
+}
+/** The morph's progress (0 → 1, eased) at share u of a move, across `win`. */
+export function morphAt(u: number, win: readonly [number, number]) {
+  const x = segment(u, win[0], win[1]);
+  return x * x * (3 - 2 * x);
+}
+/** The one ink box a letter and its counterpart share at progress p. */
+export function lerpBox(a: InkBox, b: InkBox, p: number): InkBox {
+  return { l: lerp(a.l, b.l, p), r: lerp(a.r, b.r, p), t: lerp(a.t, b.t, p), b: lerp(a.b, b.b, p) };
+}
+/** The transform that sets a letter (its ink box `ink`, its pen at x `pen`
+ *  on the baseline `base`, the transform's origin) into the box `to`:
+ *  translate(tx, ty) scale(sx, sy). Its own box gives the identity. */
+export function glyphFit(ink: InkBox, pen: number, base: number, to: InkBox) {
+  const sx = (to.r - to.l) / Math.max(1e-3, ink.r - ink.l);
+  const sy = (to.b - to.t) / Math.max(1e-3, ink.b - ink.t);
+  return { sx, sy, tx: to.l - pen - sx * (ink.l - pen), ty: to.t - base - sy * (ink.t - base) };
+}
+
 /** The two faces' horizontal scales across the morph: at every moment both
  *  have ink width lerp(srcW, dstW, p). */
 export function morphScales(srcW: number, dstW: number) {
@@ -771,19 +1293,23 @@ export const LANDING_A = {
   /** The dark dissolves into the page. */
   dissolve: [0, 380] as const,
   /** Word i leaves at `start + i * stagger` and flies `fly` ms; the fall
-   *  leads the slide (`yLead`). */
+   *  leads the slide (`yLead`: each word drops to its own line first, so
+   *  two words bound for different lines never cross on one). */
   start: 0,
-  stagger: 20,
-  fly: 480,
-  yLead: 0.8,
-  /** The shared ink width, title's → page's, as a share of the flight. */
-  morph: [0.14, 0.66] as const,
-  /** The crossfade (one window for both faces), as a share of the flight. */
-  sourceOut: [0.34, 0.6] as const,
-  targetIn: [0.34, 0.6] as const,
+  stagger: 30,
+  fly: 420,
+  yLead: 0.6,
+  /** The shared ink boxes, letter by letter, title's → page's, as a share
+   *  of the flight (a word whose face does not change is only moved). */
+  morph: [0.3, 0.64] as const,
+  /** The crossfade (one window for both faces, centred in the morph, at
+   *  the flight's fastest), as a share of the flight. */
+  sourceOut: [0.42, 0.52] as const,
+  targetIn: [0.42, 0.52] as const,
   /** The rest of the opening words (the line's other words, the kicker,
-   *  the scroll cue, the nav last) comes up round the landed words. */
-  rest: 300,
+   *  the scroll cue, the nav last) comes up round the landed words — once
+   *  the last word is on its own line (so no word slides over another). */
+  rest: 450,
   done: 600,
 } as const;
 /** The words that fly home, in the end title's order (his name, the
@@ -848,18 +1374,61 @@ export function sampleCurve(ease: Bezier, n = 14) {
 // No film: the end title is shown still, then the page crossfades in.
 export const STILL = { hold: 1100, fade: 700 } as const;
 
+// ── His photographs ────────────────────────────────────────────────────────
+// Three of his frames play parts: the life behind the pill (blurred), the
+// small print pinned to the grid paper (black and white), the magazine's
+// picture page. Each at its own ratio (never cropped or stretched), one per
+// chapter where there are enough.
+export interface OpeningPicture {
+  src: string;
+  ratio: number;
+}
+interface PictureSource {
+  imageUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+/** A photograph's ratio for the film: landscape-ish (a portrait frame
+ *  would leave the pill's life a sliver and the magazine's plate a strip). */
+export const PICTURE_RATIO = [1.2, 1.8] as const;
+/** Each role's width, px (the blurred life needs next to nothing). */
+export const PICTURE_W = [96, 480, 900] as const;
+export function pickPictures(groups: readonly { photos?: readonly PictureSource[] | null }[], count = 3): OpeningPicture[] {
+  const usable = (p: PictureSource) => {
+    if (!p.imageUrl || !p.width || !p.height) return false;
+    const r = p.width / p.height;
+    return r >= PICTURE_RATIO[0] && r <= PICTURE_RATIO[1];
+  };
+  const chosen: PictureSource[] = [];
+  for (let round = 0; chosen.length < count && round < 3; round += 1) {
+    for (const group of groups) {
+      if (chosen.length >= count) break;
+      const pick = (group.photos ?? []).filter(usable)[round];
+      if (pick && !chosen.includes(pick)) chosen.push(pick);
+    }
+  }
+  return chosen.map((p, i) => {
+    const sep = p.imageUrl!.includes('?') ? '&' : '?';
+    return { src: `${p.imageUrl}${sep}w=${PICTURE_W[i] ?? 640}&q=62&auto=format`, ratio: Math.round((p.width! / p.height!) * 10000) / 10000 };
+  });
+}
+
 // ── The fonts, loaded before the clock starts ─────────────────────────────
 // Every face and weight the film sets (document.fonts.load each, with the
 // characters it sets, so the right subset comes). No cut may show a
-// fallback face: the clock waits for these (at most FONT_WAIT_MS — past
-// that the film plays on whatever has come).
+// fallback face: the clock waits for these (and for his photographs to be
+// decoded) at most FONT_WAIT_MS — past that the film plays on whatever has
+// come.
 export const FONT_LOADS = [
   '900 100px Fraunces',
   '400 100px Fraunces',
+  'italic 400 100px Fraunces',
+  'italic 500 100px Fraunces',
   '700 20px "Space Grotesk"',
+  '600 20px "Space Grotesk"',
   '500 20px "Space Grotesk"',
 ] as const;
-export const FONT_SAMPLE = 'ARCHIVECMTLOUGYZNPBFRWDSK abcdefghijklmnopqrstuvwxyz 0123456789 ·°—/.,';
+export const FONT_SAMPLE = 'ARCHIVECMTLOUGYZNPBFRWDSK abcdefghijklmnopqrstuvwxyz 0123456789 ·°—/.,′’';
 export const FONT_WAIT_MS = 3500;
 
 // ── Deterministic material ────────────────────────────────────────────────

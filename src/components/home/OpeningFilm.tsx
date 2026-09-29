@@ -2,31 +2,35 @@ import { useEffect, useRef } from 'react';
 import OpeningScenes from './OpeningScenes';
 import {
   ANCHOR,
+  BLUR_STEP_PER_SPEED,
   BURN,
   BURN_HOLE,
   BURN_RAMP,
   BURN_STOPS,
-  COMPOSITIONS,
+  DARK_TYPED,
   DRIFT_VEC,
   FF_RATE,
   FF_TAIL,
   FIND,
+  FIND_STYLE,
   FLY_ORDER,
   FONT_LOADS,
   FONT_SAMPLE,
   FONT_WAIT_MS,
   FOUND_RANGE,
   FOUND_WORD,
+  FRAME24_MS,
   GLIDE_EASE,
   INPUT_POLICY,
   LANDING_A,
   LANDING_TARGETS,
-  MATERIALS,
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
   PUSH_DIR,
+  SCENES,
   STILL,
   TITLE,
+  TITLE_NAME,
   TYPED,
   anchorCap,
   burnDarkness,
@@ -36,24 +40,29 @@ import {
   burnRadius,
   burnSepia,
   clamp01,
+  cursorSteps,
+  faceText,
   fastForwardTarget,
   filmPlan,
   flightFor,
   flightPath,
   frameAt,
   globeReleaseAt,
+  glyphFit,
   keyBox,
   landingAEnd,
   lerp,
-  morphScales,
+  lerpBox,
+  morphAt,
   sampleCurve,
   seeded,
-  segment,
   type Box,
+  type InkBox,
   type FilmInput,
   type FilmLayout,
   type FilmPlan,
   type OpeningDetail,
+  type OpeningPicture,
   type OpeningState,
   type Vec2,
 } from '../../lib/openingFilm';
@@ -64,12 +73,6 @@ const bezier = ([a, b, c, d]: readonly number[]) => `cubic-bezier(${a}, ${b}, ${
 const FADE_CSS = bezier(EASE.fade);
 const ARRIVE_CSS = bezier(EASE.arrive);
 const GLIDE_CSS = bezier(GLIDE_EASE);
-// The two faces' shared width across a morph: one curve for both.
-const MORPH_EASE = 'cubic-bezier(0.45, 0, 0.55, 1)';
-const smooth = (t: number) => {
-  const x = clamp01(t);
-  return x * x * (3 - 2 * x);
-};
 
 // ── Measuring type ──
 // One canvas, reused: a face's ink box (its left and right bearings from the
@@ -142,6 +145,88 @@ function textBox(el: Element): Box | null {
 const px = (v: number) => `${v.toFixed(2)}px`;
 const tx = (x: number, y = 0) => `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
 
+// ── A word as its letters (the morphs) ──
+// Each letter of a `.of-gm__face` is a box of its own ([data-g], its index
+// in the text), set on its pen; its transform's origin is the pen on the
+// baseline. Measured once, in the face's own computed face and size (pens
+// with the face's kerning and tracking; each letter's ink box).
+interface Glyph {
+  el: HTMLElement;
+  /** Pen (x) and baseline (y) in the frame the two faces share. */
+  pen: number;
+  base: number;
+  ink: InkBox;
+}
+const fontOf = (style: CSSStyleDeclaration) => `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+/** Sets a face's letters on their pens, its pen origin at x0 and its
+ *  baseline at yB (in its parent's frame), and returns them measured. */
+function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number): Glyph[] {
+  const style = getComputedStyle(face);
+  if (!measureContext) measureContext = document.createElement('canvas').getContext('2d');
+  const ctx = measureContext;
+  const size = parseFloat(style.fontSize) || 16;
+  const ls = style.letterSpacing === 'normal' ? 0 : parseFloat(style.letterSpacing) || 0;
+  const shown = style.textTransform === 'uppercase' ? text.toUpperCase() : text;
+  face.style.left = px(x0);
+  face.style.top = '0px';
+  const lift = baselineIn(face);
+  face.style.top = px(yB - lift);
+  const els = Array.from(face.querySelectorAll<HTMLElement>(':scope > [data-g]'));
+  if (ctx) {
+    ctx.font = fontOf(style);
+    try {
+      // Tracking is added by hand below (the same in every engine).
+      (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0px';
+    } catch {
+      // (Without canvas letter-spacing it is never applied: the same.)
+    }
+  }
+  return els.map((el) => {
+    const i = Number(el.dataset.g);
+    const ch = shown[i] ?? '';
+    let pen = i * size * 0.6;
+    let ink: InkBox = { l: pen, r: pen + size * 0.6, t: -size * 0.7, b: 0 };
+    if (ctx) {
+      pen = ctx.measureText(shown.slice(0, i + 1)).width - ctx.measureText(ch).width + i * ls;
+      const m = ctx.measureText(ch);
+      ink = { l: pen - m.actualBoundingBoxLeft, r: pen + m.actualBoundingBoxRight, t: -m.actualBoundingBoxAscent, b: m.actualBoundingBoxDescent };
+    }
+    el.style.left = px(pen);
+    el.style.transformOrigin = `0px ${lift.toFixed(2)}px`;
+    return { el, pen: x0 + pen, base: yB, ink: { l: x0 + ink.l, r: x0 + ink.r, t: yB + ink.t, b: yB + ink.b } };
+  });
+}
+/** Letter g fitted into the box that letters a and b share at progress p. */
+function glyphTransform(g: Glyph, a: Glyph, b: Glyph, p: number) {
+  const f = glyphFit(g.ink, g.pen, g.base, lerpBox(a.ink, b.ink, p));
+  return `translate(${f.tx.toFixed(2)}px, ${f.ty.toFixed(2)}px) scale(${f.sx.toFixed(4)}, ${f.sy.toFixed(4)})`;
+}
+/** Shares of a move sampled across a morph window (its ends included). */
+const morphSamples = (win: readonly [number, number], n = 10) => Array.from({ length: n + 1 }, (_, k) => win[0] + ((win[1] - win[0]) * k) / n);
+/** Two faces' letters paired in order (a morph needs as many on each side). */
+const pairGlyphs = (a: Glyph[], b: Glyph[]) => (a.length === b.length && a.length > 0 ? a.map((g, i) => [g, b[i]] as const) : null);
+
+// ── The grain: a tile moved every 60th of a second, a 12-step loop ──
+const GRAIN_STEPS: Vec2[] = [
+  [0, 0],
+  [-37, 21],
+  [52, -44],
+  [-18, -71],
+  [66, 38],
+  [-61, 9],
+  [23, 57],
+  [-49, -27],
+  [71, -6],
+  [-8, 44],
+  [34, -63],
+  [-72, 30],
+];
+const GRAIN_LOOP_MS = 200;
+/** A scene may be drawn this long before its turn (and is hidden again once
+ *  past it): its first raster is done before its cut, and the film never
+ *  holds every scene in memory at once. */
+const PREROLL_MS = 250;
+
 /** The keys that scroll a page (with or without a modifier). */
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ' ', 'Spacebar']);
 
@@ -164,6 +249,7 @@ uniform float u_frame;
 uniform float u_radius;
 uniform float u_flick;
 uniform float u_dark;
+uniform float u_dust;
 uniform vec4 u_scratch;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -201,7 +287,7 @@ void main() {
     vec2 c = vec2(hash(vec2(u_frame + 1.3, fi * 1.7)), hash(vec2(fi * 2.9, u_frame + 7.1))) * res;
     float r = 0.9 + 2.8 * hash(vec2(u_frame * 1.9, fi * 3.3));
     float d = length(p - c) + (noise((p - c) * 0.5 + fi) - 0.5) * 1.6;
-    col = over(col, ${glColor('#171B15')}, smoothstep(r, r - 0.9, d) * 0.5);
+    col = over(col, ${glColor('#171B15')}, smoothstep(r, r - 0.9, d) * 0.5 * u_dust);
   }
   if (u_radius > 0.0) {
     float d = length(p - u_origin);
@@ -222,7 +308,7 @@ const BURN_VERT = 'attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.
 
 interface BurnGL {
   resize: (w: number, h: number) => void;
-  draw: (u: { frame: number; origin: Vec2; radius: number; flick: number; dark: number; scratch: [number, number, number, number] } | null) => void;
+  draw: (u: { frame: number; origin: Vec2; radius: number; flick: number; dark: number; dust: number; scratch: [number, number, number, number] } | null) => void;
   dispose: () => void;
 }
 function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
@@ -259,7 +345,7 @@ function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
   const U = (name: string) => gl!.getUniformLocation(prog, name);
-  const u = { res: U('u_res'), px: U('u_px'), origin: U('u_origin'), frame: U('u_frame'), radius: U('u_radius'), flick: U('u_flick'), dark: U('u_dark'), scratch: U('u_scratch') };
+  const u = { res: U('u_res'), px: U('u_px'), origin: U('u_origin'), frame: U('u_frame'), radius: U('u_radius'), flick: U('u_flick'), dark: U('u_dark'), dust: U('u_dust'), scratch: U('u_scratch') };
   let ratio = 1;
   return {
     resize(w, h) {
@@ -280,6 +366,7 @@ function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
       g.uniform1f(u.radius, v.radius);
       g.uniform1f(u.flick, v.flick);
       g.uniform1f(u.dark, v.dark);
+      g.uniform1f(u.dust, v.dust);
       g.uniform4f(u.scratch, ...v.scratch);
       g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
     },
@@ -288,9 +375,10 @@ function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
     },
   };
 }
-/** Burn frame f's scratches: one or two, light and dark, seeded. */
+/** Burn frame f's scratches: one or two, light and dark, seeded — in the
+ *  flicker's frames (f0–2) only. */
 function scratchOf(f: number): [number, number, number, number] {
-  if (f >= BURN.out[0]) return [-1, -1, 0, 0];
+  if (f >= BURN.flicker[1]) return [-1, -1, 0, 0];
   const rand = seeded(4200 + f * 17);
   const a = 0.12 + rand() * 0.76;
   const b = rand() < 0.55 ? 0.1 + rand() * 0.8 : -1;
@@ -317,7 +405,7 @@ function scratchOf(f: number): [number, number, number, number] {
  * verification hook, never linked) holds the film still at that time and
  * exposes window.__filmSeek.
  */
-export default function OpeningFilm() {
+export default function OpeningFilm({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
 
@@ -440,6 +528,7 @@ export default function OpeningFilm() {
       burnRaf = 0;
       overlay.getAnimations({ subtree: true }).forEach((a) => a.cancel());
       flightLayer.replaceChildren();
+      q('[data-title] [data-gm-unit]')?.style.removeProperty('visibility');
       burn?.dispose();
       burn = null;
     };
@@ -549,18 +638,17 @@ export default function OpeningFilm() {
     interface Geometry {
       W: number;
       H: number;
-      /** Act 1: the line's left, its baseline, its advance, its size, the
-       *  typed word's x-height. */
-      line: { left: number; top: number; baseline: number; adv: number; size: number; width: number; xr: number; foundCx: number };
+      /** Act 1: the line's left, its baseline, its advance, its size. */
+      line: { left: number; baseline: number; adv: number; size: number; width: number };
       /** The anchor. */
       cap: number;
       cx: number;
       cy: number;
       blocks: Box[];
-      /** Act 2: the found word's two faces. */
-      find: { k0: number; T0: Vec2; Wm: number; Ws: number; pad: number; clip: Box };
-      /** Acts 5–6: the title's two faces. */
-      title: { k5: number; Wm: number; Ws: number; adv: number; pen: number; revealW: number; origin: Vec2 };
+      /** Act 2: the found word's two faces, letter by letter. */
+      find: { k0: number; T0: Vec2; Wm: number; Ws: number; pad: number; clip: Box; edge: number; block: Box; from: Glyph[]; to: Glyph[] };
+      /** Acts 5–6: the typed line and the title, letter by letter. */
+      title: { k5: number; adv: number; pen: number; revealW: number; origin: Vec2; from: Glyph[]; to: Glyph[] };
       burnOrigin: Vec2;
     }
     let geo: Geometry | null = null;
@@ -571,19 +659,16 @@ export default function OpeningFilm() {
       const short = Math.min(W, H);
       const phoneLayout = plan.layout === 'phone';
 
-      // Act 1: the typed line (the CRT's copy stands for all four).
+      // Act 1: the typed line (the CRT's copy stands for all eight: one
+      // monospace, one size, one place on every machine).
       const lineEl = q('[data-mat="crt"] [data-line]')!;
       const typed = q('[data-mat="crt"] [data-typed]')!;
       const lineRect = lineEl.getBoundingClientRect();
-      const lineInk = inkOf(typed, TYPED);
-      const size = lineInk.size;
+      const size = parseFloat(getComputedStyle(typed).fontSize) || 16;
       const width = typed.offsetWidth;
       const adv = width / TYPED.length;
       const baseline = lineRect.top + baselineIn(typed);
-      const found = inkOf(typed, FOUND_WORD);
       const foundPen = lineRect.left + FOUND_RANGE[0] * adv;
-      const foundCx = foundPen + (found.right - found.left) / 2;
-      const xr = lineInk.xh / size;
 
       // The anchor: one cap height for every cut, the widest word fitting.
       const keys = qa<HTMLElement>('[data-key]');
@@ -591,18 +676,20 @@ export default function OpeningFilm() {
       const perCap = keys.map((key, i) => {
         const word = q('[data-word]', key)!;
         word.style.fontSize = '100px';
-        const ink = inkOf(word, COMPOSITIONS[i].word);
+        const ink = inkOf(word, faceText(SCENES[i].word, SCENES[i].face));
         return { word, ink, perCap: (ink.left + ink.right) / Math.max(1, ink.cap), capRatio: ink.cap / 100 };
       });
       const widest = Math.max(...perCap.filter((_, i) => used.has(i)).map((p) => p.perCap));
       const cap = anchorCap(W, H, widest, plan.layout);
       const blocks: Box[] = [];
+      let anchorBase = 0;
       keys.forEach((key, i) => {
         const { word, capRatio } = perCap[i];
         word.style.fontSize = px(cap / Math.max(0.01, capRatio));
-        const ink = inkOf(word, COMPOSITIONS[i].word);
+        const ink = inkOf(word, faceText(SCENES[i].word, SCENES[i].face));
         const inkW = ink.left + ink.right;
         const kb = keyBox(W, H, cap, inkW);
+        anchorBase = kb.baseline;
         const block = q('[data-block]', key)!;
         block.style.left = px(kb.block.x);
         block.style.top = px(kb.block.y);
@@ -611,7 +698,6 @@ export default function OpeningFilm() {
         word.style.left = px(kb.inkX + ink.left);
         word.style.top = '0px';
         word.style.top = px(kb.baseline - baselineIn(word));
-        word.style.transformOrigin = `${(kb.cx - (kb.inkX + ink.left)).toFixed(2)}px 50%`;
         blocks.push(kb.block);
         key.style.transformOrigin = `${kb.cx.toFixed(2)}px ${kb.cy.toFixed(2)}px`;
         // The page round it knows where the block is.
@@ -621,35 +707,58 @@ export default function OpeningFilm() {
           cut.style.setProperty('--br', px(kb.block.x + kb.block.w));
           cut.style.setProperty('--bt', px(kb.block.y));
           cut.style.setProperty('--bb', px(kb.block.y + kb.block.h));
+          cut.style.setProperty('--cap', px(cap));
         }
       });
       const cx = ANCHOR.x * W;
       const cy = ANCHOR.y * H;
       const pad = cap * ANCHOR.pad;
 
-      // Act 2: the found word's typewriter face, in the anchor's frame, its
-      // x-height the anchor's cap height, on the same baseline and centre.
+      // The words on the anchor's line sit on its baseline (where the sheet
+      // says so: on the phone they go over and under it instead).
+      qa<HTMLElement>('[data-cut] [data-base]').forEach((el) => {
+        el.style.top = '';
+        if (getComputedStyle(el).getPropertyValue('--base-align').trim() !== '1') return;
+        el.style.top = px(anchorBase - baselineIn(el));
+      });
+
+      // Act 2: key 0 — the typewriter's word (as typed, then struck in
+      // capitals in the same cells) and Fraunces's ARCHIVE, letter by
+      // letter, in the anchor's frame: the typewriter's capitals as tall as
+      // the anchor's, both words centred on the anchor, on its baseline.
       const key0 = keys[0];
-      const from = q('[data-from]', key0)!;
       const serif = perCap[0].word;
-      const serifInk = inkOf(serif, COMPOSITIONS[0].word);
+      const firstWord = faceText(SCENES[0].word, SCENES[0].face);
+      const serifInk = inkOf(serif, firstWord);
       const Ws = serifInk.left + serifInk.right;
-      const Fm = cap / Math.max(0.05, xr);
-      from.style.fontSize = px(Fm);
-      const fromInk = inkOf(from, FOUND_WORD);
-      const Wm = fromInk.left + fromInk.right;
       const kb0 = keyBox(W, H, cap, Ws);
-      const fromLeft = cx - Wm / 2 + fromInk.left;
-      from.style.left = px(fromLeft);
+      const from = q('[data-from]', key0)!;
+      const gmFrom = q('[data-gm="from"]', key0)!;
+      const gmTo = q('[data-gm="to"]', key0)!;
+      gmFrom.style.fontSize = '100px';
+      const Fm = cap / Math.max(0.05, inkOf(gmFrom, 'H').cap / 100);
+      gmFrom.style.fontSize = px(Fm);
+      from.style.fontSize = px(Fm);
+      gmTo.style.fontSize = serif.style.fontSize;
+      const capsWord = FOUND_WORD.toUpperCase();
+      const monoInk = inkOf(gmFrom, capsWord);
+      const Wm = monoInk.left + monoInk.right;
+      const x0m = cx - Wm / 2 + monoInk.left;
+      const findFrom = setGlyphs(gmFrom, capsWord, x0m, kb0.baseline);
+      const findTo = setGlyphs(gmTo, firstWord, kb0.inkX + serifInk.left, kb0.baseline);
+      from.style.left = px(x0m);
       from.style.top = '0px';
       from.style.top = px(kb0.baseline - baselineIn(from));
-      from.style.transformOrigin = `${(cx - fromLeft).toFixed(2)}px 50%`;
+      // Where it starts: its letters on the line's letters (the same face at
+      // the line's size, pen on pen, baseline on baseline).
       const k0 = size / Fm;
-      const T0: Vec2 = [foundCx - cx, baseline - (size * xr) / 2 - cy];
-      // The marker's clip: round both the start's block and the end's.
+      const T0: Vec2 = [foundPen - cx - k0 * (x0m - cx), baseline - cy - k0 * (kb0.baseline - cy)];
+      // The marker's clip: round both the start's block and the end's; its
+      // leading edge ragged, about 16 px wide on screen as it sweeps.
       const bh = cap * ANCHOR.block;
+      const edge = 16 / k0;
       const clipL = cx - Math.max(Wm, Ws) / 2 - pad - 24;
-      const clipR = cx + Math.max(Wm, Ws) / 2 + pad + 24;
+      const clipR = cx + Math.max(Wm, Ws) / 2 + pad + 24 + edge;
       const clip: Box = { x: clipL, y: cy - bh * 1.6, w: clipR - clipL, h: bh * 3.2 };
       const clipEl = q('[data-clip]', key0)!;
       const clipIn = q('[data-clip-in]', key0)!;
@@ -657,13 +766,14 @@ export default function OpeningFilm() {
       clipEl.style.top = px(clip.y);
       clipEl.style.width = px(clip.w);
       clipEl.style.height = px(clip.h);
+      clipEl.style.setProperty('--of-edge', px(edge));
       clipIn.style.left = px(-clip.x);
       clipIn.style.top = px(-clip.y);
 
       // Act 3's pages: the giant words, set on the short side and placed on
       // their baselines.
       qa<HTMLElement>('[data-cut]').forEach((cutEl) => {
-        const c = COMPOSITIONS[Number(cutEl.dataset.cut)];
+        const c = SCENES[Number(cutEl.dataset.cut)];
         qa<HTMLElement>('[data-giant]', cutEl).forEach((g, k) => {
           const spec = c.giants[k];
           const word = q('[data-giant-word]', g)!;
@@ -678,39 +788,47 @@ export default function OpeningFilm() {
           g.style.top = px(spec.y * H + (spec.yCap ?? 0) * spec.cap * short - baselineIn(word));
         });
       });
+      placeSmallPrint(W, H, short, phoneLayout, blocks);
 
-      // Acts 5–6: the title (in flow) and the typed line turned into it.
+      // Acts 5–6: the title (in flow, set as the first screen sets his
+      // name), its letters, and the typed line — the typewriter's capitals
+      // as tall as the title's, centred on it, on its baseline; the typed
+      // line in the same cells.
       const titleUnit = q('[data-title]')!;
       const name = q('[data-title-to]')!;
       const mono = q('[data-title-from]')!;
       const reveal = mono.closest<HTMLElement>('[data-reveal]')!;
-      const nameInk = inkOf(name, 'Ryan Xu');
+      const tFrom = q('[data-gm="from"]', titleUnit)!;
+      const tTo = q('[data-gm="to"]', titleUnit)!;
+      const caps = TITLE_NAME.toUpperCase();
+      const nameInk = inkOf(name, TITLE_NAME);
       const nameBase = name.offsetTop + baselineIn(name);
       const nameLeft = name.offsetLeft;
-      const Ws5 = nameInk.left + nameInk.right;
       const inkCx = nameLeft + (nameInk.right - nameInk.left) / 2;
-      const xh5 = nameInk.xh;
-      const origin: Vec2 = [inkCx, nameBase - xh5 / 2];
+      const capF = nameInk.cap;
+      const origin: Vec2 = [inkCx, nameBase - capF / 2];
       titleUnit.style.transformOrigin = `${origin[0].toFixed(2)}px ${origin[1].toFixed(2)}px`;
-      name.style.transformOrigin = `${(inkCx - nameLeft).toFixed(2)}px 50%`;
-      const Fm5 = xh5 / Math.max(0.05, xr);
+      tFrom.style.fontSize = '100px';
+      const Fm5 = capF / Math.max(0.05, inkOf(tFrom, 'H').cap / 100);
+      tFrom.style.fontSize = px(Fm5);
       mono.style.fontSize = px(Fm5);
-      const monoInk = inkOf(mono, 'ryan xu');
-      const Wm5 = monoInk.left + monoInk.right;
-      const adv5 = mono.offsetWidth / 'ryan xu'.length;
-      const pen = inkCx - Wm5 / 2 + monoInk.left;
+      const capsInk = inkOf(tFrom, caps);
+      const pen = inkCx - (capsInk.left + capsInk.right) / 2 + capsInk.left;
+      const titleFrom = setGlyphs(tFrom, caps, pen, nameBase);
+      const titleTo = setGlyphs(tTo, caps, nameLeft, nameBase);
+      const adv5 = mono.offsetWidth / DARK_TYPED.length;
       const padR = 12;
       reveal.style.left = px(pen - padR);
       reveal.style.top = '0px';
       reveal.style.top = px(nameBase - baselineIn(mono) - padR);
-      mono.style.transformOrigin = `${(inkCx - pen).toFixed(2)}px 50%`;
       const cursor = q('[data-title-cursor]')!;
-      const capM = monoInk.cap;
+      const capM = capsInk.cap;
       cursor.style.left = px(pen);
       cursor.style.top = px(nameBase - capM - Fm5 * 0.1);
       cursor.style.width = px(adv5 * 0.86);
       cursor.style.height = px(capM + Fm5 * 0.2);
-      const typedPx = phoneLayout ? Math.max(18, Math.min(24, W * 0.058)) : Math.max(20, Math.min(34, W * 0.018));
+      // The typed line's size on screen (the title grows from it).
+      const typedPx = phoneLayout ? Math.max(22, Math.min(32, W * 0.075)) : Math.max(28, Math.min(64, W * 0.034));
       const k5 = typedPx / Fm5;
 
       // The burn starts beside the anchor (up and to the right of its
@@ -721,16 +839,89 @@ export default function OpeningFilm() {
       return {
         W,
         H,
-        line: { left: lineRect.left, top: lineRect.top, baseline, adv, size, width, xr, foundCx },
+        line: { left: lineRect.left, baseline, adv, size, width },
         cap,
         cx,
         cy,
         blocks,
-        find: { k0, T0, Wm, Ws, pad, clip },
-        title: { k5, Wm: Wm5, Ws: Ws5, adv: adv5, pen, revealW: mono.offsetWidth + 2 * padR, origin },
+        find: { k0, T0, Wm, Ws, pad, clip, edge, block: kb0.block, from: findFrom, to: findTo },
+        title: { k5, adv: adv5, pen, revealW: mono.offsetWidth + 2 * padR, origin, from: titleFrom, to: titleTo },
         burnOrigin,
       };
     };
+
+    // Act 3's small print on an editorial page — the ringed word and the
+    // grey texture — kept clear of the anchor, the words on its line, the
+    // giant words (as far as they drift), the frame's print and the Skip
+    // pill: at its place in the data when that is clear, else at the nearest
+    // clear place, else not at all. (Measured once, before the clock, like
+    // everything else.)
+    type Rect = { x: number; y: number; w: number; h: number };
+    const grow = (r: Rect, m: number): Rect => ({ x: r.x - m, y: r.y - m, w: r.w + 2 * m, h: r.h + 2 * m });
+    const hits = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const offsetBox = (el: HTMLElement): Rect => ({ x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight });
+    const SEARCH: Vec2[] = (() => {
+      const out: Vec2[] = [];
+      for (let dx = -264; dx <= 264; dx += 24) for (let dy = -216; dy <= 216; dy += 12) out.push([dx, dy]);
+      return out.sort((a, b) => Math.hypot(a[0], a[1] * 1.4) - Math.hypot(b[0], b[1] * 1.4));
+    })();
+    function placeSmallPrint(W: number, H: number, short: number, phoneLayout: boolean, blocks: Box[]) {
+      const s = skip.getBoundingClientRect();
+      const skipBox = grow({ x: s.left, y: s.top, w: s.width, h: s.height }, 14);
+      qa<HTMLElement>('[data-cut]').forEach((cutEl) => {
+        const index = Number(cutEl.dataset.cut);
+        const c = SCENES[index];
+        if (!c.deco) return;
+        const block = blocks[index];
+        const keep: Rect[] = [grow(block, 22), skipBox];
+        qa<HTMLElement>('.of-row, .of-side', cutEl).forEach((el) => el.offsetWidth && keep.push(grow(offsetBox(el), 16)));
+        const chrome = q(`[data-chrome="${index}"]`);
+        if (chrome) qa<HTMLElement>('.of-meta, .of-credit', chrome).forEach((el) => el.offsetWidth && keep.push(grow(offsetBox(el), 10)));
+        const cutMs = plan.cuts.find((x) => x.index === index);
+        const speed = (c.driftPx * 1000) / Math.max(1, cutMs ? cutMs.end - cutMs.start : 167);
+        const trail = (speed / 100) * BLUR_STEP_PER_SPEED * 3;
+        qa<HTMLElement>('[data-giant]', cutEl).forEach((g, k) => {
+          const word = q('[data-giant-word]', g)!;
+          const base = g.offsetTop + baselineIn(word);
+          const capPx = c.giants[k].cap * short;
+          keep.push(grow({ x: g.offsetLeft, y: base - capPx, w: word.offsetWidth, h: capPx }, c.driftPx / 2 + trail + 10));
+        });
+        const inBounds = (r: Rect) => r.x >= 14 && r.y >= 14 && r.x + r.w <= W - 14 && r.y + r.h <= H - 14;
+        const place = (el: HTMLElement, want: Vec2, box: Rect, inset: Vec2) => {
+          el.style.visibility = '';
+          for (const [dx, dy] of SEARCH) {
+            const r = { x: want[0] + dx, y: want[1] + dy, w: box.w, h: box.h };
+            if (!inBounds(r) || keep.some((k) => hits(r, k))) continue;
+            el.style.left = px(r.x + inset[0]);
+            el.style.top = px(r.y + inset[1]);
+            keep.push(grow(r, 10));
+            return;
+          }
+          el.style.visibility = 'hidden';
+        };
+        // The ringed word (its ring drawn round it: 0.7em × 0.55em out).
+        const ringed = q('[data-ringed]', cutEl);
+        if (ringed) {
+          const em = parseFloat(getComputedStyle(ringed).fontSize) || 22;
+          const rw = ringed.offsetWidth + 1.4 * em;
+          const rh = ringed.offsetHeight + 1.1 * em;
+          const right = c.deco.ring[0] > 0.5;
+          const ringWant: Vec2 = phoneLayout
+            ? [right ? W - 24 - rw : 24, right ? block.y - 96 - rh : block.y + block.h + 70]
+            : [c.deco.ring[0] * W - 0.7 * em, c.deco.ring[1] * H - 0.55 * em];
+          place(ringed, ringWant, { x: 0, y: 0, w: rw, h: rh }, [0.7 * em, 0.55 * em]);
+        }
+        // The texture (the phone keeps the first).
+        qa<HTMLElement>('[data-texture]', cutEl).forEach((p, k) => {
+          if (getComputedStyle(p).display === 'none') return;
+          const t = c.deco!.texture[k];
+          const w = p.offsetWidth;
+          const h = p.offsetHeight;
+          const want: Vec2 = phoneLayout ? [Math.min(Math.max(14, t.at[0] * W), W - 14 - w), block.y + block.h + 110] : [t.at[0] * W, t.at[1] * H];
+          place(p, want, { x: 0, y: 0, w, h }, [0, 0]);
+        });
+      });
+    }
 
     // ── Build: the whole film as keyframes on one clock ──
     const build = () => {
@@ -749,6 +940,14 @@ export default function OpeningFilm() {
           }
         });
         const anim = el.animate(keyframes, { duration: total, fill: 'both', easing: 'linear' });
+        anim.startTime = t0;
+        filmAnims.push(anim);
+        return anim;
+      };
+      /** Keyframes on a window of the clock only [start, end] (offsets in
+       *  the window); outside it the element's own style (fill none). */
+      const during = (el: Element, start: number, end: number, keyframes: Keyframe[], iterations = 1) => {
+        const anim = el.animate(keyframes, { delay: start, duration: Math.max(1, end - start), iterations, fill: 'none', easing: 'linear' });
         anim.startTime = t0;
         filmAnims.push(anim);
         return anim;
@@ -777,23 +976,72 @@ export default function OpeningFilm() {
         if (end < total) ch.push([end, 0]);
         steps(el, 'opacity', start > 0 ? 0 : on, ch);
       };
+      /** Drawn (visibility) from PREROLL_MS before `start` to just after
+       *  `end`, and not otherwise: a main-thread property, so it is let in
+       *  early and let go late — the compositor's opacity decides the frame
+       *  the scene shows. */
+      const live = (el: Element, start: number, end: number) => {
+        const from = Math.max(0, start - PREROLL_MS);
+        const forever = end >= total;
+        during(el, from, forever ? total : end + 50, [{ visibility: 'visible' }, { visibility: 'visible' }]).effect?.updateTiming({ fill: forever ? 'forwards' : 'none' });
+      };
+      /** Not drawn from just after `t` on (for what is there from the first
+       *  paint). */
+      const goneAfter = (el: Element, t: number) => {
+        during(el, t + 50, total, [{ visibility: 'hidden' }, { visibility: 'hidden' }]).effect?.updateTiming({ fill: 'forwards' });
+      };
+      /** Shown and drawn across [start, end). */
+      const scene = (el: Element, start: number, end: number) => {
+        shown(el, start, end);
+        live(el, start, end);
+      };
+      /** The grain: its tile moved every 60th of a second across [start, end). */
+      const grain = (tile: Element | null, start: number, end: number) => {
+        if (!tile) return;
+        const frames: Keyframe[] = GRAIN_STEPS.map(([x, y], k) => ({ offset: k / GRAIN_STEPS.length, transform: `translate(${x}px, ${y}px)`, easing: 'steps(1, end)' }));
+        frames.push({ offset: 1, transform: 'translate(0px, 0px)' });
+        during(tile, start, start + GRAIN_LOOP_MS, frames, Math.max(1, Math.ceil((end - start) / GRAIN_LOOP_MS)));
+      };
+      /** A morph's letters: each pair fitted into their shared ink box across
+       *  `win` (shares of the move [start, start + dur]); outside it each
+       *  letter is its own (the face not shown then is hidden). */
+      const morphLetters = (pairs: (readonly [Glyph, Glyph])[] | null, start: number, dur: number, win: readonly [number, number]) => {
+        if (!pairs) return;
+        const us = morphSamples(win);
+        const span = win[1] - win[0];
+        pairs.forEach(([a, b]) => {
+          [a, b].forEach((gl) => {
+            during(
+              gl.el,
+              start + dur * win[0],
+              start + dur * win[1],
+              us.map((u) => ({ offset: (u - win[0]) / span, transform: glyphTransform(gl, a, b, morphAt(u, win)) })),
+            );
+          });
+        });
+      };
 
       const acts = plan.acts;
       const f0 = acts.burn.start;
       const frameT = (f: number) => burnFrameStart(plan, f);
       const frameOut = frameT(BURN.out[1]);
 
-      // ── Act 1: the materials, the typing, the cursor ──
-      const mats = MATERIALS[plan.layout];
+      // ── Act 1: the machines, the typing, the cursor ──
+      const inkSteps = cursorSteps(plan);
       qa<HTMLElement>('[data-mat]').forEach((mat) => {
-        const id = mat.dataset.mat as (typeof mats)[number];
-        const m = plan.materials.find((x) => x.id === id);
+        const id = mat.dataset.mat as string;
+        const m = plan.styles.find((x) => x.id === id);
         if (!m) {
           play(mat, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 0 }]);
           return;
         }
-        const last = id === mats[mats.length - 1];
-        shown(mat, m.start, last ? acts.find.end : m.end);
+        const found = id === FIND_STYLE;
+        const endT = found ? acts.find.end : m.end;
+        shown(mat, m.start, endT);
+        // The CRT is there from the first paint; the others are drawn a
+        // quarter second before their cut.
+        if (id === 'crt') goneAfter(mat, endT);
+        else live(mat, m.start, endT);
         const reveal = q('[data-reveal]', mat)!;
         const inner = q('[data-reveal-in]', reveal)!;
         const { adv, width, size } = g.line;
@@ -803,10 +1051,16 @@ export default function OpeningFilm() {
         const typing: [number, number][] = plan.typing.map((t, i) => [t, u(i + 1)]);
         typing.push([acts.find.start, 0]);
         reveals(reveal, inner, u(0), typing);
-        // The cursor: its first flash, then on, riding the typing.
+        // The cursor: there from the clock's first frame, riding the typing;
+        // its ink on the film's clock (530 ms steps: blinking before the
+        // first letter and after the last, solid while it types). What grows
+        // with the line (a pill's end, a marker's, a bar's) rides with it.
         const cursor = q('[data-cursor]', mat)!;
+        steps(q('[data-cursor-ink]', cursor)!, 'opacity', 1, inkSteps);
         const cur: [number, string][] = plan.typing.map((t, i) => [t, tx((i + 1) * adv)]);
-        if (id === 'copy') {
+        const growEnd = q('[data-grow-end]', mat);
+        if (growEnd) steps(growEnd, 'transform', tx(0), cur);
+        if (found) {
           // Found: it goes with TRAVEL, pushed down and out.
           const { start, end } = plan.glide;
           const endPush = start + (end - start) * FIND.pushGone;
@@ -820,30 +1074,18 @@ export default function OpeningFilm() {
           frames.push({ offset: at(start), transform: tx(x), easing: GLIDE_CSS }, { offset: at(endPush), transform: tx(x, FIND.push * H) }, { offset: 1, transform: tx(x, FIND.push * H) });
           play(cursor, frames);
           play(cursor, [
-            { offset: 0, opacity: 0 },
-            { offset: at(plan.cursorOn), opacity: 0 },
-            { offset: at(plan.cursorOn), opacity: 1 },
+            { offset: 0, opacity: 1 },
             { offset: at(start), opacity: 1 },
             { offset: at(endPush), opacity: 0 },
             { offset: 1, opacity: 0 },
           ]);
-        } else {
-          steps(cursor, 'transform', tx(0), cur);
-          steps(cursor, 'opacity', 0, [[plan.cursorOn, 1]]);
-        }
-        if (id === 'copy') {
           // The rest of the line is pushed away as the word lifts off it.
-          const { start, end } = plan.glide;
-          const endPush = start + (end - start) * FIND.pushGone;
           qa<HTMLElement>('[data-word]', mat).forEach((w) => {
             const word = w.dataset.word!;
-            if (word === 'archive') {
-              play(w, [
-                { offset: 0, opacity: 1 },
-                { offset: at(start), opacity: 1, easing: FADE_CSS },
-                { offset: at(start + 90), opacity: 0 },
-                { offset: 1, opacity: 0 },
-              ]);
+            if (word === FOUND_WORD) {
+              // Under the marker's block as the word lifts off: gone at once
+              // (a fade would leave its letters behind on the paper).
+              steps(w, 'opacity', 1, [[start, 0]]);
               return;
             }
             const dy = (PUSH_DIR[word] ?? 1) * FIND.push * H;
@@ -860,24 +1102,36 @@ export default function OpeningFilm() {
               { offset: 1, opacity: 0 },
             ]);
           });
+        } else {
+          steps(cursor, 'transform', tx(0), cur);
         }
+        // The grid paper's arrow, drawn in six stages a 24th apart (each a
+        // longer stretch of the one path), its head with the last.
+        const stages = qa<SVGPathElement>('[data-arrow]', mat);
+        stages.forEach((path, k) => {
+          const t = m.start + (k + 1) * FRAME24_MS;
+          const off = k < stages.length - 1 ? m.start + (k + 2) * FRAME24_MS : endT;
+          during(path, t, off, [{ opacity: 1 }, { opacity: 1 }]);
+        });
+        const head = q('[data-arrow-head]', mat);
+        if (head) during(head, m.start + stages.length * FRAME24_MS, endT, [{ opacity: 1 }, { opacity: 1 }]);
       });
 
       // ── Act 2: the marker, the glide, the morph (key 0) ──
       const key0 = q('[data-key="0"]')!;
       {
-        const { k0, T0, Wm, Ws, pad, clip } = g.find;
+        const { k0, T0, Wm, pad, clip, edge, block: box0, from: lettersFrom, to: lettersTo } = g.find;
         const { sweep, glide } = plan;
         const clipEl = q('[data-clip]', key0)!;
         const clipIn = q('[data-clip-in]', key0)!;
         const cx = g.cx;
-        // The marker: its window's right edge from the start block's left
-        // to its right, then open.
+        // The marker: its window's (ragged) right edge from the start
+        // block's left to its right, then open.
         const bmL = cx - Wm / 2 - pad;
         const bmR = cx + Wm / 2 + pad;
         const clipRight = clip.x + clip.w;
         const uA = bmL - clipRight;
-        const uB = bmR - clipRight;
+        const uB = bmR - clipRight + edge;
         play(clipEl, [
           { offset: 0, transform: tx(uA) },
           { offset: at(sweep.start), transform: tx(uA) },
@@ -901,53 +1155,71 @@ export default function OpeningFilm() {
           ...samples.map(({ u, e }) => ({ offset: at(glide.start + dur * u), transform: unit(e) })),
           { offset: 1, transform: unit(1) },
         ]);
-        // One ink width for both faces (the block with them), and one
-        // crossfade window.
-        const width = (u: number) => lerp(Wm, Ws, smooth(segment(u, FIND.morph[0], FIND.morph[1])));
+        // Every letter and its counterpart in one ink box; the block as wide
+        // as their shared ink.
+        const pairs = pairGlyphs(lettersFrom, lettersTo);
+        morphLetters(pairs, glide.start, dur, FIND.morph);
+        const inkW = (p: number) => {
+          if (!pairs) return lerp(Wm, g.find.Ws, p);
+          const [a0, b0] = pairs[0];
+          const [a1, b1] = pairs[pairs.length - 1];
+          return lerp(a1.ink.r, b1.ink.r, p) - lerp(a0.ink.l, b0.ink.l, p);
+        };
         const block = q('[data-block]', key0)!;
-        const from = q('[data-from]', key0)!;
-        const to = q('[data-word]', key0)!;
-        const ws = samples.map(({ u }) => ({ t: glide.start + dur * u, w: width(u) }));
-        const sx = (v: number) => `scaleX(${v.toFixed(5)})`;
-        play(block, [{ offset: 0, transform: sx((Wm + 2 * pad) / (Ws + 2 * pad)) }, ...ws.map(({ t, w }) => ({ offset: at(t), transform: sx((w + 2 * pad) / (Ws + 2 * pad)) })), { offset: 1, transform: sx(1) }]);
-        play(from, [{ offset: 0, transform: sx(1) }, ...ws.map(({ t, w }) => ({ offset: at(t), transform: sx(w / Wm) })), { offset: 1, transform: sx(Ws / Wm) }]);
-        play(to, [{ offset: 0, transform: sx(Wm / Ws) }, ...ws.map(({ t, w }) => ({ offset: at(t), transform: sx(w / Ws) })), { offset: 1, transform: sx(1) }]);
+        const sx = (p: number) => `scaleX(${((inkW(p) + 2 * pad) / box0.w).toFixed(5)})`;
+        play(block, [
+          { offset: 0, transform: sx(0) },
+          ...morphSamples(FIND.morph).map((u) => ({ offset: at(glide.start + dur * u), transform: sx(morphAt(u, FIND.morph)) })),
+          { offset: 1, transform: sx(1) },
+        ]);
+        // The faces: as typed until the glide; struck in capitals as it
+        // lifts off (the beat); the crossing; Fraunces until the first cut,
+        // where the word itself takes over.
         const [s0, s1] = FIND.swap;
-        play(from, [
-          { offset: 0, opacity: 1 },
+        const gmFrom = q('[data-gm="from"]', key0)!;
+        const gmTo = q('[data-gm="to"]', key0)!;
+        steps(q('[data-from]', key0)!, 'opacity', 1, [[glide.start, 0]]);
+        play(gmFrom, [
+          { offset: 0, opacity: 0 },
+          { offset: at(glide.start), opacity: 0 },
+          { offset: at(glide.start), opacity: 1 },
           { offset: at(glide.start + dur * s0), opacity: 1 },
           { offset: at(glide.start + dur * s1), opacity: 0 },
           { offset: 1, opacity: 0 },
         ]);
-        play(to, [
+        play(gmTo, [
           { offset: 0, opacity: 0 },
           { offset: at(glide.start + dur * s0), opacity: 0 },
           { offset: at(glide.start + dur * s1), opacity: 1 },
-          { offset: 1, opacity: 1 },
+          { offset: at(glide.end), opacity: 1 },
+          { offset: at(glide.end), opacity: 0 },
+          { offset: 1, opacity: 0 },
         ]);
+        steps(q('[data-word]', key0)!, 'opacity', 0, [[glide.end, 1]]);
       }
 
       // ── Act 3: the paper, the pages, the anchor ──
-      const lastCut = plan.cuts[plan.cuts.length - 1];
-      [q('[data-paper]'), q('[data-soft]'), q('[data-grain]'), q('[data-vignette]')].forEach((el) => el && shown(el, acts.cuts.start, frameOut));
+      [q('[data-paper]'), q('[data-soft]'), q('[data-grain]'), q('[data-vignette]')].forEach((el) => el && scene(el, acts.cuts.start, frameOut));
+      grain(q('[data-grain-tile]'), acts.cuts.start, frameOut);
       const used = new Map(plan.cuts.map((c, k) => [c.index, k]));
       qa<HTMLElement>('[data-cut]').forEach((cutEl) => {
         const index = Number(cutEl.dataset.cut);
         const k = used.get(index);
         const key = q(`[data-key="${index}"]`)!;
+        const chrome = q(`[data-chrome="${index}"]`);
         if (k == null) {
-          play(cutEl, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 0 }]);
-          play(key, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 0 }]);
+          [cutEl, key, chrome].forEach((el) => el && play(el, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 0 }]));
           return;
         }
         const cut = plan.cuts[k];
         const isLast = k === plan.cuts.length - 1;
         const end = isLast ? frameOut : cut.end;
-        shown(cutEl, cut.start, end);
-        shown(key, index === 0 ? plan.sweep.start : cut.start, end);
+        scene(cutEl, cut.start, end);
+        if (chrome) scene(chrome, cut.start, end);
+        scene(key, index === 0 ? plan.sweep.start : cut.start, end);
         // The giant words drift, the whole cut, one way (their copies ride
         // with them); the last runs on into the burn a 24th at a time.
-        const c = COMPOSITIONS[index];
+        const c = SCENES[index];
         const [dx, dy] = DRIFT_VEC[c.drift];
         const v = c.driftPx / (cut.end - cut.start);
         const pos = (t: number) => {
@@ -974,12 +1246,13 @@ export default function OpeningFilm() {
       });
 
       // ── Act 4: the burn ──
-      // The frame: its gate weave, the slip, the slide out (held a frame).
+      // The frame: its gate weave, the slip, the slide out (held a frame) —
+      // out along its own tilted up-axis, the way the last cut drifts.
       const frameEl = q('[data-frame]')!;
       const tanSlide = Math.tan((BURN.slideDeg * Math.PI) / 180);
       const framePose = (f: number) => {
         const p = frameAt(f);
-        const slant = f >= BURN.out[0] ? p.y * H * tanSlide : 0;
+        const slant = f >= BURN.out[0] ? -p.y * H * tanSlide : 0;
         return `translate3d(${(p.x + slant).toFixed(2)}px, ${(p.y * H + p.weaveY).toFixed(2)}px, 0) rotate(${p.rot.toFixed(3)}deg)`;
       };
       steps(
@@ -988,14 +1261,19 @@ export default function OpeningFilm() {
         'translate3d(0px, 0px, 0) rotate(0deg)',
         Array.from({ length: BURN.out[1] + 1 }, (_, f) => [frameT(f), framePose(f)] as [number, string]),
       );
-      steps(q('[data-sepia]')!, 'opacity', 0, [
+      // What a slip shows past the frame's foot: for the slip's frame only
+      // (nothing light comes in as the frame darkens and goes).
+      scene(q('[data-next]')!, frameT(BURN.slip), frameT(BURN.slip + 1));
+      const sepia = q('[data-sepia]')!;
+      steps(sepia, 'opacity', 0, [
         ...Array.from({ length: BURN.out[1] - BURN.burn[0] }, (_, k) => [frameT(BURN.burn[0] + k), burnSepia(BURN.burn[0] + k)] as [number, number]),
         [frameOut, 0],
       ]);
+      live(sepia, frameT(BURN.burn[0]), frameOut);
       const canvas = q<HTMLCanvasElement>('[data-burn]')!;
       const veil = q('[data-veil]')!;
       if (burn) {
-        shown(canvas, f0, frameOut);
+        scene(canvas, f0, frameOut);
         play(veil, [{ offset: 0, opacity: 0 }, { offset: 1, opacity: 0 }]);
       } else {
         // No WebGL: no burn, but the frame still darkens and goes.
@@ -1004,12 +1282,13 @@ export default function OpeningFilm() {
           ...Array.from({ length: BURN.out[1] - BURN.burn[0] }, (_, k) => [frameT(BURN.burn[0] + k), Math.max(burnRadius(BURN.burn[0] + k), burnDarkness(BURN.burn[0] + k))] as [number, number]),
           [frameOut, 0],
         ]);
+        live(veil, frameT(BURN.burn[0]), frameOut);
       }
-      shown(q('[data-burnground]')!, f0, acts.dark.start);
+      scene(q('[data-burnground]')!, f0, acts.dark.start);
       // The leader: one card a frame.
       qa<HTMLElement>('[data-leader]').forEach((card, k) => {
         const f = BURN.leader[0] + k;
-        shown(card, frameT(f), frameT(f + 1));
+        scene(card, frameT(f), frameT(f + 1));
       });
       // The lit perforations climb the screen, a frame at a time, fading.
       const perfs = q('[data-perfrow]')!;
@@ -1017,13 +1296,14 @@ export default function OpeningFilm() {
       const perfO = [0.95, 0.85, 0.62, 0.34];
       steps(perfs, 'transform', tx(0, perfY[0] * H), perfY.map((y, k) => [frameT(BURN.perfs[0] + k), tx(0, y * H)] as [number, string]));
       steps(perfs, 'opacity', 0, [...perfO.map((o, k) => [frameT(BURN.perfs[0] + k), o] as [number, number]), [acts.dark.start, 0]]);
+      live(perfs, frameT(BURN.perfs[0]), acts.dark.start);
 
       // ── Acts 5–6: the dark, typed; the title ──
       const end = q('[data-end]')!;
-      shown(end, acts.dark.start, total);
+      scene(end, acts.dark.start, total);
+      grain(q('[data-end-grain-tile]'), acts.dark.start, total + LANDING_A.done);
       const tg = g.title;
       const unitEl = q('[data-title]')!;
-      const name = q('[data-title-to]')!;
       const mono = q('[data-title-from]')!;
       const reveal = mono.closest<HTMLElement>('[data-reveal]')!;
       const inner = q('[data-reveal-in]', reveal)!;
@@ -1039,8 +1319,10 @@ export default function OpeningFilm() {
       // The typing: the reveal's window to the n-th letter.
       const u5 = (n: number) => tg.pen + n * tg.adv - (tg.pen - 12 + tg.revealW);
       const typing5: [number, number][] = plan.darkTyping.map((t, i) => [t, u5(i + 1)]);
-      typing5.push([t6, 0]);
       reveals(reveal, inner, u5(0), typing5);
+      // The typed line is struck in capitals on the beat the title begins
+      // (the same cells): from there its letters are the morph's.
+      steps(reveal, 'opacity', 1, [[t6, 0]]);
       // The lime cursor: on, riding the typing, one blink after, gone as the
       // line turns into the title.
       const cur5: [number, string][] = plan.darkTyping.map((t, i) => [t, tx((i + 1) * tg.adv)]);
@@ -1056,19 +1338,19 @@ export default function OpeningFilm() {
         { offset: at(plan.blink.end + TITLE.cursorOut), opacity: 0 },
         { offset: 1, opacity: 0 },
       ]);
-      // One ink width for both faces, one crossfade window.
-      const w5 = (u: number) => lerp(tg.Wm, tg.Ws, smooth(u));
-      const sx = (v: number) => `scaleX(${v.toFixed(5)})`;
-      play(mono, [{ offset: 0, transform: sx(1) }, ...samples.map(({ u }) => ({ offset: at(t6 + TITLE.morph * u), transform: sx(w5(u) / tg.Wm) })), { offset: 1, transform: sx(tg.Ws / tg.Wm) }]);
-      play(name, [{ offset: 0, transform: sx(tg.Wm / tg.Ws) }, ...samples.map(({ u }) => ({ offset: at(t6 + TITLE.morph * u), transform: sx(w5(u) / tg.Ws) })), { offset: 1, transform: sx(1) }]);
+      // Every typewriter capital turns into its Fraunces capital in one ink
+      // box as the line grows to the title; one crossing, centred in it.
+      morphLetters(pairGlyphs(tg.from, tg.to), t6, TITLE.morph, TITLE.box);
       const [a, b] = TITLE.swap;
-      play(mono, [
-        { offset: 0, opacity: 1 },
+      play(q('[data-gm="from"]', unitEl)!, [
+        { offset: 0, opacity: 0 },
+        { offset: at(t6), opacity: 0 },
+        { offset: at(t6), opacity: 1 },
         { offset: at(t6 + TITLE.morph * a), opacity: 1 },
         { offset: at(t6 + TITLE.morph * b), opacity: 0 },
         { offset: 1, opacity: 0 },
       ]);
-      play(name, [
+      play(q('[data-gm="to"]', unitEl)!, [
         { offset: 0, opacity: 0 },
         { offset: at(t6 + TITLE.morph * a), opacity: 0 },
         { offset: at(t6 + TITLE.morph * b), opacity: 1 },
@@ -1105,6 +1387,8 @@ export default function OpeningFilm() {
         radius: burnRadius(want) * diag,
         flick: burnFrame(want).flick * 0.1,
         dark: burnDarkness(want),
+        // Dust on the frame until it darkens.
+        dust: want < BURN.out[0] ? 1 : 0,
         scratch: scratchOf(want),
       });
     };
@@ -1132,7 +1416,9 @@ export default function OpeningFilm() {
       later(startLanding, plan.length - t + 50);
     };
     const shiftAll = (delta: number) => {
-      overlay.getAnimations({ subtree: true }).forEach((a) => {
+      // The film's own list (a finished window is no longer among the
+      // element's animations, but must move with the clock all the same).
+      filmAnims.forEach((a) => {
         if (a.startTime != null) a.startTime = Number(a.startTime) + delta;
       });
       t0 += delta;
@@ -1173,6 +1459,7 @@ export default function OpeningFilm() {
     // A: the words fly home.
     function landA() {
       const endLayer = q('[data-end]')!;
+      const titleLetters = q('[data-title] [data-gm-unit]', endLayer)!;
       const rate = hurried ? FF_RATE : 1;
       const ms = (v: number) => v / rate;
       const vh = window.innerHeight;
@@ -1192,85 +1479,115 @@ export default function OpeningFilm() {
       html.setAttribute('data-open-fly', '');
       html.dataset.reel = 'flight';
 
+      // What a word looks like at either end. A word that is the same on both
+      // ends (his name: the title sets it as the page does) is only moved;
+      // one whose face changes turns letter by letter, every letter and its
+      // counterpart held to one ink box.
+      const casing = (text: string, style: CSSStyleDeclaration) =>
+        style.textTransform === 'uppercase' ? text.toUpperCase() : style.textTransform === 'lowercase' ? text.toLowerCase() : text;
+      const tracking = (style: CSSStyleDeclaration) => (style.letterSpacing === 'normal' ? 0 : (parseFloat(style.letterSpacing) || 0) / (parseFloat(style.fontSize) || 16));
+      const sameFace = (a: CSSStyleDeclaration, b: CSSStyleDeclaration, aText: string, bText: string) =>
+        a.fontFamily === b.fontFamily &&
+        a.fontWeight === b.fontWeight &&
+        a.fontStyle === b.fontStyle &&
+        casing(aText, a) === casing(bText, b) &&
+        Math.abs(tracking(a) - tracking(b)) < 0.002;
+
       const flights = pairs
         .map(({ src, dst }, order) => {
           const srcRect = src.getBoundingClientRect();
           const dstBox = textBox(dst);
           if (!dstBox || !srcRect.width) return null;
           const scale = srcRect.height / Math.max(1, src.offsetHeight);
+          const sStyle = getComputedStyle(src);
+          const dStyle = getComputedStyle(dst);
           const srcText = (src.textContent || '').replace(/\s+/g, ' ').trim();
           const srcInk = inkOf(src, srcText);
           const srcBase = baselineOf(src);
           const dstText = (dst.textContent || '').trim();
           const dstInk = inkOf(dst, dstText);
           const dstBase = baselineOf(dst);
-          const from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * srcInk.ascent) / 2];
-          const to: Vec2 = [dstBox.x + (dstInk.right - dstInk.left) / 2, dstBase - dstInk.ascent / 2];
-          const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, srcInk.ascent * scale, dstInk.ascent, order);
-          return { src, dst, srcText, dstText, dstBox, dstBase, scale, to, flight };
+          // Ink centre to ink centre; the size from ink height to ink height.
+          const from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * (srcInk.ascent - srcInk.descent)) / 2];
+          const to: Vec2 = [dstBox.x + (dstInk.right - dstInk.left) / 2, dstBase - (dstInk.ascent - dstInk.descent) / 2];
+          const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, (srcInk.ascent + srcInk.descent) * scale, dstInk.ascent + dstInk.descent, order);
+          return { src, srcText, sStyle, dstText, dStyle, dstBox, dstBase, scale, to, flight, same: sameFace(sStyle, dStyle, srcText, dstText) };
         })
         .filter(<T,>(x: T | null): x is T => x != null);
 
-      const face = (text: string, style: CSSStyleDeclaration, size: number) => {
+      /** A clone of a word in a face (its letters each a box, for a morph). */
+      const face = (text: string, style: CSSStyleDeclaration, size: number, letters: boolean) => {
         const box = document.createElement('span');
         box.className = 'of-fly__face';
-        const inner = document.createElement('span');
-        inner.className = 'of-fly__ink';
-        inner.textContent = text;
+        const shown = casing(text, style);
+        box.style.fontFamily = style.fontFamily;
+        box.style.fontWeight = style.fontWeight;
+        box.style.fontStyle = style.fontStyle;
+        box.style.fontSize = `${size}px`;
+        box.style.letterSpacing = `${(tracking(style) * size).toFixed(3)}px`;
+        box.style.textTransform = 'none';
+        box.style.color = style.color;
+        box.style.lineHeight = 'normal';
+        box.style.fontVariationSettings = style.fontVariationSettings;
+        box.style.fontOpticalSizing = (style as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing;
+        box.style.fontFeatureSettings = style.fontFeatureSettings;
+        box.style.textShadow = style.textShadow;
+        if (letters) {
+          shown.split('').forEach((ch, i) => {
+            if (ch === ' ') return;
+            const g = document.createElement('span');
+            g.className = 'of-g';
+            g.dataset.g = String(i);
+            g.textContent = ch;
+            box.append(g);
+          });
+        } else {
+          const inner = document.createElement('span');
+          inner.className = 'of-fly__ink';
+          inner.textContent = shown;
+          box.append(inner);
+        }
         const probe = document.createElement('i');
         probe.className = 'of-bl';
-        inner.append(probe);
-        box.append(inner);
-        inner.style.fontFamily = style.fontFamily;
-        inner.style.fontWeight = style.fontWeight;
-        inner.style.fontStyle = style.fontStyle;
-        inner.style.fontSize = `${size}px`;
-        inner.style.letterSpacing = style.letterSpacing === 'normal' ? 'normal' : `${(parseFloat(style.letterSpacing) * size) / (parseFloat(style.fontSize) || size)}px`;
-        inner.style.textTransform = style.textTransform;
-        inner.style.color = style.color;
-        inner.style.lineHeight = 'normal';
-        inner.style.fontVariationSettings = style.fontVariationSettings;
-        inner.style.fontOpticalSizing = (style as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing;
-        inner.style.fontFeatureSettings = style.fontFeatureSettings;
-        inner.style.textShadow = style.textShadow;
-        return { box, inner, probe };
+        box.append(probe);
+        return { box, text: shown };
       };
 
-      const built = flights.map(({ src, dst, srcText, dstText, to, scale, flight }) => {
+      const placed = flights.map((f) => {
         const wrap = document.createElement('div');
         wrap.className = 'of-fly';
-        wrap.style.transformOrigin = `${to[0]}px ${to[1]}px`;
-        const sStyle = getComputedStyle(src);
-        const source = face(srcText, sStyle, ((parseFloat(sStyle.fontSize) || 16) * scale) / flight.k);
-        source.inner.style.textShadow = 'none';
-        const dStyle = getComputedStyle(dst);
-        const target = face(dstText, dStyle, parseFloat(dStyle.fontSize) || 16);
-        wrap.append(source.box, target.box);
+        wrap.style.transformOrigin = `${f.to[0]}px ${f.to[1]}px`;
+        const target = face(f.dstText, f.dStyle, parseFloat(f.dStyle.fontSize) || 16, !f.same);
+        const source = f.same ? null : face(f.srcText, f.sStyle, ((parseFloat(f.sStyle.fontSize) || 16) * f.scale) / f.flight.k, true);
+        if (source) {
+          source.box.style.textShadow = 'none';
+          wrap.append(source.box);
+        }
+        wrap.append(target.box);
         flightLayer.append(wrap);
-        return { wrap, source, target, srcText, dstText, flight };
-      });
-      const placed = built.map((b, i) => {
-        const { dstBox, dstBase } = flights[i];
-        const sRect = b.source.box.getBoundingClientRect();
-        const sBase = b.source.probe.getBoundingClientRect().top;
-        const tRect = b.target.box.getBoundingClientRect();
-        const tBase = b.target.probe.getBoundingClientRect().top;
-        const sInk = inkOf(b.source.inner, b.srcText);
-        const tInk = inkOf(b.target.inner, b.dstText);
-        const [cx, cy] = flights[i].to;
-        b.target.box.style.transform = `translate3d(${(dstBox.x - tRect.left).toFixed(2)}px, ${(dstBase - tBase).toFixed(2)}px, 0)`;
-        const sx = cx - (sInk.right - sInk.left) / 2 - sRect.left;
-        const sy = cy + sInk.ascent / 2 - sBase;
-        b.source.box.style.transform = `translate3d(${sx.toFixed(2)}px, ${sy.toFixed(2)}px, 0)`;
-        b.source.inner.style.transformOrigin = `${((sInk.right - sInk.left) / 2).toFixed(2)}px 50%`;
-        b.target.inner.style.transformOrigin = `${((tInk.right - tInk.left) / 2).toFixed(2)}px 50%`;
-        return { ...b, morph: morphScales(sInk.left + sInk.right, tInk.left + tInk.right) };
+        let letters: (readonly [Glyph, Glyph])[] | null = null;
+        if (source) {
+          // The page's letters on the page's own pens; the title's letters
+          // round the same ink centre, at the page's scale.
+          const toLetters = setGlyphs(target.box, target.text, f.dstBox.x, f.dstBase);
+          const sInk = inkOf(source.box, source.text);
+          const x0 = f.to[0] - (sInk.left + sInk.right) / 2 + sInk.left;
+          const yB = f.to[1] + (sInk.ascent - sInk.descent) / 2;
+          letters = pairGlyphs(setGlyphs(source.box, source.text, x0, yB), toLetters);
+        } else {
+          target.box.style.left = px(f.dstBox.x);
+          target.box.style.top = '0px';
+          target.box.style.top = px(f.dstBase - baselineIn(target.box));
+        }
+        return { ...f, wrap, source, target, letters };
       });
 
-      // The title's words leave it; the dark dissolves into the page.
+      // The title's words leave it (the clones take their place on this
+      // very frame); the dark dissolves into the page.
       flights.forEach(({ src }) => {
         src.style.visibility = 'hidden';
       });
+      titleLetters.style.visibility = 'hidden';
       const track = (a: Animation) => {
         landAnims.push(a);
         return a;
@@ -1284,8 +1601,7 @@ export default function OpeningFilm() {
         }),
       );
 
-      const [m0, m1] = LANDING_A.morph;
-      placed.forEach(({ wrap, source, target, flight, morph }) => {
+      placed.forEach(({ wrap, source, target, flight, letters }) => {
         const timing = { duration: ms(flight.duration), delay: ms(flight.delay), fill: 'both' as FillMode, easing: 'linear' };
         track(
           wrap.animate(
@@ -1296,14 +1612,25 @@ export default function OpeningFilm() {
             timing,
           ),
         );
-        const widths = (from: number, to: number): Keyframe[] => [
-          { offset: 0, transform: `scaleX(${from.toFixed(4)})` },
-          { offset: m0, transform: `scaleX(${from.toFixed(4)})`, easing: MORPH_EASE },
-          { offset: m1, transform: `scaleX(${to.toFixed(4)})` },
-          { offset: 1, transform: `scaleX(${to.toFixed(4)})` },
-        ];
-        track(source.inner.animate(widths(morph.source[0], morph.source[1]), timing));
-        track(target.inner.animate(widths(morph.target[0], morph.target[1]), timing));
+        if (!source) return;
+        if (letters) {
+          const win = LANDING_A.morph;
+          const us = morphSamples(win, 8);
+          letters.forEach(([a, b]) => {
+            [a, b].forEach((gl) => {
+              track(
+                gl.el.animate(
+                  [
+                    { offset: 0, transform: glyphTransform(gl, a, b, 0) },
+                    ...us.map((u) => ({ offset: u, transform: glyphTransform(gl, a, b, morphAt(u, win)) })),
+                    { offset: 1, transform: glyphTransform(gl, a, b, 1) },
+                  ],
+                  timing,
+                ),
+              );
+            });
+          });
+        }
         const [so, sf] = LANDING_A.sourceOut;
         const [ti, tf] = LANDING_A.targetIn;
         track(
@@ -1371,7 +1698,9 @@ export default function OpeningFilm() {
     // A verification hook (?filmT=<ms>): the film held still at any time.
     const seek = (t: number) => {
       if (!geo) return;
-      const film = overlay.getAnimations({ subtree: true }).filter((a) => !landAnims.includes(a));
+      // Its own list: a window already played is no longer among the
+      // elements' animations, and a seek back must find it.
+      const film = filmAnims;
       film.forEach((a) => {
         a.pause();
         a.currentTime = Math.min(t, plan.length + 39);
@@ -1396,8 +1725,23 @@ export default function OpeningFilm() {
       });
     }
 
+    // The fonts, and his photographs decoded (a machine or a page never
+    // cuts in on an empty plate), before the clock starts — at most
+    // FONT_WAIT_MS.
+    const picturesIn = () =>
+      Promise.all(
+        qa<HTMLImageElement>('img[data-pic]').map((img) =>
+          (img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+            img.addEventListener('load', () => resolve(), { once: true });
+            img.addEventListener('error', () => resolve(), { once: true });
+          })).then(() => (img.naturalWidth && img.decode ? img.decode().catch(() => undefined) : undefined)),
+        ),
+      );
     const fontsIn = Promise.race([
-      Promise.all(FONT_LOADS.map((f) => document.fonts?.load(f, FONT_SAMPLE) ?? Promise.resolve([]))).then(() => document.fonts?.ready),
+      Promise.all([
+        Promise.all(FONT_LOADS.map((f) => document.fonts?.load(f, FONT_SAMPLE) ?? Promise.resolve([]))).then(() => document.fonts?.ready),
+        picturesIn(),
+      ]),
       new Promise((resolve) => window.setTimeout(resolve, FONT_WAIT_MS)),
     ]).catch(() => undefined);
     const whenVisible = () =>
@@ -1466,7 +1810,7 @@ export default function OpeningFilm() {
     <>
       <div ref={rootRef} className="opening" aria-hidden="true">
         <div className="of-stage" data-stage>
-          <OpeningScenes />
+          <OpeningScenes pictures={pictures} />
         </div>
         <div className="of-flight" data-flight />
       </div>
