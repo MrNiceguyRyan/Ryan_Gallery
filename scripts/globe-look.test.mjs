@@ -89,7 +89,7 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   assert.deepEqual(STOCK_PAINT, PLANET_PAINT);
   assert.deepEqual(
     [look['raster-saturation'], look['raster-contrast'], look['raster-brightness-min'], look['raster-brightness-max'], look['raster-hue-rotate']],
-    [-0.46, 0.24, 0.04, 0.56, -8],
+    [-0.38, 0.24, 0.1, 0.53, -8],
   );
   for (const key of ['raster-color', 'raster-color-mix', 'raster-color-range']) assert.equal(key in look, false, key);
   // The colour kept at about half: never the full photograph (0, the bright
@@ -97,19 +97,24 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   assert.ok(look['raster-saturation'] <= -0.35 && look['raster-saturation'] >= -0.55);
   // Crisp: a firm contrast, never the grey's flat card.
   assert.ok(look['raster-contrast'] >= 0.18 && look['raster-contrast'] <= 0.3);
-  // The floor only just lifted (it was 0.15: a grey veil over the sea); the
-  // whites held well short of paper — the deserts' glare was the brightness
-  // (0.94 under the bright pass; 0.68 still left the phone's desert at
-  // 84–89 of luma, 0.56 brings it to 71–75).
-  assert.ok(look['raster-brightness-min'] <= 0.06);
+  // The floor lifted enough that the land by the sea stands over the water
+  // (at 0.04 the coasts of Miami, Orlando and New York were +1 to +2 of
+  // luma, the phone's New York −2: the coastline in hue only; at 0.10 with
+  // the darker tint +4 to +8), never the grey's 0.15 veil. The whites held
+  // well short of paper — the deserts' glare was the brightness (0.94 under
+  // the bright pass; 0.68 still left the phone's desert at 84–89 of luma,
+  // 0.53 over this floor holds it at 73–77).
+  assert.ok(look['raster-brightness-min'] >= 0.08 && look['raster-brightness-min'] <= 0.12);
   assert.ok(look['raster-brightness-max'] >= 0.5 && look['raster-brightness-max'] <= 0.6);
   // A hair warmer: the hue turns a few degrees at most.
   assert.ok(Math.abs(look['raster-hue-rotate']) <= 10);
-  // The seas: the page's ink a step lifted (not the bright pass's
-  // blue-green, not a teal), over the water only, at half strength.
-  assert.equal(WATER_TINT.color, '#383f37');
+  // The seas: the page's own ink (not the bright pass's blue-green, not a
+  // teal), over the water only, at half strength — a step under the first
+  // toned pass's #383f37, which sat level with the forests (the coast gone).
+  assert.equal(WATER_TINT.color, '#2b322c');
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(WATER_TINT.color.slice(i, i + 2), 16));
   assert.ok(g >= r && g >= b && Math.max(r, g, b) - Math.min(r, g, b) <= 10, 'olive-grey, near neutral');
+  assert.ok(0.2126 * r + 0.7152 * g + 0.0722 * b < 0.2126 * 0x38 + 0.7152 * 0x3f + 0.0722 * 0x37, 'under #383f37');
   assert.equal(WATER_TINT.opacity, 0.5);
   // The light's floor still lifts in 25 steps across FLOOR_Q.
   const values = new Set();
@@ -120,6 +125,11 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   // A thin atmosphere in the site's palette: the limb a quiet bone hairline,
   // the night the page's ink.
   assert.ok(SILVER_FOG['horizon-blend'] <= 0.02);
+  // The space round the planet the torn pass brings up is the archive's
+  // from the start, not the page's ground (#282c20): against the page's
+  // ground the planet's night-side sea sat 9.5 of luma under it.
+  assert.equal(SILVER_FOG['space-color'], '#1d2117');
+  assert.equal(SILVER_FOG_LITE['space-color'], '#1d2117');
   assert.match(SILVER_FOG['high-color'], /^rgba\(220, 218, 200, 0\.08\)$/);
   assert.equal(SILVER_FOG_LITE['high-color'], 'rgba(220, 218, 200, 0.18)');
   assert.deepEqual([PLANET_LIGHT.rim, PLANET_LIGHT.rimWidth, PLANET_LIGHT.glow, PLANET_LIGHT.spec], [0.28, 0.028, 0.12, 0.06]);
@@ -155,6 +165,10 @@ test('the reader\'s map carries the photograph whole, the seas tinted, under a c
   assert.match(fog, /color: 'rgba\(170, 170, 154, 0\.55\)'/);
   assert.match(fog, /'high-color': 'rgba\(214, 212, 196, 0\.14\)'/);
   assert.match(fog, /'space-color': '#1d2117'/);
+  // One space the whole way down: the dive's fog does not ramp it.
+  const dive = source.slice(source.indexOf('function diveFog('), source.indexOf('const PROLOGUE_FOG = '));
+  assert.match(dive, /'space-color': prologueAir\['space-color'\],/);
+  assert.doesNotMatch(dive, /ramp\(prologueAir\['space-color'\]/);
   assert.match(fog, /'horizon-blend': 0\.01,/);
   // The reading tone: the page's olive ink at 0.16 (a whisper, 0.04, under
   // the bright pass); the rail's shade and the readout's shadow lighter again.

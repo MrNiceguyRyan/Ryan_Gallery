@@ -402,8 +402,9 @@ const TIP_DEG_PER_S = 15;
 // #141810) went for the site's own palette: the far land goes into a warm
 // grey air (0.55), the limb is a bone hairline at 0.14 (a 0.01 blend), and
 // the space is the page's ink a step under its ground (#1d2117: luma 31
-// against the ground's 42, the whole planet's open sea at 32–36 just over
-// it, so the planet reads as a sphere, not a hole in a ring).
+// against the ground's 42, the whole planet's open sea at 33 just over it,
+// so the planet reads as a sphere, not a hole in a ring). The planet the
+// torn pass brings up has this space too (globeLook SILVER_FOG).
 const GLOBE_FOG = {
   range: [10, 20] as [number, number],
   color: 'rgba(170, 170, 154, 0.55)',
@@ -427,7 +428,10 @@ const PROLOGUE_INK_ENTRY = 0.15;
 // read before the atlas takes the camera (its reading line sits inside the
 // entrance's last stretch), and it was read under the prologue's clear air
 // — its sea and the space over the limb the darkest ground of any chapter —
-// with the archive's haze cutting in a scroll later.
+// with the archive's haze cutting in a scroll later. The space is not
+// ramped: it is the archive's from the moment the planet is up (it ramped
+// from the page's ground, and the planet's night-side sea sat 9.5 of luma
+// under it).
 const DIVE_FOG_ZOOMS = [4.2, 5] as const;
 function diveFog(prologueAir: typeof SILVER_FOG) {
   const [from, to] = DIVE_FOG_ZOOMS;
@@ -436,7 +440,7 @@ function diveFog(prologueAir: typeof SILVER_FOG) {
     range: ramp(['literal', prologueAir.range], ['literal', GLOBE_FOG.range]),
     color: ramp(prologueAir.color, GLOBE_FOG.color),
     'high-color': ramp(prologueAir['high-color'], GLOBE_FOG['high-color']),
-    'space-color': ramp(prologueAir['space-color'], GLOBE_FOG['space-color']),
+    'space-color': prologueAir['space-color'],
     'horizon-blend': ramp(prologueAir['horizon-blend'], GLOBE_FOG['horizon-blend']),
     'star-intensity': 0,
   } as unknown as typeof GLOBE_FOG;

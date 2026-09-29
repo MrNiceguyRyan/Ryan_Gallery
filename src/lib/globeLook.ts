@@ -30,41 +30,56 @@ const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 //   Page 102, the whole planet 77 at 0.48–0.56, the phone's Zion 133 — a
 //   satellite screenshot in a dark print archive. Owner: 地球可以再优化一下，
 //   太亮了也和整体网站风格差异过大.
-// - Now. The whites stop at 0.56 (the glare was the deserts'), the colour
-//   comes down by 0.46 — half, not the grey's washout — and a firmer contrast
-//   (0.24) with the floor only just lifted keeps it crisp rather than dull
-//   (the grey's whites were 0.58 too, but over a 0.15 floor, the colour
-//   washed out and a haze: a 0.43 range with nothing in it); the hue a few
-//   degrees warmer (the greens toward olive). Miami 39 / 11 / 0.22, Orlando
-//   41, New York 37, Page 59 / 29 / 0.29 (p99 126), Zion 56, Bryce 58; the
-//   whole planet 44 / 17 / 0.22 in space of 31, the open sea 32–36 (the
-//   whites leave the sea and the space where they were). The phone: 31–36
-//   by the sea, 71–75 in the desert. The desert alone, right of the rail:
-//   72–74 (its land 84–86), where the bright pass's was 129–132 (land
-//   132–136). A first toned pass stopped the whites at 0.68: the desert
-//   alone was still 85–88 (land 96–99) and the phone's 84–89, inside the
-//   band the owner had called 太亮. Twice the grey's depth or more in the
-//   deserts (sd 22–29 against its 7–14).
+// - Toned, first. The whites at 0.68, then 0.56 (the glare was the
+//   deserts': at 0.68 the desert alone right of the rail was 85–88 and the
+//   phone's 84–89, inside the band the owner had called 太亮), the colour
+//   down by 0.46, the floor at 0.04 and a sea tint of #383f37. The deserts
+//   were right (sd 22–29, twice the grey's depth), but by the sea the land
+//   had gone down to the water's own tone: the coast (the land within 12 px
+//   of the sea less the sea within 12 px of the land) +2 at Miami, Orlando
+//   and New York, +1 on the phone and −2 at the phone's New York, the land
+//   there darker than the sea — the coastline in hue only, and New York's
+//   frame (31) no deeper than the grey card's (43). The forests, under the
+//   colour's cut and the low whites, sat at the lifted sea's 38–47.
+// - Now. The floor lifts to 0.10 and the sea's tint goes down a step
+//   (#2b322c), so the land stands over the water again; the whites stop at
+//   0.53 and the colour comes down by 0.38, not 0.46 (the lift takes the
+//   saturation with it); the contrast (0.24) and the hue (−8, the greens
+//   toward olive) stay. A lower contrast (0.12) lifts the sea as much as
+//   the land (the coast +2 to +2.5, the phone's New York −1), and the floor
+//   alone (0.10 over the old tint) lifts both: +4 to +5, the phone +1 to +4.
+//   The coast now: +8.4 at Miami and Orlando, +6.5 at New York (the grey's
+//   +7 to +8), the phone +6.5, +6.5 and +3.9. Miami
+//   42 / 12 / 0.20, Orlando 43, New York 41; Page 61 / 27 / 0.27 (p99 120,
+//   it was 126), Zion 58, Bryce 61; the whole planet 47 / 17 / 0.18 in
+//   space of 31, the open sea 33 (the Atlantic, the Gulf). The phone: 35–39
+//   by the sea, 73–77 in the desert. The desert alone, right of the rail:
+//   75–76 (its land 82–84), where the bright pass's was 129–132.
 // The same grade on the planet the page brings up (PLANET_PAINT) and on the
 // reader's map (STOCK_PAINT): nothing changes colour on the way down (the two
-// layers at one camera inside SILVER_EXIT differ by 0.05 of 255 per channel;
-// the dive's frames step at most 1.3 luma once the planet is up).
+// layers at one camera inside SILVER_EXIT differ by 0.02 of 255 per channel;
+// the dive's frames step at most 1.4 luma once the planet is up).
 const ATLAS_GRADE = {
-  'raster-saturation': -0.46,
+  'raster-saturation': -0.38,
   'raster-contrast': 0.24,
-  'raster-brightness-min': 0.04,
-  'raster-brightness-max': 0.56,
+  'raster-brightness-min': 0.1,
+  'raster-brightness-max': 0.53,
   'raster-hue-rotate': -8,
 } as const;
 export const STOCK_PAINT = ATLAS_GRADE;
 export const PLANET_PAINT = ATLAS_GRADE;
 /** The seas: a dark olive-grey laid over the imagery's water (the basemap's
  *  own water polygons, a fill over the photograph), under the light, the
- *  route and the names — the page's ink a step lifted, so on the whole
- *  planet the open sea sits just over the space round it (the Atlantic 33,
- *  the Gulf 32, space 31) and the planet reads as a sphere. One step darker
- *  (#2b322c) it sat under the space: a dark hole in a ring of air. */
-export const WATER_TINT = { color: '#383f37', opacity: 0.5 } as const;
+ *  route and the names — the page's own ink, so the land by the sea stands
+ *  over it (the coasts above). Over the grade's 0.10 floor the open sea
+ *  still sits just over the space round the whole planet (the Atlantic and
+ *  the Gulf 33, space 31), and the planet reads as a sphere. At 0.04 this
+ *  tint sat under the space (a dark hole in a ring of air), so the first
+ *  toned pass lifted it to #383f37 — level with the forests, the coast
+ *  gone. The tint lifts the photograph's own water, which is darker still:
+ *  thinner (0.34, over the first pass's grade) the open sea fell to 20 in
+ *  space of 31, the rests to 25–34. */
+export const WATER_TINT = { color: '#2b322c', opacity: 0.5 } as const;
 // The planet's paint's way out on the dive onto the reader's map's: a
 // crossfade of two layers (RouteAtlas, `writeSatelliteVeil`) across these
 // zooms. The two carry one grade now, so it is invisible; the two layers
@@ -91,14 +106,20 @@ export function silverFloorAt(q: number) {
 // site's own type colour; it was a pale sky blue under the bright pass, off
 // the palette), the space round it darker than the page so the planet stands
 // out. The air on the planet the page brings up comes from the light, on the
-// lit limb (planetLight); the fog keeps a whisper of bone there, and its
-// space is the page's own ground (the planet rises over the page). The lite
-// light (weak GPUs) draws no air, so its fog carries the rim instead.
+// lit limb (planetLight); the fog keeps a whisper of bone there. Its space
+// is the archive's (#1d2117, RouteAtlas GLOBE_FOG) from the moment the
+// planet is up, not the page's ground (#282c20): the planet the torn pass
+// brings up shows its night side (the Pacific), and against the page's
+// ground that sea sat 9.5 of luma under the space round it, a dark hole
+// (the grey build had it 11 over, the bright one 6). One space the whole
+// way down: the sea there is level with it now (−1.1), where the lit open
+// sea of the idle planet sits 2 over it. The lite light (weak GPUs) draws
+// no air, so its fog carries the rim instead.
 export const SILVER_FOG = {
   range: [10, 20] as [number, number],
   color: 'rgba(190, 214, 226, 0)',
   'high-color': 'rgba(220, 218, 200, 0.08)',
-  'space-color': '#282c20',
+  'space-color': '#1d2117',
   'horizon-blend': 0.012,
   'star-intensity': 0,
 };
