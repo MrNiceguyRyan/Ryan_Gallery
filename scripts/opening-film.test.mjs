@@ -16,7 +16,9 @@
 // left edge, baseline and cap height); the flash budget (≤ 6 turns, ≤ 3 in
 // any second, a mid ground turning nothing; the proof turns none); the
 // proof (its beats on the sixth, its clock counted from its first frame,
-// the stylesheet's count-in at rest when printed); the anchor (one centre, one
+// the stylesheet's lights at rest when down, both plates the clock's, so the
+// lime never stands alone longer than its beat, the word never in a
+// stand-in face); the anchor (one centre, one
 // height, one cap height, its reading zone kept clear); the drift (on across
 // a cut, or a quarter turn); at least four type tiers a page; no place names
 // but the eggs; the words (ARCHIVE, CAMERA — never cinema — TRAVEL, THOUGHT,
@@ -253,9 +255,12 @@ test('act 0: the proof — a count-in on the sixth, before the clock (the plan u
   for (const b of [paint, lime, word]) assert.ok(Number.isInteger(b), `${b}: whole sixths`);
   assert.ok(paint > lime && lime > word && word > 0, 'the paint, the lime plate, the ink plate, then the page');
   assert.ok(close(F.PRELUDE_MS, paint * F.CUT_MS));
-  assert.ok(P0.draw * F.CUT_MS <= (paint - lime) * F.CUT_MS + 1e-6, 'the marks are drawn by the time the lime prints');
+  assert.ok(Number.isInteger(P0.lights) && P0.lights * F.CUT_MS <= (paint - lime) * F.CUT_MS + 1e-6, 'the lights are down by the time the lime prints');
   assert.ok(P0.set <= (lime - word) * F.CUT_MS - 1000 / 60, 'the lime has set a frame before the word prints');
-  assert.ok(close(F.PROOF_LIME_MS, (paint - lime) * F.CUT_MS + P0.set));
+  // The lime alone on the sheet: one beat, never more (the owner's eye:
+  // longer, a lone bar reads as a loading bar).
+  assert.ok((lime - word) * F.CUT_MS <= 500, 'the word within half a second of the lime');
+  assert.ok(F.GRID_HAIR_MS > 0 && F.GRID_HAIR_MS <= 0.5, 'the clock a hair ahead of the grid, never a frame');
   assert.ok(P0.sheet < 1 && P0.sheet > 0.99, 'never opaque, never seen through');
   assert.ok(P0.unprinted > 0 && P0.unprinted < 0.005, 'drawn, never seen');
   for (const [layout, plan] of Object.entries(PLANS)) {
@@ -295,13 +300,14 @@ test('act 0: the proof — a count-in on the sixth, before the clock (the plan u
   for (const n of F.PLACE_NAMES) for (const text of slug) assert.doesNotMatch(text, new RegExp(`\\b${n}\\b`, 'i'), text);
 });
 
-test('the proof\'s clock: film 0 on the proof\'s sixth grid, the word never before the keyframes', () => {
+test('the proof\'s clock: film 0 on the proof\'s sixth grid, the lime never before the keyframes, the word a third of a second after it', () => {
   const CUT = F.CUT_MS;
+  const { lime, word } = F.PRELUDE.beats;
   assert.ok(close(F.filmStart(1000, 1100), 2000), 'fast: the page a second after the first paint');
-  assert.ok(close(F.filmStart(1000, 1000 + 4 * CUT), 2000), 'ready on the word\'s own beat');
-  assert.ok(close(F.filmStart(1000, 1700), 2000 + CUT), 'a sixth late');
-  assert.ok(close(F.filmStart(1000, 2800), 2000 + 7 * CUT), 'a slow island');
-  assert.ok(close(F.filmStart(null, 500), 500 + 2 * CUT), 'no proof to count from: the word when ready');
+  assert.ok(close(F.filmStart(1000, 1000 + 2 * CUT), 2000), 'ready on the lime\'s own beat');
+  assert.ok(close(F.filmStart(1000, 1400), 2000 + CUT), 'a sixth late');
+  assert.ok(close(F.filmStart(1000, 2800), 2000 + 9 * CUT), 'a slow island');
+  assert.ok(close(F.filmStart(null, 500), 500 + 4 * CUT), 'no proof to count from: the lime when ready');
   const rand = F.seeded(4061);
   for (let i = 0; i < 2000; i += 1) {
     const o = rand() * 5000;
@@ -309,12 +315,17 @@ test('the proof\'s clock: film 0 on the proof\'s sixth grid, the word never befo
     const t0 = F.filmStart(o, r);
     assert.ok(onGrid(t0, CUT, o), `on the proof's grid: ${o} ${r}`);
     assert.ok(t0 - o >= F.PRELUDE_MS - 1e-6, 'never shorter than the proof');
-    assert.ok(t0 - 2 * CUT >= r - 1e-6, `the word never before the keyframes: ${o} ${r}`);
-    assert.ok(t0 - 2 * CUT < Math.max(r, o + 4 * CUT) + CUT, `never more than a sixth late: ${o} ${r}`);
+    const limeAt = t0 - lime * CUT;
+    const wordAt = t0 - word * CUT;
+    assert.ok(limeAt >= r - 1e-6, `the lime never before the keyframes: ${o} ${r}`);
+    assert.ok(limeAt < Math.max(r, o + (6 - lime) * CUT) + CUT, `never more than a sixth late: ${o} ${r}`);
+    // However slow the island, the lime and the word are one clock's: the
+    // lime alone on the sheet for its beat, never longer.
+    assert.ok(close(wordAt - limeAt, (lime - word) * CUT, 1e-6), `the word a beat after the lime: ${o} ${r}`);
   }
 });
 
-test('the proof is the first paint: the stylesheet counts in, one animation an element, at rest when printed', () => {
+test('the proof is the first paint: a flat sheet; the stylesheet brings the lights down, at rest when down; the plates are held for the clock', () => {
   const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const P0 = F.PRELUDE;
   const CUT = F.CUT_MS;
@@ -324,83 +335,101 @@ test('the proof is the first paint: the stylesheet counts in, one animation an e
   const marks = ruleOf(css, '.of-proof-marks');
   assert.match(marks, /opacity: 1;/);
   assert.match(marks, /visibility: visible;/);
-  // The three running rules: on html[data-opening] (never data-clock, so the
-  // clock can't cut the count short), ONE animation each (two on one
-  // property are played on the main thread, where hydration would stall
-  // them), filled both ways (the island reads the proof's start from them
-  // at any moment, and seeks them).
+  // ONE running rule: the lights, on html[data-opening] (never data-clock,
+  // so the clock can't cut it short), one animation (compositor), filled
+  // both ways (the island reads the proof's start from it at any moment,
+  // and seeks it) — on the vignette's own ::before, so the island's
+  // opacity on the vignette is never the same property.
   const runs = [...css.matchAll(/([^{}]+)\{[^}]*animation:[^;}]*of-proof[^}]*\}/g)];
-  assert.equal(runs.filter((m) => !/animation: none/.test(m[0])).length, 3);
-  for (const m of runs) {
-    assert.doesNotMatch(m[1], /data-clock/, m[1]);
-    if (/animation: none/.test(m[0])) continue;
-    assert.match(m[1].trim(), /^html\[data-opening\] /, m[1]);
-    const value = m[0].match(/animation:\s*([^;]+);/)[1];
-    assert.doesNotMatch(value.replace(/\([^)]*\)/g, ''), /,/, `one animation: ${value}`);
-    assert.match(value, / both$/, `filled both ways: ${value}`);
-  }
-  // The lime plate: held unprinted to its beat, then the first impression
-  // setting to full on the house curve (the plan's keyframes, sampled).
-  const lime = ruleOf(css, "html[data-opening] .of-key[data-key='0'] .of-key__block").match(/animation: of-proof-lime (\d+\.?\d*)ms linear both;/);
-  assert.ok(lime, 'the lime plate');
-  assert.ok(close(Number(lime[1]), F.PROOF_LIME_MS, 0.001), `${lime[1]} ms`);
-  const got = keyframesOf(css, 'of-proof-lime');
-  const want = F.proofLimeKeyframes();
-  assert.equal(got.length, want.length, 'as many keyframes as the plan');
-  got.forEach((k, i) => {
-    assert.ok(close(k.offset, want[i].offset, 1e-6), `offset ${i}: ${k.offset} / ${want[i].offset}`);
-    assert.ok(close(k.opacity, want[i].opacity, 5e-4), `opacity ${i}: ${k.opacity} / ${want[i].opacity}`);
-  });
-  // The lime prints on its beat's own frame: the step is taken within a
-  // hundredth of a millisecond before it, never after.
-  const beat = (P0.beats.paint - P0.beats.lime) * CUT;
-  for (const k of [want[1], want[2], got[1], got[2]]) {
-    const t = k.offset * F.PROOF_LIME_MS;
-    assert.ok(t < beat && beat - t < 0.01, `the lime's step at ${t} ms, its beat ${beat} ms`);
-  }
-  assert.equal(want[2].opacity, P0.limeInk, 'its first impression');
-  assert.equal(want.at(-1).opacity, 1, 'at rest: printed');
-  assert.equal(got[0].opacity, P0.unprinted);
+  const running = runs.filter((m) => !/animation: none/.test(m[0]));
+  assert.equal(running.length, 1, running.map((m) => m[1].trim()).join(' | '));
+  for (const m of runs) assert.doesNotMatch(m[1], /data-clock/, m[1]);
+  const lights = ruleOf(css, 'html[data-opening] .of-frame__vignette::before').match(/animation: of-proof-lights (\d+\.?\d*)ms var\(--ease-develop\) both;/);
+  assert.ok(lights && close(Number(lights[1]), P0.lights * CUT, 0.001), 'the lights go down over the first beat');
+  assert.deepEqual(keyframesOf(css, 'of-proof-lights').map((k) => [k.offset, k.opacity]), [[0, 0], [1, 1]], 'from none to down, at rest down');
+  for (const k of keyframesOf(css, 'of-proof-lights')) assert.match(k.body.trim(), /^opacity: [\d.]+;$/, 'opacity only');
+  // The vignette's gradient is its ::before's (the element itself carries none).
+  assert.match(css, /\n\.of-frame__vignette::before \{[^}]*content: '';[^}]*background: radial-gradient\(/);
+  assert.match(css, /\n\.of-frame__vignette \{[^}]*\}/);
+  assert.doesNotMatch(css.match(/\n\.of-frame__vignette \{[^}]*\}/)[0], /background/);
+  // Nothing else of the proof is the stylesheet's to print: no lime, word,
+  // label, crop-mark or grain animation (a lime printed on the stylesheet's
+  // clock stood alone for seconds on a slow load, waiting for the island's).
+  for (const name of ['of-proof-lime', 'of-proof-draw', 'of-proof-plate', 'of-grain-first']) assert.ok(!css.includes(name), name);
+  assert.doesNotMatch(ruleOf(css, ".of-key[data-key='0'] .of-key__block"), /animation/);
+  // The plates are held for the clock: the lime and the grain drawn at the
+  // pages' warm opacity (unseen, their rasters done), the word and both
+  // labels at 0.
+  const warm = css.match(/\.opening:not\(\[data-clock\]\) \.of-key\[data-key='0'\] \.of-key__block,\s*\.opening:not\(\[data-clock\]\) \.of-frame__grain \{ opacity: ([\d.]+); \}/);
+  assert.ok(warm, 'the lime and the grain held');
+  assert.equal(Number(warm[1]), P0.unprinted);
+  assert.match(css, /\.opening:not\(\[data-clock\]\) \.of-key\[data-key='0'\] \.of-key__word,\s*\.opening:not\(\[data-clock\]\) \.of-proof__slug \[data-plate\] \{ opacity: 0; \}/);
   const island = read('../src/components/home/OpeningFilm.tsx');
   assert.equal(Number(island.match(/const WARM_OPACITY = ([\d.]+);/)[1]), P0.unprinted, 'unprinted is the pages\' own warm opacity');
-  // The crop marks rule in by the lime's beat, on the house curve.
-  const draw = ruleOf(css, 'html[data-opening] .of-proof-marks .of-crop').match(/animation: of-proof-draw (\d+\.?\d*)ms var\(--ease-arrive\) both;/);
-  assert.ok(draw && close(Number(draw[1]), P0.draw * CUT, 0.001), 'the crop marks');
-  for (const k of keyframesOf(css, 'of-proof-draw')) assert.match(k.body.trim(), /^transform: [^;]+;$/, 'transform only');
-  // The lime plate's label comes with it (a step, printed at rest).
-  const plate = ruleOf(css, "html[data-opening] .of-proof__slug [data-plate='1']").match(/animation: of-proof-plate (\d+\.?\d*)ms steps\(1, end\) both;/);
-  assert.ok(plate && close(Number(plate[1]), (P0.beats.paint - P0.beats.lime) * CUT, 0.001), 'plate 1 with the lime');
-  assert.deepEqual(keyframesOf(css, 'of-proof-plate').map((k) => k.opacity), [0, 1]);
   assert.match(css, /\.of-proof__slug \[data-plate\] \{ display: inline-block; \}/, 'a box of its own (its opacity the compositor\'s)');
-  // The ink plate is the clock's: held until the clock is laid.
-  assert.match(css, /\.opening:not\(\[data-clock\]\) \.of-key\[data-key='0'\] \.of-key__word,\s*\.opening:not\(\[data-clock\]\) \.of-proof__slug \[data-plate='2'\] \{ opacity: 0; \}/);
-  // Reduced motion: no proof (the same selectors as the running rules).
+  // Reduced motion: no proof (the same selector as the running rule).
   const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.match(rm, /\.of-proof,\s*\.of-proof-marks \{ opacity: 0; visibility: hidden; \}/);
-  assert.match(rm, /html\[data-opening\] \.of-proof-marks \.of-crop,\s*html\[data-opening\] \.of-proof__slug \[data-plate='1'\],\s*html\[data-opening\] \.of-key\[data-key='0'\] \.of-key__block \{ animation: none; \}/);
+  assert.match(rm, /html\[data-opening\] \.of-frame__vignette::before \{ animation: none; \}/);
   // The phone keeps its registration mark, and the slug above the pill.
   const phone = css.slice(css.indexOf('.of-proof__wide { display: none; }') - 400, css.indexOf('.of-proof__wide { display: none; }') + 200);
   assert.match(phone, /\.of-proof-marks \.of-reg \{\s*display: block;\s*left: calc\(50% - 10px\);\s*width: 20px;\s*height: 20px;/);
   assert.match(phone, /bottom: calc\(max\(clamp\(1\.25rem, 2\.6vh, 2\.25rem\), env\(safe-area-inset-bottom\)\) \+ 58px\);/);
   // The markup: the sheet over the pages, under the anchor; the marks over
-  // the soft edge; static, and the slug in the system monospace only.
+  // the soft edge; static; no crop marks (flush in the corners they read as
+  // the bracket frame the owner had taken off the covers, and the foot's
+  // right corner is the Skip pill's); the slug in the system monospace only.
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   const main = scenes.slice(scenes.indexOf('export default function OpeningScenes'));
   const at = (s) => main.indexOf(s);
   assert.ok(at('<ProofSheet') > at('<Cut key') && at('<ProofSheet') < at('className="of-anchor"'), 'the sheet between the pages and the anchor');
   assert.ok(at('<ProofMarks') > at('of-frame__soft'), 'the marks above the soft edge');
+  assert.ok(at('data-vignette') > at('<ProofMarks'), 'the lights over the proof');
   const marksFn = scenes.slice(scenes.indexOf('function ProofMarks'), scenes.indexOf('// ── Act 1'));
+  assert.match(marksFn, /<Marks crops=\{false\} \/>/);
+  assert.match(scenes, /\{crops && \(\s*<>\s*<i className="of-crop of-crop--tl" \/>/);
   assert.match(marksFn, /className="of-proof__slug of-mono"/);
   assert.doesNotMatch(marksFn, /font-serif|font-ui/);
   assert.match(marksFn, /<span data-plate="1">\{PROOF_SLUG\.plates\[0\]\}<\/span>/);
   assert.match(marksFn, /<span data-plate="2">\{PROOF_SLUG\.plates\[1\]\}<\/span>/);
 });
 
+test('the proof\'s plates on the clock: the lime a third of a second before the word, setting to full a frame before it', () => {
+  const P0 = F.PRELUDE;
+  const CUT = F.CUT_MS;
+  const keys = F.proofLimeKeys();
+  const lime = -P0.beats.lime * CUT;
+  assert.deepEqual(keys.slice(0, 3).map((k) => [+k.t.toFixed(6), k.opacity]), [[-F.PRELUDE_MS, P0.unprinted], [+lime.toFixed(6), P0.unprinted], [+lime.toFixed(6), P0.limeInk]], 'unprinted to its beat, then its first impression (a step)');
+  assert.ok(close(keys.at(-1).t, lime + P0.set) && keys.at(-1).opacity === 1, 'set to full');
+  for (let i = 1; i < keys.length; i += 1) {
+    assert.ok(keys[i].t >= keys[i - 1].t, 'in time order');
+    assert.ok(keys[i].opacity >= keys[i - 1].opacity, 'the ink only sets');
+  }
+  // On the house curve (EASE.arrive), sampled every 25 ms at most.
+  for (let i = 4; i < keys.length; i += 1) assert.ok(keys[i].t - keys[i - 1].t <= 25 + 1e-9);
+  assert.ok(keys.at(-1).t <= -P0.beats.word * CUT - 1000 / 60, 'set a frame before the word');
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.match(island, /preKeys\(q\('\[data-key="0"\] \[data-block\]'\), proofLimeKeys\(\)\);/);
+  assert.match(island, /pre\(q\('\[data-plate="1"\]'\), 0, \[\[pr\.lime, 1\]\]\);/);
+  // The film's grain comes with the lime (unseen before: drawn warm), and
+  // goes where it always went.
+  assert.match(island, /pre\(grainEl, WARM_OPACITY, \[\[pr\.lime, 1\], \[acts\.hand\.start, 0\]\]\);\s*if \(grainEl\) goneAfter\(grainEl, acts\.hand\.start\);/);
+  assert.match(island, /\[q\('\[data-paper\]'\), q\('\[data-soft\]'\), q\('\[data-vignette\]'\)\]\.forEach\(\(el\) => el && scene\(el, 0, acts\.hand\.start\)\);/);
+  // The word's face: the first scene's, waited for before the clock (the
+  // proof holds for it, never a stand-in face), a while at most.
+  assert.equal(F.SCENES[0].word, 'ARCHIVE');
+  assert.equal(F.SCENES[0].face, 'f900');
+  assert.equal(F.PROOF_FACE, '900 100px Fraunces');
+  assert.ok(F.FONT_LOADS.includes(F.PROOF_FACE));
+  assert.ok(F.PROOF_FACE_WAIT_MS >= F.FONT_WAIT_MS && F.PROOF_FACE_WAIT_MS <= 1500, `${F.PROOF_FACE_WAIT_MS} ms`);
+  assert.match(island, /const proofFaceIn = Promise\.race\(\[\s*\(document\.fonts\?\.load\(PROOF_FACE, FONT_SAMPLE\) \?\? Promise\.resolve\(\[\]\)\)\.catch\(\(\) => undefined\),\s*new Promise\(\(resolve\) => window\.setTimeout\(resolve, seekParam != null \? 6000 : PROOF_FACE_WAIT_MS\)\),\s*\]\);/);
+});
+
 test('the island: one clock from the proof\'s first frame; the proof moves with seek and skip', () => {
   const island = read('../src/components/home/OpeningFilm.tsx');
   const begin = island.slice(island.indexOf('const begin = () => {'), island.indexOf('// A verification hook'));
   assert.match(begin, /overlay\.setAttribute\('data-clock', ''\);\s*const proof = proofAnims\(\);/);
-  assert.match(begin, /t0 = filmStart\(seekParam != null \? null : origin, nowMs\(\) \+ CLOCK_LEAD_MS\);/);
+  assert.match(begin, /t0 = filmStart\(seekParam != null \? null : origin, nowMs\(\) \+ CLOCK_LEAD_MS\) - GRID_HAIR_MS;/);
   assert.match(begin, /const origin = starts\.length \? Math\.min\(\.\.\.starts\) : proof\.length \? nowMs\(\) : null;/);
   assert.match(begin, /if \(a\.startTime == null\) a\.startTime = t0 - PRELUDE_MS;/);
   assert.match(begin, /if \(pendingSkip\) \{[\s\S]*?proof\.forEach\(\(a\) => a\.finish\(\)\);[\s\S]*?\} else \{/);
@@ -853,7 +882,7 @@ test('the fonts: every face asked for before the clock; italic only in Fraunces 
   for (const face of ['900 100px Fraunces', '400 100px Fraunces', 'italic 400 100px Fraunces', 'italic 500 100px Fraunces', '700 20px "Space Grotesk"', '600 20px "Space Grotesk"', '500 20px "Space Grotesk"']) assert.ok(faces.includes(face), face);
   const island = read('../src/components/home/OpeningFilm.tsx');
   assert.match(island, /document\.fonts\?\.load\(f, FONT_SAMPLE\)/);
-  assert.match(island, /fontsIn\.then\(whenVisible\)\.then/);
+  assert.match(island, /Promise\.all\(\[fontsIn, proofFaceIn\]\)\.then\(whenVisible\)\.then/);
   // His photographs are decoded behind the film (never waited for).
   assert.match(island, /img\.decode\?\.\(\)/);
   // Every italic rule's class is set on Fraunces (font-serif) in the markup,
@@ -885,10 +914,10 @@ test('a reload never sits still: the clock waits ≤ 300 ms for the faces, never
   // keyframes are laid: ≤ 300 + 2 frames + the lead after the island starts.
   const lead = Number(island.match(/const CLOCK_LEAD_MS = (\d+);/)[1]);
   assert.ok(F.FONT_WAIT_MS + 2 * 17 + lead <= 400, 'the clock within 0.4 s of the island');
-  assert.match(island, /fontsIn\.then\(whenVisible\)\.then\(\(\) => \{\s*\/\/[^\n]*\n\s*requestAnimationFrame\(begin\);/);
-  // Before the clock, the first page's grain moves and the Skip pill comes up.
+  assert.match(island, /Promise\.all\(\[fontsIn, proofFaceIn\]\)\.then\(whenVisible\)\.then\(\(\) => \{\s*\/\/[^\n]*\n\s*requestAnimationFrame\(begin\);/);
+  // Before the clock, the proof's lights go down and the Skip pill comes up.
   const css = read('../src/styles/opening.css');
-  assert.match(css, /\.opening:not\(\[data-clock\]\) \.of-frame__grain \.of-grain__tile \{ animation: of-grain-first 200ms steps\(1, end\) infinite; \}/);
+  assert.match(css, /html\[data-opening\] \.of-frame__vignette::before \{ animation: of-proof-lights /);
   assert.match(css, /html\[data-opening\] \.of-skip \{\s*display: inline-flex;\s*animation: of-skip-in 360ms/);
 });
 

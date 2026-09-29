@@ -2,7 +2,7 @@
    A retro editorial type film; the acts, the scenes, the machines and the
    burn's frames are data in src/lib/openingFilm.ts, and the island only
    times what this sheet draws. This sheet is the film's MATERIALS: the
-   proof it opens on (the first paint, counting in by itself); the
+   proof it opens on (the first paint: the lights go down by themselves); the
    match cuts' pages round the lime anchor (editorial pages on paper, on the
    dark neutrals and on the ticket stocks, with their layered print, and
    twelve pieces of printed matter); the hand-off's lime block; eight
@@ -102,16 +102,6 @@ html[data-opening=''][data-reel='reel'] nav[data-site-nav] {
 @keyframes of-skip-in {
   from { opacity: 0; transform: translateY(6px); }
 }
-/* The frame's grain moves from the first paint (the island's own grain,
-   counted from the proof's first frame, takes over as the clock is laid):
-   the proof is never a still. */
-@keyframes of-grain-first {
-  0% { transform: translate(0px, 0px); }
-  25% { transform: translate(-37px, 21px); }
-  50% { transform: translate(52px, -44px); }
-  75% { transform: translate(-18px, -71px); }
-}
-.opening:not([data-clock]) .of-frame__grain .of-grain__tile { animation: of-grain-first 200ms steps(1, end) infinite; }
 @keyframes of-failsafe-in {
   from { opacity: 0; }
   to { opacity: 1; pointer-events: auto; }
@@ -260,16 +250,22 @@ html[data-film-lock] body { overflow: clip !important; }
 
 /* ── Act 0: the proof ──
    The first paint is a printer's proof on the newspaper's newsprint
-   (PRELUDE in src/lib/openingFilm.ts): the stylesheet rules the crop marks
-   in and prints the lime plate from the first paint (html[data-opening],
-   never data-clock, so the clock can't cut the count short). One animation
-   an element, so the compositor plays them through the island's hydration;
-   each filled both ways and at rest in its printed state, so the island can
-   read the proof's start from them at any moment (its clock is counted from
-   it) and seek them, and a cancel never un-prints anything. The island
-   prints the word on the film's clock and lets the proof go at film 0. The
-   first page is under the sheet from the first paint (the sheet at 0.998:
-   never opaque, so the page is rastered as it always was, and never seen). */
+   (PRELUDE in src/lib/openingFilm.ts): a flat, even sheet with its marks
+   (the registration mark at its head, the step bar at its foot) and its
+   slug. The stylesheet plays its first beat only: the lights go down — the
+   frame's vignette comes in over the first third of a second, from
+   html[data-opening] (never data-clock, so the clock can't cut it short),
+   on the vignette's own ::before (the island times the vignette itself: no
+   property is ever the stylesheet's and the island's in turn), filled both
+   ways and at rest when down, so the island reads the proof's first frame
+   from it at any moment (its clock is counted from it) and seeks it.
+   Everything else is held unprinted until the island's clock: the lime
+   plate and its word, their labels, and the grain. The island prints both
+   plates a third of a second apart on its clock, and lets the proof go at
+   film 0; a slow island is waited for under a blank proof, finished and
+   still — never a lone lime bar on the sheet. The first page is under the
+   sheet from the first paint (0.998: never opaque, so the page is rastered
+   as it always was, and never seen). */
 .of-proof {
   position: absolute;
   inset: 0;
@@ -287,19 +283,15 @@ html[data-film-lock] body { overflow: clip !important; }
   visibility: visible;
   will-change: opacity;
 }
-/* Each crop mark rules out from its trim corner (the vertex of its two
-   hairlines). */
-.of-proof-marks .of-crop--tl { transform-origin: 100% 100%; }
-.of-proof-marks .of-crop--tr { transform-origin: 0 100%; }
-.of-proof-marks .of-crop--bl { transform-origin: 100% 0; }
-.of-proof-marks .of-crop--br { transform-origin: 0 0; }
-html[data-opening] .of-proof-marks .of-crop { animation: of-proof-draw 333.333ms var(--ease-arrive) both; }
-html[data-opening] .of-key[data-key='0'] .of-key__block { animation: of-proof-lime 583.333ms linear both; }
-html[data-opening] .of-proof__slug [data-plate='1'] { animation: of-proof-plate 333.333ms steps(1, end) both; }
-/* The ink plate is the clock's (it is held here until the clock is laid;
-   without the island it never prints — the failsafe lets the page through). */
+html[data-opening] .of-frame__vignette::before { animation: of-proof-lights 333.333ms var(--ease-develop) both; }
+/* The plates are the clock's: held until the clock is laid (the lime and
+   the grain drawn, unseen, at the pages' warm opacity: their rasters are
+   done before they print). Without the island they never print — the
+   failsafe lets the page through. */
+.opening:not([data-clock]) .of-key[data-key='0'] .of-key__block,
+.opening:not([data-clock]) .of-frame__grain { opacity: 0.002; }
 .opening:not([data-clock]) .of-key[data-key='0'] .of-key__word,
-.opening:not([data-clock]) .of-proof__slug [data-plate='2'] { opacity: 0; }
+.opening:not([data-clock]) .of-proof__slug [data-plate] { opacity: 0; }
 /* The slug at the proof's foot: the system monospace (it cannot swap). */
 .of-proof__slug {
   position: absolute;
@@ -315,29 +307,8 @@ html[data-opening] .of-proof__slug [data-plate='1'] { animation: of-proof-plate 
 }
 /* A box of their own, so their opacity is the compositor's. */
 .of-proof__slug [data-plate] { display: inline-block; }
-@keyframes of-proof-draw {
-  from { transform: scale(0); }
-}
-/* Unprinted (drawn, unseen) to the lime beat, 4/7 of the way (the step a
-   hair before it: the beat is a frame's own time); then its first
-   impression, setting to full on the house curve (sampled:
-   proofLimeKeyframes). */
-@keyframes of-proof-lime {
-  0%,
-  57.1427% { opacity: 0.002; }
-  57.1428% { opacity: 0.64; }
-  61.4286% { opacity: 0.818; }
-  65.7143% { opacity: 0.9108; }
-  70% { opacity: 0.9558; }
-  74.2857% { opacity: 0.9783; }
-  78.5714% { opacity: 0.9898; }
-  82.8571% { opacity: 0.9957; }
-  87.1429% { opacity: 0.9984; }
-  91.4286% { opacity: 0.9996; }
-  95.7143%,
-  100% { opacity: 1; }
-}
-@keyframes of-proof-plate {
+/* The lights go down: the vignette comes in over the proof's first beat. */
+@keyframes of-proof-lights {
   from { opacity: 0; }
   to { opacity: 1; }
 }
@@ -3182,6 +3153,13 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+/* Its own layer: the lights (the proof brings them down from the first
+   paint; the island times the vignette itself). */
+.of-frame__vignette::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: radial-gradient(ellipse 80% 76% at 50% 50%, transparent 54%, rgba(23, 27, 21, 0.3) 100%);
 }
 /* The burn: the frame outside it turns sepia (a colour blend: its light and
@@ -3515,10 +3493,8 @@ html[data-reel='skip'] .of-skip { display: none; }
   .of-title__cursor,
   .of-title__gm { visibility: hidden; }
   .opening { transition: opacity 700ms var(--ease-fade); }
-  /* No proof either (the same selectors as its running rules). */
+  /* No proof either (the same selector as its running rule). */
   .of-proof,
   .of-proof-marks { opacity: 0; visibility: hidden; }
-  html[data-opening] .of-proof-marks .of-crop,
-  html[data-opening] .of-proof__slug [data-plate='1'],
-  html[data-opening] .of-key[data-key='0'] .of-key__block { animation: none; }
+  html[data-opening] .of-frame__vignette::before { animation: none; }
 }

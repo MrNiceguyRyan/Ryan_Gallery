@@ -42,10 +42,10 @@ import {
 // measured or set on the anchor's baseline it carries a baseline probe
 // (`.of-bl`). The server's first paint is the proof (act 0): a sheet of the
 // newspaper's newsprint over the first match cut, its marks and its slug,
-// the first cut's lime anchor over it — the stylesheet counts it in. The
-// first match cut is drawn under it from the first paint: the stylesheet
-// sets it (the anchor, its giant, the words on its line) exactly where the
-// island will.
+// the first cut's lime anchor over it, unprinted — the stylesheet brings
+// the lights down, the island prints the plates. The first match cut is
+// drawn under it from the first paint: the stylesheet sets it (the anchor,
+// its giant, the words on its line) exactly where the island will.
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
 // the anchor, the printed matter's own words (but the dictionary, Webster's
@@ -157,14 +157,20 @@ function Circled({ n }: { n: string }) {
 }
 
 /** Crop marks at the frame's corners, a registration mark at its head and a
- *  grey step bar (a printer's proof). */
-function Marks() {
+ *  grey step bar (a printer's proof). Without `crops`, the head and foot
+ *  marks only (the film's own proof: four marks flush in the corners read
+ *  as a bracket frame, and the foot's right corner is the Skip pill's). */
+function Marks({ crops = true }: { crops?: boolean }) {
   return (
     <div className="of-marks" aria-hidden="true">
-      <i className="of-crop of-crop--tl" />
-      <i className="of-crop of-crop--tr" />
-      <i className="of-crop of-crop--bl" />
-      <i className="of-crop of-crop--br" />
+      {crops && (
+        <>
+          <i className="of-crop of-crop--tl" />
+          <i className="of-crop of-crop--tr" />
+          <i className="of-crop of-crop--bl" />
+          <i className="of-crop of-crop--br" />
+        </>
+      )}
       <svg className="of-reg" viewBox="0 0 40 40">
         <circle cx="20" cy="20" r="10" />
         <path d="M20 2 V38 M2 20 H38" />
@@ -185,14 +191,13 @@ function Marks() {
 function ProofSheet() {
   return <div className="of-proof" data-proof aria-hidden="true" />;
 }
-/** Its marks (the pages' own: crop marks, registration mark, step bar) and
- *  its slug, above the soft edge so the hairlines stay crisp. Each plate's
- *  label comes with its plate: the lime's (the stylesheet), the ink's (the
- *  clock). */
+/** Its marks (the pages' own registration mark and step bar; no crop
+ *  marks) and its slug, above the soft edge so the hairlines stay crisp.
+ *  Each plate's label comes with its plate, on the clock. */
 function ProofMarks() {
   return (
     <div className="of-proof-marks" data-proof-marks aria-hidden="true">
-      <Marks />
+      <Marks crops={false} />
       <p className="of-proof__slug of-mono">
         {PROOF_SLUG.head}{' '}
         <span className="of-proof__wide">{PROOF_SLUG.wide}</span>{' '}
