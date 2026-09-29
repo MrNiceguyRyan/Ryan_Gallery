@@ -286,7 +286,9 @@ html[data-voyage] .route-atlas .viewfinder__scrim {
      so when they are up they are meant to be read: 0.86 ink holds ≥ 4.5:1
      where the route or pale rock runs behind a figure (0.62 measured 3.9:1). */
   color: rgba(244, 244, 237, 0.86);
-  text-shadow: 0 0 6px rgba(12, 15, 10, 0.62);
+  /* A step firmer since the planet is a bright photograph (2026-09-29): pale
+     rock and desert run behind the figures now. */
+  text-shadow: 0 0 6px rgba(12, 15, 10, 0.72), 0 1px 2px rgba(12, 15, 10, 0.6);
 }
 .viewfinder__meta {
   display: flex;
@@ -737,6 +739,27 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
 @media (min-width: 1280px) {
   .explorer-rail { right: 64px; }
 }
+/* The rail's own shade (2026-09-29): the planet is a bright photograph now,
+   and over the desert of Page, Zion and Bryce the name and the lede sat on
+   ground as light as they are. A soft pool behind the rail while a place's
+   words are on it (the idle line keeps its own), on the words' own beat. */
+.explorer-rail::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 12%;
+  bottom: 12%;
+  left: -140px;
+  right: -48px;
+  pointer-events: none;
+  background: radial-gradient(ellipse 62% 56% at 60% 47%, rgba(14, 17, 11, 0.5) 0%, rgba(14, 17, 11, 0.3) 52%, rgba(14, 17, 11, 0.08) 82%, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.explorer-rail:has(.explorer-place[data-shown])::before {
+  opacity: 1;
+  transition: opacity 560ms var(--ease-arrive) var(--place-delay, var(--dur-in));
+}
 .explorer-place {
   position: absolute;
   inset: 0;
@@ -746,12 +769,21 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
   padding-bottom: 6vh;
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--dur-in) var(--ease-fade), visibility 0s linear var(--dur-in);
+  translate: 0 10px;
+  transition: opacity var(--dur-in) var(--ease-fade), visibility 0s linear var(--dur-in), translate 0s linear var(--dur-in);
 }
+/* In with its ticket: at a switch's click (the rail's own beat), or — the
+   ticket arriving from the open map (src/lib/coverDock.ts, "The arrival") —
+   as that ticket starts (`--place-delay`, HomePage), rising the last 10px
+   on the arrive curve as the ticket unrolls. */
 .explorer-place[data-shown] {
   opacity: 1;
   visibility: visible;
-  transition: opacity 520ms var(--ease-arrive) var(--dur-in), visibility 0s;
+  translate: 0 0;
+  transition:
+    opacity 560ms var(--ease-arrive) var(--place-delay, var(--dur-in)),
+    translate 720ms var(--ease-arrive) var(--place-delay, var(--dur-in)),
+    visibility 0s;
 }
 .explorer-idle {
   position: absolute;
@@ -778,7 +810,7 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   z-index: -1;
   inset: 22% -80px 22% -100px;
   pointer-events: none;
-  background: radial-gradient(closest-side at 50% 50%, rgba(16, 20, 14, 0.5) 0%, rgba(16, 20, 14, 0.32) 55%, transparent 100%);
+  background: radial-gradient(closest-side at 50% 50%, rgba(16, 20, 14, 0.58) 0%, rgba(16, 20, 14, 0.38) 55%, transparent 100%);
 }
 .explorer-idle__kicker {
   display: flex;
@@ -809,13 +841,23 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   letter-spacing: 0.06em;
   color: rgba(244, 244, 237, 0.64);
 }
-/* ── The controls: Prev · All places · Index · Next ── */
+/* ── The controls: one bar ──
+   Owner, 2026-09-29: 右下角这些按钮太多了，没有美感. One slim instrument at
+   the foot of the rail (ExplorerControls): Recentre (in only when needed),
+   ‹, where the reader is on the route (it opens the list), ›, the Index.
+   Bone on translucent olive, one hairline round it, nothing else drawn; no
+   lime of its own (the viewfinder's leg readout keeps the view's one lime;
+   the keyboard's ring is lime). Space Grotesk labels,
+   tracking under 0.1em; every target 40px or more. */
 .explorer-controls {
   position: absolute;
   z-index: 30;
   right: 48px;
   bottom: 26px;
+  display: flex;
+  justify-content: flex-end;
   width: clamp(280px, 25vw, 440px);
+  pointer-events: none;
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
@@ -828,154 +870,169 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   visibility: visible;
   transition: opacity 600ms var(--ease-arrive) 200ms, visibility 0s;
 }
-.explorer-controls__bar {
+.explorer-bar {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-/* Recentre (src/lib/explorerDrift.ts): over the controls, out of their
-   flow (they never shift for it), in when the view has drifted from the
-   place in hand or nothing is in hand; away while the list is open. A
-   crosshair, the word, and the place it goes back to. */
-.explorer-controls__recentre {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--recentre-lift, 10px));
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  max-width: 100%;
-  padding: 0 14px 0 11px;
-  border: 1px solid rgba(244, 244, 237, 0.22);
+  gap: 2px;
+  height: 46px;
+  padding: 2px;
+  border: 1px solid rgba(244, 244, 237, 0.16);
   border-radius: 999px;
-  background: rgba(17, 21, 15, 0.88);
-  color: #F4F4ED;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(6px);
-  transition:
-    opacity var(--dur-in) var(--ease-fade),
-    transform var(--dur-in) var(--ease-leave),
-    visibility 0s linear var(--dur-in),
-    background-color var(--dur-in) var(--ease-arrive),
-    border-color var(--dur-in) var(--ease-arrive);
+  background: rgba(22, 26, 18, 0.66);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 10px 30px rgba(6, 8, 5, 0.28);
+  pointer-events: auto;
 }
-.explorer-controls__recentre[data-shown] {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-  transition:
-    opacity var(--dur-swap) var(--ease-arrive) 120ms,
-    transform var(--dur-swap) var(--ease-arrive) 120ms,
-    visibility 0s,
-    background-color var(--dur-in) var(--ease-arrive),
-    border-color var(--dur-in) var(--ease-arrive);
-}
-.explorer-controls__recentre:hover {
-  background: rgba(30, 35, 27, 0.96);
-  border-color: rgba(244, 244, 237, 0.4);
-}
-.explorer-controls__recentre:focus-visible {
-  outline: 2px solid #D2FF00;
-  outline-offset: 2px;
-}
-.explorer-controls__recentre-mark {
-  flex: none;
-  width: 14px;
-  height: 14px;
-}
-.explorer-controls__recentre-place {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: rgba(244, 244, 237, 0.62);
-}
-.explorer-controls__recentre kbd {
-  font: inherit;
-  padding: 1px 4px;
-  border: 1px solid rgba(244, 244, 237, 0.24);
-  border-radius: 3px;
-  color: rgba(244, 244, 237, 0.62);
-}
-.explorer-controls--phone .explorer-controls__recentre {
-  right: 50%;
-  transform: translate(50%, 6px);
-}
-.explorer-controls--phone .explorer-controls__recentre[data-shown] {
-  transform: translate(50%, 0);
-}
-/* The desktop's two rows: the list and the Index, then the steps; each
-   button half the rail, so a neighbour's name reads whole. */
-.explorer-controls__bar + .explorer-controls__bar {
-  margin-top: 6px;
-}
-.explorer-controls__bar--tools > button,
-.explorer-controls__bar--steps > button {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.explorer-controls__bar > button {
+.explorer-bar > button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid rgba(244, 244, 237, 0.14);
+  height: 40px;
   border-radius: 999px;
-  background: rgba(17, 21, 15, 0.84);
-  color: rgba(244, 244, 237, 0.86);
-  font-size: 9px;
+  color: rgba(244, 244, 237, 0.84);
+  transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive);
+}
+.explorer-bar > button:hover:not(:disabled) {
+  background: rgba(244, 244, 237, 0.08);
+  color: #F4F4ED;
+  transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive);
+}
+.explorer-bar > button:active:not(:disabled) {
+  background: rgba(244, 244, 237, 0.12);
+}
+.explorer-bar > button:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 1px;
+}
+.explorer-bar > button:disabled {
+  opacity: 0.35;
+}
+.explorer-bar__icon {
+  flex: none;
+  width: 40px;
+}
+.explorer-bar__glyph {
+  width: 13px;
+  height: 13px;
+}
+/* The place in hand: its number, the route's length, its name. */
+.explorer-bar__now {
+  gap: 8px;
+  min-width: 0;
+  padding: 0 14px 0 16px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
-  transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive), border-color var(--dur-in) var(--ease-arrive);
 }
-.explorer-controls__bar > button:hover:not(:disabled) {
-  background: rgba(30, 35, 27, 0.94);
-  border-color: rgba(244, 244, 237, 0.3);
+.explorer-bar__dot {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(244, 244, 237, 0.86);
+}
+.explorer-bar__no {
   color: #F4F4ED;
 }
-.explorer-controls__bar > button:focus-visible {
-  outline: 2px solid #D2FF00;
-  outline-offset: 2px;
+.explorer-bar__of {
+  color: rgba(244, 244, 237, 0.5);
 }
-.explorer-controls__bar > button:disabled {
-  opacity: 0.4;
-}
-.explorer-controls__step {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.explorer-controls__step--prev { justify-content: flex-start !important; }
-.explorer-controls__step--next { justify-content: flex-end !important; }
-.explorer-controls__place {
-  display: inline-flex;
-  min-width: 0;
-  gap: 6px;
-}
-.explorer-controls__name {
+.explorer-bar__name {
   overflow: hidden;
+  max-width: 13em;
+  margin-left: 4px;
   text-overflow: ellipsis;
+  color: #F4F4ED;
 }
-.explorer-controls__arrow {
-  font-size: 12px;
-  line-height: 1;
+.explorer-bar__caret {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  color: rgba(244, 244, 237, 0.55);
+  transition: rotate var(--dur-in) var(--ease-arrive);
 }
-.explorer-controls__count {
-  color: rgba(244, 244, 237, 0.6);
+.explorer-bar__now[aria-expanded='true'] .explorer-bar__caret {
+  rotate: 180deg;
+}
+/* Recentre: in only when needed; the bar opens a place for it on the left
+   (its right edge never moves). */
+.explorer-controls__recentre {
+  width: 0 !important;
+  margin-right: -2px;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    width var(--dur-swap) var(--ease-arrive),
+    margin var(--dur-swap) var(--ease-arrive),
+    opacity var(--dur-in) var(--ease-fade),
+    visibility 0s linear var(--dur-swap);
+}
+.explorer-controls__recentre[data-shown] {
+  width: 40px !important;
+  margin-right: 0;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    width var(--dur-swap) var(--ease-arrive),
+    margin var(--dur-swap) var(--ease-arrive),
+    opacity var(--dur-swap) var(--ease-arrive) 80ms,
+    visibility 0s;
+}
+/* A tip over the bar: a step's neighbour, an icon's name (the keyboard's
+   focus shows it too). */
+.explorer-bar [data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(17, 21, 15, 0.92);
+  color: #F4F4ED;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  translate: -50% 4px;
+  transition: opacity var(--dur-out) var(--ease-fade), translate var(--dur-out) var(--ease-arrive);
+}
+.explorer-bar > button:last-child[data-tip]::after {
+  left: auto;
+  right: 0;
+  translate: 0 4px;
+}
+@media (hover: hover) {
+  .explorer-bar [data-tip]:hover:not(:disabled)::after {
+    opacity: 1;
+    translate: -50% 0;
+    transition: opacity var(--dur-in) var(--ease-arrive) 240ms, translate var(--dur-in) var(--ease-arrive) 240ms;
+  }
+  .explorer-bar > button:last-child[data-tip]:hover::after {
+    translate: 0 0;
+  }
+}
+.explorer-bar [data-tip]:focus-visible::after {
+  opacity: 1;
+  translate: -50% 0;
+}
+.explorer-bar > button:last-child[data-tip]:focus-visible::after {
+  translate: 0 0;
 }
 .explorer-list {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   width: 100%;
+  pointer-events: auto;
   max-height: min(62vh, 560px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1121,9 +1178,22 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   bottom: max(14px, env(safe-area-inset-bottom));
   width: auto;
 }
-.explorer-controls--phone .explorer-controls__bar > button {
-  min-height: 46px;
-  padding: 0 10px;
+/* The phone's bar: across the foot, its middle taking what is left. */
+.explorer-controls--phone .explorer-bar {
+  flex: 1 1 auto;
+  height: 50px;
+}
+.explorer-controls--phone .explorer-bar > button {
+  height: 44px;
+}
+.explorer-controls--phone .explorer-bar__icon {
+  width: 44px;
+}
+.explorer-controls--phone .explorer-controls__recentre[data-shown] {
+  width: 44px !important;
+}
+.explorer-controls--phone .explorer-bar__now {
+  flex: 1 1 auto;
 }
 .explorer-controls--phone .explorer-list {
   max-height: min(58vh, 520px);
@@ -1142,13 +1212,19 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 @media (prefers-reduced-motion: reduce) {
   .explorer-place,
+  .explorer-place[data-shown] {
+    translate: none !important;
+  }
+  .explorer-place,
   .explorer-place[data-shown],
   .explorer-idle,
   .explorer-idle[data-shown],
   .explorer-controls,
   .explorer-controls[data-visible],
   .explorer-controls__recentre,
-  .explorer-controls__recentre[data-shown] {
+  .explorer-controls__recentre[data-shown],
+  .explorer-rail::before,
+  .explorer-bar [data-tip]::after {
     transition-duration: 0s !important;
     transition-delay: 0s !important;
   }
@@ -2820,10 +2896,11 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
    release and recede under a story with the map they are attached to. Every
    camera frame the atlas publishes where each place stands and the chapter
    writes its dock there (`translate3d`, at the shield's foot); the seat hangs
-   the plate from that point. A cover shows only while the camera is down on
-   its place (`data-at`): it appears whole, with no entrance of its own, and
-   as the camera leaves it rides away with its shield and fades on the fade
-   curve (an exit eases in). */
+   the plate from that point. A cover shows while its place is in hand
+   (`data-at`); from the open map it arrives as the camera settles, unrolled
+   from its shield's corner (src/lib/coverDock.ts, "The arrival", played by
+   ArchiveChapter), and let go it folds back into that corner as it rides
+   away with its shield and fades on the fade curve (an exit eases in). */
 .archive-dock-host {
   position: absolute;
   inset: 0;
@@ -2855,6 +2932,11 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .archive-dock__seat {
   position: absolute;
   pointer-events: auto;
+}
+/* Arriving from the open map, before it starts (src/lib/coverDock.ts, "The
+   arrival"): on the map but not yet seen, and out of the hand. */
+.archive-dock[data-arriving] .archive-dock__seat {
+  pointer-events: none;
 }
 /* A switch (src/lib/coverDock.ts, "The switch"): the arriving cover lies over
    the one leaving, both where the ticket lay; the one leaving is under it,
@@ -3403,7 +3485,10 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
    steps of luma exactly while it moved (the review of 2026-09-28), the
    opposite of calm. */
 .route-atlas-rest-tone {
-  background: rgba(9, 12, 8, 0.16);
+  /* 2026-09-29 (有点灰灰的，我想要…明亮一点): 0.16 → 0.04. The photograph is
+     whole and in its own colour now (src/lib/globeLook.ts); the type keeps
+     its own local scrims (the lede's pool, the idle line's). */
+  background: rgba(9, 12, 8, 0.04);
 }
 
 .route-atlas-interface-veil {
@@ -3415,9 +3500,9 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
 .route-atlas-entry-dissolve {
   background: linear-gradient(
     180deg,
-    rgba(40, 44, 32, 0.62) 0%,
-    rgba(40, 44, 32, 0.38) 34%,
-    rgba(40, 44, 32, 0.12) 70%,
+    rgba(18, 21, 15, 0.56) 0%,
+    rgba(18, 21, 15, 0.32) 34%,
+    rgba(18, 21, 15, 0.1) 70%,
     transparent 100%
   );
 }

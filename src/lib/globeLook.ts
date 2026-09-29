@@ -14,133 +14,72 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
 // ── The grade ──
-// The satellite photograph is printed in silver: its luminance is mapped
-// through an olive-to-paper ramp instead of being desaturated in colour. The
-// top of the ramp stops at #e9e6d8 — at paper white the Sahara blew out at a
-// quarter of the scroll and outshone the name.
-// Owner, 2026-09-28 (到主页的时候…有点晃眼): the disc was still the brightest
-// thing on arrival — p99 224/255 at dpr 2, 4.6% of the screen over 200, and
-// the entry then turned the Sahara and Arabia across the view at that
-// brightness. The top four stops come down a step (the print keeps its
-// shadows and its olive): the highlights now stop at a warm grey, #c6c2b2.
-// Measured at dpr 2 with the type hidden: 0.15% of the screen over 200
-// (was 4.6%), the disc's 99th percentile under 195 (was 224).
-export const SILVER_MIX = [0.2126, 0.7152, 0.0722, 0] as [number, number, number, number];
-export const SILVER_RAMP: Array<[number, string]> = [
-  [0.0, '#1a1e14'],
-  [0.06, '#2b3224'],
-  [0.14, '#383f2e'],
-  [0.25, '#4f553f'],
-  [0.4, '#76775e'],
-  [0.56, '#96937b'],
-  [0.72, '#aca78f'],
-  [0.87, '#bcb7a3'],
-  [1.0, '#c6c2b2'],
-];
-// Where the ramp's darkest four stops lift to once the page is under way, so
-// the ocean reads one step above the page ground instead of as a hole in it.
-// The first screen keeps the deep ocean; the lift runs across FLOOR_Q.
-export const SILVER_FLOOR = ['#363b2d', '#3b4131', '#434a36', '#51573f'];
-export const FLOOR_Q: [number, number] = [0.12, 0.32];
-// The archive's own paint for the same layer (what it had before the grade):
-// past SILVER_EXIT the satellite is only a residual veil under the dark
-// atlas, and the chapters must look exactly as they did.
-// Lifted 2026-09-28 with the residual (RouteAtlas): the owner found the
-// chapters' ground too dark. Then, the same day, the lift glared (到主页的时候，
-// 我感觉从视觉上来看有点晃眼，有点晕): a mean luma of 86/255 at rest, the
-// Bahamas' shallows and the Sonoran desert blowing out, the saturation of a
-// travel brochure. Settled between the two: a quieter colour, a softer
-// contrast, the whites capped short of paper (no blown highlight), the deep
-// water's floor kept a touch above black so the sea still reads as sea.
-// Measured in headless Chrome at every place's rest, 1728×1000, the
-// interface hidden (Rec. 709 luma, 0–255, mean over the six places): the
-// old dark paint 36, the lift 86, then 63; saturation 0.26 → 0.22; the
-// 99th-percentile highlight 149 → 110; the spread (sd) 26 → 18. The review
-// that followed found the places themselves 48–79 apart (the desert of Page
-// and Bryce against the sea off Miami): the top end capped lower, the floor
-// lifted, the contrast and the colour softened again, so the sea comes up
-// and the desert down. Measured the same way under the held 24° camera (dpr
-// 2): Miami 54, Orlando 58, Page 70, Zion 63, Bryce 67, New York 59 — mean
-// 62, where the paint before this measured 45–75.
-export const STOCK_PAINT = {
-  'raster-saturation': -0.4,
-  'raster-contrast': -0.35,
-  'raster-brightness-min': 0.15,
-  'raster-brightness-max': 0.58,
+// Owner, 2026-09-29: 整个地球的模型有点丑…有点灰灰的，我想要精致和明亮一点. The
+// planet had been printed in silver (its luminance through an olive ramp) on
+// the way down, and the reader's map was the photograph under a grey lift: a
+// floor raised to 15%, the whites capped at 58%, the colour taken down 40%,
+// three-quarters strength over the dark basemap, a 16% tone over all of it
+// and a grey-olive haze in the air. Measured at every place's rest and on the
+// open map (1728 × 1000, dpr 2, the interface hidden, Rec. 709 luma 0–255):
+// mean luma ~50, sd ~7.5 — a flat grey card — mean HSV saturation 0.11.
+// Now the planet is a photograph of itself, whole: the imagery at full
+// strength, its own colour (a hair warmer: the greens toward olive, the seas
+// a step toward teal), a little contrast, the floor only just lifted and the
+// whites allowed short of paper (the desert of Page and Bryce at 0.94).
+// The deep sea, all but black in the imagery, takes a clear
+// blue-green over the water only (WATER_TINT) — the land is never tinted.
+// The same grade on the planet the page brings up (PLANET_PAINT) and on the
+// reader's map (STOCK_PAINT): nothing changes colour on the way down.
+const ATLAS_GRADE = {
+  'raster-saturation': 0,
+  'raster-contrast': 0.1,
+  'raster-brightness-min': 0.05,
+  'raster-brightness-max': 0.94,
+  'raster-hue-rotate': -6,
 } as const;
-// The silver print's way out on the dive: the archive's own paint on a second
-// layer over the same tiles, crossfaded in across these zooms at the veil's
-// strength (RouteAtlas, `writeSatelliteVeil`) — no longer a swap hidden in a
-// dip of the veil to 10%, which blinked the whole frame dark two seconds
-// before the landing.
+export const STOCK_PAINT = ATLAS_GRADE;
+export const PLANET_PAINT = ATLAS_GRADE;
+/** The seas: a clear blue-green laid over the imagery's water (the basemap's
+ *  own water polygons, a fill over the photograph), under the light, the
+ *  route and the names. */
+export const WATER_TINT = { color: '#3a8f9a', opacity: 0.34 } as const;
+// The planet's paint's way out on the dive onto the reader's map's: a
+// crossfade of two layers (RouteAtlas, `writeSatelliteVeil`) across these
+// zooms. The two carry one grade now, so it is invisible; the two layers
+// stay (one source each: the draped globe's overlap stencil masked a second
+// layer on one source mid-dive).
 export const SILVER_EXIT: readonly [number, number] = [3.5, 5];
 
-/** The archive's paint's share at `zoom` on the way down (0: all silver, 1:
- *  all the archive's), quantised to 1/50 so the layers are written only as
- *  it moves. Straight in the zoom, across most of the dive: the dive is
- *  fastest in its middle, and an eased share there darkened the frame ~17
- *  steps of luma a second. */
+/** The reader's map's paint's share at `zoom` on the way down (0: all the
+ *  planet's layer, 1: all the map's), quantised to 1/50 so the layers are
+ *  written only as it moves. */
 export function silverExitAt(zoom: number) {
   return Math.round(50 * clamp01((zoom - SILVER_EXIT[0]) / (SILVER_EXIT[1] - SILVER_EXIT[0]))) / 50;
 }
 
-const hexChannels = (hex: string) => {
-  const value = parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-};
-const mixHex = (from: string, to: string, t: number) => {
-  const a = hexChannels(from);
-  const b = hexChannels(to);
-  return `#${a.map((channel, index) => Math.round(channel + (b[index] - channel) * t).toString(16).padStart(2, '0')).join('')}`;
-};
-
-/** The floor lift `k` at prologue progress q, quantised to 1/25 so the ramp
- *  (a 256-entry texture Mapbox rebuilds per write) changes 25 times at most. */
+// The light's own floor lift (globeLookAt): across FLOOR_Q of the prologue.
+export const FLOOR_Q: [number, number] = [0.12, 0.32];
+/** The floor lift `k` at prologue progress q, quantised to 1/25. */
 export function silverFloorAt(q: number) {
   return Math.round(25 * smoothstep(FLOOR_Q[0], FLOOR_Q[1], q)) / 25;
 }
 
-/** `raster-color` for the silver print with the floor lifted by k (0..1).
- *  A constant expression on purpose: zoom-driven raster paint is evaluated per
- *  tile on the draped globe and leaves rectangular seams mid-dive. */
-export function silverRamp(k: number): unknown[] {
-  const stops: unknown[] = [];
-  SILVER_RAMP.forEach(([value, color], index) => {
-    const floor = SILVER_FLOOR[index];
-    stops.push(value, floor ? mixHex(color, floor, k) : color);
-  });
-  return ['interpolate', ['linear'], ['raster-value'], ...stops];
-}
-
-/** The full silver paint for `prologue-satellite` (raster-opacity is left to
- *  the atlas, which keeps its own zoom fade). */
-export function silverPaint(k: number): Record<string, unknown> {
-  return {
-    'raster-color-mix': SILVER_MIX,
-    'raster-color-range': [0, 1],
-    'raster-color': silverRamp(k),
-    'raster-saturation': 0,
-    'raster-contrast': 0,
-    // The stock paint lifts the floor; the silver print keeps its own.
-    'raster-brightness-min': 0,
-    'raster-brightness-max': 1,
-  };
-}
-
 // ── The air ──
-// Mapbox's own atmosphere drew a wide white halo all the way round. The air
-// now comes from the light, on the lit limb only; the fog keeps just a whisper
-// of high colour. The lite light (weak GPUs, see planetLight) draws no air, so
-// its fog carries the rim instead.
+// A thin atmosphere: the planet's limb crisp, a narrow pale-blue glow on it,
+// the space round it darker than the page so the planet stands out. The air
+// on the planet the page brings up comes from the light, on the lit limb
+// (planetLight); the fog keeps a whisper of blue there, and its space is the
+// page's own ground (the planet rises over the page). The lite light (weak
+// GPUs) draws no air, so its fog carries the rim instead.
 export const SILVER_FOG = {
-  range: [9, 20] as [number, number],
-  color: 'rgba(244, 244, 237, 0)',
-  'high-color': 'rgba(214, 217, 208, 0.05)',
+  range: [10, 20] as [number, number],
+  color: 'rgba(190, 214, 226, 0)',
+  'high-color': 'rgba(120, 165, 205, 0.08)',
   'space-color': '#282c20',
-  'horizon-blend': 0.02,
+  'horizon-blend': 0.012,
   'star-intensity': 0,
 };
-export const SILVER_FOG_LITE = { ...SILVER_FOG, 'high-color': 'rgba(214, 217, 208, 0.12)' };
+export const SILVER_FOG_LITE = { ...SILVER_FOG, 'high-color': 'rgba(120, 165, 205, 0.18)' };
 
 // ── The light ──
 // Constant shader values. The key light's direction, the ambient floor and the
@@ -161,8 +100,11 @@ export const PLANET_LIGHT = {
   spec: 0.1,
   specPower: 24,
   grain: 0.05,
-  nightColor: [0.118, 0.13, 0.098] as [number, number, number],
-  paper: [0.957, 0.957, 0.929] as [number, number, number],
+  // The night side and the air (2026-09-29, 精致和明亮): the unlit side a
+  // deep blue-black at a light touch rather than an olive veil (the olive
+  // read as grey over the colour photograph), the air a pale sky blue.
+  nightColor: [0.035, 0.055, 0.085] as [number, number, number],
+  paper: [0.8, 0.89, 0.97] as [number, number, number],
   // Where the light arrives from before the dawn has swept it round (deg
   // away from the viewer: behind the planet).
   dawnTheta: 128,
@@ -218,8 +160,12 @@ export function globeLookAt(q: number, dawn = 1): GlobeLookValues {
     // The floor ends at 0.3, not 0.24: at q 0.4–0.5 the disc is almost all
     // Pacific, and its unlit third read darker than the page itself — a hole
     // beside the chapter count.
-    ambient: lerp(lerp(0.14, 0.3, floor), 0.34, swing),
-    nightTint: lerp(lerp(0.55, 0.4, floor), 0.25, swing),
+    // Where the swing lands (the planet the torn pass brings up): the far
+    // side falls to 0.6 of the lit one, the night laid over it at 0.12 —
+    // the planet reads round without a grey third (2026-09-29; it was 0.34
+    // and 0.25 under the silver print).
+    ambient: lerp(lerp(0.14, 0.3, floor), 0.6, swing),
+    nightTint: lerp(lerp(0.55, 0.4, floor), 0.12, swing),
     wrap: lerp(0.38, 0.6, swing),
     spec: lerp(FIRST_SCREEN_LIGHT.spec, PLANET_LIGHT.spec, underway) * lerp(1, 0.5, swing),
     specPower: lerp(FIRST_SCREEN_LIGHT.specPower, PLANET_LIGHT.specPower, underway),

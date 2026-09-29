@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { MapShield } from './RouteShield';
 import { pad2, stateCode } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
@@ -15,19 +15,21 @@ export interface ExplorerPlace {
 
 /**
  * The explorer's controls (src/lib/explorer.ts): the way through the places
- * for a reader who would rather step than roam — Prev and Next with the
- * neighbouring places' names, "All places" (the numbered list, each row
- * with its place's shield, a jump anywhere), and on the desktop the Index
- * (the archive's contact sheet). Every one of them lets the ticket in hand
- * go first: the explorer tears it before it moves. Bone ink; the one lime
- * in view stays the atlas's.
- * PROPOSED copy (the explorer's build, 2026-09-28), for the owner to
- * approve: "All places", "Index", and for screen readers "Previous place:
- * …" / "Next place: …" and "All places, N".
- * Recentre (src/lib/explorerDrift.ts, 2026-09-29): a crosshair pill over the
- * controls, in once the view has drifted from the place in hand (or nothing
- * is in hand): "Recentre · 01 Miami" and the R key; for screen readers
- * "Recentre on 01 Miami (R)". PROPOSED copy.
+ * for a reader who would rather step than roam. Owner, 2026-09-29: 右下角这些
+ * 按钮太多了，没有美感 — five dark pills (Recentre, All places, Index, and
+ * the two steps with their neighbours' names) are now ONE slim bar: ‹ and ›
+ * either side of where the reader is on the route ("01 / 06 · Miami", which
+ * opens the numbered list, each row with its shield), and two small icons —
+ * Recentre (in only while it is needed: the view has drifted from the place
+ * in hand, or nothing is in hand; the R key) and, on the desktop, the Index
+ * (the archive's contact sheet). A step's neighbour and an icon's name show
+ * on hover and focus (a tip over the bar); screen readers hear them whole.
+ * Bone ink on translucent olive, one hairline, a bone dot by the place in
+ * hand; no lime of its own (the view's one lime stays the atlas's readout).
+ * PROPOSED copy (2026-09-28/29), for the owner to approve: "Places", the tips
+ * "Recentre · 01 Miami · R" and "Index", and for screen readers "Previous
+ * place: …" / "Next place: …", "All places, 06. Now 01 Miami", "Recentre on
+ * 01 Miami (R)", "Index: the contact sheet".
  */
 export default function ExplorerControls({
   places,
@@ -61,9 +63,8 @@ export default function ExplorerControls({
   /** Up once the explorer has been entered. */
   visible: boolean;
   /** Recentre: shown when the view has drifted from the place in hand (or
-   *  nothing is in hand), back onto `place`; `lift` stands it this far over
-   *  the controls, px (the phone's card, when one is up). */
-  recentre?: { shown: boolean; place: ExplorerPlace | null; onRecentre: () => void; lift?: number };
+   *  nothing is in hand), back onto `place`. */
+  recentre?: { shown: boolean; place: ExplorerPlace | null; onRecentre: () => void };
 }) {
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -105,78 +106,102 @@ export default function ExplorerControls({
   }, [listOpen, onListOpen]);
 
   const total = places.length;
+  const now = current ? places.find((place) => place.id === current) ?? null : null;
+  const chevron = (d: string) => (
+    <svg className="explorer-bar__glyph" viewBox="0 0 12 12" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
   const prevButton = (
     <button
       type="button"
-      className="explorer-controls__step explorer-controls__step--prev"
+      className="explorer-bar__icon explorer-controls__step explorer-controls__step--prev"
       onClick={onPrev}
       disabled={!prev}
       aria-label={prev ? `Previous place: ${pad2(prev.number)} ${prev.name}` : 'Previous place'}
+      data-tip={prev ? `${pad2(prev.number)} ${prev.name}` : undefined}
     >
-      <span aria-hidden="true" className="explorer-controls__arrow">←</span>
-      {prev && (
-        <span className="explorer-controls__place">
-          <span className="tabular-nums">{pad2(prev.number)}</span>
-          <span className="explorer-controls__name">{prev.name}</span>
-        </span>
-      )}
+      {chevron('M7.5 2.5 4 6l3.5 3.5')}
     </button>
   );
   const nextButton = (
     <button
       type="button"
-      className="explorer-controls__step explorer-controls__step--next"
+      className="explorer-bar__icon explorer-controls__step explorer-controls__step--next"
       onClick={onNext}
       disabled={!next}
       aria-label={next ? `Next place: ${pad2(next.number)} ${next.name}` : 'Next place'}
+      data-tip={next ? `${pad2(next.number)} ${next.name}` : undefined}
     >
-      {next && (
-        <span className="explorer-controls__place">
-          <span className="tabular-nums">{pad2(next.number)}</span>
-          <span className="explorer-controls__name">{next.name}</span>
-        </span>
-      )}
-      <span aria-hidden="true" className="explorer-controls__arrow">→</span>
+      {chevron('M4.5 2.5 8 6l-3.5 3.5')}
     </button>
   );
+  // The bar's middle: where the reader is on the route ("01 / 06 · Miami"),
+  // or, with nothing in hand, how many places there are. It opens the list.
   const allButton = (
     <button
       ref={toggleRef}
       type="button"
-      className="explorer-controls__all"
+      className="explorer-bar__now explorer-controls__all"
       aria-expanded={listOpen}
       aria-controls={listOpen ? listId : undefined}
+      aria-label={now ? `All places, ${pad2(total)}. Now ${pad2(now.number)} ${now.name}` : `All places, ${pad2(total)}`}
       onClick={() => onListOpen(!listOpen)}
     >
-      All places <span className="tabular-nums explorer-controls__count">{pad2(total)}</span>
+      {now ? (
+        <>
+          <span className="explorer-bar__dot" aria-hidden="true" />
+          <span className="explorer-bar__no tabular-nums">{pad2(now.number)}</span>
+          <span className="explorer-bar__of tabular-nums">/ {pad2(total)}</span>
+          <span className="explorer-bar__name">{now.name}</span>
+        </>
+      ) : (
+        <>
+          <span className="explorer-bar__no tabular-nums">{pad2(total)}</span>
+          <span className="explorer-bar__name">Places</span>
+        </>
+      )}
+      <svg className="explorer-bar__caret" viewBox="0 0 10 10" aria-hidden="true">
+        <path d="M2.5 6.25 5 3.75l2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </button>
   );
   const recentreShown = !!recentre?.shown && !listOpen;
+  const recentreLabel = recentre?.place ? `Recentre on ${pad2(recentre.place.number)} ${recentre.place.name} (R)` : 'Recentre (R)';
   const recentreButton = recentre && (
     <button
       type="button"
-      className="explorer-controls__recentre"
+      className="explorer-bar__icon explorer-controls__recentre"
       data-shown={recentreShown ? '' : undefined}
       aria-hidden={!recentreShown}
       inert={!recentreShown}
       tabIndex={recentreShown ? undefined : -1}
       onClick={recentre.onRecentre}
       aria-keyshortcuts="R"
-      aria-label={recentre.place ? `Recentre on ${pad2(recentre.place.number)} ${recentre.place.name} (R)` : 'Recentre (R)'}
-      style={recentre.lift != null ? ({ '--recentre-lift': `${recentre.lift}px` } as CSSProperties) : undefined}
+      aria-label={recentreLabel}
+      data-tip={recentre.place ? `Recentre · ${pad2(recentre.place.number)} ${recentre.place.name}${phone ? '' : ' · R'}` : 'Recentre'}
     >
-      <svg className="explorer-controls__recentre-mark" viewBox="0 0 14 14" aria-hidden="true">
+      <svg className="explorer-bar__glyph" viewBox="0 0 14 14" aria-hidden="true">
         <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.1" />
         <circle cx="7" cy="7" r="1.1" fill="currentColor" />
         <path d="M7 0.5v2.4M7 11.1v2.4M0.5 7h2.4M11.1 7h2.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
       </svg>
-      <span>Recentre</span>
-      {recentre.place && (
-        <span className="explorer-controls__recentre-place tabular-nums">
-          {pad2(recentre.place.number)} {recentre.place.name}
-        </span>
-      )}
-      {!phone && <kbd aria-hidden="true">R</kbd>}
+    </button>
+  );
+  const indexButton = onIndex && (
+    <button
+      type="button"
+      className="explorer-bar__icon explorer-controls__index"
+      onClick={onIndex}
+      aria-label="Index: the contact sheet"
+      data-tip="Index"
+    >
+      <svg className="explorer-bar__glyph" viewBox="0 0 12 12" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="3.6" height="3.6" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="6.9" y="1.5" width="3.6" height="3.6" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="1.5" y="6.9" width="3.6" height="3.6" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <rect x="6.9" y="6.9" width="3.6" height="3.6" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.1" />
+      </svg>
     </button>
   );
   return (
@@ -186,7 +211,6 @@ export default function ExplorerControls({
       aria-hidden={!visible}
       inert={!visible}
     >
-      {recentreButton}
       {listOpen && (
         <div
           ref={listRef}
@@ -231,31 +255,16 @@ export default function ExplorerControls({
           </ol>
         </div>
       )}
-      {phone ? (
-        <div className="explorer-controls__bar">
-          {prevButton}
-          {allButton}
-          {nextButton}
-        </div>
-      ) : (
-        // Two rows on the desktop, so a neighbour's name is never cut to its
-        // first letter ("05 B…" at 1280): the list and the Index over the
-        // steps, in the order the keyboard meets them.
-        <>
-          <div className="explorer-controls__bar explorer-controls__bar--tools">
-            {allButton}
-            {onIndex && (
-              <button type="button" className="explorer-controls__index" onClick={onIndex}>
-                Index
-              </button>
-            )}
-          </div>
-          <div className="explorer-controls__bar explorer-controls__bar--steps">
-            {prevButton}
-            {nextButton}
-          </div>
-        </>
-      )}
+      {/* One instrument (2026-09-29, 右下角这些按钮太多了，没有美感): Recentre
+          (in only when it is needed), the steps either side of where the
+          reader is on the route (the list behind it), and the Index. */}
+      <div className="explorer-bar" role="group" aria-label="Places">
+        {recentreButton}
+        {prevButton}
+        {allButton}
+        {nextButton}
+        {indexButton}
+      </div>
     </div>
   );
 }

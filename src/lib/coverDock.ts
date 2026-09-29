@@ -24,6 +24,8 @@
 // tab, the places' coordinates and each chapter's rest zoom — never read off
 // the page. scripts/cover-dock.test.mjs holds the maths.
 
+import { EASE, bezierFn } from './motion.ts';
+
 export type Quadrant = 'tr' | 'tl' | 'br' | 'bl';
 
 /** Every corner a plate can take about its shield (the geometry is the same
@@ -415,6 +417,81 @@ export function developSweep(ratio: number) {
 // 2026-09-29). The sweep's positions hold: the band's middle is where it was.
 export const DEVELOP_MASK = 'linear-gradient(245deg, #000 45%, transparent 55%)';
 
+// ── The arrival: a ticket from the open map ──
+// Owner, 2026-09-29: 当地球页空置的时候，点开一个地点的动效和封面出现动效很差.
+// With nothing in hand the reader chooses a place: the camera turns to it on
+// the switch's own move (explorerCamera.ts planSwitch), its shield lifts in
+// the click, and the ticket used to appear whole in one frame at the
+// landing, the rail's words a beat later. Now it ARRIVES as the planet
+// settles, from its shield: the ticket rides in with its shield (not pinned:
+// nothing was in hand to hold still) and, `delay` ms after the click —
+// ARRIVAL.leadMs before the camera touches down, when the turn has done ~90%
+// of its way — its stub unrolls down from the corner by the shield (the
+// caret first), the face opens across from the stub outward, the print
+// develops in behind it from the stub's edge (the switch's develop), and the
+// tab, the cue and the pad come in once the outline is set. The rail's name
+// and lede come in with it (HomePage). Letting a ticket go folds it back
+// into the same corner as it fades (`foldClip`): the arrival run backwards.
+export const ARRIVAL = {
+  /** The ticket starts this long before the camera touches down… */
+  leadMs: 520,
+  /** …never sooner than this after the click (the shield's lift reads
+   *  first), and at once past it when the camera has nowhere to go. */
+  minDelayMs: 260,
+  /** Under this many screen px of travel the camera has nowhere to go. */
+  stillPx: 24,
+  /** The dock's ink comes up from nothing over this (no hard first edge). */
+  inkMs: 160,
+  /** The stub unrolls from the corner by the shield. */
+  unrollMs: 460,
+  /** The face opens across from the stub, starting this far in. */
+  openDelay: 180,
+  openMs: 640,
+  /** The print develops (the switch's develop), starting this far in. */
+  developDelay: 220,
+  developMs: 900,
+  /** The tab, the cue and the pad come in (the outline set). */
+  extrasAt: 820,
+  /** The fold back into the corner on letting go (the dock's fade). */
+  foldMs: 400,
+} as const;
+
+/** When the arriving ticket starts, ms after the click: ARRIVAL.leadMs before
+ *  a camera that lands `landMs` after it, once it has `travelPx` of screen to
+ *  cover; at ARRIVAL.minDelayMs when it has (all but) nowhere to go. */
+export function arrivalDelay(landMs: number, travelPx: number) {
+  if (!(travelPx >= ARRIVAL.stillPx)) return ARRIVAL.minDelayMs;
+  return Math.round(Math.max(ARRIVAL.minDelayMs, landMs - ARRIVAL.leadMs));
+}
+
+const arriveCurve = bezierFn(EASE.arrive);
+const planeCurve = bezierFn(EASE.plane);
+
+/** The arriving plate's outline over the arrival (0 → ARRIVAL.openDelay +
+ *  openMs), as clip-path keyframes (WAAPI, linear between them): the stub's
+ *  height on the arrive curve, then the face's width on the plane curve,
+ *  both anchored at the stub's top-right (switchClip). `own` is the plate
+ *  (photograph + stub). */
+export function arrivalClipFrames(own: Size, stub: number = DOCK.stub, steps = 20) {
+  const total = ARRIVAL.openDelay + ARRIVAL.openMs;
+  const across = Math.min(own.w, stub);
+  const frames: Array<{ offset: number; clipPath: string }> = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = (total * i) / steps;
+    const down = arriveCurve(clamp(t / ARRIVAL.unrollMs, 0, 1));
+    const open = planeCurve(clamp((t - ARRIVAL.openDelay) / ARRIVAL.openMs, 0, 1));
+    const show = { w: across + (own.w - across) * open, h: own.h * down };
+    frames.push({ offset: i / steps, clipPath: switchClip(own, show) });
+  }
+  return { frames, ms: total };
+}
+
+/** Where a ticket let go folds to as it fades: back to its stub, a third of
+ *  its height, at the corner by the shield. */
+export function foldClip(own: Size, stub: number = DOCK.stub) {
+  return switchClip(own, { w: Math.min(own.w, stub), h: own.h / 3 });
+}
+
 // ── When a cover shows ──
 // The atlas's camera asks, on every draw, for the cover of the place in hand
 // (src/lib/explorer.ts): `appear` once the camera is down at it (so a cover
@@ -476,7 +553,16 @@ export interface DockFrame {
   /** Where the covers are pinned this frame (the dock's point, or a glide
    *  to it, or back onto the shield once the camera is down), instead of
    *  their place's foot. */
-  pin?: Point | null;
+  pin?: Point | null;  /** A ticket arriving from the open map (see "The arrival"). */
+  arrive?: DockArrive | null;
+}
+
+export interface DockArrive {
+  /** A new arrival, a new key. */
+  key: number;
+  id: string;
+  /** When the ticket starts (performance.now() ms). */
+  at: number;
 }
 
 type Listener<T> = (value: T) => void;

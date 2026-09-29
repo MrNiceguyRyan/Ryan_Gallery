@@ -5,14 +5,13 @@ import test from 'node:test';
 import {
   FIRST_SCREEN_LIGHT,
   PLANET_LIGHT,
-  SILVER_FLOOR,
-  SILVER_RAMP,
+  PLANET_PAINT,
+  SILVER_FOG,
   createGlobeChannel,
   globeLookAt,
   silverFloorAt,
-  silverPaint,
-  silverRamp,
   STOCK_PAINT,
+  WATER_TINT,
 } from '../src/lib/globeLook.ts';
 
 test('the first screen\'s corner globe and its turn are gone: the globe rises facing stop 01', async () => {
@@ -43,7 +42,9 @@ test('the key light and the ambient floor follow the measured schedule', () => {
   assert.equal(mid.floor, 1);
   near(mid.azimuth, 150);
   const index = globeLookAt(0.9);
-  near(index.azimuth, 118); near(index.theta, 34); near(index.ambient, 0.34); near(index.nightTint, 0.25);
+  // Where the swing lands, brighter since 2026-09-29 (有点灰灰的): the far
+  // side at 0.6 of the lit one, the night laid over it at 0.12.
+  near(index.azimuth, 118); near(index.theta, 34); near(index.ambient, 0.6); near(index.nightTint, 0.12);
   // The globe the pass brings up is drawn at q = 1: the light swung round
   // onto the places, the floor lifted.
   const planet = globeLookAt(1);
@@ -78,36 +79,63 @@ test('the first screen keeps the approved light, and eases to the under-way ligh
   assert.ok(Math.abs(globeLookAt(0.9).spec - PLANET_LIGHT.spec * 0.5) < 1e-9);
 });
 
-test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps the highlights', () => {
-  const stops = (ramp) => ramp.slice(3).filter((_, index) => index % 2 === 1);
-  const base = stops(silverRamp(0));
-  assert.deepEqual(base, SILVER_RAMP.map(([, color]) => color));
-  // Capped a step below paper since the review of 2026-09-28 (晃眼 on
-  // arrival): the disc's p99 was 224/255.
-  assert.equal(base.at(-1), '#c6c2b2');
-  const lifted = stops(silverRamp(1));
-  assert.deepEqual(lifted.slice(0, 4), SILVER_FLOOR);
-  assert.deepEqual(lifted.slice(4), base.slice(4));
+test('the planet is a photograph of itself, bright and in its own colour (owner, 2026-09-29)', () => {
+  // 整个地球的模型有点丑…有点灰灰的，我想要精致和明亮一点: no silver print, no
+  // grey lift. One grade from the planet the page brings up to the reader's
+  // map (nothing changes colour on the way down).
+  const look = PLANET_PAINT;
+  assert.deepEqual(STOCK_PAINT, PLANET_PAINT);
+  for (const key of ['raster-color', 'raster-color-mix', 'raster-color-range']) assert.equal(key in look, false, key);
+  // Its own colour, never washed out; a little contrast, never flattened.
+  assert.ok(look['raster-saturation'] >= 0 && look['raster-saturation'] <= 0.15);
+  assert.ok(look['raster-contrast'] > 0 && look['raster-contrast'] <= 0.15);
+  // The floor only just lifted (it was 0.15: a grey veil over the sea), the
+  // whites allowed (they were capped at 0.58), short of paper.
+  assert.ok(look['raster-brightness-min'] <= 0.06);
+  assert.ok(look['raster-brightness-max'] >= 0.9 && look['raster-brightness-max'] < 1);
+  // A hair warmer: the hue turns a few degrees at most.
+  assert.ok(Math.abs(look['raster-hue-rotate']) <= 10);
+  // The seas: a clear blue-green over the water only, well short of opaque.
+  assert.match(WATER_TINT.color, /^#[0-9a-f]{6}$/i);
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(WATER_TINT.color.slice(i, i + 2), 16));
+  assert.ok(g > r && b > r, 'blue-green');
+  assert.ok(WATER_TINT.opacity > 0.15 && WATER_TINT.opacity <= 0.45);
+  // The light's floor still lifts in 25 steps across FLOOR_Q.
   const values = new Set();
   for (let q = 0; q <= 1; q += 0.0005) values.add(silverFloorAt(q));
   assert.ok(values.size <= 26);
   assert.equal(silverFloorAt(0.12), 0);
   assert.equal(silverFloorAt(0.32), 1);
-  // Stock paint resets the colour mapping and restores the archive's grade —
-  // lifted 2026-09-28 (the owner found the chapters' ground too dark), then
-  // calmed the same day (有点晃眼): a quieter colour and contrast, the whites
-  // capped short of paper, the floor kept above black; the silver print puts
-  // its own floor back. Measured at every place's rest, the map's mean luma
-  // went 86 → 63 (the target band 60–65), its 99th percentile 149 → 110.
-  // The archive's paint is its own layer's for good (RouteAtlas,
-  // SATELLITE_STOCK_LAYER): no colour mapping on it to reset.
-  const stock = STOCK_PAINT;
-  assert.equal('raster-color' in stock, false);
-  assert.equal(stock['raster-saturation'], -0.4);
-  assert.equal(stock['raster-contrast'], -0.35);
-  assert.ok(stock['raster-brightness-min'] > 0 && stock['raster-brightness-min'] <= 0.15);
-  assert.ok(stock['raster-brightness-max'] <= 0.8, 'no blown highlight');
-  assert.equal(silverPaint(0)['raster-brightness-min'], 0);
+  // A thin atmosphere: the limb's blend narrow, the air a pale blue.
+  assert.ok(SILVER_FOG['horizon-blend'] <= 0.02);
+  assert.ok(PLANET_LIGHT.paper[2] > PLANET_LIGHT.paper[0], 'the air is blue, not paper');
+  assert.ok(PLANET_LIGHT.nightColor[2] > PLANET_LIGHT.nightColor[0], 'the night is blue-black, not olive');
+});
+
+test('the reader\'s map carries the photograph whole, the seas tinted, under a clear air', () => {
+  const source = readFileSync(new URL('../src/components/home/RouteAtlas.tsx', import.meta.url), 'utf8');
+  // The photograph at full strength over the dark basemap (it was 0.76: a
+  // grey film).
+  assert.match(source, /const PROLOGUE_SATELLITE_RESIDUAL = 1;/);
+  assert.match(source, /const ARCHIVE_SATELLITE_OPACITY: readonly number\[\] = \[3\.1, 1, 4\.6, PROLOGUE_SATELLITE_RESIDUAL\];/);
+  assert.match(source, /const PHONE_SATELLITE_OPACITY = 1;/);
+  // The planet's layer is painted in the grade (no silver ramp is written).
+  assert.match(source, /\.\.\.PLANET_PAINT,/);
+  assert.doesNotMatch(source, /'raster-color'/);
+  // The sea tint: over the water, under the light (the desktop) and on the
+  // phone's map; its id never says "water" (the basemap restyle would paint
+  // it the paper's dark water).
+  assert.equal((source.match(/addWaterTint\(map, firstLabel\);/g) ?? []).length, 2);
+  const id = /const WATER_TINT_LAYER = '([^']+)';/.exec(source)?.[1];
+  assert.ok(id && !id.includes('water'), id);
+  assert.ok(source.indexOf('addWaterTint(map, firstLabel);') < source.indexOf('map.addLayer(light, firstLabel);'));
+  // The archive's air: no grey-olive haze, a narrow limb.
+  const fog = source.slice(source.indexOf('const GLOBE_FOG = {'), source.indexOf('};', source.indexOf('const GLOBE_FOG = {')));
+  assert.doesNotMatch(fog, /#555a4a/);
+  assert.match(fog, /'horizon-blend': 0\.012/);
+  // The reading tone is a whisper now.
+  const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
+  assert.match(css, /\.route-atlas-rest-tone \{[^}]*background: rgba\(9, 12, 8, 0\.04\);/);
 });
 
 test('channel and wiring', () => {
@@ -127,7 +155,7 @@ test('channel and wiring', () => {
   // camera stays the only writer, and it draws the look at the planet's own.
   assert.match(source, /opacity: globeRevealed \? 1 : 0/);
   assert.match(source, /if \(holdRevealRef\.current\) \{/);
-  assert.match(source, /const floor = silverFloorAt\(1\);/);
+  assert.match(source, /lookWrites\.floor = silverFloorAt\(1\);/);
   assert.doesNotMatch(source, /GlobeEggs|createEggExposure|prologue-graticule|lifeActive|globeIntro/);
 });
 
