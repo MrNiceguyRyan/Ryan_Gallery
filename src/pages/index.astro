@@ -5,7 +5,6 @@ import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
-import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
 import '../styles/entrance.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
@@ -64,8 +63,6 @@ const fetchedCollections = await fetchSanityWithRetry(() =>
 const collections = Array.isArray(fetchedCollections)
   ? fetchedCollections.map((collection) => withSampleChapters(collection))
   : fetchedCollections;
-// His own frames for the film's magazine page and strip of film.
-const openingPictures = pickPictures(collections ?? []);
 ---
 
 <Layout dark={true}>
@@ -78,8 +75,9 @@ const openingPictures = pickPictures(collections ?? []);
         shown and the page opens on the opening words), src/lib/reelVisit.ts. */}
     <script is:inline set:html={reelHeadScript()} />
   </Fragment>
-  {/* The opening film: a word hunt through many texts, over the page. Its
-      first scene is the server's markup, so it is the first paint. */}
-  <OpeningFilm client:load pictures={openingPictures} />
+  {/* The opening film: a retro editorial type film, over the page. Its
+      first frame (a dark CRT, a blinking cursor) is the server's markup, so
+      it is the first paint. */}
+  <OpeningFilm client:load />
   <HomePage client:load collections={collections} />
 </Layout>

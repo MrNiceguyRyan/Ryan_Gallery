@@ -1,23 +1,16 @@
 // Run offline: node --experimental-strip-types --test scripts/opening-film.test.mjs
 //
-// The opening film (src/lib/openingFilm.ts): the cut schedule (12–16 scenes
-// on a desktop, fewer on a phone, cut on a beat, about 7–8.5 s to the clap,
-// every shot holding long enough to be read once its entrance has landed, no
-// metronome, a clapperboard that holds), the words (CAMERA, never CINEMA —
-// nor a film set's fields), the runs (each word hunted in one run of match
-// cuts; the first screen's own words all found), the entrances (a hard cut
-// and one short move that lands exactly at rest, about the found word; no
-// blur-in; a whip's ghosts; the typebars' strike), the input (only the Skip
-// pill skips; the page's scroll held by a lock nothing else can lift, Tab
-// kept on the pill), the skip (to the clapperboard, never past the landing,
-// never back, nothing after the clap), the globe's lead, the camera (the
-// word on the focus at the run's size; continuous across a match cut; dead
-// still once landed), the
-// finder's track (it searches while a shot moves and locks on when it can be
-// read; it travels between runs), landing A's flights and
-// its targets (the entrance's opening words), the flash safety of the cuts (and the
-// desktop's grade), the finder's looks, his photographs, and the seeded
-// material the server and client both draw.
+// The opening film (src/lib/openingFilm.ts), v4 — the owner's spec of
+// 2026-09-28 ("复古编辑部动态排版"): a typewriter relay, the word found by a
+// lime marker, match cuts round a fixed lime anchor, a film burn, the dark
+// typed, the end title, the landing. Held here: the lengths (desktop ≤ 7.5 s,
+// phone ≤ 6.6 s, landing included), every hard cut on the beat and the burn
+// on the 24 fps grid, the flash budget (light/dark turns ≤ 3 in any second,
+// ≤ 4 in all; the burn never brighter than bone), the anchor (one centre,
+// one height, one cap height for every cut), the drift (on across a cut, or
+// a quarter turn), the words (ARCHIVE, CAMERA — never cinema — TRAVEL,
+// THOUGHT, YOU, RYAN XU), the landing's words at both ends, the input (only
+// the Skip pill skips), the skip, and the house rules the sheet must keep.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -32,440 +25,272 @@ const bundled = await build({
   platform: 'neutral',
 });
 const F = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
-
+const read = (file) => readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+const PLANS = { desktop: F.filmPlan('desktop'), phone: F.filmPlan('phone') };
 
-test('the schedule: 12–16 scenes on a desktop, fewer on a phone, every scene once', () => {
-  assert.ok(F.FILM_DESKTOP.length >= 12 && F.FILM_DESKTOP.length <= 16, `${F.FILM_DESKTOP.length} scenes`);
-  assert.ok(F.FILM_PHONE.length < F.FILM_DESKTOP.length);
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const ids = film.map((s) => s.id);
-    assert.equal(new Set(ids).size, ids.length, 'no scene twice');
-    assert.equal(ids[0], 'code', 'it opens on the code');
-    assert.equal(ids[ids.length - 1], 'slate', 'it ends on the clapperboard');
-    // Every phone scene is one of the desktop's (the same film, fewer).
-    for (const id of F.FILM_PHONE.map((s) => s.id)) assert.ok(F.FILM_DESKTOP.some((s) => s.id === id), id);
-  }
+test('the length: desktop ≤ 7.5 s and phone ≤ 6.6 s, the landing included; hard limit 8 s', () => {
+  const landing = F.landingAEnd(F.FLY_ORDER.length);
+  assert.ok(landing <= F.LANDING_A.done, 'every word home inside the landing');
+  const desk = PLANS.desktop.length + F.LANDING_A.done;
+  const phone = PLANS.phone.length + F.LANDING_A.done;
+  assert.ok(desk <= 7500, `desktop ${desk} ms`);
+  assert.ok(desk >= 7300, `desktop ${desk} ms: about 7.5 s`);
+  assert.ok(phone <= 6600, `phone ${phone} ms`);
+  assert.ok(phone >= 6400, `phone ${phone} ms: about 6.6 s`);
+  for (const plan of Object.values(PLANS)) assert.ok(plan.length + F.LANDING_A.done <= 8000);
 });
 
-test('the rhythm: 7–8.5 s to the clap, cut on the beat, every shot held long enough to read, no metronome', () => {
-  const cuts = F.cutSchedule(F.FILM_DESKTOP);
-  const end = F.filmLength(cuts);
-  // (He reviews by reloading: he sits through it every time.)
-  assert.ok(end >= 7000 && end <= 8500, `desktop ${end} ms`);
-  const phone = F.filmLength(F.cutSchedule(F.FILM_PHONE));
-  assert.ok(phone >= 4500 && phone < end, `phone ${phone} ms`);
-  // Hard cuts on the beat: every scene a whole number of beats.
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) for (const s of film) assert.equal(s.ms % F.BEAT_MS, 0, `${s.id} ${s.ms}`);
-  // Every middle shot HOLDS once its entrance has landed (the finder locks
-  // on): at least 420 ms, and on average 1.3× the 360 ms the last cut's
-  // shots had in all (the owner: a little slower, to read each one).
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const middle = F.cutSchedule(film).slice(1, -1);
-    const holds = middle.map((c) => c.end - F.lockAt(c));
-    holds.forEach((h, i) => assert.ok(h >= 420, `${middle[i].id} holds ${h} ms`));
-    const mean = holds.reduce((a, b) => a + b, 0) / holds.length;
-    assert.ok(mean >= 1.3 * 360, `mean hold ${mean.toFixed(0)} ms`);
-    for (const c of middle) assert.ok(c.ms <= 750, `${c.id} ${c.ms} ms: a shot, not a scene`);
-    // No metronome: never more than three shots in a row of one length.
-    let same = 1;
-    for (let i = 1; i < middle.length; i += 1) {
-      same = middle[i].ms === middle[i - 1].ms ? same + 1 : 1;
-      assert.ok(same <= 3, `${same} shots of ${middle[i].ms} ms in a row at ${middle[i].id}`);
+test('the acts: contiguous from 0, in the spec\'s order and lengths', () => {
+  for (const [layout, plan] of Object.entries(PLANS)) {
+    const order = ['type', 'find', 'cuts', 'burn', 'dark', 'title'];
+    let at = 0;
+    for (const id of order) {
+      assert.equal(plan.acts[id].start, at, `${layout} ${id} starts where the last ended`);
+      at = plan.acts[id].end;
     }
+    assert.equal(at, plan.length);
+    assert.equal(plan.acts.find.end - plan.acts.find.start, 500);
+    assert.equal(plan.acts.burn.end - plan.acts.burn.start, 1000, 'the burn: 24 frames at 24 fps');
+    assert.equal(plan.acts.dark.end - plan.acts.dark.start, 1000);
   }
-  // The bigger reads get the longer holds: the slices (six faces, one
-  // letter each) and the poster (the one full sentence).
-  const desk = Object.fromEntries(F.FILM_DESKTOP.map((s) => [s.id, s.ms]));
-  assert.ok(desk.slices >= 750 && desk.poster >= 750);
-  // The code holds for its lock and lift (on a phone too: every beat ends
-  // inside the scene); the clapperboard long enough to read.
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const code = film[0].ms;
-    for (const beat of [F.CODE_BEATS.lift, F.CODE_BEATS.dim, F.CODE_BEATS.finder]) assert.ok(beat[0] < beat[1] && beat[1] <= code, `${beat} in ${code}`);
-    const lastLock = F.CODE_BEATS.scramble + 6 * F.CODE_BEATS.stagger + F.CODE_BEATS.lockAfter;
-    assert.ok(lastLock <= F.CODE_BEATS.lift[0] + 200, 'the word has locked before it is far off the rain');
-    // …and ARCHIVE has landed, still, before the first cut (the cut comes on
-    // its landing; the match cut carries the hold on into the dictionary).
-    assert.ok(code - F.CODE_BEATS.lift[1] >= 40, 'the lifted word lands before the cut');
-    // The finder is up inside the first quarter second (the first second is
-    // a hunt, not generic rain), and on the word when the lift lands.
-    assert.ok(F.CODE_BEATS.finder[0] <= 250);
-    assert.equal(F.CODE_BEATS.finder[1], F.CODE_BEATS.lift[1]);
-  }
-  assert.ok(F.FILM_DESKTOP.at(-1).ms >= 800);
-  // Its beats fit inside it: it is lifted in, the chalk — the ring round
-  // CAMERA first, then the lines — then the clap on the scene's end.
-  const beats = F.slateBeats(F.FILM_DESKTOP.at(-1).ms);
-  assert.equal(beats.clap[1], F.FILM_DESKTOP.at(-1).ms);
-  assert.ok(beats.ring >= F.ENTRANCES.slate.ms, 'chalked once it has landed');
-  assert.ok(beats.underline[0] > beats.ring, 'CAMERA first');
-  for (let i = 1; i < beats.underline.length; i += 1) assert.ok(beats.underline[i] > beats.underline[i - 1]);
-  assert.ok(beats.underline.at(-1) + beats.underlineMs < beats.clap[0]);
+  // Desktop, to the spec's clock: 1.75 / 2.25 / 4.25 / 5.25 / 6.25 s.
+  const d = PLANS.desktop.acts;
+  assert.deepEqual([d.type.end, d.find.end, d.cuts.end, d.burn.end, d.dark.end], [1750, 2250, 4250, 5250, 6250]);
 });
 
-test('the words: CAMERA, not cinema', () => {
-  const words = new Set(F.FILM_DESKTOP.map((s) => s.word));
-  assert.ok(words.has('camera'));
-  assert.ok(!words.has('cinema'));
-  assert.deepEqual(Object.keys(F.FOCUS).sort(), ['archive', 'camera', 'ryanxu', 'thought', 'travel']);
-  // Nowhere in the film's source: the lib, the scenes, the island, the sheet.
-  for (const file of ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css']) {
-    const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
-    assert.doesNotMatch(text, /cinema/i, file);
+test('every hard cut falls on the beat; the burn on the 24 fps grid', () => {
+  assert.equal(F.BEAT_MS, 125);
+  for (const plan of Object.values(PLANS)) {
+    const cuts = F.hardCuts(plan);
+    assert.ok(cuts.length >= 12);
+    for (const t of cuts) assert.equal(t % F.BEAT_MS, 0, `${plan.layout} cut at ${t}`);
+    for (const c of plan.cuts) assert.equal(c.end - c.start, 2 * F.BEAT_MS, 'a match cut is two beats');
+    // The burn's frames: 1/24 s each, three to a beat.
+    assert.ok(close(F.FRAME24_MS * 3, F.BEAT_MS));
+    for (let f = 0; f <= F.BURN.frames; f += 3) assert.equal(F.burnFrameStart(plan, f) % F.BEAT_MS, 0);
+    for (let f = 0; f < F.BURN.frames; f += 1) {
+      const t = F.burnFrameStart(plan, f);
+      assert.equal(F.burnFrameAt(plan, t + 1), f);
+      assert.equal(F.burnFrameAt(plan, t + F.FRAME24_MS - 1), f, 'held for the whole frame');
+    }
+    assert.equal(F.burnFrameAt(plan, plan.acts.burn.start - 1), -1);
+    assert.equal(F.burnFrameAt(plan, plan.acts.burn.end), -1);
   }
-  const scenes = readFileSync(fileURLToPath(new URL('../src/components/home/OpeningScenes.tsx', import.meta.url)), 'utf8');
-  // Two camera objects, and CAMERA found in three shots — on the phone too.
-  assert.equal((scenes.match(/<Find word="camera"/g) || []).length, 3);
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    assert.equal(film.filter((s) => s.word === 'camera').length, 3);
-    assert.ok(film.some((s) => s.id === 'topplate') && film.some((s) => s.id === 'lens'), 'both camera objects');
-  }
-  // The payoff chalks CAMERA too (a ring round its label), and the board's
-  // fields are a roll of film's, not a film set's; the counter counts frames.
-  assert.match(scenes, /<ChalkRing \/>/);
-  const slate = scenes.slice(scenes.indexOf('function SlateScene'));
-  for (const word of ['fps', 'Sync', 'Take', 'Scene<', 'Prod.']) assert.ok(!slate.includes(word), word);
-  const island = readFileSync(fileURLToPath(new URL('../src/components/home/OpeningFilm.tsx', import.meta.url)), 'utf8');
-  assert.doesNotMatch(island, />TC </);
-  assert.match(island, /data-counter/);
-  assert.ok(!F.RAIN_TOKENS.some((t) => /REEL|SCN|TAKE|SYNC|FPS/.test(t)), 'the rain speaks camera');
 });
 
-test('the entrances: one short move, landing exactly at rest, then a hold', () => {
-  const [w, h] = [1728, 1000];
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    for (const cut of F.cutSchedule(film)) {
-      const e = F.ENTRANCES[cut.id];
-      assert.ok(e, cut.id);
-      // Short: the move is a punch, never the shot.
-      assert.ok(e.ms <= 0.6 * cut.ms, `${cut.id} moves ${e.ms} of ${cut.ms}`);
-      assert.ok(e.read >= 0 && e.read <= 0.6 * cut.ms, `${cut.id} reads at ${e.read}`);
-      // At rest when it lands.
-      assert.deepEqual(F.entranceAt(e, 1, w, h), F.REST);
-      if (e.ms > 0) {
-        const start = F.entranceAt(e, 0, w, h);
-        assert.notDeepEqual(start, F.REST, `${cut.id} starts somewhere`);
-        // It only ever closes in on rest (no overshoot, no bounce: it locks).
-        let last = Infinity;
-        for (let u = 0; u <= 1.0001; u += 0.05) {
-          const s = F.entranceAt(e, u, w, h);
-          const off = Math.abs(s.x) + Math.abs(s.y) + Math.abs(s.rx) + Math.abs(s.ry) + Math.abs(s.k - 1) * 1000;
-          assert.ok(off <= last + 1e-9, `${cut.id} at ${u.toFixed(2)}`);
-          last = off;
-        }
+test('act 1: the typewriter relay — a material every three beats under letters that never move', () => {
+  assert.equal(F.TYPED, 'an archive of travel');
+  assert.equal(F.FOUND_WORD, 'archive');
+  assert.deepEqual([...F.MATERIALS.desktop], ['crt', 'phosphor', 'paper', 'copy']);
+  assert.equal(F.MATERIALS.phone.length, 3, 'the phone keeps three');
+  for (const plan of Object.values(PLANS)) {
+    const m = plan.materials;
+    assert.equal(m[0].start, 0);
+    m.forEach((x, i) => {
+      if (i > 0) {
+        assert.equal(x.start, m[i - 1].end);
+        assert.equal(x.end - x.start, 3 * F.BEAT_MS, 'three beats a material');
       }
-    }
-  }
-  // Varied: at least five kinds of move in the desktop film.
-  const kinds = new Set(F.FILM_DESKTOP.map((s) => F.ENTRANCES[s.id].kind).filter((k) => k !== 'cut'));
-  assert.ok(kinds.size >= 5, [...kinds].join());
-  // Nothing enters soft: no shot blurs in.
-  for (const [id, e] of Object.entries(F.ENTRANCES)) assert.ok(!('blur' in e) && e.kind !== 'focus', `${id} blurs in`);
-  assert.ok(!('blur' in F.REST));
-  // Fast in: a snap is mostly done in its first third.
-  const snap = F.ENTRANCES.dictionary;
-  assert.ok(F.entranceAt(snap, 1 / 3, w, h).k - 1 < 0.3 * (snap.k - 1));
-  // The book's two gears: most of the way in its first 90 ms, then a slow
-  // straight gear; the finder locks once it has shifted.
-  const book = F.ENTRANCES.book;
-  assert.ok(book.gear);
-  const shift = book.gear[0] * book.ms;
-  assert.ok(Math.abs(shift - 90) < 1e-9);
-  assert.ok(Math.abs(F.entranceAt(book, book.gear[0], w, h).k - 1.06) < 1e-9, 'k 1.06 at the shift');
-  assert.ok(book.read >= shift);
-  const slow = [0.4, 0.6, 0.8].map((u) => F.entranceAt(book, u, w, h).k);
-  assert.ok(Math.abs(slow[0] - slow[1] - (slow[1] - slow[2])) < 1e-9, 'the slow gear is linear');
-  // Sampled densely through the fast gear.
-  const us = F.entranceSamples(book);
-  assert.equal(us[0], 0);
-  assert.equal(us.at(-1), 1);
-  assert.ok(us.filter((u) => u <= book.gear[0] + 1e-9).length >= 8);
-  for (let i = 1; i < us.length; i += 1) assert.ok(us[i] > us[i - 1]);
-  assert.deepEqual(F.entranceSamples(F.ENTRANCES.slices), []);
-  // A whip's ghosts: full through the first 80 ms, gone when it lands,
-  // fading (never growing) between; fainter as they trail further; their
-  // lag closing with the move (all of it at the cut, none once landed).
-  const whip = F.ENTRANCES.newspaper;
-  assert.equal(F.entranceLeft(whip, 0), 1);
-  assert.equal(F.entranceLeft(whip, 1), 0);
-  assert.ok(F.entranceLeft(whip, 0.5) < 0.25, 'most of a whip is in its first half');
-  assert.equal(F.ghostAt(0, whip.ms), 1);
-  assert.equal(F.ghostAt(F.GHOST_HOLD_MS / whip.ms, whip.ms), 1);
-  assert.equal(F.ghostAt(1, whip.ms), 0);
-  let g = 1;
-  for (let u = 0; u <= 1.0001; u += 0.05) {
-    const v = F.ghostAt(u, whip.ms);
-    assert.ok(v <= g + 1e-12);
-    g = v;
-  }
-  for (let i = 1; i < F.WHIP_GHOSTS.length; i += 1) {
-    assert.ok(F.WHIP_GHOSTS[i].lag > F.WHIP_GHOSTS[i - 1].lag && F.WHIP_GHOSTS[i].opacity < F.WHIP_GHOSTS[i - 1].opacity);
-  }
-  // The typewriter: the carriage slams home (no blur), and every letter of
-  // THOUGHT is struck before the finder locks on.
-  const tw = F.ENTRANCES.typewriter;
-  assert.equal(tw.kind, 'slam');
-  assert.ok(tw.ms <= 120 && Math.abs(tw.x) <= 0.12);
-  const s = F.TYPE_STRIKE;
-  assert.ok(s.at + 6 * s.stagger + s.ms <= tw.read, 'THOUGHT struck before the lock');
-  assert.ok(s.ms <= 34, 'each strike two frames');
-  // The sheet's transform: the entrance turns about the word's resting
-  // place (the focus maps to itself, whatever the tilt and scale).
-  const cam = { s: 0.9, tx: 12, ty: -30 };
-  const f = [800, 460];
-  const str = F.sheetTransform(cam, { x: 0, y: 0, rx: 30, ry: -20, k: 1.2 }, f);
-  assert.equal(str, 'translate(0.00px, 0.00px) translate(800.00px, 460.00px) rotateX(30.000deg) rotateY(-20.000deg) scale(1.20000) translate(-800.00px, -460.00px) translate(12.00px, -30.00px) scale(0.90000)');
-  // A flat shot's list has no turn in it at all.
-  const flat = F.sheetTransform(cam, { x: 40, y: 0, rx: 0, ry: 0, k: 1 }, f, false);
-  assert.doesNotMatch(flat, /rotate|3d/);
-  // At rest, the point the word rests on maps to itself: the entrance is
-  // about it (x' = f + k (x - f) + offset).
-  for (const depth of [true, false]) {
-    const e = F.entranceAt(F.ENTRANCES.dictionary, 0, 1728, 1000);
-    assert.ok(e.k > 1);
-    assert.match(F.sheetTransform(cam, e, f, depth), /^translate\(0\.00px, 0\.00px\) translate\(800\.00px, 460\.00px\)/);
-  }
-});
-
-test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing', () => {
-  assert.equal(F.INPUT_POLICY.skip, 'skip');
-  for (const source of ['wheel', 'touch', 'key', 'pointer']) assert.notEqual(F.INPUT_POLICY[source], 'skip', source);
-  // The page does not scroll under the film either.
-  for (const source of ['wheel', 'touch', 'key']) assert.equal(F.INPUT_POLICY[source], 'hold', source);
-  // The island has no fast-forward on anything but the pill.
-  const island = readFileSync(fileURLToPath(new URL('../src/components/home/OpeningFilm.tsx', import.meta.url)), 'utf8');
-  assert.doesNotMatch(island, /addEventListener\('pointerdown'/);
-  assert.doesNotMatch(island, /addEventListener\('touchstart'/);
-  assert.doesNotMatch(island, /hurry\(\)/);
-  assert.match(island, /skip\.addEventListener\('click', onSkip\)/);
-  // The scroll lock is a stylesheet rule on html[data-film-lock] (the
-  // homepage's own effect wrote the body's inline overflow and lifted an
-  // inline lock), and the page under the film is inert.
-  const css = readFileSync(fileURLToPath(new URL('../src/styles/opening.css', import.meta.url)), 'utf8');
-  assert.match(css, /html\[data-film-lock\] body \{ overflow: clip !important; \}/);
-  assert.match(island, /html\.setAttribute\('data-film-lock', ''\)/);
-  assert.match(island, /setAttribute\('inert', ''\)/);
-  assert.doesNotMatch(island, /body\.style\.overflow/);
-  // Keys: Tab stays on the pill; a scrolling key is swallowed WHATEVER the
-  // modifier (Cmd+Down scrolled the page under the film) — the check for
-  // the browser's shortcuts comes after it.
-  const keys = island.slice(island.indexOf('const onKeyDown'), island.indexOf('const onSkip'));
-  assert.match(keys, /event\.key === 'Tab'[\s\S]*?event\.preventDefault\(\);[\s\S]*?skip\.focus\(\{ preventScroll: true \}\)/);
-  assert.ok(keys.indexOf('SCROLL_KEYS.has') > 0 && keys.indexOf('SCROLL_KEYS.has') < keys.indexOf('event.metaKey || event.ctrlKey || event.altKey ||'), 'scroll keys before the shortcut pass');
-});
-
-test('the cuts: contiguous from 0, one run per word, the first screen\'s words all found', () => {
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const cuts = F.cutSchedule(film);
-    assert.equal(cuts[0].start, 0);
-    for (let i = 1; i < cuts.length; i += 1) assert.equal(cuts[i].start, cuts[i - 1].end);
-    const runs = [];
-    cuts.forEach((c) => {
-      if (c.runStart) runs.push(c.word);
-      else assert.equal(c.word, cuts[c.index - 1].word);
     });
-    assert.equal(new Set(runs).size, runs.length, 'each word in one run');
-    for (const word of ['archive', 'travel', 'thought', 'ryanxu']) assert.ok(runs.includes(word), word);
-    assert.equal(runs[0], 'archive');
-    assert.equal(runs.at(-1), 'ryanxu');
-    // sceneAt: the scene on screen at a time, the last holding.
-    assert.equal(F.sceneAt(cuts, 0), 0);
-    assert.equal(F.sceneAt(cuts, cuts[1].start), 1);
-    assert.equal(F.sceneAt(cuts, cuts[1].start - 1), 0);
-    assert.equal(F.sceneAt(cuts, 1e6), cuts.length - 1);
+    assert.equal(m[0].end - m[0].start, 5 * F.BEAT_MS, 'the cursor alone for two beats, then three');
+    // Dark, (dark,) light, light: one change of tone.
+    const tones = m.map((x) => F.MATERIAL_TONE[x.id]);
+    assert.equal(tones.filter((t, i) => i > 0 && t !== tones[i - 1]).length, 1);
+    // The typing: continuous across the cuts, done before the marker.
+    const times = plan.typing;
+    assert.equal(times.length, F.TYPED.length);
+    assert.equal(times[0], 2 * F.BEAT_MS, 'the first letter after the cursor\'s flash');
+    for (let i = 1; i < times.length; i += 1) assert.ok(times[i] > times[i - 1], 'in order');
+    assert.ok(times.at(-1) <= plan.acts.type.end - F.TYPE_TAIL_MS);
   }
-  assert.ok(F.FILM_DESKTOP.some((s) => s.word === 'camera'));
+  // About fourteen a second on the desktop, each within ±25 ms of its beat.
+  const t = PLANS.desktop.typing;
+  const d = PLANS.desktop.acts.type;
+  const interval = Math.min(1000 / F.TYPE_CPS, (d.end - F.TYPE_TAIL_MS - t[0]) / F.TYPED.length);
+  t.forEach((x, i) => assert.ok(Math.abs(x - (t[0] + i * interval)) <= F.TYPE_JITTER_MS + 0.5, `letter ${i}`));
+  const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
+  assert.ok(cps > 12.5 && cps < 15.5, `${cps.toFixed(1)} a second`);
+  // The typewriter's ribbon: 0.75–1 strong, ±0.5 px, the same on server and client.
+  const r = F.ribbon(F.TYPED);
+  assert.deepEqual(r, F.ribbon(F.TYPED));
+  for (const x of r) {
+    assert.ok(x.ink >= 0.75 && x.ink <= 1);
+    assert.ok(Math.abs(x.dx) <= 0.5 && Math.abs(x.dy) <= 0.5);
+  }
 });
 
-test('opening.css scrambles and locks the letters on CODE_BEATS', () => {
-  const css = readFileSync(fileURLToPath(new URL('../src/styles/opening.css', import.meta.url)), 'utf8');
-  const { scramble, stagger, lockAfter } = F.CODE_BEATS;
-  assert.ok(css.includes(`animation: of-scramble ${lockAfter}ms`), 'scramble duration');
-  assert.ok(css.includes(`animation-delay: calc(${scramble}ms + var(--k) * ${stagger}ms)`), 'scramble start');
-  assert.ok(css.includes(`animation-delay: calc(${scramble + lockAfter}ms + var(--k) * ${stagger}ms)`), 'lock-on');
+test('act 2: the marker sweeps, then the word glides to the anchor on the spec\'s curve', () => {
+  assert.deepEqual([...F.GLIDE_EASE], [0.2, 0.7, 0.1, 1]);
+  for (const plan of Object.values(PLANS)) {
+    assert.equal(plan.sweep.start, plan.acts.find.start);
+    assert.equal(plan.sweep.end - plan.sweep.start, 150);
+    assert.equal(plan.glide.start, plan.acts.find.start + F.BEAT_MS);
+    assert.equal(plan.glide.end, plan.acts.cuts.start, 'it lands as the first cut comes');
+    assert.equal(plan.cuts[0].face, 'f900', 'into the anchor\'s first face');
+    assert.equal(plan.cuts[0].word, 'ARCHIVE');
+  }
+  // One crossfade window, inside the width's morph.
+  assert.ok(F.FIND.morph[0] <= F.FIND.swap[0] && F.FIND.swap[1] <= F.FIND.morph[1]);
 });
 
-test('skip: to the clapperboard with its tail left, never back, nothing after the clap', () => {
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const cuts = F.cutSchedule(film);
-    const end = F.filmLength(cuts);
-    const slate = cuts.at(-1);
-    const target = end - F.FF_TAIL;
-    assert.ok(target >= slate.start, 'inside the clapperboard');
-    for (const t of [0, 10, 900, cuts[3].start + 5, slate.start, target - 1]) {
-      const to = F.fastForwardTarget(cuts, t);
-      assert.equal(to, target, `from ${t}`);
-      assert.ok(to > t && to < end, 'forward, and the landing still to play');
+test('act 3: the keywords, the faces, the words the owner asked for', () => {
+  const words = (plan) => plan.cuts.map((c) => c.word);
+  assert.deepEqual(words(PLANS.desktop), ['ARCHIVE', 'ARCHIVE', 'CAMERA', 'CAMERA', 'TRAVEL', 'TRAVEL', 'THOUGHT', 'YOU']);
+  assert.deepEqual(words(PLANS.phone), ['ARCHIVE', 'ARCHIVE', 'CAMERA', 'TRAVEL', 'TRAVEL', 'YOU']);
+  for (const plan of Object.values(PLANS)) {
+    assert.equal(plan.cuts.at(-1).word, 'YOU', 'YOU is the last page before the burn');
+    for (let i = 1; i < plan.cuts.length; i += 1) assert.notEqual(plan.cuts[i].face, plan.cuts[i - 1].face, 'every cut changes the face');
+    for (const c of plan.cuts) assert.ok(F.FACE_ORDER.includes(c.face));
+  }
+  assert.deepEqual(PLANS.desktop.cuts.map((c) => c.face), ['f900', 'f400', 'sg700', 'mono', 'f900', 'f400', 'sg700', 'mono']);
+  // The words that must be seen: ARCHIVE, CAMERA, TRAVEL, RYAN XU, YOU — and
+  // never cinema, anywhere in the film's source.
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  assert.equal(F.DARK_TYPED, 'ryan xu');
+  assert.equal(F.TITLE_NAME, 'Ryan Xu');
+  assert.deepEqual([...F.TITLE_SUB], ['CAMERA', 'ARCHIVE', 'TRAVEL', 'THOUGHT']);
+  assert.equal(F.TITLE_YOU.word, 'YOU');
+  for (const file of ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css']) {
+    assert.doesNotMatch(read(file), /cinema/i, file);
+  }
+  assert.match(scenes, /data-fly="you"/);
+});
+
+test('act 3: the anchor never moves — one centre, one block height, one cap height for every cut', () => {
+  const W = 1728;
+  const H = 1000;
+  for (const layout of ['desktop', 'phone']) {
+    const cap = F.anchorCap(W, H, 5.9, layout);
+    const boxes = [2.6, 4.1, 5.9, 6.4].map((perCap) => F.keyBox(W, H, cap, perCap * cap));
+    for (const b of boxes) {
+      assert.ok(close(b.block.x + b.block.w / 2, boxes[0].block.x + boxes[0].block.w / 2), 'centre x');
+      assert.ok(close(b.block.y + b.block.h / 2, boxes[0].block.y + boxes[0].block.h / 2), 'centre y');
+      assert.ok(close(b.block.h, boxes[0].block.h), 'height');
+      assert.ok(close(b.baseline, boxes[0].baseline), 'baseline');
+      // The cap is centred in the block.
+      assert.ok(close(b.baseline - cap / 2, b.cy));
+      // The ink is centred on the anchor.
+      assert.ok(close(b.inkX + (b.block.w - 2 * cap * F.ANCHOR.pad) / 2, b.cx));
     }
-    assert.equal(F.fastForwardTarget(cuts, target), null, 'already there');
-    assert.equal(F.fastForwardTarget(cuts, target + 50), null, 'never back');
-    assert.equal(F.fastForwardTarget(cuts, end), null, 'the clap has come');
-    assert.equal(F.fastForwardTarget(cuts, end + 400), null, 'landing');
-    // The chalk is on the board by then (a fast-forward sees the found words).
-    const beats = F.slateBeats(slate.ms);
-    assert.ok(slate.start + beats.underline.at(-1) + beats.underlineMs <= target + 160);
+    // Only the width follows the word.
+    assert.ok(boxes[3].block.w > boxes[0].block.w);
   }
-  // Hurried, the landing plays faster: from the pill to the settled page in
-  // about a second and a half.
-  assert.ok(F.FF_RATE > 1 && F.FF_RATE <= 1.6);
-  assert.ok(F.FF_TAIL + F.LANDING_A.done / F.FF_RATE <= 1500, 'Skip → settled page');
-});
-
-test('the globe: let go well before the clap, so its dawn is done under the film', () => {
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const cuts = F.cutSchedule(film);
-    const at = F.globeReleaseAt(cuts);
-    assert.ok(at >= 0);
-    assert.ok(F.filmLength(cuts) - at >= 2500, 'at least 2.5 s of lead');
+  // 12% of the height, unless the widest word must fit across.
+  assert.ok(close(F.anchorCap(1728, 1000, 5.9, 'desktop'), 120));
+  const phoneCap = F.anchorCap(390, 844, 5.9, 'phone');
+  assert.ok(phoneCap < 0.12 * 844 && close(phoneCap * (5.9 + 2 * F.ANCHOR.pad), 0.86 * 390, 1e-6));
+  // Nothing in a cut's data can move the anchor: a composition has no
+  // anchor of its own.
+  for (const c of F.COMPOSITIONS) {
+    for (const key of ['x', 'y', 'cap', 'anchor', 'block']) assert.equal(c[key], undefined, key);
   }
 });
 
-test('the camera: the word on the focus at the run\'s cap height, and dead still once it has landed', () => {
-  const anchor = { x: 820, y: 460, cap: 58 };
-  const cam = F.cameraFor(anchor, [864, 460], 64, 0);
-  assert.ok(close(cam.tx + anchor.x * cam.s, 864, 1e-9));
-  assert.ok(close(cam.ty + anchor.y * cam.s, 460, 1e-9));
-  assert.ok(close(anchor.cap * cam.s, 64, 1e-9));
-  const pushed = F.cameraFor(anchor, [864, 460], 64, 1);
-  assert.ok(close(anchor.cap * pushed.s, 64 * (1 + F.RUN_PUSH), 1e-9));
-  // No push and no drift: a hold creeping on reads soft (the owner).
-  assert.equal(F.RUN_PUSH, 0);
-  assert.deepEqual([...F.RUN_DRIFT], [0, 0]);
-  const cuts = F.cutSchedule(F.FILM_DESKTOP);
-  for (let i = 1; i < cuts.length; i += 1) {
-    assert.deepEqual(F.focusAt(cuts, i, cuts[i].start, 1728, 1000, false), F.focusAt(cuts, i, cuts[i].end, 1728, 1000, false), cuts[i].id);
-  }
-  // The CSS rule and the function agree.
-  assert.equal(F.capFor(1728, 1000), 64);
-  assert.equal(F.capFor(390, 844), 36);
-  assert.equal(F.capFor(4000, 3000), 96);
-});
-
-test('a match cut: across a cut inside a run the word keeps its place and its size', () => {
-  const cuts = F.cutSchedule(F.FILM_DESKTOP);
-  const [w, h] = [1728, 1000];
-  // Two different sheets, two different anchors: at the cut, both put their
-  // word on one point at one size.
-  const a = { x: 1100, y: 960, cap: 63 };
-  const b = { x: 2450, y: 780, cap: 66 };
-  for (let i = 1; i < cuts.length; i += 1) {
-    if (cuts[i].runStart) continue;
-    const t = cuts[i].start;
-    const before = F.cameraFor(a, F.focusAt(cuts, i - 1, t, w, h, false), 64, F.runProgress(cuts, i - 1, t));
-    const after = F.cameraFor(b, F.focusAt(cuts, i, t, w, h, false), 64, F.runProgress(cuts, i, t));
-    assert.ok(close(before.tx + a.x * before.s, after.tx + b.x * after.s, 1e-6), `x at cut ${i}`);
-    assert.ok(close(before.ty + a.y * before.s, after.ty + b.y * after.s, 1e-6), `y at cut ${i}`);
-    assert.ok(close(a.cap * before.s, b.cap * after.s, 1e-6), `size at cut ${i}`);
-  }
-  // The run's progress only grows, and the code's run pushes from its
-  // second scene (the first lifts its word instead).
-  for (let i = 0; i < cuts.length; i += 1) {
-    let last = -1;
-    for (let t = cuts[i].start; t <= cuts[i].end; t += 17) {
-      const p = F.runProgress(cuts, i, t);
-      assert.ok(p >= last - 1e-12);
-      last = p;
+test('act 3: the drift runs on across every cut (the same way, or a quarter turn), 20–60 px', () => {
+  for (const plan of Object.values(PLANS)) {
+    for (let i = 1; i < plan.cuts.length; i += 1) {
+      const a = F.DRIFT_DEG[plan.cuts[i - 1].drift];
+      const b = F.DRIFT_DEG[plan.cuts[i].drift];
+      const turn = Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+      assert.ok(turn === 0 || turn === 90, `${plan.layout} ${i}: ${turn}°`);
     }
   }
-  assert.equal(F.runProgress(cuts, 0, cuts[0].end), 0);
-});
-
-test('the finder\'s looks: a reading rule by default, the corners on ?finder=frame', () => {
-  assert.equal(F.finderLookFrom(''), 'rule');
-  assert.equal(F.finderLookFrom('?finder=frame'), 'frame');
-  assert.equal(F.finderLookFrom('?open=b&finder=frame'), 'frame');
-  assert.equal(F.finderLookFrom('?finder=x'), 'rule');
-  // The rule: the word's ink width + 8 px, 6 px under the baseline (a box is
-  // the word's cap box + pad).
-  const word = { x: 500, y: 300, w: 240, h: 64 };
-  const pad = 16;
-  const r = F.ruleFor(F.finderBox(word, pad), pad);
-  assert.ok(close(r.x, 496) && close(r.w, 248) && close(r.y, 370));
-  // It grows only sideways (a pulse is a snap, not a drop).
-  const g = F.growBox(word, 12, 0);
-  assert.equal(g.y, word.y);
-  assert.equal(g.h, word.h);
-  assert.equal(g.w, word.w + 24);
-});
-
-test('the finder in the code scene: up round the scrambling letters, then riding the lift onto the word', () => {
-  const ink = { x: 680, y: 430, w: 370, h: 66 };
-  const [cx, cy] = [864, 460];
-  const k0 = 0.3;
-  const pad = 16;
-  const keys = F.codeFinderKeys(ink, cx, cy, k0, pad);
-  for (let i = 1; i < keys.length; i += 1) assert.ok(keys[i].t >= keys[i - 1].t);
-  const small = F.finderBox(F.scaleBox(ink, k0, cx, cy), pad);
-  // It comes up round the scrambling cells, not round the word it will be.
-  assert.equal(keys[0].t, 0);
-  assert.ok(close(keys[0].box.w, small.w + 2 * F.CODE_BEATS.search));
-  assert.ok(keys[0].box.w < F.finderBox(ink, pad).w, 'smaller than the lifted word');
-  assert.ok(keys.some((k) => k.t === F.CODE_BEATS.finder[0]));
-  // Closed on the cells when the lift starts; on the full word when it ends.
-  const liftStart = keys.find((k) => k.t === F.CODE_BEATS.lift[0]);
-  assert.deepEqual(liftStart.box, small);
-  const last = keys.at(-1);
-  assert.equal(last.t, F.CODE_BEATS.lift[1]);
-  const full = F.finderBox(ink, pad);
-  for (const key of ['x', 'y', 'w', 'h']) assert.ok(close(last.box[key], full[key], 1e-9), key);
-  // Riding the lift: it only grows, centred on the lock point.
-  let w = 0;
-  for (const k of keys.filter((k) => k.t >= F.CODE_BEATS.lift[0])) {
-    assert.ok(k.box.w >= w - 1e-9);
-    w = k.box.w;
+  for (const c of F.COMPOSITIONS) {
+    assert.ok(c.driftPx >= 20 && c.driftPx <= 60, `${c.word} ${c.driftPx}`);
+    assert.ok(c.giants.length >= 1 && c.giants.length <= 2, '1–2 giant words');
+    for (const g of c.giants) assert.ok(g.cap >= 0.3 && g.cap <= 0.45, `${g.text} ${g.cap}`);
+    assert.ok(c.texture.length >= 2 && c.texture.length <= 3, '2–3 texture paragraphs');
+    assert.ok(c.label && c.line && c.ringed && c.metaL && c.frame && c.at);
   }
+  // The motion blur: 3–4 copies, fainter as they fall back.
+  assert.ok(F.BLUR_COPIES.length >= 3 && F.BLUR_COPIES.length <= 4);
+  for (let i = 1; i < F.BLUR_COPIES.length; i += 1) assert.ok(F.BLUR_COPIES[i].opacity < F.BLUR_COPIES[i - 1].opacity);
 });
 
-test('the finder: it searches while a shot moves, locks on when it can be read, travels between runs', () => {
-  const cuts = F.cutSchedule(F.FILM_DESKTOP);
-  const boxes = cuts.map((c, i) => {
-    const b = { x: 600 + i * 7, y: 400 + i * 3, w: 400 + i, h: 90 };
-    return [b, { ...b, x: b.x - 4, w: b.w + 8 }];
-  });
-  const keys = F.finderTrack(cuts, boxes, F.CODE_BEATS.finder[1]);
-  for (let i = 1; i < keys.length; i += 1) assert.ok(keys[i].t >= keys[i - 1].t, `key ${i} in time`);
-  const lerpBox = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
-  cuts.forEach((cut, i) => {
-    if (i === 0) return;
-    const lock = F.lockAt(cut);
-    assert.ok(lock >= cut.start && lock < cut.end, `${cut.id} locks inside its shot`);
-    // (At a cut the previous scene's last key comes first, then this one's.)
-    const first = keys.filter((k) => k.t === cut.start).at(-1);
-    assert.ok(first, `a key on cut ${i}`);
-    if (cut.runStart) {
-      assert.equal(first.ease, 'travel');
-      assert.deepEqual(first.box, boxes[i - 1][1], 'it leaves from the last word');
-      // …and is on the new word by the time the shot can be read.
-      const arrived = keys.find((k) => k.t > cut.start && k.t <= cut.end);
-      assert.ok(arrived.t >= lock, 'arrives as the word lands');
-    } else {
-      // Searching: wide, held until the lock, then onto the word.
-      assert.equal(first.ease, 'hold');
-      assert.ok(first.box.w > boxes[i][0].w, 'wider than the word');
-      const held = keys.find((k) => k.t === lock);
-      assert.ok(held && held.ease === 'arrive' && held.box.w > boxes[i][0].w, 'still wide at the lock, then it snaps');
-      const on = keys.find((k) => k.t > lock && k.t < cut.end);
-      const span = cut.end - cut.start;
-      const expect = lerpBox(boxes[i][0], boxes[i][1], (on.t - cut.start) / span);
-      for (const key of ['x', 'y', 'w', 'h']) assert.ok(close(on.box[key], expect[key], 1e-9), `on the word after the snap: ${key}`);
-      assert.ok(on.t - lock <= F.FINDER_SNAP_MS, 'a snap, not a glide');
+test('act 4: the burn — frames in the spec\'s order, the slip, the leader one frame a card', () => {
+  assert.equal(F.BURN.frames, 24);
+  assert.deepEqual([...F.BURN.flicker], [0, 3]);
+  assert.equal(F.BURN.slip, 3);
+  assert.deepEqual([...F.BURN.burn], [4, 9]);
+  assert.deepEqual([...F.BURN.out], [9, 12]);
+  assert.deepEqual([...F.BURN.black], [12, 14]);
+  assert.deepEqual([...F.BURN.leader], [14, 20]);
+  assert.deepEqual([...F.BURN.perfs], [20, 24]);
+  assert.equal(F.LEADER.length, F.BURN.leader[1] - F.BURN.leader[0], 'one card a frame');
+  assert.ok(F.LEADER.includes('head') && F.LEADER.includes('35mm') && F.LEADER.includes('reel') && F.LEADER.includes('archive'));
+  // The slip: a quarter up, for one frame; the slide out at 6°.
+  assert.ok(close(F.frameAt(3).y, -0.25));
+  assert.equal(F.frameAt(2).y, 0);
+  assert.equal(F.frameAt(4).y, 0);
+  assert.ok(close(F.frameAt(11).rot, 6));
+  // The weave: ±1 px a frame, none once out.
+  for (let f = 0; f < 12; f += 1) assert.ok(Math.abs(F.frameAt(f).x) <= 1 && Math.abs(F.frameAt(f).weaveY) <= 1);
+  // The burn grows, the flicker is ±10% at most, the dark comes last.
+  for (let f = 5; f < 12; f += 1) assert.ok(F.burnRadius(f) > F.burnRadius(f - 1));
+  assert.equal(F.burnRadius(3), 0);
+  for (let f = 0; f < 24; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) <= 1);
+  assert.equal(F.burnDarkness(8), 0);
+  assert.ok(F.burnDarkness(11) > F.burnDarkness(9));
+  assert.equal(F.burnDarkness(12), 1);
+});
+
+test('no strobe: light/dark turns ≤ 3 in any second, ≤ 4 in all; the burn never brighter than bone', () => {
+  for (const plan of Object.values(PLANS)) {
+    const flips = F.toneFlips(plan);
+    assert.ok(flips.length <= 4, `${plan.layout}: ${flips.length} turns`);
+    for (const t of flips) {
+      const inWindow = flips.filter((c) => c >= t && c < t + 1000).length;
+      assert.ok(inWindow <= 3, `${plan.layout}: ${inWindow} turns from ${t} ms`);
     }
-    const last = keys.filter((k) => k.t === cut.end)[0];
-    assert.deepEqual(last.box, boxes[i][1], 'on the word at the cut\'s end');
-  });
-  // Its strength: dim while searching, full once locked (steps on the frame).
-  const strength = F.finderStrength(cuts);
-  for (const cut of cuts.slice(1)) {
-    const lock = F.lockAt(cut);
-    if (lock <= cut.start) continue;
-    const mine = strength.filter((k) => k.t >= cut.start && k.t < cut.end);
-    assert.deepEqual(mine.slice(0, 3).map((k) => k.o), [1, F.FINDER_SEARCH_OPACITY, F.FINDER_SEARCH_OPACITY]);
-    assert.equal(mine.at(-1).o, 1);
+    // Act 1 turns once; act 3 never; the burn turns it dark and it stays so.
+    const tl = F.toneTimeline(plan);
+    assert.equal(tl[0].tone, 'dark');
+    assert.equal(tl.at(-1).tone, 'dark');
+    const act3 = tl.find((s) => s.start <= plan.acts.cuts.start && s.end >= plan.acts.cuts.end);
+    assert.ok(act3 && act3.tone === 'light', 'act 3 all light');
   }
+  const bone = F.luminance('#F4F4ED');
+  for (const c of F.BURN_RAMP) assert.ok(F.luminance(c) <= bone + 1e-9, c);
+  assert.equal(F.BURN_RAMP[0], '#F4F4ED', 'its brightest is bone');
+  assert.ok(F.luminance(F.BURN_HOLE) < 0.02, 'the hole is dark');
 });
 
-test('landing A: every word flies from its box on the board to its glyph box, in order, inside the landing', () => {
+test('acts 5–6: the dark typed with one lime cursor, then the line turns into the title', () => {
+  for (const plan of Object.values(PLANS)) {
+    const t = plan.darkTyping;
+    assert.equal(t.length, F.DARK_TYPED.length);
+    assert.equal(t[0], plan.acts.dark.start + F.DARK_TYPE_AT);
+    const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
+    assert.ok(cps > 10.5 && cps < 13.5, `${cps.toFixed(1)} a second`);
+    // Typed, then one blink (half a period off), on again as the title comes.
+    assert.ok(plan.blink.start > t.at(-1));
+    assert.ok(close(plan.blink.end - plan.blink.start, F.CURSOR_MS / 2));
+    assert.equal(plan.blink.end, plan.acts.title.start);
+  }
+  assert.ok(F.TITLE.morph < F.ACT_BEATS.title * F.BEAT_MS);
+  assert.ok(F.TITLE.swap[0] > 0 && F.TITLE.swap[1] < 1);
+});
+
+test('the landing\'s words: at both ends — the end title and the entrance', () => {
+  assert.deepEqual([...F.FLY_ORDER], ['ryan', 'xu', 'camera', 'archive', 'travel', 'thought', 'you']);
+  assert.deepEqual([...F.FLY_OPTIONAL], ['you']);
+  for (const word of F.FLY_ORDER) {
+    assert.equal(F.LANDING_TARGETS[word].from, `[data-fly="${word}"]`);
+    if (word !== 'you') assert.equal(F.LANDING_TARGETS[word].to, `.entrance-intro [data-open-land="${word}"]`);
+  }
+  assert.equal(F.LANDING_TARGETS.you.to, '.entrance [data-open-land="you"]');
+  const intro = read('../src/components/home/EntranceIntro.tsx');
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  for (const word of ['ryan', 'xu']) assert.ok(intro.includes(`data-open-land="${word}"`), `entrance: ${word}`);
+  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(intro.includes(`{ land: '${word}' }`), `entrance: ${word}`);
+  for (const word of ['ryan', 'xu']) assert.ok(scenes.includes(`data-fly="${word}"`), `title: ${word}`);
+  // The credits' words carry data-fly from TITLE_SUB, lower-cased.
+  assert.match(scenes, /data-fly=\{word\.toLowerCase\(\)\}/);
+  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(F.TITLE_SUB.map((w) => w.toLowerCase()).includes(word));
+});
+
+test('landing A: every word flies from its box to its glyph box, in order, inside 0.6 s', () => {
   const src = { x: 500, y: 300, w: 400, h: 110 };
   const dst = { x: 104, y: 284, w: 700, h: 221 };
   const f = F.flightFor(src, dst, 64, 175, 0);
@@ -474,36 +299,15 @@ test('landing A: every word flies from its box on the board to its glyph box, in
   assert.ok(close(f.k, 64 / 175));
   const delays = F.FLY_ORDER.map((_, i) => F.flightFor(src, dst, 1, 1, i).delay);
   for (let i = 1; i < delays.length; i += 1) assert.ok(delays[i] > delays[i - 1]);
-  assert.ok(F.landingAEnd(F.FLY_ORDER.length) <= F.LANDING_A.done);
-  assert.ok(F.LANDING_A.fly >= 950 && F.LANDING_A.fly <= 1400, 'about 1–1.2 s');
-  assert.ok(F.LANDING_A.done <= 1600, 'the transition is 1.2–1.6 s');
+  assert.ok(F.LANDING_A.done <= 600, 'the spec gives the landing 0.6 s');
   assert.ok(F.LANDING_A.rest < F.landingAEnd(F.FLY_ORDER.length));
-  // No dead beat after the clap: the words are off at once, and a tenth of
-  // the way home within 200 ms.
-  assert.equal(F.LANDING_A.start, 0);
-  const curve = (u) => {
-    // The FLY_EASE bezier, sampled (x → y) by bisection.
-    const [x1, y1, x2, y2] = F.FLY_EASE;
-    const bx = (t) => 3 * x1 * t * (1 - t) ** 2 + 3 * x2 * t * t * (1 - t) + t ** 3;
-    const by = (t) => 3 * y1 * t * (1 - t) ** 2 + 3 * y2 * t * t * (1 - t) + t ** 3;
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 40; i += 1) {
-      const mid = (lo + hi) / 2;
-      if (bx(mid) < u) lo = mid;
-      else hi = mid;
-    }
-    return by((lo + hi) / 2);
-  };
-  assert.ok(curve(200 / F.LANDING_A.fly) >= 0.1, `${curve(200 / F.LANDING_A.fly)} at 200 ms`);
   const path = F.flightPath(F.flightFor(src, dst, 64, 175, 0));
   assert.ok(close(path[0].x, 700 - 454) && close(path.at(-1).x, 0) && close(path.at(-1).s, 1));
-  // The typeface turns in ONE window (both faces), inside the morph.
   assert.deepEqual([...F.LANDING_A.sourceOut], [...F.LANDING_A.targetIn]);
   assert.ok(F.LANDING_A.morph[0] <= F.LANDING_A.sourceOut[0] && F.LANDING_A.sourceOut[1] <= F.LANDING_A.morph[1]);
 });
 
-test('landing A\'s morph: both faces hold one ink width at every moment, board\'s to page\'s', () => {
+test('one ink box: both faces hold one ink width at every moment', () => {
   for (const [srcW, dstW] of [
     [310, 460],
     [520, 240],
@@ -511,100 +315,93 @@ test('landing A\'s morph: both faces hold one ink width at every moment, board\'
   ]) {
     const m = F.morphScales(srcW, dstW);
     for (let p = 0; p <= 1.0001; p += 0.125) {
-      // The island interpolates each face's scaleX linearly between these,
-      // with one curve and one window for both: the same p for both.
       const sw = srcW * (m.source[0] + (m.source[1] - m.source[0]) * p);
       const tw = dstW * (m.target[0] + (m.target[1] - m.target[0]) * p);
       assert.ok(close(sw, tw, 1e-9), `${srcW}→${dstW} at ${p}`);
     }
-    assert.ok(close(srcW * m.source[0], srcW) && close(dstW * m.target[1], dstW));
   }
 });
 
-test('landing A\'s targets: his name, CAMERA and the line land in the entrance\'s opening words', () => {
-  // The first screen is the entrance's opening words now (no globe there),
-  // on a phone as on the desktop: every word flies there.
-  assert.deepEqual([...F.FLY_ORDER], ['ryan', 'xu', 'camera', 'archive', 'travel', 'thought']);
-  for (const word of F.FLY_ORDER) {
-    assert.equal(F.LANDING_TARGETS[word].from, `[data-fly="${word}"]`);
-    assert.equal(F.LANDING_TARGETS[word].to, `.entrance-intro [data-open-land="${word}"]`);
-  }
-  // Landing B (through the O into the globe's disc) went with the globe's
-  // place on the first screen.
-  assert.equal(F.LANDING_B, undefined);
-  assert.equal(F.landingFrom, undefined);
-  assert.equal(F.LANDING_A.globe, undefined);
-  // The entrance and the slate carry every word (the page's spans and the
-  // board's), so none of them is left behind.
-  const intro = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
-  const scenes = readFileSync(new URL('../src/components/home/OpeningScenes.tsx', import.meta.url), 'utf8');
-  for (const word of ['ryan', 'xu']) assert.ok(intro.includes(`data-open-land="${word}"`), word);
-  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(intro.includes(`{ land: '${word}' }`), word);
-  for (const word of F.FLY_ORDER) assert.ok(scenes.includes(`data-fly="${word}"`), `slate: ${word}`);
+test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing', () => {
+  assert.equal(F.INPUT_POLICY.skip, 'skip');
+  for (const source of ['wheel', 'touch', 'key', 'pointer']) assert.notEqual(F.INPUT_POLICY[source], 'skip', source);
+  for (const source of ['wheel', 'touch', 'key']) assert.equal(F.INPUT_POLICY[source], 'hold', source);
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.doesNotMatch(island, /addEventListener\('pointerdown'/);
+  assert.doesNotMatch(island, /addEventListener\('touchstart'/);
+  assert.match(island, /skip\.addEventListener\('click', onSkip\)/);
+  const css = read('../src/styles/opening.css');
+  assert.match(css, /html\[data-film-lock\] body \{ overflow: clip !important; \}/);
+  assert.match(island, /html\.setAttribute\('data-film-lock', ''\)/);
+  assert.match(island, /setAttribute\('inert', ''\)/);
+  assert.doesNotMatch(island, /body\.style\.overflow/);
+  const keys = island.slice(island.indexOf('const onKeyDown'), island.indexOf('const onSkip'));
+  assert.match(keys, /event\.key === 'Tab'[\s\S]*?event\.preventDefault\(\);[\s\S]*?skip\.focus\(\{ preventScroll: true \}\)/);
+  assert.ok(keys.indexOf('SCROLL_KEYS.has') > 0 && keys.indexOf('SCROLL_KEYS.has') < keys.indexOf('event.metaKey || event.ctrlKey || event.altKey ||'));
 });
 
-test('no strobe: at most three light/dark changes in any one second; the desktop a calm grade', () => {
-  const changesOf = (film) => {
-    const cuts = F.cutSchedule(film);
-    const changes = [];
-    for (let i = 1; i < cuts.length; i += 1) {
-      if (F.SCENE_TONE[cuts[i].id] !== F.SCENE_TONE[cuts[i - 1].id]) changes.push(cuts[i].start);
-    }
-    return changes;
-  };
-  for (const film of [F.FILM_DESKTOP, F.FILM_PHONE]) {
-    const changes = changesOf(film);
-    for (const t of changes) {
-      const inWindow = changes.filter((c) => c >= t && c < t + 1000).length;
-      assert.ok(inWindow <= 3, `${inWindow} changes from ${t} ms`);
-    }
+test('skip: to the end title with its tail left, never back, nothing once the landing has begun', () => {
+  for (const plan of Object.values(PLANS)) {
+    const target = plan.length - F.FF_TAIL;
+    assert.ok(target >= plan.acts.title.start + F.TITLE.morph, 'the title is formed where the skip lands');
+    assert.equal(F.fastForwardTarget(plan, 0), target);
+    assert.equal(F.fastForwardTarget(plan, 3000), target);
+    assert.equal(F.fastForwardTarget(plan, target), null, 'never back');
+    assert.equal(F.fastForwardTarget(plan, plan.length), null);
   }
-  // Desktop: four changes of tone in all, never two inside one second (dark
-  // code, light paper, dark camera and travel board, light book and print,
-  // dark film).
-  const desk = changesOf(F.FILM_DESKTOP);
-  assert.ok(desk.length <= 4, `${desk.length} changes`);
-  for (let i = 1; i < desk.length; i += 1) assert.ok(desk[i] - desk[i - 1] >= 1000, `${desk[i - 1]} → ${desk[i]}`);
-  // It ends dark, into the olive page.
-  assert.equal(F.SCENE_TONE[F.FILM_DESKTOP.at(-1).id], 'dark');
+  assert.ok(F.FF_RATE > 1);
 });
 
-test('his photographs: a landscape frame from each chapter first, at its own ratio, sized for the scene', () => {
-  const photo = (name, w, h) => ({ imageUrl: `https://cdn.sanity.io/images/p/d/${name}.jpg`, width: w, height: h });
-  const groups = [
-    { photos: [photo('m-tall', 3000, 4500), photo('m1', 6000, 4000), photo('m2', 6000, 4000)] },
-    { photos: [photo('p1', 5000, 3333)] },
-    { photos: null },
-    { photos: [photo('z-pano', 9000, 3000), photo('z1', 4000, 2800)] },
-  ];
-  const pics = F.pickPictures(groups);
-  assert.equal(pics.length, 4);
-  assert.deepEqual(
-    pics.map((p) => p.src.split('/').at(-1).split('?')[0]),
-    ['m1.jpg', 'p1.jpg', 'z1.jpg', 'm2.jpg'],
-    'one per chapter, then a second round; portraits and panoramas passed over',
-  );
-  assert.ok(pics[0].src.endsWith('?w=640&q=60&auto=format'));
-  assert.ok(pics[1].src.endsWith('?w=800&q=60&auto=format'));
-  for (const p of pics) assert.ok(p.ratio >= F.PICTURE_RATIO[0] && p.ratio <= F.PICTURE_RATIO[1]);
-  assert.ok(close(pics[2].ratio, Math.round((4000 / 2800) * 10000) / 10000));
-  assert.deepEqual(F.pickPictures([]), []);
-  assert.deepEqual(F.pickPictures([{ photos: [{ imageUrl: null, width: 1, height: 1 }] }]), []);
+test('the fonts: every face loaded before the clock, none synthesised', () => {
+  const faces = F.FONT_LOADS.join(' | ');
+  for (const face of ['900 100px Fraunces', '400 100px Fraunces', '700 20px "Space Grotesk"']) assert.ok(faces.includes(face), face);
+  assert.ok(F.FONT_WAIT_MS <= 4000);
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.match(island, /document\.fonts\?\.load\(f, FONT_SAMPLE\)/);
+  // The clock starts in begin(), which runs only once the fonts are in.
+  assert.match(island, /fontsIn\.then\(whenVisible\)\.then/);
+  const css = read('../src/styles/opening.css');
+  assert.doesNotMatch(css, /italic/, 'no italic anywhere in the film (Space Grotesk has none)');
+  // One more face only: the typewriter's monospace, a system stack.
+  assert.match(css, /--of-mono: ui-monospace/);
+  assert.doesNotMatch(css, /@import|@font-face|fonts\.googleapis/);
 });
 
-test('the material is seeded: the server and the client draw the same rain', () => {
-  const a = F.rainColumns();
-  const b = F.rainColumns();
-  assert.deepEqual(a, b);
-  assert.equal(a.length, F.RAIN_COLUMNS);
-  assert.equal(a[(F.RAIN_COLUMNS - 1) / 2].i, 0, 'the middle column is the lock column');
-  for (const c of a) {
-    assert.equal(c.text.length, c.len);
-    assert.ok(c.fall > 1.5 && c.fall < 6);
+test('the house rules: bone and ink, never pure black or white; one lime; tracking ≤ 0.1em; no blur animated', () => {
+  const css = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(css, /#fff\b|#ffffff\b|#000\b|#000000\b|[:,(]\s*(white|black)\b/i);
+  assert.doesNotMatch(css, /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/);
+  assert.doesNotMatch(css, /rgba?\(\s*255\s*,\s*255\s*,\s*255\s*[,)]/);
+  // Uppercase tracking capped at 0.1em.
+  for (const m of css.matchAll(/letter-spacing:\s*([\d.]+)em/g)) assert.ok(Number(m[1]) <= 0.1, m[0]);
+  // The one accent: lime, and no yellow highlight.
+  const lime = [...css.matchAll(/#d2ff00/gi)].length;
+  assert.ok(lime >= 1 && lime <= 5);
+  assert.doesNotMatch(css, /#ff0\b|#ffff00|#ffe600|#ffd400/i);
+  // Only transform and opacity are animated (keyframes in the sheet).
+  for (const block of css.matchAll(/@keyframes [\w-]+ \{([\s\S]*?)\n\}/g)) {
+    for (const prop of block[1].matchAll(/([a-z-]+):/g)) assert.ok(['transform', 'opacity', 'visibility', 'pointer-events'].includes(prop[1]), prop[1]);
   }
-  for (const [i, letter] of [...'ARCHIVE'].entries()) {
-    const strip = F.scrambleStrip(letter, i);
-    assert.equal(strip.length, 8);
-    assert.equal(strip.at(-1), letter);
-  }
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.doesNotMatch(island, /filter:\s*`?blur/);
+});
+
+test('no structure branches on the viewport or reduced motion (hydration)', () => {
+  const scenes = read('../src/components/home/OpeningScenes.tsx');
+  assert.doesNotMatch(scenes, /useReducedMotion|matchMedia|innerWidth|window\./);
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  const markup = island.slice(island.lastIndexOf('return ('));
+  assert.doesNotMatch(markup, /reduce|phone/);
+  assert.doesNotMatch(island, /initial=\{\{\s*opacity:\s*0/);
+  // Reduced motion: the end title shown still (values, not structure).
+  const css = read('../src/styles/opening.css');
+  const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(rm, /\.of-end,[\s\S]*?opacity: 1/);
+});
+
+test('the material is seeded: the server and the client draw the same', () => {
+  assert.deepEqual(F.typeTimes('abc', 0, 500, 14, 25, 3), F.typeTimes('abc', 0, 500, 14, 25, 3));
+  const a = F.seeded(7);
+  const b = F.seeded(7);
+  for (let i = 0; i < 20; i += 1) assert.equal(a(), b());
 });
