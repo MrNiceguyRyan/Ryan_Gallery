@@ -56,20 +56,20 @@ import {
   type GeoCoordinate,
 } from '../../lib/routeGeometry';
 import {
-  SILVER_EXIT_HYSTERESIS,
-  SILVER_EXIT_ZOOM,
   STOCK_PAINT,
   SILVER_FOG,
   SILVER_FOG_LITE,
   createGlobeChannel,
   globeGraticule,
   globeLookAt,
+  prologueGlide,
   prologueNaturalLongitude,
+  prologueRoll,
   prologueTurnRemaining,
+  silverExitAt,
   silverFloorAt,
   silverPaint,
   silverRamp,
-  stockPaint,
 } from '../../lib/globeLook';
 import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight';
 import { createEggExposure, setEggMarks } from '../../lib/eggExposure';
@@ -80,8 +80,8 @@ import {
   EXPLORE_BEARING,
   EXPLORE_PITCH,
   EXPLORE_ZOOM,
+  READER_ZOOM,
   planFlight,
-  pitchForZoom,
 } from '../../lib/explorerCamera';
 import { phoneFocalY } from '../../lib/explorer';
 
@@ -121,9 +121,10 @@ export interface AtlasVoyage {
 
 /** A camera move the explorer asks for (src/lib/explorer.ts): `fly` to a
  *  place (a shield, the list, Prev / Next, the one in hand again), `entry`
- *  the phone's move from the planet to stop 01 (the desktop's entry is the
+ *  the phone's descent onto stop 01 (the desktop's entry is the
  *  prologue's own clock, driven by HomePage), `cut` straight onto a place
- *  (under a story, turned to another place), `home` back to the planet;
+ *  (under a story, turned to another place, an entry cut short), `home`
+ *  back under the phone's opener card;
  *  `release` moves nothing: the ticket in hand (torn) leaves the map. */
 export interface AtlasFlight {
   kind: 'fly' | 'entry' | 'cut' | 'home' | 'release';
@@ -191,8 +192,9 @@ interface ChapterRouteStop {
 // come from src/lib/mapInk.ts, which /travel imports as well.
 // The camera down at a place: oblique enough for the standing signs to read
 // as planted in the map, north kept nearly straight up. Owner, 2026-09-28
-// (有点晕): 46° tipped in on every dive became 40°, reached only with the
-// zoom (src/lib/explorerCamera.ts, pitchForZoom).
+// (有点晕): 46° tipped in on every dive became 40° following the zoom, then
+// one gentle 24° held at every zoom (src/lib/explorerCamera.ts,
+// EXPLORE_PITCH).
 const CHAPTER_PITCH = EXPLORE_PITCH.rest;
 const CHAPTER_BEARING = EXPLORE_BEARING;
 
@@ -367,24 +369,30 @@ const GLOBE_DIVE_START = 0.32;
 const GLOBE_HANDOFF_AT = 0.84;
 const GLOBE_HANDOFF_ZOOM = HOP.restZoom;
 // Where in the descent the camera begins to tip from square-on to its
-// oblique view (see globeEntryPose).
-const GLOBE_TIP_FROM = 0.6;
-// A flight from the open planet tips to the oblique view once it is down, no
-// faster than this at its steepest (the entry's own tip peaks at ~44°/s).
-const TIP_DEG_PER_S = 42;
+// oblique view (see globeEntryPose): the last 70% of it, so the 24° come in
+// at 15°/s at the steepest (a 40° tip over the last 40% peaked at 44°/s).
+const GLOBE_TIP_FROM = 0.3;
+// A flight that has to tip (the pitch is held at every zoom, so only a
+// camera set square by something else ever does) tips once it is down, no
+// faster than this at its steepest.
+const TIP_DEG_PER_S = 15;
 // The archive's air: a long flight's apex sees the planet's edge through it.
 // Owner, 2026-09-28 (背景很暗): the far land used to fog toward near-black
 // (#1B2319), so every chapter with the horizon in view — the Florida and New
 // York chapters, over the sea — was dark in its upper half and darkest by
 // the rail. The air is a lit haze now, the land going pale into distance as
 // real air takes it (atmospheric perspective), the space above the limb the
-// page's own ground.
+// page's own ground. Quieter since the review of 2026-09-28: where the
+// planet's edge is in view (Miami's corner) the lit air was a bright crescent
+// behind the nav, p99 103 against ~60 of ground, swept across the screen by
+// every flight; the air is now about the ground's own tone (p99 71) and the
+// sky above it dark.
 const GLOBE_FOG = {
   range: [7, 18] as [number, number],
-  color: '#7a806c',
-  'high-color': '#5f6650',
+  color: '#555a4a',
+  'high-color': '#2e3327',
   'space-color': '#282c20',
-  'horizon-blend': 0.14,
+  'horizon-blend': 0.06,
   'star-intensity': 0,
 };
 
@@ -437,13 +445,10 @@ const PROLOGUE_GLOBE = {
   zoom: 2.78,
   // The turn across the prologue is PROLOGUE_TURN (src/lib/globeLook.ts):
   // westward, 195° from the first screen's face to the first chapter.
+  // The glide from the corner to the atlas focus rides the turn's own clock
+  // (globeLook, `prologueGlide`) and ends at the prologue's end, where the
+  // dive takes the planet on from the very pose the glide arrives at.
   startLatitude: 9,
-  // The stretch of the prologue spent gliding from the corner to the atlas
-  // focus. It runs to the prologue's end, where the dive takes the planet on
-  // from the very pose the glide arrives at: there is nothing to read on the
-  // way (the index and the film roll that stood there are gone).
-  glideStart: 0.35,
-  glideEnd: 1,
   // The load-in: the canvas waits for its first tiles, then fades in while
   // the dawn sweeps the light round and the globe settles this many degrees
   // eastward — the way the drift and the scroll turn it — into place. (It used
@@ -452,7 +457,8 @@ const PROLOGUE_GLOBE = {
   settle: 24,
   // How long the canvas may wait for those tiles before it shows anyway.
   revealCapMs: 3000,
-  // Axial tilt while it sits in the corner; straightens during the glide.
+  // Axial tilt while it sits in the corner; straightens over the first of
+  // the glide (globeLook, `prologueRoll`), before the turn is at its fastest.
   tilt: -14,
   // Left alone, the globe keeps turning — easing toward `driftMax` degrees
   // over roughly `driftTau` ms. The drift is part of the turn (see
@@ -483,7 +489,7 @@ function cornerZoomFor(viewportWidth: number) {
 // the canvas dips out and comes back on the other pose; the dive into the
 // first chapter (and the way back up) cuts to the ground and fades the new
 // view in. The route and its places are drawn whole on the planet at once.
-const STILL_SWAP_Q = (PROLOGUE_GLOBE.glideStart + PROLOGUE_GLOBE.glideEnd) / 2;
+const STILL_SWAP_Q = 0.5;
 type StillPose = 'corner' | 'planet' | 'archive';
 // The map canvas bleeds this far past the atlas column on every side
 // (`-inset-8`), and the atlas focal point is the centre of the canvas once
@@ -515,20 +521,22 @@ const PROLOGUE_SATELLITE_FADE: [number, number] = [3.3, 4.5];
 // Calmed the same day (有点晃眼): 0.88 → 0.76, with the stock paint's own
 // quieter grade (src/lib/globeLook.ts STOCK_PAINT).
 const PROLOGUE_SATELLITE_RESIDUAL = 0.76;
-// The dive's veil on the way down to that residual, as [zoom, opacity] pairs.
-// It dips to 10% around SILVER_EXIT_ZOOM, where the one layer trades the
-// silver print for the archive's own paint: at the old 30% the trade was a
-// one-frame cut from the olive print to full colour (the Gulf's blue, the
-// Bahamas' cyan) across the whole map, mid-dive and inside every voyage. Both
-// sides of the exit's hysteresis sit inside the dip, and the veil is back at
-// the residual by the handoff zoom, where the archive's own veil (below)
-// takes over at the same strength.
+// The dive's veil on the way down to that residual, as [zoom, opacity] pairs:
+// one steady step down, the archive's handoff zoom at the residual, where the
+// archive's own veil (below) takes over at the same strength. It used to dip
+// to 10% round the silver print's exit, the one layer trading its paint
+// there out of sight; the frame went 62 → 35 → 54 luma, a two-second blink
+// just before the landing (the review of 2026-09-28). The print's exit is a
+// crossfade onto a second layer now (SILVER_EXIT, `writeSatelliteVeil`), at
+// the veil's own strength, so nothing needs hiding.
 const PROLOGUE_SATELLITE_OPACITY: readonly number[] = [
   PROLOGUE_SATELLITE_FADE[0], 1,
-  SILVER_EXIT_ZOOM - 0.15, 0.1,
-  SILVER_EXIT_ZOOM + 0.3, 0.1,
   GLOBE_HANDOFF_ZOOM, PROLOGUE_SATELLITE_RESIDUAL,
 ];
+// The layer (and source) the archive's own paint comes up on over the silver
+// print, the same satellite imagery: the reader's map (both layers are drawn
+// only while the crossfade runs; a layer at opacity 0 is not drawn).
+const SATELLITE_STOCK_LAYER = 'prologue-satellite-stock';
 // In the archive: at a long flight's apex the camera climbs past the
 // prologue's zoom keys, so a modest photographic veil (more real ground from
 // higher up), never the prologue's full print.
@@ -537,8 +545,12 @@ const ARCHIVE_SATELLITE_OPACITY: readonly number[] = [3.1, 0.78, 4.6, PROLOGUE_S
 const PHONE_SATELLITE_OPACITY = 0.62;
 // The phone's shields, css px (the desktop's SHIELD_MAP_PX is 34).
 const SHIELD_PHONE_PX = 26;
-// The planet the phone opens on, whole on a 390px screen.
-const PHONE_PLANET_ZOOM = 1.15;
+// Where the phone's camera waits under the opener card: above stop 01, near
+// enough that the entry is one short descent (about 1.9 levels at the zoom
+// cap, ~2.6 s). It used to wait on the whole planet (zoom 1.15) and came
+// down 3.9 levels over 5.2 s, then tipped. The card hides it (the reader
+// never sees it wait), and the reader can still zoom out to the planet.
+const PHONE_APPROACH_ZOOM = 3.2;
 // The fastest the veil (and the grade's exit, and the planet light's fade)
 // follow the camera's zoom, per ms: 0.075 of a zoom level a frame keeps the
 // steepest key under 0.07 of opacity a frame, about 2 L on the map. A long
@@ -722,11 +734,11 @@ export default function RouteAtlas({
   // `lookQ` the progress the look is drawn at (1 once the prologue has handed
   // over), both for the light, as is `fadeZoom`, the veil's own zoom (see
   // VEIL_ZOOM_RATE), which the light fades out on.
-  const globeWritesRef = useRef({ silver: true, floor: Number.NaN, graticule: Number.NaN, archive: false, lookQ: 0, opacity: Number.NaN, fadeZoom: Number.NaN });
+  const globeWritesRef = useRef({ floor: Number.NaN, graticule: Number.NaN, archive: false, lookQ: 0, opacity: Number.NaN, stockOpacity: 0, fadeZoom: Number.NaN });
   const mapboxToken = getMapboxToken();
   // The desktop atlas has the first screen's globe in front of it (the
   // prologue) and descends from it onto the entry's place (the entrance);
-  // the phone's opens on the planet and flies.
+  // the phone's waits above stop 01 under the opener card and goes down.
   const classicEntrance = !mobile && !!entryProgress;
   const classicGlobe = true;
   const prologue = classicEntrance && !!prologueProgress;
@@ -910,6 +922,10 @@ export default function RouteAtlas({
     scale: number;
     was: number;
     since: number;
+    /** In the keyboard's reach: on the page. A shield round the planet or
+     *  past the screen's edge is out of the tab order (focus would land on
+     *  something nobody can see). */
+    reach: boolean | null;
   }>());
   // The atlas's bleed past the viewport on each side (the desktop canvas).
   const bleed = classicEntrance ? CANVAS_BLEED : 0;
@@ -961,6 +977,7 @@ export default function RouteAtlas({
           scale: 0,
           was: 0,
           since: 0,
+          reach: null,
         };
         shieldPosesRef.current.set(place.id, pose);
       }
@@ -991,6 +1008,10 @@ export default function RouteAtlas({
         point.y > bleed && point.y - h < height - bleed &&
         angularDistance([centre.lng, centre.lat], place.coordinates) < SHIELD_HORIZON;
       const slot: StackSlot = { id: place.id, number: place.number, x: point.x, y: point.y, w, h, rank, type: place.type };
+      if (onScreen !== pose.reach && pose.sign) {
+        pose.reach = onScreen;
+        pose.sign.tabIndex = onScreen ? 0 : -1;
+      }
       if (onScreen && !under) slots.push(slot);
       if (onScreen && (!under || !pose.under || now - pose.underSince < DUR_MS.out)) printed.push(slot);
     });
@@ -1233,7 +1254,9 @@ export default function RouteAtlas({
   // the globe dives into the archive.
   const archiveFrameOpacity = useTransform(
     sampledEntryProgress,
-    (progress) => (prologue ? entrancePhase(progress, 0.06, 0.42) : 1),
+    // Across most of the descent (the reading tone darkens the map by 16%:
+    // over 0.06–0.42 it did so while the silver print left, ~17 luma/s).
+    (progress) => (prologue ? entrancePhase(progress, 0.04, 0.9) : 1),
   );
   const fallbackPrologueProgress = useMotionValue(1);
   const resolvedPrologueProgress = prologueProgress ?? fallbackPrologueProgress;
@@ -1255,13 +1278,12 @@ export default function RouteAtlas({
     () => staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, mapboxToken, mobile],
   );
-  // The planet the phone opens on (and goes home to): whole, over the route.
-  const phonePlanet = useMemo(() => {
-    const longitudes = mappedStops.map((stop) => stop.coordinates[0]);
-    const latitudes = mappedStops.map((stop) => stop.coordinates[1]);
-    const longitude = longitudes.length ? (Math.min(...longitudes) + Math.max(...longitudes)) / 2 : -95;
-    const latitude = latitudes.length ? (Math.min(...latitudes) + Math.max(...latitudes)) / 2 : 36;
-    return { longitude, latitude: Math.max(10, latitude - 6), zoom: PHONE_PLANET_ZOOM, bearing: 0, pitch: 0 };
+  // Where the phone's camera waits under the opener card (and goes home to):
+  // above stop 01, already at the atlas's oblique view, so the entry is one
+  // short descent with nothing to tip (PHONE_APPROACH_ZOOM).
+  const phoneApproach = useMemo(() => {
+    const [longitude, latitude] = mappedStops[0]?.coordinates ?? [-95, 36];
+    return { longitude, latitude, zoom: PHONE_APPROACH_ZOOM, bearing: CHAPTER_BEARING, pitch: CHAPTER_PITCH };
   }, [mappedStops]);
 
   useEffect(() => {
@@ -1653,11 +1675,12 @@ export default function RouteAtlas({
   // follows them: the planet turns to the Americas as it glides to the focal
   // point, then the camera goes down onto the entry's place (one calm move,
   // src/lib/explorerCamera.ts ENTRY). From there the map is the reader's:
-  // Mapbox's own drag, wheel, pinch and keys, within EXPLORE_ZOOM, the pitch
-  // following the zoom; the camera only moves when the explorer asks it to
-  // (`flight`: a shield, the list, Prev / Next), on a flight whose duration
-  // keeps the ground and the zoom under the explorer's caps (planFlight).
-  // The phone opens on the planet and flies (its entry is a flight too).
+  // Mapbox's drag, wheel and pinch and the atlas's own keys and
+  // double-click, within EXPLORE_ZOOM, the pitch held; the camera only moves
+  // when the explorer asks it to (`flight`: a shield, the list, Prev / Next),
+  // on a flight whose duration keeps the ground and the zoom under the
+  // explorer's caps (planFlight). The phone waits above stop 01 under its
+  // opener card and goes down (its entry is a flight too).
   // Every frame drawn by the prologue and the entrance is one render-free
   // pass in Motion's render phase; in the reader's hands the camera is never
   // written, only the paint that follows its zoom.
@@ -1913,23 +1936,19 @@ export default function RouteAtlas({
     };
 
     // ── The silver print (see src/lib/globeLook.ts) ──
-    // One layer carries it: `prologue-satellite` is printed in silver through
-    // the prologue and the descent, and gets its own archive paint back once
-    // the camera is past SILVER_EXIT_ZOOM or the reader has the map.
+    // Two layers over the one satellite source, each with its own paint for
+    // good: `prologue-satellite` printed in silver, SATELLITE_STOCK_LAYER in
+    // the archive's own paint. Only their opacities move (writeSatelliteVeil):
+    // the silver through the prologue and the dive, crossfaded across
+    // SILVER_EXIT into the archive's paint, which alone carries the reader's
+    // map. The one layer used to trade its paint mid-dive; on the draped globe
+    // a paint change reaches the tiles over a few frames, and a rectangle of
+    // the old print showed in the sea for a moment.
     const lookWrites = globeWritesRef.current;
     const prologueFog = () => (globeChannel.lite ? PROLOGUE_FOG_LITE : PROLOGUE_FOG);
-    const applySatellitePaint = (silver: boolean) => {
-      lookWrites.silver = silver;
-      if (!map.getLayer('prologue-satellite')) return;
-      const floor = silverFloorAt(lookWrites.lookQ);
-      lookWrites.floor = silver ? floor : Number.NaN;
-      Object.entries(silver ? silverPaint(floor) : stockPaint()).forEach(([key, value]) => {
-        map.setPaintProperty('prologue-satellite', key as 'raster-color', value as never);
-      });
-    };
     const writeLook = (q: number, graticuleQ = q) => {
       lookWrites.lookQ = q;
-      if (lookWrites.silver && map.getLayer('prologue-satellite')) {
+      if (map.getLayer('prologue-satellite')) {
         const floor = silverFloorAt(q);
         if (floor !== lookWrites.floor) {
           lookWrites.floor = floor;
@@ -1946,11 +1965,11 @@ export default function RouteAtlas({
     const applyPaintMode = (mode: 'prologue' | 'archive') => {
       paintMode = mode;
       lookWrites.archive = mode === 'archive';
-      if (mode === 'archive' && lookWrites.silver) applySatellitePaint(false);
       if (map.getLayer('prologue-graticule')) {
         map.setLayoutProperty('prologue-graticule', 'visibility', mode === 'archive' ? 'none' : 'visible');
       }
       lookWrites.opacity = Number.NaN;
+      lookWrites.stockOpacity = Number.NaN;
       ['prologue-route', 'prologue-stops-dot'].forEach((layerId) => {
         if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', mode === 'archive' ? 'none' : 'visible');
       });
@@ -1972,13 +1991,27 @@ export default function RouteAtlas({
       veilTime = now;
       return veilZoom;
     };
-    const writeSatelliteVeil = (zoom: number) => {
+    // The veil V at `zoom`, and the archive's paint's share k of it: the
+    // silver print below at V(1−k)/(1−Vk) and the archive's paint over it at
+    // Vk composite to exactly paper·(1−V) + V·((1−k)·silver + k·archive), a
+    // crossfade at the veil's own strength (nothing dips, nothing cuts). At
+    // k = 1 the silver is out (not drawn at all) and the archive's paint is
+    // the veil.
+    const writeSatelliteVeil = (zoom: number, k: number) => {
       if (!map.getLayer('prologue-satellite')) return;
       const keys = paintMode === 'archive' ? ARCHIVE_SATELLITE_OPACITY : PROLOGUE_SATELLITE_OPACITY;
-      const opacity = Math.round(satelliteOpacityAt(keys, zoom) * 500) / 500;
-      if (opacity === lookWrites.opacity) return;
-      lookWrites.opacity = opacity;
-      map.setPaintProperty('prologue-satellite', 'raster-opacity', opacity);
+      const veil = satelliteOpacityAt(keys, zoom);
+      const silver = k >= 1 ? 0 : k <= 0 ? veil : (veil * (1 - k)) / (1 - veil * k);
+      const base = Math.round(silver * 500) / 500;
+      const over = k <= 0 ? 0 : Math.round(veil * Math.min(1, k) * 500) / 500;
+      if (base !== lookWrites.opacity) {
+        lookWrites.opacity = base;
+        map.setPaintProperty('prologue-satellite', 'raster-opacity', base);
+      }
+      if (over !== lookWrites.stockOpacity && map.getLayer(SATELLITE_STOCK_LAYER)) {
+        lookWrites.stockOpacity = over;
+        map.setPaintProperty(SATELLITE_STOCK_LAYER, 'raster-opacity', over);
+      }
     };
     const writeRouteTrim = (routeProgress: number) => {
       if (Number.isFinite(lastRouteProgress) && Math.abs(routeProgress - lastRouteProgress) < 0.0002 && routeProgress !== 1 && routeProgress !== 0) return;
@@ -1991,7 +2024,7 @@ export default function RouteAtlas({
 
     // ── Flights (the reader's map) ──
     // A place asked for: the camera goes to its resting pose — the place on
-    // its point beside the covers' corner, the pitch its zoom's — on a
+    // its point beside the covers' corner, the pitch the atlas's — on a
     // Mapbox flight (the reader can take the map from it at any moment),
     // DERIVED to stay under the explorer's caps. Bearing never turns.
     let flying: {
@@ -2012,7 +2045,7 @@ export default function RouteAtlas({
     const restPose = (index: number) => ({
       center: restCenter(index),
       zoom: restZoom(index),
-      pitch: pitchForZoom(restZoom(index), CHAPTER_PITCH),
+      pitch: CHAPTER_PITCH,
       bearing: CHAPTER_BEARING,
       padding: activePadding,
     });
@@ -2078,12 +2111,13 @@ export default function RouteAtlas({
         return;
       }
       if (next.kind === 'home') {
-        // The phone's way home: the planet, under a dip (HomePage veils it).
-        flying = { token: next.token, kind: 'home', index: -1, from: -1, center: [phonePlanet.longitude, phonePlanet.latitude], zoom: phonePlanet.zoom, origin: [0, 0], trimFrom: 0, trimTo: 0, tip: null, tipping: false };
+        // The phone's way home: back under the opener card, above stop 01,
+        // under a dip (HomePage veils it).
+        flying = { token: next.token, kind: 'home', index: -1, from: -1, center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, origin: [0, 0], trimFrom: 0, trimTo: 0, tip: null, tipping: false };
         setDockAt(null);
         markInboundStop(null);
         map.stop();
-        map.jumpTo({ center: [phonePlanet.longitude, phonePlanet.latitude], zoom: phonePlanet.zoom, pitch: 0, bearing: 0, padding: { top: 0, right: 0, bottom: 0, left: 0 } });
+        map.jumpTo({ center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, pitch: phoneApproach.pitch, bearing: phoneApproach.bearing, padding: { top: 0, right: 0, bottom: 0, left: 0 } });
         land(true);
         return;
       }
@@ -2193,30 +2227,13 @@ export default function RouteAtlas({
     map.on('move', onFlightMove);
 
     // ── The reader's map ──
-    // The pitch follows the zoom (square on the planet, oblique down at a
-    // place: pitchForZoom); a click on the empty map lets the place in hand
-    // go (after a beat, so a double-click only zooms); the cover in hand is
-    // asked for as the zoom comes and goes.
+    // The pitch is held (EXPLORE_PITCH): nothing the reader does tips the
+    // camera. A click on the empty map lets the place in hand go (after a
+    // beat, so a double-click only zooms); a double-click zooms one level
+    // about the point, on the house's sine under the zoom cap (READER_ZOOM:
+    // Mapbox's own took 300 ms); the cover in hand is asked for as the zoom
+    // comes and goes.
     let dismissTimer = 0;
-    // Written on the transform in place, the way Mapbox's own pitch handler
-    // writes it, and drawn with the zoom's own frame. Not `setPitch`: that is
-    // a `jumpTo`, and a jumpTo stops the handlers — every wheel tick's eased
-    // zoom was cut after its first frame between z 3.4 and 5 (30 ticks of the
-    // wheel moved the map 0.8 levels there), and a key's or a double-click's
-    // ease with it. (react-map-gl's transform proxy passes an uncontrolled
-    // pitch straight through.)
-    const onZoom = () => {
-      if (!freeRef.current || flying || reducedMotion) return;
-      const target = pitchForZoom(map.getZoom(), CHAPTER_PITCH);
-      if (Math.abs(map.getPitch() - target) <= 0.2) return;
-      const transform = (map as unknown as { transform?: { pitch: number } }).transform;
-      if (transform && 'pitch' in transform) {
-        transform.pitch = target;
-        map.triggerRepaint();
-      } else {
-        map.setPitch(target);
-      }
-    };
     const onFreeMove = () => {
       if (!freeRef.current) return;
       setDockAt(askFor());
@@ -2232,17 +2249,32 @@ export default function RouteAtlas({
         if (!disposed) onDismissRef.current?.();
       }, HOP.dismissWaitMs);
     };
-    const onDoubleClick = () => {
+    const onDoubleClick = (event: { lngLat?: { lng: number; lat: number }; originalEvent?: MouseEvent }) => {
       window.clearTimeout(dismissTimer);
       dismissTimer = 0;
+      if (!freeRef.current || flying) return;
+      const target = event.originalEvent?.target as Element | null;
+      if (target?.closest?.('.mapboxgl-marker, button, a, [role="button"]')) return;
+      const out = event.originalEvent?.shiftKey ? -1 : 1;
+      const zoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + out * READER_ZOOM.clickLevels));
+      map.easeTo({
+        zoom,
+        ...(event.lngLat ? { around: event.lngLat } : null),
+        duration: reducedMotion ? 0 : READER_ZOOM.clickMs,
+        easing: voyageEase,
+      });
     };
-    map.on('zoom', onZoom);
     map.on('move', onFreeMove);
     map.on('click', onClick);
     map.on('dblclick', onDoubleClick);
 
     // The descent onto the entry's place is under way (the camera "flies").
     let descending = false;
+    // How far the descent's pose has got (globeEntryProgress; 1 = down on the
+    // place). The entry's clocks jumped to their ends before it got there —
+    // the reader cut the entry short (HomePage, `finishEntry`) — and the
+    // camera is set down on the place under a short dip instead.
+    let entryPoseAt = 0;
     // The reader's map has been handed the camera (reduced motion cuts it
     // onto the entry's place then). A restart in the reader's hands starts
     // handed over.
@@ -2266,7 +2298,10 @@ export default function RouteAtlas({
         setCameraState('rest');
         markInboundStop(null);
       }
-      if (inPrologue) cutDown = false;
+      if (inPrologue) {
+        cutDown = false;
+        entryPoseAt = 0;
+      }
       if (inPrologue && canvasBox && firstTarget) {
         // ── Globe prologue ── the lit globe low in the bottom-right corner;
         // entered, it turns to the entry's place and glides into the atlas
@@ -2274,7 +2309,9 @@ export default function RouteAtlas({
         // pose. Reduced motion draws only the two ends of it.
         const q = still ? (still === 'planet' ? 1 : 0) : clamp01(queuedPrologue);
         const intro = globeIntro.get();
-        const glide = smootherstep(clamp01((q - PROLOGUE_GLOBE.glideStart) / (PROLOGUE_GLOBE.glideEnd - PROLOGUE_GLOBE.glideStart)));
+        // On the turn's own clock (see prologueGlide): the planet comes in
+        // from the corner exactly as it turns, one motion, one peak.
+        const glide = prologueGlide(q);
         const viewportWidth = document.documentElement.clientWidth;
         const cx = PROLOGUE_GLOBE.centerX * viewportWidth - canvasBox.left;
         const cy = PROLOGUE_GLOBE.centerY * viewportH - canvasBox.top;
@@ -2296,10 +2333,10 @@ export default function RouteAtlas({
         globeChannel.remaining = prologueTurnRemaining(q, drift);
         const center: GeoCoordinate = [
           globeChannel.compose(natural, q) + globeChannel.wobble,
-          PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * smootherstep(q),
+          PROLOGUE_GLOBE.startLatitude + (GLOBE_START_LATITUDE - PROLOGUE_GLOBE.startLatitude) * glide,
         ];
         handoffLongitude = center[0];
-        const bearing = PROLOGUE_GLOBE.tilt * (1 - glide);
+        const bearing = PROLOGUE_GLOBE.tilt * (1 - prologueRoll(glide));
         const cornerZoom = cornerZoomFor(viewportWidth);
         const zoom = cornerZoom + (globeMode.startZoom - cornerZoom) * glide;
         const paddingKey = `${padding.top.toFixed(1)}|${padding.right.toFixed(1)}|${padding.bottom.toFixed(1)}|${padding.left.toFixed(1)}`;
@@ -2346,7 +2383,8 @@ export default function RouteAtlas({
         if (Number.isFinite(handoffLongitude)) {
           entryMode.startLongitude = aim.coordinate[0] + wrap180(handoffLongitude - aim.coordinate[0]);
         }
-        const pose = globeEntryPose(aim, globeEntryProgress(entryNow, entryMode), entryMode);
+        entryPoseAt = globeEntryProgress(entryNow, entryMode);
+        const pose = globeEntryPose(aim, entryPoseAt, entryMode);
         writeLook(1, 1);
         if (!lastCoordinate || Math.abs(lastZoom - pose.zoom) > 0.0004 ||
           Math.abs(lastCoordinate[0] - pose.center[0]) > 0.00005 || Math.abs(lastCoordinate[1] - pose.center[1]) > 0.00005 ||
@@ -2362,7 +2400,26 @@ export default function RouteAtlas({
       } else {
         // ── The reader's map ── (and the phone, always). Nothing here moves
         // the camera: it is Mapbox's, or a flight's.
-        if (descending) {
+        const cutShort = prologue && !still && !cutDown && entryPoseAt < 1 && !!firstTarget;
+        if (cutShort) {
+          // The entry cut short (a key, a press, a second turn of the wheel):
+          // the camera is set down on the place under a dip of the canvas
+          // (the reduced-motion swap's own), never flung the rest of the way.
+          stillFade?.cancel();
+          stillCanvas.style.opacity = '0';
+          if (padded !== true) {
+            padded = true;
+            map.setPadding(activePadding);
+          }
+          map.jumpTo(restPose(entryIndex));
+          lastCoordinate = null;
+          entryPoseAt = 1;
+          stillFadeIn = true;
+          const place = viewfinderPlace(entryIndex);
+          if (place) viewfinderRef.current?.settle(place);
+          writeRouteTrim(restRoute(entryIndex));
+        }
+        if (descending || cutShort) {
           // Down on the entry's place: its cover comes up, its sign reads.
           descending = false;
           setCameraState('locked');
@@ -2405,10 +2462,11 @@ export default function RouteAtlas({
         if (mode !== paintMode) applyPaintMode(mode);
         const zoomNow = map.getZoom();
         const zoomVeil = followVeilZoom(zoomNow, !!still);
-        const wantSilver = mode !== 'archive' && zoomVeil < SILVER_EXIT_ZOOM +
-          (lookWrites.silver ? SILVER_EXIT_HYSTERESIS : -SILVER_EXIT_HYSTERESIS);
-        if (wantSilver !== lookWrites.silver) applySatellitePaint(wantSilver);
-        writeSatelliteVeil(zoomVeil);
+        // The archive's paint comes up over the silver print across
+        // SILVER_EXIT on the way down (and the print comes back on the way
+        // up); the reader's map is the archive's paint alone.
+        const exit = mode === 'archive' ? 1 : silverExitAt(zoomVeil);
+        writeSatelliteVeil(zoomVeil, exit);
         if (zoomVeil !== lookWrites.fadeZoom) {
           lookWrites.fadeZoom = zoomVeil;
           if (mode !== 'archive' && zoomVeil < 3.8) map.triggerRepaint();
@@ -2528,7 +2586,6 @@ export default function RouteAtlas({
       disposed = true;
       map.off('moveend', onMoveEnd);
       map.off('move', onFlightMove);
-      map.off('zoom', onZoom);
       map.off('move', onFreeMove);
       map.off('click', onClick);
       map.off('dblclick', onDoubleClick);
@@ -2558,33 +2615,68 @@ export default function RouteAtlas({
     // viewfinderPlace / markCurrentStop / markInboundStop read only refs and
     // chapterRoute.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [atlasEngaged, canvasExtension, chapterRestZooms, chapterRoute, globeChannel, globeIntro, globeMode, layoutRevision, mapLoaded, mobile, paused, phoneCardH, phonePlanet, prologue, reducedMotion, resolvedPrologueProgress, sampledEntryProgress]);
+  }, [atlasEngaged, canvasExtension, chapterRestZooms, chapterRoute, globeChannel, globeIntro, globeMode, layoutRevision, mapLoaded, mobile, paused, phoneApproach, phoneCardH, prologue, reducedMotion, resolvedPrologueProgress, sampledEntryProgress]);
 
   // The reader's map: the handlers on, the canvas a stop in the tab order
-  // (arrows move it, + and − zoom), the zoom within EXPLORE_ZOOM.
+  // (arrows move it, + and − zoom), the zoom within EXPLORE_ZOOM. The keys
+  // are the atlas's own, not Mapbox's: its +/− eased a whole level in 300 ms
+  // and rounded to whole levels (5.05 → 6 → 7), 6.2 levels/s. Here + and −
+  // take half a level on the house's sine, the arrows a short pan
+  // (READER_ZOOM), and the wheel runs at a calmer rate than Mapbox's.
   const readerHasMap = free && mapLoaded && !paused;
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !mapLoaded) return;
     const canvas = map.getCanvas();
-    if (readerHasMap) {
-      map.keyboard.enable();
-      map.keyboard.disableRotation();
-      map.touchZoomRotate.disableRotation();
-      map.setMinZoom(mobile ? EXPLORE_ZOOM.minPhone : EXPLORE_ZOOM.min);
-      canvas.tabIndex = 0;
-      canvas.removeAttribute('aria-hidden');
-      canvas.setAttribute('role', 'application');
-      canvas.setAttribute('aria-label', 'Map of the archive. Arrow keys move it, plus and minus zoom. Each place is a shield.');
-    } else {
-      map.keyboard.disable();
+    if (!readerHasMap) {
       map.setMinZoom(1);
       canvas.tabIndex = -1;
       canvas.setAttribute('aria-hidden', 'true');
       canvas.removeAttribute('role');
       canvas.removeAttribute('aria-label');
+      return;
     }
-  }, [mapLoaded, mobile, readerHasMap]);
+    map.touchZoomRotate.disableRotation();
+    map.scrollZoom.setWheelZoomRate(READER_ZOOM.wheelRate);
+    map.setMinZoom(mobile ? EXPLORE_ZOOM.minPhone : EXPLORE_ZOOM.min);
+    canvas.tabIndex = 0;
+    canvas.removeAttribute('aria-hidden');
+    canvas.setAttribute('role', 'application');
+    canvas.setAttribute('aria-label', 'Map of the archive. Arrow keys move it, plus and minus zoom. Each place is a shield.');
+    // + and −: toward a target that each press moves on by half a level, so
+    // a held key keeps on at the same calm pace instead of restarting.
+    let zoomTarget = Number.NaN;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const pan = (x: number, y: number) => {
+        event.preventDefault();
+        map.panBy([x, y], { easing: voyageEase, duration: reducedMotion ? 0 : READER_ZOOM.panMs });
+      };
+      const zoomBy = (levels: number) => {
+        event.preventDefault();
+        const from = map.isEasing() && Number.isFinite(zoomTarget) ? zoomTarget : map.getZoom();
+        zoomTarget = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), from + levels));
+        const span = Math.abs(zoomTarget - map.getZoom());
+        // Never faster than the one press's own peak (π/2 · 0.5 / 0.7 s).
+        const ms = Math.max(READER_ZOOM.keyMs, (span / READER_ZOOM.keyLevels) * READER_ZOOM.keyMs);
+        map.easeTo({ zoom: zoomTarget, easing: voyageEase, duration: reducedMotion ? 0 : ms });
+      };
+      const step = READER_ZOOM.panPx;
+      switch (event.key) {
+        case 'ArrowLeft': pan(-step, 0); break;
+        case 'ArrowRight': pan(step, 0); break;
+        case 'ArrowUp': pan(0, -step); break;
+        case 'ArrowDown': pan(0, step); break;
+        case '+':
+        case '=': zoomBy(READER_ZOOM.keyLevels); break;
+        case '-':
+        case '_': zoomBy(-READER_ZOOM.keyLevels); break;
+        default:
+      }
+    };
+    canvas.addEventListener('keydown', onKey);
+    return () => canvas.removeEventListener('keydown', onKey);
+  }, [mapLoaded, mobile, readerHasMap, reducedMotion]);
 
   const mapReadiness = {
     loaded: mapLoaded,
@@ -2718,7 +2810,7 @@ export default function RouteAtlas({
       <div className="absolute inset-0 bg-[#282c20]" aria-hidden="true" />
       <div
         style={prologue ? { right: -(CANVAS_BLEED + canvasExtension) } : undefined}
-        className={`route-atlas__canvas absolute origin-center overflow-hidden ${classicEntrance ? '-inset-8' : 'inset-0'}`}
+        className={`route-atlas__canvas absolute origin-center overflow-hidden ${classicEntrance ? 'route-atlas__canvas--bleed -inset-8' : 'inset-0'}`}
       >
         <motion.div
           aria-hidden="true"
@@ -2758,7 +2850,7 @@ export default function RouteAtlas({
             mapStyle={MAP_STYLE}
             projection={{ name: 'globe' }}
             initialViewState={mobile
-              ? phonePlanet
+              ? phoneApproach
               : chapterRoute[0]
                 ? {
                     longitude: globeStartCenter(chapterRoute[0].stop.coordinates)[0],
@@ -2782,14 +2874,14 @@ export default function RouteAtlas({
             renderWorldCopies={false}
             fadeDuration={0}
             // The reader's map (the explorer's `explore`): drag, the wheel
-            // and a pinch zoom, a double-click zooms in, the keys move it
-            // (see "The reader's map" above). Never rotated, never tipped by
-            // hand: the pitch follows the zoom.
+            // and a pinch zoom. A double-click and the keys are the atlas's
+            // own, calmer than Mapbox's (see "The reader's map" above).
+            // Never rotated, never tipped by hand: the pitch is held.
             scrollZoom={readerHasMap}
             dragPan={readerHasMap}
             touchZoomRotate={readerHasMap}
-            doubleClickZoom={readerHasMap}
-            keyboard={readerHasMap}
+            doubleClickZoom={false}
+            keyboard={false}
             dragRotate={false}
             touchPitch={false}
             boxZoom={false}
@@ -2835,13 +2927,12 @@ export default function RouteAtlas({
               // The prologue globe is photographic: satellite imagery at globe
               // zooms, printed in silver (globeLook) and lit by one key light
               // (planetLight). As the camera goes down it settles to a residual
-              // veil under the atlas's paper, and past SILVER_EXIT_ZOOM takes
+              // veil under the atlas's paper, and past SILVER_EXIT takes
               // the archive's own paint back.
               if (prologue && !map.getSource('prologue-satellite')) {
                 const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
                 const lookWrites = globeWritesRef.current;
                 lookWrites.lookQ = clamp01(resolvedPrologueProgress.get());
-                lookWrites.silver = true;
                 lookWrites.floor = silverFloorAt(lookWrites.lookQ);
                 lookWrites.opacity = Math.round(satelliteOpacityAt(PROLOGUE_SATELLITE_OPACITY, map.getZoom()) * 500) / 500;
                 map.addSource('prologue-satellite', { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
@@ -2853,6 +2944,28 @@ export default function RouteAtlas({
                     'raster-opacity': lookWrites.opacity,
                     'raster-opacity-transition': { duration: 0, delay: 0 },
                     ...silverPaint(lookWrites.floor),
+                    'raster-fade-duration': 160,
+                  } as never,
+                }, firstLabel);
+                // The archive's paint, over the print: it comes up across
+                // SILVER_EXIT and is the reader's map (writeSatelliteVeil).
+                // The same imagery through a source of its own: two raster
+                // layers on one source share the draped globe's overlap
+                // stencil, and wherever a new zoom level's tiles came in over
+                // their parents mid-dive the upper layer was masked out — a
+                // tile-shaped patch of bare ground flashing in the sea for a
+                // frame or two. (The browser's cache serves the second
+                // source's tiles: the same URLs.)
+                lookWrites.stockOpacity = 0;
+                map.addSource(SATELLITE_STOCK_LAYER, { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
+                map.addLayer({
+                  id: SATELLITE_STOCK_LAYER,
+                  type: 'raster',
+                  source: SATELLITE_STOCK_LAYER,
+                  paint: {
+                    'raster-opacity': 0,
+                    'raster-opacity-transition': { duration: 0, delay: 0 },
+                    ...STOCK_PAINT,
                     'raster-fade-duration': 160,
                   } as never,
                 }, firstLabel);

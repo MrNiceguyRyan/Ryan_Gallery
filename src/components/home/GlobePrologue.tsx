@@ -121,9 +121,11 @@ export default function GlobePrologue({ years, progress, covered = false, leavin
         </p>
         <div className="mt-14 flex items-center gap-10">
           {/* Last of the first screen, but inside the name's own rise: the
-              cue that says "scroll" must not arrive after the reader already
-              has. The wheel, a key or a press of it enters the map (the page
-              itself does not scroll: src/lib/explorer.ts). */}
+              cue must not arrive after the reader already has moved. The
+              wheel, a key or a press of it enters the map. It said "Scroll",
+              but the page no longer scrolls (src/lib/explorer.ts): the word
+              is the map's now. PROPOSED copy (2026-09-28 review): "Explore",
+              for the owner to approve. */}
           <button
             type="button"
             aria-label="Enter the map"
@@ -132,7 +134,7 @@ export default function GlobePrologue({ years, progress, covered = false, leavin
             className="prologue-hero-cue pointer-events-auto flex min-h-11 items-center gap-3 font-ui text-[10px] uppercase tracking-[0.1em] text-white/50 transition-colors hover:text-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
           >
             <span className="prologue-scroll-cue relative block h-7 w-px overflow-hidden bg-white/18" />
-            Scroll
+            Explore
           </button>
           {/* The globe's easter eggs by keyboard. Out of sight until focused;
               focused, one quiet line says what the keys do. */}

@@ -21,6 +21,9 @@ export interface ExplorerPlace {
  * (the archive's contact sheet). Every one of them lets the ticket in hand
  * go first: the explorer tears it before it moves. Bone ink; the one lime
  * in view stays the atlas's.
+ * PROPOSED copy (the explorer's build, 2026-09-28), for the owner to
+ * approve: "All places", "Index", and for screen readers "Previous place:
+ * …" / "Next place: …" and "All places, N".
  */
 export default function ExplorerControls({
   places,

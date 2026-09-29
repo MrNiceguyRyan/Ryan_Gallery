@@ -15,7 +15,7 @@ import {
   silverFloorAt,
   silverPaint,
   silverRamp,
-  stockPaint,
+  STOCK_PAINT,
 } from '../src/lib/globeLook.ts';
 
 const TARGET = -80.19;
@@ -76,10 +76,13 @@ test('the first screen keeps the approved light, and eases to the under-way ligh
   );
   assert.deepEqual(globeLookAt(0.11).haze, FIRST_SCREEN_LIGHT.haze);
   const underway = globeLookAt(0.32);
-  assert.deepEqual(
-    [underway.spec, underway.specPower, underway.haze, underway.hazeWidth, underway.glow],
-    [PLANET_LIGHT.spec, PLANET_LIGHT.specPower, PLANET_LIGHT.haze, PLANET_LIGHT.hazeWidth, PLANET_LIGHT.glow],
-  );
+  [underway.spec, underway.specPower, underway.haze, underway.hazeWidth, underway.glow].forEach((value, index) => {
+    const want = [PLANET_LIGHT.spec, PLANET_LIGHT.specPower, PLANET_LIGHT.haze, PLANET_LIGHT.hazeWidth, PLANET_LIGHT.glow][index];
+    assert.ok(Math.abs(value - want) < 1e-9, `${index}: ${value} vs ${want}`);
+  });
+  // Quieter under way since the review of 2026-09-28 (the lit limb swept
+  // across the view by the entry's turn).
+  assert.ok(PLANET_LIGHT.glow <= 0.14 && PLANET_LIGHT.haze <= 0.04);
   // Monotonic in between: no pulse.
   let previous = Infinity;
   for (let q = 0; q <= 0.4; q += 0.005) {
@@ -95,7 +98,9 @@ test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps t
   const stops = (ramp) => ramp.slice(3).filter((_, index) => index % 2 === 1);
   const base = stops(silverRamp(0));
   assert.deepEqual(base, SILVER_RAMP.map(([, color]) => color));
-  assert.equal(base.at(-1), '#e9e6d8');
+  // Capped a step below paper since the review of 2026-09-28 (晃眼 on
+  // arrival): the disc's p99 was 224/255.
+  assert.equal(base.at(-1), '#c6c2b2');
   const lifted = stops(silverRamp(1));
   assert.deepEqual(lifted.slice(0, 4), SILVER_FLOOR);
   assert.deepEqual(lifted.slice(4), base.slice(4));
@@ -110,11 +115,13 @@ test('the silver ramp lifts only its four darkest stops, in 25 steps, and caps t
   // capped short of paper, the floor kept above black; the silver print puts
   // its own floor back. Measured at every place's rest, the map's mean luma
   // went 86 → 63 (the target band 60–65), its 99th percentile 149 → 110.
-  const stock = stockPaint();
-  assert.equal(stock['raster-color'], undefined);
-  assert.equal(stock['raster-saturation'], -0.3);
-  assert.equal(stock['raster-contrast'], -0.1);
-  assert.ok(stock['raster-brightness-min'] > 0 && stock['raster-brightness-min'] < 0.1);
+  // The archive's paint is its own layer's for good (RouteAtlas,
+  // SATELLITE_STOCK_LAYER): no colour mapping on it to reset.
+  const stock = STOCK_PAINT;
+  assert.equal('raster-color' in stock, false);
+  assert.equal(stock['raster-saturation'], -0.4);
+  assert.equal(stock['raster-contrast'], -0.35);
+  assert.ok(stock['raster-brightness-min'] > 0 && stock['raster-brightness-min'] <= 0.15);
   assert.ok(stock['raster-brightness-max'] <= 0.8, 'no blown highlight');
   assert.equal(silverPaint(0)['raster-brightness-min'], 0);
 });
@@ -145,5 +152,8 @@ test('the archive stays on the globe (owner decision, 2026-09-25)', () => {
   // The veil and the light's fade share one rate-limited zoom (a fast dive
   // stepped the whole map 6.5 L in one frame at zoom 3.6).
   assert.match(source, /zoom: globeWritesRef\.current\.fadeZoom/);
-  assert.match(source, /map\.setPaintProperty\('prologue-satellite', 'raster-opacity', opacity\)/);
+  // Written as plain numbers (see satelliteOpacityAt): the print below, the
+  // archive's paint over it across the silver's exit.
+  assert.match(source, /map\.setPaintProperty\('prologue-satellite', 'raster-opacity', base\)/);
+  assert.match(source, /map\.setPaintProperty\(SATELLITE_STOCK_LAYER, 'raster-opacity', over\)/);
 });

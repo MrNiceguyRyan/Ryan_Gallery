@@ -38,6 +38,7 @@ import {
   type ExplorerState,
 } from '../../lib/explorer';
 import { ENTRY, entryQ } from '../../lib/explorerCamera';
+import { TEAR_MS } from '../../lib/ticketTear';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
 // the opening is settling without creating Mapbox's WebGL context or mounting
@@ -430,12 +431,20 @@ export default function HomePage({ collections }: Props) {
   }, [captureStory]);
 
   // ── Playing a gesture's effects, in order ──
-  const tearTicket = useCallback((id: string, kind: 'tear-then' | 'tear-stub', go: () => void) => {
+  // `gone`: go on only once the torn face has left the screen (before a
+  // flight: the map never pans under a card still being laid aside — one
+  // large motion at a time), not merely once it is free.
+  const tearTicket = useCallback((id: string, kind: 'tear-then' | 'tear-stub', go: () => void, gone = false) => {
     const section = document.getElementById(`archive-item-${id}`);
-    const detail: { go: () => void; handled?: boolean } = { go };
+    const detail: { go: () => void; handled?: boolean; gone?: boolean } = { go, gone };
     section?.dispatchEvent(new CustomEvent(`archive:${kind}`, { detail }));
     if (!detail.handled) go();
   }, []);
+  // The tear under way, if any: a gesture that comes while it runs (Next
+  // pressed three times over) does not tear the next tickets — never dealt —
+  // nor start the camera mid-tear; it waits for this tear and then plays its
+  // own moves (the last one asked for wins: its `then` replaces the rest).
+  const tearRunRef = useRef<{ then: (() => void) | null } | null>(null);
   const nextFlight = useCallback((kind: AtlasFlight['kind'], id: string | null) => {
     flightTokenRef.current += 1;
     const next = { kind, id, token: flightTokenRef.current };
@@ -496,7 +505,8 @@ export default function HomePage({ collections }: Props) {
   }, [desktopLayout, entryProgress, nextFlight, prologueProgress, reduce]);
 
   // Back to the first screen: under a short veil the camera is set back on
-  // the corner globe (the desktop's clocks to 0) or the planet (the phone),
+  // the corner globe (the desktop's clocks to 0) or above stop 01 under the
+  // opener card (the phone),
   // and the first screen comes up again.
   const goHome = useCallback(() => {
     entryAnimRef.current?.stop();
@@ -520,9 +530,23 @@ export default function HomePage({ collections }: Props) {
       if (!effect) return;
       const next = () => step(index + 1);
       switch (effect.type) {
-        case 'tear':
-          tearTicket(effect.id, 'tear-then', next);
+        case 'tear': {
+          const run: { then: (() => void) | null } = { then: next };
+          tearRunRef.current = run;
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            window.clearTimeout(guard);
+            if (tearRunRef.current === run) tearRunRef.current = null;
+            run.then?.();
+          };
+          // Never held up for good by a tear that does not report back (its
+          // ticket re-seated under it).
+          const guard = window.setTimeout(finish, TEAR_MS + 600);
+          tearTicket(effect.id, 'tear-then', finish, effects[index + 1]?.type === 'fly');
           return;
+        }
         case 'tear-stub': {
           const collection = orderedCities.find((city) => city._id === effect.id);
           const captured = collection ? captureStory(collection) : undefined;
@@ -557,6 +581,11 @@ export default function HomePage({ collections }: Props) {
           next();
       }
     };
+    const running = tearRunRef.current;
+    if (running && effects[0]?.type !== 'tear-stub') {
+      running.then = () => step(effects[0]?.type === 'tear' ? 1 : 0);
+      return;
+    }
     step(0);
   }, [captureStory, goHome, nextFlight, openCollection, orderedCities, runEntry, tearTicket]);
 
@@ -580,6 +609,27 @@ export default function HomePage({ collections }: Props) {
       dispatchRef.current({ type: 'entered' });
     }
   }, []);
+
+  // ── The entry, cut short ──
+  // Being able to stop a motion is itself a comfort: while the entry plays,
+  // a key (Escape among them), a press anywhere or a second turn of the wheel
+  // sets the camera down on the place at once — the desktop's clocks to
+  // their ends (RouteAtlas dips the canvas and cuts, as reduced motion
+  // does), the phone's flight cut onto the place.
+  const finishEntry = useCallback(() => {
+    if (explorerRef.current.phase !== 'entering') return;
+    if (desktopLayout) {
+      entryAnimRef.current?.stop();
+      entryAnimRef.current = null;
+      prologueProgress.set(1);
+      entryProgress.set(1);
+      setEntryVoyage(null);
+      dispatchRef.current({ type: 'entered' });
+      return;
+    }
+    const id = explorerRef.current.current;
+    if (id && entryFlightRef.current != null) entryFlightRef.current = nextFlight('cut', id);
+  }, [desktopLayout, entryProgress, nextFlight, prologueProgress]);
 
   // A window that crosses the phone/desktop line with the map in hand (a
   // tablet turned, a window dragged narrower): the other layout's camera is
@@ -678,6 +728,39 @@ export default function HomePage({ collections }: Props) {
       window.removeEventListener('touchmove', onTouchMove);
     };
   }, [explorer.phase]);
+
+  useEffect(() => {
+    if (explorer.phase !== 'entering' || reduce) return;
+    const began = performance.now();
+    // The wheel that entered keeps turning for a while (a trackpad's glide):
+    // only a new turn after a pause, well into the entry, cuts it short.
+    let lastWheel = began;
+    const onWheel = (event: WheelEvent) => {
+      const now = performance.now();
+      const fresh = now - lastWheel > 320 && now - began > 600;
+      lastWheel = now;
+      if (fresh && Math.abs(event.deltaY) + Math.abs(event.deltaX) >= 4) finishEntry();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.key === 'Tab' || event.key === 'Shift') return;
+      // A key held from the entering press repeats: not a new ask (Escape
+      // always is).
+      if (event.key !== 'Escape' && performance.now() - began < 250) return;
+      finishEntry();
+    };
+    const onDown = (event: PointerEvent) => {
+      if (!event.isPrimary) return;
+      finishEntry();
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown);
+    };
+  }, [explorer.phase, finishEntry, reduce]);
 
   // ── Escape: the ticket in hand tears away ──
   useEffect(() => {
@@ -922,6 +1005,40 @@ export default function HomePage({ collections }: Props) {
   const phase = explorer.phase;
   const entered = phase !== 'globe';
   const free = phase === 'explore';
+  // The wheel zooms the map wherever it turns: over the ticket at its shield
+  // and over the rail's words too (they lie on the map), not only over the
+  // bare canvas — a quarter of the screen used to be dead to it. Handed on to
+  // the map's canvas as the same wheel, at the same point; the list and the
+  // Index keep their own scroll.
+  useEffect(() => {
+    if (!free) return;
+    const onWheel = (event: WheelEvent) => {
+      const target = event.target as Element | null;
+      if (!target?.closest?.('.archive-dock, .explorer-rail')) return;
+      if (target.closest('.explorer-list, [data-lenis-prevent]') || storyOpenRef.current) return;
+      const canvas = document.querySelector<HTMLCanvasElement>('.route-atlas[data-atlas-free] .mapboxgl-canvas');
+      if (!canvas) return;
+      event.preventDefault();
+      canvas.dispatchEvent(new WheelEvent('wheel', {
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        deltaZ: event.deltaZ,
+        deltaMode: event.deltaMode,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+        bubbles: true,
+        cancelable: true,
+      }));
+    };
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => window.removeEventListener('wheel', onWheel, { capture: true });
+  }, [free]);
   const select = useCallback((id: string) => {
     if (explorerRef.current.phase === 'globe') {
       // The globe's easter egg dealt a ticket: enter, straight to its place.
@@ -1017,7 +1134,10 @@ export default function HomePage({ collections }: Props) {
     <>
       <div
         ref={pageRootRef}
-        className="explorer-page relative h-[100dvh] overflow-hidden font-sans bg-[#282c20] text-[#F4F4ED]"
+        // `overflow-clip`, never `hidden`: a hidden box is still a scroller,
+        // and a focus that reached the map's attribution (below the fold of
+        // the canvas's bleed) scrolled the whole page 32px and left it there.
+        className="explorer-page relative h-[100dvh] overflow-clip font-sans bg-[#282c20] text-[#F4F4ED]"
         data-explorer-phase={phase}
         data-explorer-place={current ?? undefined}
         inert={pageInert}
@@ -1124,15 +1244,6 @@ export default function HomePage({ collections }: Props) {
                 leaving={entered}
                 onEnter={() => dispatchRef.current({ type: 'enter' })}
               />
-              {/* `opening-atlas`: landing A lets the globe rise out of the dark
-                  behind the words (global.css, "The opening film"). */}
-              <aside className="explorer-stage opening-atlas absolute inset-y-0 left-0 z-10 h-full w-[78%]">
-                {atlas}
-                {/* The covers' dock: each place's cover rides here, on the
-                    atlas, beside its shield (ArchiveChapter portals it in;
-                    src/lib/coverDock.ts places it every camera frame). */}
-                <div ref={setDockHost} className="archive-dock-host" />
-              </aside>
               {/* The rail: the place in hand — its name and lede — down the
                   right of the page; with nothing in hand, the archive's own
                   line. It lets the pointer through to the map elsewhere. */}
@@ -1149,6 +1260,8 @@ export default function HomePage({ collections }: Props) {
                   <p className="explorer-idle__figures font-ui tabular-nums">
                     {String(places.length).padStart(2, '0')} places · {totalFrames} frames
                   </p>
+                  {/* PROPOSED copy (the explorer's build, 2026-09-28): for the
+                      owner to approve. */}
                   <p className="explorer-idle__hint font-ui">Choose a shield on the map, or step through below.</p>
                 </div>
                 {chapters}
@@ -1167,6 +1280,19 @@ export default function HomePage({ collections }: Props) {
                 onEngage={setEngagedChapterId}
                 visible={free}
               />
+              {/* The map comes after the rail and the controls in the page's
+                  order (they lie over it: z-index, not order, stacks them),
+                  so the keyboard meets the place in hand and the ways
+                  through the places before the map's own stops. */}
+              {/* `opening-atlas`: landing A lets the globe rise out of the dark
+                  behind the words (global.css, "The opening film"). */}
+              <aside className="explorer-stage opening-atlas absolute inset-y-0 left-0 z-10 h-full w-[78%]">
+                {atlas}
+                {/* The covers' dock: each place's cover rides here, on the
+                    atlas, beside its shield (ArchiveChapter portals it in;
+                    src/lib/coverDock.ts places it every camera frame). */}
+                <div ref={setDockHost} className="archive-dock-host" />
+              </aside>
             </div>
           ) : (
             /* ── The phone's explorer: the map full screen under the opener
@@ -1195,7 +1321,8 @@ export default function HomePage({ collections }: Props) {
                 visible={free}
               />
               {/* The opener card over the map: a swipe up, a tap anywhere on
-                  it, or its cue (the keyboard's way) hands the screen over. */}
+                  it, or its cue (the keyboard's way) hands the screen over.
+                  PROPOSED copy: "Enter the map". */}
               <div
                 className="explorer-opener"
                 data-leaving={entered ? '' : undefined}
@@ -1240,6 +1367,7 @@ export default function HomePage({ collections }: Props) {
               onBackToStart={leave}
               onOpenStory={openStoryFromClosing}
             />
+            {/* PROPOSED copy: "Close index". */}
             <button
               type="button"
               className="explorer-index__close font-ui"

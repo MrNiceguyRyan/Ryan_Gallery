@@ -18,6 +18,13 @@ const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 // through an olive-to-paper ramp instead of being desaturated in colour. The
 // top of the ramp stops at #e9e6d8 — at paper white the Sahara blew out at a
 // quarter of the scroll and outshone the name.
+// Owner, 2026-09-28 (到主页的时候…有点晃眼): the disc was still the brightest
+// thing on arrival — p99 224/255 at dpr 2, 4.6% of the screen over 200, and
+// the entry then turned the Sahara and Arabia across the view at that
+// brightness. The top four stops come down a step (the print keeps its
+// shadows and its olive): the highlights now stop at a warm grey, #c6c2b2.
+// Measured at dpr 2 with the type hidden: 0.15% of the screen over 200
+// (was 4.6%), the disc's 99th percentile under 195 (was 224).
 export const SILVER_MIX = [0.2126, 0.7152, 0.0722, 0] as [number, number, number, number];
 export const SILVER_RAMP: Array<[number, string]> = [
   [0.0, '#1a1e14'],
@@ -25,10 +32,10 @@ export const SILVER_RAMP: Array<[number, string]> = [
   [0.14, '#383f2e'],
   [0.25, '#4f553f'],
   [0.4, '#76775e'],
-  [0.56, '#a09d83'],
-  [0.72, '#c4bfa5'],
-  [0.87, '#dcd8c3'],
-  [1.0, '#e9e6d8'],
+  [0.56, '#96937b'],
+  [0.72, '#aca78f'],
+  [0.87, '#bcb7a3'],
+  [1.0, '#c6c2b2'],
 ];
 // Where the ramp's darkest four stops lift to once the page is under way, so
 // the ocean reads one step above the page ground instead of as a hole in it.
@@ -36,7 +43,7 @@ export const SILVER_RAMP: Array<[number, string]> = [
 export const SILVER_FLOOR = ['#363b2d', '#3b4131', '#434a36', '#51573f'];
 export const FLOOR_Q: [number, number] = [0.12, 0.32];
 // The archive's own paint for the same layer (what it had before the grade):
-// below SILVER_EXIT_ZOOM the satellite is only a residual veil under the dark
+// past SILVER_EXIT the satellite is only a residual veil under the dark
 // atlas, and the chapters must look exactly as they did.
 // Lifted 2026-09-28 with the residual (RouteAtlas): the owner found the
 // chapters' ground too dark. Then, the same day, the lift glared (到主页的时候，
@@ -47,16 +54,35 @@ export const FLOOR_Q: [number, number] = [0.12, 0.32];
 // water's floor kept a touch above black so the sea still reads as sea.
 // Measured in headless Chrome at every place's rest, 1728×1000, the
 // interface hidden (Rec. 709 luma, 0–255, mean over the six places): the
-// old dark paint 36, the lift 86, now 63; saturation 0.26 → 0.22; the
-// 99th-percentile highlight 149 → 110; the spread (sd) 26 → 18.
+// old dark paint 36, the lift 86, then 63; saturation 0.26 → 0.22; the
+// 99th-percentile highlight 149 → 110; the spread (sd) 26 → 18. The review
+// that followed found the places themselves 48–79 apart (the desert of Page
+// and Bryce against the sea off Miami): the top end capped lower, the floor
+// lifted, the contrast and the colour softened again, so the sea comes up
+// and the desert down. Measured the same way under the held 24° camera (dpr
+// 2): Miami 54, Orlando 58, Page 70, Zion 63, Bryce 67, New York 59 — mean
+// 62, where the paint before this measured 45–75.
 export const STOCK_PAINT = {
-  'raster-saturation': -0.3,
-  'raster-contrast': -0.1,
-  'raster-brightness-min': 0.07,
-  'raster-brightness-max': 0.8,
+  'raster-saturation': -0.4,
+  'raster-contrast': -0.35,
+  'raster-brightness-min': 0.15,
+  'raster-brightness-max': 0.58,
 } as const;
-export const SILVER_EXIT_ZOOM = 4.5;
-export const SILVER_EXIT_HYSTERESIS = 0.1;
+// The silver print's way out on the dive: the archive's own paint on a second
+// layer over the same tiles, crossfaded in across these zooms at the veil's
+// strength (RouteAtlas, `writeSatelliteVeil`) — no longer a swap hidden in a
+// dip of the veil to 10%, which blinked the whole frame dark two seconds
+// before the landing.
+export const SILVER_EXIT: readonly [number, number] = [3.5, 5];
+
+/** The archive's paint's share at `zoom` on the way down (0: all silver, 1:
+ *  all the archive's), quantised to 1/50 so the layers are written only as
+ *  it moves. Straight in the zoom, across most of the dive: the dive is
+ *  fastest in its middle, and an eased share there darkened the frame ~17
+ *  steps of luma a second. */
+export function silverExitAt(zoom: number) {
+  return Math.round(50 * clamp01((zoom - SILVER_EXIT[0]) / (SILVER_EXIT[1] - SILVER_EXIT[0]))) / 50;
+}
 
 const hexChannels = (hex: string) => {
   const value = parseInt(hex.slice(1), 16);
@@ -101,16 +127,6 @@ export function silverPaint(k: number): Record<string, unknown> {
   };
 }
 
-/** The stock paint: no colour mapping (undefined resets each key). */
-export function stockPaint(): Record<string, unknown> {
-  return {
-    'raster-color': undefined,
-    'raster-color-mix': undefined,
-    'raster-color-range': undefined,
-    ...STOCK_PAINT,
-  };
-}
-
 // ── The air ──
 // Mapbox's own atmosphere drew a wide white halo all the way round. The air
 // now comes from the light, on the lit limb only; the fog keeps just a whisper
@@ -134,10 +150,12 @@ export const PLANET_LIGHT = {
   rimWidth: 0.035,
   // The air and the glint once the page is under way (from FLOOR_Q's end);
   // the first screen keeps the approved frame's softer, wider light
-  // (FIRST_SCREEN_LIGHT) and eases into these across FLOOR_Q.
-  haze: 0.09,
+  // (FIRST_SCREEN_LIGHT) and eases into these across FLOOR_Q. Quieter since
+  // the review of 2026-09-28 (晃眼): the lit limb was a bright crescent
+  // swept across the view by the entry's turn (0.42 / 0.09).
+  haze: 0.04,
   hazeWidth: 0.24,
-  glow: 0.42,
+  glow: 0.14,
   glowWidth: 0.012,
   sky: [-0.05, 0.95] as [number, number],
   spec: 0.1,
@@ -245,6 +263,32 @@ export function prologueTurnRemaining(q: number, drift: number) {
   const u = 1 - clamp01(q);
   const { A, B } = PROLOGUE_TURN;
   return (A * u * u * u + B * u) * (1 - drift / (A + B));
+}
+
+/** How far the entry has brought the planet in from the corner at progress
+ *  q: the share of the whole turn already made (the drift cancels out of the
+ *  ratio). The glide runs on the turn's own clock, so the entry's two
+ *  motions start, peak and end together (explorerCamera, `entryQ`, plays the
+ *  turn on the house's sine: the glide is that same sine). Before the review
+ *  of 2026-09-28 the glide was a smootherstep of q from 0.35: the turn and
+ *  the glide first cancelled, then added, and the ground surged four times
+ *  over within 350 ms nearly three seconds in — the lurch. */
+export function prologueGlide(q: number) {
+  const u = 1 - clamp01(q);
+  const { A, B } = PROLOGUE_TURN;
+  return 1 - (A * u * u * u + B * u) / (A + B);
+}
+
+/** The corner globe's axial tilt comes out over the first ENTRY_ROLL_SHARE of
+ *  the entry's turn (its time, recovered from the glide, which is the
+ *  house's sine of it), on a sine of its own: done before the turn is at its
+ *  fastest (half-way), never on top of it. 14° over 45% of 3.8 s peaks at
+ *  ~13°/s (the review measured 20°/s, the roll running through the turn). */
+export const ENTRY_ROLL_SHARE = 0.45;
+export function prologueRoll(glide: number) {
+  const t = Math.acos(1 - 2 * clamp01(glide)) / Math.PI;
+  const u = clamp01(t / ENTRY_ROLL_SHARE);
+  return (1 - Math.cos(Math.PI * u)) / 2;
 }
 
 /** The prologue globe's longitude before any egg: the

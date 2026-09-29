@@ -216,7 +216,9 @@ test('the archive\'s plan: every cover whole on the stage, off the rail and the 
   }
   // Today, on the owner's screen.
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
-  assert.deepEqual(chapters.map((c) => plan[c.id].quadrant), ['tr', 'bl', 'br', 'bl', 'tr', 'tl']);
+  // (New York's corner is bottom-left under the 24° camera: at 40° it was
+  // top-left.)
+  assert.deepEqual(chapters.map((c) => plan[c.id].quadrant), ['tr', 'bl', 'br', 'bl', 'tr', 'bl']);
 });
 
 test('the channel keeps the last plan and frame for a cover that mounts late', () => {
@@ -242,7 +244,7 @@ test('the channel keeps the last plan and frame for a cover that mounts late', (
 test('a ticket tears only while its cover is up, and is put back whole once it has gone', () => {
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // Nothing tears a cover no one can see (the explorer then simply goes on).
-  assert.match(chapter, /const tearThen = \(go: \(\) => void\) => \{\s+const section = chapterRef\.current as HTMLElement \| null;\s+if \(!ticket \|\| !section \|\| !dockShownRef\.current\) return false;/);
+  assert.match(chapter, /const tearThen = \(go: \(\) => void, gone = false\) => \{\s+const section = chapterRef\.current as HTMLElement \| null;\s+if \(!ticket \|\| !section \|\| !dockShownRef\.current\) return false;/);
   assert.match(chapter, /const tearStubThen = \(go: \(\) => void\) => \{\s+if \(!ticket \|\| !dockShownRef\.current\) return false;/);
   // Gone (its fade done), it is whole again for the next visit.
   assert.match(chapter, /reseatTimer = window\.setTimeout\(\(\) => reseatRef\.current\(\), DOCK_FADE_MS \+ 60\);/);

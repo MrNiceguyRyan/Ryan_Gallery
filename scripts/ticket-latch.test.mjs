@@ -36,8 +36,11 @@ test('every tear gate is the face free plus the same beat', () => {
   assert.equal(TEAR_BEAT_MS, 60);
   assert.equal(TEAR_BEFORE_FLIGHT_MS, TEAR_FREE_MS + TEAR_BEAT_MS);
   assert.match(chapter, /const PULL_GO_AFTER_MS = TEAR_BEFORE_FLIGHT_MS;/);
-  // The tear asked for, and the admission, both go on after it.
-  assert.match(chapter, /\}, reduce \? TEAR_REDUCED_MS : PULL_GO_AFTER_MS\);[\s\S]*\}, reduce \? TEAR_REDUCED_MS : PULL_GO_AFTER_MS\);/);
+  // The tear asked for, and the admission, both go on after it — a flight
+  // only once the face has gone (the map never pans under a card still
+  // being laid aside).
+  assert.match(chapter, /\}, reduce \? TEAR_REDUCED_MS : gone \? GONE_GO_AFTER_MS : PULL_GO_AFTER_MS\);[\s\S]*\}, reduce \? TEAR_REDUCED_MS : PULL_GO_AFTER_MS\);/);
+  assert.match(chapter, /const GONE_GO_AFTER_MS = TEAR_MS;/);
   assert.ok(TEAR_FREE_MS < TEAR_MS, 'the face is free before the tear is over');
   // The scroll's latch and its mirrors are gone with the scroll.
   assert.doesNotMatch(chapter, /stepLatch|TEAR_LINE_DOCKED|ticketLatch/);

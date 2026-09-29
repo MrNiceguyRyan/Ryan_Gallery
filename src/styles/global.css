@@ -945,11 +945,17 @@ html[data-voyage] .route-atlas:not(.route-atlas--mobile):not(.route-atlas--livin
     opacity var(--dur-out) var(--ease-fade),
     visibility 0s;
 }
-/* A hit area 5px round the shield. */
+/* A hit area 5px round the shield; 10px under a finger (the phone's shields
+   are 23–31px, under the 44px a fingertip needs). */
 .place-shield__sign::before {
   content: '';
   position: absolute;
   inset: -5px;
+}
+@media (pointer: coarse) {
+  .place-shield__sign::before {
+    inset: -10px;
+  }
 }
 .place-shield__sign:focus-visible {
   outline: 2px solid #D2FF00;
@@ -1398,7 +1404,9 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   padding: 14px 10px 10px;
   border: 1px solid rgba(244, 244, 237, 0.12);
   border-radius: 8px;
-  background: rgba(15, 18, 13, 0.96);
+  /* Opaque: at 96% the rail's lede showed through its head and first row,
+     two layers of type colliding (the review of 2026-09-28). */
+  background: #11140f;
   box-shadow: 0 18px 50px rgba(5, 7, 4, 0.45);
 }
 .explorer-list__head {
@@ -1491,6 +1499,14 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 .explorer-index__close:hover { color: #F4F4ED; border-color: rgba(244, 244, 237, 0.34); }
 .explorer-index__close:focus-visible { outline: 2px solid #D2FF00; outline-offset: 2px; }
+/* The sheet's own "Back to the start" is bone inside the Index: its Close is
+   focused on opening, and its lime ring is the view's one lime. */
+.explorer-index .closing-links > button {
+  color: rgba(244, 244, 237, 0.86);
+}
+.explorer-index .closing-links > button:hover {
+  color: #F4F4ED;
+}
 /* ── The phone ──
    The card is dealt at the foot of the screen (src/lib/explorer.ts,
    phoneCard), over the controls; the rail's words live on the card's stub
@@ -3460,31 +3476,18 @@ body.walkin-in .walkin-nav { transform: translateY(0); }
   filter: brightness(0.58) saturate(0.46) contrast(1.22);
 }
 
-/* Reading tone. Once the camera has landed on a chapter the ground settles
-   into a darker paper, so the photograph and the type are the subject and
-   the map is the drawing behind them; the moment a flight starts it lifts,
-   so the map comes forward exactly when it moves. Opacity only (compositor),
-   driven by the camera state the atlas broadcasts on <html> — `locked` is
-   the landing itself, so the settle begins on touchdown. Sinks slowly, lifts
-   fast: the flight is the event, the rest is the reading. */
-/* Lightened 2026-09-28 (the owner: the chapters' ground was too dark): the
-   settle is a breath now, not a dimmer — the photograph and its type are the
-   subject by their own weight, and the rail has its own local ground. It
-   covers the whole canvas: the map runs to the page's edge. Then a little
-   deeper again the same day (有点晃眼): 0.1 → 0.16, with the satellite's own
-   quieter grade (src/lib/globeLook.ts STOCK_PAINT). */
+/* Reading tone: the map's ground a breath darker than the photograph, so the
+   photograph and its type are the subject and the map the drawing behind
+   them. Lightened 2026-09-28 (the owner: the chapters' ground was too dark),
+   deepened a little the same day (有点晃眼): 0.16, with the satellite's own
+   quieter grade (src/lib/globeLook.ts STOCK_PAINT). It covers the whole
+   canvas: the map runs to the page's edge.
+   It holds in every camera state. It used to lift at every take-off, "so the
+   map comes forward exactly when it moves" — the whole map brightened by 6–11
+   steps of luma exactly while it moved (the review of 2026-09-28), the
+   opposite of calm. */
 .route-atlas-rest-tone {
   background: rgba(9, 12, 8, 0.16);
-  opacity: 0;
-  /* Take-off clears it on the fade curve: on the arrive curve 84% of the tone
-     was gone in the first 80 ms, a cut with a tail. */
-  transition: opacity 0.5s var(--ease-fade);
-}
-html[data-atlas-camera='locked'] .route-atlas-rest-tone,
-html[data-atlas-camera='rest'] .route-atlas-rest-tone {
-  opacity: 1;
-  transition-duration: 1.6s;
-  transition-timing-function: var(--ease-arrive);
 }
 
 .route-atlas-interface-veil {
@@ -4433,6 +4436,17 @@ html[data-atlas-camera='rest'] .route-atlas-rest-tone {
 .route-atlas--mobile .mapboxgl-ctrl-logo {
   opacity: 0.18;
   transform: scale(0.62);
+}
+/* The desktop canvas bleeds CANVAS_BLEED (32px) past the page on every side:
+   Mapbox's logo and attribution come back inside the page, where they can be
+   read and reached (a focus on the attribution used to sit below the fold). */
+.route-atlas__canvas--bleed .mapboxgl-ctrl-bottom-left {
+  left: 32px;
+  bottom: 32px;
+}
+.route-atlas__canvas--bleed .mapboxgl-ctrl-bottom-right {
+  right: 32px;
+  bottom: 32px;
 }
 @media (max-width: 1023px) {
   .atlas-map-workspace .mapboxgl-ctrl-bottom-left {

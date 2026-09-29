@@ -11,35 +11,55 @@
 //    SCREEN_SPEED_CAP (a share of the viewport per second) and the zoom never
 //    changes faster than ZOOM_RATE_CAP levels a second; the path climbs less
 //    (FLIGHT.curve) and eases in and out (the house's sine, voyageEase);
-//  - bearing never changes in a flight, and pitch only follows the zoom
-//    (pitchForZoom): a flat planet from space, the oblique view only down at
-//    a region — never tipped on its own, never swung together with a turn;
+//  - bearing never changes in a flight, and the pitch is one gentle oblique
+//    view held at every zoom (EXPLORE_PITCH): the review of 2026-09-28
+//    measured the pitch that followed the zoom tipping 75°/s under one flick
+//    of the wheel (242°/s under a double-click) — the reader's own hand
+//    swinging the camera — so it no longer follows anything;
 //  - the reader's own drag and zoom are the map's (Mapbox), within
-//    EXPLORE_ZOOM: the whole planet to a regional view.
+//    EXPLORE_ZOOM: the whole planet to a regional view, the wheel, the keys
+//    and a double-click all held under the flights' own zoom cap
+//    (READER_ZOOM, RouteAtlas "The reader's map").
 // Pure: no DOM, no Mapbox. RouteAtlas plays what this plans.
 
 import { voyageEase } from './motion.ts';
 import { prologueTurnRemaining } from './globeLook.ts';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
-const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
 /** The reader's zoom range: the whole planet … a regional view (a phone's
  *  planet is smaller: its screen is). */
 export const EXPLORE_ZOOM = { min: 1.6, minPhone: 1, max: 8.5 } as const;
 
-/** The oblique view down at a place: this many degrees, reached from `flat`
- *  to `full` zoom (the planet from space is seen square on). It was 46°,
- *  tipped in on every dive. */
-export const EXPLORE_PITCH = { rest: 40, flat: 3.4, full: 5 } as const;
+/** The oblique view: this many degrees at every zoom, held (never tipped
+ *  with the zoom). It was 46°, tipped in on every dive, then 40° following
+ *  the zoom; at 24° the ground near the foot of the screen moves about 1.3×
+ *  the focal point's speed in a flight instead of 1.7×, and the planet's
+ *  bright limb stays out of the frame at rest. */
+export const EXPLORE_PITCH = { rest: 24 } as const;
 /** The chapters' bearing: north all but straight up, and it never moves. */
 export const EXPLORE_BEARING = -2;
 
-/** The camera's pitch at `zoom`: flat on the planet, `rest` down at a place. */
-export function pitchForZoom(zoom: number, rest: number = EXPLORE_PITCH.rest) {
-  const { flat, full } = EXPLORE_PITCH;
-  return rest * smootherstep(clamp01((zoom - flat) / (full - flat)));
-}
+/** The reader's own zooms, held under the flights' zoom cap. Mapbox's own
+ *  double-click and +/− eased a whole level in 300 ms (6.2 levels/s, and the
+ *  keys rounded to whole levels); its wheel ran a quick flick at ~1.9/s. */
+export const READER_ZOOM = {
+  /** A double-click: one level, about the point clicked. Peaks at
+   *  π/2 · 1 / 1.4 ≈ 1.12 levels/s on the house's sine. */
+  clickLevels: 1,
+  clickMs: 1400,
+  /** + / −: half a level a press, never rounded. */
+  keyLevels: 0.5,
+  keyMs: 700,
+  /** The arrows: this far a press. */
+  panPx: 120,
+  panMs: 450,
+  /** Mapbox's wheel rate (levels per wheel delta px); its default is 1/450,
+   *  under which a brisk flick of a mouse wheel (ten notches) zoomed 1.9
+   *  levels/s; 1/700 measured 1.39, this ~1.15. A trackpad's own rate is
+   *  left as it is (0.2 levels/s measured). */
+  wheelRate: 1 / 850,
+} as const;
 
 // ── A flight ──
 // The path is van Wijk & Nuij's (2003), the one Mapbox's flyTo draws with
@@ -127,15 +147,20 @@ export const FLIGHT = {
    *  2.1 and climbed high enough to show the planet's edge on a neighbour. */
   curve: 1.25,
   /** The ground under the focal point: never faster than this share of the
-   *  viewport's width a second. */
-  screenShare: 0.62,
+   *  viewport's width a second. The cap is set at the focal point, but the
+   *  foreground low on the screen moves faster under the oblique camera
+   *  (≈1.3× at 24°), and a flight that changes zoom moves the edges faster
+   *  still: at 0.62 (with 40°) the fastest point crossed at up to 1.13 vw/s;
+   *  at 0.4 (with 24°) no point of the screen passes ~0.65 vw/s, the median
+   *  point ~0.45 (traced on the live page at 1728). */
+  screenShare: 0.4,
   /** The zoom: never faster than this, levels a second. */
   zoomPerS: 1.15,
   /** Never shorter (a neighbour still reads as a trip) nor longer. The
    *  longest is the fall from the whole planet onto a place (~4.4 levels):
    *  capped at 3.6 s it peaked at 2.2 levels/s on the live page; at 5.2 s it
    *  is the entry's own pace. */
-  minMs: 1150,
+  minMs: 1500,
   maxMs: 5200,
 } as const;
 
@@ -169,23 +194,27 @@ export function planFlight(w0: number, u1: number, dz: number, viewportW: number
 // no longer the scroll's front-loaded curve played on time — at the old
 // shape a glide over 2 s spun the planet 120°/s at the start — but the
 // house's sine on the angle itself: `entryQ` finds the prologue's q that
-// leaves exactly that share of the turn to come. Over 3.8 s the ~195° from
-// the first screen's face to the Americas peaks under 81°/s: the surface of
-// the corner globe (~650px radius at 1728) crosses the screen at about half
-// its width a second, under the flights' own cap.
+// leaves exactly that share of the turn to come, and the glide rides the
+// same sine (globeLook, `prologueGlide`), so the two never cancel and then
+// add (the lurch the review measured 2.9 s in). Over 3.8 s the 165–195°
+// from the first screen's face to the Americas (less the idle drift already
+// turned) peaks at 68–81°/s, once, in the middle.
+// The reader can cut it short: a key, a press or a second turn of the wheel
+// sets the camera down on stop 01 at once (HomePage, `finishEntry`).
 export const ENTRY = {
   /** The turn and the glide, ms. */
   turnMs: 3800,
   /** The descent onto stop 01, ms. Long enough that the zoom stays about
-   *  at FLIGHT.zoomPerS and the tip to the oblique view — which comes in
-   *  only once the zoom is nearly done (RouteAtlas, globeEntryPose) — stays
-   *  under 45°/s. Traced frame by frame on the live page at 1728: 2.7 s gave
-   *  a zoom of ~1.7 levels/s and a 40° tip at ~78°/s; 3.9 s gives 1.18/s
-   *  and 44°/s. */
+   *  at FLIGHT.zoomPerS and the tip to the oblique view (EXPLORE_PITCH,
+   *  spread over the last 70% of the descent: RouteAtlas, GLOBE_TIP_FROM)
+   *  stays at 15°/s. Traced frame by frame on the live page at 1728: 2.7 s
+   *  gave a zoom of ~1.7 levels/s and a 40° tip at ~78°/s. */
   diveMs: 3900,
   /** The first screen's type goes over this long as the turn begins. */
   typeOutMs: 700,
-  /** On a phone (no prologue): the planet to stop 01, at least this long. */
+  /** On a phone (no prologue): the camera waits under the opener card
+   *  above stop 01 at PHONE_APPROACH_ZOOM and goes down, at least this
+   *  long (it came down from the whole planet: 6.9 s, then a tip). */
   phoneMinMs: 2400,
 } as const;
 

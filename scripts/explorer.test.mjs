@@ -24,9 +24,10 @@ const bundle = async (entry) => {
 };
 const explorer = await bundle('../src/lib/explorer.ts');
 const camera = await bundle('../src/lib/explorerCamera.ts');
+const look = await bundle('../src/lib/globeLook.ts');
 const order = await bundle('../src/lib/chapterOrder.ts');
 const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, PHONE_CARD } = explorer;
-const { ENTRY, EXPLORE_PITCH, EXPLORE_ZOOM, FLIGHT, entryQ, entryTurnRate, flightPath, flightSpeeds, pitchForZoom, planFlight } = camera;
+const { ENTRY, EXPLORE_PITCH, FLIGHT, READER_ZOOM, entryQ, entryTurnRate, flightPath, flightSpeeds, planFlight } = camera;
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
 
@@ -206,18 +207,106 @@ test('every flight keeps the ground and the zoom under the caps (and slower than
   if (process.env.EXPLORER_NUMBERS) console.log(rows.join('\n'));
 });
 
-test('the pitch follows the zoom: square on the planet, oblique down at a place', () => {
-  assert.equal(pitchForZoom(EXPLORE_ZOOM.min), 0);
-  assert.equal(pitchForZoom(3), 0);
-  assert.equal(pitchForZoom(EXPLORE_PITCH.full), EXPLORE_PITCH.rest);
-  assert.equal(pitchForZoom(7), EXPLORE_PITCH.rest);
-  let last = -1;
-  for (let z = 1; z <= 9; z += 0.05) {
-    const p = pitchForZoom(z);
-    assert.ok(p >= last - 1e-9, 'never tips back as the zoom goes on');
-    last = p;
+test('the pitch is held: one gentle oblique view at every zoom, never tipped by the reader\'s hand', () => {
+  // The review of 2026-09-28: the pitch that followed the zoom tipped the
+  // camera 75°/s under one flick of the wheel, 242°/s under a double-click.
+  assert.equal(EXPLORE_PITCH.rest, 24);
+  assert.deepEqual(Object.keys(EXPLORE_PITCH), ['rest']);
+  assert.equal('pitchForZoom' in camera, false, 'nothing ties the pitch to the zoom');
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.doesNotMatch(atlas, /map\.on\('zoom'/, 'no per-frame zoom handler writes the camera');
+  assert.doesNotMatch(atlas, /transform\.pitch = /);
+  assert.match(atlas, /pitch: CHAPTER_PITCH,\n/, 'a place\'s rest pose has the one pitch');
+});
+
+test('the reader\'s own zooms stay under the flights\' zoom cap', () => {
+  // A sine over `ms` peaks at π/2 · levels / seconds.
+  const peak = (levels, ms) => (Math.PI / 2) * levels / (ms / 1000);
+  assert.ok(peak(READER_ZOOM.clickLevels, READER_ZOOM.clickMs) <= FLIGHT.zoomPerS, 'double-click');
+  assert.ok(peak(READER_ZOOM.keyLevels, READER_ZOOM.keyMs) <= FLIGHT.zoomPerS, '+ / −');
+  assert.ok(READER_ZOOM.wheelRate < 1 / 450, 'the wheel slower than Mapbox\'s default');
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  // Mapbox's own double-click and keys (300 ms, whole levels) are off.
+  assert.match(atlas, /doubleClickZoom=\{false\}/);
+  assert.match(atlas, /keyboard=\{false\}/);
+  assert.match(atlas, /setWheelZoomRate\(READER_ZOOM\.wheelRate\)/);
+  assert.match(atlas, /duration: reducedMotion \? 0 : READER_ZOOM\.clickMs/);
+});
+
+test('the entry\'s glide rides the turn\'s own clock: one motion, one peak, no lurch', () => {
+  const { prologueGlide, prologueRoll, prologueTurnRemaining, ENTRY_ROLL_SHARE } = look;
+  for (const drift of [0, 12, 30]) {
+    const total = prologueTurnRemaining(0, drift);
+    for (let t = 0; t <= 1.0001; t += 0.02) {
+      const q = entryQ(t, 0, drift);
+      // The share of the turn made is the share of the glide made.
+      const turned = 1 - prologueTurnRemaining(q, drift) / total;
+      assert.ok(Math.abs(prologueGlide(q) - turned) < 1e-6, `drift ${drift}, t ${t.toFixed(2)}`);
+    }
   }
-  assert.ok(EXPLORE_PITCH.rest < 46, 'less oblique than the chapters\' 46°');
+  assert.equal(prologueGlide(0), 0);
+  assert.equal(prologueGlide(1), 1);
+  // The axial tilt (14°) is out before the turn is at its fastest (half-way
+  // through its time, where the glide is 0.5), and gently.
+  assert.ok(ENTRY_ROLL_SHARE < 0.5);
+  assert.ok(Math.abs(prologueRoll(0.5) - 1) < 1e-9);
+  let peak = 0;
+  let prev = 0;
+  for (let i = 1; i <= 1000; i += 1) {
+    const roll = prologueRoll((1 - Math.cos(Math.PI * (i / 1000))) / 2);
+    peak = Math.max(peak, ((roll - prev) * 14) / (ENTRY.turnMs / 1000 / 1000));
+    prev = roll;
+  }
+  assert.ok(peak <= 14, `roll ${peak.toFixed(1)}°/s`);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /const glide = prologueGlide\(q\);/);
+  assert.doesNotMatch(atlas, /glideStart/);
+});
+
+test('the entry can be cut short, and the phone waits near stop 01', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /const finishEntry = useCallback/);
+  assert.match(home, /explorer\.phase !== 'entering'/);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /const cutShort = prologue && !still && !cutDown && entryPoseAt < 1/);
+  assert.match(atlas, /const PHONE_APPROACH_ZOOM = 3\.2;/);
+  // From the approach the descent is short at the zoom cap.
+  const plan = planFlight(844 + 0, 40, 5.05 - 3.2, 390);
+  assert.ok(plan.speeds.zoomPerS <= FLIGHT.zoomPerS * 1.02 && plan.durationMs <= 3000, `${plan.durationMs} ms, ${plan.speeds.zoomPerS.toFixed(2)}/s`);
+});
+
+test('a flight waits for the torn face to have gone; taps in a row do not tear what was never dealt', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /tearTicket\(effect\.id, 'tear-then', finish, effects\[index \+ 1\]\?\.type === 'fly'\)/);
+  assert.match(home, /const tearRunRef = useRef/);
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.match(chapter, /const GONE_GO_AFTER_MS = TEAR_MS;/);
+  assert.match(chapter, /reduce \? TEAR_REDUCED_MS : gone \? GONE_GO_AFTER_MS : PULL_GO_AFTER_MS/);
+  // The ticket's own "Next stop" goes the explorer's way (same tear, same clock).
+  const goNext = chapter.slice(chapter.indexOf('const goNext = () => {'), chapter.indexOf('// ── The sign turns into place'));
+  assert.doesNotMatch(goNext, /tearThen/);
+});
+
+test('the map holds its tone while it moves, and its veil never dips', () => {
+  const css = source('src/styles/global.css');
+  assert.doesNotMatch(css, /data-atlas-camera='(locked|rest)'\] \.route-atlas-rest-tone/);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const keys = atlas.slice(atlas.indexOf('const PROLOGUE_SATELLITE_OPACITY'), atlas.indexOf('];', atlas.indexOf('const PROLOGUE_SATELLITE_OPACITY')));
+  assert.doesNotMatch(keys, /0\.1,/, 'no dip to 10%');
+  // The crossfade is exact: silver under at V(1−k)/(1−Vk), the archive's
+  // paint over at Vk, leaves the paper at 1−V throughout.
+  for (const V of [1, 0.9, 0.76]) {
+    for (const k of [0.1, 0.5, 0.9]) {
+      const base = (V * (1 - k)) / (1 - V * k);
+      const over = V * k;
+      const paper = (1 - base) * (1 - over);
+      assert.ok(Math.abs(paper - (1 - V)) < 1e-9);
+      assert.ok(Math.abs(base * (1 - over) - V * (1 - k)) < 1e-9);
+    }
+  }
+  const { silverExitAt, SILVER_EXIT } = look;
+  assert.equal(silverExitAt(SILVER_EXIT[0]), 0);
+  assert.equal(silverExitAt(SILVER_EXIT[1]), 1);
 });
 
 test('the entry turns the planet on the sine, under 85°/s, and ends on q = 1', () => {
@@ -263,14 +352,8 @@ test('the fall from the whole planet onto a place stays near the zoom cap', () =
   assert.ok(ENTRY.diveMs >= 3600);
 });
 
-test('the reader\'s zoom is never cut short by the pitch; a fall tips only once it is down', () => {
+test('a drag never turns the map; a camera set square tips only once it is down', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  // The pitch follows the zoom by writing the transform: `setPitch` is a
-  // jumpTo, and a jumpTo stopped every wheel tick's eased zoom (30 ticks
-  // moved the map 0.8 levels between z 3.4 and 5).
-  const onZoom = atlas.slice(atlas.indexOf('const onZoom = () =>'), atlas.indexOf('const onFreeMove'));
-  assert.match(onZoom, /transform\.pitch = target/);
-  assert.doesNotMatch(onZoom.slice(0, onZoom.indexOf('} else {')), /setPitch/);
   // No snap to north after a drag (a 2° turn nobody asked for).
   assert.match(atlas, /bearingSnap=\{0\}/);
   // From the open planet the flight keeps its pitch and bearing and tips

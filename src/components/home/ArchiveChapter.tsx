@@ -231,6 +231,11 @@ const PULL_RESEAT_S = 0.35;
 const PULL_RESEAT_EASE = EASE.arrive;
 // When the page may go on: the face free plus a beat.
 const PULL_GO_AFTER_MS = TEAR_BEFORE_FLIGHT_MS;
+// …and before the camera moves: the face laid aside and gone (the review of
+// 2026-09-28 caught a 900 × 480 card still turning aside while the whole map
+// set off under it — two large motions at once). The tear is the answer to
+// the click; the map follows it.
+const GONE_GO_AFTER_MS = TEAR_MS;
 // The sign's flap ("The sign turns into place"): a board set to the stop
 // being left at take-off is put back if no landing follows this soon (a
 // flight lasts 1.15–3.6 s).
@@ -980,11 +985,12 @@ export default function ArchiveChapter({
     setTorn(true);
     const timers = pullTimersRef.current;
     window.clearTimeout(timers.go);
-    // Only once the face is free does the page go on (撕开后才能前往下一个地方).
+    // Only once the face has gone does the page go on (撕开后才能前往下一个地方):
+    // the next place is a flight.
     timers.go = window.setTimeout(() => {
       timers.go = 0;
       onTearAwayRef.current?.();
-    }, Math.max(0, tornAt + PULL_GO_AFTER_MS - now));
+    }, Math.max(0, tornAt + GONE_GO_AFTER_MS - now));
   };
 
   // ── The tear, asked for ──
@@ -996,8 +1002,9 @@ export default function ArchiveChapter({
   // 撕开票根，然后前往下一站. Under reduced motion the face fades in place
   // (TEAR_REDUCED_MS) and the page goes on after it. False when there is
   // nothing to tear here (torn already, a hand on it, its cover not up, the
-  // camera in the air): the caller simply goes.
-  const tearThen = (go: () => void) => {
+  // camera in the air): the caller simply goes. `gone`: a flight follows, and
+  // waits for the face to have left the screen (GONE_GO_AFTER_MS).
+  const tearThen = (go: () => void, gone = false) => {
     const section = chapterRef.current as HTMLElement | null;
     if (!ticket || !section || !dockShownRef.current) return false;
     if (tornRef.current || stubTornRef.current || pullHoldRef.current !== 'none' || pullRef.current) return false;
@@ -1020,7 +1027,7 @@ export default function ArchiveChapter({
     timers.go = window.setTimeout(() => {
       timers.go = 0;
       go();
-    }, reduce ? TEAR_REDUCED_MS : PULL_GO_AFTER_MS);
+    }, reduce ? TEAR_REDUCED_MS : gone ? GONE_GO_AFTER_MS : PULL_GO_AFTER_MS);
     return true;
   };
   // ── The admission: the stub, torn off to open the story ──
@@ -1082,8 +1089,8 @@ export default function ArchiveChapter({
     const section = chapterRef.current as HTMLElement | null;
     if (!section) return;
     const onTearThen = (event: Event) => {
-      const detail = (event as CustomEvent<{ go: () => void; handled?: boolean }>).detail;
-      if (detail && !detail.handled) detail.handled = tearThenRef.current(detail.go);
+      const detail = (event as CustomEvent<{ go: () => void; handled?: boolean; gone?: boolean }>).detail;
+      if (detail && !detail.handled) detail.handled = tearThenRef.current(detail.go, Boolean(detail.gone));
     };
     const onTearStub = (event: Event) => {
       const detail = (event as CustomEvent<{ go: () => void; handled?: boolean }>).detail;
@@ -1101,12 +1108,14 @@ export default function ArchiveChapter({
   }, [ticket]);
 
   // The stub's own "Next stop": live on the ticket being read, while it is
-  // whole and the page can go on.
+  // whole and the page can go on. It asks the explorer as Next does (the
+  // explorer tears this ticket and flies on the same clock), rather than
+  // tearing here and asking after: that path took off 600 ms sooner than
+  // every other way on.
   const nextReady = ticket && isActive && !torn && Boolean(onTearAway);
   const goNext = () => {
     if (!nextReady) return;
-    const go = () => onTearAwayRef.current?.();
-    if (!tearThen(go)) go();
+    onTearAwayRef.current?.();
   };
 
   // ── The sign turns into place ──

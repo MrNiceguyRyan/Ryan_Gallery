@@ -338,9 +338,9 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   // A flip is cut to its own cell, by a clip (overflow would move the baseline).
   assert.match(css, /\.flap-c\[data-show\] \{[^}]*clip-path: inset\(-0\.2em 0\)/);
   // Every move lets the ticket in hand go first: the explorer tears it and
-  // goes on once the face is free (src/lib/explorer.ts); the scroll's tear
-  // went with the scroll.
-  assert.match(home, /case 'tear':\s+tearTicket\(effect\.id, 'tear-then', next\);/);
+  // goes on once the face is free — a flight once it has gone
+  // (src/lib/explorer.ts); the scroll's tear went with the scroll.
+  assert.match(home, /case 'tear': \{[\s\S]*?tearTicket\(effect\.id, 'tear-then', finish,/);
   assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.
