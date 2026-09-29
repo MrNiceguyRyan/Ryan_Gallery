@@ -24,7 +24,7 @@ import { activeChapters, chapterSections } from '../../lib/chapterOrder';
 import { chapterPoint } from '../../lib/geo';
 import { coverDock, coverOf, coverRatioOf } from '../../lib/coverDock';
 import { DUR, DUR_MS, EASE, bezierFn } from '../../lib/motion';
-import { ARRIVAL_EASE, ARRIVAL_SECONDS } from '../../lib/boardingPass';
+import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardingPass';
 import { NOTES_LIVE } from '../../lib/notesNav';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
 import {
@@ -34,15 +34,12 @@ import {
   explore,
   neighbour,
   phoneCard,
-  requestExplore,
   type ExplorerAction,
   type ExplorerEffect,
   type ExplorerState,
 } from '../../lib/explorer';
 import { ENTRY } from '../../lib/explorerCamera';
 import { TEAR_MS } from '../../lib/ticketTear';
-import { startLenis } from '../../lib/smoothScroll';
-import type Lenis from 'lenis';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
 // the opening is settling without creating Mapbox's WebGL context or mounting
@@ -207,13 +204,15 @@ function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
  *  HomePage — the entrance, then the archive as a map to roam
  * ═══════════════════════════════════════════════════════
  * One journey (owner, 2026-09-28): the opening film (its own island) lands
- * on the entrance's opening words (EntranceIntro — no globe there); a little
- * way down the reader picks up the boarding pass and tears it (by the stub,
- * the Tear button, or scrolling on). Torn, the page glides on: the pass goes
- * up and away as the globe rises over the lower edge, already facing stop 01
- * (the first place by route order — data-driven), and without a stop the
- * camera goes down onto it: the explorer's entry, asked for through the seam
- * (`requestExplore`, src/lib/explorer.ts). From there the map is the
+ * on the entrance's cover of words (EntranceIntro — no globe there), which
+ * sets itself block by block; the boarding pass assembles beside it, and the
+ * reader tears it — only a click on its stub does. Torn, the page glides on
+ * by itself: the pass goes up and away as the globe rises over the lower
+ * edge, already facing stop 01 (the first place by route order — data-
+ * driven), and without a stop the camera goes down onto it: the explorer's
+ * entry, asked for through the seam (`requestExplore`, src/lib/explorer.ts),
+ * while the torn stub flies on to become stop 01's cover's stub (the
+ * hand-off contract, src/lib/boardingPass.ts). From there the map is the
  * reader's: drag it, zoom it, choose a shield. The ticket in hand tears
  * before anything moves on; its stub tears off to open its story. Once the
  * explorer has the page the entrance is taken off it (the page no longer
@@ -311,8 +310,17 @@ export default function HomePage({ collections }: Props) {
   // (data-driven: Miami today, Washington once the owner adds it as stop 01).
   const firstStop = useMemo(() => {
     const first = orderedCities[0];
-    return first ? { name: first.name.trim(), region: first.region?.trim() || null, year: first.year ?? null } : null;
+    return first ? { name: first.name.trim(), region: first.region?.trim() || null, year: first.year ?? null, slug: first.slug ?? null } : null;
   }, [orderedCities]);
+  // The entrance's cover of words says what the archive holds, from its own
+  // data (src/lib/boardingPass.ts, coverBlocks): the years, the places, the
+  // frames, the regions in route order.
+  const coverFacts = useMemo(() => ({
+    years: archiveYearSpan,
+    places: orderedCities.length,
+    frames: totalFrames,
+    regions: distinctRegions(orderedCities.map((city) => city.region)),
+  }), [archiveYearSpan, orderedCities, totalFrames]);
   // The explorer's places: those the map can put a shield on.
   const placeIds = useMemo(() => routeStops.map((stop) => stop.id), [routeStops]);
   const places = useMemo<ExplorerPlace[]>(() => routeStops.map((stop) => ({
@@ -515,7 +523,6 @@ export default function HomePage({ collections }: Props) {
   const [entranceIssue, setEntranceIssue] = useState(0);
   const [globeHeld, setGlobeHeld] = useState(true);
   const explorerSectionRef = useRef<HTMLDivElement>(null);
-  const lenisRef = useRef<Lenis | null>(null);
   // The veil over the whole page while Back to the start swaps the explorer
   // for the opening words (never a scroll back up through the pass).
   const [pageVeiled, setPageVeiled] = useState(false);
@@ -698,15 +705,10 @@ export default function HomePage({ collections }: Props) {
       done();
       return;
     }
-    const lenis = lenisRef.current;
     // Short of the explorer: the rest of the way on the entrance's glide
     // curve, in time with the distance (a full screen takes the glide's
     // own ARRIVAL_SECONDS).
     const seconds = Math.min(ARRIVAL_SECONDS, Math.max(0.45, (ARRIVAL_SECONDS * Math.abs(top - from)) / Math.max(1, window.innerHeight)));
-    if (lenis) {
-      lenis.scrollTo(top, { duration: seconds, easing: arrivalCurve, lock: true, force: true, onComplete: done });
-      return;
-    }
     const start = performance.now();
     const step = (now: number) => {
       const k = Math.min(1, (now - start) / (seconds * 1000));
@@ -866,34 +868,24 @@ export default function HomePage({ collections }: Props) {
     const timer = window.setTimeout(() => setAtlasPaused(true), 900);
     return () => window.clearTimeout(timer);
   }, [selectedCollection, storyClosing]);
-  // ── Lenis: the entrance's scroll ──
-  // The entrance scrolls, on the site's weighty glide (startLenis; the pass's
-  // scroll tear and the glide after it ride it). Once the explorer has the
-  // page nothing scrolls: Lenis goes and the body is clipped — the only lock
-  // this page uses (under the story too, its own scroller) — and the wheel
-  // is the map's.
-  useEffect(() => {
-    if (!entranceOn) return;
-    const { lenis, destroy } = startLenis();
-    lenisRef.current = lenis;
-    return () => {
-      destroy();
-      lenisRef.current = null;
-    };
-  }, [entranceOn, reduce]);
   useEffect(() => {
     document.body.style.backgroundColor = '#282c20';
     return () => {
       document.body.style.backgroundColor = '';
     };
   }, []);
+  // ── Nothing on this page scrolls by hand ──
+  // The entrance is one screen (its cover of words and the pass: the pass is
+  // the one way on, and its glide moves the page itself, EntranceIntro), and
+  // the explorer is the map, whose wheel is its own. So the body is clipped
+  // from the first frame — the only lock this page uses (under the story
+  // too, its own scroller). No Lenis: there is no scroll left to smooth.
   useEffect(() => {
-    if (entranceOn) return;
     document.body.style.overflow = 'clip';
     return () => {
       document.body.style.overflow = '';
     };
-  }, [entranceOn]);
+  }, []);
   // The entrance off the page (the explorer's top becomes the page's) or
   // back on it (Back to the start): either way the page is at its top, in
   // the frame the DOM changes, before it paints.
@@ -1094,24 +1086,20 @@ export default function HomePage({ collections }: Props) {
     setListOpen(false);
     dispatchRef.current({ type: 'leave' });
   }, []);
-  // The wordmark: back to the start. On the entrance it is already there:
-  // the page goes up to the opening words.
+  // The wordmark: back to the start. On the entrance it is already there
+  // (one screen, never scrolled by hand).
   const toStart = useCallback(() => {
     if (!entranceOnRef.current) {
       setSelectedCollection(null);
       leave();
-      return;
     }
-    const lenis = lenisRef.current;
-    if (lenis && !reduce) lenis.scrollTo(0, { duration: ARRIVAL_SECONDS, easing: arrivalCurve });
-    else window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
-  }, [leave, reduce]);
+  }, [leave]);
 
   // The entrance's hand-off. Torn, the pass lets the globe come in (its
   // held reveal goes) as the page begins its glide; once the glide has
-  // brought the globe up, the pass asks for the explorer through the seam.
+  // brought the globe up, the entrance asks for the explorer through the
+  // seam itself (`requestExplore`, with the stub's hand-off: EntranceIntro).
   const onEntranceArrive = useCallback(() => setGlobeHeld(false), []);
-  const onEntranceArrived = useCallback(() => requestExplore({ from: 'boarding-pass' }), []);
   const entranceNextTop = useCallback(() => {
     const section = explorerSectionRef.current;
     return section ? documentTop(section) : null;
@@ -1281,12 +1269,10 @@ export default function HomePage({ collections }: Props) {
         {entranceOn && (
           <EntranceIntro
             key={entranceIssue}
-            years={archiveYearSpan}
+            facts={coverFacts}
             first={firstStop}
-            lenisRef={lenisRef}
             nextTop={entranceNextTop}
             onArrive={onEntranceArrive}
-            onArrived={onEntranceArrived}
             covered={reelCovering}
           />
         )}

@@ -536,10 +536,15 @@ test('landing A\'s targets: his name, CAMERA and the line land in the entrance\'
   assert.equal(F.LANDING_A.globe, undefined);
   // The entrance and the slate carry every word (the page's spans and the
   // board's), so none of them is left behind.
+  // (Entrance v2: the page's words are the cover of words' own, src/lib/
+  // boardingPass.ts coverBlocks, each rendered as its [data-open-land] span
+  // inside .entrance-intro by EntranceIntro.)
   const intro = readFileSync(new URL('../src/components/home/EntranceIntro.tsx', import.meta.url), 'utf8');
+  const cover = readFileSync(new URL('../src/lib/boardingPass.ts', import.meta.url), 'utf8');
   const scenes = readFileSync(new URL('../src/components/home/OpeningScenes.tsx', import.meta.url), 'utf8');
-  for (const word of ['ryan', 'xu']) assert.ok(intro.includes(`data-open-land="${word}"`), word);
-  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(intro.includes(`{ land: '${word}' }`), word);
+  assert.ok(intro.includes('data-open-land={part.land}') && intro.includes('className="entrance-intro"'));
+  for (const word of ['ryan', 'xu']) assert.ok(cover.includes(`{ land: '${word}', text: `), word);
+  for (const word of ['camera', 'archive', 'travel', 'thought']) assert.ok(cover.includes(`{ land: '${word}' }`), word);
   for (const word of F.FLY_ORDER) assert.ok(scenes.includes(`data-fly="${word}"`), `slate: ${word}`);
 });
 

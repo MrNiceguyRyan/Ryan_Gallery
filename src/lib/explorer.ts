@@ -15,7 +15,8 @@
 // ── The seam ──
 // The entrance in front of the explorer hands the page over once the globe
 // is on screen: the boarding pass, torn, asks as the page's glide lands with
-// the globe risen (HomePage, `onEntranceArrived`), and nothing synthetic
+// the globe risen (EntranceIntro, with `stubHandoff`: its torn stub is on
+// its way to stop 01's cover — src/lib/boardingPass.ts), and nothing synthetic
 // follows the ask. Anyone can ask for it:
 //   import { requestExplore } from '../lib/explorer';
 //   requestExplore();            // or: window.dispatchEvent(new CustomEvent('archive:explore'))
@@ -39,6 +40,10 @@ export interface ExplorerDetail {
 export interface ExploreRequest {
   /** Who asked (for the record only: 'boarding-pass', …). */
   from?: string;
+  /** The torn boarding pass's stub is on its way to stop 01's cover: keep
+   *  that cover's stub hidden until the entrance says it has landed
+   *  (the hand-off contract, src/lib/boardingPass.ts). */
+  stubHandoff?: boolean;
 }
 
 declare global {

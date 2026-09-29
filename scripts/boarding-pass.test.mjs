@@ -1,33 +1,33 @@
 // Run offline: node --experimental-strip-types --test scripts/boarding-pass.test.mjs
 //
-// The boarding pass after the opening film (src/lib/boardingPass.ts, its QR
-// code src/lib/qrCode.ts): what it prints (from the first chapter, never an
-// invented origin), the QR code (a real one: every block a valid
+// The entrance v2 (src/lib/boardingPass.ts, its QR code src/lib/qrCode.ts):
+// what the pass prints (from the first chapter, the passenger the reader,
+// never an invented origin), the QR code (a real one: every block a valid
 // Reed–Solomon codeword, the codewords read back out of the matrix in
 // placement order, the format information BCH-valid, the finders and timing
-// where a reader looks), the hand (the tilt and sway caps, the hand's speed
-// going still when the hand does, the place it always comes back to from
-// anywhere, a hair past and settled, the rubber band that keeps most of it on
-// screen), the tear (the paper resists for 22 px — 18 under a finger — then
-// the rip follows the hand to the bottom notch over a short pull; let go early
-// the stub lies back down but the rip stays, late or flicked it tears on; a
-// tap only peels it), the stub's fall, and the page's scroll score round it
-// (the scroll strains, then peels the stub before it tears).
+// where a reader looks), what the cover of words says (the archive's own
+// facts; the film's words each in their own span), the reveal (a block
+// every 180 ms, 0.6 s each, the reference's), the pass's assembly (one
+// choreographed 0.8–1.2 s), the rule that only a click on the stub tears it,
+// and the stub's hand-off to the explorer (the carry, the arc, the landing
+// handshake — with a stand-in for the explorer's half of the contract).
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import * as P from '../src/lib/boardingPass.ts';
 import * as Q from '../src/lib/qrCode.ts';
-import { TEAR_FREE_MS, TEAR_TENSION_MS, tornEdge, tornEdgeAcross, tornEdgePaths } from '../src/lib/ticketTear.ts';
+import { TEAR_FREE_MS, mirrorAffine, tearPose } from '../src/lib/ticketTear.ts';
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('what it prints: the first chapter, never an invented origin', () => {
+test('what it prints: the first chapter, the reader as the passenger, never an invented origin', () => {
   const miami = P.passFields({ name: 'Miami', region: 'Florida', year: '2026' });
+  assert.equal(miami.passenger, 'YOU');
   assert.equal(miami.to, 'MIAMI');
   assert.equal(miami.toCode, 'FL');
   assert.equal(miami.date, '2026');
   assert.equal(miami.from, 'HERE');
-  assert.equal(miami.passenger, 'RYAN XU');
   assert.equal(miami.flight, 'RX 001');
   assert.equal(miami.seat, '01A');
   assert.equal(miami.boarding, 'NOW');
@@ -39,6 +39,7 @@ test('what it prints: the first chapter, never an invented origin', () => {
   const none = P.passFields(null);
   assert.equal(none.date, '—');
   assert.equal(none.toCode, '');
+  assert.equal(none.passenger, 'YOU');
   assert.equal(P.passFields({ name: 'X', year: 'soon' }).date, '—');
   // A long name steps down to keep to its field.
   assert.equal(P.destinationScale('MIAMI'), 1);
@@ -169,281 +170,391 @@ function fnMask(code) {
 }
 
 // ── The hand ──
-test('the tilt: toward the grab point, never more than 10°', () => {
-  for (const [nx, ny] of [[1, 1], [-1, -1], [1, 0], [0, 1], [0.3, -0.8], [5, -9]]) {
-    const { rx, ry } = P.tiltFor(nx, ny);
-    assert.ok(Math.hypot(rx, ry) <= P.PASS_HAND.tiltMax + 1e-9);
-  }
-  // The grabbed point comes toward the reader: the right edge (rotateY −),
-  // the bottom edge (rotateX +).
-  assert.ok(P.tiltFor(1, 0).ry < 0 && P.tiltFor(-1, 0).ry > 0);
-  assert.ok(P.tiltFor(0, 1).rx > 0 && P.tiltFor(0, -1).rx < 0);
-  assert.ok(close(P.tiltFor(1, 0).ry, -10));
-  assert.deepEqual(P.tiltFor(0.7, 0.7, 0), { rx: 0, ry: 0 });
+
+// ── The cover of words ──
+const FACTS = { years: '2025–2026', places: 6, frames: 58, regions: ['Florida', 'Arizona', 'Utah', 'New York'] };
+const MIAMI = { name: 'Miami', region: 'Florida', year: 2026, slug: 'miami' };
+const textOf = (block) => P.coverText(block.pieces);
+
+test('the cover says what the archive holds, from its own data, in the film\'s words', () => {
+  const blocks = P.coverBlocks(FACTS, MIAMI);
+  assert.deepEqual(blocks.map((b) => b.kind), ['kicker', 'xl', 'xl-quiet', 'm', 'm', 'm']);
+  const texts = blocks.map(textOf);
+  assert.equal(texts[1], 'Ryan Xu, a camera, and the places I travel.');
+  assert.equal(texts[2], '6 places. 58 frames.');
+  assert.equal(texts[3], 'Florida, Arizona, Utah and New York, 2025–2026.');
+  assert.equal(texts[5], 'First stop, Miami. The passenger is you.');
+  // Every word the film lands, once, in its own span, in reading order.
+  const lands = blocks.flatMap((b) => P.coverWords(b.pieces).flat()).filter((part) => part.land).map((part) => part.land);
+  assert.deepEqual(lands, ['ryan', 'xu', 'camera', 'travel', 'archive', 'thought', 'you']);
+  assert.deepEqual([...lands].sort(), [...P.LAND_WORDS].sort());
+  // The first stop is the pass's to take (it flies onto TO).
+  const passParts = blocks.flatMap((b) => P.coverWords(b.pieces).flat()).filter((part) => part.pass);
+  assert.deepEqual(passParts, [{ text: 'Miami', pass: 'to' }]);
+  // Nothing claimed that the data does not say: every number on the cover
+  // is one of the facts (the kicker's years included).
+  const numbers = texts.join(' ').match(/\d+/g) ?? [];
+  const known = new Set([String(FACTS.places), String(FACTS.frames), '2025', '2026']);
+  numbers.forEach((n) => assert.ok(known.has(n), `invented number ${n}`));
+  assert.doesNotMatch(texts.join(' '), /one camera/i);
+  // Singulars, and nothing where the data is silent.
+  const one = P.coverBlocks({ years: '2026', places: 1, frames: 1, regions: ['Utah'] }, null).map(textOf);
+  assert.ok(one.includes('1 place. 1 frame.'));
+  assert.ok(one.includes('Utah, 2026.'));
+  assert.equal(one[one.length - 1], 'The passenger is you.');
+  const bare = P.coverBlocks({ years: '', places: 0, frames: 0, regions: [] }, null);
+  assert.deepEqual(bare.map((b) => b.kind), ['kicker', 'xl', 'm', 'm']);
+  // Regions: distinct, in route order.
+  assert.deepEqual(P.distinctRegions(['Florida', 'Florida', ' Arizona ', null, 'Utah', 'utah', 'New York']), ['Florida', 'Arizona', 'Utah', 'New York']);
+  assert.equal(P.listJoin(['A']), 'A');
+  assert.equal(P.listJoin(['A', 'B']), 'A and B');
 });
 
-test('the sway: from the hand\'s sideways speed, never more than 12°, settling when the hand stops', () => {
-  for (const vx of [-99999, -3000, -200, 0, 200, 3000, 99999]) {
-    for (const ny of [-1, 0, 1]) assert.ok(Math.abs(P.swayTarget(vx, ny)) <= P.PASS_HAND.swayMax + 1e-9);
-  }
-  // Hung from above, moving right, the foot trails left: a clockwise turn.
-  assert.ok(P.swayTarget(800, -1) > 0);
-  assert.ok(P.swayTarget(800, 1) < 0);
-  // The spring: driven to the cap it stays inside it; let go it settles.
-  let s = { s: 0, v: 0 };
-  let peak = 0;
-  for (let i = 0; i < 120; i += 1) {
-    s = P.stepSway(s, 12, 1 / 60);
-    peak = Math.max(peak, Math.abs(s.s));
-  }
-  assert.ok(peak <= P.PASS_HAND.swayMax + 1e-9);
-  for (let i = 0; i < 90; i += 1) s = P.stepSway(s, 0, 1 / 60);
-  assert.ok(Math.abs(s.s) < 0.05 && Math.abs(s.v) < 1, `settled at ${s.s}`);
+test('the cover\'s words: punctuation stays with its word, a landed word never rises', () => {
+  const words = P.coverWords([{ land: 'ryan', text: 'Ryan' }, ' ', { land: 'xu', text: 'Xu' }, ', a ', { land: 'camera' }, ', and — the ', { land: 'travel' }, '.']);
+  assert.deepEqual(words.map((w) => w.map((p) => p.text).join('')), ['Ryan', 'Xu,', 'a', 'camera,', 'and', '—', 'the', 'travel.']);
+  // "Xu," is one word: the landed Xu and its comma.
+  assert.deepEqual(words[1], [{ text: 'Xu', land: 'xu' }, { text: ',' }]);
+  // A wide screen's break is a word of its own, and reads as a space.
+  const broken = P.coverWords(['a,', { br: true }, 'b']);
+  assert.deepEqual(broken, [[{ text: 'a,' }], [{ text: '', br: true }], [{ text: 'b' }]]);
+  assert.equal(P.coverText(['a,', { br: true }, 'b']), 'a, b');
+  // The component renders a landed word's word as a never-rising group (its
+  // punctuation fades in with the block), every other word as a rising one;
+  // the film's contract is the span's own attribute, inside .entrance-intro.
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  assert.match(intro, /className="entrance-intro"/);
+  assert.match(intro, /data-open-land=\{part\.land\}/);
+  assert.match(intro, /className="ec-f"/);
+  assert.match(intro, /className="ec-w"/);
+  assert.match(intro, /data-pass-from=\{part\.pass\}/);
+  const css = source('src/styles/entrance.css');
+  // The words rise; so does a word of ours the film did not carry home; a
+  // word it carried home ([data-flown], marked as the film lands) never
+  // moves, nor does the group round it.
+  assert.match(css, /\.entrance\[data-compose='play'\] :is\(\.ec-w, \.ec-found:not\(\[data-flown\]\)\) \{\s*animation: ec-rise/);
+  assert.doesNotMatch(css, /\.ec-f[\s,{:][^{]*\{[^}]*animation/);
+  assert.doesNotMatch(css.replace(/\.ec-found:not\(\[data-flown\]\)/g, ''), /\.ec-found[^{]*\{[^}]*animation: ec-/);
+  assert.match(intro, /if \(word && document\.querySelector\(`\[data-fly="\$\{word\}"\]`\)\) el\.setAttribute\('data-flown', ''\);/);
 });
 
-test('the areas: its place is the middle (or the torn main part\'s middle); held, most of it stays on screen', () => {
-  for (const [fw, fh, pw, ph] of [[1728, 1000, 860, 344], [1280, 800, 640, 256], [390, 844, 300, 486], [375, 667, 208, 337]]) {
-    const { rest, reach } = P.passAreas(fw, fh, pw, ph);
-    // Its place: the middle of its frame, a point (every throw used to end
-    // on the edge of a rest area, ~100 px off the centred prompt).
-    assert.deepEqual([rest.x0, rest.x1, rest.y0, rest.y1], [0, 0, 0, 0]);
-    assert.ok(reach.x1 > 0 && reach.x0 === -reach.x1 && reach.y0 === -reach.y1);
-    // Held anywhere — the hand as far past the screen as it likes — the
-    // rubber band keeps at least three quarters of the pass on screen each
-    // way.
-    const visible = (x, w, f) => Math.max(0, Math.min(f / 2, x + w / 2) - Math.max(-f / 2, x - w / 2)) / w;
-    for (const d of [0, 200, 600, 5000, 1e6]) {
-      const x = P.rubberBand(reach.x1 + d, reach.x0, reach.x1, P.passAreas(fw, fh, pw, ph).band.x);
-      const y = P.rubberBand(reach.y1 + d, reach.y0, reach.y1, P.passAreas(fw, fh, pw, ph).band.y);
-      assert.ok(visible(x, pw, fw) >= 0.75 && visible(y, ph, fh) >= 0.75, `${fw}: ${d} px past, x ${visible(x, pw, fw).toFixed(2)} y ${visible(y, ph, fh).toFixed(2)}`);
-      if (d <= 600) assert.ok(visible(x, pw, fw) >= 0.76 && visible(y, ph, fh) >= 0.76, `${fw}: ${d} px past`);
-    }
-  }
-  // Torn, the main part's middle is its place: the areas shift with it.
-  const shifted = P.passAreas(1728, 1000, 860, 344, [116, 0]);
-  assert.deepEqual([shifted.rest.x0, shifted.rest.x1, shifted.rest.y0], [116, 116, 0]);
+// ── The reveal ──
+test('the reveal is the reference\'s: a block every 180 ms, each up 20 px and in over 0.6 s on ENTER', () => {
+  assert.deepEqual([...P.ENTER_EASE], [0.22, 0.61, 0.36, 1]);
+  assert.deepEqual({ ...P.COVER_REVEAL }, { stepMs: 180, durMs: 600, rise: 20 });
+  assert.deepEqual([0, 1, 2, 5].map(P.revealAt), [0, 180, 360, 900]);
+  assert.equal(P.revealEnd(6), 5 * 180 + 600);
+  assert.equal(P.revealEnd(0), 0);
+  // The stylesheet runs it from the module's numbers (set inline), on the
+  // entrance's own copy of the curve.
+  const css = source('src/styles/entrance.css');
+  assert.match(css, /--entrance-ease: cubic-bezier\(0\.22, 0\.61, 0\.36, 1\);/);
+  assert.match(css, /calc\(var\(--b, 0\) \* var\(--ec-step, 180ms\)\)/);
+  assert.match(css, /@keyframes ec-rise \{\s*from \{ opacity: 0; transform: translateY\(var\(--ec-rise, 20px\)\); \}/);
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  assert.match(intro, /\['--ec-step' as string\]: `\$\{COVER_REVEAL\.stepMs\}ms`/);
+  assert.match(intro, /\['--ec-dur' as string\]: `\$\{COVER_REVEAL\.durMs\}ms`/);
+  // Reduced motion: values, not structure — the words are simply there.
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.entrance\[data-compose='play'\] :is\(\.ec-w, \.ec-p, \.ec-found\) \{ animation: none; \}/);
+  // A second view opens composed: the cover waits only while the film is
+  // over it (html[data-reel] reel / flight), and plays once it lands.
+  assert.match(intro, /const waiting = \(\) => reel\(\) === 'reel' \|\| reel\(\) === 'flight';/);
+  assert.match(intro, /setCompose\('done'\);/);
 });
 
-test('the hand\'s speed: its last moves only; a hand held still has none', () => {
-  // Moving right at 875 px/s, a move every 16 ms.
-  const samples = Array.from({ length: 12 }, (_, i) => [1000 + i * 16, 100 + i * 14, 200]);
-  const lastT = samples[samples.length - 1][0];
-  const [vx, vy] = P.recentVelocity(samples, lastT);
-  assert.ok(Math.abs(vx - 875) < 1 && vy === 0, `moving: ${vx}`);
-  // The hand stops: no new moves come. Within a frame or two it is still
-  // (the sway settles, a let-go sets the pass down instead of throwing it).
-  for (const after of [50, 150, 300, 1000]) assert.deepEqual(P.recentVelocity(samples, lastT + after), [0, 0]);
-  assert.ok(P.recentVelocity(samples, lastT + 30)[0] > 0, 'a frame late it is still the hand\'s speed');
-  // Only the last 90 ms count: a fast start then a slow finish reads slow.
-  const slowing = [[0, 0, 0], [16, 60, 0], [32, 120, 0], [150, 130, 0], [166, 132, 0], [182, 134, 0]];
-  assert.ok(Math.abs(P.recentVelocity(slowing, 182)[0] - 125) < 1);
-  assert.deepEqual(P.recentVelocity([[0, 0, 0]], 0), [0, 0]);
+// ── The assembly ──
+test('the pass assembles in one choreographed move of 0.8–1.2 s, as the last line settles', () => {
+  const items = P.assemblySchedule();
+  const at = Object.fromEntries(items.map((item) => [item.part, item]));
+  const ms = P.assemblyMs();
+  assert.ok(ms >= 800 && ms <= 1200, `${ms} ms`);
+  // Paper first, then the stub to meet it, the print part by part, the
+  // words onto their fields once the part they land on is in, the hint last.
+  assert.equal(items[0].part, 'paper');
+  assert.equal(at.paper.at, 0);
+  assert.ok(at.stub.at > at.paper.at && at.stub.at < at.paper.ms);
+  for (const part of ['band', 'route', 'grid', 'qr', 'stubprint']) assert.ok(at[part].at > 0 && at[part].at + at[part].ms <= ms, part);
+  assert.ok(at['flight-to'].at + at['flight-to'].ms >= at.route.at + at.route.ms, 'TO lands on its line once it is printed');
+  assert.ok(at['flight-you'].at + at['flight-you'].ms >= at.grid.at + at.grid.ms, 'PASSENGER lands on its line once it is printed');
+  assert.ok(at['flight-you'].at + at['flight-you'].ms >= at.paper.at + at.paper.ms);
+  assert.equal(Math.max(...items.map((i) => i.at + i.ms)), at.hint.at + at.hint.ms);
+  // Calm: every part is at least 0.38 s long; the words fly under 0.9 s.
+  items.forEach((item) => assert.ok(item.ms >= 380, item.part));
+  assert.ok(P.PASS_ASSEMBLY.flights.ms <= 900);
+  // It starts as the last block is settling: after it started rising, before
+  // it has finished.
+  for (const blocks of [4, 5, 6]) {
+    const start = P.assemblyAt(blocks);
+    assert.ok(start > P.revealAt(blocks - 1) && start < P.revealEnd(blocks), `${blocks} blocks`);
+  }
+  // Every part it plays is on the pass, and both flights have a field to
+  // land on and a word to leave from.
+  const pass = source('src/components/home/BoardingPass.tsx');
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  for (const part of ['paper', 'stub', 'band', 'route', 'grid', 'qr', 'stubprint']) assert.match(pass, new RegExp(`data-asm="${part}"`), part);
+  assert.match(intro, /data-asm="hint"/);
+  assert.match(pass, /data-pass-land="to"/);
+  assert.match(pass, /data-pass-land="you"/);
+  assert.match(intro, /data-pass-from=\{part\.land === 'you' \? 'you' : undefined\}/);
+  // Both on the first screen: the pass sits beside the words (desktop) or
+  // under them (narrower), never a screen below.
+  const css = source('src/styles/entrance.css');
+  assert.match(css, /\.entrance-intro \{[^}]*height: 100svh;/);
+  assert.doesNotMatch(css, /--pass-pin|entrance-pass__frame/);
 });
 
-test('the rubber band: 1:1 inside, never past its dimension outside', () => {
-  assert.equal(P.rubberBand(40, -100, 100, 300), 40);
-  for (const d of [1, 10, 100, 1000, 1e6]) {
-    const out = P.rubberBand(100 + d, -100, 100, 300);
-    assert.ok(out > 100 && out < 100 + 300 && out < 100 + d + 1e-9);
-    const back = P.rubberBand(-100 - d, -100, 100, 300);
-    assert.ok(close(back, -out));
-  }
-  // It only ever gives more as the hand goes further.
-  let last = 100;
-  for (let d = 0; d < 2000; d += 25) {
-    const out = P.rubberBand(100 + d, -100, 100, 300);
-    assert.ok(out >= last - 1e-9);
-    last = out;
-  }
-});
-
-test('let go anywhere, at any speed: it glides, slows, and is set back down in its place', () => {
-  const { rest, reach } = P.passAreas(1728, 1000, 860, 344);
-  const starts = [];
-  for (const x of [reach.x0 * 1.5, reach.x0 * 0.3, 0, reach.x1 * 0.5, reach.x1 * 1.5]) {
-    for (const y of [reach.y0 * 1.5, 0, reach.y1 * 1.5]) {
-      for (const [vx, vy] of [[0, 0], [4200, 0], [-4200, 1300], [900, -3000], [99999, 99999]]) {
-        starts.push({ x, y, vx, vy });
-      }
-    }
-  }
-  for (const start of starts) {
-    const [vx, vy] = P.throwVelocity(start.vx, start.vy);
-    assert.ok(Math.hypot(vx, vy) <= P.PASS_HAND.maxSpeed + 1e-6);
-    let body = { x: start.x, y: start.y, vx, vy };
-    let settledAt = -1;
-    for (let i = 0; i < 60 * 4; i += 1) {
-      body = P.stepBody(body, 1 / 60, rest);
-      assert.ok(Number.isFinite(body.x) && Number.isFinite(body.y));
-      // Never flung far: at most a screen's width past the reach.
-      assert.ok(Math.abs(body.x) < 1728 && Math.abs(body.y) < 1000);
-      if (settledAt < 0 && P.bodyAtRest(body, rest)) settledAt = i;
-    }
-    assert.ok(settledAt >= 0, `settles from ${JSON.stringify(start)}`);
-    assert.ok(settledAt < 60 * 2.5, `in ${settledAt} frames from ${JSON.stringify(start)}`);
-    const [tx, ty] = P.clampToArea(body.x, body.y, rest);
-    assert.ok(Math.hypot(body.x - tx, body.y - ty) < 0.5);
-  }
-  // Still, in its place, it stays exactly where it was put.
-  const still = P.stepBody({ x: 0, y: 0, vx: 0, vy: 0 }, 1 / 60, rest);
-  assert.deepEqual([still.x, still.y], [0, 0]);
-  // Set back down: a hair past its place (about 3 %) and settled — never a
-  // bounce, never a crawl.
-  let back = { x: 500, y: 0, vx: 0, vy: 0 };
-  let under = 0;
-  for (let i = 0; i < 240; i += 1) {
-    back = P.stepBody(back, 1 / 60, rest);
-    under = Math.min(under, back.x);
-  }
-  assert.ok(-under / 500 > 0.01 && -under / 500 < 0.05, `overshoot ${(-under / 5).toFixed(1)} %`);
-  // The same path at any frame rate.
-  const at60 = Array.from({ length: 60 }).reduce((b) => P.stepBody(b, 1 / 60, rest), { x: 700, y: 300, vx: 0, vy: 0 });
-  const at120 = Array.from({ length: 120 }).reduce((b) => P.stepBody(b, 1 / 120, rest), { x: 700, y: 300, vx: 0, vy: 0 });
-  assert.ok(close(at60.x, at120.x, 1) && close(at60.y, at120.y, 1));
-});
-
-// ── The tear ──
-test('the tear: the paper resists for 22 px, then the rip follows the hand to the notch over a short pull', () => {
-  const span = P.tearSpan(344);
-  // Short: a real stub stays in the fingers (a 256 px pull left the hand
-  // out on the olive ground, a 140 px one just off the stub's far edge).
-  // At most ~95 px from the grab to free.
-  assert.ok(span >= 56 && span <= 72);
-  assert.ok(P.TEAR_RESIST_PX + P.tearSpan(9999) <= 95);
-  assert.ok(P.TEAR_RESIST_TOUCH_PX + P.tearSpan(9999, true) <= 85);
-  assert.equal(P.tearClock(0, span), 0);
-  assert.equal(P.tearClock(-30, span), 0);
-  // Resisting: only the strain, never the rip.
-  for (const t of [1, 10, 20, P.TEAR_RESIST_PX - 0.1]) {
-    assert.ok(P.tearClock(t, span) < TEAR_TENSION_MS);
-    assert.equal(P.tearTip(t, span), 0);
-  }
-  assert.ok(close(P.tearClock(P.TEAR_RESIST_PX, span), TEAR_TENSION_MS));
-  // The rip follows the hand: its tip is the hand's share of the span, and
-  // the clock only moves on as the hand does.
-  let last = 0;
-  for (let t = 0; t <= P.TEAR_RESIST_PX + span + 40; t += 2) {
-    const clock = P.tearClock(t, span);
-    assert.ok(clock >= last - 1e-9);
-    last = clock;
-  }
-  assert.ok(close(P.tearTip(P.TEAR_RESIST_PX + span / 2, span), 0.5));
-  assert.equal(P.tearClock(P.TEAR_RESIST_PX + span, span), TEAR_FREE_MS);
-  assert.equal(P.tearClock(P.TEAR_RESIST_PX + span * 3, span), TEAR_FREE_MS);
-  // The pass gives a little while it resists, and settles as the rip runs.
-  assert.ok(P.tearGive(P.TEAR_RESIST_PX, span) <= P.TEAR_GIVE_PX + 1e-9);
-  assert.ok(P.tearGive(P.TEAR_RESIST_PX, span) > P.tearGive(P.TEAR_RESIST_PX * 0.7, span));
-  assert.ok(close(P.tearGive(P.TEAR_RESIST_PX + span, span), 0));
-  // Let go: early springs back; most of the way, or a flick, tears on.
-  assert.equal(P.tearCommits(P.TEAR_RESIST_PX - 1, span, 5), false);
-  assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.5, span, 0.1), false);
-  assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.5, span, 1.2), true);
-  assert.equal(P.tearCommits(P.TEAR_RESIST_PX + span * 0.9, span, 0), true);
-  // A finger's pull is shorter, and resists less.
-  assert.ok(P.tearSpan(340, true) <= P.tearSpan(340));
-  assert.ok(P.tearResist(true) < P.tearResist(false));
-  // A rip already started resists no more (resist 0): the hand's travel is
-  // the rip at once.
-  assert.ok(P.tearClock(1, span, 0) > TEAR_TENSION_MS);
-  assert.equal(P.tearGive(10, span, 0) >= 0, true);
-  // A thumb pulling a perforation drifts sideways: under a finger a pull
-  // along the diagonal (0.45, 1) counts in full; a mouse's is its projection.
-  assert.equal(P.pullTravel(100, 40, false), 100);
-  assert.ok(close(P.pullTravel(100, 45, true), Math.hypot(100, 45)));
-  assert.ok(P.pullTravel(100, 200, true) <= 100 + 0.45 * 200 + 1e-9);
-  assert.equal(P.pullTravel(-10, 80, true), 0);
-  assert.equal(P.pullTravel(0, 80, true), 0);
-});
-
-test('a tap on the stub only peels it: up a few degrees and back down', () => {
+// ── The start button ──
+test('only a click on the stub tears it: no drag, no wheel, no scroll, no timer', () => {
+  const inputs = ['click', 'key', 'hover', 'press', 'drag', 'wheel', 'scroll', 'idle'];
+  const table = Object.fromEntries(['stub', 'main', 'elsewhere'].map((target) => [target, inputs.map((input) => P.passResponse(target, input))]));
+  assert.deepEqual(table.stub, ['tear', 'tear', 'lift', 'lift', 'none', 'none', 'none', 'none']);
+  assert.deepEqual(table.main, ['peek', 'none', 'none', 'none', 'none', 'none', 'none', 'none']);
+  assert.deepEqual(table.elsewhere, inputs.map(() => 'none'));
+  for (const target of ['stub', 'main', 'elsewhere']) for (const input of inputs) assert.equal(P.passResponse(target, input, true), 'none');
+  // The pass itself: the stub is a real button (Enter and Space are its
+  // own), and nothing picks the pass up or follows a scroll.
+  const pass = source('src/components/home/BoardingPass.tsx');
+  assert.match(pass, /<button\s+ref=\{tearRef\}\s+type="button"\s+className="bp-tear"/);
+  assert.doesNotMatch(pass, /pointermove|setPointerCapture|setStrain|setRise|'scroll'|touchmove/);
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  assert.doesNotMatch(intro, /\.tear\(/, 'the entrance never tears the pass itself');
+  assert.doesNotMatch(intro, /setTimeout\([^)]*tear/);
+  // The hover: a hair on the perforation, less than a click's peek.
+  assert.ok(P.HOVER_PEEL_DEG > 0 && P.HOVER_PEEL_DEG < P.PEEK_DEG && P.HOVER_PEEL_DEG <= 3);
   assert.equal(P.peekAngle(0), 0);
   assert.ok(Math.abs(P.peekAngle(1)) < 1e-9);
   let peak = 0;
-  for (let k = 0; k <= 1; k += 0.01) {
-    const a = P.peekAngle(k);
-    assert.ok(a >= -1e-9 && a <= P.PEEK_DEG + 1e-9);
-    peak = Math.max(peak, a);
-  }
+  for (let k = 0; k <= 1; k += 0.01) peak = Math.max(peak, P.peekAngle(k));
   assert.ok(close(peak, P.PEEK_DEG, 0.05));
-  assert.ok(P.PEEK_MS >= 300 && P.PEEK_MS <= 450);
 });
 
-test('the torn edge across: the same profile turned about the diagonal', () => {
-  const along = tornEdgePaths(300, 7);
-  assert.deepEqual(tornEdgePaths(300, 7), along);
-  const down = tornEdge(300, 7);
-  const across = tornEdgeAcross(300, 7, { face: 'rgba(0,0,0,0.2)', stub: 'rgba(0,0,0,0.1)' });
-  for (const key of ['faceCut', 'stubCut', 'faceFringe', 'stubFringe']) {
-    assert.ok(down[key].startsWith('url("data:image/svg+xml,'));
-    assert.ok(across[key].startsWith('url("data:image/svg+xml,'));
-    assert.ok(decodeURIComponent(across[key]).includes("matrix(0 1 1 0 0 0)"));
-  }
-  assert.ok(decodeURIComponent(across.faceCut).includes(`width='${along.height}' height='8'`));
+// ── The stub, kept ──
+const BOX = { w: 177, h: 263 };
+function freeStub() {
+  // As BoardingPass reads it: the tear's pose the moment the stub is free,
+  // mirrored (the stub comes off the pass), about the seat's box.
+  const m = mirrorAffine(tearPose(TEAR_FREE_MS, { w: BOX.w, h: BOX.h, vw: BOX.w * 4 }, { hinge: P.PASS_HINGE }).m, BOX.w);
+  const seat = { left: 1447, top: 612 };
+  return {
+    cx: seat.left + m[0] * (BOX.w / 2) + m[2] * (BOX.h / 2) + m[4],
+    cy: seat.top + m[1] * (BOX.w / 2) + m[3] * (BOX.h / 2) + m[5],
+    rotate: (Math.atan2(m[1], m[0]) * 180) / Math.PI,
+    w: BOX.w,
+    h: BOX.h,
+  };
+}
+const TARGET = { x: 1102, y: 262, w: 190, h: 596, rotate: 0 };
+
+test('free, the stub settles into the hand from exactly where the tear left it', () => {
+  const free = freeStub();
+  assert.ok(Math.abs(free.rotate) > 1 && Math.abs(free.rotate) <= 8 * P.PASS_HINGE + 0.5, `${free.rotate}°`);
+  const at0 = P.carryPose(free, 0);
+  assert.deepEqual([at0.cx, at0.cy, at0.rotate, at0.scale, at0.print, at0.card], [free.cx, free.cy, free.rotate, 1, 1, 0]);
+  const held = P.carried(free);
+  assert.ok(close(held.cy, free.cy - P.STUB_CARRY.lift));
+  assert.ok(close(held.rotate, free.rotate * (1 - P.STUB_CARRY.straighten)));
+  assert.ok(close(held.scale, P.STUB_CARRY.scale));
+  assert.equal(held.shadow, 1);
 });
 
-test('the stub\'s fall: down, faster and faster, and gone below the screen', () => {
-  // Torn by the scroll the page is about to move up: the stub is let go
-  // downward, heavier, and is below a 1000 px screen from its middle in
-  // about half a second (it never crosses the rising globe).
-  let f = { x: 0, y: 500, vx: P.STUB_FALL.scrollToss[0], vy: P.STUB_FALL.scrollToss[1], a: 0, va: P.STUB_FALL.scrollToss[2] };
-  assert.ok(f.vy > 0, 'let go downward');
-  let tf = 0;
-  while (f.y < 1000 + 210 && tf < 2) {
-    const next = P.stepFall(f, 1 / 60, P.STUB_FALL.scrollGravity);
-    assert.ok(next.y > f.y);
-    f = next;
-    tf += 1 / 60;
+test('the arc: 1.2–1.6 s, bowed up, a slight turn, onto the cover stub; the merge makes it the cover stub', () => {
+  const free = freeStub();
+  const from = P.carried(free);
+  const to = TARGET;
+  const end = P.centreOf(to);
+  // Its length is in step with the distance, within the reference's range.
+  const near = P.stubFlightMs({ x: 0, y: 0 }, { x: 10, y: 0 });
+  const mid = P.stubFlightMs({ x: 0, y: 0 }, { x: 600, y: 0 });
+  const far = P.stubFlightMs({ x: 0, y: 0 }, { x: 3000, y: 0 });
+  assert.ok(near >= 1200 && near < 1210);
+  assert.ok(mid > near && mid < 1600);
+  assert.equal(far, 1600);
+  // At 0 it is where it set off; at 1 it is on the cover stub: centred on
+  // it, turned as it, the cover stub's width — still the pass's white stub,
+  // held in the air (its shadow shortened, not gone).
+  const a = P.stubFlightPose(from, BOX, to, 0);
+  assert.ok(close(a.cx, from.cx) && close(a.cy, from.cy) && close(a.rotate, from.rotate) && close(a.scale, from.scale));
+  assert.equal(a.print, 1);
+  assert.equal(a.card, 0);
+  const z = P.stubFlightPose(from, BOX, to, 1);
+  assert.ok(close(z.cx, end.x) && close(z.cy, end.y) && close(z.rotate, to.rotate, 1e-9));
+  assert.ok(close(BOX.w * z.scale, to.w));
+  assert.equal(z.print, 1);
+  assert.equal(z.card, 0);
+  assert.ok(z.shadow > 0.5 && z.shadow < from.shadow);
+  // The merge (once the camera is down): in place, it becomes the cover
+  // stub, blank — exactly its rect (the card's height lands at the cover
+  // stub's), its card, no print, no shadow.
+  const card = P.courierCard(BOX, to);
+  assert.ok(close(card.h * z.scale, to.h));
+  assert.ok(close(card.w * z.scale, to.w));
+  const m0 = P.stubMergePose(z, 0);
+  assert.deepEqual([m0.cx, m0.cy, m0.rotate, m0.scale, m0.print, m0.card, m0.unfold, m0.shadow], [z.cx, z.cy, z.rotate, z.scale, 1, 0, 0, z.shadow]);
+  const m1 = P.stubMergePose(z, 1);
+  assert.deepEqual([m1.cx, m1.cy, m1.rotate, m1.scale], [z.cx, z.cy, z.rotate, z.scale]);
+  assert.equal(P.unfoldInset(card.h, BOX.h, m1.unfold), 0);
+  assert.equal(m1.print, 0);
+  assert.equal(m1.card, 1);
+  assert.equal(m1.shadow, 0);
+  let before = m0;
+  for (let i = 1; i <= 30; i += 1) {
+    const p = P.stubMergePose(z, i / 30);
+    assert.ok(p.print <= before.print + 1e-12 && p.card >= before.card - 1e-12 && p.unfold >= before.unfold - 1e-12 && p.shadow <= before.shadow + 1e-12);
+    before = p;
   }
-  assert.ok(tf < 0.62, `scroll-torn stub gone in ${tf.toFixed(2)} s`);
-  let s = { x: 0, y: 0, vx: P.STUB_FALL.toss[0], vy: P.STUB_FALL.toss[1], a: 0, va: P.STUB_FALL.toss[2] };
-  let lastVy = s.vy;
-  let t = 0;
-  while (s.y < 1000 && t < P.STUB_FALL.maxMs / 1000) {
-    s = P.stepFall(s, 1 / 60);
-    assert.ok(s.vy > lastVy, 'gravity only ever adds');
-    lastVy = s.vy;
-    t += 1 / 60;
+  // The card is up before the print is gone: never a see-through moment.
+  for (let i = 0; i <= 30; i += 1) {
+    const p = P.stubMergePose(z, i / 30);
+    assert.ok(p.card + p.print >= 0.99, `${i / 30}`);
   }
-  assert.ok(s.y >= 1000, `below a 1000 px screen in ${t.toFixed(2)} s`);
-  assert.ok(t < 1.4);
+  assert.ok(P.STUB_MERGE.ms >= 380 && P.STUB_MERGE.ms <= 700);
+  // Bowed up: mid-way it is above the chord's middle, by no more than bowMax.
+  const c = P.arcControl({ x: from.cx, y: from.cy }, end);
+  assert.ok(c.y < (from.cy + end.y) / 2);
+  assert.ok(Math.hypot(c.x - (from.cx + end.x) / 2, c.y - (from.cy + end.y) / 2) <= P.STUB_FLIGHT.bowMax + 1e-9);
+  // A chord going up and one going down both bow up the screen.
+  assert.ok(P.arcControl({ x: 0, y: 500 }, { x: 400, y: 100 }).y < 300);
+  assert.ok(P.arcControl({ x: 400, y: 100 }, { x: 0, y: 500 }).y < 300);
+  // Every step of the way: the progress along the path never goes back,
+  // the turn stays slight, nothing jumps between frames.
+  let prev = a;
+  let maxTurn = 0;
+  for (let i = 1; i <= 90; i += 1) {
+    const p = P.stubFlightPose(from, BOX, to, i / 90);
+    const base = from.rotate + (to.rotate - from.rotate) * ((p.scale - from.scale) / (z.scale - from.scale));
+    maxTurn = Math.max(maxTurn, Math.abs(p.rotate - base));
+    assert.ok(Math.hypot(p.cx - prev.cx, p.cy - prev.cy) < 40, `step ${i}`);
+    assert.ok(p.print <= prev.print + 1e-12 && p.card >= prev.card - 1e-12 && p.unfold >= prev.unfold - 1e-12);
+    prev = p;
+  }
+  assert.ok(maxTurn <= P.STUB_FLIGHT.turn + 0.5 && maxTurn >= P.STUB_FLIGHT.turn * 0.8, `${maxTurn}°`);
+  // The card unfolds from the print's height (centred) to its own.
+  assert.ok(close(P.unfoldInset(card.h, BOX.h, 0), (card.h - BOX.h) / 2));
+  // A cover stub shorter than the pass's (a phone's card, scaled): the stub
+  // lands fitted inside it (never spilling past it) and the card unfolds
+  // across instead.
+  const phoneBox = { w: 97, h: 156 };
+  const phoneTo = { x: 236.8, y: 587.1, w: 136.8, h: 146.9, rotate: 0 };
+  const s = P.landingScale(phoneBox, phoneTo);
+  assert.ok(close(phoneBox.h * s, phoneTo.h) && phoneBox.w * s <= phoneTo.w + 1e-9);
+  const phoneCard = P.courierCard(phoneBox, phoneTo);
+  assert.ok(close(phoneCard.w * s, phoneTo.w) && close(phoneCard.h * s, phoneTo.h));
+  assert.equal(P.unfoldInset(phoneCard.h, phoneBox.h, 0), 0);
+  assert.ok(close(P.unfoldInset(phoneCard.w, phoneBox.w, 0), (phoneCard.w - phoneBox.w) / 2));
+  assert.equal(P.unfoldInset(phoneCard.w, phoneBox.w, 1), 0);
+  assert.equal(P.unfoldInset(100, 263, 0), 0);
 });
 
-test('the page round it: the rise, the scroll\'s strain and peel, the tear point, the glide', () => {
-  const vh = 1000;
-  const pin = 1000;
-  assert.equal(P.passRise(0, pin, vh), 0);
-  assert.equal(P.passRise(pin * P.PASS_RISE[0] - 1, pin, vh), 0);
-  assert.equal(P.passRise(pin, pin, vh), 1);
-  assert.equal(P.scrollStrain(pin, pin, vh), 0);
-  assert.ok(close(P.scrollStrain(pin + vh * P.PASS_PIN * P.PASS_TEAR_AT, pin, vh), 1));
-  assert.ok(P.PASS_TEAR_AT < 1, 'it tears while still pinned');
-  // A short pin: the wheel is never long without something to show.
-  assert.ok(P.PASS_PIN * P.PASS_TEAR_AT * vh <= 260);
-  // The scroll pulls as a hand would: the strain first, then the rip runs
-  // (and shows) — a third of the seam at most — before the tear takes over.
-  const span = P.tearSpan(344);
-  let lastClock = -1;
-  for (let s = 0; s <= 1.0001; s += 0.05) {
-    const travel = P.scrollTravel(s, span);
-    const clock = P.tearClock(travel, span);
-    assert.ok(clock >= lastClock - 1e-9, 'only ever onward');
-    lastClock = clock;
+// A stand-in for the explorer's half of the contract: it names the target
+// once its entry starts (`targetAt`) and says it has landed (`landedAt`).
+function runHandoff({ targetAt, landedAt, target = TARGET, until = 16000 }) {
+  const free = freeStub();
+  let state = P.courierStart(0);
+  const said = [];
+  const removed = [];
+  const phases = [];
+  let lastPose = null;
+  let jumps = 0;
+  for (let now = 0; now <= until; now += 16) {
+    if (targetAt != null && now >= targetAt) state = P.courierStep(state, { type: 'target', now, rect: target }, free).state;
+    if (landedAt != null && now >= landedAt && state.entryLanded == null) {
+      const r = P.courierStep(state, { type: 'entry-landed', now }, free);
+      state = r.state;
+      r.effects.forEach((e) => (e === 'say-landed' ? said : removed).push(now));
+    }
+    const drawn = P.courierPose(state, free, now);
+    const r = P.courierStep(state, { type: 'tick', now, pose: drawn.pose }, free);
+    state = r.state;
+    r.effects.forEach((e) => (e === 'say-landed' ? said : removed).push(now));
+    if (phases[phases.length - 1]?.phase !== state.phase) phases.push({ phase: state.phase, now });
+    const pose = P.courierPose(state, free, now).pose;
+    if (lastPose && state.phase !== 'done' && Math.hypot(pose.cx - lastPose.cx, pose.cy - lastPose.cy) > 40) jumps += 1;
+    lastPose = pose;
+    if (state.phase === 'done') break;
   }
-  assert.equal(P.tearTip(P.scrollTravel(0.2, span), span), 0, 'the strain alone at first');
-  const peel = P.tearTip(P.scrollTravel(1, span), span);
-  assert.ok(close(peel, P.SCROLL_PEEL, 1e-6) && peel < P.TEAR_COMMIT_TIP);
-  assert.ok(P.tearTip(P.scrollTravel(0.6, span), span) > 0.05, 'visibly peeling well before the tear');
-  // The glide: one calm length, a soft start and a long soft landing.
-  assert.ok(P.ARRIVAL_SECONDS >= 1.2 && P.ARRIVAL_SECONDS <= 1.6);
-  const [x1, y1, x2, y2] = P.ARRIVAL_EASE;
-  const bez = (t, a, b) => 3 * (1 - t) * (1 - t) * t * a + 3 * (1 - t) * t * t * b + t * t * t;
-  let peakSpeed = 0;
-  for (let t = 0.001; t < 1; t += 0.001) {
-    const dx = bez(t + 1e-4, x1, x2) - bez(t, x1, x2);
-    const dy = bez(t + 1e-4, y1, y2) - bez(t, y1, y2);
-    if (dx > 1e-9) peakSpeed = Math.max(peakSpeed, dy / dx);
+  return { state, said, removed, phases, jumps };
+}
+
+test('the hand-off: it merges only once it has arrived AND the camera is down, says so once, then goes', () => {
+  // The contract's usual case: the target from the entry's start (after the
+  // 1.6 s glide), a long descent: the stub arrives first and waits there,
+  // fixed while the camera comes down under it; then it merges.
+  const slow = runHandoff({ targetAt: 2300, landedAt: 2300 + 4400 });
+  assert.deepEqual(slow.phases.map((p) => p.phase), ['carry', 'arc', 'hold', 'merge', 'handoff', 'done']);
+  const arc = slow.phases.find((p) => p.phase === 'arc');
+  assert.ok(arc.now >= 2300 && arc.now < 2300 + 40);
+  const hold = slow.phases.find((p) => p.phase === 'hold');
+  assert.ok(hold.now - arc.now >= 1200 && hold.now - arc.now <= 1640);
+  const merge = slow.phases.find((p) => p.phase === 'merge');
+  assert.ok(merge.now >= 6700 && merge.now < 6700 + 20);
+  assert.equal(slow.said.length, 1);
+  assert.ok(slow.said[0] >= merge.now + P.STUB_MERGE.ms && slow.said[0] < merge.now + P.STUB_MERGE.ms + 20);
+  assert.equal(slow.removed.length, 1);
+  assert.ok(slow.removed[0] - slow.said[0] >= P.STUB_FLIGHT.handoffMs);
+  assert.equal(slow.jumps, 0);
+  // A short descent (or one the reader cut short): the camera is down before
+  // the stub arrives; it merges the moment it arrives.
+  const quick = runHandoff({ targetAt: 2300, landedAt: 2600 });
+  const qArc = quick.phases.find((p) => p.phase === 'arc');
+  const qLand = quick.phases.find((p) => p.phase === 'merge');
+  assert.ok(qLand.now - qArc.now >= 1200 && qLand.now - qArc.now <= 1640);
+  assert.ok(!quick.phases.some((p) => p.phase === 'hold' && p.now < qLand.now - 20));
+  assert.equal(quick.said.length, 1);
+  assert.equal(quick.jumps, 0);
+  // Named early (the explorer can derive it before its entry): it still
+  // settles into the hand first.
+  const early = runHandoff({ targetAt: 0, landedAt: 5000 });
+  assert.ok(early.phases.find((p) => p.phase === 'arc').now >= P.STUB_CARRY.ms);
+  // An explorer that never names a target: once it has landed the stub is
+  // let go where it is, and the landing is still said (its own stub shows).
+  const none = runHandoff({ targetAt: null, landedAt: 6000 });
+  assert.deepEqual(none.phases.map((p) => p.phase), ['carry', 'fade', 'done']);
+  assert.equal(none.said.length, 1);
+  assert.ok(none.said[0] >= 6000 + P.STUB_FLIGHT.targetGraceMs);
+  // One that never says it landed: handed over all the same, never kept.
+  const mute = runHandoff({ targetAt: 2300, landedAt: null });
+  assert.equal(mute.said.length, 1);
+  assert.ok(mute.said[0] >= P.STUB_FLIGHT.maxWaitMs + P.STUB_MERGE.ms && mute.said[0] < P.STUB_FLIGHT.maxWaitMs + P.STUB_MERGE.ms + 20);
+  // Neither: let go at the longest wait.
+  const lost = runHandoff({ targetAt: null, landedAt: null });
+  assert.equal(lost.said.length, 1);
+  assert.equal(lost.state.phase, 'done');
+  // A contract rect is taken only if it is one.
+  assert.equal(P.validStubRect(null), null);
+  assert.equal(P.validStubRect({ x: 1, y: 2, w: 0, h: 5, rotate: 0 }), null);
+  assert.equal(P.validStubRect({ x: NaN, y: 2, w: 10, h: 5 }), null);
+  assert.deepEqual(P.validStubRect({ x: 1, y: 2, w: 10, h: 5 }), { x: 1, y: 2, w: 10, h: 5, rotate: 0 });
+});
+
+test('the hand-off contract, as the page speaks it', () => {
+  assert.equal(P.STUB_LANDED_EVENT, 'archive:stub-landed');
+  assert.equal(P.ENTRY_LANDED_EVENT, 'archive:entry-landed');
+  assert.equal(P.COVER_STUB_TARGET, '__archiveCoverStubTarget');
+  // Torn, the entrance asks for the explorer with the stub's hand-off.
+  const intro = source('src/components/home/EntranceIntro.tsx');
+  assert.match(intro, /requestExplore\(\{ from: 'boarding-pass', stubHandoff \}\)/);
+  assert.match(intro, /ask\(true\)/);
+  assert.match(source('src/lib/explorer.ts'), /stubHandoff\?: boolean;/);
+  // The courier reads the explorer's derived rect, never a rect of its own
+  // per frame (derive, do not sample), and says the landing on window.
+  const motion = source('src/components/home/entranceMotion.ts');
+  const courier = motion.slice(motion.indexOf('export function launchStubCourier'));
+  assert.doesNotMatch(courier, /getBoundingClientRect|offsetWidth|offsetTop/);
+  assert.match(courier, /readTarget\(\)/);
+  assert.match(motion, /window\.dispatchEvent\(new CustomEvent\(STUB_LANDED_EVENT/);
+  assert.match(courier, /listen\(ENTRY_LANDED_EVENT/);
+  // It lives on <body>, outside the entrance (which leaves the page once the
+  // explorer has it), and goes with the page.
+  assert.match(courier, /document\.body\.append\(layer\)/);
+  assert.match(courier, /astro:before-swap/);
+  // The glide: the page goes on by itself, a beat after the stub is free,
+  // on the glide's own curve.
+  assert.equal(P.ARRIVAL_SECONDS, 1.6);
+  assert.ok(P.GLIDE_AFTER_FREE_MS > 0 && P.GLIDE_AFTER_FREE_MS <= 200);
+  assert.match(intro, /arrivalCurve\(k\)/);
+  // Values, not structure: neither component branches its markup on
+  // reduced motion.
+  for (const file of ['src/components/home/EntranceIntro.tsx', 'src/components/home/BoardingPass.tsx']) {
+    assert.doesNotMatch(source(file), /useReducedMotion/, file);
   }
-  // Peak ≤ 2.6× the mean (the old curve's was 2.96× over a shorter glide).
-  assert.ok(peakSpeed <= 2.6, `peak ${peakSpeed.toFixed(2)}× the mean speed`);
-  assert.ok((peakSpeed * 1000) / P.ARRIVAL_SECONDS < 1700, 'a 1000 px glide peaks under 1700 px/s');
 });

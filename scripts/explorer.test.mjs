@@ -331,10 +331,12 @@ test('the homepage hands the entrance a seam: an event, a function, a record', (
   assert.match(home, /EXPLORE_EVENT/);
   assert.match(home, /__archiveExploreAsked/, 'an ask made before the page mounted is kept');
   // The boarding pass, torn, asks once the glide has brought the globe up —
-  // and nothing synthetic follows the ask (a real key, press or new wheel
-  // cuts the entry short).
-  assert.match(home, /const onEntranceArrived = useCallback\(\(\) => requestExplore\(\{ from: 'boarding-pass' \}\), \[\]\);/);
-  assert.match(home, /onArrived=\{onEntranceArrived\}/);
+  // itself, with its stub's hand-off (entrance v2) — and nothing synthetic
+  // follows the ask (a real key, press or new wheel cuts the entry short).
+  const entrance = source('src/components/home/EntranceIntro.tsx');
+  assert.match(entrance, /requestExplore\(\{ from: 'boarding-pass', stubHandoff \}\)/);
+  assert.match(lib, /stubHandoff\?: boolean;/);
+  assert.doesNotMatch(home, /onEntranceArrived|onArrived=/);
   const handOver = home.slice(home.indexOf('handOverRef.current = (enter'), home.indexOf('// ── The seam: anyone may ask'));
   assert.doesNotMatch(handOver, /dispatchEvent|new (Wheel|Keyboard|Pointer|Mouse)Event/);
   // The explorer's first screen no longer listens for a first wheel or key:
