@@ -286,10 +286,14 @@ html[data-voyage] .route-atlas .viewfinder__scrim {
      so when they are up they are meant to be read: 0.86 ink holds ≥ 4.5:1
      where the route or pale rock runs behind a figure (0.62 measured 3.9:1). */
   color: rgba(244, 244, 237, 0.86);
-  /* One soft shadow (2026-09-29): the bright pass's pale rock and desert
-     (Page's p99 218) wanted a firmer pair; the toned print's whites stop
-     near 150 (p99 152). */
-  text-shadow: 0 0 6px rgba(12, 15, 10, 0.66);
+  /* The firmer pair (2026-09-29). On the phone the figures stay up about
+     2 s at rest, over the desert of Page, Zion and Bryce. With one soft
+     shadow (0.66) over the toned print's first whites (0.68) the 10px
+     longitudes measured 3.8:1 there (worst 5% of glyph pixels against the
+     ground under them). With the pair and the whites at 0.56 every rest
+     holds ≥ 5.5:1 (the lowest: Miami's and Page's longitudes 5.5, Bryce's
+     5.7). */
+  text-shadow: 0 0 6px rgba(12, 15, 10, 0.72), 0 1px 2px rgba(12, 15, 10, 0.6);
 }
 .viewfinder__meta {
   display: flex;
@@ -744,7 +748,9 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
    the name and the lede sat on pale ground. A soft pool behind the rail
    while a place's words are on it (the idle line keeps its own), on the
    words' own beat. Lighter since the toned print (0.5 / 0.3 / 0.08 under the
-   bright photograph): those deserts are at 64–68 of luma now, not ~100. */
+   bright photograph): the desert behind the rail is 72–74 of luma now (its
+   land 84–86), not 129–132 (land 132–136). At the brightest 5% of that
+   ground the lede holds ≥ 7.9:1, the name ≥ 8.7:1, the frames ≥ 11:1. */
 .explorer-rail::before {
   content: '';
   position: absolute;

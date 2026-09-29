@@ -30,14 +30,21 @@ const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 //   Page 102, the whole planet 77 at 0.48–0.56, the phone's Zion 133 — a
 //   satellite screenshot in a dark print archive. Owner: 地球可以再优化一下，
 //   太亮了也和整体网站风格差异过大.
-// - Now. The whites stop at 0.68 (the glare was the deserts'), the colour
+// - Now. The whites stop at 0.56 (the glare was the deserts'), the colour
 //   comes down by 0.46 — half, not the grey's washout — and a firmer contrast
-//   (0.24) keeps it crisp rather than dull; the hue a few degrees warmer (the
-//   greens toward olive). Miami 41 / 14 / 0.24, Orlando 43, New York 39,
-//   Page 68 / 37 / 0.30 (p99 152), Zion 64, Bryce 67; the whole planet 46 /
-//   21 / 0.23 in space of 31; the phone 32–38 by the sea and 84–89 in the
-//   desert. A third calmer than the bright pass, and up to five times the
-//   grey's depth (sd 11–37 against its ~7.5).
+//   (0.24) with the floor only just lifted keeps it crisp rather than dull
+//   (the grey's whites were 0.58 too, but over a 0.15 floor, the colour
+//   washed out and a haze: a 0.43 range with nothing in it); the hue a few
+//   degrees warmer (the greens toward olive). Miami 39 / 11 / 0.22, Orlando
+//   41, New York 37, Page 59 / 29 / 0.29 (p99 126), Zion 56, Bryce 58; the
+//   whole planet 44 / 17 / 0.22 in space of 31, the open sea 32–36 (the
+//   whites leave the sea and the space where they were). The phone: 31–36
+//   by the sea, 71–75 in the desert. The desert alone, right of the rail:
+//   72–74 (its land 84–86), where the bright pass's was 129–132 (land
+//   132–136). A first toned pass stopped the whites at 0.68: the desert
+//   alone was still 85–88 (land 96–99) and the phone's 84–89, inside the
+//   band the owner had called 太亮. Twice the grey's depth or more in the
+//   deserts (sd 22–29 against its 7–14).
 // The same grade on the planet the page brings up (PLANET_PAINT) and on the
 // reader's map (STOCK_PAINT): nothing changes colour on the way down (the two
 // layers at one camera inside SILVER_EXIT differ by 0.05 of 255 per channel;
@@ -46,7 +53,7 @@ const ATLAS_GRADE = {
   'raster-saturation': -0.46,
   'raster-contrast': 0.24,
   'raster-brightness-min': 0.04,
-  'raster-brightness-max': 0.68,
+  'raster-brightness-max': 0.56,
   'raster-hue-rotate': -8,
 } as const;
 export const STOCK_PAINT = ATLAS_GRADE;

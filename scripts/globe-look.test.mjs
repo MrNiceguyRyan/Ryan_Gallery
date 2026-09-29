@@ -89,7 +89,7 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   assert.deepEqual(STOCK_PAINT, PLANET_PAINT);
   assert.deepEqual(
     [look['raster-saturation'], look['raster-contrast'], look['raster-brightness-min'], look['raster-brightness-max'], look['raster-hue-rotate']],
-    [-0.46, 0.24, 0.04, 0.68, -8],
+    [-0.46, 0.24, 0.04, 0.56, -8],
   );
   for (const key of ['raster-color', 'raster-color-mix', 'raster-color-range']) assert.equal(key in look, false, key);
   // The colour kept at about half: never the full photograph (0, the bright
@@ -99,9 +99,10 @@ test('the planet is a split-toned print in the site\'s own palette: calm, crisp,
   assert.ok(look['raster-contrast'] >= 0.18 && look['raster-contrast'] <= 0.3);
   // The floor only just lifted (it was 0.15: a grey veil over the sea); the
   // whites held well short of paper — the deserts' glare was the brightness
-  // (0.94 under the bright pass).
+  // (0.94 under the bright pass; 0.68 still left the phone's desert at
+  // 84–89 of luma, 0.56 brings it to 71–75).
   assert.ok(look['raster-brightness-min'] <= 0.06);
-  assert.ok(look['raster-brightness-max'] >= 0.6 && look['raster-brightness-max'] <= 0.72);
+  assert.ok(look['raster-brightness-max'] >= 0.5 && look['raster-brightness-max'] <= 0.6);
   // A hair warmer: the hue turns a few degrees at most.
   assert.ok(Math.abs(look['raster-hue-rotate']) <= 10);
   // The seas: the page's ink a step lifted (not the bright pass's
@@ -160,7 +161,7 @@ test('the reader\'s map carries the photograph whole, the seas tinted, under a c
   const css = readFileSync(new URL('../src/styles/global.css', import.meta.url), 'utf8');
   assert.match(css, /\.route-atlas-rest-tone \{[^}]*background: rgba\(30, 36, 22, 0\.16\);/);
   assert.match(css, /\.explorer-rail::before \{[^}]*rgba\(14, 17, 11, 0\.34\) 0%, rgba\(14, 17, 11, 0\.2\) 52%, rgba\(14, 17, 11, 0\.05\) 82%/);
-  assert.match(css, /\.viewfinder__readout \{[^}]*text-shadow: 0 0 6px rgba\(12, 15, 10, 0\.66\);/);
+  assert.match(css, /\.viewfinder__readout \{[^}]*text-shadow: 0 0 6px rgba\(12, 15, 10, 0\.72\), 0 1px 2px rgba\(12, 15, 10, 0\.6\);/);
 });
 
 test('channel and wiring', () => {
