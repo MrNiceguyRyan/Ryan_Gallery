@@ -81,7 +81,8 @@ test('the acts: contiguous from 0, the single words first, then the relay; the l
     const total = plan.length + F.LANDING_A.done;
     assert.ok(BEFORE_MS - total >= 3000 && BEFORE_MS - total <= 4000, `${layout}: ${total} ms, ${BEFORE_MS - total} ms shorter`);
   }
-  assert.ok(F.landingAEnd(F.FLY_ORDER.length) <= F.LANDING_A.done, 'every word home inside the landing');
+  const others = F.FLY_ORDER.length - F.NAME_WORDS.length;
+  assert.ok(F.landingAHome(others) + F.LANDING_A.settle <= F.LANDING_A.done, 'every word home, and the page\'s own, inside the landing');
 });
 
 test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th, the eighth', () => {
@@ -589,7 +590,7 @@ test('one ink box, letter by letter: a letter fitted into its own box is itself;
     assert.ok(Math.abs(mid(box) - mid(fade)) <= 0.03, `centred: ${box} / ${fade}`);
     assert.equal(fade[1] - fade[0], 0, `one instant: ${fade}`);
   }
-  assert.match(read('../src/components/home/OpeningScenes.tsx'), /text=\{TITLE_NAME\.toUpperCase\(\)\}/);
+  assert.match(read('../src/components/home/OpeningScenes.tsx'), /text=\{TITLE_NAME\}/);
   const ink = { l: 12, r: 60, t: -70, b: 2 };
   const same = F.glyphFit(ink, 10, 0, ink);
   assert.ok(close(same.sx, 1) && close(same.sy, 1) && close(same.tx, 0) && close(same.ty, 0));
@@ -856,7 +857,7 @@ test('acts 5–6: the dark typed with one lime cursor, then the line turns into 
 const COVER_FACTS = { years: '2025–2026', places: 6, frames: 58, regions: ['Florida', 'Arizona', 'Utah', 'New York'] };
 const landsOf = (blocks) => blocks.map((block) => block.pieces.filter((piece) => typeof piece === 'object' && 'land' in piece).map((piece) => piece.land));
 
-test('the end title sets his name in the cover\'s face; the cover\'s case turns in flight, one ink box a letter', () => {
+test('the end title sets his name exactly as the cover does (face, case, tracking): it flies home only moved', () => {
   const film = read('../src/styles/opening.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const entrance = read('../src/styles/entrance.css').replace(/\/\*[\s\S]*?\*\//g, '');
   const global = read('../src/styles/global.css');
@@ -871,16 +872,28 @@ test('the end title sets his name in the cover\'s face; the cover\'s case turns 
   assert.equal(value(cover, 'font-family'), 'var(--font-display)');
   assert.equal(value(cover, 'font-weight'), '400');
   assert.match(global, /--font-display: "Fraunces"/);
-  // The title's name: the same family (font-serif is Fraunces) and weight.
+  // The title's name: the same family (font-serif is Fraunces), weight and
+  // tracking, in the cover's own case (review of 2026-09-30: the capitals
+  // turned letter by letter in flight, "Ryan XU" on one frame).
   const title = rule(film, '.of-title__face');
   assert.equal(value(title, 'font-weight'), '400');
+  assert.equal(value(title, 'letter-spacing'), value(cover, 'letter-spacing'));
+  assert.equal(value(title, 'text-transform'), undefined);
+  assert.equal(F.TITLE_NAME, 'Ryan Xu');
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   assert.match(scenes, /className="of-title__name of-title__face font-serif" data-title-to>\s*<span data-fly="ryan">Ryan<\/span> <span data-fly="xu">Xu<\/span>/);
-  // Its capitals turn into the cover's case in flight: a face that differs
-  // at either end (case included) morphs letter by letter, the two faces
-  // swapped in one instant (never a frame with both).
+  assert.equal([...scenes.matchAll(/<Glyphs face="(from|to)"[^>]*text=\{TITLE_NAME\} \/>/g)].length, 2, 'the typed line is struck in the title\'s case');
+  assert.doesNotMatch(scenes, /TITLE_NAME\.toUpperCase/);
+  // The name at the cover's optical size, its letters on the page's own
+  // pens (the clone that takes its place is the cover's word, scaled).
   const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.match(island, /name\.style\.fontVariationSettings = opsz;\s*tTo\.style\.fontVariationSettings = opsz;/);
+  assert.match(island, /setGlyphs\(tTo, caps, nameLeft, nameBase, domPens\(name, caps\)\)/);
+  // A word the same at both ends is only moved (its scale the two sizes'
+  // own ratio); one whose face changes (the credits) turns letter by letter,
+  // the two faces swapped in one instant (never a frame with both).
   assert.match(island, /casing\(aText, a\) === casing\(bText, b\)/);
+  assert.match(island, /const srcH = same \? \(parseFloat\(sStyle\.fontSize\) \|\| 16\) \* scale/);
   assert.match(island, /letters = pairGlyphs\(/);
   assert.equal(F.LANDING_A.sourceOut[0], F.LANDING_A.sourceOut[1]);
   assert.deepEqual([...F.LANDING_A.sourceOut], [...F.LANDING_A.targetIn]);
@@ -914,16 +927,44 @@ test('the landing\'s words: at both ends — the end title and the entrance\'s c
   assert.match(scenes, /data-fly=\{word\.toLowerCase\(\)\}/);
 });
 
-test('landing A: every word flies from its box to its glyph box, in order, inside 0.6 s', () => {
+test('landing A: every word flies from its box to its glyph box — his name first, whole — inside 0.7 s', () => {
   const src = { x: 500, y: 300, w: 400, h: 110 };
   const dst = { x: 104, y: 284, w: 700, h: 221 };
   const f = F.flightFor(src, dst, 64, 175, 0);
   assert.ok(close(f.dx, 700 - 454));
   assert.ok(close(f.dy, 355 - 394.5));
   assert.ok(close(f.k, 64 / 175));
-  const delays = F.FLY_ORDER.map((_, i) => F.flightFor(src, dst, 1, 1, i).delay);
-  for (let i = 1; i < delays.length; i += 1) assert.ok(delays[i] > delays[i - 1]);
+  // His name's two words on one slot (one clock, one path); the others after
+  // it, a stagger apart. It leaves first and lands first.
+  assert.deepEqual([...F.NAME_WORDS], ['ryan', 'xu']);
+  const name = F.landingSlot(null);
+  assert.equal(name.rigid, true);
+  const slots = [0, 1, 2, 3, 4].map((i) => F.landingSlot(i));
+  for (let i = 1; i < slots.length; i += 1) assert.ok(slots[i].delay > slots[i - 1].delay);
+  assert.ok(name.delay <= slots[0].delay);
+  assert.ok(name.delay + name.duration < slots[0].delay + slots[0].duration, 'the name is home first');
+  // The title's own letters fly the name's first share and hand it over in
+  // mid-air, at speed (never at rest, where a layer's pixel shows).
+  const curve = F.flightPath({ dx: 1, dy: 0, k: 1, delay: 0, duration: 1, yLead: 1, rigid: true }, 1000);
+  const eased = (u) => 1 - curve[Math.round(u * 1000)].x;
+  const speed = (u) => (eased(u + 0.01) - eased(u - 0.01)) / 0.02;
+  assert.ok(F.LANDING_A.nameSwap > 0.15 && F.LANDING_A.nameSwap < 0.5, `swap at ${F.LANDING_A.nameSwap}`);
+  assert.ok(speed(F.LANDING_A.nameSwap) > 1.2, `speed at the swap ${speed(F.LANDING_A.nameSwap)}`);
+  // The credits turn into the page's face at the start of their flight, at
+  // their own size, then give way to the word itself (the page's shaping).
+  assert.equal(F.LANDING_A.morph[0], 0);
+  assert.ok(F.LANDING_A.morph[1] <= 0.25);
+  assert.ok(F.LANDING_A.plain > F.LANDING_A.morph[1] && F.LANDING_A.plain < 0.4);
+  // The landing curve: calm — its fastest at most 2.1 times its mean (the
+  // first landing's peaked at 2.7: a dart).
+  const peak = Math.max(...Array.from({ length: 97 }, (_, i) => speed((i + 2) / 100)));
+  assert.ok(peak <= 2.1, `peak ${peak}`);
+  // Inside 0.7 s (the owner has asked for shorter, never longer), the
+  // page's own words in by then.
   assert.ok(F.LANDING_A.done <= 700);
+  const others = F.FLY_ORDER.length - F.NAME_WORDS.length;
+  assert.ok(F.landingAHome(others) >= F.LANDING_A.dissolve[1], 'the dark is gone before the page\'s words take over');
+  assert.ok(F.landingAHome(others) + F.LANDING_A.settle <= F.LANDING_A.done);
   // The rest of the cover sets itself block by block from 'landed' (the
   // film's LANDING_A.rest): the cover waits through the flight …
   const intro = read('../src/components/home/EntranceIntro.tsx');
@@ -932,13 +973,13 @@ test('landing A: every word flies from its box to its glyph box, in order, insid
   assert.match(entrance, /\.entrance\[data-compose='play'\] :is\(\.ec-w, \.ec-found:not\(\[data-flown\]\)\) \{\s*animation: ec-rise var\(--ec-dur, 600ms\) var\(--entrance-ease\) calc\(var\(--b, 0\) \* var\(--ec-step, 180ms\)\) backwards;/);
   // … and no word rises on a block a flying word lands on before every
   // word (YOU too) is home: nothing comes up under a word still sliding in.
-  const all = F.landingAEnd(F.FLY_ORDER.length);
+  const all = F.landingAEnd(others);
   for (const first of [{ name: 'Miami' }, null]) {
     landsOf(P.coverBlocks(COVER_FACTS, first)).forEach((lands, b) => {
       if (lands.length) assert.ok(F.LANDING_A.rest + P.revealAt(b) >= all, `block ${b}: ${F.LANDING_A.rest} + ${P.revealAt(b)} vs ${all}`);
     });
   }
-  assert.ok(F.LANDING_A.rest < F.landingAEnd(F.FLY_ORDER.length));
+  assert.ok(F.LANDING_A.rest < F.landingAEnd(others));
   // YOU's line (its lead only, when YOU flies) is gone before the first
   // flight could reach it.
   assert.ok(F.LANDING_A.youOut[1] <= 100);
@@ -946,6 +987,110 @@ test('landing A: every word flies from its box to its glyph box, in order, insid
   assert.match(island, /youFlies \? \[\.\.\.youLine\.children\]\.filter\(\(el\) => !\(el as HTMLElement\)\.dataset\.fly\) : \[youLine\]/);
   const path = F.flightPath(F.flightFor(src, dst, 64, 175, 0));
   assert.ok(close(path[0].x, 700 - 454) && close(path.at(-1).x, 0) && close(path.at(-1).s, 1));
+  assert.ok(close(path[0].s, 64 / 175), 'from the title\'s size');
+});
+
+test('landing A: his name is one rigid unit — the gap between its words never opens', () => {
+  // The page's "Ryan" and "Xu" (ink centres), and the title's: the same
+  // layout, k times larger, somewhere else.
+  const P1 = [203, 237];
+  const P2 = [373, 237];
+  const k = 1.3625;
+  const O = [640, 420];
+  const title = (p) => [O[0] + k * (p[0] - 200), O[1] + k * (p[1] - 240)];
+  const flight = (p) => {
+    const t = title(p);
+    return F.flightFor({ x: t[0], y: t[1], w: 0, h: 0 }, { x: p[0], y: p[1], w: 0, h: 0 }, k, 1, null);
+  };
+  const a = F.flightPath(flight(P1), 60);
+  const b = F.flightPath(flight(P2), 60);
+  a.forEach((ka, i) => {
+    const kb = b[i];
+    assert.ok(close(ka.s, kb.s, 1e-9));
+    const gapX = P2[0] + kb.x - (P1[0] + ka.x);
+    const gapY = P2[1] + kb.y - (P1[1] + ka.y);
+    assert.ok(close(gapX, ka.s * (P2[0] - P1[0]), 1e-6), `x at ${ka.offset}: ${gapX} vs ${ka.s * (P2[0] - P1[0])}`);
+    assert.ok(close(gapY, 0, 1e-6));
+  });
+});
+
+test('landing A: the order — above the credits\' line first, the highest first; then the deepest first — and no word ever passes through another', () => {
+  // Measured on the built page (the source face's box on the end title, the
+  // page word's box), 2026-09-30.
+  const SCREENS = {
+    '1728x1000': { camera: [[724, 516, 59, 17], [518, 172, 280, 129]], travel: [[870, 516, 54, 17], [683, 279, 207, 129]], archive: [[796, 516, 61, 16], [554, 604, 96, 34]], thought: [[936, 516, 68, 17], [313, 642, 102, 34]], you: [[895, 551, 29, 16], [554, 696, 48, 34]], NAME: [[641, 326, 441, 176], [104, 172, 326, 129]] },
+    '1280x800': { camera: [[532, 408, 46, 13], [412, 142, 227, 96]], travel: [[645, 408, 41, 13], [551, 222, 170, 96]], archive: [[588, 408, 47, 13], [414, 468, 72, 25]], thought: [[696, 408, 52, 13], [234, 495, 77, 25]], you: [[666, 436, 25, 14], [413, 536, 36, 25]], NAME: [[467, 267, 339, 129], [77, 142, 262, 96]] },
+    '390x844': { camera: [[87, 405, 46, 13], [46, 159, 139, 53]], travel: [[200, 405, 41, 13], [163, 204, 106, 53]], archive: [[143, 405, 47, 13], [290, 379, 58, 20]], thought: [[251, 405, 52, 13], [245, 403, 62, 20]], you: [[221, 434, 25, 14], [289, 460, 29, 20]], NAME: [[88, 313, 212, 72], [16, 115, 158, 53]] },
+  };
+  const EXPECTED = {
+    '1728x1000': ['camera', 'travel', 'you', 'thought', 'archive'],
+    '1280x800': ['camera', 'travel', 'you', 'thought', 'archive'],
+    '390x844': ['camera', 'travel', 'archive', 'you', 'thought'],
+  };
+  const box = (b) => ({ x: b[0], y: b[1], w: b[2], h: b[3] });
+  for (const [screen, words] of Object.entries(SCREENS)) {
+    const rank = (w) => F.landingRank({ from: words[w][0][1], top: words[w][1][1] });
+    const order = Object.keys(words).filter((w) => w !== 'NAME').sort((a, b) => rank(a) - rank(b) || words[a][1][0] - words[b][1][0]);
+    assert.deepEqual(order, EXPECTED[screen], screen);
+    const flights = Object.fromEntries(Object.keys(words).map((w) => {
+      const [s, d] = words[w];
+      const f = F.flightFor(box(s), box(d), s[3], d[3], w === 'NAME' ? null : order.indexOf(w));
+      return [w, { f, s, d, path: F.flightPath(f, 200) }];
+    }));
+    // Each word's box at t (its ink ~76% of its line box's height); a credit
+    // turns from its own shape into the page word's across the morph.
+    const at = ({ f, s, d, path }, t) => {
+      const u = Math.min(1, Math.max(0, (t - f.delay) / f.duration));
+      const p = path[Math.round(u * 200)];
+      const cx = d[0] + d[2] / 2 + p.x;
+      const cy = d[1] + d[3] / 2 + p.y;
+      let w = d[2] * p.s;
+      let h = d[3] * p.s;
+      if (!f.rigid && u < F.LANDING_A.morph[1]) {
+        const m = u / F.LANDING_A.morph[1];
+        w = s[2] * (1 - m) + w * m;
+        h = s[3] * (1 - m) + h * m;
+      }
+      h *= 0.76;
+      return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+    };
+    const names = Object.keys(flights);
+    for (let t = 0; t <= F.LANDING_A.done; t += 4) {
+      for (let i = 0; i < names.length; i += 1) {
+        for (let j = i + 1; j < names.length; j += 1) {
+          const A = at(flights[names[i]], t);
+          const B = at(flights[names[j]], t);
+          const overlap = Math.min(A[2], B[2]) - Math.max(A[0], B[0]) > -2 && Math.min(A[3], B[3]) - Math.max(A[1], B[1]) > -2;
+          assert.ok(!overlap, `${screen}: ${names[i]} and ${names[j]} cross at ${t} ms`);
+        }
+      }
+    }
+  }
+});
+
+test('landing A: the page\'s words take over pixel for pixel — the clones are not layers of their own', () => {
+  const css = read('../src/styles/opening.css');
+  const rule = (sel) => {
+    const i = css.indexOf(`${sel} {`);
+    assert.ok(i >= 0, sel);
+    return css.slice(i, css.indexOf('}', i));
+  };
+  // A layer's origin is snapped to its whole pixel (a face on the page
+  // word's sub-pixel pen drew its glyphs a third of a pixel off); a layer
+  // that ever flew larger than the page keeps that raster (his name, 1.36
+  // times the page's at the start): the flight's own animation makes the one
+  // layer it needs, and nothing asks for more.
+  for (const sel of ['.of-fly', '.of-fly__face', '.of-fly__ink']) assert.doesNotMatch(rule(sel), /will-change/, sel);
+  // Home: the page's words shown under the clones, which dissolve into them
+  // (one drawing), then go.
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  assert.match(island, /html\.removeAttribute\('data-open-fly'\);\s*placed\.forEach\(\(\{ wrap \}\) => \{\s*track\(wrap\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: ms\(LANDING_A\.settle\)/);
+  assert.ok(F.LANDING_A.settle >= 80 && F.LANDING_A.settle <= 160);
+  // Every word lands on the page word's own pen and baseline, set whole.
+  assert.match(island, /seat\(word\.box, f\.dstBox\.x, f\.dstBase\);/);
+  // His name sets off as the title draws it (its own letters) and is handed
+  // to its clones in mid-air.
+  assert.match(island, /cut\(titleLetters, 1, 0, lead\.flight\.delay \+ LANDING_A\.nameSwap \* lead\.flight\.duration\)/);
 });
 
 test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing', () => {

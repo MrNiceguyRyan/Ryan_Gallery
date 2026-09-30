@@ -53,7 +53,7 @@ test('a saved scroll: the same place on the page (the film takes no room); an ol
 });
 
 // A sandbox with just enough of a browser for the inline scripts.
-function sandbox({ readyState = 'loading', seen = null, nav = 'navigate', histLength = 3, state = null, height = 1000, storageThrows = false } = {}) {
+function sandbox({ readyState = 'loading', seen = null, torn = null, nav = 'navigate', histLength = 3, state = null, height = 1000, storageThrows = false } = {}) {
   const attrs = {};
   const listeners = {};
   const replaced = [];
@@ -68,7 +68,7 @@ function sandbox({ readyState = 'loading', seen = null, nav = 'navigate', histLe
   const sessionStorage = {
     getItem(k) {
       if (storageThrows) throw new Error('denied');
-      return k === V.REEL_SEEN_KEY ? seen : null;
+      return k === V.REEL_SEEN_KEY ? seen : k === V.PASS_TORN_KEY ? torn : null;
     },
   };
   const ctx = {
@@ -155,4 +155,44 @@ test('the router script: an in-site arrival at the homepage decides on the incom
   const fresh = sandbox({ readyState: 'complete', seen: null });
   vm.runInContext(V.reelRouterScript(), fresh.ctx);
   assert.deepEqual(swap(fresh, '/', 'push'), { 'data-reel': 'reel', 'data-opening': '' }, 'not seen yet: the film');
+});
+
+test('the way back: once the pass is torn, a later view opens on the globe; a reload and a new tab start from the film', () => {
+  // plan × torn → where the page opens.
+  assert.equal(V.homeOpening('skip', true), 'explorer');
+  assert.equal(V.homeOpening('skip', false), 'entrance', 'not torn yet: the entrance and its pass');
+  assert.equal(V.homeOpening('play', true), 'entrance', 'the film plays: it lands on the entrance');
+  assert.equal(V.homeOpening('play', false), 'entrance');
+  // The place kept, if it is still on the map.
+  assert.equal(V.restoredPlace('zion', ['miami', 'zion']), 'zion');
+  assert.equal(V.restoredPlace('atlantis', ['miami', 'zion']), null);
+  assert.equal(V.restoredPlace('', ['miami']), null);
+  assert.equal(V.restoredPlace(null, ['miami']), null);
+  // The head script (a full load).
+  const head = (opts) => {
+    const box = sandbox(opts);
+    vm.runInContext(HEAD, box.ctx);
+    return plain(box.attrs);
+  };
+  assert.deepEqual(head({ seen: '1', torn: '1', nav: 'navigate' }), { 'data-reel': 'skip', 'data-home': 'explorer' }, 'the wordmark from a page loaded whole');
+  assert.deepEqual(head({ seen: '1', torn: '1', nav: 'back_forward' }), { 'data-reel': 'skip', 'data-home': 'explorer' }, 'Back from another site');
+  assert.deepEqual(head({ seen: '1', torn: null, nav: 'back_forward' }), { 'data-reel': 'skip' }, 'not torn: the entrance');
+  assert.deepEqual(head({ seen: '1', torn: '1', nav: 'reload' }), { 'data-reel': 'reel', 'data-opening': '' }, 'a reload: the film, then the entrance');
+  assert.deepEqual(head({ seen: '1', torn: '1', nav: 'navigate', histLength: 1 }), { 'data-reel': 'reel', 'data-opening': '' }, 'a new tab: its first view');
+  assert.deepEqual(head({ seen: '1', torn: '1', storageThrows: true }), { 'data-reel': 'reel', 'data-opening': '' }, 'storage denied: the first view');
+  // The router script (an in-site arrival: the nav, a story's way home, Back).
+  const swapOn = (box, to, navigationType) => {
+    const incoming = {};
+    const e = { to: new URL(to, 'http://site'), navigationType, newDocument: { documentElement: { setAttribute: (k, v) => { incoming[k] = v; } } } };
+    box.listeners['astro:before-swap'].forEach((fn) => fn(e));
+    return plain(incoming);
+  };
+  const box = sandbox({ readyState: 'complete', seen: '1', torn: '1' });
+  vm.runInContext(V.reelRouterScript(), box.ctx);
+  assert.deepEqual(swapOn(box, '/', 'push'), { 'data-reel': 'skip', 'data-home': 'explorer' }, 'the wordmark');
+  assert.deepEqual(swapOn(box, '/', 'traverse'), { 'data-reel': 'skip', 'data-home': 'explorer' }, 'Back');
+  assert.deepEqual(swapOn(box, '/about', 'push'), {}, 'not the homepage');
+  const untorn = sandbox({ readyState: 'complete', seen: '1', torn: null });
+  vm.runInContext(V.reelRouterScript(), untorn.ctx);
+  assert.deepEqual(swapOn(untorn, '/', 'push'), { 'data-reel': 'skip' }, 'not torn: the entrance');
 });

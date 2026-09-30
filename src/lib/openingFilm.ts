@@ -55,15 +55,17 @@
 //      frame each, and a row of lit sprocket holes into the dark.
 //   5. The dark: "ryan xu" is typed on the film's base, with a lime block
 //      cursor (the act's one lime) that blinks once more when done.
-//   6. The end title: that line is struck in capitals and turns, letter by
-//      letter, into his name in Fraunces capitals — set exactly as the first
-//      screen sets it, so it flies home without changing face — with
-//      CAMERA · ARCHIVE · TRAVEL · THOUGHT under it, and YOU.
+//   6. The end title: that line is struck in the title's case ("Ryan Xu")
+//      and turns, letter by letter, into his name in Fraunces — set exactly
+//      as the first screen sets it (face, case, tracking), so it flies home
+//      without changing at all — with CAMERA · ARCHIVE · TRAVEL · THOUGHT
+//      under it, and YOU.
 //
 // Then it lands (landing A, "words fly home"): the dark dissolves into the
-// first screen and RYAN, XU, CAMERA, ARCHIVE, TRAVEL, THOUGHT (and YOU, when
-// the page has a place for it) fly into their places in the entrance's
-// opening words (src/components/home/EntranceIntro.tsx).
+// first screen, his name glides home first, whole (the signature), and
+// CAMERA, TRAVEL, ARCHIVE, THOUGHT (and YOU, when the page has a place for
+// it) follow into their places in the entrance's opening words
+// (src/components/home/EntranceIntro.tsx).
 //
 // No place names: the places are the archive's suspense. The only ones in
 // the film are two tiny easter eggs (EGGS: a dateline in a newspaper column,
@@ -1178,7 +1180,7 @@ export function ribbon(text: string, seed = 23) {
  *  fastest, where the two letters are the same size in the same place: one
  *  frame shows the one face, the next the other, never both (a crossfade,
  *  however short, showed two words for two or three frames). The words are
- *  in the same case on both sides (capitals). */
+ *  in the same case on both sides ("Ryan Xu"). */
 export const GLYPH_MORPH = {
   box: [0.06, 0.5] as const,
   fade: [0.29, 0.29] as const,
@@ -1281,9 +1283,9 @@ export const DARK_CPS = 14;
 export const DARK_TYPE_AT = BEAT_MS;
 
 // ── Act 6: the end title ──────────────────────────────────────────────────
-/** The typed line turns into the title: struck in capitals on the beat the
- *  title begins (the letters in the same cells), then every typewriter
- *  capital turns into its Fraunces capital in one shared ink box
+/** The typed line turns into the title: struck in the title's case on the
+ *  beat the title begins (the letters in the same cells), then every
+ *  typewriter letter turns into its Fraunces letter in one shared ink box
  *  (GLYPH_MORPH) as the line grows to the title's size; the credits come up
  *  under it. */
 export const TITLE = {
@@ -1295,10 +1297,13 @@ export const TITLE = {
   you: [300, 500] as const,
   rise: 10,
 } as const;
-/** The end title's words (PROPOSED: the YOU line). His name is set in
- *  the cover's face (Fraunces 400: entrance.css .ec-xl), in capitals; the
- *  cover sets it "Ryan Xu", so on its way home only its case turns, letter
- *  by letter in one ink box (LANDING_A.morph), like the credits. */
+/** The end title's words (PROPOSED: the YOU line). His name is set as the
+ *  cover sets it — its face, case and tracking (Fraunces 400, "Ryan Xu":
+ *  entrance.css .ec-xl) — so it flies home as it stands, only moved and
+ *  made smaller (landing A): the signature. (It was set in capitals and
+ *  turned its case letter by letter in flight; review of 2026-09-30.) The
+ *  typed line is struck in the title's case on the beat the title begins
+ *  (r and x take their capitals). */
 export const TITLE_NAME = 'Ryan Xu';
 export const TITLE_SUB = ['CAMERA', 'ARCHIVE', 'TRAVEL', 'THOUGHT'] as const;
 export const TITLE_YOU = { lead: 'Admit one', word: 'YOU' } as const;
@@ -1541,33 +1546,73 @@ export function morphScales(srcW: number, dstW: number) {
 
 // ── Landing A: the words fly home ─────────────────────────────────────────
 // Each word leaves the end title from its own box and lands on its own glyph
-// box in the entrance's opening words (one continuous FLIP), a little after
-// the one before; the title's face turns into the page's on the way (one ink
-// box, as above). Landing ms. The spec gives it 0.6 s.
+// box in the entrance's opening words (one continuous FLIP). Landing ms.
+//
+// Owner, 2026-09-30 (动画结束之后，Ryanxu这几个字跳转到左侧文章的时候，动效可以
+// 再优化一下). Studied frame by frame, the first landing (every word 420 ms,
+// 30 ms apart, the fall leading the slide) broke his name in two: RYAN and XU
+// flew as two words at two scales (1.01 and 1.37: the case turn made their
+// ink boxes differ), so the gap between them opened to a word's width and XU
+// dropped below RYAN; each turned its case letter by letter mid-flight, at
+// its fastest, 30 ms apart ("Ryan XU" on one frame); the credits grew to
+// 40 px as Space Grotesk capitals before they turned into the page's
+// Fraunces; CAMERA passed over TRAVEL on the way up; and the page's words
+// took over from the clones with every edge of every glyph moved (sub-pixel
+// pens and the flight layer's own raster: up to 179 of 255 at an edge).
+// Now:
+//  - his name is ONE unit, the signature: the end title sets it in the
+//    cover's own case and tracking (TITLE_NAME, opening.css .of-title__face),
+//    so nothing about it turns on the way — its two words leave together on
+//    one clock, one scale, one path, and it is only moved and made smaller
+//    (a rigid FLIP). It leaves first and lands first;
+//  - the credits and YOU leave a beat later, once the name is clear of the
+//    line above them, by the line they land on (landingRank: those bound
+//    above first, the highest first, then the deepest first — no word ever
+//    passes through another), and turn from the credits' capitals into the
+//    page's Fraunces at the very start, at their own small size (the
+//    letters' shared ink boxes; one instant for the swap), then grow in the
+//    page's face — never a large word in the wrong face;
+//  - their size grows on a log scale (each frame the same ratio: a word eight
+//    times larger at the end grows evenly, not all at the end);
+//  - home, every clone is the word itself (the page's own shaping), and the
+//    page's words take over under a short cross-dissolve (`settle`): the
+//    same word at the same place in two rasters, so the eye never sees a
+//    frame change.
 export const LANDING_A = {
-  /** The dark dissolves into the page. */
-  dissolve: [0, 380] as const,
-  /** Word i leaves at `start + i * stagger` and flies `fly` ms; the fall
-   *  leads the slide (`yLead`: each word drops to its own line first, so
-   *  two words bound for different lines never cross on one). */
-  start: 0,
-  stagger: 30,
-  fly: 420,
-  yLead: 0.6,
-  /** The shared ink boxes, letter by letter, title's → page's, as a share
-   *  of the flight (a word whose face does not change is only moved). */
-  morph: [0.3, 0.64] as const,
-  /** The swap of the faces (Space Grotesk capitals → the page's Fraunces):
-   *  one instant, the same for both, in the middle of the morph at the
-   *  flight's fastest, where the two share one ink box — never a frame
-   *  with both (a 42 ms crossfade showed CAMERA over camera). */
-  sourceOut: [0.47, 0.47] as const,
-  targetIn: [0.47, 0.47] as const,
-  /** The rest of the opening words (the line's other words, the kicker,
-   *  the scroll cue, the nav last) comes up round the landed words — once
-   *  the last word is home (landingAEnd), so nothing comes up under a word
-   *  still sliding in ('that' under 'thought'). */
-  rest: 560,
+  /** The dark dissolves into the page: gone before the first word is home. */
+  dissolve: [0, 440] as const,
+  /** His name: both words at once, on one clock. */
+  name: { delay: 0, fly: 470, yLead: 0.86 } as const,
+  /** The title's own letters fly the first share of the name's flight and
+   *  hand it to the clones there, at speed (a clone's layer draws its text
+   *  up to a pixel off the title's: at rest, the hand-over ticked). */
+  nameSwap: 0.3,
+  /** The credits and YOU: word i (landingRank's order) leaves at
+   *  `start + i * stagger` and flies `fly` ms — the first home just after
+   *  his name; the fall (or the rise) leads the slide a little (`yLead`: a
+   *  word bound for another line is on its own line before it slides along
+   *  it). */
+  start: 140,
+  stagger: 22,
+  fly: 360,
+  yLead: 0.72,
+  /** The credits' turn into the page's face, as a share of their flight:
+   *  the letters' shared ink boxes across `morph`, the faces swapped in one
+   *  instant in its middle (a crossfade showed CAMERA over camera) — while
+   *  the word is still at the credits' own size. */
+  morph: [0, 0.22] as const,
+  sourceOut: [0.11, 0.11] as const,
+  targetIn: [0.11, 0.11] as const,
+  /** Past the turn, the letters give way to the word itself, set whole (the
+   *  page's own shaping and kerning): the clone that lands IS the word. */
+  plain: 0.3,
+  /** Home: the clones dissolve into the page's own words (ms). */
+  settle: 110,
+  /** The rest of the opening words (the kicker first, the name's line's
+   *  other words a block later, the nav last) comes up round the landed
+   *  words; no block a flying word lands on rises before every word is home
+   *  (landingAEnd), so nothing comes up under a word still sliding in. */
+  rest: 440,
   done: 700,
   /** The end title's YOU line (only its lead, "Admit one ·", when YOU
    *  flies to the cover's own "you"): gone before the first flight reaches
@@ -1588,9 +1633,14 @@ export const LANDING_TARGETS: Record<FlyWord, { from: string; to: string }> = Ob
   FLY_ORDER.map((word) => [word, { from: `[data-fly="${word}"]`, to: word === 'you' ? `.entrance [data-open-land="${word}"]` : `.entrance-intro [data-open-land="${word}"]` }]),
 ) as Record<FlyWord, { from: string; to: string }>;
 
-/** The landing curve: an ease-in-out with a soft arrival, quick off the
- *  mark. */
-export const FLY_EASE = [0.38, 0, 0.2, 1] as const;
+/** The landing curve: a calm, even ease-in-out with a soft arrival — its
+ *  fastest 2.0 times its mean, a little before the middle (the first
+ *  landing's (0.38, 0, 0.2, 1) peaked at 2.7 times: his name moved 70 px
+ *  in one 60th of a second, a dart; now 43 at 1728 × 1000). */
+export const FLY_EASE = [0.4, 0, 0.4, 1] as const;
+
+/** The words his name is made of: they fly as one (LANDING_A.name). */
+export const NAME_WORDS: readonly FlyWord[] = ['ryan', 'xu'];
 
 export interface Flight {
   /** Source centre minus target centre (px) and source/target scale. */
@@ -1599,32 +1649,64 @@ export interface Flight {
   k: number;
   delay: number;
   duration: number;
+  /** The share of the flight by which the word is on its own line. */
+  yLead: number;
+  /** His name's words scale linearly with the slide (so the two keep their
+   *  places to each other exactly, one rigid unit); the others on a log
+   *  scale. */
+  rigid: boolean;
+}
+/** A word's place in the landing's order, lower first: the words bound above
+ *  the line they leave from first (they rise behind his name), the highest
+ *  first; then those bound below it, the deepest first — so no word rises
+ *  into one still rising above it or drops through one still dropping below
+ *  it. `from` and `top`: the tops of its box on the title and on the page
+ *  (px); words on one line rank alike (the caller then reads along it). */
+export function landingRank({ from, top }: { from: number; top: number }) {
+  const line = Math.round(top / 4) * 4;
+  return line < from - 2 ? line : 100000 - line;
+}
+/** When a word leaves and how long it flies: his name's words together
+ *  (`order` null), the others in the cover's reading order (`order` 0, 1…). */
+export function landingSlot(order: number | null) {
+  if (order == null) return { delay: LANDING_A.name.delay, duration: LANDING_A.name.fly, yLead: LANDING_A.name.yLead, rigid: true };
+  return { delay: LANDING_A.start + order * LANDING_A.stagger, duration: LANDING_A.fly, yLead: LANDING_A.yLead, rigid: false };
 }
 /** The FLIP from a word's box on the end title to its glyph box on the page:
- *  sizes match on the cap height (`srcCap` / `dstCap`). */
-export function flightFor(src: Box, dst: Box, srcCap: number, dstCap: number, order: number): Flight {
+ *  sizes match on the ink height (`srcCap` / `dstCap`). */
+export function flightFor(src: Box, dst: Box, srcCap: number, dstCap: number, order: number | null): Flight {
   return {
     dx: src.x + src.w / 2 - (dst.x + dst.w / 2),
     dy: src.y + src.h / 2 - (dst.y + dst.h / 2),
     k: srcCap / Math.max(1e-6, dstCap),
-    delay: LANDING_A.start + order * LANDING_A.stagger,
-    duration: LANDING_A.fly,
+    ...landingSlot(order),
   };
 }
-/** A flight sampled into keyframes: the slide on the landing curve, the
- *  fall ahead of it (`yLead`), the scale with the slide. */
+/** A flight sampled into keyframes: the slide on the landing curve, the fall
+ *  a little ahead of it (`yLead`), the size with the slide — on a log scale
+ *  (a word growing eightfold grows by the same ratio every frame), or, for
+ *  his name, linearly: two flights on one slot, one scale and one line (its
+ *  two words) then keep their places to each other exactly, one rigid unit
+ *  (the title's name is the page's, scaled). */
 const flyCurve = bezierFn(FLY_EASE);
-export function flightPath(f: Flight, samples = 20) {
+export function flightPath(f: Flight, samples = 24) {
   const out: { offset: number; x: number; y: number; s: number }[] = [];
+  const k = Math.max(1e-6, f.k);
   for (let i = 0; i <= samples; i += 1) {
     const u = i / samples;
     const ex = flyCurve(u);
-    const ey = flyCurve(Math.min(1, u / LANDING_A.yLead));
-    out.push({ offset: u, x: f.dx * (1 - ex), y: f.dy * (1 - ey), s: f.k + (1 - f.k) * ex });
+    const ey = flyCurve(Math.min(1, u / Math.max(0.05, f.yLead)));
+    out.push({ offset: u, x: f.dx * (1 - ex), y: f.dy * (1 - ey), s: f.rigid ? k + (1 - k) * ex : Math.pow(k, 1 - ex) });
   }
   return out;
 }
-export const landingAEnd = (words: number) => LANDING_A.start + Math.max(0, words - 1) * LANDING_A.stagger + LANDING_A.fly;
+/** Every word home (ms from the landing's start), `words` of them besides
+ *  his name. */
+export const landingAEnd = (words: number) =>
+  Math.max(LANDING_A.name.delay + LANDING_A.name.fly, words > 0 ? LANDING_A.start + (words - 1) * LANDING_A.stagger + LANDING_A.fly : 0);
+/** The page's words take over (the clones' cross-dissolve begins): every
+ *  word home and the dark gone. */
+export const landingAHome = (words: number) => Math.max(landingAEnd(words), LANDING_A.dissolve[1]);
 
 /** A glide sampled on a curve: n + 1 points of (offset 0 → 1, eased 0 → 1). */
 export function sampleCurve(ease: Bezier, n = 14) {

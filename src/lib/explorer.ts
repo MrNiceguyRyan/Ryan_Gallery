@@ -179,7 +179,12 @@ export type ExplorerAction =
    *  switch's own move, its ticket docked again. */
   | { type: 'recentre'; last?: string | null }
   /** Back to the start (the entrance's opening words). */
-  | { type: 'leave' };
+  | { type: 'leave' }
+  /** The way back (a later visit in the session, the pass already torn:
+   *  src/lib/reelVisit.ts `homeOpening`): the explorer as the reader left
+   *  it, at once — the place that was in hand (its cover up), else nothing
+   *  in hand — no entry, no descent. */
+  | { type: 'restore'; id: string | null };
 
 export type ExplorerEffect =
   /** Tear the stub off the ticket: the admission, played whole (the face
@@ -197,7 +202,10 @@ export type ExplorerEffect =
   | { type: 'story'; id: string }
   /** Back to the start: the opening words again, and the camera back on
    *  the globe the next tear will bring up. */
-  | { type: 'home' };
+  | { type: 'home' }
+  /** The way back: the camera set on the place in hand, unseen (a cut, under
+   *  the page's veil); its cover comes up where it lies. */
+  | { type: 'restore'; id: string };
 
 export interface ExplorerStep {
   state: ExplorerState;
@@ -267,6 +275,12 @@ export function explore(state: ExplorerState, action: ExplorerAction, order: rea
     case 'leave': {
       if (state.phase === 'globe') return same(state);
       return { state: { phase: 'globe', current: null }, effects: [{ type: 'home' }] };
+    }
+    case 'restore': {
+      // Only onto a page that has not been entered (the way back opens on it).
+      if (state.phase !== 'globe') return same(state);
+      const id = action.id && order.includes(action.id) ? action.id : null;
+      return { state: { phase: 'explore', current: id }, effects: id ? [{ type: 'restore', id }] : [] };
     }
     default:
       return same(state);

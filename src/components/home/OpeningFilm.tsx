@@ -25,6 +25,7 @@ import {
   INPUT_POLICY,
   LANDING_A,
   LANDING_TARGETS,
+  NAME_WORDS,
   OPENING_EVENT,
   PHONE_MAX_WIDTH,
   CUT_MS,
@@ -57,7 +58,8 @@ import {
   globeReleaseAt,
   glyphFit,
   keyBox,
-  landingAEnd,
+  landingAHome,
+  landingRank,
   lerpBox,
   morphAt,
   readingZone,
@@ -170,8 +172,10 @@ interface Glyph {
 }
 const fontOf = (style: CSSStyleDeclaration) => `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
 /** Sets a face's letters on their pens, its pen origin at x0 and its
- *  baseline at yB (in its parent's frame), and returns them measured. */
-function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number): Glyph[] {
+ *  baseline at yB (in its parent's frame), and returns them measured. The
+ *  pens are the canvas's, or `pens` (each character's, from x0) where the
+ *  page has laid the same text out itself. */
+function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number, pens?: readonly number[] | null): Glyph[] {
   const style = getComputedStyle(face);
   if (!measureContext) measureContext = document.createElement('canvas').getContext('2d');
   const ctx = measureContext;
@@ -198,14 +202,37 @@ function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number): Gly
     let pen = i * size * 0.6;
     let ink: InkBox = { l: pen, r: pen + size * 0.6, t: -size * 0.7, b: 0 };
     if (ctx) {
-      pen = ctx.measureText(shown.slice(0, i + 1)).width - ctx.measureText(ch).width + i * ls;
+      pen = pens?.[i] ?? ctx.measureText(shown.slice(0, i + 1)).width - ctx.measureText(ch).width + i * ls;
       const m = ctx.measureText(ch);
       ink = { l: pen - m.actualBoundingBoxLeft, r: pen + m.actualBoundingBoxRight, t: -m.actualBoundingBoxAscent, b: m.actualBoundingBoxDescent };
+    } else if (pens?.[i] != null) {
+      pen = pens[i];
     }
     el.style.left = px(pen);
     el.style.transformOrigin = `0px ${lift.toFixed(2)}px`;
     return { el, pen: x0 + pen, base: yB, ink: { l: x0 + ink.l, r: x0 + ink.r, t: yB + ink.t, b: yB + ink.b } };
   });
+}
+/** Each character's pen in an element's own text, from its left edge, as
+ *  the page lays it out (its face's own shaping and optical size: the
+ *  canvas measures a variable face at its automatic optical size only).
+ *  Read at layout time, never per frame; null if the text is not all there. */
+function domPens(el: HTMLElement, text: string): number[] | null {
+  const box = el.getBoundingClientRect();
+  const k = el.offsetWidth > 0 ? box.width / el.offsetWidth : 1;
+  if (!box.width || !(k > 0)) return null;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  const pens: number[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const t = node.textContent ?? '';
+    for (let j = 0; j < t.length; j += 1) {
+      range.setStart(node, j);
+      range.setEnd(node, j + 1);
+      pens.push((range.getBoundingClientRect().left - box.left) / k);
+    }
+  }
+  return pens.length === text.length ? pens : null;
 }
 /** Letter g fitted into the box that letters a and b share at progress p. */
 function glyphTransform(g: Glyph, a: Glyph, b: Glyph, p: number) {
@@ -933,17 +960,29 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       hand.style.width = px(lastBlock.w);
       hand.style.height = px(lastBlock.h);
 
-      // Acts 5–6: the title (in flow, his name in the cover's Fraunces 400,
-      // in capitals), its letters, and the typed line — the typewriter's capitals
-      // as tall as the title's, centred on it, on its baseline; the typed
-      // line in the same cells.
+      // Acts 5–6: the title (in flow, his name as the cover sets it:
+      // Fraunces 400, "Ryan Xu"), its letters, and the typed line — the
+      // typewriter's capitals as tall as the title's, centred on it, on its
+      // baseline; the typed line in the same cells (struck in the title's
+      // case on the title's beat).
       const titleUnit = q('[data-title]')!;
       const name = q('[data-title-to]')!;
       const mono = q('[data-title-from]')!;
       const reveal = mono.closest<HTMLElement>('[data-reveal]')!;
       const tFrom = q('[data-gm="from"]', titleUnit)!;
       const tTo = q('[data-gm="to"]', titleUnit)!;
-      const caps = TITLE_NAME.toUpperCase();
+      const caps = TITLE_NAME;
+      // The name at the cover's own optical size (Fraunces draws a smaller
+      // size wider and softer: at 1728 its "Ryan Xu" at 104 px is 4% wider,
+      // scaled, than the title's own at 142 px). The clone that flies home is
+      // the cover's word scaled up, so on the frame it takes the title's
+      // place the two are one drawing; the title's letters sit on the page's
+      // own pens for that size.
+      const coverName = document.querySelector<HTMLElement>(LANDING_TARGETS.ryan.to);
+      const coverSize = coverName ? parseFloat(getComputedStyle(coverName).fontSize) : NaN;
+      const opsz = coverSize > 0 ? `"opsz" ${Math.min(144, Math.max(9, coverSize)).toFixed(2)}` : '';
+      name.style.fontVariationSettings = opsz;
+      tTo.style.fontVariationSettings = opsz;
       const nameInk = inkOf(name, TITLE_NAME);
       const nameBase = name.offsetTop + baselineIn(name);
       const nameLeft = name.offsetLeft;
@@ -958,7 +997,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const capsInk = inkOf(tFrom, caps);
       const pen = inkCx - (capsInk.left + capsInk.right) / 2 + capsInk.left;
       const titleFrom = setGlyphs(tFrom, caps, pen, nameBase);
-      const titleTo = setGlyphs(tTo, caps, nameLeft, nameBase);
+      const titleTo = setGlyphs(tTo, caps, nameLeft, nameBase, domPens(name, caps));
       const adv5 = mono.offsetWidth / DARK_TYPED.length;
       const padR = 12;
       reveal.style.left = px(pen - padR);
@@ -1594,14 +1633,16 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       landA();
     }
 
-    // A: the words fly home.
+    // A: the words fly home (src/lib/openingFilm.ts, LANDING_A: his name
+    // first, whole; then the others in the cover's reading order; the page's
+    // own words take over under a short cross-dissolve).
     function landA() {
       const endLayer = q('[data-end]')!;
       const titleLetters = q('[data-title] [data-gm-unit]', endLayer)!;
       const rate = hurried ? FF_RATE : 1;
       const ms = (v: number) => v / rate;
       const vh = window.innerHeight;
-      const found: { src: HTMLElement; dst: HTMLElement; top: number; name: boolean }[] = [];
+      const found: { src: HTMLElement; dst: HTMLElement; top: number; left: number; from: number; name: boolean }[] = [];
       FLY_ORDER.forEach((word) => {
         const src = endLayer.querySelector<HTMLElement>(LANDING_TARGETS[word].from);
         const dst = document.querySelector<HTMLElement>(LANDING_TARGETS[word].to);
@@ -1610,27 +1651,30 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         // and goes with the dark.
         const r = dst.getBoundingClientRect();
         if (r.bottom < 0 || r.top > vh) return;
-        found.push({ src, dst, top: r.top, name: word === 'ryan' || word === 'xu' });
+        found.push({ src, dst, top: r.top, left: r.left, from: src.getBoundingClientRect().top, name: NAME_WORDS.includes(word) });
       });
-      // His name first (the cover's own face: only its case turns); then the
-      // words leave by the line
-      // they land on, the deepest first: a word bound for a lower line drops
-      // ahead of the ones bound above it, so none drops through another on
-      // its way down (on one line, in the title's order).
-      const pairs = [
-        ...found.filter((p) => p.name),
-        ...found.filter((p) => !p.name).sort((a, b) => (Math.abs(a.top - b.top) < 4 ? 0 : b.top - a.top)),
-      ];
+      // His name first, its words on one clock (one unit). Then the others,
+      // each a little after the one before, by the line they land on: those
+      // bound above the credits' line first (they rise behind the name), the
+      // highest first; then those bound below it, the deepest first — so a
+      // word never rises into one still rising above it, nor drops through
+      // one still dropping below it (measured: with the cover's reading
+      // order, "thought" passed over "archive" and "you"). On one line, in
+      // reading order.
+      const names = found.filter((p) => p.name);
+      const others = found.filter((p) => !p.name).sort((a, b) => landingRank(a) - landingRank(b) || a.left - b.left);
+      const pairs = [...names, ...others];
 
       overlay.classList.add('is-landing');
       html.setAttribute('data-open-fly', '');
       html.dataset.reel = 'flight';
 
       // What a word looks like at either end. A word that is the same on both
-      // ends is only moved; one whose face changes (the credits' capitals;
-      // his name's capitals into the cover's "Ryan Xu", src/lib/
-      // boardingPass.ts coverBlocks) turns letter by letter, every letter and
-      // its counterpart held to one ink box.
+      // ends (his name: the title sets it as the cover does) is only moved
+      // and scaled — the size is the two faces' own ratio, so it lands as the
+      // page draws it; one whose face changes (the credits' capitals into
+      // the page's Fraunces) turns letter by letter, every letter and its
+      // counterpart held to one ink box, at the start of its flight.
       const casing = (text: string, style: CSSStyleDeclaration) =>
         style.textTransform === 'uppercase' ? text.toUpperCase() : style.textTransform === 'lowercase' ? text.toLowerCase() : text;
       const tracking = (style: CSSStyleDeclaration) => (style.letterSpacing === 'normal' ? 0 : (parseFloat(style.letterSpacing) || 0) / (parseFloat(style.fontSize) || 16));
@@ -1641,8 +1685,13 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         casing(aText, a) === casing(bText, b) &&
         Math.abs(tracking(a) - tracking(b)) < 0.002;
 
+      // The title's name as it stands on screen: its letters (the morph's
+      // Fraunces face) on their pens, and its baseline — read once, here.
+      const titleFace = q('[data-title] [data-gm="to"]', endLayer);
+      const titleBase = titleFace?.querySelector<HTMLElement>(':scope > .of-bl')?.getBoundingClientRect().top ?? null;
+
       const flights = pairs
-        .map(({ src, dst }, order) => {
+        .map(({ src, dst, name }, i) => {
           const srcRect = src.getBoundingClientRect();
           const dstBox = textBox(dst);
           if (!dstBox || !srcRect.width) return null;
@@ -1655,11 +1704,28 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           const dstText = (dst.textContent || '').trim();
           const dstInk = inkOf(dst, dstText);
           const dstBase = baselineOf(dst);
-          // Ink centre to ink centre; the size from ink height to ink height.
-          const from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * (srcInk.ascent - srcInk.descent)) / 2];
+          const same = sameFace(sStyle, dStyle, srcText, dstText);
+          // Ink centre to ink centre; the size from ink height to ink height
+          // (the same face: from font size to font size, exactly).
+          let from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * (srcInk.ascent - srcInk.descent)) / 2];
           const to: Vec2 = [dstBox.x + (dstInk.right - dstInk.left) / 2, dstBase - (dstInk.ascent - dstInk.descent) / 2];
-          const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, (srcInk.ascent + srcInk.descent) * scale, dstInk.ascent + dstInk.descent, order);
-          return { src, srcText, sStyle, dstText, dStyle, dstBox, dstBase, scale, to, flight, same: sameFace(sStyle, dStyle, srcText, dstText) };
+          const srcH = same ? (parseFloat(sStyle.fontSize) || 16) * scale : (srcInk.ascent + srcInk.descent) * scale;
+          const dstH = same ? parseFloat(dStyle.fontSize) || 16 : dstInk.ascent + dstInk.descent;
+          if (same && titleBase != null) {
+            // A word only moved (his name) starts exactly where the title
+            // draws it: its first letter's pen and the title's baseline — so
+            // the clone that takes the title's place on this frame is drawn
+            // on it (read off the letters on screen, not the unseen text the
+            // title is measured on, a pixel apart).
+            const at = TITLE_NAME.indexOf(srcText);
+            const letter = at >= 0 ? titleFace?.querySelector<HTMLElement>(`:scope > [data-g="${at}"]`) : null;
+            if (letter) {
+              const k = srcH / Math.max(1e-6, dstH);
+              from = [letter.getBoundingClientRect().left - k * (dstBox.x - to[0]), titleBase - k * (dstBase - to[1])];
+            }
+          }
+          const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, srcH, dstH, name ? null : i - names.length);
+          return { src, srcText, sStyle, dstText, dStyle, dstBox, dstBase, scale, to, flight, same };
         })
         .filter(<T,>(x: T | null): x is T => x != null);
 
@@ -1700,21 +1766,33 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         box.append(probe);
         return { box, text: shown };
       };
+      /** A face set on the page word's own pen and baseline. */
+      const seat = (box: HTMLElement, x: number, base: number) => {
+        box.style.left = px(x);
+        box.style.top = '0px';
+        box.style.top = px(base - baselineIn(box));
+      };
 
       const placed = flights.map((f) => {
         const wrap = document.createElement('div');
         wrap.className = 'of-fly';
         wrap.style.transformOrigin = `${f.to[0]}px ${f.to[1]}px`;
-        const target = face(f.dstText, f.dStyle, parseFloat(f.dStyle.fontSize) || 16, !f.same);
+        const dstSize = parseFloat(f.dStyle.fontSize) || 16;
+        // The word as the page sets it (what lands), and — for a word whose
+        // face turns — its letters in both faces for the turn.
+        const word = face(f.dstText, f.dStyle, dstSize, false);
+        const target = f.same ? null : face(f.dstText, f.dStyle, dstSize, true);
         const source = f.same ? null : face(f.srcText, f.sStyle, ((parseFloat(f.sStyle.fontSize) || 16) * f.scale) / f.flight.k, true);
         if (source) {
           source.box.style.textShadow = 'none';
           wrap.append(source.box);
         }
-        wrap.append(target.box);
+        if (target) wrap.append(target.box);
+        wrap.append(word.box);
         flightLayer.append(wrap);
+        seat(word.box, f.dstBox.x, f.dstBase);
         let letters: (readonly [Glyph, Glyph])[] | null = null;
-        if (source) {
+        if (source && target) {
           // The page's letters on the page's own pens; the title's letters
           // round the same ink centre, at the page's scale.
           const toLetters = setGlyphs(target.box, target.text, f.dstBox.x, f.dstBase);
@@ -1722,34 +1800,33 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           const x0 = f.to[0] - (sInk.left + sInk.right) / 2 + sInk.left;
           const yB = f.to[1] + (sInk.ascent - sInk.descent) / 2;
           letters = pairGlyphs(setGlyphs(source.box, source.text, x0, yB), toLetters);
-        } else {
-          target.box.style.left = px(f.dstBox.x);
-          target.box.style.top = '0px';
-          target.box.style.top = px(f.dstBase - baselineIn(target.box));
         }
-        return { ...f, wrap, source, target, letters };
+        return { ...f, wrap, source, target, word, letters };
       });
 
-      // The title's words leave it (the clones take their place on this
-      // very frame); the dark dissolves into the page.
-      flights.forEach(({ src }) => {
-        src.style.visibility = 'hidden';
-      });
-      titleLetters.style.visibility = 'hidden';
       const track = (a: Animation) => {
         landAnims.push(a);
         return a;
       };
-      track(
-        endLayer.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: ms(LANDING_A.dissolve[1] - LANDING_A.dissolve[0]),
-          delay: ms(LANDING_A.dissolve[0]),
-          fill: 'both',
-          easing: FADE_CSS,
-        }),
-      );
+      // The dark dissolves into the page: its ground, its perforations and
+      // grain, the credits' dots — and any word with no place to fly to. The
+      // words that fly stay in full ink until they are handed to their
+      // clones, in motion (below).
+      const flying = new Set<Element>(flights.map((f) => f.src));
+      const dark = [
+        ...Array.from(endLayer.children).filter((el) => !el.classList.contains('of-end__title')),
+        ...qa('.of-title__sub .of-title__dot, .of-title__sub [data-fly]', endLayer).filter((el) => !flying.has(el)),
+      ];
+      const dissolve = { duration: ms(LANDING_A.dissolve[1] - LANDING_A.dissolve[0]), delay: ms(LANDING_A.dissolve[0]), fill: 'both' as FillMode, easing: FADE_CSS };
+      dark.forEach((el) => {
+        const from = Number.parseFloat(getComputedStyle(el).opacity);
+        track(el.animate([{ opacity: Number.isFinite(from) ? from : 1 }, { opacity: 0 }], dissolve));
+      });
+      /** An element shown (or hidden) from `at` ms on: one instant. */
+      const cut = (el: Element, from: number, to: number, at: number) =>
+        track(el.animate([{ opacity: from }, { opacity: to }], { delay: ms(at), duration: 0, fill: 'both' }));
 
-      // YOU's line is gone before the first flight reaches its row (no word
+            // YOU's line is gone before the first flight reaches its row (no word
       // flies across a half-faded line): all of it when YOU has no place on
       // the page to fly to; else its lead ("Admit one ·"), which the words
       // bound for the cover's lower lines drop through (the cover of words
@@ -1768,18 +1845,31 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         );
       });
 
-      placed.forEach(({ wrap, source, target, flight, letters }) => {
+      /** An opacity held, then stepped at share `at` of the flight. */
+      const step = (el: HTMLElement, from: number, at: number, to: number, timing: KeyframeAnimationOptions) =>
+        track(
+          el.animate(
+            [
+              { offset: 0, opacity: from },
+              { offset: at, opacity: from },
+              { offset: at, opacity: to },
+              { offset: 1, opacity: to },
+            ],
+            timing,
+          ),
+        );
+      placed.forEach(({ wrap, source, target, word, flight, letters }) => {
         const timing = { duration: ms(flight.duration), delay: ms(flight.delay), fill: 'both' as FillMode, easing: 'linear' };
         track(
           wrap.animate(
             flightPath(flight).map((k) => ({
               offset: k.offset,
-              transform: `translate3d(${k.x.toFixed(2)}px, ${k.y.toFixed(2)}px, 0) scale(${k.s.toFixed(4)})`,
+              transform: `translate3d(${k.x.toFixed(2)}px, ${k.y.toFixed(2)}px, 0) scale(${k.s.toFixed(5)})`,
             })),
             timing,
           ),
         );
-        if (!source) return;
+        if (!source || !target) return;
         if (letters) {
           const win = LANDING_A.morph;
           const us = morphSamples(win, 8);
@@ -1798,45 +1888,77 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
             });
           });
         }
-        const [so, sf] = LANDING_A.sourceOut;
-        const [ti, tf] = LANDING_A.targetIn;
+        // The credits' capitals, then the page's letters (one instant, in
+        // the middle of the turn), then the word itself (the turn done).
+        step(source.box, 1, LANDING_A.sourceOut[0], 0, timing);
         track(
-          source.box.animate(
+          target.box.animate(
             [
-              { offset: 0, opacity: 1 },
-              { offset: so, opacity: 1 },
-              { offset: sf, opacity: 0 },
+              { offset: 0, opacity: 0 },
+              { offset: LANDING_A.targetIn[0], opacity: 0 },
+              { offset: LANDING_A.targetIn[1], opacity: 1 },
+              { offset: LANDING_A.plain, opacity: 1 },
+              { offset: LANDING_A.plain, opacity: 0 },
               { offset: 1, opacity: 0 },
             ],
             timing,
           ),
         );
+        step(word.box, 0, LANDING_A.plain, 1, timing);
+      });
+
+      // His name sets off as the title draws it — its own letters, moved as
+      // one on the name's flight (the clones' map, from where the title
+      // stands) — and is handed to its clones in mid-air (LANDING_A.
+      // nameSwap, at speed): a clone is drawn in a layer of its own, whose
+      // text sits up to a pixel off the title's (measured: 1 px at 1728 ×
+      // 1000), so the hand-over at rest ticked the name down as it left.
+      // Every other word is handed to its clone as it sets off.
+      const lead = placed.find((f) => f.same);
+      if (lead) {
+        const origin = titleLetters.getBoundingClientRect();
+        const O: Vec2 = [origin.left, origin.top];
+        const from: Vec2 = [lead.to[0] + lead.flight.dx, lead.to[1] + lead.flight.dy];
+        titleLetters.style.transformOrigin = '0px 0px';
         track(
-          target.box.animate(
-            [
-              { offset: 0, opacity: 0 },
-              { offset: ti, opacity: 0 },
-              { offset: tf, opacity: 1 },
-              { offset: 1, opacity: 1 },
-            ],
-            timing,
+          titleLetters.animate(
+            flightPath(lead.flight).map((k) => {
+              const sigma = k.s / lead.flight.k;
+              const tx = (1 - sigma) * (from[0] - O[0]) + k.x - lead.flight.dx;
+              const ty = (1 - sigma) * (from[1] - O[1]) + k.y - lead.flight.dy;
+              return { offset: k.offset, transform: `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${sigma.toFixed(5)})` };
+            }),
+            { duration: ms(lead.flight.duration), delay: ms(lead.flight.delay), fill: 'both', easing: 'linear' },
           ),
         );
+        cut(titleLetters, 1, 0, lead.flight.delay + LANDING_A.nameSwap * lead.flight.duration);
+      }
+      placed.forEach(({ wrap, src, same, flight }) => {
+        const at = flight.delay + (same ? LANDING_A.nameSwap * flight.duration : 0);
+        cut(wrap, 0, 1, at);
+        if (!same) cut(src, 1, 0, at);
       });
 
       if (seekParam != null) return;
       later(() => {
         html.dataset.reel = 'landed';
       }, ms(LANDING_A.rest));
+      // Home (every word landed, the dark gone): the page's own words take
+      // over under the clones, which dissolve into them — the same word at
+      // the same place, so no frame changes — and are then let go.
+      const home = landingAHome(others.length);
       later(() => {
-        // Landed: the page's own words take over on the very frame the
-        // clones go.
         html.removeAttribute('data-open-fly');
-        flightLayer.replaceChildren();
+        placed.forEach(({ wrap }) => {
+          track(wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(LANDING_A.settle), fill: 'forwards', easing: 'linear' }));
+        });
         unlock();
         detachInput();
-      }, ms(Math.max(landingAEnd(placed.length), LANDING_A.dissolve[1])));
-      later(finish, ms(LANDING_A.done));
+      }, ms(home));
+      later(() => {
+        flightLayer.replaceChildren();
+      }, ms(home + LANDING_A.settle));
+      later(finish, ms(Math.max(LANDING_A.done, home + LANDING_A.settle)));
     }
 
     // ── Go: the fonts first, then the clock ──

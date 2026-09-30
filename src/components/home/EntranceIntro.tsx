@@ -15,6 +15,7 @@ import {
   type PassChapter,
 } from '../../lib/boardingPass';
 import { requestExplore } from '../../lib/explorer';
+import { markPassTorn } from '../../lib/reelVisit';
 import { stockPaper } from '../../lib/ticketStock';
 import { bezierFn } from '../../lib/motion';
 
@@ -47,10 +48,13 @@ import { bezierFn } from '../../lib/motion';
 // BoardingPass, PASS_DRAG). Tearing is still the stub's click alone; torn
 // where it was put, the stub's arc sets off from there.
 //
-// A second view (the film skipped: src/lib/reelVisit.ts) and Back to the
-// start open on the cover already composed and the pass ready: nothing
-// replays. Reduced motion: values, not structure — the words are simply
-// there, the pass too, the stub fades where it is and the page cuts.
+// A second view (the film skipped: src/lib/reelVisit.ts) before the pass has
+// been torn, and Back to the start, open on the cover already composed and
+// the pass ready: nothing replays. Once it has been torn in the session, a
+// second view opens on the globe instead (the way back: this cover is not
+// drawn, HomePage takes it off). Reduced motion: values, not structure —
+// the words are simply there, the pass too, the stub fades where it is and
+// the page cuts.
 //
 // Nothing here reads a rect per frame: the explorer's top once per glide.
 
@@ -290,7 +294,12 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
     };
   }, []);
 
-  const onTear = useCallback(() => setTorn(true), []);
+  const onTear = useCallback(() => {
+    setTorn(true);
+    // Torn once in this session: a later visit opens on the globe
+    // (src/lib/reelVisit.ts, the way back).
+    markPassTorn();
+  }, []);
   const onFree = useCallback(
     ({ face, free }: StubHandover) => {
       // The stub stays with the reader and goes on to stop 01's cover.

@@ -153,6 +153,48 @@ test('back to the first screen goes home, with nothing torn', () => {
   assert.deepEqual(explore(entering, { type: 'leave' }, ORDER).effects, [{ type: 'home' }]);
 });
 
+test('the way back: the explorer as the reader left it, at once — no entry, no descent, nothing torn', () => {
+  // The place that was in hand: the camera cut onto it (its cover up).
+  const back = explore(EXPLORER_START, { type: 'restore', id: 'zion' }, ORDER);
+  assert.deepEqual(back.state, { phase: 'explore', current: 'zion' });
+  assert.deepEqual(back.effects, [{ type: 'restore', id: 'zion' }]);
+  // Nothing in hand (or a place no longer on the map): the planet, free.
+  for (const id of [null, 'atlantis']) {
+    const idle = explore(EXPLORER_START, { type: 'restore', id }, ORDER);
+    assert.deepEqual(idle.state, { phase: 'explore', current: null });
+    assert.deepEqual(idle.effects, []);
+  }
+  // The reader's map at once: any place, the cover's admission.
+  assert.deepEqual(explore(back.state, { type: 'select', id: 'page' }, ORDER).effects, [{ type: 'fly', id: 'page', from: 'zion' }]);
+  assert.deepEqual(explore(back.state, { type: 'open', id: 'zion' }, ORDER).effects.map((e) => e.type), ['tear-stub', 'story']);
+  // Only onto a page not yet entered.
+  const entering = explore(EXPLORER_START, { type: 'enter' }, ORDER).state;
+  assert.deepEqual(explore(entering, { type: 'restore', id: 'zion' }, ORDER).state, entering);
+  assert.deepEqual(explore(back.state, { type: 'restore', id: 'page' }, ORDER).state, back.state);
+  // HomePage: decided before the first paint (html[data-home]), taken up in a
+  // layout effect (never in the first render: the server's markup is the
+  // entrance's), the place kept on every change, the veil lifted once the
+  // map is still (the cut counts as an entry, so the map says when it is
+  // down) — and on a phone that hydrates on the desktop's layout first, the
+  // layout's own re-cut is an entry too.
+  const page = source('src/components/home/HomePage.tsx');
+  assert.match(page, /useLayoutEffect\(\(\) => \{\s*const root = document\.documentElement;\s*if \(root\.dataset\.home !== 'explorer'\) return;/);
+  assert.match(page, /dispatchRef\.current\(\{ type: 'restore', id \}\);/);
+  assert.match(page, /case 'restore':[\s\S]*?nextFlight\('cut', effect\.id, true\);/);
+  assert.match(page, /stop = holdUntilStill\(lift\);/);
+  assert.match(page, /nextFlight\('cut', state\.current, \(entering && !desktopLayout\) \|\| wayBackRef\.current\)/);
+  assert.match(page, /if \(step\.state\.phase !== 'globe' \|\| action\.type === 'leave'\) keepExplorerPlace\(step\.state\.current\);/);
+  assert.match(page, /markPassTorn\(\);/);
+  assert.match(source('src/components/home/EntranceIntro.tsx'), /const onTear = useCallback\(\(\) => \{\s*setTorn\(true\);[\s\S]*?markPassTorn\(\);/);
+  // The first paint: no entrance, the veil up.
+  const css = source('src/styles/entrance.css');
+  assert.match(css, /html\[data-home='explorer'\] \.entrance \{ display: none; \}/);
+  assert.match(css, /html\[data-home='explorer'\] \.home-veil \{\s*opacity: 1;/);
+  // The server draws the map's stand-in itself (no Suspense boundary left
+  // pending in the HTML: a routed page hydrated it as React #419).
+  assert.match(page, /\{client \? \(\s*<Suspense fallback=\{fallback\}>/);
+});
+
 test('the arrow keys step through the places, as the reference\'s do', () => {
   const home = source('src/components/home/HomePage.tsx');
   assert.match(home, /if \(event\.key !== 'ArrowLeft' && event\.key !== 'ArrowRight'\) return;/);

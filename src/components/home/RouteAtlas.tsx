@@ -205,6 +205,8 @@ interface Props {
    *  map and its tones and every route shield (a ticket in transit lies
    *  still over the turning ground, the shields passing under it). */
   onDockHost?: (host: HTMLDivElement | null) => void;
+  /** The map is still with its tiles in (Mapbox's 'idle'), each time. */
+  onSettled?: () => void;
 }
 
 interface ChapterRouteStop {
@@ -772,7 +774,10 @@ export default function RouteAtlas({
   holdReveal = false,
   engage = false,
   onDockHost,
+  onSettled,
 }: Props) {
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
   const classicMapFrameRef = useRef<Process | null>(null);
@@ -3335,7 +3340,10 @@ export default function RouteAtlas({
         // The basemap's labels avoid the places' keep-out (a symbol layer
         // on its own source), so collisions run across sources.
         crossSourceCollisions
-        onIdle={() => setMapSettled(true)}
+        onIdle={() => {
+          setMapSettled(true);
+          onSettledRef.current?.();
+        }}
         onLoad={() => {
           setMapLoaded(true);
           setMapLoadDelayed(false);

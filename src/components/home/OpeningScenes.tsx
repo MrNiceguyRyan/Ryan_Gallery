@@ -1159,10 +1159,10 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
             </Reveal>
             <i className="of-title__cursor" data-title-cursor />
             {/* The name as the film sets it (its letters morph from the
-                typewriter's capitals) … */}
+                typewriter's, struck in the title's case) … */}
             <span className="of-gm of-title__gm" data-gm-unit>
-              <Glyphs face="from" className="of-title__glyphs of-title__glyphs--from of-mono" text={TITLE_NAME.toUpperCase()} />
-              <Glyphs face="to" className="of-title__glyphs of-title__face font-serif" text={TITLE_NAME.toUpperCase()} />
+              <Glyphs face="from" className="of-title__glyphs of-title__glyphs--from of-mono" text={TITLE_NAME} />
+              <Glyphs face="to" className="of-title__glyphs of-title__face font-serif" text={TITLE_NAME} />
             </span>
             {/* … and as a word (what flies home; the still under reduced
                 motion). */}

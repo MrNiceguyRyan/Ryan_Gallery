@@ -1,11 +1,22 @@
-// ── The opening film on a second view ──
+// ── The opening film on a second view, and the way back to the globe ──
 // The film (src/components/home/OpeningFilm.tsx) plays once a session. A
 // later homepage load in the same tab — back from /about or a story, the
-// wordmark from another page, the browser's back button — opens straight on
-// the first screen (the entrance's opening words, EntranceIntro — the globe
-// comes later, once the boarding pass is torn); a RELOAD plays it again (the
-// owner reviews by reloading), and so does a new tab (its sessionStorage is
-// its own).
+// wordmark from another page, the browser's back button — skips it; a RELOAD
+// plays it again (the owner reviews by reloading), and so does a new tab (its
+// sessionStorage is its own).
+//
+// Where such a later load opens (owner, 2026-09-30: 从其他地区回到home的时候，
+// 直接回到地球处，不需要再一次撕开机票了): once the reader has torn the boarding
+// pass in this tab's session (PASS_TORN_KEY, set by the tear), straight on
+// the explorer — the globe, the place last in hand with its cover up
+// (EXPLORER_PLACE_KEY, kept by HomePage), else nothing in hand — under a
+// short veil that lifts once the map is still with its tiles in: no film, no
+// pass, no tear, no descent (`homeOpening`: data-home="explorer" on <html>).
+// Before the tear it opens on the first screen (the entrance's opening words
+// and the pass, EntranceIntro). A reload plays the film, so it opens on the
+// entrance and a new pass: the journey from the start (the owner's way to
+// review it; the film lands its words on the entrance). A new tab: its first
+// view, as ever.
 //
 // The decision is made before the first paint and written on <html>:
 // data-reel="skip" (no film), or data-reel="reel" with data-opening (the
@@ -26,6 +37,10 @@
 // shipped decision to account.
 
 export const REEL_SEEN_KEY = 'rx:reel-seen';
+/** The boarding pass has been torn in this tab's session. */
+export const PASS_TORN_KEY = 'rx:pass-torn';
+/** The explorer's place in hand as the reader left it ('' for none). */
+export const EXPLORER_PLACE_KEY = 'rx:explorer-place';
 
 export type ReelPlan = 'play' | 'skip';
 
@@ -54,6 +69,48 @@ export function restoredScroll(scrollY: number, reelOffset: unknown): number {
  *  going back into the archive, not an arrival: no film. */
 export const DEEP_RESTORE = 0.5;
 
+export type HomeOpening = 'entrance' | 'explorer';
+
+/** Where a homepage load opens: on the entrance (the opening words and the
+ *  pass) or straight on the explorer — only when the film does not play and
+ *  the pass has been torn in this session. */
+export function homeOpening(plan: ReelPlan, torn: boolean): HomeOpening {
+  return plan === 'skip' && torn ? 'explorer' : 'entrance';
+}
+
+/** The place to restore: the one kept, if it is still one of the explorer's
+ *  (`order`), else none. */
+export function restoredPlace(kept: string | null | undefined, order: readonly string[]): string | null {
+  return kept && order.includes(kept) ? kept : null;
+}
+
+/** The pass is torn (the reader is on the way to the globe). */
+export function markPassTorn() {
+  try {
+    sessionStorage.setItem(PASS_TORN_KEY, '1');
+  } catch {
+    // Storage denied: a later visit opens on the entrance again.
+  }
+}
+
+/** Keep the explorer's place in hand (null: nothing in hand). */
+export function keepExplorerPlace(id: string | null) {
+  try {
+    sessionStorage.setItem(EXPLORER_PLACE_KEY, id ?? '');
+  } catch {
+    // Storage denied: the explorer comes back with nothing in hand.
+  }
+}
+
+/** The place kept for this session, raw (null: none). */
+export function keptExplorerPlace(): string | null {
+  try {
+    return sessionStorage.getItem(EXPLORER_PLACE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Mark the film as seen for this tab's session. */
 export function markReelSeen() {
   try {
@@ -65,8 +122,10 @@ export function markReelSeen() {
 
 const source = () =>
   `var REEL_SEEN_KEY=${JSON.stringify(REEL_SEEN_KEY)};` +
+  `var PASS_TORN_KEY=${JSON.stringify(PASS_TORN_KEY)};` +
   `var DEEP_RESTORE=${DEEP_RESTORE};` +
   `var reelPlan=${reelPlan.toString()};` +
+  `var homeOpening=${homeOpening.toString()};` +
   `var restoredScroll=${restoredScroll.toString()};`;
 
 /** index.astro's <head> script: on a full load, decide before the first
@@ -92,6 +151,9 @@ export function reelHeadScript() {
     '}}catch(e){}' +
     "root.setAttribute('data-reel',plan==='skip'?'skip':'reel');" +
     "if(plan==='play')root.setAttribute('data-opening','');" +
+    'var torn=false;' +
+    "try{torn=sessionStorage.getItem(PASS_TORN_KEY)==='1';}catch(e){}" +
+    "if(homeOpening(plan,torn)==='explorer')root.setAttribute('data-home','explorer');" +
     '})();'
   );
 }
@@ -111,6 +173,9 @@ export function reelRouterScript() {
     'var el=e.newDocument.documentElement;' +
     "el.setAttribute('data-reel',plan==='skip'?'skip':'reel');" +
     "if(plan==='play')el.setAttribute('data-opening','');" +
+    'var torn=false;' +
+    "try{torn=sessionStorage.getItem(PASS_TORN_KEY)==='1';}catch(err){}" +
+    "if(homeOpening(plan,torn)==='explorer')el.setAttribute('data-home','explorer');" +
     '});' +
     '})();'
   );
