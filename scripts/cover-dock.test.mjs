@@ -29,8 +29,12 @@ import {
   cueBox,
   dockPoint,
   glideShare,
+  GIVE_WAY,
+  giveWay,
   printStyle,
   rideAt,
+  stepBack,
+  yieldAxis,
   tipPopFrames,
   easeInverse,
   glideAt,
@@ -573,6 +577,210 @@ test('a change of corner rides the ground: the carrier at its own shield, the ar
   assert.deepEqual(rideAt({ x: 0, y: 0 }, { x: 0, y: 100 }, 0.25), { x: 0, y: 25 });
 });
 
+test('a ticket in transit gives way: no shield of its switch ever through it, its seat exact', () => {
+  // Review, 2026-09-29: parked on its seat, the ticket lay across the way of
+  // the shield it goes to (New York → Miami: Miami's 01 came up through the
+  // face and sat on MIAMI for 0.4 s) and of the one it leaves (Bryce's 05
+  // along the stub's foot as it folded). It steps across the shield's run,
+  // to its own side of it, a joint's gap clear — only while the shield runs
+  // level with it — and at the corner itself not at all.
+  const chapters = archiveChapters();
+  const size = { w: 340, h: 172 };
+  for (const quadrant of QUADRANTS) {
+    const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant });
+    for (const chapter of chapters) {
+      const e = plan[chapter.id];
+      assert.deepEqual(e.shield, chapter.shield, 'the plan keeps the shield it drew');
+      const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
+      const at = (foot, axis) => giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis }]);
+      // At its corner: nothing to step for, either way.
+      assert.deepEqual(at(e.point, 'x'), { x: 0, y: 0 }, quadrant);
+      assert.deepEqual(at(e.point, 'y'), { x: 0, y: 0 }, quadrant);
+    }
+  }
+  // Every run into the corner (arriving: the shield it goes to) and out of
+  // it (leaving: the one it leaves), from every side, straight or bowed as a
+  // flight's zoom bows them: never a pixel of the shield on the ticket, the
+  // step eased in (no more than a few px per px of the shield's run), and
+  // nought at the corner.
+  const sq = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
+  for (const quadrant of QUADRANTS) {
+    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant })[chapters[0].id];
+    const F = e.point;
+    const seat = { x: F.x + e.ticket.x, y: F.y + e.ticket.y };
+    for (let deg = 0; deg < 360; deg += 10) {
+      for (const bow of [0, 0.25, -0.25]) {
+        const dir = { x: Math.cos((deg * Math.PI) / 180), y: Math.sin((deg * Math.PI) / 180) };
+        const reach = 1400;
+        // A run from `reach` px off the corner, bowed sideways by `bow`.
+        const along = (k) => ({
+          x: F.x + dir.x * reach * (1 - k) - dir.y * reach * bow * Math.sin(Math.PI * k),
+          y: F.y + dir.y * reach * (1 - k) + dir.x * reach * bow * Math.sin(Math.PI * k),
+        });
+        const travel = { x: -dir.x, y: -dir.y };
+        const axis = yieldAxis(travel);
+        let prev = null;
+        let prevFoot = null;
+        for (let i = 0; i <= 2800; i += 1) {
+          const foot = along(i / 2800);
+          const step = giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis }]);
+          const ticket = { left: seat.x + step.x, top: seat.y + step.y, right: seat.x + step.x + size.w, bottom: seat.y + step.y + size.h };
+          assert.ok(sq(ticket, shieldBox(foot, e.shield)) <= 0.5, `${quadrant} from ${deg}° bow ${bow}: the shield on the ticket at ${i}`);
+          if (prev) {
+            const moved = Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y);
+            const stepped = Math.hypot(step.x - prev.x, step.y - prev.y);
+            assert.ok(stepped <= 4 * moved + 0.3, `${quadrant} from ${deg}° bow ${bow}: a jump of ${stepped.toFixed(1)} px for ${moved.toFixed(1)} of run`);
+          }
+          prev = step;
+          prevFoot = foot;
+        }
+        assert.deepEqual(prev, { x: 0, y: 0 }, `${quadrant} from ${deg}°: nought at the corner`);
+      }
+    }
+  }
+  // The shield it leaves: from the corner out along every run, straight or
+  // bowed, at the ground's speed (1 px/ms) — stepped for only while it runs
+  // level with the ticket, never a pixel on it, and let go of at a walk
+  // (`stepBack`), never a jump.
+  for (const quadrant of QUADRANTS) {
+    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant })[chapters[0].id];
+    const F = e.point;
+    const seat = { x: F.x + e.ticket.x, y: F.y + e.ticket.y };
+    for (let deg = 0; deg < 360; deg += 10) {
+      for (const bow of [0, 0.2, -0.2]) {
+        const dir = { x: Math.cos((deg * Math.PI) / 180), y: Math.sin((deg * Math.PI) / 180) };
+        const along = (k) => ({
+          x: F.x + dir.x * 1400 * k - dir.y * 1400 * bow * Math.sin(Math.PI * k),
+          y: F.y + dir.y * 1400 * k + dir.x * 1400 * bow * Math.sin(Math.PI * k),
+        });
+        const axis = yieldAxis(dir);
+        let prev = null;
+        let prevFoot = null;
+        for (let i = 0; i <= 2800; i += 1) {
+          const foot = along(i / 2800);
+          const need = giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis, leaving: true }]);
+          const step = stepBack(prev, need, prevFoot ? Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y) : 0);
+          if (i === 0) assert.deepEqual(step, { x: 0, y: 0 }, `${quadrant} leaving ${deg}°: nothing to step for at the corner`);
+          const ticket = { left: seat.x + step.x, top: seat.y + step.y, right: seat.x + step.x + size.w, bottom: seat.y + step.y + size.h };
+          assert.ok(sq(ticket, shieldBox(foot, e.shield)) <= 0.5, `${quadrant} leaving ${deg}° bow ${bow}: the shield on the ticket at ${i}`);
+          if (prev) {
+            const moved = Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y);
+            const stepped = Math.hypot(step.x - prev.x, step.y - prev.y);
+            assert.ok(stepped <= 4 * moved + 0.3, `${quadrant} leaving ${deg}° bow ${bow}: a jump of ${stepped.toFixed(1)} px for ${moved.toFixed(1)} of run`);
+          }
+          prev = step;
+          prevFoot = foot;
+        }
+      }
+    }
+  }
+  {
+    // A neighbour left behind that comes to rest just past the ticket's foot
+    // (Zion under Bryce Canyon's ticket) is not stepped from; one coming on
+    // (the place gone to) is leant into from as far.
+    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant: 'tl' })[chapters[4].id];
+    const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
+    const foot = { x: seat.x + size.w - 30, y: seat.y + size.h + 60 + e.shield.h };
+    assert.deepEqual(giveWay(seat, size, [{ foot, shield: e.shield, quadrant: 'bl', axis: 'x', leaving: true }]), { x: 0, y: 0 });
+    assert.ok(giveWay(seat, size, [{ foot, shield: e.shield, quadrant: 'bl', axis: 'x' }]).x < -20);
+  }
+  // Across the run: a shield that comes up or down → the ticket steps
+  // sideways; one that comes across → up or down.
+  assert.equal(yieldAxis({ x: 314, y: -2042 }), 'x');
+  assert.equal(yieldAxis({ x: 1892, y: 49 }), 'y');
+  // The place gone to may stand anywhere as the cover starts to fold: its
+  // way is leant into (weight 0 → 1), the place left's is not (it starts at
+  // its own corner).
+  const e = plan[chapters[0].id];
+  const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
+  const beside = { x: seat.x + 200, y: seat.y + 60 };
+  const full = giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x' }]);
+  assert.ok(full.x < -10);
+  assert.deepEqual(giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x', weight: 0 }]), { x: 0, y: 0 });
+  assert.equal(giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x', weight: 0.5 }]).x, Math.round(full.x * 5) / 10);
+  // Two shields asking for the same side share one step (the further).
+  const two = giveWay(seat, size, [
+    { foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x' },
+    { foot: { x: beside.x - 40, y: beside.y }, shield: e.shield, quadrant: e.quadrant, axis: 'x' },
+  ]);
+  assert.ok(two.x <= full.x && two.x >= full.x - 41);
+  // Out at once, back at a walk (GIVE_WAY.backPxMs): a shield leaving at the
+  // ground's speed let the ticket spring back faster than its own shield.
+  assert.deepEqual(stepBack(null, { x: -40, y: 0 }, 16), { x: -40, y: 0 });
+  assert.deepEqual(stepBack({ x: -20, y: 0 }, { x: -60, y: 0 }, 16), { x: -60, y: 0 });
+  assert.deepEqual(stepBack({ x: 0, y: 0 }, { x: -60, y: 45 }, 16), { x: -60, y: 45 }, 'out from nothing: at once');
+  assert.deepEqual(stepBack({ x: -60, y: 10 }, { x: 0, y: 0 }, 10), { x: -60 + 10 * GIVE_WAY.backPxMs, y: 10 - 10 * GIVE_WAY.backPxMs });
+  assert.deepEqual(stepBack({ x: -2, y: 0 }, { x: 30, y: 0 }, 16), { x: 30, y: 0 });
+  assert.deepEqual(stepBack({ x: -30, y: 0 }, { x: 30, y: 0 }, 16), { x: -30 + 16 * GIVE_WAY.backPxMs, y: 0 });
+  // …but home by the time the cover is open: with 40 ms left, a 100 px step
+  // goes 16/40 of the way this frame, and the rest by then.
+  assert.deepEqual(stepBack({ x: -100, y: 0 }, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 40), { x: -60, y: 0 });
+  assert.deepEqual(stepBack({ x: -100, y: 0 }, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 10), { x: 0, y: 0 });
+  {
+    let was = { x: -120, y: 30 };
+    for (let t = 0; t < 400; t += 16) was = stepBack(was, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 400 - t);
+    assert.deepEqual(was, { x: 0, y: 0 });
+  }
+  assert.ok(GIVE_WAY.backPxMs <= 0.5 && GIVE_WAY.reach >= 200);
+});
+
+test('wiring: the travelling ticket gives way on its glide; only the place in hand is lifted over it', () => {
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const css = source('src/styles/global.css');
+  // Both glides (lying still or gliding; riding the ground to a new corner)
+  // give way, off the shields' feet as the atlas projects them.
+  assert.match(atlas, /const axis = yieldAxis\(travel\);/);
+  assert.match(atlas, /const travel = footTo \? \{ x: to\.x - footTo\.x, y: to\.y - footTo\.y \} : \{ x: 0, y: 0 \};/);
+  assert.match(atlas, /const want = giveWay\(base, \{ w: destEntry\.ticketW, h: destEntry\.ticketH \}, yieldTo\(t, points, riding\)\);/);
+  assert.match(atlas, /const step = stepBack\(was\?\.step \?\? null, need, was \? t - was\.t : 0, GIVE_WAY\.backPxMs, home - t\);/);
+  assert.match(atlas, /const touchdown = now \+ durationMs;/);
+  assert.equal((atlas.match(/, expand, Math\.max\(expand, touchdown\)\)/g) ?? []).length, 2);
+  // Down by the touchdown whatever it gave way for (the covers at rest are
+  // clear of every shield by the plan).
+  assert.match(atlas, /const down = 1 - smoothstep01\(\(t - expand\) \/ Math\.max\(1, home - expand\)\);/);
+  assert.match(atlas, /\.\.\.giving\(\(t, points\) => \{/);
+  assert.match(atlas, /\{ \.\.\.giving\(\(\(g\) => \(t: number\) => g\(t - now\)\)\(ticketGlide\(lies, seatTo, relay - now, expand - now, easing, durationMs\)\), false, expand, Math\.max\(expand, touchdown\)\), until: expand \}/);
+  // A new choice mid-way takes up where the ticket lay before it gave way
+  // and the step it had taken (never baked into where it lies).
+  assert.match(atlas, /\? \(held\.base \?\? held\.at\)\(now, seen\)/);
+  assert.match(atlas, /let was: \{ step: Point; t: number \} \| null = heldStep \? \{ step: heldStep, t: now \} : null;/);
+  // The place gone to leant into over the fold; the one left while lying
+  // still (a riding ticket rides).
+  assert.match(atlas, /const leanFrom = leaning \? leaning\.t0 : now;/);
+  assert.match(atlas, /out\.push\(mode === 'self'\s+\? \{ foot: b, shield: destEntry\.shield, quadrant: destEntry\.quadrant, axis, leaving: true \}/);
+  assert.match(atlas, /const leanMs = Math\.max\(TICKET_FOLD_MS, \(leaning \? leaning\.relayAt : relayAt\) - leanFrom\);/);
+  assert.match(atlas, /if \(a && carrierEntry && !riding\) out\.push\(\{ foot: a, shield: carrierEntry\.shield, quadrant: carrierEntry\.quadrant, axis, leaving: true \}\);/);
+  // (Not the ticket under a new one laid on in transit: it never came to
+  // its corner, and its shield may stand across the ticket from its side.)
+  assert.match(atlas, /const a = carrier && carrier !== destId && mode !== 'lay' \? points\[carrier\] : null;/);
+  // Only the place in hand's shield comes over the covers while a ticket
+  // travels; every other passes under.
+  assert.match(css, /\.route-atlas\[data-shields-over\] \{\s*--shields-over: 30;\s*\}/);
+  assert.match(atlas, /pose\.marker\.style\.zIndex = rank === 2 \? `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)` : String\(z\);/);
+});
+
+test('a press on a shield in flight is its click, never the reader taking the map', () => {
+  // Review, 2026-09-29: the destination's own shield clicked again from the
+  // relay on — Mapbox ended the flight on the press (its pan goes active on
+  // mousedown), the reader's hand (`land(false)`) pulled the opening in to
+  // that instant, and the click's own choice found it "already opening":
+  // the tip popped with a second of flight to run.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /const pressTarget = map\.getCanvasContainer\(\);/);
+  assert.match(atlas, /const holdShieldPress = \(event: Event\) => \{\s*if \(!flying \|\| flying\.kind === 'home'\) return;\s*if \(\(event\.target as Element \| null\)\?\.closest\?\.\('\.place-shield__sign'\)\) event\.stopPropagation\(\);\s*\};/);
+  assert.match(atlas, /pressTarget\.addEventListener\('mousedown', holdShieldPress, true\);/);
+  assert.match(atlas, /pressTarget\.addEventListener\('touchstart', holdShieldPress, \{ capture: true, passive: true \}\);/);
+  assert.match(atlas, /pressTarget\.removeEventListener\('mousedown', holdShieldPress, true\);/);
+  assert.match(atlas, /pressTarget\.removeEventListener\('touchstart', holdShieldPress, true\);/);
+  // The reader's own press on the map (not a shield) still takes it.
+  assert.match(atlas, /if \(!arrived\) retimeOnTake\(\);/);
+  // Mapbox's pan still goes active on the press itself (why it must not
+  // reach it).
+  const mapbox = readFileSync(new URL('../node_modules/mapbox-gl/dist/mapbox-gl-dev.js', import.meta.url), 'utf8');
+  assert.match(mapbox, /class MousePanHandler extends MouseHandler \{\s*mousedown\(e, point\) \{\s*super\.mousedown\(e, point\);\s*if \(this\._lastPoint\) this\._active = true;/);
+});
+
 test('a switch keeps the ticket where it lies: its own pin for each cover, the relay a cut, nothing re-placed per frame', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const chapter = source('src/components/home/ArchiveChapter.tsx');
@@ -723,14 +931,15 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(chapter, /dock\.style\.transform = `translate3d\(\$\{point\.x\}px, \$\{point\.y\}px, 0\)`/);
   assert.match(chapter, /data-cover-for=\{id\}/);
   assert.match(chapter, /createPortal\(/);
-  // The desktop's dock is a layer of the atlas's own (under its shields
-  // while a ticket travels); the phone's is the page's.
+  // The desktop's dock is a layer of the atlas's own (under the place in
+  // hand's own shield while a ticket travels, over every other shield);
+  // the phone's is the page's.
   assert.match(home, /onDockHost=\{desktopLayout \? setDockHost : undefined\}/);
   assert.match(atlas, /\{!mobile && onDockHost && <div ref=\{onDockHost\} className="archive-dock-host archive-dock-host--atlas" \/>\}/);
   assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host archive-dock-host--phone" data-let-go=\{letGo \? '' : undefined\} \/>/);
   assert.match(css, /\.archive-dock-host--atlas \{\s*z-index: 25;\s*\}/);
   assert.match(css, /\.route-atlas\[data-shields-over\] \{\s*--shields-over: 30;\s*\}/);
-  assert.match(atlas, /pose\.marker\.style\.zIndex = `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)`;/);
+  assert.match(atlas, /pose\.marker\.style\.zIndex = rank === 2 \? `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)` : String\(z\);/);
   assert.match(atlas, /const ticketing = \(!!sw && now < sw\.expandAt\) \|\| \(!!arrive && now >= arrive\.inkAt && now < arrive\.expandAt\);/);
   // The place in hand's rail shows with its cover (the dock's frame).
   assert.match(home, /coverDock\.subscribe\(\(frame\) => \{/);
@@ -763,7 +972,42 @@ test('the joint is a gap and a caret, never a line across it', () => {
     const rule = new RegExp(`\\.archive-dock\\[data-quadrant='${quadrant}'\\] \\.archive-plate__caret \\{[^}]*clip-path: polygon\\(`);
     assert.match(css, rule, quadrant);
   }
-  assert.match(css, /\.archive-plate__caret\[data-half='stub'\] \{\s*background: var\(--stub-paper/);
+  assert.match(css, /\.archive-plate__caret\[data-half='stub'\] \{\s*color: var\(--stub-paper/);
+  // Its two outer sides carry a hairline of the sign's own enamel rule, so it
+  // reads on any ground (Bryce Canyon's brown tip was lost on the brown
+  // desert): the element is the rule's colour cut to the tip, the card's
+  // stock (its `color`) the tip cut 1 px inside the two outer sides — the
+  // plate's own edges keep no line.
+  const rule = css.match(/\.archive-ticket-sign \{[^}]*box-shadow: inset 0 0 0 1\.5px (rgba\([^)]+\));/)[1];
+  assert.match(css, new RegExp(`\\.archive-plate__caret \\{[^}]*background: ${rule.replace(/[()]/g, '\\$&')};\\s*color: #0f120d;`));
+  assert.match(css, /\.archive-plate__caret::before \{\s*content: '';\s*position: absolute;\s*inset: 0;\s*background: currentColor;/);
+  const inner = { bl: '8px 13.76px, 8px 8px, 2.24px 8px, 13.76px 2.24px', tl: '8px 2.24px, 8px 8px, 2.24px 8px, 13.76px 13.76px', br: '8px 13.76px, 8px 8px, 13.76px 8px, 2.24px 2.24px', tr: '8px 2.24px, 8px 8px, 13.76px 8px, 2.24px 13.76px' };
+  for (const quadrant of QUADRANTS) {
+    assert.ok(css.includes(`.archive-dock[data-quadrant='${quadrant}'] .archive-plate__caret::before {\n  clip-path: polygon(${inner[quadrant]});`), quadrant);
+  }
+  // The inner cut is the tip's two outer sides moved in by 1 px (the rule),
+  // meeting the plate's edges: derived for below-left, mirrored for the rest.
+  {
+    const e1 = { a: { x: 0, y: 8 }, b: { x: 16, y: 0 } };
+    const e2 = { a: { x: 16, y: 0 }, b: { x: 8, y: 16 } };
+    const inward = (e, towards) => {
+      const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, l = Math.hypot(dx, dy);
+      let n = { x: -dy / l, y: dx / l };
+      const m = { x: (e.a.x + e.b.x) / 2, y: (e.a.y + e.b.y) / 2 };
+      if ((towards.x - m.x) * n.x + (towards.y - m.y) * n.y < 0) n = { x: -n.x, y: -n.y };
+      return { a: { x: e.a.x + n.x, y: e.a.y + n.y }, b: { x: e.b.x + n.x, y: e.b.y + n.y } };
+    };
+    const i1 = inward(e1, { x: 8, y: 8 });
+    const i2 = inward(e2, { x: 8, y: 8 });
+    const at = (e, k) => ({ x: e.a.x + (e.b.x - e.a.x) * k, y: e.a.y + (e.b.y - e.a.y) * k });
+    const onY8 = at(i1, (8 - i1.a.y) / (i1.b.y - i1.a.y));
+    const onX8 = at(i2, (8 - i2.a.x) / (i2.b.x - i2.a.x));
+    const d = (i1.b.x - i1.a.x) * (i2.b.y - i2.a.y) - (i1.b.y - i1.a.y) * (i2.b.x - i2.a.x);
+    const k = ((i2.a.x - i1.a.x) * (i2.b.y - i2.a.y) - (i2.a.y - i1.a.y) * (i2.b.x - i2.a.x)) / d;
+    const tip = at(i1, k);
+    const r = (n) => Number(n.toFixed(2));
+    assert.deepEqual([r(onX8.y), r(onY8.x), r(tip.x), r(tip.y)], [13.76, 2.24, 13.76, 2.24]);
+  }
   // The tip reads at 1728 (a 4 px nub on the map did not): a 16 px box cut
   // 8 px into the plate, 8 px out each way — the gap's own depth, at 45°.
   assert.match(css, /\.archive-plate__caret \{\s*position: absolute;\s*z-index: 2;\s*width: 16px;\s*height: 16px;/);

@@ -29,7 +29,7 @@ const explorer = await bundle('../src/lib/explorer.ts');
 const camera = await bundle('../src/lib/explorerCamera.ts');
 const look = await bundle('../src/lib/globeLook.ts');
 const order = await bundle('../src/lib/chapterOrder.ts');
-const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, phoneStubRect, PHONE_CARD, ENTRY_LANDED_EVENT, STUB_LANDED_EVENT, STUB_WAIT_MS } = explorer;
+const { EXPLORER_START, explore, neighbour, stopOne, phoneCard, phoneFocalY, phoneStubRect, phoneTicketScale, PHONE_CARD, ENTRY_LANDED_EVENT, STUB_LANDED_EVENT, STUB_WAIT_MS } = explorer;
 const { ENTRY, ENTRY_PEAK, EXPLORE_PITCH, FLIGHT, READER_ZOOM, SWITCH, entryEase, entryEaseRate, entryEaseInverse, entryFrame, entryStartZoom, entryZoomRate, flightPath, flightSpeeds, phoneEntryMs, planFlight, switchLift, switchMs } = camera;
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
@@ -101,7 +101,9 @@ test('a switch can be interrupted: a new choice mid-turn turns on from there', (
   // carries by phase (src/lib/coverDock.ts, "The switch"), never stacking;
   // the same place with nothing under way is pinned back to its dock.
   assert.match(atlas, /pinRef\.current = \{ from: written \?\? to, to, t0: now, ms: durationMs, ease: easing \};/);
-  assert.match(atlas, /const lies = glideRef\.current\s+\? glideRef\.current\.at\(now, seen\)/);
+  // (Where it lay before it gave way to its shields, the step it had taken
+  // carried on: coverDock `giveWay`.)
+  assert.match(atlas, /const held = glideRef\.current;\s+const lies = held\s+\? \(held\.base \?\? held\.at\)\(now, seen\)/);
   assert.match(atlas, /from: carrier,\s+to: destId,\s+mode,/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // An arriving ticket that becomes the carrier holds (in transit) or folds
@@ -217,6 +219,52 @@ test('the phone\'s card fits the screen, its type legible, the place above it', 
     assert.ok(Math.abs(rect.y + rect.h - (844 - PHONE_CARD.dockBottom - PHONE_CARD.below)) < 0.01);
     assert.ok(Math.abs(rect.h - card.photoH * card.scale) < 0.01);
   }
+});
+
+test("the phone's switch: every card folds into one ticket size, never swells, and the next grows out of it", async () => {
+  // Review, 2026-09-29: Miami → Orlando's card grew 25 px taller as it
+  // "shrank" into its ticket (it came to Orlando's larger scale), and
+  // Orlando → Page only cropped its foot. One ticket size on the screen for
+  // every hop: the smallest card's scale.
+  const { coverRatioOf } = await bundle('../src/lib/coverDock.ts');
+  const chapters = order.chapterSections(order.activeChapters(collections)).flatMap((section) => section.cities);
+  const ratios = chapters.map((city) => coverRatioOf(city.coverImageUrl ?? city.photos?.[0]?.imageUrl) ?? 1.5);
+  assert.equal(ratios.length, 6);
+  for (const [vw, vh] of [[390, 844], [375, 667], [430, 932], [320, 568]]) {
+    const scale = phoneTicketScale(vw, vh, ratios);
+    const cards = ratios.map((ratio) => phoneCard(vw, vh, ratio));
+    assert.equal(scale, Math.min(...cards.map((card) => card.scale)));
+    assert.ok(scale >= PHONE_CARD.minScale);
+    for (const card of cards) {
+      // The ticket (the stub's head and a strip of the face, card px) on the
+      // screen: one size for every card, never larger than the card it is
+      // folded from — nor than that card's own ticket at its own scale.
+      const w = Math.min(150, card.photoW) + PHONE_CARD.stub;
+      const h = Math.min(card.photoH, 172);
+      assert.ok(w * scale <= (card.photoW + PHONE_CARD.stub) * card.scale + 0.01);
+      assert.ok(h * scale <= card.photoH * card.scale + 0.01);
+      assert.ok(w * scale <= w * card.scale + 0.01 && h * scale <= h * card.scale + 0.01);
+    }
+  }
+  const scale = phoneTicketScale(390, 844, ratios);
+  assert.equal(scale, 0.72);
+  assert.deepEqual([Math.round(340 * scale), Math.round(172 * scale)], [245, 124]);
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  // The atlas hands every switch the one scale; the carrier comes to it at
+  // the arriving card's corner as it folds; the arriving card waits at it
+  // and grows out of it to its own as it opens.
+  assert.match(atlas, /ticketScale: phoneTicketScale\(window\.innerWidth, window\.innerHeight, chapterRoute\.map\(\(entry\) => entry\.stop\.coverRatio \?\? 1\.5\)\),/);
+  assert.match(chapter, /const k = ticketK\(scale, dest\);/);
+  assert.match(chapter, /Math\.min\(scale \?\? Math\.min\(card\.scale, other\?\.scale \?\? card\.scale\), card\.scale\) \/ card\.scale/);
+  assert.match(chapter, /phoneGrow\(play, sw\.ticketScale, sw\.expandAt, !play\.carry\);/);
+  assert.match(chapter, /play\.grow = startAt\(cover\.animate\(\[ticketTransform\(k\), ticketTransform\(1\)\], \{ duration: TICKET_EXPAND_MS, easing: CSS_EASE\.plane,/);
+  assert.match(chapter, /TICKET_EXPAND_MS,\n  TICKET_FOLD_MS,/);
+  // Every carry is to the one ticket size (never the arriving card's own).
+  assert.doesNotMatch(chapter, /const k = dest\.scale \/ card\.scale;/);
+  const carries = chapter.match(/(?<!const )phoneCarry\([^;]*;/g) ?? [];
+  assert.equal(carries.length, 5);
+  for (const call of carries) assert.match(call, /, sw\.ticketScale\);$/, call);
 });
 
 // ── The camera's calm ──

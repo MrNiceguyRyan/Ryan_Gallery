@@ -24,6 +24,7 @@ import {
   ARRIVAL,
   DOCK,
   TICKET,
+  TICKET_EXPAND_MS,
   TICKET_FOLD_MS,
   afterOpening,
   awaySide,
@@ -535,8 +536,11 @@ function ArchiveChapter({
     print: Animation | null;
     /** The arriving miniature dissolving in over the one under it. */
     dissolve: Animation | null;
-    /** The phone's card coming to the arriving card's scale as it folds. */
+    /** The phone's card coming to the one ticket size as it folds (or, laid
+     *  on a ticket in transit, from that ticket to its own place)… */
     carry: Animation | null;
+    /** …and, arriving, growing out of it to its own size as it opens. */
+    grow: Animation | null;
     tip: Animation | null;
     timers: number[];
     relayed: boolean;
@@ -606,7 +610,7 @@ function ArchiveChapter({
     print?.style.removeProperty('transform');
     print?.style.removeProperty('opacity');
     caret?.style.removeProperty('transform');
-    if (phone && play?.carry) {
+    if (phone && (play?.carry || play?.grow)) {
       cover?.style.removeProperty('transform');
       cover?.style.removeProperty('transform-origin');
     }
@@ -641,7 +645,7 @@ function ArchiveChapter({
     play.anims.forEach((anim) => { if (anim.playState !== 'finished') holdNow(anim); });
   };
   const newPlay = (kind: Play['kind'], key: number, role: Play['role'], mode: Play['mode'], cutAt = 0): Play => {
-    const play: Play = { kind, key, role, mode, anims: [], plate: null, print: null, dissolve: null, carry: null, tip: null, timers: [], relayed: false, cut: false, cutAt, inked: false };
+    const play: Play = { kind, key, role, mode, anims: [], plate: null, print: null, dissolve: null, carry: null, grow: null, tip: null, timers: [], relayed: false, cut: false, cutAt, inked: false };
     playRef.current = play;
     return play;
   };
@@ -746,7 +750,8 @@ function ArchiveChapter({
     const caret = plate.querySelector<HTMLElement>('.archive-plate__caret[data-half="stub"]');
     const band = plate.querySelector<SVGElement>('.archive-ticket-sign__shield .route-shield__band');
     if (stub) play.anims.push(startAt(stub.animate([{ backgroundColor: from }, { backgroundColor: to }], timing), time));
-    if (caret) play.anims.push(startAt(caret.animate([{ backgroundColor: from }, { backgroundColor: to }], timing), time));
+    // (The caret's stock is its `color`: its edge is the sign's rule.)
+    if (caret) play.anims.push(startAt(caret.animate([{ color: from }, { color: to }], timing), time));
     if (band) play.anims.push(startAt(band.animate([{ fill: from }, { fill: to }], timing), time));
   };
   // The sign's rule starts at the carrier's name lines (a one-line and a
@@ -770,35 +775,58 @@ function ArchiveChapter({
     play.anims.push(rule);
   };
   // The phone's cards stand centred at the foot of the screen, each at its
-  // own scale. The carrier comes down (or up) to the arriving card's scale
-  // AS IT FOLDS — about its ticket's corner, the card's bottom-right, which
-  // it brings onto the arriving one's — so the relay lays one card's ticket
-  // on the other's exactly and the transit holds one size (arrive, then
-  // open). DERIVED from the two cards; from where it stands, if it was
-  // already moving.
-  const phoneCarry = (play: Play, toRatio: number | undefined, time: number, ms: number) => {
+  // own scale. A switch folds every card into ONE ticket size on the screen
+  // (`ticketScale`, the smallest card's: src/lib/explorer.ts,
+  // phoneTicketScale) — a card larger than it shrinks to it AS IT FOLDS,
+  // about its ticket's corner (the card's bottom-right), which it brings
+  // onto the arriving card's; a card at it stays as it is. The arriving card
+  // waits at that same size on its own corner, so the relay lays one ticket
+  // on the other exactly and the transit holds one size, then grows out of
+  // it to its own size as it opens (arrive, then open). Never a card grown
+  // to a larger one's scale on its way into a ticket (review, 2026-09-29:
+  // Miami's card swelled 25 px taller "shrinking" to Orlando's). DERIVED
+  // from the cards; from where it stands, if it was already moving.
+  const ticketK = (scale: number | undefined, other?: PhoneCard) =>
+    (card ? Math.min(scale ?? Math.min(card.scale, other?.scale ?? card.scale), card.scale) / card.scale : 1);
+  const ticketTransform = (k: number, dx = 0) => ({ transform: `translate(${dx.toFixed(2)}px, 0px) scale(${k.toFixed(4)})`, transformOrigin: '100% 100%' });
+  const phoneCarry = (play: Play, toRatio: number | undefined, time: number, ms: number, scale: number | undefined) => {
     const { cover } = parts();
     if (!phone || !card || !cover || !toRatio) return;
     const dest = phoneCard(window.innerWidth, window.innerHeight, toRatio);
-    const k = dest.scale / card.scale;
+    const k = ticketK(scale, dest);
     const dx = ((dest.photoW + TICKET_STUB) * dest.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 / card.scale;
-    const to = { transform: `translate(${dx.toFixed(2)}px, 0px) scale(${k.toFixed(4)})`, transformOrigin: '100% 100%' };
+    const to = ticketTransform(k, dx);
     // (Still moving, or holding where it came to: from there.)
-    const running = play.carry && play.carry.playState !== 'idle' ? play.carry : null;
-    if (running) {
-      try { running.commitStyles(); } catch { /* from rest */ }
-      running.cancel();
+    const running = [play.carry, play.grow].filter((anim): anim is Animation => !!anim && anim.playState !== 'idle');
+    if (running.length) {
+      running.forEach((anim) => {
+        try { anim.commitStyles(); } catch { /* from rest */ }
+        anim.cancel();
+      });
+      play.grow = null;
     } else if (Math.abs(k - 1) < 1e-3 && Math.abs(dx) < 0.25) return;
-    const frames = running ? [to] : [{ transform: 'translate(0px, 0px) scale(1)', transformOrigin: '100% 100%' }, to];
+    const frames = running.length ? [to] : [ticketTransform(1), to];
     play.carry = startAt(cover.animate(frames, { duration: Math.max(1, ms), easing: CSS_EASE.plane, fill: 'forwards' }), time);
     play.anims.push(play.carry);
+  };
+  // The arriving card grows out of the ticket to its own size as it opens
+  // (`time`: the opening; `hold`: at the ticket's size until then — else
+  // whatever brought it there holds it).
+  const phoneGrow = (play: Play, scale: number | undefined, time: number, hold: boolean) => {
+    const { cover } = parts();
+    if (!phone || !card || !cover) return;
+    const k = ticketK(scale);
+    if (Math.abs(k - 1) < 1e-3) return;
+    play.grow = startAt(cover.animate([ticketTransform(k), ticketTransform(1)], { duration: TICKET_EXPAND_MS, easing: CSS_EASE.plane, fill: hold ? 'both' : 'forwards' }), time);
+    play.anims.push(play.grow);
   };
   // A card laid on a ticket still in transit (a new choice mid-transit):
   // it starts at the size and place that ticket has on the screen now (one
   // read of its transform, at the relay, as its stock is read), holds it
   // while its picture dissolves in over the one under it, and comes to its
-  // own over a fold's length once that one is gone.
-  const phoneLay = (play: Play, under: HTMLElement | null, fromRatio: number | undefined, time: number) => {
+  // own ticket's place over a fold's length once that one is gone (the
+  // same size: only the corner moves, if the cards differ in width).
+  const phoneLay = (play: Play, under: HTMLElement | null, fromRatio: number | undefined, time: number, scale: number | undefined) => {
     const { cover } = parts();
     const below = under?.querySelector<HTMLElement>('.archive-dock__cover') ?? null;
     if (!phone || !card || !cover || !below || !fromRatio) return;
@@ -810,12 +838,10 @@ function ArchiveChapter({
     const out = phoneCard(window.innerWidth, window.innerHeight, fromRatio);
     const k = (m.a * out.scale) / card.scale;
     const dx = (((out.photoW + TICKET_STUB) * out.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 + m.e * out.scale) / card.scale;
-    if (Math.abs(k - 1) < 1e-3 && Math.abs(dx) < 0.25) return;
+    const own = ticketK(scale);
+    if (Math.abs(k - own) < 1e-3 && Math.abs(dx) < 0.25) return;
     play.carry = startAt(cover.animate(
-      [
-        { transform: `translate(${dx.toFixed(2)}px, 0px) scale(${k.toFixed(4)})`, transformOrigin: '100% 100%' },
-        { transform: 'translate(0px, 0px) scale(1)', transformOrigin: '100% 100%' },
-      ],
+      [ticketTransform(k, dx), ticketTransform(own)],
       { duration: TICKET_FOLD_MS, easing: CSS_EASE.plane, fill: 'both' },
     ), time + TICKET.dissolveMs);
     play.anims.push(play.carry);
@@ -831,10 +857,12 @@ function ArchiveChapter({
       play.inked = true;
     });
     later(play, beats.expandEnd, () => {
-      [play.plate, play.print].forEach((anim) => anim?.cancel());
-      play.anims = play.anims.filter((anim) => anim !== play.plate && anim !== play.print);
+      [play.plate, play.print, play.carry, play.grow].forEach((anim) => anim?.cancel());
+      play.anims = play.anims.filter((anim) => anim !== play.plate && anim !== play.print && anim !== play.carry && anim !== play.grow);
       play.plate = null;
       play.print = null;
+      play.carry = null;
+      play.grow = null;
     });
     later(play, extrasAt, () => {
       dock?.removeAttribute('data-switch');
@@ -875,8 +903,11 @@ function ArchiveChapter({
     if (sw.mode === 'lay') {
       const stub = leaving?.querySelector<HTMLElement>('.archive-ticket-stub');
       if (stub) fromStock = getComputedStyle(stub).backgroundColor || fromStock;
-      phoneLay(play, leaving, sw.fromRatio, sw.relayAt);
+      phoneLay(play, leaving, sw.fromRatio, sw.relayAt, sw.ticketScale);
     }
+    // (The phone's card: at the ticket's size from the relay — or brought
+    // there from the ticket it is laid on — and grown to its own as it opens.)
+    phoneGrow(play, sw.ticketScale, sw.expandAt, !play.carry);
     expandPlate(play, form, sw.expandAt, true);
     dissolveIn(play, sw.relayAt);
     play.tip = popTip(play, sw.tipAt);
@@ -897,6 +928,7 @@ function ArchiveChapter({
     if (play.mode !== 'self' || play.relayed) {
       [play.plate, play.print].forEach((anim) => { if (alive(anim)) anim.startTime = sw.expandAt; });
     }
+    if (alive(play.grow)) play.grow.startTime = sw.expandAt;
     if (play.tip) play.tip.startTime = sw.tipAt;
     openAndTip(play, sw);
   };
@@ -944,7 +976,7 @@ function ArchiveChapter({
       dock.removeAttribute('data-arrived');
       if (reduce || !form) return;
       retractTip(was, now);
-      phoneCarry(was, sw.toRatio, now, Math.max(1, sw.relayAt - now));
+      phoneCarry(was, sw.toRatio, now, Math.max(1, sw.relayAt - now), sw.ticketScale);
       return;
     }
     if (sw.mode === 'fold' || !was) {
@@ -954,7 +986,7 @@ function ArchiveChapter({
       if (reduce || !form) return;
       retractTip(play, now);
       foldPlate(play, form, now + TICKET.foldAt, 'fold');
-      phoneCarry(play, sw.toRatio, now + TICKET.foldAt, TICKET_FOLD_MS);
+      phoneCarry(play, sw.toRatio, now + TICKET.foldAt, TICKET_FOLD_MS, sw.ticketScale);
       return;
     }
     // It was arriving: it carries now.
@@ -970,14 +1002,14 @@ function ArchiveChapter({
       // strip) — its own picture whole at once, so the one it was laid on
       // can go from under it unseen.
       was.dissolve?.finish();
-      [was.plate, was.print, was.tip, was.carry].forEach((anim) => { if (alive(anim)) holdNow(anim); });
+      [was.plate, was.print, was.tip, was.carry, was.grow].forEach((anim) => { if (alive(anim)) holdNow(anim); });
       return;
     }
     // 'back': folds back from where it is, its tip in first, by the relay.
     const ms = Math.max(1, sw.relayAt - now);
     retractTip(was, now);
     foldPlate(was, form, now, 'fold', ms);
-    phoneCarry(was, sw.toRatio, now, ms);
+    phoneCarry(was, sw.toRatio, now, ms, sw.ticketScale);
   };
   // Turned back to before its relay (A → B → A): the carrier is the arriving
   // cover, in place — no relay to another, no roll — held as a ticket (its
@@ -997,8 +1029,10 @@ function ArchiveChapter({
     dock.removeAttribute('data-leaving');
     dock.setAttribute('data-switch', 'in');
     dock.setAttribute('data-ticket', '');
-    // (The phone's card, coming to the other card's scale, comes back to its own.)
-    if (alive(was.carry)) phoneCarry(was, cardRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()));
+    // (The phone's card, on its way to the other card's corner, comes back to
+    // its own at the ticket's size, and grows out of it as it opens.)
+    phoneCarry(was, cardRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()), sw.ticketScale);
+    phoneGrow(was, sw.ticketScale, sw.expandAt, !was.carry);
     popTip(was, sw.tipAt);
     openAndTip(was, sw);
   };
@@ -1039,7 +1073,7 @@ function ArchiveChapter({
     if (play?.kind === 'switch' && play.role === 'out') {
       play.key = sw.key;
       play.cutAt = sw.cutAt;
-      if (!play.cut && !reduce && phone) phoneCarry(play, sw.toRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()));
+      if (!play.cut && !reduce && phone) phoneCarry(play, sw.toRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()), sw.ticketScale);
       return;
     }
     switchOut(sw);

@@ -362,6 +362,9 @@ export interface DockEntry {
   ticketH: number;
   fold: Point;
   ticket: Point;
+  /** Its shield's box as the plan drew it (the current scale): the one a
+   *  travelling ticket keeps clear of (`giveWay`). */
+  shield: Size;
   /** Where its "Open story" hangs (`cueSlot`): off its own route. */
   cue: CueSlot;
   /** How much of its neighbours' shields the cover would hide (px²) and how
@@ -655,6 +658,7 @@ export function planDock(
       ticketH: ticketHeight,
       fold,
       ticket: { x: offset.x + seat.x, y: offset.y + seat.y },
+      shield: { w: chapter.shield.w, h: chapter.shield.h },
       cue,
       covered: Math.round(covered),
       overflow,
@@ -890,6 +894,131 @@ export function rideAt(from: Point, to: Point, g: number): Point {
   return { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
 }
 
+// ── Giving way ──
+// A ticket in transit lies still (or glides on the camera's clock) while the
+// planet turns under it, and the shields of its switch travel with the
+// ground: the one it goes to comes in to its corner, the one it leaves goes
+// out of it. Lying still, it lay across their way — the shield it goes to
+// came up through its face and sat on its name before it reached the
+// corner (review, 2026-09-29). So the ticket gives way: never a shield
+// through it, never its own shield on it. It steps ACROSS the shield's way
+// (sideways from a shield that comes up or down, up or down from one that
+// comes across) toward its own side of that shield — the side its corner
+// puts it on — just as far as keeps a joint's gap between them, and only
+// while the shield runs level with it: it leans into the step as the
+// shield nears it from the far side (over GIVE_WAY.reach px), at once from
+// its own corner's side (a shield comes to rest a joint's gap off the
+// corner there: nothing to step for). At the corner itself the step is
+// nought, so the ticket comes to its seat exactly. DERIVED each frame from
+// the shields' feet as the atlas projects them (never a box read off the
+// page).
+export const GIVE_WAY = {
+  /** How far off (px, between the boxes) a shield coming from the ticket's
+   *  far side starts to move it: the step eases in over this much of its
+   *  run, or over the step's own length if that is longer (the ground's own
+   *  speed, never a jump). */
+  reach: 300,
+  /** It steps aside as fast as the shield comes (nothing ever runs through
+   *  it), and back no faster than this, px/ms (`stepBack`): a shield
+   *  leaving it at the ground's speed let it spring back faster than its
+   *  own shield moved. */
+  backPxMs: 0.4,
+} as const;
+
+/** A shield a travelling ticket gives way to: its foot this frame, its box,
+ *  the ticket's corner of it, the axis the ticket steps along (across the
+ *  shield's run: `yieldAxis`), how far into giving way it is yet (1 by
+ *  default: the place gone to may stand anywhere about the cover as it
+ *  starts to fold, so the ticket leans into its way over the fold), and
+ *  whether it is the shield the ticket leaves (`leaving`: it starts at the
+ *  ticket's own corner and only ever runs level with it from there — the
+ *  ticket steps for it only while it does, never ahead of it: a neighbour
+ *  that stops just past the ticket's foot is not stepped from). */
+export interface Yield {
+  foot: Point;
+  shield: Size;
+  quadrant: Quadrant;
+  axis: 'x' | 'y';
+  weight?: number;
+  leaving?: boolean;
+}
+
+/** The axis a ticket steps along for a shield running `travel` px on the
+ *  screen: across it (a shield that comes mostly up or down → sideways). */
+export function yieldAxis(travel: Point): 'x' | 'y' {
+  return Math.abs(travel.x) >= Math.abs(travel.y) ? 'y' : 'x';
+}
+
+const smoothstep = (k: number) => {
+  const t = clamp(k, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/** The step (px) a ticket of `size` whose top-left lies at `at` takes to
+ *  give way to `shields`: per axis, the furthest step each way (two
+ *  shields that ask for the same side share one step). 0, 0 when nothing
+ *  runs through it. */
+export function giveWay(at: Point, size: Size, shields: readonly Yield[], reach: number = GIVE_WAY.reach): Point {
+  const gap = DOCK.gap;
+  const ticket: Box = { left: at.x, top: at.y, right: at.x + size.w, bottom: at.y + size.h };
+  const steps = { x: [0, 0], y: [0, 0] };
+  for (const { foot, shield, quadrant, axis, weight = 1, leaving = false } of shields) {
+    const box: Box = { left: foot.x - shield.w / 2, top: foot.y - shield.h, right: foot.x + shield.w / 2, bottom: foot.y };
+    // The ticket's side of the shield, each way (its corner): -1 left/up.
+    const sx = quadrant === 'tl' || quadrant === 'bl' ? -1 : 1;
+    const sy = quadrant === 'tl' || quadrant === 'tr' ? -1 : 1;
+    const across = axis === 'x';
+    // How far it must step to its side to keep the joint's gap.
+    const need = across
+      ? Math.max(0, sx < 0 ? ticket.right + gap - box.left : box.right + gap - ticket.left)
+      : Math.max(0, sy < 0 ? ticket.bottom + gap - box.top : box.bottom + gap - ticket.top);
+    if (need <= 0) continue;
+    // How far off the shield runs the other way (≤ 0: level with it), and
+    // from which side: its own corner's (the ticket's side is -s there) or
+    // the far one.
+    const off = across
+      ? Math.max(box.top - ticket.bottom, ticket.top - box.bottom)
+      : Math.max(box.left - ticket.right, ticket.left - box.right);
+    const ownSide = across
+      ? (box.top + box.bottom > ticket.top + ticket.bottom ? 1 : -1) === -sy
+      : (box.left + box.right > ticket.left + ticket.right ? 1 : -1) === -sx;
+    // (A long step — a shield that comes on from behind the ticket, from
+    // well across it — is leant into from as far off as the step is long,
+    // so the ticket never outruns the shield it makes way for.)
+    const lean = off <= 0 ? 1 : 1 - smoothstep(off / (ownSide || leaving ? gap : Math.max(1, reach, need)));
+    const step = clamp(weight, 0, 1) * lean * need * (across ? sx : sy);
+    const slot = steps[axis];
+    if (step < 0) slot[0] = Math.min(slot[0], step);
+    else slot[1] = Math.max(slot[1], step);
+  }
+  const f = (n: number) => Math.round(n * 10) / 10 || 0;
+  return { x: f(steps.x[0] + steps.x[1]), y: f(steps.y[0] + steps.y[1]) };
+}
+
+/** The step a ticket takes this frame, from the one it had `ms` ago and the
+ *  one it needs now (`giveWay`): out at once, however far (never a shield
+ *  through it), back toward it no faster than `rate` px/ms — but back by
+ *  `left` ms from now whatever it is (the cover open at its seat, never
+ *  still drifting home once the camera is down). */
+export function stepBack(was: Point | null, need: Point, ms: number, rate: number = GIVE_WAY.backPxMs, left = Infinity): Point {
+  if (!was) return need;
+  const dt = Math.max(0, ms);
+  const due = (a: number, b: number) => (Number.isFinite(left) ? Math.abs(a - b) * Math.min(1, dt / Math.max(dt, left)) : 0);
+  const roomFor = (a: number, b: number) => Math.max(dt * rate, due(a, b));
+  const axis = (a: number, b: number) => {
+    // Out from where it stands, or further out the same way: at once.
+    if ((a === 0 || Math.sign(b) === Math.sign(a)) && Math.abs(b) >= Math.abs(a)) return b;
+    if (a !== 0 && Math.sign(b) !== Math.sign(a) && b !== 0) {
+      // Out the other way (a second shield): back to nothing first.
+      const room = roomFor(a, 0);
+      return Math.abs(a) <= room ? b : a - Math.sign(a) * room;
+    }
+    const room = roomFor(a, b);
+    return Math.abs(a - b) <= room ? b : a - Math.sign(a - b) * room;
+  };
+  return { x: axis(was.x, need.x), y: axis(was.y, need.y) };
+}
+
 // ── The arrival: a ticket from the open map ──
 // Owner, 2026-09-29: 当地球页空置的时候，点开一个地点的动效和封面出现动效很差 —
 // and, the same day, the switch's own language (先缩小成类似机票那样…到位之后
@@ -995,12 +1124,16 @@ export interface DockSwitch {
   end: number;
   /** The carrier's name lines (the arriving sign's rule starts at them). */
   fromLines?: number;
-  /** The two covers' ratios (the phone's cards: the carrier comes down to
-   *  the arriving card's scale as it folds, so the relay is exact and the
-   *  transit holds one size; a ticket laid in transit starts at the one
-   *  under it). */
+  /** The two covers' ratios (the phone's cards: the carrier comes to the
+   *  one ticket scale at the arriving card's corner as it folds, so the
+   *  relay is exact and the transit holds one size; a ticket laid in
+   *  transit starts at the one under it). */
   fromRatio?: number;
   toRatio?: number;
+  /** The phone's one ticket scale (src/lib/explorer.ts, phoneTicketScale):
+   *  every card folds into a ticket of this size on the screen, and the
+   *  arriving one grows out of it. */
+  ticketScale?: number;
 }
 
 export interface DockFrame {

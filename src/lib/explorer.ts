@@ -328,6 +328,16 @@ export function phoneCard(vw: number, vh: number, ratio: number): PhoneCard {
   return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) + PHONE_CARD.tab };
 }
 
+/** The phone's one ticket scale: the smallest card's across the archive (a
+ *  landscape card's, PHONE_CARD.minScale on a phone). A switch folds every
+ *  card into a ticket of this one size on the screen — a card larger than
+ *  it shrinks into it, never one smaller swells to a larger card's — and
+ *  the arriving card grows out of it to its own (review, 2026-09-29: Miami
+ *  → Orlando's card grew 25 px taller as it "shrank" into its ticket). */
+export function phoneTicketScale(vw: number, vh: number, ratios: readonly number[]): number {
+  return ratios.length ? Math.min(...ratios.map((ratio) => phoneCard(vw, vh, ratio).scale)) : PHONE_CARD.minScale;
+}
+
 /** Where the phone card's stub rests on the screen (viewport px): the card
  *  stands centred, its foot `dockBottom + below` above the screen's foot
  *  (global.css `.archive-dock--phone`; a home-indicator inset is not

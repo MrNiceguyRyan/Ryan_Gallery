@@ -2930,11 +2930,12 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 }
 /* The desktop's dock is a layer of the atlas (RouteAtlas `onDockHost`):
    over the map, its tones, its instruments and its header, and over the
-   route shields (a marker's z-index is `--shields-over` + its pile order) —
-   except while a ticket travels (`data-shields-over`, from a switch's click,
-   or an arrival's ink, until it opens), when the shields come over the
-   covers, so a shield passing a ticket stays readable (a ticket parked on a
-   long hop hid 05, 04 and 03 in turn). */
+   route shields — except, while a ticket travels (`data-shields-over`, from
+   a switch's click, or an arrival's ink, until it opens), the place in
+   hand's own shield (its marker's z-index is `--shields-over` + its pile
+   order): the ticket gives way to it (src/lib/coverDock.ts, `giveWay`), so
+   they meet only at the joint. Every other shield passes under a ticket as
+   the ground turns (drawn over it, they sat on its face and its name). */
 .archive-dock-host--atlas {
   z-index: 25;
 }
@@ -3067,17 +3068,31 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
    goes with the face when the face is torn off. Through a switch it goes
    back into its corner and comes out of it once the cover is open
    (ArchiveChapter: a scale about the point where it meets the plate, its
-   `transform-origin` here, per corner). */
+   `transform-origin` here, per corner).
+   Its two outer sides carry a 1 px hairline of the sign's own enamel rule,
+   so it reads on any ground: cut from Bryce Canyon's brown card, a plain
+   tip was lost on the brown Utah desert (ΔE 8–12) and its pop not seen.
+   The rule is the caret's own edge (the element, in the rule's colour, cut
+   to the tip), the card's stock the tip itself (`::before`, in `color`,
+   cut 1 px inside the two outer sides) — not a line off the corner: it
+   ends where the tip meets the plate. */
 .archive-plate__caret {
   position: absolute;
   z-index: 2;
   width: 16px;
   height: 16px;
   pointer-events: none;
-  background: #0f120d;
+  background: rgba(244, 244, 237, 0.86);
+  color: #0f120d;
+}
+.archive-plate__caret::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
 }
 .archive-plate__caret[data-half='stub'] {
-  background: var(--stub-paper, #30352a);
+  color: var(--stub-paper, #30352a);
 }
 .archive-dock[data-quadrant='tr'] .archive-plate__caret {
   left: -8px;
@@ -3085,11 +3100,17 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   clip-path: polygon(8px 0, 8px 8px, 16px 8px, 0 16px);
   transform-origin: 8px 8px;
 }
+.archive-dock[data-quadrant='tr'] .archive-plate__caret::before {
+  clip-path: polygon(8px 2.24px, 8px 8px, 13.76px 8px, 2.24px 13.76px);
+}
 .archive-dock[data-quadrant='tl'] .archive-plate__caret {
   left: calc(100% - 8px);
   top: calc(100% - 8px);
   clip-path: polygon(8px 0, 8px 8px, 0 8px, 16px 16px);
   transform-origin: 8px 8px;
+}
+.archive-dock[data-quadrant='tl'] .archive-plate__caret::before {
+  clip-path: polygon(8px 2.24px, 8px 8px, 2.24px 8px, 13.76px 13.76px);
 }
 .archive-dock[data-quadrant='br'] .archive-plate__caret {
   left: -8px;
@@ -3097,11 +3118,17 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   clip-path: polygon(8px 16px, 8px 8px, 16px 8px, 0 0);
   transform-origin: 8px 8px;
 }
+.archive-dock[data-quadrant='br'] .archive-plate__caret::before {
+  clip-path: polygon(8px 13.76px, 8px 8px, 13.76px 8px, 2.24px 2.24px);
+}
 .archive-dock[data-quadrant='bl'] .archive-plate__caret {
   left: calc(100% - 8px);
   top: -8px;
   clip-path: polygon(8px 16px, 8px 8px, 0 8px, 16px 0);
   transform-origin: 8px 8px;
+}
+.archive-dock[data-quadrant='bl'] .archive-plate__caret::before {
+  clip-path: polygon(8px 13.76px, 8px 8px, 2.24px 8px, 13.76px 2.24px);
 }
 /* "Open story" hangs where the place's own route does not run
    (src/lib/coverDock.ts, `cueSlot`: `data-cue`): under the plate on the
