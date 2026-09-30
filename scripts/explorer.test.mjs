@@ -101,7 +101,7 @@ test('a switch can be interrupted: a new choice mid-turn turns on from there', (
   // carries by phase (src/lib/coverDock.ts, "The switch"), never stacking;
   // the same place with nothing under way is pinned back to its dock.
   assert.match(atlas, /pinRef\.current = \{ from: written \?\? to, to, t0: now, ms: durationMs, ease: easing \};/);
-  assert.match(atlas, /const lies = glideRef\.current\s+\? glideRef\.current\.at\(now\)/);
+  assert.match(atlas, /const lies = glideRef\.current\s+\? glideRef\.current\.at\(now, seen\)/);
   assert.match(atlas, /from: carrier,\s+to: destId,\s+mode,/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // An arriving ticket that becomes the carrier holds (in transit) or folds
@@ -197,13 +197,19 @@ test('the phone\'s card fits the screen, its type legible, the place above it', 
       assert.ok(card.photoH * card.scale <= vh * PHONE_CARD.shareH + 1);
       const focal = phoneFocalY(vh, card.h);
       assert.ok(focal > 88 && focal < vh - PHONE_CARD.controls - card.h, `${vw}×${vh} @${ratio}: the place stands clear of the card`);
-      // Its height counts the state's tab on its top edge.
-      assert.equal(card.h, Math.ceil(card.photoH * card.scale + PHONE_CARD.below) + Math.ceil(PHONE_CARD.tab * card.scale));
-      // The boxed state is legible on the card (15px at its scale).
-      assert.ok(15 * card.scale >= 10.5);
+      // Its height counts the state's tab on its top edge — set back to the
+      // screen's own size, whatever the card's scale (its state a constant
+      // 15px: at the card's scale it read 10.8px on four of six places).
+      assert.equal(card.h, Math.ceil(card.photoH * card.scale + PHONE_CARD.below) + PHONE_CARD.tab);
     }
   }
   assert.equal(PHONE_CARD.tab, 30);
+  {
+    const css = source('src/styles/global.css');
+    assert.match(css, /\.archive-dock--phone \.archive-dock__tab \{\s*height: 30px;\s*transform: scale\(calc\(1 \/ var\(--card-scale, 1\)\)\);\s*transform-origin: 0 100%;/);
+    assert.match(css, /\.archive-dock--phone \.archive-dock__tab-state \{\s*height: 22px;\s*font-size: 15px;/);
+    assert.match(source('src/components/home/ArchiveChapter.tsx'), /'--card-scale': card\.scale/);
+  }
   // The stub the entrance lands on does not move (the card's foot stays).
   for (const ratio of [1.5, 0.667]) {
     const rect = phoneStubRect(390, 844, ratio);

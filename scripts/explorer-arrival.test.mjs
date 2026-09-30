@@ -14,10 +14,12 @@ const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'u
 
 test('the arrival in the switch\'s language: the ticket inks in, is printed, opens by the touchdown, then its tip', () => {
   // Nowhere to go (the camera all but there): at once past the shield's lift.
-  assert.deepEqual(arrivalSchedule(SWITCH.ms, 3), { inkAt: 260, expandAt: 620, tipAt: 1080 });
-  assert.deepEqual(arrivalSchedule(SWITCH.ms, Number.NaN), { inkAt: 260, expandAt: 620, tipAt: 1080 });
+  // The tab and the cue wait for the tip to be down (TICKET.extrasGap).
+  const extras = TICKET.tipInMs + TICKET.extrasGap;
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, 3), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, Number.NaN), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
   // A real flight: open as the camera settles, the tip out at the touchdown.
-  assert.deepEqual(arrivalSchedule(1800, 500), { inkAt: 980, expandAt: 1340, tipAt: 1800 });
+  assert.deepEqual(arrivalSchedule(1800, 500), { inkAt: 980, expandAt: 1340, tipAt: 1800, extrasAt: 1800 + extras });
   const turn = bezierFn(EASE.turn);
   const onTurn = arrivalSchedule(SWITCH.ms, 400);
   assert.equal(onTurn.tipAt, SWITCH.ms, 'the tip comes out as the camera touches down');
@@ -27,8 +29,9 @@ test('the arrival in the switch\'s language: the ticket inks in, is printed, ope
   // Never sooner than the floor, whatever the flight: the shield lifts first.
   assert.equal(arrivalSchedule(300, 500).inkAt, ARRIVAL.minDelayMs);
   assert.ok(ARRIVAL.minDelayMs >= DUR_MS.in);
-  // The ticket is printed before it opens (its strip developed), its ink
-  // quick (no hard first edge, no slow fade), its opening the switch's.
+  // The ticket (its picture a miniature in the strip) is on the map before
+  // it opens, its ink quick (no hard first edge, no slow fade), its opening
+  // the switch's.
   for (const land of [300, 900, 1400, 2000, 2600]) {
     const s = arrivalSchedule(land, 400);
     assert.equal(s.expandAt - s.inkAt, ARRIVAL.printMs);
@@ -51,8 +54,10 @@ test('letting go runs the fold backwards: the tip in, the ticket folded at its s
   assert.equal(DUR_MS.in + 160, 360);
   const letGo = chapter.slice(chapter.indexOf('const letGo = () => {'), chapter.indexOf('const onSwitchRef'));
   assert.match(letGo, /retractTip\(fold, now\);/);
+  // The fold shrinks the picture into the strip with the plate (no dark
+  // ground: foldPlate runs the print's frames too).
   assert.match(letGo, /foldPlate\(fold, form, now \+ TICKET\.foldAt, 'let-go'\);/);
-  assert.match(letGo, /printToMat\(fold, now \+ TICKET\.foldAt, TICKET\.printOutMs\);/);
+  assert.doesNotMatch(letGo, /printToMat|\bmat\b/);
   // Under reduced motion nothing folds (the dock is hidden at once).
   assert.match(letGo, /if \(reduce \|\| !form\) return;/);
   // The tab and the cue fade with the tip going back.
@@ -74,7 +79,7 @@ test('wiring: the atlas asks for the arriving ticket at take-off and says when i
   // Timed off the flight's own landing, derived.
   assert.match(atlas, /const landMs = durationMs \+ \(flying\.tip\?\.ms \?\? 0\);/);
   assert.match(atlas, /const beats = arrivalSchedule\(landMs, travelPx\);/);
-  assert.match(atlas, /inkAt: now \+ beats\.inkAt, expandAt: now \+ beats\.expandAt, tipAt: now \+ beats\.tipAt/);
+  assert.match(atlas, /inkAt: now \+ beats\.inkAt, expandAt: now \+ beats\.expandAt, tipAt: now \+ beats\.tipAt, extrasAt: now \+ beats\.extrasAt/);
   // Every flight clears the last one's arrival; it is published with the frame.
   assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, pins, arrive \}\);/);
   // The chapter plays it once per key, and folds a ticket let go.

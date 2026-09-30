@@ -298,7 +298,9 @@ export const PHONE_CARD = {
   dockBottom: 76,
   /** What hangs under the plate ("Open story"), px. */
   below: 34,
-  /** The state's tab on the card's top edge (its name boxed), card px. */
+  /** The state's tab on the card's top edge (its name boxed), screen px:
+   *  set back to the screen's own size whatever the card's scale (global.css
+   *  `.archive-dock--phone .archive-dock__tab`), so its state reads 15px. */
   tab: 30,
 } as const;
 
@@ -323,7 +325,7 @@ export function phoneCard(vw: number, vh: number, ratio: number): PhoneCard {
     photoH = Math.max(80, Math.floor((across / scale - PHONE_CARD.stub) / r));
   }
   const photoW = Math.floor(photoH * r);
-  return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) + Math.ceil(PHONE_CARD.tab * scale) };
+  return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) + PHONE_CARD.tab };
 }
 
 /** Where the phone card's stub rests on the screen (viewport px): the card

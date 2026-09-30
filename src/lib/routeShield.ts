@@ -261,6 +261,8 @@ export const pad2 = (value: number) => String(value).padStart(2, '0');
 // The story's kept stub prints the same name at the same size, so the two
 // fly like for like (MagazineLayout, StubFace).
 export const SIGN_NAME_MEASURE = 142;
+/** The sign's name's line height, em (global.css `.archive-ticket-sign__name`). */
+export const TICKET_NAME_LINE = 0.95;
 export const SIGN_NAME_MAX = 30;
 export const SIGN_NAME_MIN = 15;
 export function signNameSize(name: string): number {
@@ -506,6 +508,24 @@ export const FLAP = {
   /** The whole word is down by delay + this (DUR.scene). */
   budget: 1000,
 } as const;
+// ── The roll: a ticket's name on a switch ──
+// Owner, 2026-09-29: 地点文字滚动. On a switch the ticket is small and the
+// flap's bold capitals turning at 25 a second read as 乱码 (XHIEFCB,
+// BRARS ZRFRBH) and flickered more than anything else on the screen. So a
+// switch's ticket ROLLS its name instead (RouteShield `runRoll`): the name
+// being left slides up out of the sign's rule while the new one rolls up
+// into it from below, masked by the rule, on EASE.turn (away at once, a long
+// settle); a state that changes comes in on a cross-fade (never letters that
+// are no state: "SB" on New York's shield); the stop number counts through
+// the real stops between, down as the name reads. ROLL.ms, down
+// well inside the transit (TICKET.transitMinMs ≥ 480), compressed only for a
+// shorter one.
+export const ROLL = { ms: 320, minMs: 120 } as const;
+/** The roll's length inside a transit of `budget` ms. */
+export function rollMs(budget?: number): number {
+  return budget == null || !Number.isFinite(budget) ? ROLL.ms : Math.max(ROLL.minMs, Math.min(ROLL.ms, Math.round(budget)));
+}
+
 /** A state that changes turns through this many letters, each this long. */
 export const CODE_FLIPS = 2;
 export const CODE_TICK = 36;

@@ -16,15 +16,22 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import test from 'node:test';
 import {
   CORNER_ORDER,
+  CUE,
   DOCK,
   QUADRANTS,
   ROUTE_SLACK,
   TICKET,
   TICKET_EXPAND_MS,
+  TICKET_FOLD_MS,
+  afterOpening,
   chooseCorners,
   coverStubRect,
-  developSweep,
+  cueBox,
   dockPoint,
+  glideShare,
+  printStyle,
+  rideAt,
+  tipPopFrames,
   easeInverse,
   glideAt,
   switchSchedule,
@@ -49,6 +56,7 @@ import { EXPLORE_PITCH } from '../src/lib/explorerCamera.ts';
 import { chapterPoint } from '../src/lib/geo.ts';
 import { EASE, bezierFn, voyageEase } from '../src/lib/motion.ts';
 import { SHIELD_MAP_PX, SHIELD_SCALE, shieldForm, signLines, stateCode } from '../src/lib/routeShield.ts';
+import { greatCirclePoint } from '../src/lib/routeGeometry.ts';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const { collections } = JSON.parse(readFileSync(new URL('./fixtures/archive-2026-09-27.json', import.meta.url), 'utf8'));
@@ -261,6 +269,42 @@ test('the archive\'s plan: one dock per corner — each place at its own, the co
   assert.deepEqual(coverStubRect(miami), { x: 852, y: 208, w: 190, h: 479, rotate: 0 });
 });
 
+test('"Open story" hangs off its own route: New York\'s goes up into the tab\'s band', () => {
+  // The dashed line ran through New York's "OPEN STORY →" (its leg west
+  // leaves the shield right under the cue of a cover above-left). The cue
+  // keeps a berth of its route as the atlas draws it (open: no leg into 01,
+  // none out of 06); where the line runs, it goes to the other free slot.
+  const chapters = archiveChapters();
+  const css = source('src/styles/global.css');
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  for (const [vw, vh] of SCREENS) {
+    const camera = cameraFor(vw, vh);
+    const plan = planDock(chapters, vw, vh, camera);
+    chapters.forEach((c, index) => {
+      const e = plan[c.id];
+      const plate = plateRect(e.point, c.shield, { w: e.photoW + DOCK.stub, h: e.photoH }, e.quadrant);
+      const box = cueBox(plate, e.photoW, e.cue);
+      // Inside what the plate carries (the tab's band, the cue's own under
+      // it): nothing new on the stage.
+      const fit = fitBox(plate, e.tab);
+      assert.ok(box.left >= fit.left && box.right <= fit.right && box.top >= fit.top && box.bottom <= fit.bottom, `${vw} ${c.name}`);
+      const ends = [index > 0 ? c.route.prev : null, index < chapters.length - 1 ? c.route.next : null].filter(Boolean);
+      for (const end of ends) {
+        for (let i = 0; i <= 600; i += 1) {
+          const p = projectAt(greatCirclePoint(c.coordinates, end, i / 600), e.centre, c.zoom, camera);
+          const near = p.x > box.left - CUE.berth && p.x < box.right + CUE.berth && p.y > box.top - CUE.berth && p.y < box.bottom + CUE.berth;
+          assert.ok(!near, `${vw} ${c.name}: its route runs through its cue`);
+        }
+      }
+    });
+    assert.deepEqual(chapters.map((c) => `${plan[c.id].cue.edge}-${plan[c.id].cue.side}`), ['bottom-left', 'bottom-left', 'bottom-left', 'bottom-left', 'bottom-left', 'top-right'], `${vw}`);
+  }
+  assert.match(chapter, /data-cue=\{!phone && dockEntry \? `\$\{dockEntry\.cue\.edge\}-\$\{dockEntry\.cue\.side\}` : undefined\}/);
+  assert.match(css, /\.archive-dock\[data-cue\$='-left'\] \.archive-plate__cue \{\s*right: auto;\s*left: 0;/);
+  assert.match(css, new RegExp(`\\.archive-dock\\[data-cue\\^='top-'\\] \\.archive-plate__cue \\{\\s*top: -${CUE.rise}px;\\s*bottom: auto;`));
+  assert.match(css, new RegExp(`\\.archive-plate__cue \\{[^}]*bottom: -${CUE.drop}px;`));
+});
+
 test('the corner rule: pure, the route\'s slack, a hop in one corner moves nothing', () => {
   const chapters = archiveChapters();
   for (const [vw, vh] of SCREENS) {
@@ -331,12 +375,12 @@ test('the ticket: 340×172, seated at the plate\'s corner by its shield, at ever
       });
     }
   }
-  // At 1728 the tickets lie at (702, 208) below-left and (702, 661) above.
+  // At 1728 the tickets lie at (702, 208) below-left and (702, 663) above.
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
   const at = (id) => [plan[id].point.x + plan[id].ticket.x, plan[id].point.y + plan[id].ticket.y];
   assert.deepEqual(at(chapters[0].id), [702, 208]);
-  assert.deepEqual(at(chapters[4].id), [702, 661]);
-  assert.deepEqual(at(chapters[5].id), [702, 661]);
+  assert.deepEqual(at(chapters[4].id), [702, 663]);
+  assert.deepEqual(at(chapters[5].id), [702, 663]);
 });
 
 test('the fold and the opening: a clip and a translate, one edge by the shield never moving', () => {
@@ -378,9 +422,46 @@ test('the fold and the opening: a clip and a translate, one edge by the shield n
       if (q[0] === 't') assert.ok(Math.abs(ty - bottom) <= 0.11);
       else assert.equal(ty, 0);
     });
-    // The stub unrolls before the face is half open (the sign first).
-    const half = opening.frames.find((f) => insets(f.clipPath)[3] <= (plate.w - W) / 2);
-    assert.ok(insets(half.clipPath)[2] <= (plate.h - H) * 0.05);
+    // 先缩小: the whole cover shrinks into its corner and grows back out of
+    // it — the stub and the face on one clock (no wipe of one after the
+    // other).
+    opening.frames.forEach((f) => {
+      const [, , bottom, left] = insets(f.clipPath);
+      assert.ok(Math.abs(bottom / (plate.h - H) - left / (plate.w - W)) < 0.01, `${q} ${f.clipPath}`);
+    });
+    // The photograph goes with it: a miniature of the whole cover in the
+    // strip (the print scaled to cover the well, centred), never the
+    // full-size print's corner. It starts and ends at full size, the fold's
+    // last frame is the opening's first, and on every frame the print covers
+    // what the clip shows of the face.
+    const photo = { w: plate.w - DOCK.stub, h: plate.h };
+    const well = { w: W - DOCK.stub, h: H };
+    assert.equal(folding.print.length, folding.frames.length);
+    assert.equal(folding.print[0].transform, 'translate(0.0px, 0.0px) scale(1.0000)');
+    assert.equal(opening.print.at(-1).transform, 'translate(0.0px, 0.0px) scale(1.0000)');
+    assert.equal(opening.print[0].transform, folding.print.at(-1).transform);
+    assert.equal(folding.print.at(-1).transform, printStyle(form, 0).transform);
+    const pose = (tf) => {
+      const [, tx, ty, sc] = tf.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([\d.]+)\)/).map(Number);
+      return { tx, ty, sc };
+    };
+    const mini = pose(printStyle(form, 0).transform);
+    const s = Math.max(well.w / photo.w, well.h / photo.h);
+    assert.ok(Math.abs(mini.sc - s) < 1e-3, 'cover-fit in the well');
+    assert.ok(Math.abs(mini.tx + (photo.w * s) / 2 - (photo.w - well.w / 2)) < 0.2, 'centred across the well');
+    assert.ok(Math.abs(mini.ty + (photo.h * s) / 2 - well.h / 2) < 0.2, 'centred down the well');
+    for (const set of [folding, opening, letGo]) {
+      set.frames.forEach((f, i) => {
+        const [, , bottom, left] = insets(f.clipPath);
+        const p = pose(set.print[i].transform);
+        // The face shown: from the clip's left to the perforation, from the
+        // top to the clip's foot.
+        assert.ok(p.tx <= left + 0.2, `${q}: the print reaches the clip's left edge`);
+        assert.ok(p.ty <= 0.2, `${q}: the print reaches the top`);
+        assert.ok(p.tx + photo.w * p.sc >= photo.w - 0.2, `${q}: the print reaches the perforation`);
+        assert.ok(p.ty + photo.h * p.sc >= photo.h - bottom - 0.2, `${q}: the print reaches the clip's foot`);
+      });
+    }
   }
 });
 
@@ -393,8 +474,23 @@ test('the beats: off the flight\'s own clock', () => {
   assert.equal(t.expandEnd, t.expandAt + 440);
   assert.ok(Math.abs(t.expandEnd - 1361) <= 2);
   assert.equal(t.tipAt, t.expandEnd + TICKET.tipGap);
-  assert.ok(t.tipAt + TICKET.tipInMs <= 1600);
-  assert.equal(t.end, t.tipAt + TICKET.extrasInMs);
+  assert.ok(t.tipAt + TICKET.tipInMs <= 1610);
+  // 然后尖冒出来: the tip is a beat of its own — popped past its size and
+  // back, with visible travel — and the tab and the cue wait until it is
+  // down (they took the eye from it), 120–150 ms more.
+  assert.ok(TICKET.tipInMs >= 200 && TICKET.tipInMs <= 260);
+  assert.ok(TICKET.tipPop >= 1.2 && TICKET.tipPop <= 1.35);
+  const pop = tipPopFrames({ arrive: 'A', travel: 'T' });
+  assert.deepEqual(pop.map((f) => f.transform), ['scale(0)', `scale(${TICKET.tipPop})`, 'scale(1)']);
+  assert.equal(pop[0].easing, 'A');
+  assert.ok(TICKET.extrasGap >= 120 && TICKET.extrasGap <= 150);
+  assert.equal(t.extrasAt, t.tipAt + TICKET.tipInMs + TICKET.extrasGap);
+  assert.equal(t.end, t.extrasAt + TICKET.extrasInMs);
+  assert.deepEqual(afterOpening(t.expandAt), { expandAt: t.expandAt, expandEnd: t.expandEnd, tipAt: t.tipAt, extrasAt: t.extrasAt, end: t.end });
+  // The relay is a cross-fade of the two pictures, then the cut: no dark
+  // tile in between.
+  assert.ok(TICKET.dissolveMs > 0 && TICKET.dissolveMs <= 200);
+  assert.equal(TICKET_FOLD_MS, TICKET.faceMs);
   // 到位之后展开: the camera has made 95% of its move.
   assert.ok(Math.abs(turn(t.expandAt / 1400) - TICKET.landShare) < 0.01);
   assert.ok(Math.abs(switchSchedule(2000, voyageEase).expandAt - 1713) <= 2);
@@ -417,7 +513,7 @@ test('the glide: a ticket rides the camera\'s own clock to its new corner, slowe
   const bryce = plan[chapters[4].id];
   const from = { x: zion.point.x + zion.ticket.x, y: zion.point.y + zion.ticket.y };
   const to = { x: bryce.point.x + bryce.ticket.x, y: bryce.point.y + bryce.ticket.y };
-  assert.deepEqual([from, to], [{ x: 702, y: 208 }, { x: 702, y: 661 }]);
+  assert.deepEqual([from, to], [{ x: 702, y: 208 }, { x: 702, y: 663 }]);
   const ground = Math.hypot(bryce.point.x - zion.point.x, bryce.point.y - zion.point.y);
   for (const D of [1400, 2000]) {
     const s = switchSchedule(D, voyageEase);
@@ -442,6 +538,41 @@ test('the glide: a ticket rides the camera\'s own clock to its new corner, slowe
   assert.deepEqual(still(700), from);
 });
 
+test('a change of corner rides the ground: the carrier at its own shield, the arriving ticket swung round its shield', () => {
+  // The two seats as their shields stand each frame (the ground moving
+  // under both): until the relay the ticket is the leaving one's at its own
+  // shield; by the opening the arriving one's at its own corner; between,
+  // on the camera's own clock — continuous at both ends, always between the
+  // two seats as they stand, and on a far leg's sine moving one way only on
+  // the screen (on the 1400 turn the ground has done 63% by the relay, and
+  // the ticket rises at most a few tens of px against it as it swings).
+  const turn = bezierFn(EASE.turn);
+  const seat = (foot, e) => ({ x: foot.x + e.x, y: foot.y + e.y });
+  const zionTicket = { x: -373, y: 8 };
+  const bryceTicket = { x: -373, y: -228 };
+  for (const [D, ease] of [[1400, turn], [2000, voyageEase]]) {
+    const s = switchSchedule(D, ease);
+    const share = glideShare(s.relayAt, s.expandAt, ease, D);
+    let prev = null;
+    let back = 0;
+    for (let t = 0; t <= D; t += 5) {
+      const g = ease(t / D) * 687;
+      const zion = { x: 1074, y: 200 + g };
+      const bryce = { x: 1060, y: 204 + g };
+      const a = seat(zion, zionTicket);
+      const b = seat(bryce, bryceTicket);
+      const p = rideAt(a, b, share(t));
+      if (t <= s.relayAt) assert.deepEqual(p, a);
+      if (t >= s.expandAt) assert.deepEqual(p, b);
+      assert.ok(p.y >= Math.min(a.y, b.y) - 1e-9 && p.y <= Math.max(a.y, b.y) + 1e-9);
+      if (prev) back += Math.max(0, prev.y - p.y);
+      prev = p;
+    }
+    assert.ok(back <= (ease === turn ? 40 : 1e-6), `${D}: ${back.toFixed(1)} px against the ground`);
+  }
+  assert.deepEqual(rideAt({ x: 0, y: 0 }, { x: 0, y: 100 }, 0.25), { x: 0, y: 25 });
+});
+
 test('a switch keeps the ticket where it lies: its own pin for each cover, the relay a cut, nothing re-placed per frame', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const chapter = source('src/components/home/ArchiveChapter.tsx');
@@ -459,7 +590,7 @@ test('a switch keeps the ticket where it lies: its own pin for each cover, the r
   // in the frame's own task (before any paint)…
   const switchIn = chapter.slice(chapter.indexOf('const switchIn = ('), chapter.indexOf('const retimeIn = ('));
   assert.match(switchIn, /dock\.setAttribute\('data-ticket', sw\.mode === 'lay' \? '' : 'wait'\);/);
-  assert.match(chapter, /const off = coverDock\.subscribe\(\(frame\) => \{[\s\S]*onSwitchRef\.current\(sw, at\);[\s\S]*onBeatRef\.current\(sw, now\);/);
+  assert.match(chapter, /const off = coverDock\.subscribe\(\(frame\) => \{[\s\S]*onSwitchRef\.current\(sw, at, frame\.at\);[\s\S]*onBeatRef\.current\(sw, now\);/);
   assert.match(css, /\.archive-dock\[data-ticket='wait'\],\s*\.archive-dock\[data-ticket='wait'\] \.archive-ticket-next \{\s*visibility: hidden !important;/);
   // …and the relay and the carrier's cut are decided in the frame, for
   // every cover at once; the carrier goes with no fade.
@@ -471,14 +602,19 @@ test('a switch keeps the ticket where it lies: its own pin for each cover, the r
   // Every beat is started at its own time on the document's timeline.
   assert.match(chapter, /anim\.startTime = time;/);
   // A publish at each beat (a resting map draws nothing), keyed by it.
-  assert.match(atlas, /\[sw\.relayAt, sw\.cutAt, sw\.expandAt, sw\.tipAt\]\.forEach\(\(t\) => \{/);
-  assert.match(atlas, /const beats = sw \? \[sw\.relayAt, sw\.cutAt, sw\.expandAt, sw\.tipAt\]\.filter\(\(t\) => now >= t\)\.length : 0;/);
+  assert.match(atlas, /\[sw\.relayAt, sw\.cutAt, sw\.expandAt, sw\.tipAt, sw\.extrasAt\]\.forEach\(\(t\) => \{/);
+  assert.match(atlas, /const beats = sw \? \[sw\.relayAt, sw\.cutAt, sw\.expandAt, sw\.tipAt, sw\.extrasAt\]\.filter\(\(t\) => now >= t\)\.length : 0;/);
+  // A resize moves every point with the camera standing still: the layout
+  // and the plan's revision are in the publish's key.
+  assert.match(atlas, /const key = `\$\{cameraKey\(map\)\}\|\$\{size\.width\}x\$\{size\.height\}\|\$\{pointsKey\}\|/);
+  assert.match(atlas, /\$\{plan \? planRevRef\.current : 0\}/);
   // Paint and composite only: a clip, a translate, a scale, colours, a mask.
   const plays = chapter.slice(chapter.indexOf('// ── The switch, the arrival, the let-go'), chapter.indexOf('// ── The stub hand-off (src/lib/explorer.ts)'));
   assert.ok(plays.length > 2000);
   assert.doesNotMatch(plays, /getBoundingClientRect|offset(Width|Height|Top|Left)|client(Width|Height)|style\.(width|left|top) =/);
-  // The only read: the ticket in transit's colour, once, at a 'lay' relay.
-  assert.equal((plays.match(/getComputedStyle\(/g) ?? []).length, 1);
+  // The only reads: a ticket in transit's colour and (the phone) its
+  // transform, once each, at a 'lay' relay.
+  assert.equal((plays.match(/getComputedStyle\(/g) ?? []).length, 2);
   // A publish per frame at most (the map fires move and render in one).
   assert.match(atlas, /if \(key === publishedKeyRef\.current\) return;/);
   const publish = atlas.slice(atlas.indexOf('const publishDock = () => {'), atlas.indexOf('const publishDockRef'));
@@ -492,20 +628,37 @@ test('a new choice mid-switch never stacks: the carrier by phase', () => {
   // Folding: the one folding carries on, the new cover at the same relay.
   assert.match(pick, /if \(now < prev\.relayAt\) \{\s+carrier = prev\.from;\s+relayAt = prev\.relayAt;/);
   assert.match(pick, /mode = carrier === destId \? 'self' : 'fold';/);
-  // In transit: laid on at once, its dark ground in over retargetMatMs.
-  assert.match(pick, /mode = 'lay';\s+relayAt = now;\s+cutAt = now \+ TICKET\.retargetMatMs;/);
+  // In transit: laid on at once, its picture dissolving in, then the cut.
+  assert.match(pick, /mode = 'lay';\s+relayAt = now;\s+cutAt = now \+ TICKET\.dissolveMs;/);
+  assert.match(pick, /let cutAt = relayAt \+ TICKET\.dissolveMs;/);
   // Opening: folds back over the share it had opened.
   assert.match(pick, /mode = 'back';[\s\S]*relayAt = now \+ Math\.max\(TICKET\.foldBackMinMs, Math\.round\(TICKET_FOLD_MS \* open\)\);/);
   // The chapter's parts: the one given up before its relay goes unseen…
   const onSwitch = chapter.slice(chapter.indexOf('const onSwitch = ('), chapter.indexOf('const onBeat = ('));
   assert.match(onSwitch, /if \(!play\.relayed && play\.mode !== 'self'\) cutUnseen\(\);/);
-  // …the carrier still folding carries on; a ticket in transit holds; a
-  // cover opening folds back from where it is.
-  assert.match(onSwitch, /if \(play\?\.kind === 'switch' && play\.role === 'out'\) \{\s+play\.key = sw\.key;/);
+  // …a carrier a newer switch has dropped before its cut goes at once,
+  // unseen under the ticket laid over it (it lingered and faded where it
+  // lay: three tickets at once on rapid presses)…
+  assert.match(onSwitch, /\} else if \(play\.cut\) settlePlay\(\);[\s\S]*else if \(sw \|\| held\) cutUnseen\(\);/);
+  assert.match(chapter, /const cutUnseen = \(\) => \{\s+const dock = dockRef\.current;\s+dock\?\.setAttribute\('data-cut', ''\);\s+dock\?\.removeAttribute\('data-leaving'\);/);
+  // …the carrier still folding carries on; a ticket in transit holds (its
+  // own picture whole at once, over the one going from under it); a cover
+  // opening folds back from where it is.
+  assert.match(onSwitch, /if \(play\?\.kind === 'switch' && play\.role === 'out'\) \{\s+play\.key = sw\.key;\s+play\.cutAt = sw\.cutAt;\s+if \(!play\.cut && !reduce && phone\) phoneCarry\(play, sw\.toRatio,/);
   const out = chapter.slice(chapter.indexOf('const switchOut = ('), chapter.indexOf('const switchSelf = ('));
-  assert.match(out, /if \(sw\.mode === 'lay'\) \{[\s\S]*anim\.pause\(\);/);
+  assert.match(out, /if \(sw\.mode === 'lay'\) \{[\s\S]*was\.dissolve\?\.finish\(\);[\s\S]*holdNow\(anim\)/);
+  assert.match(chapter, /const holdNow = \(anim: Animation\) => \{\s+const at = anim\.currentTime;\s+anim\.pause\(\);\s+if \(at != null\) anim\.currentTime = at;/);
   assert.match(out, /foldPlate\(was, form, now, 'fold', ms\);/);
-  assert.match(chapter, /running\.commitStyles\(\);/);
+  assert.match(chapter, /openingPlate\.commitStyles\(\);/);
+  // Turned back to itself and away again before its relay (A → B → A → C,
+  // a key held down): it never stopped folding — it carries on the same
+  // fold (no restart from whole, no cut of a whole plate).
+  assert.match(out, /if \(was\?\.kind === 'switch' && was\.mode === 'self' && !was\.relayed\) \{[\s\S]*Object\.assign\(was, \{ key: sw\.key, role: 'out', mode: 'fold', cut: false, cutAt: sw\.cutAt \}\);[\s\S]*retractTip\(was, now\);[\s\S]*return;\s+\}\s+if \(sw\.mode === 'fold' \|\| !was\) \{/);
+  // The cover just left, chosen back after its cut: nothing of the cut
+  // outlives it (a later let-go folds and fades, never vanishes).
+  const switchIn = chapter.slice(chapter.indexOf('const switchIn = ('), chapter.indexOf('const retimeIn = ('));
+  assert.match(switchIn, /dock\.removeAttribute\('data-cut'\);/);
+  assert.match(chapter, /if \(at\) \{\s+hold = false;[\s\S]{0,300}dock\.removeAttribute\('data-cut'\);\s+dock\.setAttribute\('data-at', ''\);/);
 });
 
 test('the channel keeps the last plan and frame for a cover that mounts late', () => {
@@ -570,7 +723,15 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(chapter, /dock\.style\.transform = `translate3d\(\$\{point\.x\}px, \$\{point\.y\}px, 0\)`/);
   assert.match(chapter, /data-cover-for=\{id\}/);
   assert.match(chapter, /createPortal\(/);
-  assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host"( data-let-go=\{[^}]*\})? \/>/);
+  // The desktop's dock is a layer of the atlas's own (under its shields
+  // while a ticket travels); the phone's is the page's.
+  assert.match(home, /onDockHost=\{desktopLayout \? setDockHost : undefined\}/);
+  assert.match(atlas, /\{!mobile && onDockHost && <div ref=\{onDockHost\} className="archive-dock-host archive-dock-host--atlas" \/>\}/);
+  assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host archive-dock-host--phone" data-let-go=\{letGo \? '' : undefined\} \/>/);
+  assert.match(css, /\.archive-dock-host--atlas \{\s*z-index: 25;\s*\}/);
+  assert.match(css, /\.route-atlas\[data-shields-over\] \{\s*--shields-over: 30;\s*\}/);
+  assert.match(atlas, /pose\.marker\.style\.zIndex = `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)`;/);
+  assert.match(atlas, /const ticketing = \(!!sw && now < sw\.expandAt\) \|\| \(!!arrive && now >= arrive\.inkAt && now < arrive\.expandAt\);/);
   // The place in hand's rail shows with its cover (the dock's frame).
   assert.match(home, /coverDock\.subscribe\(\(frame\) => \{/);
   assert.match(home, /railShown=\{dockAt === city\._id\}/);
@@ -580,7 +741,7 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(css, /\.archive-dock\[data-at\] \{\s*opacity: 1;\s*visibility: visible;\s*transition: none;/);
   assert.match(css, /\.archive-dock \{[^}]*transition: opacity var\(--dur-swap\) var\(--ease-fade\) 200ms, visibility 0s linear 520ms;/);
   // It recedes under a story with the map it is on.
-  assert.match(css, /main\[data-story-under="true"\] \.archive-dock-host \{/);
+  assert.match(css, /main\[data-story-under="true"\] \.archive-dock-host:not\(\.archive-dock-host--atlas\) \{/);
   // No lime on the map's caret or tab.
   const dockCss = css.slice(css.indexOf('/* ─── The cover rides with its shield'), css.indexOf('/* The chapter\'s rail'));
   assert.ok(dockCss.length > 500);
@@ -603,12 +764,14 @@ test('the joint is a gap and a caret, never a line across it', () => {
     assert.match(css, rule, quadrant);
   }
   assert.match(css, /\.archive-plate__caret\[data-half='stub'\] \{\s*background: var\(--stub-paper/);
-  // The caret's tip stays inside the gap: 4px out each way of the 8.
-  const tip = /\.archive-dock\[data-quadrant='tr'\] \.archive-plate__caret \{\s*left: -4px;/;
+  // The tip reads at 1728 (a 4 px nub on the map did not): a 16 px box cut
+  // 8 px into the plate, 8 px out each way — the gap's own depth, at 45°.
+  assert.match(css, /\.archive-plate__caret \{\s*position: absolute;\s*z-index: 2;\s*width: 16px;\s*height: 16px;/);
+  const tip = /\.archive-dock\[data-quadrant='tr'\] \.archive-plate__caret \{\s*left: -8px;/;
   assert.match(css, tip);
   // It comes out of the plate's corner itself: scaled about the point where
   // it meets the plate, per corner.
-  const origin = { tr: '4px 8px', tl: '8px 8px', br: '4px 4px', bl: '8px 4px' };
+  const origin = { tr: '8px 8px', tl: '8px 8px', br: '8px 8px', bl: '8px 8px' };
   for (const quadrant of QUADRANTS) {
     assert.match(css, new RegExp(`\\.archive-dock\\[data-quadrant='${quadrant}'\\] \\.archive-plate__caret \\{[^}]*transform-origin: ${origin[quadrant]};`), quadrant);
   }
@@ -624,15 +787,18 @@ test('the state, boxed; the pad gone; the old switch gone', () => {
   // label face, caps tracked at most 0.1em, outlined, never lime.
   const rule = css.match(/^\.archive-dock__tab-state \{([^}]*)\}/m)[1];
   assert.match(rule, /font-family: var\(--font-ui\);/);
-  assert.match(rule, /font-size: 13px;/);
+  // 更醒目: 16px caps in a 26px rule on a 34px tab (it was 13 in 20: no
+  // bigger than the Fraunces 14 it replaced).
+  assert.match(rule, /font-size: 16px;/);
+  assert.match(rule, /height: 26px;/);
   assert.match(rule, /font-weight: 700;/);
   assert.match(rule, /text-transform: uppercase;/);
   assert.ok(Number(rule.match(/letter-spacing: ([\d.]+)em/)[1]) <= 0.1);
   assert.match(rule, /box-shadow: inset 0 0 0 1\.5px rgba\(244, 244, 237, 0\.86\);/);
-  const tabCss = css.slice(css.indexOf('.archive-dock__tab {'), css.indexOf('/* The chapter\'s rail'));
+  const tabCss = css.slice(css.indexOf('\n.archive-dock__tab {'), css.indexOf('/* The chapter\'s rail'));
   assert.doesNotMatch(tabCss, /d2ff00|210,\s*255,\s*0/i);
-  assert.match(css, /\.archive-dock__tab \{[^}]*height: 30px;/);
-  assert.equal(DOCK.tab, 30);
+  assert.match(css, /\.archive-dock__tab \{[^}]*height: 34px;/);
+  assert.equal(DOCK.tab, 34);
   assert.equal(DOCK.below, 36);
   assert.match(chapter, /<div className="archive-dock__tab font-ui" data-side=\{phone \? 'left' : side\} aria-hidden="true">/);
   assert.match(chapter, /<span className="archive-dock__tab-state">\{stateTab\.state\}<\/span>/);
@@ -644,12 +810,9 @@ test('the state, boxed; the pad gone; the old switch gone', () => {
     return statSync(path).isDirectory() ? walk(path) : [path];
   });
   const src = walk(new URL('../src', import.meta.url).pathname).filter((f) => /\.(tsx?|css|astro)$/.test(f)).map((f) => readFileSync(f, 'utf8')).join('\n');
-  for (const gone of ['archive-ticket-pad', 'padStocks', 'chapterPadStocks', 'SWITCH_COVER', 'switchClip', 'matPolygon', 'arrivalClipFrames', 'foldClip', 'DOCK_QUADRANT', 'arrivalDelay', 'regionTab']) {
+  for (const gone of ['archive-ticket-pad', 'padStocks', 'chapterPadStocks', 'SWITCH_COVER', 'switchClip', 'matPolygon', 'arrivalClipFrames', 'foldClip', 'DOCK_QUADRANT', 'arrivalDelay', 'regionTab', 'archive-photo-frame__mat', 'developStrip', 'developSweep', 'printToMat', 'retargetMatMs']) {
     assert.doesNotMatch(src, new RegExp(`\\b${gone}\\b`), gone);
   }
-  // The develop is kept (the strip), and starts blank.
-  const { from, to, hidden } = developSweep(1.5);
-  assert.ok(hidden < from && from < to);
 });
 
 test('a portrait cover keeps most of the height it had in the column', () => {

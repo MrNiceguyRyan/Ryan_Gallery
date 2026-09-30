@@ -1273,6 +1273,14 @@ export default function HomePage({ collections }: Props) {
   }, [desktopLayout, routeStops]);
 
   const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
+  // Let go by the reader's own hand, the ticket fades sooner (global.css
+  // `.archive-dock-host[data-let-go]`): said on the host, which on the
+  // desktop is the atlas's own layer.
+  useEffect(() => {
+    if (!dockHost) return;
+    if (letGo) dockHost.setAttribute('data-let-go', '');
+    else dockHost.removeAttribute('data-let-go');
+  }, [dockHost, letGo]);
   // The place whose cover is up (src/lib/coverDock.ts): its rail shows with
   // it — never while the ticket tears or the camera flies (one large motion
   // at a time) — and with no cover up the rail says what the archive is.
@@ -1438,6 +1446,10 @@ export default function HomePage({ collections }: Props) {
       // The map is the page's second half: the camera holds the pose the
       // globe will rise in (its tiles loading) while the entrance is read.
       engage
+      // The desktop's covers ride in a layer of the atlas's own, under its
+      // route shields while a ticket travels (ArchiveChapter portals them
+      // in; src/lib/coverDock.ts places them every camera frame).
+      onDockHost={desktopLayout ? setDockHost : undefined}
     />
   );
 
@@ -1658,11 +1670,8 @@ export default function HomePage({ collections }: Props) {
                   so the keyboard meets the place in hand and the ways
                   through the places before the map's own stops. */}
               <aside className="explorer-stage absolute inset-y-0 left-0 z-10 h-full w-[78%]">
+                {/* The covers' dock is the atlas's own layer (`onDockHost`). */}
                 {atlas}
-                {/* The covers' dock: each place's cover rides here, on the
-                    atlas, beside its shield (ArchiveChapter portals it in;
-                    src/lib/coverDock.ts places it every camera frame). */}
-                <div ref={setDockHost} className="archive-dock-host" data-let-go={letGo ? '' : undefined} />
               </aside>
             </div>
           ) : (

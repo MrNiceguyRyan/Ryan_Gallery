@@ -20,7 +20,10 @@ import {
   flapGlyph,
   flapNumber,
   FLAP_MIN_TICK,
+  ROLL,
+  TICKET_NAME_LINE,
   flapPlan,
+  rollMs,
   nameStep,
   signLines,
   shieldForm,
@@ -222,9 +225,11 @@ test('the split-flap lands left to right, inside DUR.scene', () => {
   assert.equal(long.length, 40);
 });
 
-test('a switch turns the name in its transit: at once, down inside it, never a blur', () => {
-  // src/lib/coverDock.ts "The switch": runFlap(root, from, { delay: 0,
-  // budget: expandAt − relayAt }) — 541 ms on the 1400 turn.
+test('a timed flap lands inside its budget: at once, down inside it, never a blur', () => {
+  // A flap timed to a moment (FlapTiming: { delay: 0, budget }) — a switch's
+  // ticket rolls its name instead (runRoll, below), the flap stays for a
+  // landing that turns its board; the plan holds for any budget, 541 ms here
+  // (the 1400 turn's transit).
   for (const name of ['MIAMI', 'ORLANDO', 'PAGE', 'ZION', 'BRYCE CANYON', 'NEW YORK']) {
     const cells = name.replace(/\s+/g, '').length;
     const plan = flapPlan(cells, { delay: 0, budget: 541 });
@@ -244,6 +249,33 @@ test('a switch turns the name in its transit: at once, down inside it, never a b
   // The defaults are unchanged.
   assert.deepEqual(flapPlan(11), flapPlan(11, {}));
   assert.equal(flapPlan(11)[0].start, FLAP.delay);
+});
+
+test('a switch ROLLS its ticket\'s name: the old up out of the rule, the new up into it, down inside the transit', async () => {
+  // 地点文字滚动: on a small ticket the flap's turning capitals read as 乱码
+  // (XHIEFCB, BRARS ZRFRBH). The roll is one calm move, on EASE.turn.
+  const { TICKET } = await import('../src/lib/coverDock.ts');
+  assert.ok(ROLL.ms >= 280 && ROLL.ms <= 360);
+  assert.ok(ROLL.ms <= TICKET.transitMinMs, 'down inside the shortest transit');
+  assert.equal(rollMs(), ROLL.ms);
+  assert.equal(rollMs(541), ROLL.ms);
+  assert.equal(rollMs(200), 200);
+  assert.equal(rollMs(10), ROLL.minMs);
+  assert.equal(rollMs(Number.NaN), ROLL.ms);
+  assert.equal(TICKET_NAME_LINE, TICKET.nameLine);
+  const shield = source('src/components/home/RouteShield.tsx');
+  const roll = shield.slice(shield.indexOf('export function runRoll('), shield.indexOf('/** A shield\'s drawing'));
+  // The name: the new cells rise from below the box as it stands at the
+  // start (the taller of the two names, by their words: NEW YORK is two
+  // lines), the old name set whole slides up out of it, the box clipped.
+  assert.match(roll, /const lines = Math\.max\(signLines\(words\.join\(' '\)\), signLines\(\(from\.name \?\? ''\)\.trim\(\) \|\| 'X'\)\);/);
+  assert.match(roll, /overlay\.animate\(\[\{ transform: 'translateY\(0\)' \}, \{ transform: 'translateY\(-110%\)' \}\], \{ duration: ms, easing: CSS_EASE\.turn/);
+  assert.match(roll, /box\.style\.clipPath = 'inset\(0 -0\.3em\)';/);
+  // A state that changes fades in: no letters that are no state.
+  assert.match(roll, /if \(role === 'code'\) \{\s+chars\.forEach\(\(el\) => anims\.push\(el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/);
+  assert.doesNotMatch(roll, /flapGlyph/);
+  // The number counts through the real stops, down as the name reads.
+  assert.match(roll, /flapNumber\(final, leaving, t, 0, ms \/ 2\)/);
 });
 
 test('the sign\'s lines, and the ticket they set: 144 for one, 172 for two, from the CSS itself', async () => {
@@ -399,9 +431,12 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.doesNotMatch(home, /case 'tear': \{|'tear-then'/);
   assert.doesNotMatch(chapter, /archive:tear-then|tearThen\b/);
   assert.match(chapter, /pending = detail\.from;\s+clearPrime = primeFlap\(root, detail\.from\);/);
-  assert.match(chapter, /relayFlapRef\.current = \(budget\) => start\(\{ delay: 0, budget \}\);/);
+  // A switch's ticket ROLLS its name in at the relay (地点文字滚动; on a
+  // small ticket the flap's turning capitals read as 乱码), inside the
+  // transit; a landing with no switch still turns it.
+  assert.match(chapter, /relayFlapRef\.current = \(budget\) => start\(\{ budget \}\);/);
   assert.match(chapter, /relayFlapRef\.current\?\.\(Math\.max\(0, sw\.expandAt - Math\.max\(now, sw\.relayAt\)\)\);/);
-  assert.match(chapter, /stopFlap = runFlap\(root, from, timing\);/);
+  assert.match(chapter, /stopFlap = roll \? runRoll\(root, from, roll\) : runFlap\(root, from\);/);
   assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.
