@@ -161,6 +161,52 @@ export const PROOF = {
 
 export interface ProofRect { x: number; y: number; w: number; h: number }
 
+/**
+ * The room the sheet is set in. The PAGE is the closing's own screen (the
+ * nav's frame round it, a kicker over the grid, the links under the copy);
+ * the PANEL is the explorer's places panel grown into the contact sheet
+ * (ExplorerControls, 2026-09-30: the Index folded into the list of places):
+ * set under the panel's own head (its two views): tighter margins, no
+ * kicker — the head says what the sheet is — and no links (the nav and the
+ * wordmark are on screen round it). The copy sits in the room the short
+ * rows leave, as on the page.
+ */
+export interface ProofBounds {
+  /** Side margin. */
+  M: number;
+  /** Nothing rests above this line (the nav's box; the panel's head). */
+  top: number;
+  /** Room above the grid for the kicker, and below it for the foot. */
+  KICK: number;
+  FOOT: number;
+  /** Where the grid sits in the height it is given. */
+  align: 'center' | 'top';
+  /** The copy block carries the links line. */
+  links: boolean;
+  /** The copy never runs closer than this to the foot. */
+  copyFoot: number;
+}
+
+export const PAGE_BOUNDS: ProofBounds = {
+  M: PROOF.M,
+  top: PROOF.NAV,
+  KICK: PROOF.KICK,
+  FOOT: PROOF.FOOT,
+  align: 'center',
+  links: true,
+  copyFoot: PROOF.COPY_FOOT,
+};
+
+export const PANEL_BOUNDS: ProofBounds = {
+  M: 28,
+  top: 24,
+  KICK: 0,
+  FOOT: 24,
+  align: 'center',
+  links: false,
+  copyFoot: 24,
+};
+
 export interface ProofFrameBox extends ProofRect {
   /** 1-based frame number across the issue. */
   n: number;
@@ -200,6 +246,7 @@ export interface ProofLayout {
   copyW: number;
   figureSize: number;
   figureGap: number;
+  bounds: ProofBounds;
 }
 
 const clamp = (lo: number, value: number, hi: number) => Math.max(lo, Math.min(hi, value));
@@ -232,8 +279,10 @@ export function proofLayout(
   H: number,
   chapters: readonly ProofChapter[],
   metrics: ProofMetrics,
+  bounds: ProofBounds = PAGE_BOUNDS,
 ): ProofLayout | null {
-  const { M, NAV, KICK, FOOT, G, GAP, NUM, NUM_TOP, LEAD } = PROOF;
+  const { G, GAP, NUM, NUM_TOP, LEAD } = PROOF;
+  const { M, top: NAV, KICK, FOOT } = bounds;
   if (!chapters.length || W <= 0 || H <= 0) return null;
   const rows = chapters.map((chapter) => ({
     chapter,
@@ -268,7 +317,7 @@ export function proofLayout(
   const SH = h + NUM;
   const pitch = SH + LEAD;
   const gridH = nRows * pitch - LEAD;
-  const gridTop = Math.round(NAV + KICK + (H - NAV - KICK - FOOT - gridH) / 2);
+  const gridTop = Math.round(NAV + KICK + (bounds.align === 'top' ? 0 : (H - NAV - KICK - FOOT - gridH) / 2));
 
   const frames: ProofFrameBox[] = [];
   const stubs: ProofStubBox[] = [];
@@ -312,14 +361,15 @@ export function proofLayout(
     W, H, h, SH, pitch, SW, x0, gridTop, frames, stubs, rowEnds,
     kicker: { x: M, y: gridTop - 30 },
     voidX, copyW, figureSize, figureGap,
+    bounds,
   };
 }
 
 /** The copy block's height at a title size (every line box is set, not measured). */
-export function copyHeight(titleSize: number, figureSize: number) {
+export function copyHeight(titleSize: number, figureSize: number, withLinks = true) {
   const title = 4 * PROOF.TITLE_LEAD * titleSize;
   const figures = 30 + figureSize + 9 + 12;
-  const links = 18 + 44;
+  const links = withLinks ? 18 + 44 : 0;
   return Math.ceil(title + figures + links);
 }
 
@@ -340,7 +390,7 @@ export function placeCopy(layout: ProofLayout, fittedSize: number) {
   let size = Math.min(PROOF.TITLE_MAX, fittedSize);
   const topAt = (s: number) => Math.max(floor, rowTop - Math.round(s * 0.2));
   for (let turn = 0; turn < 4; turn += 1) {
-    const over = topAt(size) + copyHeight(size, layout.figureSize) - (H - PROOF.COPY_FOOT);
+    const over = topAt(size) + copyHeight(size, layout.figureSize, layout.bounds.links) - (H - layout.bounds.copyFoot);
     if (over <= 0) break;
     size = Math.floor(size - over / (4 * PROOF.TITLE_LEAD) - 1);
   }
@@ -857,7 +907,7 @@ export type ProofHit =
 
 /** The copy block's box on the sheet (its height is set, not measured). */
 export function copyBox(layout: ProofLayout, copy: { x: number; y: number; w: number; titleSize: number }): ProofRect {
-  return { x: copy.x, y: copy.y, w: copy.w, h: copyHeight(copy.titleSize, layout.figureSize) };
+  return { x: copy.x, y: copy.y, w: copy.w, h: copyHeight(copy.titleSize, layout.figureSize, layout.bounds.links) };
 }
 
 /** Hit-test a point (sheet px) against the layout's own rects. */

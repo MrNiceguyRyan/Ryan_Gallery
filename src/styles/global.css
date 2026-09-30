@@ -692,7 +692,8 @@ main[data-story-under="true"] [data-story-source] .archive-plate__cue {
      never the browser's pan. The list keeps its own vertical scroll. */
   touch-action: none;
 }
-.explorer-list {
+.explorer-list,
+.explorer-sheet {
   touch-action: pan-y;
 }
 /* The reader's map: Mapbox's own handlers take the pointer (the atlas's map
@@ -850,41 +851,59 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   letter-spacing: 0.06em;
   color: rgba(244, 244, 237, 0.64);
 }
-/* ── The controls: one bar ──
+/* ── The controls: one bar, one size ──
    Owner, 2026-09-29: 右下角这些按钮太多了，没有美感. One slim instrument at
-   the foot of the rail (ExplorerControls): Recentre (in only when needed),
-   ‹, where the reader is on the route (it opens the list), ›, the Index.
+   the foot of the rail (ExplorerControls): ‹, where the reader is on the
+   route (it opens the places panel), ›. Owner, 2026-09-30: 右下角的胶囊会随着
+   地区改变，产生位置大小往左偏移，我觉得应该固定住 — the capsule is one size in
+   every state and never moves: its middle sets every state's words in the
+   same cells at once (`.explorer-bar__stack`, the widest word sizes the
+   cell), and Recentre is a button of its own beside it, never in it.
    Bone on translucent olive, one hairline round it, nothing else drawn; no
    lime of its own (the viewfinder's leg readout keeps the view's one lime;
-   the keyboard's ring is lime). Space Grotesk labels,
-   tracking under 0.1em; every target 40px or more. */
+   the keyboard's ring is lime). Space Grotesk labels, tracking under 0.1em;
+   every target 40px or more. The room the controls and the panel stand in
+   is the explorer's own: the rail's right edge, the foot, the nav's left
+   edge and band. */
+.explorer {
+  --ctl-right: 48px;
+  --ctl-bottom: 26px;
+  --bar-h: 46px;
+  --list-w: clamp(280px, 25vw, 440px);
+  --panel-left: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-left));
+  --panel-top: calc(max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top)) + 68px);
+}
+@media (min-width: 1280px) {
+  .explorer { --ctl-right: 64px; }
+}
 .explorer-controls {
   position: absolute;
-  z-index: 30;
-  right: 48px;
-  bottom: 26px;
+  z-index: 32;
+  right: var(--ctl-right);
+  bottom: var(--ctl-bottom);
   display: flex;
   justify-content: flex-end;
-  width: clamp(280px, 25vw, 440px);
+  width: var(--list-w);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-out) var(--ease-fade), visibility 0s linear var(--dur-out);
-}
-@media (min-width: 1280px) {
-  .explorer-controls { right: 64px; }
 }
 .explorer-controls[data-visible] {
   opacity: 1;
   visibility: visible;
   transition: opacity 600ms var(--ease-arrive) 200ms, visibility 0s;
 }
+.explorer-controls__row {
+  position: relative;
+  display: flex;
+}
 .explorer-bar {
   position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 46px;
+  height: var(--bar-h);
   padding: 2px;
   border: 1px solid rgba(244, 244, 237, 0.16);
   border-radius: 999px;
@@ -894,7 +913,8 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   box-shadow: 0 10px 30px rgba(6, 8, 5, 0.28);
   pointer-events: auto;
 }
-.explorer-bar > button {
+.explorer-bar > button,
+.explorer-recentre {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -904,15 +924,16 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   color: rgba(244, 244, 237, 0.84);
   transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive);
 }
-.explorer-bar > button:hover:not(:disabled) {
-  background: rgba(244, 244, 237, 0.08);
+.explorer-bar > button:hover:not(:disabled),
+.explorer-recentre:hover {
+  background-color: rgba(244, 244, 237, 0.08);
   color: #F4F4ED;
-  transition: background-color var(--dur-in) var(--ease-arrive), color var(--dur-in) var(--ease-arrive);
 }
 .explorer-bar > button:active:not(:disabled) {
   background: rgba(244, 244, 237, 0.12);
 }
-.explorer-bar > button:focus-visible {
+.explorer-bar > button:focus-visible,
+.explorer-recentre:focus-visible {
   outline: 2px solid #D2FF00;
   outline-offset: 1px;
 }
@@ -927,9 +948,12 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   width: 13px;
   height: 13px;
 }
-/* The place in hand: its number, the route's length, its name. */
+/* The place in hand: its number, the route's length, its name — each in a
+   cell that holds every state's word at once. Idle, the total stands where
+   it stands held ("06 PLACES" / "• 01 / 06 MIAMI"). */
 .explorer-bar__now {
-  gap: 8px;
+  flex: none;
+  gap: 10px;
   min-width: 0;
   padding: 0 14px 0 16px;
   font-size: 10px;
@@ -938,64 +962,115 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   text-transform: uppercase;
   white-space: nowrap;
 }
+.explorer-bar__fig {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .explorer-bar__dot {
   flex: none;
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: rgba(244, 244, 237, 0.86);
-}
-.explorer-bar__no {
-  color: #F4F4ED;
+  opacity: 0;
+  transition: opacity var(--dur-in) var(--ease-fade);
 }
 .explorer-bar__of {
+  color: #F4F4ED;
+  transition: color var(--dur-swap) var(--ease-arrive);
+}
+.explorer-bar__slash {
+  opacity: 0;
+  transition: opacity var(--dur-in) var(--ease-fade);
+}
+.explorer-bar__now[data-held] :is(.explorer-bar__dot, .explorer-bar__slash) {
+  opacity: 1;
+  transition: opacity var(--dur-swap) var(--ease-arrive);
+}
+.explorer-bar__now[data-held] .explorer-bar__of {
   color: rgba(244, 244, 237, 0.5);
 }
-.explorer-bar__name {
+/* A cell of words: every word in the one grid area, as wide as the widest;
+   the one in hand seen. A change turns once: the word being left goes up
+   and out of the cell, the new one comes up into it (the cover's own roll,
+   smaller and quieter; its flap stays the cover's). A word that is neither
+   waits below, unseen. */
+.explorer-bar__stack {
+  display: inline-grid;
   overflow: hidden;
-  max-width: 13em;
-  margin-left: 4px;
-  text-overflow: ellipsis;
+}
+.explorer-bar__stack > span {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(100%);
+}
+.explorer-bar__stack > [data-at='now'] {
+  opacity: 1;
+  transform: none;
+  transition: transform var(--dur-swap) var(--ease-turn), opacity var(--dur-in) var(--ease-arrive);
+}
+.explorer-bar__stack > [data-at='was'] {
+  transform: translateY(-100%);
+  transition: transform var(--dur-swap) var(--ease-turn), opacity var(--dur-in) var(--ease-fade);
+}
+.explorer-bar__no {
+  justify-items: end;
+  color: #F4F4ED;
+}
+.explorer-bar__name {
+  justify-items: start;
   color: #F4F4ED;
 }
 .explorer-bar__caret {
   flex: none;
   width: 10px;
   height: 10px;
-  margin-left: 2px;
   color: rgba(244, 244, 237, 0.55);
   transition: rotate var(--dur-in) var(--ease-arrive);
 }
 .explorer-bar__now[aria-expanded='true'] .explorer-bar__caret {
   rotate: 180deg;
 }
-/* Recentre: in only when needed; the bar opens a place for it on the left
-   (its right edge never moves). */
-.explorer-controls__recentre {
-  width: 0 !important;
-  margin-right: -2px;
+/* Recentre: in only when needed, a round button of the bar's own make
+   beside it (never in it: the capsule does not move for it). In from the
+   bar's side; out on the fade curve. */
+.explorer-recentre {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  width: var(--bar-h);
+  height: var(--bar-h);
+  border: 1px solid rgba(244, 244, 237, 0.16);
+  background: rgba(22, 26, 18, 0.66);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 10px 30px rgba(6, 8, 5, 0.28);
+  pointer-events: auto;
   opacity: 0;
   visibility: hidden;
+  translate: 8px 0;
   transition:
-    width var(--dur-swap) var(--ease-arrive),
-    margin var(--dur-swap) var(--ease-arrive),
-    opacity var(--dur-in) var(--ease-fade),
-    visibility 0s linear var(--dur-swap);
+    opacity var(--dur-out) var(--ease-fade),
+    translate var(--dur-out) var(--ease-arrive),
+    background-color var(--dur-in) var(--ease-arrive),
+    color var(--dur-in) var(--ease-arrive),
+    visibility 0s linear var(--dur-out);
 }
-.explorer-controls__recentre[data-shown] {
-  width: 40px !important;
-  margin-right: 0;
+.explorer-recentre[data-shown] {
   opacity: 1;
   visibility: visible;
+  translate: 0 0;
   transition:
-    width var(--dur-swap) var(--ease-arrive),
-    margin var(--dur-swap) var(--ease-arrive),
-    opacity var(--dur-swap) var(--ease-arrive) 80ms,
+    opacity var(--dur-swap) var(--ease-arrive),
+    translate var(--dur-swap) var(--ease-arrive),
+    background-color var(--dur-in) var(--ease-arrive),
+    color var(--dur-in) var(--ease-arrive),
     visibility 0s;
 }
-/* A tip over the bar: a step's neighbour, an icon's name (the keyboard's
+/* A tip over the bar: a step's neighbour, Recentre's place (the keyboard's
    focus shows it too). */
-.explorer-bar [data-tip]::after {
+.explorer-controls [data-tip]::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 12px);
@@ -1020,7 +1095,7 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   translate: 0 4px;
 }
 @media (hover: hover) {
-  .explorer-bar [data-tip]:hover:not(:disabled)::after {
+  .explorer-controls [data-tip]:hover:not(:disabled)::after {
     opacity: 1;
     translate: -50% 0;
     transition: opacity var(--dur-in) var(--ease-arrive) 240ms, translate var(--dur-in) var(--ease-arrive) 240ms;
@@ -1029,42 +1104,224 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
     translate: 0 0;
   }
 }
-.explorer-bar [data-tip]:focus-visible::after {
+.explorer-controls [data-tip]:focus-visible::after {
   opacity: 1;
   translate: -50% 0;
 }
 .explorer-bar > button:last-child[data-tip]:focus-visible::after {
   translate: 0 0;
 }
-.explorer-list {
+/* ── The places panel: one paper, two views ──
+   Owner, 2026-09-30: 现在不知道index怎样和整体风格可以结合在一起，单独右下角
+   跳转感觉效果很奇怪. The Index (the archive's contact sheet) is the places
+   panel's second view, no longer a page of its own. The panel stands in the
+   explorer's room from the nav's band to the bar; its PAPER is the list's
+   box at the bar's end (the places) or the whole room (the contact sheet),
+   and it grows from one to the other in place — a large plane's curve, the
+   head riding its top edge — while the view it is leaving goes at once and
+   the view it opens on comes in as it settles. The views are set in the
+   paper at their own sizes (the room's: `cqw`/`cqh` are the panel's) and
+   the paper cuts them: growing, it uncovers the sheet from the bar's corner
+   out, and nothing is laid out again as it moves. Opened and closed, the
+   paper rides the bar (the house curve, quick). Every size is the room's
+   (the viewport's) and the data's (the number of places): nothing is
+   measured. */
+.explorer-panel {
+  --head-h: 44px;
+  --row-h: 48px;
+  --list-h: min(calc(var(--head-h) + var(--rows, 6) * var(--row-h) + 17px), 100cqh);
+  container-type: size;
+  position: absolute;
+  z-index: 31;
+  left: var(--panel-left);
+  right: var(--ctl-right);
+  top: var(--panel-top);
+  bottom: calc(var(--ctl-bottom) + var(--bar-h) + 10px);
+  pointer-events: none;
+  visibility: hidden;
+  transition: visibility 0s linear var(--dur-grow);
+}
+.explorer-panel[data-open] {
+  visibility: visible;
+  transition: visibility 0s;
+}
+.explorer-panel__paper {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 10px);
-  width: 100%;
-  pointer-events: auto;
-  max-height: min(62vh, 560px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 14px 10px 10px;
+  bottom: 0;
+  left: calc(100% - var(--list-w));
+  top: 100%;
+  overflow: hidden;
   border: 1px solid rgba(244, 244, 237, 0.12);
   border-radius: 8px;
-  /* Opaque: at 96% the rail's lede showed through its head and first row,
-     two layers of type colliding (the review of 2026-09-28). */
-  background: #11140f;
+  /* Opaque: at 96% the rail's lede showed through the list's head and its
+     first row, two layers of type colliding (the review of 2026-09-28).
+     The sheet's own ground (the closing's, and its loupe's). */
+  background: #20241a;
   box-shadow: 0 18px 50px rgba(5, 7, 4, 0.45);
+  pointer-events: auto;
+  opacity: 0;
+  transition:
+    top var(--dur-swap) var(--ease-arrive),
+    left var(--dur-swap) var(--ease-arrive),
+    opacity var(--dur-in) var(--ease-fade) 120ms;
 }
-.explorer-list__head {
+.explorer-panel[data-open] .explorer-panel__paper {
+  top: calc(100% - var(--list-h));
+  opacity: 1;
+  transition:
+    top var(--dur-swap) var(--ease-arrive),
+    left var(--dur-swap) var(--ease-arrive),
+    opacity var(--dur-flick) var(--ease-arrive);
+}
+.explorer-panel[data-open][data-move='grow'] .explorer-panel__paper {
+  transition:
+    top var(--dur-grow) var(--ease-plane),
+    left var(--dur-grow) var(--ease-plane),
+    opacity var(--dur-flick) var(--ease-arrive);
+}
+/* The sheet put away: the paper folds back down into the bar as it grew,
+   and goes as it gets there. */
+.explorer-panel[data-move='grow']:not([data-open]) .explorer-panel__paper {
+  transition:
+    top var(--dur-grow) var(--ease-plane),
+    left var(--dur-grow) var(--ease-plane),
+    opacity var(--dur-in) var(--ease-fade) 360ms;
+}
+.explorer-panel[data-open][data-view='sheet'] .explorer-panel__paper {
+  top: 0;
+  left: 0;
+}
+/* The head's hairline, across the paper whatever its width. */
+.explorer-panel__paper::before {
+  content: '';
+  position: absolute;
+  top: var(--head-h);
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(244, 244, 237, 0.08);
+}
+.explorer-panel__head {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 0 8px 10px;
+  width: calc(var(--list-w) - 2px);
+  max-width: 100%;
+  height: var(--head-h);
+  padding: 0 6px 0 18px;
+}
+.explorer-panel__tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 100%;
+  margin: 0;
+}
+.explorer-panel__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  /* Room for the keyboard's ring inside the head (the paper cuts anything
+     outside it); the words keep their places. */
+  padding: 0 8px;
+  margin: 0 -8px;
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(244, 244, 237, 0.62);
-  border-bottom: 1px solid rgba(244, 244, 237, 0.08);
+  color: rgba(244, 244, 237, 0.5);
+  transition: color var(--dur-in) var(--ease-arrive);
 }
-.explorer-list__rows {
-  margin-top: 6px;
+.explorer-panel__tab:hover,
+.explorer-panel__tab[aria-selected='true'],
+p.explorer-panel__tabs .explorer-panel__tab {
+  color: #F4F4ED;
+}
+.explorer-panel__count {
+  color: rgba(244, 244, 237, 0.5);
+}
+/* The view that is up: a bone rule under it, on the head's hairline. */
+.explorer-panel__tab::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 1px;
+  background: #F4F4ED;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform var(--dur-swap) var(--ease-arrive);
+}
+.explorer-panel__tab[aria-selected='true']::after {
+  transform: none;
+}
+.explorer-panel__tab:focus-visible,
+.explorer-panel__close:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: -2px;
+}
+.explorer-panel__tab:focus-visible {
+  border-radius: 4px;
+}
+.explorer-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: rgba(244, 244, 237, 0.62);
+  transition: color var(--dur-in) var(--ease-arrive), background-color var(--dur-in) var(--ease-arrive);
+}
+.explorer-panel__close:hover {
+  color: #F4F4ED;
+  background-color: rgba(244, 244, 237, 0.08);
+}
+.explorer-panel__close svg {
+  width: 10px;
+  height: 10px;
+}
+/* The views, in the paper at their own sizes (the paper's border off
+   them), anchored at the bar's corner: the one being left goes at once; the
+   one opened comes in as the paper settles. */
+.explorer-list,
+.explorer-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-flick) var(--ease-fade), visibility 0s linear var(--dur-flick);
+}
+.explorer-list {
+  width: calc(var(--list-w) - 2px);
+  max-width: 100%;
+  height: calc(var(--list-h) - var(--head-h) - 3px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 10px 8px;
+}
+.explorer-sheet {
+  width: calc(100cqw - 2px);
+  height: calc(100cqh - var(--head-h) - 3px);
+  overflow: hidden;
+}
+.explorer-panel[data-open][data-view='places'] .explorer-list,
+.explorer-panel[data-open][data-view='sheet'] .explorer-sheet {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-swap) var(--ease-arrive) 120ms, visibility 0s;
+}
+.explorer-panel[data-open][data-view='sheet'] .explorer-sheet {
+  transition: opacity var(--dur-out) var(--ease-arrive) 160ms, visibility 0s;
 }
 .explorer-list__row {
   display: grid;
@@ -1073,7 +1330,7 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   column-gap: 10px;
   align-items: center;
   width: 100%;
-  min-height: 48px;
+  height: var(--row-h);
   padding: 6px 8px;
   border-radius: 5px;
   text-align: left;
@@ -1115,41 +1372,102 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   text-transform: uppercase;
   color: rgba(244, 244, 237, 0.6);
 }
-/* ── The Index: the archive's contact sheet, over the map ── */
-.explorer-index {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  overflow: hidden;
-  background: #20241a;
+/* The contact sheet in the panel (ArchiveClosing, frame="panel"): the
+   panel's paper is its ground. */
+.archive-closing--panel {
+  background: transparent;
 }
-.explorer-index__close {
+.closing-copy[hidden] {
+  display: none;
+}
+/* The rolls, flowing (FlowSheet): the phone's contact sheet, and a window
+   too narrow for the proof. One roll per place: its stub on the place's
+   own card stock, then its frames at their own ratios in justified lines,
+   the cover ringed in bone. */
+.flow-sheet {
   position: absolute;
-  z-index: 40;
-  top: max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top));
-  right: max(clamp(1.5rem, 3.35vw, 3rem), env(safe-area-inset-right));
-  display: inline-flex;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 14px 14px 20px;
+}
+.flow-roll + .flow-roll {
+  margin-top: 20px;
+}
+.flow-stub {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid rgba(244, 244, 237, 0.16);
-  border-radius: 999px;
-  background: rgba(17, 21, 15, 0.86);
-  color: rgba(244, 244, 237, 0.88);
+  column-gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: var(--stub-paper, #35383e);
+  color: #F4F4ED;
+  text-align: left;
+}
+.flow-stub:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 2px;
+}
+.flow-stub__no {
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.flow-stub__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.flow-stub__place {
   font-size: 10px;
-  letter-spacing: 0.1em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.explorer-index__close:hover { color: #F4F4ED; border-color: rgba(244, 244, 237, 0.34); }
-.explorer-index__close:focus-visible { outline: 2px solid #D2FF00; outline-offset: 2px; }
-/* The sheet's own "Back to the start" is bone inside the Index: its Close is
-   focused on opening, and its lime ring is the view's one lime. */
-.explorer-index .closing-links > button {
-  color: rgba(244, 244, 237, 0.86);
+.flow-stub__sub {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 237, 0.7);
 }
-.explorer-index .closing-links > button:hover {
-  color: #F4F4ED;
+.flow-stub__count {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+}
+.flow-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.flow-frame {
+  flex-shrink: 1;
+  height: 58px;
+  margin: 0;
+  overflow: hidden;
+  background: #0f120c;
+  cursor: pointer;
+}
+.flow-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.flow-frame.is-cover {
+  outline: 1.5px solid rgba(244, 244, 237, 0.9);
+  outline-offset: 2px;
+}
+.flow-frames__rest {
+  flex: 10 1 0;
+  height: 0;
 }
 /* ── The phone ──
    The card is dealt at the foot of the screen (src/lib/explorer.ts,
@@ -1198,16 +1516,31 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   height: 22px;
   font-size: 15px;
 }
+/* The phone's room: the bar across the foot beside Recentre's own place
+   (kept whether Recentre is in or not, so the capsule never moves); the
+   panel from under the nav's band to the bar, the full width. */
+.explorer--phone {
+  --ctl-right: 12px;
+  --ctl-bottom: max(14px, env(safe-area-inset-bottom));
+  --bar-h: 50px;
+  --list-w: 100%;
+  --panel-left: 12px;
+  --panel-top: calc(max(clamp(1.25rem, 2.1vw, 2.25rem), env(safe-area-inset-top)) + 56px);
+}
 .explorer-controls--phone {
   left: 12px;
-  right: 12px;
-  bottom: max(14px, env(safe-area-inset-bottom));
   width: auto;
 }
-/* The phone's bar: across the foot, its middle taking what is left. */
+.explorer-controls--phone .explorer-controls__row {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: calc(var(--bar-h) + 8px);
+}
+/* The phone's bar: across the foot, its middle taking what is left, its
+   words centred in it (their cells still fixed). */
 .explorer-controls--phone .explorer-bar {
   flex: 1 1 auto;
-  height: 50px;
+  min-width: 0;
 }
 .explorer-controls--phone .explorer-bar > button {
   height: 44px;
@@ -1215,14 +1548,14 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
 .explorer-controls--phone .explorer-bar__icon {
   width: 44px;
 }
-.explorer-controls--phone .explorer-controls__recentre[data-shown] {
-  width: 44px !important;
-}
 .explorer-controls--phone .explorer-bar__now {
   flex: 1 1 auto;
 }
-.explorer-controls--phone .explorer-list {
-  max-height: min(58vh, 520px);
+@media (max-width: 379px) {
+  .explorer-controls--phone .explorer-bar__now {
+    gap: 8px;
+    padding: 0 8px;
+  }
 }
 /* The stub's seat (ArchiveChapter): the stub's own box in the ticket; it
    clips at the seam while the stub is torn off to open the story. */
@@ -1247,12 +1580,25 @@ html[data-atlas-camera='flying'] .explorer-idle[data-shown] {
   .explorer-idle[data-shown],
   .explorer-controls,
   .explorer-controls[data-visible],
-  .explorer-controls__recentre,
-  .explorer-controls__recentre[data-shown],
+  .explorer-recentre,
+  .explorer-recentre[data-shown],
   .explorer-rail::before,
-  .explorer-bar [data-tip]::after {
+  .explorer-controls [data-tip]::after,
+  .explorer-bar__stack > span,
+  .explorer-bar__dot,
+  .explorer-bar__slash,
+  .explorer-bar__of,
+  .explorer-panel,
+  .explorer-panel__paper,
+  .explorer-panel__tab::after,
+  .explorer-list,
+  .explorer-sheet {
     transition-duration: 0s !important;
     transition-delay: 0s !important;
+  }
+  /* Values, not structure: the recentre does not slide in. */
+  .explorer-recentre {
+    translate: none;
   }
 }
 
