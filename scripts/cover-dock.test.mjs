@@ -13,6 +13,7 @@
 // the archive as Sanity serves it (a fixture).
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import {
   CORNER_ORDER,
@@ -777,7 +778,9 @@ test('a press on a shield in flight is its click, never the reader taking the ma
   assert.match(atlas, /if \(!arrived\) retimeOnTake\(\);/);
   // Mapbox's pan still goes active on the press itself (why it must not
   // reach it).
-  const mapbox = readFileSync(new URL('../node_modules/mapbox-gl/dist/mapbox-gl-dev.js', import.meta.url), 'utf8');
+  // Resolved as Node would (a worktree may take its packages from a parent).
+  const mapboxDir = createRequire(import.meta.url).resolve('mapbox-gl/package.json').replace(/package\.json$/, '');
+  const mapbox = readFileSync(`${mapboxDir}dist/mapbox-gl-dev.js`, 'utf8');
   assert.match(mapbox, /class MousePanHandler extends MouseHandler \{\s*mousedown\(e, point\) \{\s*super\.mousedown\(e, point\);\s*if \(this\._lastPoint\) this\._active = true;/);
 });
 
