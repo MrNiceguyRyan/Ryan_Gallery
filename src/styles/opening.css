@@ -3358,15 +3358,14 @@ img.of-pic { background: rgba(23, 27, 21, 0.1); }
   position: relative;
   will-change: transform;
 }
-/* His name in the cover's face (entrance.css .ec-xl: Fraunces 400), in
-   capitals: the cover sets it "Ryan Xu", so only its case turns on the way
-   home (landing A's letter morph, as the credits'). */
+/* His name as the cover sets it (entrance.css .ec-xl: Fraunces 400, "Ryan
+   Xu", -0.025em): the signature flies home as it stands, only moved and made
+   smaller (landing A), never a letter turned on the way. */
 .of-title__face {
   font-size: clamp(60px, 8.2vw, 156px);
   font-weight: 400;
   line-height: 1;
-  letter-spacing: -0.035em;
-  text-transform: uppercase;
+  letter-spacing: -0.025em;
   white-space: nowrap;
   color: #f4f4ed;
 }
@@ -3483,24 +3482,26 @@ html[data-reel='skip'] .of-skip { display: none; }
 }
 
 /* ── Landing A: the flight's clones ───────────────────────────────────── */
+/* One layer a word (the wrap, which flies). Its faces are NOT layers of
+   their own: a layer's origin is snapped to the whole pixel, and a face set
+   on the page word's sub-pixel pen (103.67 px) drew its glyphs a third of a
+   pixel off the page's, every edge of the word changing at the hand-off
+   (measured 2026-09-30: up to 169 of 255). Painted into the wrap's layer,
+   the landed clone is the page's word to the pixel. */
 .of-fly {
   position: absolute;
   left: 0;
   top: 0;
-  will-change: transform;
 }
 .of-fly__face {
   position: absolute;
   left: 0;
   top: 0;
   white-space: pre;
-  will-change: transform, opacity;
 }
-/* The word itself: the morph's horizontal scale goes on it (both faces held
-   to one ink width). */
+/* The word itself, set whole (the page's own shaping). */
 .of-fly__ink {
   display: inline-block;
-  will-change: transform;
 }
 
 /* ── Reduced motion: no film ──────────────────────────────────────────────
