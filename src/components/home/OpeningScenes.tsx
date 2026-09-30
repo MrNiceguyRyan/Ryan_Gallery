@@ -7,6 +7,7 @@ import {
   DARK_TYPED,
   DRIFT_VEC,
   LEADER,
+  PROOF_SLUG,
   SCENES,
   SHEETS,
   STYLES,
@@ -39,9 +40,13 @@ import {
 // transformed at rest by the island's clock; what moves, the island moves
 // (transform and opacity on the film's one clock), and where a word must be
 // measured or set on the anchor's baseline it carries a baseline probe
-// (`.of-bl`). The first match cut is the server's first paint: the
-// stylesheet sets it (the anchor, its giant, the words on its line) exactly
-// where the island will.
+// (`.of-bl`). The server's first paint is the proof (act 0): a sheet of the
+// newspaper's newsprint over the first match cut, its marks and its slug,
+// the first cut's lime anchor over it, unprinted — the stylesheet brings
+// the lights down, the head script prints the plates (src/lib/proofPlates.ts).
+// The first match cut is
+// drawn under it from the first paint: the stylesheet sets it (the anchor,
+// its giant, the words on its line) exactly where the island will.
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
 // the anchor, the printed matter's own words (but the dictionary, Webster's
@@ -153,14 +158,20 @@ function Circled({ n }: { n: string }) {
 }
 
 /** Crop marks at the frame's corners, a registration mark at its head and a
- *  grey step bar (a printer's proof). */
-function Marks() {
+ *  grey step bar (a printer's proof). Without `crops`, the head and foot
+ *  marks only (the film's own proof: four marks flush in the corners read
+ *  as a bracket frame, and the foot's right corner is the Skip pill's). */
+function Marks({ crops = true }: { crops?: boolean }) {
   return (
     <div className="of-marks" aria-hidden="true">
-      <i className="of-crop of-crop--tl" />
-      <i className="of-crop of-crop--tr" />
-      <i className="of-crop of-crop--bl" />
-      <i className="of-crop of-crop--br" />
+      {crops && (
+        <>
+          <i className="of-crop of-crop--tl" />
+          <i className="of-crop of-crop--tr" />
+          <i className="of-crop of-crop--bl" />
+          <i className="of-crop of-crop--br" />
+        </>
+      )}
       <svg className="of-reg" viewBox="0 0 40 40">
         <circle cx="20" cy="20" r="10" />
         <path d="M20 2 V38 M2 20 H38" />
@@ -170,6 +181,29 @@ function Marks() {
           <i key={k} style={vars({ '--k': k })} />
         ))}
       </span>
+    </div>
+  );
+}
+
+// ── Act 0: the proof ──────────────────────────────────────────────────────
+
+/** The proof's sheet: the newspaper's newsprint over the first page (let go
+ *  at film 0; never quite opaque, so the page under it is drawn). */
+function ProofSheet() {
+  return <div className="of-proof" data-proof aria-hidden="true" />;
+}
+/** Its marks (the pages' own registration mark; no crop marks, and its
+ *  step bar is not drawn) and its slug, above the soft edge so the hairlines
+ *  stay crisp. The slug is printed whole from the first paint: a proof lists
+ *  its plates before they print, and nothing at its foot moves while the
+ *  reader waits. */
+function ProofMarks() {
+  return (
+    <div className="of-proof-marks" data-proof-marks aria-hidden="true">
+      <Marks crops={false} />
+      <p className="of-proof__slug of-mono">
+        {PROOF_SLUG.head} <span className="of-proof__wide">{PROOF_SLUG.wide}</span> {PROOF_SLUG.plates.join(' ')}
+      </p>
     </div>
   );
 }
@@ -1042,7 +1076,8 @@ const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
 
 /**
  * Every scene, stacked (the island times them): the frame (the paper, every
- * cut's page, the anchor, the soft edge, the grain; the relay's machines
+ * cut's page, the proof's sheet, the anchor, the soft edge, the proof's
+ * marks, the grain; the relay's machines
  * over them; the hand-off's lime block; for the burn the sepia and its
  * canvas and — past its foot — the frame line and perforations a slip
  * shows), the dark of the burn with its leader and lit perforations, and the
@@ -1059,12 +1094,15 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
         {SCENES.map((s, i) => (
           <Cut key={i} index={i} s={s} pictures={pictures} />
         ))}
+        {/* Act 0: the proof over the first page, under its anchor. */}
+        <ProofSheet />
         <div className="of-anchor" data-anchor>
           {SCENES.map((s, i) => (
             <Key key={i} index={i} s={s} />
           ))}
         </div>
         <div className="of-frame__soft" data-soft />
+        <ProofMarks />
         {SCENES.map((s, i) => (
           <Chrome key={i} index={i} s={s} />
         ))}
