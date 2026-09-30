@@ -29,8 +29,12 @@ export interface ProofChapter {
   slug: string;
   /** What the torn stub printed: '01'… */
   ordinal: string;
+  /** English: also what the stub's sub compares against (stubSub). */
   place: string;
   region: string;
+  /** Their printed Chinese twins ('' where there is none: the English). */
+  placeZh: string;
+  regionZh: string;
   year: string;
   coverUrl: string;
   coverRatio: number;
@@ -72,6 +76,8 @@ export function proofChapters(collections: readonly Collection[]): ProofChapter[
       ordinal: pad2(chapters.length + 1),
       place: collection.name.trim(),
       region: (collection.region ?? collection.location ?? '').trim(),
+      placeZh: (collection.nameZh ?? '').trim(),
+      regionZh: ((collection.region ? collection.regionZh : collection.locationZh) ?? '').trim(),
       year: collection.year != null ? String(collection.year) : '',
       coverUrl,
       coverRatio: fileRatio(coverUrl) ?? 1.5,

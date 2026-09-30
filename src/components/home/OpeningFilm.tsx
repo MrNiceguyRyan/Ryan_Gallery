@@ -79,6 +79,8 @@ import {
 import { markReelSeen } from '../../lib/reelVisit';
 import { PLATES, proofPlates, type ProofPlates } from '../../lib/proofPlates';
 import { EASE } from '../../lib/motion';
+import { shownMatch } from '../../i18n/lang';
+import { T, useT } from '../../i18n/react';
 
 const bezier = ([a, b, c, d]: readonly number[]) => `cubic-bezier(${a}, ${b}, ${c}, ${d})`;
 const FADE_CSS = bezier(EASE.fade);
@@ -461,6 +463,7 @@ function scratchOf(f: number): [number, number, number, number] {
 export default function OpeningFilm({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
+  const say = useT();
 
   useEffect(() => {
     const overlayEl = rootRef.current;
@@ -978,7 +981,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // the cover's word scaled up, so on the frame it takes the title's
       // place the two are one drawing; the title's letters sit on the page's
       // own pens for that size.
-      const coverName = document.querySelector<HTMLElement>(LANDING_TARGETS.ryan.to);
+      // (The cover is printed in both languages: the shown copy.)
+      const coverName = shownMatch(document, LANDING_TARGETS.ryan.to);
       const coverSize = coverName ? parseFloat(getComputedStyle(coverName).fontSize) : NaN;
       const opsz = coverSize > 0 ? `"opsz" ${Math.min(144, Math.max(9, coverSize)).toFixed(2)}` : '';
       name.style.fontVariationSettings = opsz;
@@ -1645,7 +1649,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const found: { src: HTMLElement; dst: HTMLElement; top: number; left: number; from: number; name: boolean }[] = [];
       FLY_ORDER.forEach((word) => {
         const src = endLayer.querySelector<HTMLElement>(LANDING_TARGETS[word].from);
-        const dst = document.querySelector<HTMLElement>(LANDING_TARGETS[word].to);
+        // The cover is printed in both languages (src/i18n): the hidden
+        // copy has no box, and a flight aimed at it would be dropped.
+        const dst = shownMatch(document, LANDING_TARGETS[word].to);
         if (!src || !dst || !dst.getClientRects().length) return;
         // A place below the first screen is not a landing: that word stays
         // and goes with the dark.
@@ -2164,8 +2170,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         </div>
         <div className="of-flight" data-flight />
       </div>
-      <button ref={skipRef} type="button" className="of-skip" aria-label="Skip the opening film">
-        Skip
+      <button ref={skipRef} type="button" className="of-skip" aria-label={say('film.skipAria')}>
+        <T k="film.skip" />
         <span aria-hidden="true">&rarr;</span>
       </button>
     </>

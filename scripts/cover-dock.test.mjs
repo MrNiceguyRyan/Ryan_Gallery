@@ -951,7 +951,7 @@ test('the state, boxed; the pad gone; the old switch gone', () => {
   assert.equal(DOCK.tab, 34);
   assert.equal(DOCK.below, 36);
   assert.match(chapter, /<div className="archive-dock__tab font-ui" data-side=\{phone \? 'left' : side\} aria-hidden="true">/);
-  assert.match(chapter, /<span className="archive-dock__tab-state">\{stateTab\.state\}<\/span>/);
+  assert.match(chapter, /<span className="archive-dock__tab-state"><Bi en=\{stateTab\.state\} zh=\{stateTab\.stateZh\} \/><\/span>/);
   assert.doesNotMatch(css, /archive-dock__tab-region/);
   // No strips under the cover: the pad is gone everywhere, and the old
   // switch's outline, mat polygon, unroll and fold with it.
@@ -974,8 +974,8 @@ test('票根上已经有region了，只出现一处: the state once, boxed on th
   const rows = chapter.slice(start, chapter.indexOf('}, [collection]);', start));
   assert.ok(rows.length > 100);
   assert.doesNotMatch(rows, /'Region'|collection\.region/);
-  assert.match(rows, /rows\.push\(\['Frames'/);
-  assert.match(chapter, /<span className="archive-dock__tab-state">\{stateTab\.state\}<\/span>/);
+  assert.match(rows, /rows\.push\(\{ label: 'chapter\.stub\.frames'/);
+  assert.match(chapter, /<span className="archive-dock__tab-state"><Bi en=\{stateTab\.state\} zh=\{stateTab\.stateZh\} \/><\/span>/);
   // 所有票根的撕口处做一个下划线指引: a hairline in the stub's own ink down its
   // perforation (6 px in from the holes, a dash between every two), from
   // under the top notch to above the bottom one, quiet on every stock,

@@ -1,5 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
 import { encodeQr, qrPath } from '../../lib/qrCode';
+import { useLang } from '../../i18n/react';
+import { tr } from '../../i18n/dict';
 import {
   HOVER_PEEL_DEG,
   HOVER_RATE,
@@ -655,7 +657,25 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
 
   const toScale = destinationScale(fields.to);
   const torn = phase === 'torn';
-  const label = `Boarding pass: passenger ${fields.passenger.toLowerCase()}, from ${fields.from.toLowerCase()} to ${fields.to.toLowerCase()}, flight ${fields.flight}, seat ${fields.seat}. Its QR code opens ryanxugallery.com.`;
+  // The printed pass stays English in both languages (a printed object, like
+  // the shields: the owner asked for YOU); what a screen reader hears is the
+  // reader's language.
+  const lang = useLang();
+  const label = lang === 'zh'
+    ? tr('zh', 'pass.aria', {
+        passenger: tr('zh', 'pass.value.passenger'),
+        from: tr('zh', 'pass.value.from'),
+        to: fields.toZh || fields.to,
+        flight: fields.flight,
+        seat: fields.seat,
+      })
+    : tr('en', 'pass.aria', {
+        passenger: fields.passenger.toLowerCase(),
+        from: fields.from.toLowerCase(),
+        to: fields.to.toLowerCase(),
+        flight: fields.flight,
+        seat: fields.seat,
+      });
 
   return (
     <div
@@ -665,7 +685,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       data-stub={torn ? 'free' : undefined}
     >
       <span ref={liftRef} className="bp-lift" aria-hidden="true" />
-      <div className="bp-body" role="group" aria-roledescription="boarding pass" aria-label={label}>
+      <div className="bp-body" role="group" aria-roledescription={tr(lang, 'pass.roledescription')} aria-label={label}>
         <div className="bp-half bp-half--main" data-asm="paper">
           <span className="bp-shadow" aria-hidden="true" />
           <div ref={mainRef} className="bp-main">
@@ -729,7 +749,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
                 viewBox={`-2 -2 ${qr.size + 4} ${qr.size + 4}`}
                 shapeRendering="crispEdges"
                 role="img"
-                aria-label="QR code: ryanxugallery.com"
+                aria-label={tr(lang, 'pass.qrAria')}
               >
                 <rect x="-2" y="-2" width={qr.size + 4} height={qr.size + 4} className="bp-qr__ground" />
                 <path d={qr.path} />
@@ -782,7 +802,7 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
             ref={tearRef}
             type="button"
             className="bp-tear"
-            aria-label="Tear the stub to begin"
+            aria-label={tr(lang, 'pass.tearAria')}
             disabled={!interactive || torn}
             tabIndex={interactive && !torn ? 0 : -1}
           />

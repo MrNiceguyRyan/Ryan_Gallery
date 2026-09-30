@@ -18,6 +18,7 @@ import { requestExplore } from '../../lib/explorer';
 import { markPassTorn } from '../../lib/reelVisit';
 import { stockPaper } from '../../lib/ticketStock';
 import { bezierFn } from '../../lib/motion';
+import { T, useT } from '../../i18n/react';
 
 // ── The entrance: a cover of words, and the pass that is the way in ──
 // Owner, 2026-09-28: 封面画面结束后，就如同这个 11moissanstoit 封面一样，一些字体
@@ -60,9 +61,6 @@ import { bezierFn } from '../../lib/motion';
 
 const arrivalCurve = bezierFn(ARRIVAL_EASE);
 
-/** PROPOSED copy: the hint under the stub. */
-const HINT = 'Tear the stub to begin';
-
 type Compose = 'wait' | 'play' | 'done';
 
 interface Props {
@@ -90,7 +88,9 @@ function Words({ block }: { block: CoverBlock }) {
     <>
       {words.map((word, index) => {
         const key = `${index}-${word.map((part) => part.text).join('')}`;
-        const lead = index > 0 ? ' ' : null;
+        // No space before a word set close (Chinese: src/lib/boardingPass.ts
+        // coverWords).
+        const lead = index > 0 && !word[0]?.tight ? ' ' : null;
         if (word[0]?.br) return <br key={key} className="ec-br" />;
         const special = word.find((part) => part.land || part.pass);
         if (!special) {
@@ -140,6 +140,11 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
   const [lifted, setLifted] = useState(false);
   const fields = useMemo(() => passFields(first), [first]);
   const blocks = useMemo(() => coverBlocks(facts, first), [facts, first]);
+  // The same cover in Chinese: the same blocks in the same order (the
+  // reveal's --b is shared), every landing word in its own span. Both are in
+  // the markup; html[data-lang] shows one (src/i18n/runtime.ts).
+  const blocksZh = useMemo(() => coverBlocks(facts, first, 'zh'), [facts, first]);
+  const t = useT();
   const callbacks = useRef({ nextTop, onArrive, onGlided });
   callbacks.current = { nextTop, onArrive, onGlided };
   const flow = useRef({ released: false, gliding: false, asked: false });
@@ -319,12 +324,27 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
   const head = blocks.filter((block) => block.kind !== 'm');
   const body = blocks.filter((block) => block.kind === 'm');
   const indexOf = (block: CoverBlock) => blocks.indexOf(block);
+  const both = (block: CoverBlock) => {
+    const zh = blocksZh[indexOf(block)];
+    return (
+      <>
+        <span data-l="en">
+          <Words block={block} />
+        </span>
+        {zh && (
+          <span data-l="zh" lang="zh-Hans">
+            <Words block={zh} />
+          </span>
+        )}
+      </>
+    );
+  };
 
   return (
     <section
       ref={sectionRef}
       className="entrance"
-      aria-label="Opening"
+      aria-label={t('entrance.aria')}
       data-compose={compose}
       data-torn={torn ? '' : undefined}
       style={style}
@@ -345,7 +365,7 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
                         // (when they hold it: the first chapter's year).
                         data-pass-from={at > 0 && fields.date !== '—' && String(piece).includes(fields.date) ? 'date' : undefined}
                       >
-                        {String(piece)}
+                        {at === 0 ? <T k="cover.kicker" /> : String(piece)}
                       </span>
                     ))}
                   </p>
@@ -355,7 +375,7 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
                     className={`ec-block ec-${block.kind}`}
                     style={{ ['--b' as string]: indexOf(block) } as CSSProperties}
                   >
-                    <Words block={block} />
+                    {both(block)}
                   </p>
                 ),
               )}
@@ -363,7 +383,7 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
             <div className="ec-body">
               {body.map((block) => (
                 <p key={indexOf(block)} className="ec-block ec-m" style={{ ['--b' as string]: indexOf(block) } as CSSProperties}>
-                  <Words block={block} />
+                  {both(block)}
                 </p>
               ))}
             </div>
@@ -380,12 +400,12 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
             />
             <p className="ec-hint" data-asm="hint" aria-hidden="true">
               <span className="ec-hint__dot" />
-              {HINT}
+              <T k="entrance.hint" />
             </p>
           </div>
         </div>
       </div>
-      <span className="sr-only" role="status">{torn ? 'The stub is torn off. Boarding.' : ''}</span>
+      <span className="sr-only" role="status">{torn ? <T k="entrance.torn" /> : ''}</span>
     </section>
   );
 }

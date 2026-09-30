@@ -46,6 +46,8 @@ import { stateCode } from './routeShield.ts';
 import { EASE } from './motion.ts';
 import { ENTRY } from './explorerCamera.ts';
 import type { CoverStubTarget } from './explorer.ts';
+import { tr } from '../i18n/dict.ts';
+import type { Lang } from '../i18n/runtime.ts';
 
 // ── The contract's names ────────────────────────────────────────────────
 // Written once, in the explorer's module (src/lib/explorer.ts, "The stub
@@ -88,6 +90,9 @@ export const PASS_URL = 'https://ryanxugallery.com/';
 
 export interface PassChapter {
   name?: string | null;
+  /** Its printed Chinese twin (the cover's first stop in 中; the pass itself
+   *  prints the English, like the shields). */
+  nameZh?: string | null;
   region?: string | null;
   year?: number | string | null;
   /** Its card stock (src/lib/ticketStock.ts): the stub lands on it. */
@@ -104,6 +109,9 @@ export interface PassFields {
   to: string;
   /** Its state's two letters, as the route shields print them ('' if none). */
   toCode: string;
+  /** The destination's Chinese name, for what a screen reader hears in 中
+   *  (the pass prints the English); absent when there is none. */
+  toZh?: string;
   flight: string;
   seat: string;
   gate: string;
@@ -120,6 +128,7 @@ export function passFields(first?: PassChapter | null): PassFields {
     from: 'HERE',
     to: name ? name.toUpperCase() : 'THE ARCHIVE',
     toCode: stateCode(first?.region),
+    ...(first?.nameZh?.trim() ? { toZh: first.nameZh.trim() } : null),
     flight: 'RX 001',
     seat: '01A',
     gate: '01',
@@ -192,14 +201,17 @@ export interface CoverFacts {
   frames: number;
   /** The regions in route order (HomePage: each chapter's own, deduped). */
   regions: readonly string[];
+  /** Their Chinese twins, one per region (the English where there is none). */
+  regionsZh?: readonly string[];
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Florida, Arizona, Utah and New York". */
-export function listJoin(items: readonly string[]): string {
+/** "Florida, Arizona, Utah and New York" (中: "佛罗里达州、亚利桑那州、犹他州和纽约州"). */
+export function listJoin(items: readonly string[], lang: Lang = 'en'): string {
   const list = items.map((item) => item.trim()).filter(Boolean);
   if (list.length <= 1) return list[0] ?? '';
+  if (lang === 'zh') return `${list.slice(0, -1).join('、')}和${list[list.length - 1]}`;
   return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
 }
 
@@ -216,8 +228,61 @@ export function distinctRegions(regions: ReadonlyArray<string | null | undefined
   return out;
 }
 
-/** The cover, block by block (PROPOSED copy). */
-export function coverBlocks(facts: CoverFacts, first?: PassChapter | null): CoverBlock[] {
+/** A dictionary line as cover pieces: each {slot} is the piece given for
+ *  it (a landing word, the first stop, a line break), the rest plain text. */
+function templatePieces(template: string, slots: Record<string, CoverPiece>): CoverPiece[] {
+  return template
+    .split(/(\{\w+\})/)
+    .filter(Boolean)
+    .map((part) => {
+      const slot = /^\{(\w+)\}$/.exec(part)?.[1];
+      return slot && slots[slot] ? slots[slot] : part;
+    });
+}
+
+/** The cover in Chinese (PROPOSED copy, src/i18n/parts/home.ts cover.*):
+ *  the same blocks, the same landing slots — every word the film carries
+ *  keeps its own span (Ryan and Xu stay Latin: his name), so the flights key
+ *  on the ids as in English. */
+function coverBlocksZh(facts: CoverFacts, first?: PassChapter | null): CoverBlock[] {
+  const land = (word: LandWord): CoverPiece => ({ land: word, text: tr('zh', `cover.land.${word}` as 'cover.land.camera') });
+  const blocks: CoverBlock[] = [];
+  blocks.push({ kind: 'kicker', pieces: facts.years ? [tr('zh', 'cover.kicker'), facts.years] : [tr('zh', 'cover.kicker')] });
+  blocks.push({
+    kind: 'xl',
+    pieces: templatePieces(tr('zh', 'cover.xl'), {
+      ryan: { land: 'ryan', text: 'Ryan' },
+      xu: { land: 'xu', text: 'Xu' },
+      camera: land('camera'),
+      travel: land('travel'),
+      br: { br: true },
+    }),
+  });
+  if (facts.places > 0) {
+    blocks.push({ kind: 'xl-quiet', pieces: [tr('zh', 'cover.figures', { places: facts.places, frames: Math.max(0, facts.frames) })] });
+  }
+  const where = listJoin(facts.regionsZh?.length === facts.regions.length ? facts.regionsZh : facts.regions, 'zh');
+  if (where || facts.years) {
+    const line = where && facts.years
+      ? tr('zh', 'cover.whereWhen', { regions: where, years: facts.years })
+      : where ? `${where}。` : `${facts.years}\u00a0年。`;
+    blocks.push({ kind: 'm', pieces: [line] });
+  }
+  blocks.push({ kind: 'm', pieces: templatePieces(tr('zh', 'cover.kept'), { archive: land('archive'), thought: land('thought') }) });
+  const name = (first?.nameZh?.trim() || first?.name?.trim()) ?? '';
+  blocks.push({
+    kind: 'm',
+    pieces: name
+      ? templatePieces(tr('zh', 'cover.firstStop'), { to: { pass: 'to', text: name }, you: land('you') })
+      : templatePieces(tr('zh', 'cover.passenger'), { you: land('you') }),
+  });
+  return blocks;
+}
+
+/** The cover, block by block (PROPOSED copy). Both languages have the same
+ *  blocks in the same order (the reveal's --b indices are shared). */
+export function coverBlocks(facts: CoverFacts, first?: PassChapter | null, lang: Lang = 'en'): CoverBlock[] {
+  if (lang === 'zh') return coverBlocksZh(facts, first);
   const blocks: CoverBlock[] = [];
   blocks.push({ kind: 'kicker', pieces: facts.years ? ['Visual Archive', facts.years] : ['Visual Archive'] });
   blocks.push({
@@ -257,6 +322,81 @@ export interface WordPart {
   land?: LandWord;
   pass?: 'to';
   br?: true;
+  /** (On a word's first part) set close to the word before, no space: a
+   *  break between two Han characters, which Chinese has instead of spaces. */
+  tight?: true;
+}
+
+// Chinese has no spaces. The cover breaks a clause into its phrases, never
+// inside one: after a closing mark (，。、…), where Han meets a figure or a
+// Latin word, and where the copy marks a break with a zero-width space
+// (U+200B) — "一台" or "地方" is never split across two lines (a phone set
+// "一 / 台相机"). A landed word is a unit of its own. The same, char for
+// char, on the server and the client (no Intl.Segmenter: its dictionary
+// differs between ICU builds).
+const HAN = /\p{Script=Han}/u;
+const CLOSING = /^[，。、；：！？）》」』’”…—·％%]/;
+const OPENING = /[（《「『‘“]$/;
+const ZWSP = '\u200b';
+function hanUnits(text: string): string[] {
+  if (!HAN.test(text)) return [text.split(ZWSP).join('')];
+  const units: string[] = [];
+  let run = '';
+  let kind: 'han' | 'latin' | null = null;
+  const flush = () => {
+    if (run) units.push(run);
+    run = '';
+    kind = null;
+  };
+  for (const ch of Array.from(text)) {
+    if (ch === ZWSP) {
+      if (!OPENING.test(run)) flush();
+      continue;
+    }
+    if (CLOSING.test(ch)) {
+      if (run) run += ch;
+      else if (units.length) units[units.length - 1] += ch;
+      else run = ch;
+      // A closing mark ends the phrase (a dash's second half stays with it).
+      kind = 'han';
+      continue;
+    }
+    const next: 'han' | 'latin' = HAN.test(ch) ? 'han' : 'latin';
+    const closed = run && CLOSING.test(run.slice(-1)) && !(ch === '—' || ch === '…');
+    if (run && !OPENING.test(run) && (closed || (kind && kind !== next))) flush();
+    run += ch;
+    kind = next;
+  }
+  flush();
+  return units;
+}
+const tightBetween = (left: string, right: string) =>
+  (HAN.test(left) || HAN.test(right)) && !CLOSING.test(right) && !OPENING.test(left) && !/\u00a0$/.test(left);
+
+/** A word (parts with no space between) split where Chinese may break. */
+function splitHan(word: WordPart[]): WordPart[][] {
+  if (!word.some((part) => HAN.test(part.text))) return [word];
+  const units: WordPart[] = [];
+  word.forEach((part) => {
+    if (part.land || part.pass || part.br) units.push(part);
+    else hanUnits(part.text).forEach((text) => units.push({ text }));
+  });
+  const out: WordPart[][] = [];
+  let current: WordPart[] = [];
+  units.forEach((unit, index) => {
+    const prev = units[index - 1];
+    if (prev && tightBetween(prev.text, unit.text)) {
+      out.push(current);
+      current = [{ ...unit, tight: true }];
+      return;
+    }
+    const last = current[current.length - 1];
+    // Plain text runs on in one part.
+    if (last && !last.land && !last.pass && !unit.land && !unit.pass) current[current.length - 1] = { ...last, text: last.text + unit.text };
+    else current.push(unit);
+  });
+  if (current.length) out.push(current);
+  return out;
 }
 
 /** A block's pieces as words (split on white space — never on a no-break
@@ -266,8 +406,16 @@ export interface WordPart {
 export function coverWords(pieces: readonly CoverPiece[]): WordPart[][] {
   const words: WordPart[][] = [];
   let word: WordPart[] = [];
+  // (A Han word after a line break is set close too: on a phone the break
+  // is hidden, and Chinese has no space there.)
+  let afterBr = false;
   const end = () => {
-    if (word.length) words.push(word);
+    if (word.length) {
+      const split = splitHan(word);
+      if (afterBr && HAN.test(split[0][0].text)) split[0][0] = { ...split[0][0], tight: true };
+      words.push(...split);
+      afterBr = false;
+    }
     word = [];
   };
   pieces.forEach((piece) => {
@@ -282,6 +430,7 @@ export function coverWords(pieces: readonly CoverPiece[]): WordPart[][] {
     if ('br' in piece) {
       end();
       words.push([{ text: '', br: true }]);
+      afterBr = true;
       return;
     }
     if ('land' in piece) word.push({ text: piece.text ?? piece.land, land: piece.land });
@@ -295,8 +444,8 @@ export function coverWords(pieces: readonly CoverPiece[]): WordPart[][] {
 export const coverText = (pieces: readonly CoverPiece[]) =>
   coverWords(pieces)
     .filter((word) => !word[0]?.br)
-    .map((word) => word.map((part) => part.text).join(''))
-    .join(' ')
+    .map((word, index) => (index > 0 && !word[0]?.tight ? ' ' : '') + word.map((part) => part.text).join(''))
+    .join('')
     .replace(/ /g, ' ');
 
 // ── The reveal ──────────────────────────────────────────────────────────

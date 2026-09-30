@@ -784,3 +784,61 @@ test('the pass in the hand: carried, never torn by it, kept on the screen', () =
   assert.doesNotMatch(glow, /d2ff00|lime/i);
   assert.match(glow, /prefers-reduced-motion: reduce[\s\S]*animation: none;/);
 });
+
+test('中: the cover in Chinese keeps every landing slot, breaks like Chinese, and the pass stays printed English', () => {
+  const facts = { ...FACTS, regionsZh: ['佛罗里达州', '亚利桑那州', '犹他州', '纽约州'] };
+  const first = { ...MIAMI, nameZh: '迈阿密' };
+  const en = P.coverBlocks(facts, first);
+  const zh = P.coverBlocks(facts, first, 'zh');
+  // The same blocks in the same order (the reveal's --b is shared).
+  assert.deepEqual(zh.map((b) => b.kind), en.map((b) => b.kind));
+  const texts = zh.map(textOf);
+  assert.equal(texts[1], 'Ryan Xu，一台相机，和我旅行过的地方。');
+  assert.equal(texts[2], '6 个地点。58 帧。');
+  assert.equal(texts[3], '佛罗里达州、亚利桑那州、犹他州和纽约州，2025–2026 年。');
+  assert.equal(texts[5], '第一站，迈阿密。乘客是你。');
+  // Every word the film lands, once each, in its own span (his name Latin).
+  const parts = zh.flatMap((b) => P.coverWords(b.pieces).flat());
+  assert.deepEqual(parts.filter((p) => p.land).map((p) => [p.land, p.text]), [
+    ['ryan', 'Ryan'], ['xu', 'Xu'], ['camera', '相机'], ['travel', '旅行'], ['archive', '档案'], ['thought', '思考'], ['you', '你'],
+  ]);
+  assert.deepEqual(parts.filter((p) => p.pass), [{ text: '迈阿密', pass: 'to', tight: true }]);
+  // Han breaks between phrases (set close, no space): after a closing
+  // mark, at a landed word, where Han meets a figure — never before a
+  // closing mark, never inside a phrase, never between a figure and its
+  // unit (a no-break space).
+  const words = P.coverWords(zh[1].pieces).map((w) => w.map((p) => p.text).join(''));
+  assert.deepEqual(words, ['Ryan', 'Xu，', '一台', '相机，', '', '和我', '旅行', '过的地方。']);
+  // (Phrases, not characters: "一台" is never split across two lines.)
+  const kept = P.coverWords(zh[4].pieces).map((w) => w.map((p) => p.text).join(''));
+  assert.deepEqual(kept, ['相机留下的，', '成了这份', '档案——', '光线、', '土地，', '以及一路相随的', '思考。']);
+  const where = P.coverWords(zh[3].pieces).map((w) => w.map((p) => p.text).join(''));
+  assert.equal(where[where.length - 1], '2025–2026 年。');
+  assert.ok(where.every((w) => !/^[，。、]/.test(w)), 'no line starts with a closing mark');
+  // English is untouched by the Han rule: no word is set close.
+  assert.ok(en.every((b) => P.coverWords(b.pieces).every((w) => !w[0].tight)));
+  assert.equal(P.listJoin(['A', 'B', 'C'], 'zh'), 'A、B和C');
+  // The pass prints English in both languages (like the shields); only what
+  // a screen reader hears is translated (toZh).
+  const fields = P.passFields(first);
+  assert.equal(fields.to, 'MIAMI');
+  assert.equal(fields.toZh, '迈阿密');
+  assert.equal(fields.passenger, 'YOU');
+  // Both covers are in the markup: the flights take the shown copy.
+  const entrance = source('src/components/home/EntranceIntro.tsx');
+  assert.match(entrance, /coverBlocks\(facts, first, 'zh'\)/);
+  assert.match(entrance, /<span data-l="zh" lang="zh-Hans">\s*<Words block=\{zh\} \/>/);
+  const motion = source('src/components/home/entranceMotion.ts');
+  assert.match(motion, /shownMatch\(text, `\[data-pass-from="\$\{word\}"\]`\)/);
+  assert.match(motion, /shownMatch\(stage, `\[data-pass-land="\$\{word\}"\]`\)/);
+  assert.doesNotMatch(motion, /querySelector<HTMLElement>\(`\[data-pass-(from|land)/);
+});
+
+test('中: his name keeps the display tracking in the Chinese cover (the landing moves the same word; the title gives way)', () => {
+  const css = source('src/styles/entrance.css');
+  const xl = /\.ec-xl,\s*\.ec-xl-quiet \{[^}]*letter-spacing: (-?[\d.]+em);/.exec(css);
+  assert.ok(xl, 'the display tracking');
+  const name = /\.ec-xl \[data-l='zh'\] :is\(\[data-open-land='ryan'\], \[data-open-land='xu'\]\) \{\s*letter-spacing: (-?[\d.]+em);/.exec(css);
+  assert.ok(name, 'the name rule in 中');
+  assert.equal(name[1], xl[1]);
+});

@@ -2,12 +2,17 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { MapShield } from './RouteShield';
 import { pad2, stateCode } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
+import { Bi, T, useLang } from '../../i18n/react';
+import { tr } from '../../i18n/dict';
 
 export interface ExplorerPlace {
   id: string;
   number: number;
   name: string;
+  /** The printed Chinese twins (the English stay the keys: shields). */
+  nameZh?: string;
   region?: string;
+  regionZh?: string;
   slug?: string;
   frames: number;
   year?: number | string;
@@ -195,6 +200,11 @@ export default function ExplorerControls({
 
   const total = places.length;
   const frames = places.reduce((sum, place) => sum + (place.frames || 0), 0);
+  // What a screen reader hears and a tip shows is one language: the
+  // reader's (English while hydrating: src/i18n/react.tsx).
+  const lang = useLang();
+  const t = (key: Parameters<typeof tr>[1], vars?: Parameters<typeof tr>[2]) => tr(lang, key, vars);
+  const nameOf = (place: ExplorerPlace) => (lang === 'zh' && place.nameZh) || place.name;
   const now = current ? places.find((place) => place.id === current) ?? null : null;
   const chevron = (d: string) => (
     <svg className="explorer-bar__glyph" viewBox="0 0 12 12" aria-hidden="true">
@@ -207,8 +217,8 @@ export default function ExplorerControls({
       className="explorer-bar__icon explorer-controls__step explorer-controls__step--prev"
       onClick={onPrev}
       disabled={!prev}
-      aria-label={prev ? `Previous place: ${pad2(prev.number)} ${prev.name}` : 'Previous place'}
-      data-tip={prev ? `${pad2(prev.number)} ${prev.name}` : undefined}
+      aria-label={prev ? t('explorer.prevAria', { nn: pad2(prev.number), name: nameOf(prev) }) : t('explorer.prev')}
+      data-tip={prev ? `${pad2(prev.number)} ${nameOf(prev)}` : undefined}
     >
       {chevron('M7.5 2.5 4 6l3.5 3.5')}
     </button>
@@ -219,8 +229,8 @@ export default function ExplorerControls({
       className="explorer-bar__icon explorer-controls__step explorer-controls__step--next"
       onClick={onNext}
       disabled={!next}
-      aria-label={next ? `Next place: ${pad2(next.number)} ${next.name}` : 'Next place'}
-      data-tip={next ? `${pad2(next.number)} ${next.name}` : undefined}
+      aria-label={next ? t('explorer.nextAria', { nn: pad2(next.number), name: nameOf(next) }) : t('explorer.next')}
+      data-tip={next ? `${pad2(next.number)} ${nameOf(next)}` : undefined}
     >
       {chevron('M4.5 2.5 8 6l-3.5 3.5')}
     </button>
@@ -243,7 +253,7 @@ export default function ExplorerControls({
       data-held={now ? '' : undefined}
       aria-expanded={listOpen}
       aria-controls={panelId}
-      aria-label={now ? `All places, ${pad2(total)}. Now ${pad2(now.number)} ${now.name}` : `All places, ${pad2(total)}`}
+      aria-label={now ? t('explorer.allAria.now', { total: pad2(total), nn: pad2(now.number), name: nameOf(now) }) : t('explorer.allAria', { total: pad2(total) })}
       onClick={() => onListOpen(!listOpen)}
     >
       <span className="explorer-bar__fig" aria-hidden="true">
@@ -258,9 +268,9 @@ export default function ExplorerControls({
         </span>
       </span>
       <span className="explorer-bar__stack explorer-bar__name" aria-hidden="true">
-        <span data-at={at(null)}>Places</span>
+        <span data-at={at(null)}><T k="explorer.places" /></span>
         {places.map((place) => (
-          <span key={place.id} data-at={at(place.id)}>{place.name}</span>
+          <span key={place.id} data-at={at(place.id)}><Bi en={place.name} zh={place.nameZh} /></span>
         ))}
       </span>
       <svg className="explorer-bar__caret" viewBox="0 0 10 10" aria-hidden="true">
@@ -269,7 +279,9 @@ export default function ExplorerControls({
     </button>
   );
   const recentreShown = !!recentre?.shown && !listOpen;
-  const recentreLabel = recentre?.place ? `Recentre on ${pad2(recentre.place.number)} ${recentre.place.name} (R)` : 'Recentre (R)';
+  const recentreLabel = recentre?.place
+    ? t('explorer.recentreAria.place', { nn: pad2(recentre.place.number), name: nameOf(recentre.place) })
+    : t('explorer.recentreAria');
   const recentreButton = recentre && (
     <button
       type="button"
@@ -281,7 +293,9 @@ export default function ExplorerControls({
       onClick={recentre.onRecentre}
       aria-keyshortcuts="R"
       aria-label={recentreLabel}
-      data-tip={recentre.place ? `Recentre · ${pad2(recentre.place.number)} ${recentre.place.name}${phone ? '' : ' · R'}` : 'Recentre'}
+      data-tip={recentre.place
+        ? `${t('explorer.recentreTip.place', { nn: pad2(recentre.place.number), name: nameOf(recentre.place) })}${phone ? '' : ' · R'}`
+        : t('explorer.recentreTip')}
     >
       <svg className="explorer-bar__glyph" viewBox="0 0 14 14" aria-hidden="true">
         <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.1" />
@@ -300,7 +314,7 @@ export default function ExplorerControls({
   if (prevRef.current.open !== open) moveRef.current = !open && view === 'sheet' ? 'grow' : 'open';
   else if (prevRef.current.view !== view) moveRef.current = 'grow';
   prevRef.current = { open, view };
-  const tab = (id: string, own: PanelView, controls: string, label: string, count: number, aria: string) => (
+  const tab = (id: string, own: PanelView, controls: string, label: ReactNode, count: number, aria: string) => (
     <button
       id={id}
       type="button"
@@ -331,7 +345,7 @@ export default function ExplorerControls({
         data-view={sheet ? view : 'places'}
         data-move={moveRef.current}
         role="dialog"
-        aria-label="Places"
+        aria-label={t('explorer.barAria')}
         aria-hidden={!open}
         inert={!open}
         style={{ '--rows': total } as CSSProperties}
@@ -339,14 +353,14 @@ export default function ExplorerControls({
         <div className="explorer-panel__paper">
           <div className="explorer-panel__head">
             {sheet ? (
-              <div className="explorer-panel__tabs" role="tablist" aria-label="Places">
-                {tab(tabPlacesId, 'places', listId, 'Places', total, `Places, ${pad2(total)}`)}
-                {tab(tabSheetId, 'sheet', sheetId, 'Contact sheet', frames, `Contact sheet, ${frames} frames`)}
+              <div className="explorer-panel__tabs" role="tablist" aria-label={t('explorer.barAria')}>
+                {tab(tabPlacesId, 'places', listId, <T k="explorer.places" />, total, t('explorer.panel.placesAria', { total: pad2(total) }))}
+                {tab(tabSheetId, 'sheet', sheetId, <T k="explorer.panel.sheet" />, frames, t('explorer.panel.sheetAria', { frames }))}
               </div>
             ) : (
               <p className="explorer-panel__tabs">
                 <span className="explorer-panel__tab">
-                  <span>Places</span>
+                  <span><T k="explorer.places" /></span>
                   <span className="explorer-panel__count tabular-nums">{pad2(total)}</span>
                 </span>
               </p>
@@ -354,7 +368,7 @@ export default function ExplorerControls({
             <button
               type="button"
               className="explorer-panel__close"
-              aria-label="Close"
+              aria-label={t('explorer.panel.close')}
               onClick={() => {
                 onListOpen(false);
                 toggleRef.current?.focus({ preventScroll: true });
@@ -396,9 +410,15 @@ export default function ExplorerControls({
                     <span className="explorer-list__shield" aria-hidden="true">
                       <MapShield code={stateCode(place.region)} number={pad2(place.number)} accent={stockPaper(place.slug)} width={22} />
                     </span>
-                    <span className="explorer-list__name">{place.name}</span>
+                    <span className="explorer-list__name"><Bi en={place.name} zh={place.nameZh} /></span>
                     <span className="explorer-list__meta">
-                      {[place.region, `${place.frames} frames`].filter(Boolean).join(' · ')}
+                      {place.region && (
+                        <>
+                          <Bi en={place.region} zh={place.regionZh} />
+                          {' · '}
+                        </>
+                      )}
+                      <T k="explorer.list.frames" vars={{ frames: place.frames }} />
                     </span>
                   </button>
                 </li>
@@ -431,7 +451,7 @@ export default function ExplorerControls({
             when it is needed. */}
         <div className="explorer-controls__row">
           {recentreButton}
-          <div className="explorer-bar" role="group" aria-label="Places">
+          <div className="explorer-bar" role="group" aria-label={t('explorer.barAria')}>
             {prevButton}
             {allButton}
             {nextButton}

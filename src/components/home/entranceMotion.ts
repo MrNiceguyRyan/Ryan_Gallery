@@ -36,6 +36,7 @@ import {
   type StubRect,
 } from '../../lib/boardingPass';
 import { EXPLORER_EVENT, PHONE_CARD, type ExplorerDetail } from '../../lib/explorer';
+import { shownMatch } from '../../i18n/lang';
 
 const ENTER_CSS = `cubic-bezier(${ENTER_EASE.join(', ')})`;
 const enter = cubicEase(ENTER_EASE);
@@ -96,8 +97,9 @@ export function assemblePass(stage: HTMLElement, text: HTMLElement, reduced: boo
   // The flights: every box read once, before anything moves.
   const flights = (['to', 'you', 'date'] as const)
     .map((word) => {
-      const src = text.querySelector<HTMLElement>(`[data-pass-from="${word}"]`);
-      const dst = stage.querySelector<HTMLElement>(`[data-pass-land="${word}"]`);
+      // The cover is printed in both languages (src/i18n): the shown copy.
+      const src = shownMatch(text, `[data-pass-from="${word}"]`);
+      const dst = shownMatch(stage, `[data-pass-land="${word}"]`);
       if (!src || !dst) return null;
       const a = src.getBoundingClientRect();
       const b = dst.getBoundingClientRect();

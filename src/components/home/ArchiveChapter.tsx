@@ -16,6 +16,9 @@ import { FlapWord, RouteShield, primeFlap, retractFlap, runFlap } from './RouteS
 import { flapText, pad2, signLines, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
 import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
+import { Bi, T, useLang } from '../../i18n/react';
+import { tr, type Key } from '../../i18n/dict';
+import { paragraphsOf } from '../../i18n/content';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import { usePressGive } from '../../lib/usePressGive';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
@@ -102,7 +105,7 @@ interface ArchiveChapterProps {
   stubAwaited?: boolean;
   /** The stop after this one, printed on the stub's "Next stop" (null: this
    *  is the last, and the stub goes on to the end of the route). */
-  nextStop?: { name: string; number: number; region?: string; slug?: string } | null;
+  nextStop?: { name: string; nameZh?: string; number: number; region?: string; slug?: string } | null;
   /** Desktop tickets: the atlas's dock (HomePage). The cover is rendered
    *  there, beside its place's shield, and placed every camera frame
    *  (src/lib/coverDock.ts); the section keeps the chapter's rail. */
@@ -111,7 +114,7 @@ interface ArchiveChapterProps {
    *  封面的州名可以框起来，我想要这个更醒目一点); the first place of a region of
    *  two or more keeps the region's figures on it ("REGION [FLORIDA] 2
    *  PLACES · 32 FRAMES"). */
-  stateTab?: { state: string; places?: number; frames?: number } | null;
+  stateTab?: { state: string; stateZh?: string; places?: number; frames?: number } | null;
   /** The archive's one ticket height (src/lib/coverDock.ts, TICKET): the
    *  phone's card folds to it (the desktop reads it off the dock's plan). */
   ticketHeight?: number;
@@ -216,6 +219,19 @@ const smoothFocus = smootherstep;
  * Hover keeps the same photograph, with a slow breath and a quiet story cue.
  */
 export default memo(ArchiveChapter);
+
+/** A Chinese paragraph cut to about `n` characters at a sentence's end (。！？),
+ *  else at a comma, else hard with an ellipsis. */
+function zhExcerpt(text: string | undefined, n: number): string | undefined {
+  const full = text?.trim();
+  if (!full) return undefined;
+  if (full.length <= n) return full;
+  const cut = full.slice(0, n);
+  const stop = Math.max(cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('？'));
+  if (stop > n * 0.5) return cut.slice(0, stop + 1);
+  const comma = Math.max(cut.lastIndexOf('，'), cut.lastIndexOf('、'));
+  return (comma > n * 0.5 ? cut.slice(0, comma) : cut) + '…';
+}
 
 function ArchiveChapter({
   id,
@@ -1746,15 +1762,17 @@ function ArchiveChapter({
   // codes. Space Grotesk has tabular figures, so the rows line up. No region
   // (owner, 2026-09-30: 票根上已经有region了，我希望只出现一处即可): the state
   // is on the cover once, boxed on its tab.
+  // Each row: its label's key (also the React key), and its value — a
+  // figure, or a coordinate whose hemisphere reads per language (北纬 …).
   const stubRows = useMemo(() => {
-    const rows: Array<[string, string]> = [];
+    const rows: Array<{ label: Key; value: string; coord?: Key }> = [];
     const frames = collection.photoCount ?? collection.photos?.length;
-    if (frames) rows.push(['Frames', String(frames).padStart(2, '0')]);
-    if (collection.year) rows.push(['Year', String(collection.year)]);
+    if (frames) rows.push({ label: 'chapter.stub.frames', value: String(frames).padStart(2, '0') });
+    if (collection.year) rows.push({ label: 'chapter.stub.year', value: String(collection.year) });
     const point = collection.mapLocation;
     if (point && Number.isFinite(point.lat) && Number.isFinite(point.lng)) {
-      rows.push(['Lat', `${Math.abs(point.lat).toFixed(4)}° ${point.lat >= 0 ? 'N' : 'S'}`]);
-      rows.push(['Long', `${Math.abs(point.lng).toFixed(4)}° ${point.lng >= 0 ? 'E' : 'W'}`]);
+      rows.push({ label: 'chapter.stub.lat', value: Math.abs(point.lat).toFixed(4), coord: point.lat >= 0 ? 'coord.n' : 'coord.s' });
+      rows.push({ label: 'chapter.stub.long', value: Math.abs(point.lng).toFixed(4), coord: point.lng >= 0 ? 'coord.e' : 'coord.w' });
     }
     return rows;
   }, [collection]);
@@ -1800,6 +1818,22 @@ function ArchiveChapter({
   const dateline = collection.location || collection.region || 'United States';
   const deck = collection.subtitle?.trim();
   const lede = excerpt(collection.slug, 220);
+  // 中: the same lines' Chinese twins (src/i18n/content.ts withZh), each
+  // falling back as its English does; a line with no twin prints English.
+  const lang = useLang();
+  const nameShown = (lang === 'zh' && collection.nameZh?.trim()) || collection.name;
+  const datelineZh = (collection.location ? collection.locationZh : collection.regionZh)?.trim()
+    || (collection.location || collection.region ? undefined : tr('zh', 'chapter.datelineFallback'));
+  const ledeLine = (
+    <Bi
+      en={lede || deck || tr('en', 'chapter.rail.fallbackLede', { dateline })}
+      zh={lede
+        ? zhExcerpt(paragraphsOf(collection.introductionZh)[0], 110)
+        : deck
+          ? collection.subtitleZh?.trim()
+          : tr('zh', 'chapter.rail.fallbackLede', { dateline: datelineZh || dateline })}
+    />
+  );
   const coverTitleSize = collection.name.trim().length > 10
     ? 'clamp(54px, 6.3vw, 92px)'
     : 'clamp(64px, 7.2vw, 108px)';
@@ -1837,7 +1871,7 @@ function ArchiveChapter({
               src={coverUrl}
               srcSet={coverSrcSet}
               sizes="(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw"
-              alt={collection.name}
+              alt={nameShown}
               loading={prioritizeImage ? 'eager' : 'lazy'}
               fetchPriority={prioritizeImage && (isActive || resolvedChapterIndex === 0) ? 'high' : 'auto'}
               decoding="async"
@@ -1860,7 +1894,7 @@ function ArchiveChapter({
         aria-hidden="true"
         className="archive-plate__view pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
       >
-        View story <ArrowRight size={12} />
+        <T k="chapter.hoverViewStory" /> <ArrowRight size={12} />
       </span>
       {/* The face's half of the torn seam: its fibres, and the strain that
           whitens the paper below the rip's tip (written by the tear). */}
@@ -1945,7 +1979,7 @@ function ArchiveChapter({
     },
     role: 'button' as const,
     tabIndex: 0,
-    'aria-label': `View story: ${collection.name}`,
+    'aria-label': tr(lang, 'chapter.coverAria', { name: nameShown }),
   };
   const baseline = (
     <motion.div
@@ -2021,7 +2055,7 @@ function ArchiveChapter({
         className="archive-plate__cue"
         style={{ x: plateCueX, opacity: plateCueOpacity }}
       >
-        Open story
+        <T k="chapter.openStory" />
         <ArrowRight size={13} strokeWidth={1.4} />
       </motion.span>
     </div>
@@ -2135,10 +2169,10 @@ function ArchiveChapter({
           </div>
           {stubRows.length > 0 && (
             <dl className="archive-ticket-stub__rows">
-              {stubRows.map(([label, value]) => (
-                <div key={label} className="archive-ticket-stub__row">
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
+              {stubRows.map((row) => (
+                <div key={row.label} className="archive-ticket-stub__row">
+                  <dt><T k={row.label} /></dt>
+                  <dd>{row.coord ? <T k={row.coord} vars={{ v: row.value }} /> : row.value}</dd>
                 </div>
               ))}
             </dl>
@@ -2157,7 +2191,7 @@ function ArchiveChapter({
               }}
             >
               <span className="archive-ticket-next__label">
-                {nextStop ? 'Next stop' : 'End of the route'}
+                <T k={nextStop ? 'chapter.nextStop' : 'chapter.endOfRoute'} />
               </span>
               {nextStop ? (
                 <span className="archive-ticket-next__stop">
@@ -2167,7 +2201,7 @@ function ArchiveChapter({
                     number={pad2(nextStop.number)}
                     accent={stockPaper(nextStop.slug)}
                   />
-                  <span className="archive-ticket-next__name">{nextStop.name}</span>
+                  <span className="archive-ticket-next__name"><Bi en={nextStop.name} zh={nextStop.nameZh} /></span>
                   <ArrowRight size={12} strokeWidth={1.6} aria-hidden="true" />
                 </span>
               ) : (
@@ -2221,11 +2255,11 @@ function ArchiveChapter({
               on its first place's tab. */}
           {stateTab && (
             <div className="archive-dock__tab font-ui" data-side={phone ? 'left' : side} aria-hidden="true">
-              <span className="archive-dock__tab-label">Region</span>
-              <span className="archive-dock__tab-state">{stateTab.state}</span>
+              <span className="archive-dock__tab-label"><T k="chapter.stateTab.label" /></span>
+              <span className="archive-dock__tab-state"><Bi en={stateTab.state} zh={stateTab.stateZh} /></span>
               {stateTab.places != null && (
                 <span className="archive-dock__tab-figures">
-                  {stateTab.places} places · {stateTab.frames} frames
+                  <T k="chapter.stateTab.figures" vars={{ places: stateTab.places, frames: stateTab.frames }} />
                 </span>
               )}
             </div>
@@ -2275,9 +2309,9 @@ function ArchiveChapter({
             style={{ opacity: editorialOpacity, x: titleInteractionX }}
             className="archive-plate__meta pointer-events-none flex items-center justify-between gap-4 font-ui text-[9px] uppercase tracking-[0.1em]"
           >
-            <span className="text-white/84">Chapter {String(index + 1).padStart(2, '0')}</span>
+            <span className="text-white/84"><T k="chapter.rail.chapter" vars={{ nn: String(index + 1).padStart(2, '0') }} /></span>
             <span className="text-right text-white/84">
-              {dateline}{collection.year ? ` · ${collection.year}` : ''}
+              <Bi en={dateline} zh={datelineZh} />{collection.year ? ` · ${collection.year}` : ''}
             </span>
           </motion.div>
           <motion.div
@@ -2288,7 +2322,10 @@ function ArchiveChapter({
               className="archive-cover-title font-serif uppercase leading-[0.84] tracking-[-0.05em] text-[#F4F4ED]"
               style={{ fontSize: railTitleSize, wordSpacing: '0.12em', fontWeight: TITLE_WEIGHT_REST }}
             >
-              {risingWords(nameParts)}
+              <Bi
+                en={risingWords(nameParts)}
+                zh={collection.nameZh?.trim() ? risingWords([collection.nameZh.trim()], () => ({ letterSpacing: '0.02em' })) : null}
+              />
             </motion.h3>
           </motion.div>
           <motion.div
@@ -2298,12 +2335,12 @@ function ArchiveChapter({
             {/* Bone ink at the lime's old weights: the atlas's one lime is
                 the viewfinder's chapter number. */}
             <div className="pt-1 font-ui uppercase">
-              <p className="text-[10px] tracking-[0.1em] text-[#F4F4ED]">{frames} frames</p>
+              <p className="text-[10px] tracking-[0.1em] text-[#F4F4ED]"><T k="chapter.rail.frames" vars={{ frames }} /></p>
               <span className="mt-5 block h-px w-10 bg-[#F4F4ED]/65" />
             </div>
             <div className="min-w-0">
               <p className="archive-rail__lede max-w-[46ch] font-serif text-[16px] leading-[1.55]">
-                {lede || deck || `A photographic dispatch from ${dateline}.`}
+                {ledeLine}
               </p>
             </div>
           </motion.div>
@@ -2334,9 +2371,9 @@ function ArchiveChapter({
             style={{ opacity: editorialOpacity, x: titleInteractionX }}
             className="archive-plate__meta pointer-events-none absolute -top-8 left-0 right-0 z-20 hidden items-center justify-between font-ui text-[9px] uppercase tracking-[0.1em] lg:flex"
           >
-            <span className="text-white/80">Chapter {String(index + 1).padStart(2, '0')}</span>
+            <span className="text-white/80"><T k="chapter.rail.chapter" vars={{ nn: String(index + 1).padStart(2, '0') }} /></span>
             <span className="mr-[1%] text-right text-white/80">
-              {dateline}{collection.year ? ` · ${collection.year}` : ''}
+              <Bi en={dateline} zh={datelineZh} />{collection.year ? ` · ${collection.year}` : ''}
             </span>
           </motion.div>
           {/* The plate: the photograph at its own ratio, capped so a tall one
@@ -2387,12 +2424,12 @@ function ArchiveChapter({
           className="archive-lede relative z-10 ml-[-12%] mt-[clamp(64px,6.5vw,92px)] hidden w-[88%] grid-cols-[96px_minmax(0,1fr)] items-start gap-x-8 pr-3 lg:grid"
         >
           <div className="pt-1 font-ui uppercase">
-            <p className="text-[10px] tracking-[0.1em] text-[#F4F4ED]">{frames} frames</p>
+            <p className="text-[10px] tracking-[0.1em] text-[#F4F4ED]"><T k="chapter.rail.frames" vars={{ frames }} /></p>
             <span className="mt-5 block h-px w-10 bg-[#F4F4ED]/65" />
           </div>
           <div className="min-w-0">
             <p className="max-w-[48ch] font-serif text-[16px] leading-[1.55] text-white/64">
-              {lede || deck || `A photographic dispatch from ${dateline}.`}
+              {ledeLine}
             </p>
           </div>
         </motion.div>
@@ -2401,9 +2438,9 @@ function ArchiveChapter({
           style={{ opacity: fieldNoteOpacity, y: fieldNoteShift }}
           className="relative z-30 mt-[clamp(72px,18vw,96px)] px-5 pr-6 lg:hidden"
         >
-          <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-[#F4F4ED]/86">{frames} frames</p>
+          <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-[#F4F4ED]/86"><T k="chapter.rail.frames" vars={{ frames }} /></p>
           <p className="mt-4 max-w-[34ch] font-serif text-[15px] leading-[1.5] text-white/66">
-            {lede || deck || `A photographic dispatch from ${dateline}.`}
+            {ledeLine}
           </p>
         </motion.div>
       </motion.div>

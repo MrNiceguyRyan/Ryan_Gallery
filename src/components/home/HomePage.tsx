@@ -29,6 +29,8 @@ import { signLines } from '../../lib/routeShield';
 import { DUR, DUR_MS, EASE, bezierFn } from '../../lib/motion';
 import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardingPass';
 import { NavSet } from '../Nav';
+import { T, TRich, useT } from '../../i18n/react';
+import { tr } from '../../i18n/dict';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
 import {
   ARRIVAL_INERT_MS,
@@ -317,6 +319,7 @@ const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRoute
  * wordmark) brings the opening words back, with a new pass. */
 export default function HomePage({ collections }: Props) {
   const reduce = useReducedMotion();
+  const t = useT();
   const desktopLayout = useDesktopLayout();
 
   // ── The places, in route order ──
@@ -349,14 +352,16 @@ export default function HomePage({ collections }: Props) {
   // place of a region of two or more keeps the region's figures on it,
   // "REGION [FLORIDA] 2 PLACES · 32 FRAMES" (owner, 2026-09-28: 保留).
   const stateTabs = useMemo(() => {
-    const tabs = new Map<string, { state: string; places?: number; frames?: number }>();
+    const tabs = new Map<string, { state: string; stateZh?: string; places?: number; frames?: number }>();
     sections.forEach((section) => {
       section.cities.forEach((city, index) => {
         const state = section.region ?? city.region?.trim();
         if (!state) return;
+        // The printed Chinese twin (the English stays the key: grouping).
+        const stateZh = city.regionZh?.trim() || undefined;
         tabs.set(city._id, index === 0 && section.showHeader
-          ? { state, places: section.cities.length, frames: section.frameCount }
-          : { state });
+          ? { state, stateZh, places: section.cities.length, frames: section.frameCount }
+          : { state, stateZh });
       });
     });
     return tabs;
@@ -391,6 +396,10 @@ export default function HomePage({ collections }: Props) {
           ? [{
               id: city._id,
               name: city.name.trim(),
+              // The printed Chinese twins (the English name and region stay
+              // the keys: the shields, the sign, the state letters).
+              nameZh: city.nameZh?.trim() || undefined,
+              regionZh: city.regionZh?.trim() || undefined,
               slug: city.slug,
               coordinates,
               imageUrl,
@@ -411,24 +420,28 @@ export default function HomePage({ collections }: Props) {
   // (data-driven: Miami today, Washington once the owner adds it as stop 01).
   const firstStop = useMemo(() => {
     const first = orderedCities[0];
-    return first ? { name: first.name.trim(), region: first.region?.trim() || null, year: first.year ?? null, slug: first.slug ?? null } : null;
+    return first ? { name: first.name.trim(), nameZh: first.nameZh?.trim() || null, region: first.region?.trim() || null, year: first.year ?? null, slug: first.slug ?? null } : null;
   }, [orderedCities]);
   // The entrance's cover of words says what the archive holds, from its own
   // data (src/lib/boardingPass.ts, coverBlocks): the years, the places, the
   // frames, the regions in route order.
-  const coverFacts = useMemo(() => ({
-    years: archiveYearSpan,
-    places: orderedCities.length,
-    frames: totalFrames,
-    regions: distinctRegions(orderedCities.map((city) => city.region)),
-  }), [archiveYearSpan, orderedCities, totalFrames]);
+  const coverFacts = useMemo(() => {
+    const regions = distinctRegions(orderedCities.map((city) => city.region));
+    // Deduped on the English; each printed in Chinese from its first city.
+    const regionsZh = regions.map((region) =>
+      orderedCities.find((city) => city.region?.trim().toLowerCase() === region.toLowerCase() && city.regionZh?.trim())?.regionZh?.trim() || region,
+    );
+    return { years: archiveYearSpan, places: orderedCities.length, frames: totalFrames, regions, regionsZh };
+  }, [archiveYearSpan, orderedCities, totalFrames]);
   // The explorer's places: those the map can put a shield on.
   const placeIds = useMemo(() => routeStops.map((stop) => stop.id), [routeStops]);
   const places = useMemo<ExplorerPlace[]>(() => routeStops.map((stop) => ({
     id: stop.id,
     number: orderedChapterIds.indexOf(stop.id) + 1,
     name: stop.name,
+    nameZh: stop.nameZh,
     region: stop.region,
+    regionZh: stop.regionZh,
     slug: stop.slug,
     frames: stop.frameCount,
     year: stop.year,
@@ -1546,7 +1559,7 @@ export default function HomePage({ collections }: Props) {
   // 2026-09-29).
   const nextStops = useMemo(() => new Map(orderedCities.map((city) => {
     const next = places.find((place) => place.id === neighbour(placeIds, city._id, 1));
-    return [city._id, next ? { name: next.name, number: next.number, region: next.region, slug: next.slug } : null] as const;
+    return [city._id, next ? { name: next.name, nameZh: next.nameZh, number: next.number, region: next.region, slug: next.slug } : null] as const;
   })), [orderedCities, placeIds, places]);
   const stepNext = useCallback(() => stepTo(1), [stepTo]);
   // The Index: the archive's contact sheet, the places panel's second view
@@ -1601,13 +1614,13 @@ export default function HomePage({ collections }: Props) {
           href="#main-content"
           className="fixed left-4 top-4 z-[100] inline-flex min-h-11 translate-y-[-160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
         >
-          Skip to archive
+          <T k="home.skipToArchive" />
         </a>
-        <h1 className="sr-only">Ryan Xu — Visual Archive</h1>
+        <h1 className="sr-only"><T k="home.h1" /></h1>
 
         {/* ── Nav ── */}
         <nav
-          aria-label="Primary navigation"
+          aria-label={t('nav.aria')}
           data-site-nav
           className="fixed top-0 left-0 w-full z-50 px-6 py-5 md:py-8 md:px-12 flex justify-between items-center bg-transparent"
           style={{
@@ -1624,7 +1637,7 @@ export default function HomePage({ collections }: Props) {
           />
           <motion.button
             type="button"
-            aria-label="Ryan Xu — back to the start"
+            aria-label={t('home.wordmarkAria')}
             onClick={toStart}
             whileTap={reduce ? undefined : { scale: 0.97 }}
             transition={{ duration: DUR.flick, ease: EASE.arrive }}
@@ -1692,24 +1705,35 @@ export default function HomePage({ collections }: Props) {
                 data-entered={entered ? '' : undefined}
                 style={railDelay != null ? ({ '--place-delay': `${railDelay + ARRIVAL.inkMs}ms` } as CSSProperties) : undefined}
               >
-                <h2 className="sr-only font-ui">Places</h2>
+                <h2 className="sr-only font-ui"><T k="home.placesHeading" /></h2>
                 <div className="explorer-idle" data-shown={free && !dockAt ? '' : undefined} aria-hidden={!free || !!dockAt}>
                   <p className="explorer-idle__kicker font-ui">
-                    <span>Visual Archive</span>
+                    <span><T k="explorer.idle.kicker" /></span>
                     {archiveYearSpan && <span className="tabular-nums">{archiveYearSpan}</span>}
                   </p>
                   <p className="explorer-idle__line font-serif">
-                    A personal archive of <em>travel</em> and <em>thought</em>.
+                    <TRich
+                      k="explorer.idle.line"
+                      slots={{
+                        travel: (lang) => <em>{tr(lang, 'explorer.idle.travel')}</em>,
+                        thought: (lang) => <em>{tr(lang, 'explorer.idle.thought')}</em>,
+                      }}
+                    />
                   </p>
                   <p className="explorer-idle__figures font-ui tabular-nums">
-                    {String(places.length).padStart(2, '0')} places · {totalFrames} frames
+                    <T k="explorer.idle.figures" vars={{ places: String(places.length).padStart(2, '0'), frames: totalFrames }} />
                   </p>
                   {/* PROPOSED copy (the explorer's build, 2026-09-28; the
                       recentre line 2026-09-29): for the owner to approve. */}
                   <p className="explorer-idle__hint font-ui">
-                    {recentrePlace && lastPlace
-                      ? `Choose a shield on the map, or recentre on ${recentrePlace.name}.`
-                      : 'Choose a shield on the map, or step through below.'}
+                    {recentrePlace && lastPlace ? (
+                      <TRich
+                        k="explorer.idle.hintRecentre"
+                        slots={{ name: (lang) => (lang === 'zh' && recentrePlace.nameZh) || recentrePlace.name }}
+                      />
+                    ) : (
+                      <T k="explorer.idle.hint" />
+                    )}
                   </p>
                 </div>
                 {chapters}
@@ -1752,7 +1776,7 @@ export default function HomePage({ collections }: Props) {
               </div>
               <div ref={setDockHost} className="archive-dock-host archive-dock-host--phone" data-let-go={letGo ? '' : undefined} />
               <div data-archive-column className="explorer-rail explorer-rail--phone">
-                <h2 className="sr-only font-ui">Places</h2>
+                <h2 className="sr-only font-ui"><T k="home.placesHeading" /></h2>
                 {chapters}
               </div>
               <ExplorerControls

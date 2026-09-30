@@ -116,7 +116,8 @@ test('the controls are one bar: every function kept, labelled, reachable', () =>
   assert.doesNotMatch(bar.slice(0, bar.indexOf('</div>')), /recentreButton|indexButton/);
   assert.doesNotMatch(controls, /explorer-controls__bar|indexButton|onIndex|explorer-controls__index/);
   // Screen readers hear every one whole; R is still Recentre's key.
-  for (const label of ['`Previous place: ${pad2(prev.number)} ${prev.name}`', '`Next place: ${pad2(next.number)} ${next.name}`', 'aria-expanded={listOpen}', 'aria-keyshortcuts="R"']) {
+  // (In the reader's language: src/i18n, explorer.prevAria / nextAria.)
+  for (const label of ["t('explorer.prevAria', { nn: pad2(prev.number), name: nameOf(prev) })", "t('explorer.nextAria', { nn: pad2(next.number), name: nameOf(next) })", 'aria-expanded={listOpen}', 'aria-keyshortcuts="R"']) {
     assert.ok(controls.includes(label), label);
   }
   // Targets of 40px and more; one hairline; bone on translucent olive.
@@ -146,7 +147,7 @@ test('the capsule is one size in every state: every word in its cell at once, Re
   // idle "Places") at once; `data-at` says which is seen and which just left.
   const all = controls.slice(controls.indexOf('const allButton = ('), controls.indexOf('const recentreShown'));
   assert.match(all, /className="explorer-bar__stack explorer-bar__no tabular-nums">\s*\{places\.map\(\(place\) => \(\s*<span key=\{place\.id\} data-at=\{at\(place\.id\)\}>\{pad2\(place\.number\)\}<\/span>/);
-  assert.match(all, /className="explorer-bar__stack explorer-bar__name" aria-hidden="true">\s*<span data-at=\{at\(null\)\}>Places<\/span>\s*\{places\.map\(\(place\) => \(\s*<span key=\{place\.id\} data-at=\{at\(place\.id\)\}>\{place\.name\}<\/span>/);
+  assert.match(all, /className="explorer-bar__stack explorer-bar__name" aria-hidden="true">\s*<span data-at=\{at\(null\)\}><T k="explorer.places" \/><\/span>\s*\{places\.map\(\(place\) => \(\s*<span key=\{place\.id\} data-at=\{at\(place\.id\)\}><Bi en=\{place\.name\} zh=\{place\.nameZh\} \/><\/span>/);
   // Nothing in the middle comes and goes from the layout: the dot and the
   // slash only fade (held / idle), the total stays where it stands.
   assert.doesNotMatch(all, /\{now \? \(/);
@@ -180,9 +181,9 @@ test('the Index is the places panel\'s second view: one paper grown in place, ne
   assert.doesNotMatch(home, /indexOpen|openIndex|closeIndex|explorer-index|Close index/);
   assert.doesNotMatch(css, /\.explorer-index/);
   // The panel's two views, a tab list in its head; the sheet set on intent.
-  assert.match(controls, /role="tablist" aria-label="Places"/);
-  assert.match(controls, /\{tab\(tabPlacesId, 'places', listId, 'Places', total, `Places, \$\{pad2\(total\)\}`\)\}/);
-  assert.match(controls, /\{tab\(tabSheetId, 'sheet', sheetId, 'Contact sheet', frames, `Contact sheet, \$\{frames\} frames`\)\}/);
+  assert.match(controls, /role="tablist" aria-label=\{t\('explorer.barAria'\)\}/);
+  assert.match(controls, /\{tab\(tabPlacesId, 'places', listId, <T k="explorer.places" \/>, total, t\('explorer.panel.placesAria', \{ total: pad2\(total\) \}\)\)\}/);
+  assert.match(controls, /\{tab\(tabSheetId, 'sheet', sheetId, <T k="explorer.panel.sheet" \/>, frames, t\('explorer.panel.sheetAria', \{ frames \}\)\)\}/);
   assert.match(controls, /role="tab"[\s\S]*aria-selected=\{view === own\}/);
   assert.match(controls, /\{sheetWanted && sheet\}/);
   // Esc, the bar, a click outside or the head's close put it away (not while

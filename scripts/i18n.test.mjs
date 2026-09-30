@@ -350,3 +350,46 @@ test('every page asks Sanity for the Chinese twins it prints', () => {
     assert.match(text, /withZh\(/, page);
   }
 });
+
+test('the homepage in 中: hooks found on the shown copy, map labels bound, no English left in its islands', () => {
+  const film = source('src/components/home/OpeningFilm.tsx');
+  // The landing's targets are printed in both languages: a bare first match
+  // is the hidden English in 中, and its flight would silently drop.
+  assert.match(film, /const dst = shownMatch\(document, LANDING_TARGETS\[word\]\.to\);/);
+  assert.match(film, /const coverName = shownMatch\(document, LANDING_TARGETS\.ryan\.to\);/);
+  assert.doesNotMatch(film, /document\.querySelector<HTMLElement>\(LANDING_TARGETS/);
+  // The homepage map's own labels follow the toggle; unbound with the atlas.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /unbindMapLanguageRef\.current = bindMapLanguage\(map\);/);
+  assert.match(atlas, /unbindMapLanguageRef\.current\?\.\(\);/);
+  // Route shields and the sign stay English: the English name/region stay the keys.
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.match(chapter, /<FlapWord text=\{collection\.name\.trim\(\)\} role="name" \/>/);
+  assert.match(chapter, /code=\{stateCode\(collection\.region\)\}/);
+  assert.match(chapter, /<span className="archive-ticket-sign__label">Stop<\/span>/);
+  // No English literal left where a reader or a screen reader meets it.
+  const files = {
+    'src/components/home/ExplorerControls.tsx': [/aria-label="[A-Z]/, /`(Previous|Next) place/, />Places</, /'Contact sheet'/],
+    'src/components/home/HomePage.tsx': [/Skip to archive/, /aria-label="(Primary|Ryan Xu —)/, /Choose a shield/, />Visual Archive</],
+    'src/components/home/ArchiveChapter.tsx': [/>\s*View story/, /Open story\s*</, /'Next stop'/, />Region</, /frames<\/p>/],
+    'src/components/home/ArchiveClosing.tsx': [/Back to the start ↑/, /Archive complete/, /aria-label=\{`Open \$/],
+    'src/components/home/AtlasSign.tsx': [/} KM`/, /aria-label="Chapters"/, /aria-label=\{`Go to chapter/],
+    'src/components/home/RouteAtlas.tsx': [/Route signal delayed/, /aria-label="The archive's map"/, /'Map of the archive\./],
+    'src/components/home/EntranceIntro.tsx': [/aria-label="Opening"/, /'The stub is torn off/],
+    'src/components/home/BoardingPass.tsx': [/aria-label="(QR code|Tear the stub)/, /aria-roledescription="boarding pass"/],
+  };
+  for (const [file, patterns] of Object.entries(files)) {
+    const text = source(file);
+    for (const pattern of patterns) assert.doesNotMatch(text, pattern, `${file}: ${pattern}`);
+  }
+});
+
+test('the viewfinder in 中: a Han character counts as two in the readouts\' width estimate; KM and the hemispheres per language', async () => {
+  const { tr } = await bundle('../src/i18n/dict.ts');
+  assert.equal(tr('zh', 'coord.n', { v: '25.7617' }), '北纬 25.7617°');
+  assert.equal(tr('en', 'coord.w', { v: '80.1918' }), '80.1918° W');
+  assert.equal(tr('zh', 'sign.km', { km: '380' }), '380 公里');
+  const sign = source('src/components/home/AtlasSign.tsx');
+  assert.match(sign, /n \+= HAN_CHAR\.test\(ch\) \? 2 : 1;/);
+  assert.match(sign, /const key = `leg:\$\{from\.id\}>\$\{to\.id\}:\$\{lang\}`;/);
+});

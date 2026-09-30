@@ -8,11 +8,16 @@ import { pad2, stateCode } from '../../lib/routeShield';
 import { stockPaper } from '../../lib/ticketStock';
 import { railBox } from '../../lib/coverDock';
 import { MapShield } from './RouteShield';
+import { Bi, T, useLang } from '../../i18n/react';
+import { tr } from '../../i18n/dict';
+import type { Lang } from '../../i18n/lang';
 
 /** Everything the sign prints for a place. */
 export interface ViewfinderPlace {
   id: string;
   name: string;
+  /** Its printed Chinese twin (the leg readout in 中). */
+  nameZh?: string;
   /** 1-based chapter number. */
   number: number;
   total: number;
@@ -122,8 +127,19 @@ function setText(element: HTMLElement | null | undefined, text: string) {
   element.textContent = text;
 }
 
-const latitudeLabel = (latitude: number) => `${Math.abs(latitude).toFixed(4)}° ${latitude >= 0 ? 'N' : 'S'}`;
-const longitudeLabel = (longitude: number) => `${Math.abs(longitude).toFixed(4)}° ${longitude >= 0 ? 'E' : 'W'}`;
+// The readouts in the page's language (北纬 25.7617° in 中: the hemisphere
+// before the figure).
+const latitudeLabel = (latitude: number, lang: Lang) => tr(lang, latitude >= 0 ? 'coord.n' : 'coord.s', { v: Math.abs(latitude).toFixed(4) });
+const longitudeLabel = (longitude: number, lang: Lang) => tr(lang, longitude >= 0 ? 'coord.e' : 'coord.w', { v: Math.abs(longitude).toFixed(4) });
+const kmLabel = (km: string, lang: Lang) => tr(lang, 'sign.km', { km });
+const placeName = (place: ViewfinderPlace, lang: Lang) => (lang === 'zh' && place.nameZh) || place.name;
+/** A readout's width in Latin characters: a Han character sets about two. */
+const HAN_CHAR = /\p{Script=Han}/u;
+function readoutChars(text: string | null | undefined) {
+  let n = 0;
+  for (const ch of text ?? '') n += HAN_CHAR.test(ch) ? 2 : 1;
+  return n;
+}
 
 /**
  * AtlasSign — what the map says about a trip, set around the focal point in
@@ -171,6 +187,11 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   // does (into the map's ground), and draw runs from a rAF loop.
   const scrimOffsetRef = useRef(0);
   scrimOffsetRef.current = scrimHost ? bleed : 0;
+  // The readouts are written by the rAF loop in the page's language (read
+  // from here); a toggle reprints them in place (below), never replays.
+  const lang = useLang();
+  const langRef = useRef<Lang>(lang);
+  langRef.current = lang;
 
   const state = useRef({
     focalX: 0,
@@ -184,6 +205,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     frame: 0,
     metaFor: '',
     legKm: null as HTMLSpanElement | null,
+    /** The leg on the readout now (reprinted in place on a toggle). */
+    leg: null as { from: ViewfinderPlace; to: ViewfinderPlace } | null,
     /** Ends the landing's report (see REPORT_HOLD_MS). */
     reportTimer: 0,
     /** The shields the readouts keep off (see `avoid`), and how each moved
@@ -247,8 +270,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const s = state.current;
     const cx = s.focalX;
     const cy = s.focalY;
-    const latChars = latRef.current?.textContent?.length ?? 0;
-    const lonChars = lonRef.current?.textContent?.length ?? 0;
+    const latChars = readoutChars(latRef.current?.textContent);
+    const lonChars = readoutChars(lonRef.current?.textContent);
     const top = cy + 10;
     // The reader can take the place in hand to the window's edge (the map is
     // theirs): a readout the edge would cut is not printed half.
@@ -257,7 +280,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const lonLeft = cx + ARM - READOUT_CHAR_PX * lonChars;
     setYield(latYieldRef.current, latChars > 0 && (cut(cx - ARM, latRight) || blocked(cx - ARM, top, latRight, top + READOUT_LINE_PX)));
     setYield(lonYieldRef.current, lonChars > 0 && (cut(lonLeft, cx + ARM) || blocked(lonLeft, top, cx + ARM, top + READOUT_LINE_PX)));
-    const metaChars = metaRef.current?.textContent?.length ?? 0;
+    const metaChars = readoutChars(metaRef.current?.textContent);
     if (!metaChars) {
       setYield(metaYieldRef.current, false);
       return;
@@ -332,8 +355,10 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
   const setLegMeta = (from: ViewfinderPlace, to: ViewfinderPlace) => {
     const s = state.current;
     const node = metaRef.current;
-    const key = `leg:${from.id}>${to.id}`;
+    const lang = langRef.current;
+    const key = `leg:${from.id}>${to.id}:${lang}`;
     if (!node || s.metaFor === key) return;
+    s.leg = { from, to };
     node.textContent = '';
     const dot = document.createElement('i');
     dot.className = 'viewfinder__dot';
@@ -341,9 +366,9 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     // Non-breaking spaces: ordinary ones collapse at the span boundaries.
     // The place being left is the atlas's one lime, and only in the air.
     const parts: Array<[string, string]> = [
-      ['is-lime', from.name],
+      ['is-lime', placeName(from, lang)],
       ['is-dim', '  →  '],
-      ['', to.name],
+      ['', placeName(to, lang)],
       ['', '   '],
     ];
     parts.forEach(([className, text]) => {
@@ -354,7 +379,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     });
     const km = document.createElement('span');
     km.className = 'is-dim';
-    km.textContent = '0 KM';
+    km.textContent = kmLabel('0', lang);
     node.appendChild(km);
     s.legKm = km;
     s.metaFor = key;
@@ -382,8 +407,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (latRef.current && lonRef.current && to) {
       const latitude = from ? lerp(from.coordinates[1], to.coordinates[1], travel) : to.coordinates[1];
       const longitude = from ? lerp(from.coordinates[0], to.coordinates[0], travel) : to.coordinates[0];
-      setText(latRef.current, latitudeLabel(latitude));
-      setText(lonRef.current, longitudeLabel(longitude));
+      setText(latRef.current, latitudeLabel(latitude, langRef.current));
+      setText(lonRef.current, longitudeLabel(longitude, langRef.current));
       latRef.current.style.transform = `translate(${leftEnd}px, ${cy + 10}px)`;
       lonRef.current.style.transform = `translate(${rightEnd}px, ${cy + 10}px) translateX(-100%)`;
       const coordinateOpacity = huntingNow ? 0.68 : 1;
@@ -397,7 +422,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     if (switching && from && to && t >= 300) {
       setLegMeta(from, to);
       const covered = t < lock ? travel : 1;
-      setText(s.legKm, `${formatKm(haversineKm(from.coordinates, to.coordinates) * covered)} KM`);
+      setText(s.legKm, kmLabel(formatKm(haversineKm(from.coordinates, to.coordinates) * covered), langRef.current));
       if (metaRef.current) metaRef.current.style.opacity = progress(300, 520, t).toFixed(3);
     } else if (switching && metaRef.current) {
       // The first 300ms of a flight: the last trip's line is not this one's.
@@ -444,6 +469,26 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     s.frame = requestAnimationFrame(loop);
   };
 
+  // 中 / EN toggled: the readouts at rest are reprinted where they stand (a
+  // flight in the air picks the language up on its next frame).
+  const langShown = useRef(lang);
+  useEffect(() => {
+    if (langShown.current === lang) return;
+    langShown.current = lang;
+    const s = state.current;
+    if (s.hunting) return;
+    if (s.shown) {
+      setText(latRef.current, latitudeLabel(s.shown.coordinates[1], lang));
+      setText(lonRef.current, longitudeLabel(s.shown.coordinates[0], lang));
+    }
+    if (s.leg) {
+      const { from, to } = s.leg;
+      setLegMeta(from, to);
+      if (s.legKm) s.legKm.textContent = kmLabel(formatKm(haversineKm(from.coordinates, to.coordinates)), lang);
+    }
+    clearReadouts();
+  }, [lang]);
+
   useImperativeHandle(forwardedRef, () => {
     const settle = (place: ViewfinderPlace) => {
       const s = state.current;
@@ -454,7 +499,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
       const arrived = !!s.shown && s.shown.id !== place.id;
       if (arrived && s.shown) {
         setLegMeta(s.shown, place);
-        if (s.legKm) s.legKm.textContent = `${formatKm(haversineKm(s.shown.coordinates, place.coordinates))} KM`;
+        if (s.legKm) s.legKm.textContent = kmLabel(formatKm(haversineKm(s.shown.coordinates, place.coordinates)), langRef.current);
       }
       report(arrived, SETTLE_MS + REPORT_HOLD_MS);
       stop();
@@ -602,15 +647,16 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
  * mid-flight), so the class here is only the initial one.
  */
 export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigate }: {
-  chapters: Array<{ id: string; number: number; name: string; frames: number }>;
+  chapters: Array<{ id: string; number: number; name: string; nameZh?: string; frames: number }>;
   currentId: string | null;
   engagedId: string | null;
   onEngage?: (chapterId: string | null) => void;
   onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
 }) {
   const [initialCurrent] = useState(currentId);
+  const lang = useLang();
   return (
-    <ol className="atlas-ticks" aria-label="Chapters">
+    <ol className="atlas-ticks" aria-label={tr(lang, 'sign.ticksAria')}>
       {chapters.map((chapter) => (
         <li key={chapter.id} className="atlas-ticks__item">
           <button
@@ -618,7 +664,7 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
             data-tick-group={chapter.id}
             data-engaged={engagedId === chapter.id ? '' : undefined}
             className={`atlas-ticks__group${chapter.id === initialCurrent ? ' is-current' : ''}`}
-            aria-label={`Go to chapter ${chapter.number}: ${chapter.name}, ${chapter.frames} frames`}
+            aria-label={tr(lang, 'sign.tickAria', { n: chapter.number, name: (lang === 'zh' && chapter.nameZh) || chapter.name, frames: chapter.frames })}
             onPointerEnter={() => onEngage?.(chapter.id)}
             onPointerLeave={() => onEngage?.(null)}
             onFocus={() => onEngage?.(chapter.id)}
@@ -626,8 +672,8 @@ export function AtlasTicks({ chapters, currentId, engagedId, onEngage, onNavigat
             onClick={(event) => onNavigate?.(chapter.id, { focus: event.detail === 0 })}
           >
             <span className="atlas-ticks__label" aria-hidden="true">
-              {pad2(chapter.number)}&nbsp;·&nbsp;{chapter.name}
-              <span className="atlas-ticks__frames">&nbsp;·&nbsp;{chapter.frames} frames</span>
+              {pad2(chapter.number)}&nbsp;·&nbsp;<Bi en={chapter.name} zh={chapter.nameZh} />
+              <span className="atlas-ticks__frames">&nbsp;·&nbsp;<T k="chapter.rail.frames" vars={{ frames: chapter.frames }} /></span>
             </span>
             {Array.from({ length: Math.max(1, chapter.frames) }, (_, index) => <i key={index} />)}
           </button>
@@ -648,7 +694,10 @@ export interface ShieldStop {
   id: string;
   /** 1-based stop number. */
   number: number;
+  /** English: the shield prints it (the signs stay English). */
   name: string;
+  /** Its Chinese twin: what a screen reader hears in 中. */
+  nameZh?: string;
   region?: string;
   /** The chapter's slug: its ticket stock, printed in the shield's band. */
   slug?: string;
@@ -693,6 +742,7 @@ export function PlaceShield({ stop, width, initialCurrentId, engaged, visibility
   onNavigate?: (chapterId: string, options?: AtlasNavigateOptions) => void;
 }) {
   const [initialCurrent] = useState(initialCurrentId);
+  const lang = useLang();
   // Invisible shields (the prologue, the entrance) must not be hit targets,
   // nor stops in the tab order: `visibility` removes both, off the same
   // value, with no re-render.
@@ -710,7 +760,7 @@ export function PlaceShield({ stop, width, initialCurrentId, engaged, visibility
         data-chapter={stop.number}
         data-engaged={engaged ? '' : undefined}
         className={`place-shield__sign${stop.id === initialCurrent ? ' is-current' : ''}`}
-        aria-label={`Go to chapter ${stop.number}: ${stop.name}`}
+        aria-label={tr(lang, 'sign.shieldAria', { n: stop.number, name: (lang === 'zh' && stop.nameZh) || stop.name })}
         onPointerEnter={() => onEngage?.(stop.id)}
         onPointerLeave={() => onEngage?.(null)}
         onFocus={() => onEngage?.(stop.id)}

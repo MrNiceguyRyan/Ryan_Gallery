@@ -129,6 +129,20 @@ html[data-home='explorer'] .home-veil {
 @media (max-width: 639px) {
   .ec-br { display: none; }
 }
+/* 中: Han is never tracked negative, and its lines need a little more
+   room than the Latin display leading (global.css "Chinese type"). */
+.ec-xl [data-l='zh'],
+.ec-xl-quiet [data-l='zh'] {
+  letter-spacing: 0.02em;
+  line-height: 1.18;
+}
+/* …but his name is the film's title, landing: it keeps the display's own
+   tracking in both languages, so its flight is the same word moved and
+   scaled (OpeningFilm landA, sameFace) and the title gives way to it —
+   with Han tracking the title stayed on screen under its flying clone. */
+.ec-xl [data-l='zh'] :is([data-open-land='ryan'], [data-open-land='xu']) {
+  letter-spacing: -0.025em;
+}
 .ec-xl-quiet {
   margin-top: 0.06em;
   color: rgba(244, 244, 237, 0.46);

@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ATLAS_PAPER, silenceArchivePlaceLabels } from '../../lib/atlasBasemap';
+import { bindMapLanguage } from '../../lib/mapLanguage';
+import { T, useLang } from '../../i18n/react';
+import { tr } from '../../i18n/dict';
+import { getLang, type Lang } from '../../i18n/lang';
 import { MAP_BURN, MAP_INK } from '../../lib/mapInk';
 import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
@@ -109,7 +113,12 @@ const turnEase = bezierFn(EASE.turn);
 
 export interface RouteStop {
   id: string;
+  /** English: also a key (the shields, the sign, the state letters). */
   name: string;
+  /** The printed Chinese twin of `name` (中 mode's readouts and names). */
+  nameZh?: string;
+  /** The printed Chinese twin of `region`. */
+  regionZh?: string;
   slug: string;
   coordinates: [number, number];
   imageUrl: string;
@@ -742,13 +751,13 @@ function buildChapterRoute(stops: RouteStop[], chapterIds?: string[]) {
   });
 }
 
-function formatCoordinate(value: number, positive: string, negative: string) {
+function formatCoordinate(value: number, positive: 'coord.n' | 'coord.e', negative: 'coord.s' | 'coord.w', lang: Lang) {
   const normalized = Math.abs(value) < 0.00005 ? 0 : value;
-  return `${Math.abs(normalized).toFixed(4)}° ${normalized >= 0 ? positive : negative}`;
+  return tr(lang, normalized >= 0 ? positive : negative, { v: Math.abs(normalized).toFixed(4) });
 }
 
-function formatCoordinateLabel([longitude, latitude]: [number, number]) {
-  return `${formatCoordinate(latitude, 'N', 'S')}  ·  ${formatCoordinate(longitude, 'E', 'W')}`;
+function formatCoordinateLabel([longitude, latitude]: [number, number], lang: Lang = 'en') {
+  return `${formatCoordinate(latitude, 'coord.n', 'coord.s', lang)}  ·  ${formatCoordinate(longitude, 'coord.e', 'coord.w', lang)}`;
 }
 
 export default function RouteAtlas({
@@ -776,6 +785,14 @@ export default function RouteAtlas({
   onDockHost,
   onSettled,
 }: Props) {
+  const lang = useLang();
+  // The basemap's own labels follow 中 / EN (src/lib/mapLanguage.ts): bound
+  // once the style has loaded, unbound with the atlas.
+  const unbindMapLanguageRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    unbindMapLanguageRef.current?.();
+    unbindMapLanguageRef.current = null;
+  }, []);
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
   const mapRef = useRef<MapRef>(null);
@@ -930,6 +947,7 @@ export default function RouteAtlas({
     return {
       id: entry.stop.id,
       name: entry.stop.name,
+      nameZh: entry.stop.nameZh,
       number: entry.chapterIndex + 1,
       total: chapterRoute.length,
       year: entry.stop.year,
@@ -965,6 +983,7 @@ export default function RouteAtlas({
     id: entry.stop.id,
     number: entry.chapterIndex + 1,
     name: entry.stop.name,
+    nameZh: entry.stop.nameZh,
     region: entry.stop.region,
     slug: entry.stop.slug,
     coordinates: entry.stop.coordinates,
@@ -3147,7 +3166,7 @@ export default function RouteAtlas({
     canvas.tabIndex = 0;
     canvas.removeAttribute('aria-hidden');
     canvas.setAttribute('role', 'application');
-    canvas.setAttribute('aria-label', 'Map of the archive. Arrow keys move it, plus and minus zoom. Each place is a shield.');
+    canvas.setAttribute('aria-label', tr(getLang(), 'atlas.canvasAria'));
     // + and −: toward a target that each press moves on by half a level, so
     // a held key keeps on at the same calm pace instead of restarting.
     let zoomTarget = Number.NaN;
@@ -3196,7 +3215,13 @@ export default function RouteAtlas({
     idleFallback: mapIdleFallback,
   }, () => setMapIdleFallback(true)), [mapCameraSynced, mapIdleFallback, mapLoaded, mapSettled]);
 
-  const coordinateLabel = activeStop ? formatCoordinateLabel(activeStop.coordinates) : '';
+  // 中 / EN toggled while the reader has the map: the canvas's name follows.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !mapLoaded || !readerHasMap) return;
+    map.getCanvas().setAttribute('aria-label', tr(lang, 'atlas.canvasAria'));
+  }, [lang, mapLoaded, readerHasMap]);
+  const coordinateLabel = activeStop ? formatCoordinateLabel(activeStop.coordinates, lang) : '';
   const interfaceVisible = !paused && atlasEngaged && interfaceInFrame && isAtlasInterfaceReady(mapReadiness) &&
     (classicEntrance || interfaceOn);
   const playInterfaceIntro = interfaceVisible && !interfaceIntroPlayedRef.current;
@@ -3541,6 +3566,10 @@ export default function RouteAtlas({
           // The basemap does not name the places this archive is naming:
           // each is signed already (its shield, its ticket).
           silenceArchivePlaceLabels(map, chapterRoute.map((entry) => entry.stop.name));
+          // The basemap's own place names in the page's language (the
+          // archive's places stay silenced: that is a filter, this a label).
+          unbindMapLanguageRef.current?.();
+          unbindMapLanguageRef.current = bindMapLanguage(map);
           // The phone's map: the land as a photograph of itself, in the
           // archive's own stock paint, under the labels and the route.
           if (mobile && !map.getSource('phone-satellite')) {
@@ -3757,7 +3786,7 @@ export default function RouteAtlas({
   return (
     <section
       ref={routeAtlasRef}
-      aria-label="The archive's map"
+      aria-label={tr(lang, 'atlas.sectionAria')}
       data-atlas-engaged={atlasEngaged ? 'true' : 'false'}
       data-atlas-free={readerHasMap ? '' : undefined}
       data-no-place={current ? undefined : ''}
@@ -3833,7 +3862,7 @@ export default function RouteAtlas({
             aria-live="polite"
           >
             <div className="rounded-full border border-white/10 bg-[#171b15]/76 px-4 py-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/62 shadow-[0_12px_36px_rgba(7,9,6,0.2)] backdrop-blur-md">
-              Route signal delayed
+              <T k="atlas.delayed" />
             </div>
           </motion.div>
         )}
@@ -3878,9 +3907,9 @@ export default function RouteAtlas({
               {/* Bone ink, and no glow: the atlas's one lime is the
                   viewfinder's chapter number. */}
               <span className="h-1.5 w-1.5 rounded-full bg-[#F4F4ED]" />
-              <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/84">The Route</p>
+              <p className="font-ui text-[8px] font-bold uppercase tracking-[0.1em] text-white/84"><T k="atlas.header.route" /></p>
             </div>
-            <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72">Photographic coordinates</p>
+            <p className="mt-3 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72"><T k="atlas.header.coords" /></p>
           </div>
           <span className="font-ui text-[9px] uppercase tabular-nums tracking-[0.1em] text-white/72">{ordinal}</span>
         </motion.header>
@@ -3896,7 +3925,9 @@ export default function RouteAtlas({
         >
           <div className="route-atlas-footer pt-5">
             <span className="sr-only" aria-live="polite">
-              {activeStop ? `Current place: ${activeStop.name}. Coordinates ${coordinateLabel}` : 'The whole map'}
+              {activeStop
+                ? tr(lang, 'atlas.live.current', { name: (lang === 'zh' && activeStop.nameZh) || activeStop.name, coords: coordinateLabel })
+                : tr(lang, 'atlas.live.whole')}
             </span>
             {/* The archive as a strip of ticks, one per frame, grouped by place. */}
             <AtlasTicks
@@ -3904,6 +3935,7 @@ export default function RouteAtlas({
                 id: entry.stop.id,
                 number: entry.chapterIndex + 1,
                 name: entry.stop.name,
+                nameZh: entry.stop.nameZh,
                 frames: entry.stop.frameCount,
               }))}
               currentId={currentStopRef.current}

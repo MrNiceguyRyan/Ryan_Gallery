@@ -36,6 +36,9 @@ import {
 } from '../../lib/proofSheet';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
 import { CSS_EASE } from '../../lib/motion';
+import { Bi, T, useLang } from '../../i18n/react';
+import { tr, type Key } from '../../i18n/dict';
+import { getLang, type Lang } from '../../i18n/lang';
 
 // Fraunces' widest digit: `0` is 1420/2000 upm. It ships without tnum, so a
 // figure set in it changes width on every tick (`1` is 0.47em) and drags the
@@ -142,7 +145,12 @@ const SKID = 'cubic-bezier(0.2, 0.8, 0.3, 1)';
 const PEN = 'cubic-bezier(0.45, 0.05, 0.4, 1)';
 const STEP_BACK = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
-const TITLE_LINES = ['Cities and', 'landscapes,', 'one frame', 'at a time.'];
+/** The title, set line by line in each language (closing.titleLines: the
+ *  lines are split on " / "; Chinese has two). */
+const TITLE_LINES: Record<Lang, string[]> = {
+  en: tr('en', 'closing.titleLines').split(' / '),
+  zh: tr('zh', 'closing.titleLines').split(' / '),
+};
 // The tally's strokes, from the same constants the layout sizes the stub by.
 const TALLY_VARS = {
   '--tick-w': `${PROOF.TICK_W}px`,
@@ -150,7 +158,6 @@ const TALLY_VARS = {
   '--tick-gap': `${PROOF.TICK_GAP}px`,
   '--tick-group-gap': `${PROOF.TICK_GROUP_GAP}px`,
 } as CSSProperties;
-const TITLE = 'Cities and landscapes, one frame at a time.';
 
 interface Geo {
   layout: ProofLayout;
@@ -212,11 +219,19 @@ function documentTop(node: HTMLElement | null) {
   return top;
 }
 
-const stubSub = (chapter: ProofChapter) => {
-  // A region that only repeats the place (New York, New York) is left off.
-  const region = chapter.region && chapter.region.toLowerCase() !== chapter.place.toLowerCase() ? chapter.region : '';
+const stubSub = (chapter: ProofChapter, lang: Lang = 'en') => {
+  // A region that only repeats the place (New York, New York) is left off —
+  // compared in English, printed in the language asked for.
+  const same = !chapter.region || chapter.region.toLowerCase() === chapter.place.toLowerCase();
+  const region = same ? '' : lang === 'zh' && chapter.regionZh ? chapter.regionZh : chapter.region;
   return [region, chapter.year].filter(Boolean).join(' · ');
 };
+const placeOf = (chapter: ProofChapter, lang: Lang) => (lang === 'zh' && chapter.placeZh) || chapter.place;
+/** The stub's place and sub, both languages in the markup. */
+const StubPlace = ({ chapter }: { chapter: ProofChapter }) => <Bi en={chapter.place} zh={chapter.placeZh} />;
+const StubSub = ({ chapter }: { chapter: ProofChapter }) => <Bi en={stubSub(chapter, 'en')} zh={stubSub(chapter, 'zh')} />;
+const stubAria = (chapter: ProofChapter, total: number, lang: Lang) =>
+  tr(lang, 'closing.stubAria', { place: placeOf(chapter, lang), n: chapter.ordinal, total: pad2(total), frames: chapter.frames.length });
 
 // Fraunces' optical size widens its figures as they get smaller, so the
 // ruler sets them near the size they are used at (26–38px), not at a size
@@ -260,11 +275,13 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
   const chapters = useMemo(() => proofChapters(collections), [collections]);
   const total = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
   const years = useMemo(() => yearSpan(chapters.map((chapter) => chapter.year)), [chapters]);
-  const figures = useMemo(() => [
-    { label: 'Chapters', value: pad2(chapters.length) },
-    { label: 'Frames', value: pad2(total) },
-    ...(years ? [{ label: 'Years', value: years }] : []),
+  // Each figure's label is a dictionary key (also its React key).
+  const figures = useMemo<Array<{ label: Key; value: string }>>(() => [
+    { label: 'closing.fig.chapters', value: pad2(chapters.length) },
+    { label: 'closing.fig.frames', value: pad2(total) },
+    ...(years ? [{ label: 'closing.fig.years' as Key, value: years }] : []),
   ], [chapters.length, total, years]);
+  const lang = useLang();
 
   const sectionRef = useRef<HTMLElement>(null);
   const proofRef = useRef<HTMLDivElement>(null);
@@ -607,10 +624,10 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
                 <span className="closing-kicker__dot" />
                 <span className="closing-kicker__count">{pad2(chapters.length)} / {pad2(chapters.length)}</span>
               </span>
-              <span className="sr-only">{chapters.length} of {chapters.length} chapters.</span>
+              <span className="sr-only"><T k="closing.sr.count" vars={{ n: chapters.length }} /></span>
               <span className="closing-kicker__rule" aria-hidden="true" />
-              <span className="closing-kicker__done">Archive complete</span>
-              <span className="closing-kicker__rest">· Every frame, 01–{pad2(total)}</span>
+              <span className="closing-kicker__done"><T k="closing.done" /></span>
+              <span className="closing-kicker__rest"><T k="closing.everyFrame" vars={{ total: pad2(total) }} /></span>
             </p>
           )}
 
@@ -619,12 +636,14 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
             className="closing-title font-serif"
             style={geo ? { fontSize: geo.copy.titleSize } : undefined}
           >
-            <span className="sr-only">{TITLE}</span>
-            {TITLE_LINES.map((line) => (
-              <span key={line} className="closing-title__line" aria-hidden="true">
-                <span>{line}</span>
-              </span>
-            ))}
+            <span className="sr-only"><T k="closing.title" /></span>
+            {(['en', 'zh'] as const).flatMap((l) =>
+              TITLE_LINES[l].map((line) => (
+                <span key={`${l}-${line}`} className="closing-title__line" aria-hidden="true" data-l={l} lang={l === 'zh' ? 'zh-Hans' : undefined}>
+                  <span>{line}</span>
+                </span>
+              )),
+            )}
           </h2>
 
           <dl
@@ -633,7 +652,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
           >
             {figures.map((figure) => (
               <div key={figure.label} className="closing-fig">
-                <dt className="closing-fig__label font-ui">{figure.label}</dt>
+                <dt className="closing-fig__label font-ui"><T k={figure.label} /></dt>
                 <dd className="closing-fig__value font-serif">
                   <span aria-hidden="true" className="closing-fig__box">
                     <span className="invisible">{figure.value}</span>
@@ -652,19 +671,19 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
                 onClick={onBackToStart}
                 className="inline-flex min-h-11 items-center uppercase text-[#D2FF00]/85 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
               >
-                Back to the start ↑
+                <T k="closing.backToStart" />
               </button>
               <a
                 href="/about"
                 className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
               >
-                About →
+                <T k="closing.about" />
               </a>
               <a
                 href="/travel"
                 className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
               >
-                Map →
+                <T k="closing.map" />
               </a>
             </div>
           )}
@@ -726,7 +745,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
                     type="button"
                     data-row={row}
                     className="proof-stub"
-                    aria-label={`Open ${chapter.place}, chapter ${chapter.ordinal} of ${pad2(chapters.length)}, ${chapter.frames.length} frames`}
+                    aria-label={stubAria(chapter, chapters.length, lang)}
                     style={{
                       left: stub.x,
                       top: stub.y,
@@ -779,8 +798,8 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
                           {chapter.ordinal}
                         </span>
                         <span className="proof-stub__meta font-ui">
-                          <span className="proof-stub__place">{chapter.place}</span>
-                          <span className="proof-stub__sub">{stubSub(chapter)}</span>
+                          <span className="proof-stub__place"><StubPlace chapter={chapter} /></span>
+                          <span className="proof-stub__sub"><StubSub chapter={chapter} /></span>
                         </span>
                       </span>
                       {/* One tick per frame, in fives, on the frame numbers'
@@ -813,8 +832,13 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
 
               {anchorChapter && (
                 <p className="proof-caption font-ui" aria-hidden="true" style={{ left: zoom.caption.x, top: zoom.caption.y }}>
-                  Frame {pad2(layout.frames[geo.anchorIndex].n)} / {pad2(total)}
-                  <em>{` · ${[anchorChapter.place, anchorChapter.year].filter(Boolean).join(' · ')}`}</em>
+                  <T k="closing.loupe" vars={{ nn: pad2(layout.frames[geo.anchorIndex].n), total: pad2(total) }} />
+                  <em>
+                    <Bi
+                      en={` · ${[anchorChapter.place, anchorChapter.year].filter(Boolean).join(' · ')}`}
+                      zh={anchorChapter.placeZh ? ` · ${[anchorChapter.placeZh, anchorChapter.year].filter(Boolean).join(' · ')}` : null}
+                    />
+                  </em>
                 </p>
               )}
             </>
@@ -829,11 +853,20 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
                 {chapter.ordinal}
               </span>
             ))}
+            {/* Both languages, plainly (no data-l: neither is hidden), so
+                the sheet is laid out for the wider of the two and a toggle
+                never overflows it. */}
             {chapters.map((chapter) => (
               <span key={`p-${chapter.id}`} data-ruler="meta" className="proof-stub__place font-ui">{chapter.place}</span>
             ))}
+            {chapters.map((chapter) => chapter.placeZh ? (
+              <span key={`pz-${chapter.id}`} data-ruler="meta" lang="zh-Hans" className="proof-stub__place font-ui">{chapter.placeZh}</span>
+            ) : null)}
             {chapters.map((chapter) => (
               <span key={`s-${chapter.id}`} data-ruler="meta" className="proof-stub__sub font-ui">{stubSub(chapter)}</span>
+            ))}
+            {chapters.map((chapter) => (
+              <span key={`sz-${chapter.id}`} data-ruler="meta" lang="zh-Hans" className="proof-stub__sub font-ui">{stubSub(chapter, 'zh')}</span>
             ))}
             {chapters.map((chapter) => (
               <span key={`c-${chapter.id}`} data-ruler="count" className="proof-stub__count font-serif" style={{ fontSize: COUNT_RULER_SIZE }}>
@@ -846,10 +879,11 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
               </span>
             ))}
             {figures.map((figure) => (
-              <span key={`l-${figure.label}`} data-ruler="label" className="closing-fig__label font-ui">{figure.label}</span>
+              <span key={`l-${figure.label}`} data-ruler="label" className="closing-fig__label font-ui">{tr('en', figure.label)}</span>
             ))}
             <span data-ruler="title" className="closing-title font-serif">
-              {TITLE_LINES.map((line) => <span key={line}>{line}</span>)}
+              {TITLE_LINES.en.map((line) => <span key={`en-${line}`}>{line}</span>)}
+              {TITLE_LINES.zh.map((line) => <span key={`zh-${line}`} lang="zh-Hans">{line}</span>)}
             </span>
           </div>
         </div>
@@ -889,25 +923,26 @@ export function FlowSheet({ chapters, onOpen }: {
   chapters: readonly ProofChapter[];
   onOpen: (chapter: ProofChapter, request: ClosingStoryRequest) => void;
 }) {
+  const lang = useLang();
   const dpr = typeof window === 'undefined' ? 2 : Math.min(3, window.devicePixelRatio || 1);
   const fileW = (ratio: number) => Math.min(640, Math.ceil((FLOW_H * ratio * dpr) / 80) * 80);
   return (
     <div className="flow-sheet" data-lenis-prevent>
       {chapters.map((chapter) => (
-        <section key={chapter.id} className="flow-roll" aria-label={`${chapter.ordinal} ${chapter.place}`}>
+        <section key={chapter.id} className="flow-roll" aria-label={`${chapter.ordinal} ${placeOf(chapter, lang)}`}>
           <button
             type="button"
             className="flow-stub"
             style={stockStyle(chapter.slug)}
-            aria-label={`Open ${chapter.place}, chapter ${chapter.ordinal} of ${pad2(chapters.length)}, ${chapter.frames.length} frames`}
+            aria-label={stubAria(chapter, chapters.length, lang)}
             onClick={(event) => onOpen(chapter, {
               returnFocus: event.detail === 0 ? event.currentTarget : event.currentTarget.closest<HTMLElement>('[data-archive-closing]'),
             })}
           >
             <span className="flow-stub__no font-serif">{chapter.ordinal}</span>
             <span className="flow-stub__meta font-ui">
-              <span className="flow-stub__place">{chapter.place}</span>
-              <span className="flow-stub__sub">{stubSub(chapter)}</span>
+              <span className="flow-stub__place"><StubPlace chapter={chapter} /></span>
+              <span className="flow-stub__sub"><StubSub chapter={chapter} /></span>
             </span>
             <b className="flow-stub__count font-serif">{pad2(chapter.frames.length)}</b>
           </button>
@@ -1508,8 +1543,11 @@ function createHands(parts: HandsParts, geo: Geo, chapters: readonly ProofChapte
     const frame = layout.frames[focal];
     const chapter = frame ? chapters[frame.row] : null;
     if (!frame || !chapter) return;
-    if (captionNo) captionNo.textContent = `Frame ${pad2(frame.n)} / ${pad2(total)}`;
-    if (captionPlace) captionPlace.textContent = ` · ${chapter.place}`;
+    // In the page's language at each write (a toggle shows from the next
+    // frame the loupe rests on).
+    const lang = getLang();
+    if (captionNo) captionNo.textContent = tr(lang, 'closing.loupe', { nn: pad2(frame.n), total: pad2(total) });
+    if (captionPlace) captionPlace.textContent = ` · ${placeOf(chapter, lang)}`;
   };
   const intend = () => {
     window.clearTimeout(intentTimer);

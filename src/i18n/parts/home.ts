@@ -142,6 +142,10 @@ export const en = {
   'explorer.list.frames': '{frames} frames',
   // The bar's group name.
   'explorer.barAria': 'Places',
+  'explorer.panel.sheet': 'Contact sheet',
+  'explorer.panel.placesAria': 'Places, {total}',
+  'explorer.panel.sheetAria': 'Contact sheet, {frames} frames',
+  'explorer.panel.close': 'Close',
 
   // ── components/home/ArchiveChapter.tsx ──
   // Stub row label (the stub is aria-hidden). The label is also the React key (:2096 key={label}) — fine as long as labels stay distinct.
@@ -268,7 +272,7 @@ export const zh: Record<keyof typeof en, string> = {
   'cover.land.camera': '相机',
   'cover.land.travel': '旅行',
   'cover.figures': '{places} 个地点。{frames} 帧。',
-  'cover.whereWhen': '{regions}，{years} 年。',
+  'cover.whereWhen': '{regions}，{years}\u00a0年。',
   'cover.kept': '相机留下的，成了这份{archive}——光线、土地，以及一路相随的{thought}。',
   'cover.land.archive': '档案',
   'cover.land.thought': '思考',
@@ -310,6 +314,10 @@ export const zh: Record<keyof typeof en, string> = {
   'explorer.list.head': '全部地点',
   'explorer.list.frames': '{frames} 帧',
   'explorer.barAria': '地点',
+  'explorer.panel.sheet': '印样',
+  'explorer.panel.placesAria': '地点，共 {total} 个',
+  'explorer.panel.sheetAria': '印样，共 {frames} 帧',
+  'explorer.panel.close': '关闭',
 
   // ── components/home/ArchiveChapter.tsx ──
   'chapter.stub.region': '地区',

@@ -333,7 +333,7 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(chapter, /\.\.\.stockStyle\(collection\.slug\),/);
   assert.match(chapter, /const band = plate\.querySelector<SVGElement>\('\.archive-ticket-sign__shield \.route-shield__band'\);/);
   assert.match(chapter, /accent=\{stockPaper\(nextStop\.slug\)\}/);
-  assert.match(home, /\{ name: next\.name, number: next\.number, region: next\.region, slug: next\.slug \}/);
+  assert.match(home, /\{ name: next\.name, nameZh: next\.nameZh, number: next\.number, region: next\.region, slug: next\.slug \}/);
   assert.match(story, /accent=\{stockPaper\(chapter\.slug\)\}/);
   assert.match(sign, /accent=\{stockPaper\(stop\.slug\)\}/);
   assert.match(css, /\.route-shield__band \{\s*fill: var\(--shield-accent, var\(--stub-paper/);

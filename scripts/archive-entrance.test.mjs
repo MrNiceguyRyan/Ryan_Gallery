@@ -59,7 +59,7 @@ test('the entry goes straight down onto stop 01: its cover is simply there, whol
   assert.doesNotMatch(home, /rollFrames|rollGates|archive-index|Back to index/);
   assert.doesNotMatch(atlas, /rollGates|bridgeRoll|prologue-mark|archive-index/);
   assert.doesNotMatch(closing, /Back to index|onBackToIndex/);
-  assert.match(closing, /Back to the start/);
+  assert.match(closing, /<T k="closing.backToStart" \/>/);
   assert.doesNotMatch(css, /data-bridge|\.bridge-|prologue-mark/);
   // The plate has no unfold of its own any more — no cover does — so it is
   // interactive whenever it is there.
