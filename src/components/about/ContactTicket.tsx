@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { T, useT } from '../../i18n/react';
 import { DUR_MS, EASE, bezierFn } from '../../lib/motion';
 import { STOCK_FALLBACK } from '../../lib/ticketStock';
 import {
@@ -41,6 +42,13 @@ import {
 // The pose is written straight onto the nodes, one writer, off one clock —
 // never through React state — and cleared at rest, so the server render and
 // the client agree. React state is only what the words say.
+//
+// 中 / EN: what the ticket prints is in both languages and CSS shows one
+// (src/i18n/runtime.ts); what only a screen reader reads — the button's
+// line, the live status — is in the reader's language (useT), the status
+// kept as what happened, not as a sentence, so it is said in the language
+// the page is in when it is read. The address and the handle are his, as
+// they are.
 
 // A press that travels less than this is a click.
 const PULL_SLOP = 6;
@@ -95,7 +103,9 @@ function ArrowOut() {
 export default function ContactTicket({ email, instagram, chapters, frames }: Props) {
   const [phase, setPhase] = useState<'whole' | 'torn'>('whole');
   const [copy, setCopy] = useState<Copy>('copied');
-  const [status, setStatus] = useState('');
+  // What the live region says: nothing, or what taking the stub did.
+  const [status, setStatus] = useState<Copy | null>(null);
+  const t = useT();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const faceHalfRef = useRef<HTMLDivElement>(null);
@@ -281,7 +291,7 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
       if (!whole) return;
       whole = false;
       setPhase('torn');
-      setStatus('');
+      setStatus(null);
       const copying = copyAddress();
       // A click plays the paper's own catches; a hand's tear carries on as
       // smoothly as the hand pulled it.
@@ -292,11 +302,7 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
       copying.then((result) => {
         if (disposed) return;
         setCopy(result);
-        setStatus(
-          result === 'copied'
-            ? `Copied: ${email} is on your clipboard.`
-            : `${email} is selected on the ticket, ready to copy.`,
-        );
+        setStatus(result);
       });
     };
 
@@ -304,7 +310,7 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
       if (whole) return;
       whole = true;
       setPhase('whole');
-      setStatus('');
+      setStatus(null);
       smooth = true;
       if (reduceQuery.matches) run(0, TEAR_REDUCED_MS);
       else run(0, RESEAT_MS, arrive);
@@ -448,9 +454,11 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
           <div ref={faceRef} className="about-ticket__face">
             <i className="about-ticket__fibre" aria-hidden="true" />
             <i className="about-ticket__strain" aria-hidden="true" />
-            <span className="about-ticket__label">Email</span>
+            <span className="about-ticket__label">
+              <T k="contact.email.label" />
+            </span>
             <span className="about-ticket__write">
-              <a className="about-ticket__mail" href={`mailto:${email}`} aria-label={`Email ${email}`}>
+              <a className="about-ticket__mail" href={`mailto:${email}`} aria-label={t('contact.email.aria', { email })}>
                 <span ref={addressRef}>
                   {at > 0 ? (
                     <>
@@ -467,7 +475,9 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
             </span>
             <span className="about-ticket__rule" aria-hidden="true" />
             <span className="about-ticket__line">
-              <span className="about-ticket__label">Instagram</span>
+              <span className="about-ticket__label">
+                <T k="contact.instagram.label" />
+              </span>
               <a className="about-ticket__ig" href={instagram} target="_blank" rel="noopener noreferrer">
                 {handle} <ArrowOut />
               </a>
@@ -482,10 +492,16 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
               the print and the stub say is said once, for a screen reader,
               by the line at the end of the button. */}
           <span className="about-ticket__under" aria-hidden="true">
-            <span className="about-ticket__word">{manual ? 'Selected' : 'Copied'}</span>
-            <span className="about-ticket__small">{manual ? 'Copy it from the ticket' : 'Address on your clipboard'}</span>
+            <span className="about-ticket__word">
+              <T k={manual ? 'contact.under.selected' : 'contact.under.copied'} />
+            </span>
+            <span className="about-ticket__small">
+              <T k={manual ? 'contact.under.selectedSmall' : 'contact.under.copiedSmall'} />
+            </span>
             <span className="about-ticket__stub-rule" />
-            <span className="about-ticket__small about-ticket__again">Put it back</span>
+            <span className="about-ticket__small about-ticket__again">
+              <T k="contact.under.again" />
+            </span>
           </span>
           <span ref={seatRef} className="about-ticket__seat">
             <span ref={stubHalfRef} className="about-ticket__half about-ticket__half--stub" aria-hidden="true">
@@ -495,20 +511,30 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
                 <i className="about-ticket__fibre" aria-hidden="true" />
                 <i className="about-ticket__strain" aria-hidden="true" />
                 <span className="about-ticket__no">{String(chapters).padStart(2, '0')}</span>
-                <span className="about-ticket__small">Chapters</span>
+                <span className="about-ticket__small">
+                  <T k="contact.stub.chapters" />
+                </span>
                 <span className="about-ticket__stub-rule" />
                 <span className="about-ticket__rows">
                   <span className="about-ticket__row">
-                    <span>Frames</span>
+                    <span>
+                      <T k="contact.stub.frames" />
+                    </span>
                     <span>{frames}</span>
                   </span>
                   <span className="about-ticket__row">
-                    <span>Since</span>
+                    <span>
+                      <T k="contact.stub.since" />
+                    </span>
                     <span>2023</span>
                   </span>
                   <span className="about-ticket__row">
-                    <span>Base</span>
-                    <span>New York</span>
+                    <span>
+                      <T k="contact.stub.base" />
+                    </span>
+                    <span>
+                      <T k="contact.stub.baseValue" />
+                    </span>
                   </span>
                 </span>
               </span>
@@ -516,18 +542,22 @@ export default function ContactTicket({ email, instagram, chapters, frames }: Pr
           </span>
           <span className="sr-only">
             {!torn
-              ? `The stub: ${chapters} chapters, ${frames} frames. Tear it off to copy the email address.`
+              ? t('contact.sr.stub', { chapters, frames })
               : manual
-                ? 'The email address is selected on the ticket. Put a stub back.'
-                : 'Copied: the email address is on your clipboard. Put a stub back.'}
+                ? t('contact.sr.selected')
+                : t('contact.sr.copied')}
           </span>
         </button>
       </div>
       <p className="about-ticket-hint" aria-hidden="true">
-        Tear off the stub to copy the address
+        <T k="contact.hint" />
       </p>
       <span className="sr-only" role="status">
-        {status}
+        {status === 'copied'
+          ? t('contact.status.copied', { email })
+          : status === 'manual'
+            ? t('contact.status.manual', { email })
+            : ''}
       </span>
     </div>
   );

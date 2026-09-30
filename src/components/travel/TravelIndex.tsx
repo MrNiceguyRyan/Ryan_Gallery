@@ -5,6 +5,7 @@ import { EASE } from '../../lib/motion';
 import { figuresLine, frameRange, greatCircleKm, groupThousands, chapterCentre } from '../../lib/travelSilver';
 import type { TravelChapter } from '../../lib/travelSilver';
 import TravelTicket, { warmCover } from './TravelTicket';
+import { Bi, T } from '../../i18n/react';
 
 // ─── The index ───
 // /travel's rail is the edition's index: every chapter at once, in the
@@ -75,9 +76,9 @@ export function TravelRows({ chapters, selected, hovered, tickets, reduce, onSel
             >
               <span className="travel-index__tab" aria-hidden="true" />
               <span className="travel-index__no font-serif">{chapter.ordinal}</span>
-              <span className="travel-index__name font-serif">{chapter.name}</span>
+              <span className="travel-index__name font-serif"><Bi en={chapter.name} zh={chapter.nameZh} /></span>
               <span className="travel-index__range font-ui">{frameRange(chapter)}</span>
-              <span className="travel-index__meta font-ui">{figuresLine(chapter)}</span>
+              <span className="travel-index__meta font-ui"><Bi en={figuresLine(chapter)} zh={figuresLine(chapter, 'zh')} /></span>
             </button>
             {tickets && (
               <AnimatePresence initial={false}>
@@ -133,8 +134,8 @@ function TravelIndex({ chapters, selected, hovered, reduce, onSelect, onHover, o
   return (
     <div className="travel-index" ref={listHost}>
       <header className="travel-index__head">
-        <p className="travel-index__eyebrow font-ui">Index</p>
-        <p className="travel-index__figures font-ui">Frames</p>
+        <p className="travel-index__eyebrow font-ui"><T k="travel.index" /></p>
+        <p className="travel-index__figures font-ui"><T k="travel.index.frames" /></p>
       </header>
       <TravelRows
         chapters={chapters}
@@ -149,13 +150,18 @@ function TravelIndex({ chapters, selected, hovered, reduce, onSelect, onHover, o
       <footer className="travel-index__foot font-ui" aria-live="off">
         {to ? (
           <>
-            <span>{from ? `${from.name} → ${to.name}` : `→ ${to.name}`}</span>
-            <span className="travel-index__foot-figure">{from ? `${groupThousands(leg)} km` : ''}</span>
+            <span>
+              <Bi
+                en={from ? `${from.name} → ${to.name}` : `→ ${to.name}`}
+                zh={from ? `${from.nameZh || from.name} → ${to.nameZh || to.name}` : `→ ${to.nameZh || to.name}`}
+              />
+            </span>
+            <span className="travel-index__foot-figure">{from ? <T k="travel.index.km" vars={{ km: groupThousands(leg) }} /> : ''}</span>
           </>
         ) : (
           <>
-            <span>Route · {chapters.length} chapters</span>
-            <span className="travel-index__foot-figure">{groupThousands(routeKm)} km</span>
+            <span><T k="travel.index.route" vars={{ n: chapters.length }} /></span>
+            <span className="travel-index__foot-figure"><T k="travel.index.km" vars={{ km: groupThousands(routeKm) }} /></span>
           </>
         )}
       </footer>

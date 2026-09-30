@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { EASE } from '../lib/motion';
+import { T } from '../i18n/react';
 
 interface Props {
   chapters: number;
@@ -170,8 +171,11 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
           data-entry-cover={ATLAS_SESSION_KEY}
           data-entry-deeplink=""
         >
+          {/* Both languages as spans (the hidden one is display:none, so
+              a screen reader hears one): a one-language string would change
+              right after hydration and be announced a second time. */}
           <span className="sr-only" role="status">
-            Opening the photographic atlas
+            <T k="travel.cover.status" />
           </span>
           {entryMode === 'full' && (
             <>
@@ -180,7 +184,7 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
             onClick={() => setCoverGone(true)}
             className="fixed left-4 top-4 z-10 inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           >
-            Skip entrance
+            <T k="travel.cover.skip" />
           </button>
           {/* No lime anywhere on the cover: the page's one lime is the
               masthead's "Archive.", which the lifting cover uncovers. */}
@@ -217,8 +221,8 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
             transition={{ duration: 0.5, delay: 0.06, ease: EASE.arrive }}
           >
             <div className="flex items-baseline justify-between gap-4 border-b border-white/20 pb-2 font-ui text-[10px] uppercase tracking-[0.1em]">
-              <span className="font-medium text-white/60">The Journal Gallery</span>
-              <span className="text-white/58">The Territory</span>
+              <span className="font-medium text-white/60"><T k="travel.cover.masthead" /></span>
+              <span className="text-white/58"><T k="travel.cover.section" /></span>
             </div>
             <div className="mt-[3px] border-b border-white/10" />
           </motion.div>
@@ -234,7 +238,7 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
               transition={{ duration: 0.4, delay: 0.12, ease: EASE.arrive }}
               className="font-ui text-[11px] uppercase tracking-[0.1em] text-[#F4F4ED]/72"
             >
-              Photographic Archive
+              <T k="travel.cover.kicker" />
             </motion.span>
 
             <div className="m-0 overflow-hidden px-[0.02em] py-[0.04em]">
@@ -244,7 +248,7 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
                 transition={{ duration: 0.6, delay: 0.16, ease: EASE.arrive }}
                 className="inline-block font-serif text-[clamp(64px,15vw,188px)] font-normal uppercase leading-[0.92] tracking-tight text-white/[0.98]"
               >
-                Atlas
+                <T k="travel.cover.title" />
               </motion.span>
             </div>
 
@@ -254,7 +258,7 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
               transition={{ duration: 0.4, delay: 0.26, ease: EASE.arrive }}
               className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"
             >
-              Geographic Index
+              <T k="travel.cover.sub" />
             </motion.div>
           </div>
 
@@ -271,11 +275,10 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
             transition={{ duration: 0.5, delay: 0.08, ease: EASE.arrive }}
           >
             <span className="text-[13px] tracking-[0.1em] text-white/55">
-              Live Atlas
+              <T k="travel.cover.live" />
             </span>
             <span>
-              {String(chapters).padStart(2, '0')} chapters /{' '}
-              {String(frames).padStart(2, '0')} frames
+              <T k="travel.cover.figures" vars={{ chapters: String(chapters).padStart(2, '0'), frames: String(frames).padStart(2, '0') }} />
             </span>
           </motion.div>
             </>
@@ -290,7 +293,7 @@ export default function TravelEntryCover({ chapters, frames }: Props) {
               aria-hidden="true"
             >
               <span className="font-ui text-[10px] uppercase tracking-[0.1em] text-white/52">
-                Atlas
+                <T k="travel.cover.title" />
               </span>
             </motion.div>
           )}

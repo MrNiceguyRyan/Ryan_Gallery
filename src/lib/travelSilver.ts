@@ -9,12 +9,17 @@
 // owns the map instance and every write; nothing here reads the DOM, and
 // nothing downstream measures a rect back.
 import type { Collection } from '../types';
+import { tr } from '../i18n/dict';
+import type { Lang } from '../i18n/runtime';
 import { fileRatio, pad2 } from './proofSheet';
 import { stockPaper } from './ticketStock';
 
 // ── The chapters ──
 export interface TravelPlace {
   city: string;
+  /** The place in Chinese (the frames' location.cityZh; for a chapter
+   *  standing on its own name, its nameZh). Absent: the English prints. */
+  cityZh?: string;
   lng: number;
   lat: number;
   frames: number;
@@ -29,9 +34,13 @@ export interface TravelFrame {
 export interface TravelChapter {
   slug: string;
   name: string;
+  /** Chinese twins (src/i18n/content.ts withZh); absent: the English prints. */
+  nameZh?: string;
   /** The homepage's chapter number: '01'… */
   ordinal: string;
   region: string;
+  /** The region's Chinese, from the same field the region came from. */
+  regionZh?: string;
   year: string;
   /** The chapter's card stock (lib/ticketStock). */
   stock: string;
@@ -75,25 +84,39 @@ export function travelChapters(collections: readonly Collection[]): TravelChapte
         number: nextFrame++,
       };
     });
-    const byCity = new Map<string, { city: string; lng: number; lat: number; frames: number }>();
+    const nameZh = collection.nameZh?.trim() || undefined;
+    const byCity = new Map<string, { city: string; cityZh?: string; lng: number; lat: number; frames: number }>();
     photos.forEach((photo) => {
       const location = photo.location;
       if (location?.lat == null || location?.lng == null) return;
       const key = `${location.city ?? ''}|${location.country ?? ''}`;
-      const entry = byCity.get(key) ?? { city: location.city || collection.name, lng: 0, lat: 0, frames: 0 };
+      const entry = byCity.get(key) ?? {
+        city: location.city || collection.name,
+        cityZh: (location.city ? location.cityZh?.trim() : nameZh) || undefined,
+        lng: 0,
+        lat: 0,
+        frames: 0,
+      };
       entry.lng += location.lng;
       entry.lat += location.lat;
       entry.frames += 1;
       byCity.set(key, entry);
     });
-    const places = [...byCity.values()].map((entry) => ({
+    const places: TravelPlace[] = [...byCity.values()].map((entry) => ({
       city: entry.city,
+      ...(entry.cityZh ? { cityZh: entry.cityZh } : {}),
       lng: entry.lng / entry.frames,
       lat: entry.lat / entry.frames,
       frames: entry.frames,
     }));
     if (!places.length && collection.mapLocation) {
-      places.push({ city: collection.name, lng: collection.mapLocation.lng, lat: collection.mapLocation.lat, frames: photos.length });
+      places.push({
+        city: collection.name,
+        ...(nameZh ? { cityZh: nameZh } : {}),
+        lng: collection.mapLocation.lng,
+        lat: collection.mapLocation.lat,
+        frames: photos.length,
+      });
     }
     if (!places.length) return;
     // The mark stands where the cover was made; else on the place with the
@@ -104,11 +127,16 @@ export function travelChapters(collections: readonly Collection[]): TravelChapte
     const keys = [...byCity.keys()];
     let lead = coverCity ? keys.indexOf(coverCity) : -1;
     if (lead < 0) lead = places.reduce((best, place, i) => (place.frames > places[best].frames ? i : best), 0);
+    // The region's Chinese comes from the field the region itself was read
+    // from (region, else location).
+    const regionZh = (collection.region != null ? collection.regionZh : collection.location != null ? collection.locationZh : undefined)?.trim();
     chapters.push({
       slug: collection.slug,
       name: collection.name.trim(),
+      ...(nameZh ? { nameZh } : {}),
       ordinal: pad2(index + 1),
       region: (collection.region ?? collection.location ?? '').trim(),
+      ...(regionZh ? { regionZh } : {}),
       year: collection.year != null ? String(collection.year) : '',
       stock: stockPaper(collection.slug),
       coverUrl,
@@ -127,26 +155,32 @@ export const leadOf = (chapter: TravelChapter): [number, number] => {
 };
 
 /** "15 frames", "01 frame" — the figure padded the way the homepage prints
- *  it, the noun agreeing with it ("1 frames" is gone). CSS sets the case. */
-export const framesLabel = (count: number) => `${pad2(count)} ${count === 1 ? 'frame' : 'frames'}`;
+ *  it, the noun agreeing with it ("1 frames" is gone). CSS sets the case.
+ *  In Chinese one form: "15 帧". */
+export const framesLabel = (count: number, lang: Lang = 'en') =>
+  tr(lang, count === 1 ? 'travel.frames.one' : 'travel.frames.other', { n: pad2(count) });
 export const frameRange = (chapter: TravelChapter) => {
   const first = chapter.frames[0]?.number;
   const last = chapter.frames[chapter.frames.length - 1]?.number;
   if (first == null || last == null) return '';
   return first === last ? pad2(first) : `${pad2(first)}–${pad2(last)}`;
 };
-/** The row's figures line: region (left out where it only repeats the name),
- *  frames, year, and how many places when there is more than one. */
-export function figuresLine(chapter: TravelChapter) {
+/** The row's figures line: region (left out where it only repeats the name,
+ *  judged in English in both languages), frames, year, and how many places
+ *  when there is more than one. */
+export function figuresLine(chapter: TravelChapter, lang: Lang = 'en') {
   const parts: string[] = [];
-  if (chapter.region && chapter.region.toLowerCase() !== chapter.name.toLowerCase()) parts.push(chapter.region);
-  parts.push(framesLabel(chapter.frames.length));
+  if (chapter.region && chapter.region.toLowerCase() !== chapter.name.toLowerCase()) {
+    parts.push(lang === 'zh' && chapter.regionZh ? chapter.regionZh : chapter.region);
+  }
+  parts.push(framesLabel(chapter.frames.length, lang));
   if (chapter.year) parts.push(chapter.year);
-  if (chapter.places.length > 1) parts.push(`${chapter.places.length} places`);
+  if (chapter.places.length > 1) parts.push(tr(lang, 'travel.places', { n: chapter.places.length }));
   return parts.join(' · ');
 }
-export const coordLabel = (lng: number, lat: number) =>
-  `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'} · ${Math.abs(lng).toFixed(2)}° ${lng >= 0 ? 'E' : 'W'}`;
+/** "25.76° N · 80.19° W"; in Chinese "北纬 25.76° · 西经 80.19°". */
+export const coordLabel = (lng: number, lat: number, lang: Lang = 'en') =>
+  `${tr(lang, lat >= 0 ? 'travel.coord.n' : 'travel.coord.s', { v: Math.abs(lat).toFixed(2) })} · ${tr(lang, lng >= 0 ? 'travel.coord.e' : 'travel.coord.w', { v: Math.abs(lng).toFixed(2) })}`;
 /** 6792 → "6 792", grouped with a thin space. */
 export const groupThousands = (value: number) => String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 

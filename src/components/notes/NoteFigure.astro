@@ -1,8 +1,12 @@
 ---
 // One photograph in a note, at its own ratio (the kept part of the file; a
 // note never crops a picture to fit a box), numbered like the Story's frames,
-// with his caption in sentence case.
-import { imageSrcSet, imageUrl, langOf, orientation, pad2, type NoteImage } from '../../lib/notes';
+// with his caption in sentence case. 中 / EN: a caption with a Chinese twin
+// prints both (the page shows the reader's); the alt is the reader's, from
+// the pair the head script applies (i18nAttrs).
+import Bi from '../../i18n/Bi.astro';
+import { i18nAttrs, tr } from '../../i18n/dict';
+import { blockLang, imageSrcSet, imageUrl, orientation, pad2, twinOf, type NoteImage } from '../../lib/notes';
 
 interface Props {
   image: NoteImage;
@@ -18,7 +22,18 @@ interface Props {
 const { image, width, height, number, placement = 'flow', eager = false } = Astro.props;
 const shape = orientation(width, height);
 const caption = image.caption?.trim() || '';
-const alt = image.alt?.trim() || caption || (number ? `Photograph ${pad2(number)}` : 'Photograph');
+const captionZh = twinOf(caption, image.captionZh);
+// A caption he wrote only in Chinese (no English beside it) shows in
+// Chinese only.
+const captionZhOnly = !caption ? image.captionZh?.trim() || '' : '';
+const nn = number ? pad2(number) : '';
+const own = image.alt?.trim() || caption;
+const alt = own || (number ? tr('en', 'note.photo', { nn }) : tr('en', 'note.photoPlain'));
+const altZh =
+  twinOf(image.alt?.trim() || caption, image.altZh) ||
+  captionZh ||
+  (own ? alt : image.altZh?.trim() || captionZhOnly || (number ? tr('zh', 'note.photo', { nn }) : tr('zh', 'note.photoPlain')));
+const altAttrs = altZh && altZh !== alt ? i18nAttrs({ alt: { en: alt, zh: altZh } }) : { alt };
 const sizes =
   shape === 'landscape'
     ? '(min-width: 1024px) 72vw, 100vw'
@@ -35,16 +50,17 @@ const sizes =
     sizes={sizes}
     width={width}
     height={height}
-    alt={alt}
+    {...altAttrs}
     loading={eager ? 'eager' : 'lazy'}
     fetchpriority={eager ? 'high' : undefined}
     decoding="async"
     draggable="false"
   />
-  {(number || caption) && (
+  {(number || caption || captionZhOnly) && (
     <figcaption class="note-cap font-ui">
-      {number ? <b>{pad2(number)}</b> : null}
-      {caption && <span lang={langOf(caption)}>{caption}</span>}
+      {number ? <b>{nn}</b> : null}
+      {caption && <span lang={blockLang(caption, captionZh)}><Bi en={caption} zh={captionZh} /></span>}
+      {captionZhOnly && <span data-l="zh" lang="zh-Hans">{captionZhOnly}</span>}
     </figcaption>
   )}
 </figure>

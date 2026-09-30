@@ -10,6 +10,8 @@ import { exposureTotals } from '../lib/exposureRecord';
 import { PORTRAIT_FALLBACK, PORTRAIT_SIZES, PORTRAIT_WIDTHS, portraitCropUrl } from '../lib/aboutPortrait';
 import { loadNotes } from '../lib/notesData';
 import { CJK_SERIF_CSS, featuredNote, formatNoteDateShort, hasHan, langOf, noteNumbers, pad2 } from '../lib/notes';
+import { siteText } from '../i18n/content';
+import { tr } from '../i18n/dict';
 
 const currentPath = Astro.url.pathname;
 
@@ -18,13 +20,22 @@ const currentPath = Astro.url.pathname;
  * in the homepage's own shape plus each frame's camera, from which the
  * ticket's counts and the colophon's cameras are reduced. Only photos that
  * reference a chapter are counted, so the total is the 58 the rest of the
- * site counts.
+ * site counts. 中 / EN: his prose with its Chinese twins (siteText: his
+ * Sanity fields when written, else the page's own English and our drafts).
  */
 const [rawSettings, rawCollections] = await Promise.all([
   fetchSanityWithRetry(() => sanityClient.fetch<SiteSettings | null>(`
     *[_type == "siteSettings"][0] {
       name,
       bio,
+      bioZh,
+      lede,
+      ledeZh,
+      tagline,
+      taglineZh,
+      notesDek,
+      notesDekZh,
+      particulars[] { term, termZh, value, valueZh },
       "avatarUrl": avatar.asset->url,
       email,
       instagram
@@ -45,6 +56,7 @@ const [rawSettings, rawCollections] = await Promise.all([
 
 const settings: SiteSettings = rawSettings ?? {};
 const name = settings.name ?? 'Ryan Xu';
+const { bio, lede, particulars } = siteText({ ...settings });
 
 // The homepage's chapters (src/lib/chapterOrder), so the ticket's count is
 // its count, and what their frames add up to.
@@ -66,9 +78,14 @@ const portrait: AboutPortrait = portraitCropUrl(avatarUrl, 480)
 
 // Stamped when the page is built — the colophon's "Updated" line and the ©
 // year. Formatted here, in one named timezone, so the server and the client
-// print the same string: New York, where the archive is based.
+// print the same string: New York, where the archive is based. The date in
+// both languages ("September 30, 2026" · "2026年9月30日"); the year is a
+// figure in both (a © line reads "© 2026" in Chinese too, never "2026年").
 const builtAt = new Date();
-const updatedOn = builtAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+const updatedOn = {
+  en: builtAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' }),
+  zh: builtAt.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' }),
+};
 const year = builtAt.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'America/New_York' });
 
 // Where the log stood: the notes' line — the note ticked "featured", else
@@ -77,14 +94,17 @@ const year = builtAt.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'A
 // NOTES_SAMPLE=1).
 const { notes } = await loadNotes();
 const teased = featuredNote(notes);
-const noteCjk = Boolean(teased && (hasHan(teased.title) || hasHan(teased.dek)));
+const noteCjk = Boolean(teased && [teased.title, teased.dek, teased.titleZh, teased.dekZh].some(hasHan));
 const note: AboutNote | null = teased
   ? {
       title: teased.title,
+      titleZh: teased.titleZh ?? null,
       dek: teased.dek ?? null,
+      dekZh: teased.dekZh ?? null,
       href: `/notes/${teased.slug}`,
       number: pad2(noteNumbers(notes).get(teased.slug) ?? 1),
       date: formatNoteDateShort(teased.publishedAt),
+      dateZh: formatNoteDateShort(teased.publishedAt, 'zh'),
       titleLang: langOf(teased.title) ?? null,
       dekLang: langOf(teased.dek) ?? null,
       cjkSerif: noteCjk,
@@ -93,8 +113,10 @@ const note: AboutNote | null = teased
 ---
 
 <Layout
-  title="About | Ryan"
-  description="Photographic archive. Operator: Ryan Xu. Base: New York."
+  title={tr('en', 'about.title')}
+  description={tr('en', 'about.description')}
+  titleZh={tr('zh', 'about.title')}
+  descriptionZh={tr('zh', 'about.description')}
   ogImage={settings.avatarUrl ? `${settings.avatarUrl}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}
   dark={true}
 >
@@ -131,7 +153,9 @@ const note: AboutNote | null = teased
   <AboutPage
     client:load
     name={name}
-    bio={settings.bio ?? null}
+    bio={bio}
+    lede={lede}
+    particulars={particulars}
     email={settings.email ?? 'ryan2420159421@gmail.com'}
     instagram={settings.instagram ?? 'https://www.instagram.com/ryan_photoo/'}
     portrait={portrait}

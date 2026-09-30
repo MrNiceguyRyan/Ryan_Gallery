@@ -111,7 +111,9 @@ test('failed request preserves the photo, offers retry, then commits only after 
   await act(async () => requestFor(1).onerror());
   assert.match(visible(), /\/0\.jpg/);
   assert.match(document.querySelector('[role=status]').textContent, /could not load/);
-  const retry = [...document.querySelectorAll('button')].find(button => button.textContent === 'Retry');
+  // Both languages are in the markup (src/i18n: CSS shows one); the English
+  // is the one with data-l="en".
+  const retry = [...document.querySelectorAll('button')].find(button => button.querySelector('[data-l="en"]')?.textContent === 'Retry');
   await act(async () => retry.click());
   await decode(requestFor(1));
   assert.match(visible(), /\/1\.jpg/);

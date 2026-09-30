@@ -6,6 +6,8 @@ import WorkStory from '../../components/works/WorkStory';
 import { fetchSanityWithRetry } from '../../lib/sanityFetch';
 import { photoDescription } from '../../lib/narratives';
 import { withSampleChapters } from '../../lib/storyChaptersSample';
+import { COLLECTION_ZH_FIELDS, withZh } from '../../i18n/content';
+import { tr } from '../../i18n/dict';
 
 export async function getStaticPaths() {
   const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Array<{ slug: string }>>(`
@@ -39,6 +41,7 @@ const [fetchedCollection, collectionIndex] = await Promise.all([
     year,
     description,
     introduction,
+    ${COLLECTION_ZH_FIELDS},
     "chapters": chapters[defined(title)] {
       _key,
       title,
@@ -73,6 +76,9 @@ const [fetchedCollection, collectionIndex] = await Promise.all([
       region,
       year,
       routeOrder,
+      nameZh,
+      regionZh,
+      locationZh,
       "photoCount": count(*[_type == "photo" && references(^._id)])
     }
   `)),
@@ -80,7 +86,7 @@ const [fetchedCollection, collectionIndex] = await Promise.all([
 
 // Its sub-chapters as fetched, or a STORY_CHAPTERS_SAMPLE=1 preview build's
 // placeholder ones (src/lib/storyChaptersSample.ts), as the homepage prints.
-const collection = withSampleChapters(fetchedCollection);
+const collection = fetchedCollection ? withZh(withSampleChapters(fetchedCollection)) : null;
 
 if (!collection) {
   throw new Error(`Collection not found: ${slug}`);
@@ -91,7 +97,7 @@ if (!collection) {
 // the chapter after it from these in the homepage's order (chapterOrdinal,
 // src/lib/chapterOrder.ts), which is why the index carries each region: a
 // region's chapters read together there.
-const activeCollectionsWithPhotos = collectionIndex.filter((c) => (c.photoCount || 0) > 0);
+const activeCollectionsWithPhotos = collectionIndex.filter((c) => (c.photoCount || 0) > 0).map((c) => withZh(c));
 const hasCompleteRouteOrder = activeCollectionsWithPhotos.length > 0
   && activeCollectionsWithPhotos.every((item) => Number.isFinite(item.routeOrder));
 const activeCollections = hasCompleteRouteOrder
@@ -116,6 +122,22 @@ const pageDescription = (() => {
   return parts.length > 0
     ? `${parts.join(' · ')} — ${suffix}`
     : suffix;
+})();
+
+// The same in Chinese, for a Chinese reader's tab (the share card and the
+// JSON-LD stay English: a crawler reads the page without its script).
+const nameZh = collection.nameZh || collection.name;
+const pageTitleZh = collection.year
+  ? tr('zh', 'works.title', { name: nameZh, year: collection.year })
+  : tr('zh', 'works.titleNoYear', { name: nameZh });
+const pageDescriptionZh = (() => {
+  if (collection.description) return collection.descriptionZh || collection.description;
+  if (collection.subtitle) return collection.subtitleZh || collection.subtitle;
+  const place = collection.locationZh || collection.location;
+  const lead = [place, collection.year ? String(collection.year) : ''].filter(Boolean).join(' · ');
+  return lead
+    ? tr('zh', 'works.descriptionFallback', { lead, n: photos.length })
+    : tr('zh', 'works.descriptionPhotos', { n: photos.length });
 })();
 
 // Use cover image for OG; fall back to first photo; fall back to default.
@@ -161,6 +183,8 @@ const collectionSchema = {
 <Layout
   title={pageTitle}
   description={pageDescription}
+  titleZh={pageTitleZh}
+  descriptionZh={pageDescriptionZh}
   ogImage={ogImage}
   ogType="article"
   dark={true}

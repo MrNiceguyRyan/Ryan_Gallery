@@ -5,6 +5,14 @@ import { DUR_MS } from '../../lib/motion';
 import { frameSrc, pad2 } from '../../lib/proofSheet';
 import { coordLabel, frameRange, framesLabel, leadOf } from '../../lib/travelSilver';
 import type { TravelChapter } from '../../lib/travelSilver';
+import { Bi, T, useLang, useT } from '../../i18n/react';
+import { pick, tr, type Key, type Vars } from '../../i18n/dict';
+
+/** A dictionary string whose {placeholders} differ by language — a place's
+ *  name and its Chinese twin — both languages in the markup (as <T>). */
+export function TwinT({ k, en, zh }: { k: Key; en?: Vars; zh?: Vars }) {
+  return <Bi en={tr('en', k, en)} zh={tr('zh', k, zh ?? en)} />;
+}
 
 // ─── A chapter's ticket on /travel ───
 // Choosing a chapter prints its ticket — the homepage's 票根 in the chapter's
@@ -60,6 +68,8 @@ interface TravelTicketProps {
 }
 
 export default function TravelTicket({ chapter, total, reduce, onOpen }: TravelTicketProps) {
+  const t = useT();
+  const lang = useLang();
   const ticketRef = useRef<HTMLAnchorElement>(null);
   const photoRef = useRef<HTMLSpanElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -120,7 +130,7 @@ export default function TravelTicket({ chapter, total, reduce, onOpen }: TravelT
         ref={ticketRef}
         className="travel-ticket"
         href={`/works/${chapter.slug}`}
-        aria-label={`Open the ${chapter.name} story, chapter ${chapter.ordinal} of ${pad2(total)}`}
+        aria-label={t('travel.ticket.aria', { name: pick(lang, chapter.name, chapter.nameZh), n: chapter.ordinal, total: pad2(total) })}
         onClick={(event) => { if (photoRef.current) onOpen?.(photoRef.current, event, chapter); }}
         onPointerEnter={() => { if (!reduce) warmPlate(chapter.coverUrl); }}
         onPointerDown={() => { if (!reduce) warmPlate(chapter.coverUrl); }}
@@ -131,17 +141,17 @@ export default function TravelTicket({ chapter, total, reduce, onOpen }: TravelT
         </span>
         <span className="travel-ticket__stub font-ui">
           <span className="travel-stub__no font-serif">{chapter.ordinal}</span>
-          <span className="travel-stub__of">/ {pad2(total)} · Admission</span>
-          <span className="travel-stub__place">{chapter.name}</span>
+          <span className="travel-stub__of"><T k="travel.ticket.of" vars={{ total: pad2(total) }} /></span>
+          <span className="travel-stub__place"><Bi en={chapter.name} zh={chapter.nameZh} /></span>
           <span className="travel-stub__rule" aria-hidden="true" />
           <dl className="travel-stub__rows">
-            <div><dt>Region</dt><dd>{chapter.region || '—'}</dd></div>
-            <div><dt>Frames</dt><dd>{pad2(count)}</dd></div>
-            <div><dt>Year</dt><dd>{chapter.year || '—'}</dd></div>
+            <div><dt><T k="travel.ticket.region" /></dt><dd>{chapter.region ? <Bi en={chapter.region} zh={chapter.regionZh} /> : '—'}</dd></div>
+            <div><dt><T k="travel.ticket.frames" /></dt><dd>{pad2(count)}</dd></div>
+            <div><dt><T k="travel.ticket.year" /></dt><dd>{chapter.year || '—'}</dd></div>
           </dl>
-          <span className="travel-stub__coord">{coordLabel(lng, lat)}</span>
+          <span className="travel-stub__coord"><Bi en={coordLabel(lng, lat)} zh={coordLabel(lng, lat, 'zh')} /></span>
           <span className="travel-stub__admit">
-            <span>Open the story</span>
+            <span><T k="travel.ticket.open" /></span>
             <ArrowUpRight size={12} strokeWidth={1.6} aria-hidden="true" className="travel-stub__arrow" />
           </span>
         </span>
@@ -159,7 +169,7 @@ export default function TravelTicket({ chapter, total, reduce, onOpen }: TravelT
         ))}
       </div>
       <p className="travel-proof__label font-ui">
-        {framesLabel(count)}
+        <Bi en={framesLabel(count)} zh={framesLabel(count, 'zh')} />
         {range ? ` · ${range}` : ''}
       </p>
     </div>

@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useIsPresent, useReducedMotion } from 'framer-
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import type { Photo } from '../../types';
 import { photoAccessibleLabel, photoDescription } from '../../lib/narratives';
+import { Bi, T, useLang, useT } from '../../i18n/react';
 import { fileDims, lightboxImageSources, prepareLightboxImage } from '../../lib/lightboxImage';
 import { CSS_EASE, DUR, DUR_MS, EASE } from '../../lib/motion';
 
@@ -22,6 +23,8 @@ interface LightboxProps {
   initialIndex: number;
   onClose: () => void;
   collectionName?: string;
+  /** The story's name in Chinese. */
+  collectionNameZh?: string;
   /** Where the viewer opens from (the clicked frame's box). */
   origin?: LightboxOrigin | null;
   /**
@@ -118,9 +121,12 @@ function CaptionValue({ cue, className, children }: { cue: CaptionCue; className
  *  keeps its node and never moves; two slots holding the same string never
  *  collide. The padding / negative-margin pair gives descenders room inside
  *  the mask without changing the line's height. */
-function CaptionSlot({ slot, value, cue, className, valueClassName }: {
+function CaptionSlot({ slot, value, valueZh, cue, className, valueClassName }: {
   slot: string;
   value: string;
+  /** The value in Chinese: printed beside it and shown by the page's
+   *  language, so a toggle swaps it without re-keying (no re-rise). */
+  valueZh?: string;
   cue: CaptionCue;
   className?: string;
   valueClassName: string;
@@ -130,7 +136,7 @@ function CaptionSlot({ slot, value, cue, className, valueClassName }: {
       <span className="relative block">
         <AnimatePresence initial={false} custom={cue}>
           <CaptionValue key={`${slot}:${value}`} cue={cue} className={valueClassName}>
-            {value}
+            <Bi en={value} zh={valueZh} />
           </CaptionValue>
         </AnimatePresence>
       </span>
@@ -142,7 +148,9 @@ function CaptionSlot({ slot, value, cue, className, valueClassName }: {
  * Shared Lightbox — fullscreen photo viewer
  * Keyboard ← → navigate · Escape close · touch swipe
  */
-export default function Lightbox({ photos, initialIndex, onClose, collectionName, origin, resolveTarget }: LightboxProps) {
+export default function Lightbox({ photos, initialIndex, onClose, collectionName, collectionNameZh, origin, resolveTarget }: LightboxProps) {
+  const t = useT();
+  const lang = useLang();
   const [index, setIndex] = useState(initialIndex);
   const [requestedIndex, setRequestedIndex] = useState(initialIndex);
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -173,7 +181,17 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
   // The viewer's heading: a written description if one exists, otherwise the
   // place. Never the machine title — "Miami #24" reads as a filename.
   const displayTitle = photoDescription(photo) || photo.location?.city?.trim() || collectionName || '';
-  const currentPhotoLabel = photoAccessibleLabel(photo, index, photos.length, collectionName);
+  // The same heading in Chinese: a written description stays as he wrote
+  // it; the place and the story's name have their Chinese twins.
+  const displayTitleZh = photoDescription(photo)
+    || (photo.location?.city?.trim() ? photo.location?.cityZh?.trim() : collectionNameZh)
+    || undefined;
+  const currentPhotoLabel = lang === 'zh'
+    ? [t('photo.position', { n: index + 1, total: Math.max(photos.length, 1) }), photoDescription(photo) || collectionNameZh || collectionName]
+        .filter(Boolean)
+        .join('，')
+    : photoAccessibleLabel(photo, index, photos.length, collectionName);
+  const viewerName = lang === 'zh' ? collectionNameZh || collectionName : collectionName;
   // Print only what varies. Craig Mod's Leica Q essay publishes an exposure
   // triplet per frame but leaves out camera and focal length, because the
   // whole essay is one fixed-lens body — a constant dimension carries no
@@ -443,7 +461,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       aria-modal="true"
       aria-hidden={!isPresent || undefined}
       inert={!isPresent ? true : undefined}
-      aria-label={collectionName ? `Photo viewer, ${collectionName}` : 'Photo viewer'}
+      aria-label={viewerName ? t('lightbox.aria', { name: viewerName }) : t('lightbox.ariaPlain')}
       data-closing={!isPresent ? 'true' : undefined}
       className="fixed inset-0 z-[60] flex items-center justify-center"
       // zoom-out is the whole "click anywhere to close" hint; the two
@@ -484,7 +502,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       onTouchCancel={() => { touchStartRef.current = null; }}
     >
       <span className="sr-only" aria-live="polite" aria-atomic="true">
-        Showing {currentPhotoLabel}
+        {t('lightbox.showing', { label: currentPhotoLabel })}
       </span>
       {/* Close button — 44px tap target, safe-area-aware on iOS */}
       <motion.button
@@ -499,7 +517,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           top: 'max(0.75rem, env(safe-area-inset-top))',
           right: 'max(0.75rem, env(safe-area-inset-right))',
         }}
-        aria-label="Close photo viewer"
+        aria-label={t('lightbox.closeAria')}
       >
         <X size={19} strokeWidth={1.5} aria-hidden="true" />
       </motion.button>
@@ -516,7 +534,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
       <div ref={stageRef} className={`relative grid cursor-default place-items-center ${imageFailed ? 'h-[min(60dvh,32rem)] w-[min(92vw,48rem)] bg-[#171b15]' : ''}`} onClick={(e) => e.stopPropagation()}>
         {imageFailed && (
           <p className="col-start-1 row-start-1 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">
-            Frame unavailable
+            <T k="lightbox.frameUnavailable" />
           </p>
         )}
         <AnimatePresence initial={false} custom={swapCue}>
@@ -579,7 +597,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           transition={{ duration: DUR.in, ease: EASE.arrive }}
           className="lightbox-chrome absolute top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           style={{ left: 'max(0.75rem, env(safe-area-inset-left))' }}
-          aria-label={`Previous photo, ${requestedIndex} of ${photos.length}`}
+          aria-label={t('lightbox.prevAria', { n: requestedIndex, total: photos.length })}
         >
           <ChevronLeft size={24} strokeWidth={1.25} aria-hidden="true" />
         </motion.button>
@@ -594,7 +612,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
           transition={{ duration: DUR.in, ease: EASE.arrive }}
           className="lightbox-chrome absolute top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-black/32 text-white/58 transition-colors duration-200 hover:border-white/25 hover:text-white md:h-12 md:w-12 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
           style={{ right: 'max(0.75rem, env(safe-area-inset-right))' }}
-          aria-label={`Next photo, ${requestedIndex + 2} of ${photos.length}`}
+          aria-label={t('lightbox.nextAria', { n: requestedIndex + 2, total: photos.length })}
         >
           <ChevronRight size={24} strokeWidth={1.25} aria-hidden="true" />
         </motion.button>
@@ -609,7 +627,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
         <div role="status" aria-live="polite" aria-atomic="true" className="absolute bottom-full mb-3 flex items-center gap-3 text-[10px] font-ui tracking-wide text-white/60">
           {failedRequest !== null ? (
             <>
-              <span>Frame {failedRequest + 1} could not load.</span>
+              <span><T k="lightbox.failed" vars={{ n: failedRequest + 1 }} /></span>
               <button
                 type="button"
                 className="min-h-11 px-2 text-white/85 underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D2FF00]"
@@ -618,9 +636,9 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
                   setFailedRequest(null);
                   setRetryAttempt((attempt) => attempt + 1);
                 }}
-              >Retry</button>
+              ><T k="lightbox.retry" /></button>
             </>
-          ) : loadingFrame ? `Preparing frame ${requestedIndex + 1}…` : null}
+          ) : loadingFrame ? <T k="lightbox.preparing" vars={{ n: requestedIndex + 1 }} /> : null}
         </div>
         <div className="flex items-center gap-3 md:gap-4 max-w-full">
           {/* Written and measured are two different kinds of line. The one
@@ -630,6 +648,7 @@ export default function Lightbox({ photos, initialIndex, onClose, collectionName
             <CaptionSlot
               slot="title"
               value={displayTitle}
+              valueZh={displayTitleZh}
               cue={sentenceCue}
               className="min-w-0"
               valueClassName="block truncate font-serif text-[15px] leading-snug tracking-normal text-white/72"

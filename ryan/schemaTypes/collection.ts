@@ -45,6 +45,32 @@ async function unplacedPhotos(chapters: unknown, context: ValidationContext): Pr
   }
 }
 
+/** 故事正文的段落格式：英文和中文两个字段用同一套。 */
+const introductionBlock = {
+  type: 'block',
+  styles: [
+    {title: 'Normal', value: 'normal'},
+    {title: 'Quote', value: 'blockquote'},
+  ],
+  marks: {
+    decorators: [
+      {title: 'Italic', value: 'em'},
+      {title: 'Strong', value: 'strong'},
+    ],
+    annotations: [],
+  },
+  lists: [],
+}
+
+/** 金句必须是正文里原样的一句话（网站把它放大印在故事中间）。 */
+function quoteInText(quote: unknown, blocks: unknown): string | true {
+  if (typeof quote !== 'string' || !quote.trim() || !Array.isArray(blocks) || blocks.length === 0) return true
+  const text = blocks
+    .map((block) => ((block as {children?: Array<{text?: string}>})?.children ?? []).map((span) => span?.text ?? '').join(''))
+    .join('\n')
+  return text.includes(quote.trim()) ? true : '金句最好是正文里原样的一句话（改了正文，金句也要跟着改）'
+}
+
 /**
  * Collection / Series document type
  * 代表一个拍摄系列，例如 "Paris 2024"、"Greece Summer" 等
@@ -54,6 +80,8 @@ export default defineType({
   name: 'collection',
   title: 'Collection / Series',
   type: 'document',
+  // 所有「· 中文」字段也集中在「中文」这一页，方便对照着改一遍。
+  groups: [{name: 'zh', title: '中文'}],
   fields: [
     defineField({
       name: 'name',
@@ -61,6 +89,13 @@ export default defineType({
       type: 'string',
       description: 'e.g. "Paris 2024", "Greece Summer", "Tokyo Neon"',
       validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'nameZh',
+      title: '名称 · 中文',
+      type: 'string',
+      group: 'zh',
+      description: '中文版网站（右上角「中」）显示的名称，例如「迈阿密」。留空时，中文版显示英文。路牌（FL 01 MIAMI）始终是英文。',
     }),
     defineField({
       name: 'slug',
@@ -80,6 +115,13 @@ export default defineType({
       description: 'e.g. "A story of light and shadow" — 显示在画廊卡片上的副标题',
     }),
     defineField({
+      name: 'subtitleZh',
+      title: '副标题 · 中文',
+      type: 'string',
+      group: 'zh',
+      description: '中文版网站（右上角「中」）显示的副标题。留空时，中文版显示英文。',
+    }),
+    defineField({
       name: 'coverImage',
       title: 'Cover Image',
       type: 'image',
@@ -94,10 +136,25 @@ export default defineType({
       description: 'e.g. "Paris, France" — 显示在卡片上的地点文字',
     }),
     defineField({
+      name: 'locationZh',
+      title: '地点 · 中文',
+      type: 'string',
+      group: 'zh',
+      description: '中文版网站（右上角「中」）显示的地点文字，例如「美国纽约」。留空时，中文版显示英文。',
+    }),
+    defineField({
       name: 'region',
       title: 'Region / Cluster',
       type: 'string',
       description: 'e.g. "Florida", "Arizona", "DMV", "Macau" — 用于首页按区域聚类（同一 region 的多个城市会归到一个区域中枢）',
+    }),
+    defineField({
+      name: 'regionZh',
+      title: '地区 · 中文',
+      type: 'string',
+      group: 'zh',
+      description:
+        '中文版网站（右上角「中」）显示的地区名，州名请带「州」，例如「佛罗里达州」「纽约州」（和城市「纽约」区分开）。只是显示用：分组和路牌上的州代码仍按上面的英文 Region。留空时，中文版显示英文。',
     }),
     defineField({
       name: 'routeOrder',
@@ -126,25 +183,60 @@ export default defineType({
       description: '用于 SEO meta description 和 Open Graph 描述，1-2 句话',
     }),
     defineField({
+      name: 'descriptionZh',
+      title: '简介 · 中文',
+      type: 'text',
+      rows: 3,
+      group: 'zh',
+      description: '中文版网站（右上角「中」）显示的简介（中文读者的浏览器标签页和书签用）。留空时，中文版显示英文。',
+    }),
+    defineField({
       name: 'introduction',
       title: 'Editorial Introduction',
       type: 'array',
-      of: [{
-        type: 'block',
-        styles: [
-          {title: 'Normal', value: 'normal'},
-          {title: 'Quote', value: 'blockquote'},
-        ],
-        marks: {
-          decorators: [
-            {title: 'Italic', value: 'em'},
-            {title: 'Strong', value: 'strong'},
-          ],
-          annotations: [],
-        },
-        lists: [],
-      }],
+      of: [introductionBlock],
       description: '在 Collection 页面侧边栏展示的精炼文案，支持段落和引用格式。建议 50-120 字，有文学感。',
+    }),
+    defineField({
+      name: 'introductionZh',
+      title: '故事正文 · 中文',
+      type: 'array',
+      of: [introductionBlock],
+      group: 'zh',
+      description:
+        '中文版网站（右上角「中」）显示的故事正文，段落和英文一一对应（第一段是开篇导语，第二段是 Part II）。留空时：英文正文还是网站自带的那一版时，显示我们先译好的中文草稿；你改写了英文正文之后，中文版显示英文，直到这里填上新的中文。',
+    }),
+    defineField({
+      name: 'dek',
+      title: 'Dek / 一句话导语',
+      type: 'text',
+      rows: 2,
+      description:
+        '一句话：首页地点下方的说明，也是故事开篇标题下的导语。留空时用网站自带的那一句（例如 "Ocean Drive holds pastel facades…"）。',
+    }),
+    defineField({
+      name: 'dekZh',
+      title: '一句话导语 · 中文',
+      type: 'text',
+      rows: 2,
+      group: 'zh',
+      description: '中文版网站（右上角「中」）显示的一句话导语。留空时，中文版显示英文。',
+    }),
+    defineField({
+      name: 'pullQuote',
+      title: 'Pull quote / 金句',
+      type: 'string',
+      description:
+        '故事中间放大印出的一句话，必须是英文正文里原样的一句（不加引号，句末不加句号）。留空时用网站自带的那一句；Bryce Canyon 和 New York 没有金句。',
+      validation: (rule) => rule.custom((value, context) => quoteInText(value, (context.document as {introduction?: unknown})?.introduction)).warning(),
+    }),
+    defineField({
+      name: 'pullQuoteZh',
+      title: '金句 · 中文',
+      type: 'string',
+      group: 'zh',
+      description: '中文版的金句，必须是上面「故事正文 · 中文」里原样的一句。改了中文正文，金句也要跟着改。' + '留空时，中文版显示英文。',
+      validation: (rule) => rule.custom((value, context) => quoteInText(value, (context.document as {introductionZh?: unknown})?.introductionZh)).warning(),
     }),
     // ─────────────────────────────────────────
     // 小章节：把一个故事分成几个主题

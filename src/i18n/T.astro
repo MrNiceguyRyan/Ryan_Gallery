@@ -1,0 +1,15 @@
+---
+// A dictionary string in static Astro markup, both languages; global.css
+// shows the reader's (src/i18n/runtime.ts). <T k="notes.title" />
+import { tr, type Key, type Vars } from './dict.ts';
+
+interface Props {
+  k: Key;
+  vars?: Vars;
+}
+
+const { k, vars } = Astro.props;
+const en = tr('en', k, vars);
+const zh = tr('zh', k, vars);
+---
+{en === zh ? en : <><span data-l="en">{en}</span><span data-l="zh" lang="zh-Hans">{zh}</span></>}

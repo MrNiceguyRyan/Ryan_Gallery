@@ -11,6 +11,15 @@ export interface TimelineItem {
 export interface SiteSettings {
   name?: string;
   bio?: string;
+  /** Chinese twins and the PROPOSED lines (src/i18n/content.ts siteText). */
+  bioZh?: string;
+  lede?: string;
+  ledeZh?: string;
+  tagline?: string;
+  taglineZh?: string;
+  notesDek?: string;
+  notesDekZh?: string;
+  particulars?: Array<{ term?: string; termZh?: string; value?: string; valueZh?: string }>;
   avatarUrl?: string;
   email?: string;
   instagram?: string;
@@ -60,6 +69,21 @@ export interface Collection {
   chapters?: ChapterInput[] | null;
   photos?: Photo[];
   photoCount?: number;
+  /* ── 中文: each field's Chinese twin, resolved at build time by
+     src/i18n/content.ts withZh (Sanity's …Zh, else our draft, else absent:
+     the page prints the English). ── */
+  nameZh?: string;
+  subtitleZh?: string;
+  locationZh?: string;
+  regionZh?: string;
+  descriptionZh?: string;
+  /** Plain paragraphs once resolved (Sanity sends Portable Text). */
+  introductionZh?: string[] | PortableTextBlock[];
+  /** The homepage caption / story standfirst (English: Sanity, else code). */
+  dek?: string;
+  dekZh?: string;
+  pullQuote?: string;
+  pullQuoteZh?: string;
 }
 
 export interface Photo {
@@ -88,6 +112,8 @@ export interface Photo {
     lat: number;
     lng: number;
     city?: string;
+    /** The place in Chinese (Sanity location.cityZh, else our draft). */
+    cityZh?: string;
     country?: string;
   };
 }
