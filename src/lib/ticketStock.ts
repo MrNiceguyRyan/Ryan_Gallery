@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 
 // ── Ticket stock: one card per chapter ──
-// Every paper object the archive prints — the homepage ticket and its pad,
+// Every paper object the archive prints — the homepage ticket,
 // the Story rail's kept stub, the phone stub, the closing proof stubs, the
 // globe's ADMIT ONE ticket — is printed on its chapter's own card, so a torn
 // stub and the next ticket read as two tickets. The hue is picked by hand

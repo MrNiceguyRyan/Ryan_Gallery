@@ -1,13 +1,18 @@
 import type { CSSProperties } from 'react';
+import { CSS_EASE } from '../../lib/motion';
 import {
   FLAP,
+  TICKET_NAME_LINE,
+  type FlapTiming,
   type ShieldForm,
   codePlan,
   flapGlyph,
   flapNumber,
   flapPlan,
   nameStep,
+  rollMs,
   shieldForm,
+  signLines,
 } from '../../lib/routeShield';
 
 /**
@@ -64,7 +69,8 @@ interface FlapColumn {
  * the stop number counting through the real stops between, its last step
  * landing with the name's last character.
  */
-function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): FlapColumn[] {
+function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>, timing: FlapTiming = {}): FlapColumn[] {
+  const delay = timing.delay ?? FLAP.delay;
   const words = Array.from(root.querySelectorAll<HTMLElement>('[data-flap]')).map((word) => {
     const role = word.dataset.flap ?? '';
     return {
@@ -75,10 +81,10 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       leaving: (from[role] ?? '').replace(/\s+/g, '').toUpperCase(),
     };
   });
-  let nameEnd: number = FLAP.delay;
+  let nameEnd: number = delay;
   words.forEach((word) => {
     if (word.role !== 'name') return;
-    const plan = flapPlan(word.chars.length);
+    const plan = flapPlan(word.chars.length, timing);
     if (plan.length) nameEnd = Math.max(nameEnd, plan[plan.length - 1].land);
   });
   const columns: FlapColumn[] = [];
@@ -94,7 +100,7 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
     if (word.role === 'num') {
       word.chars.forEach((el, index) => column(
         el,
-        (t) => flapNumber(finalWord, word.leaving, t, FLAP.delay, nameEnd)[index] ?? (el.dataset.flapC ?? ''),
+        (t) => flapNumber(finalWord, word.leaving, t, delay, nameEnd)[index] ?? (el.dataset.flapC ?? ''),
         nameEnd,
       ));
       return;
@@ -106,7 +112,7 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       // stock and the outline are the ticket's own print), and the old
       // state's letters on it — FL on Arizona's outline — read as a misprint.
       const still = !word.leaving || word.leaving === finalWord;
-      const plan = codePlan(word.chars.length);
+      const plan = codePlan(word.chars.length, delay);
       word.chars.forEach((el, index) => {
         const final = el.dataset.flapC ?? '';
         column(el, still ? () => final : (t) => flapGlyph(final, '', plan[index], t, index + wordIndex * 5), still ? 0 : plan[index].land);
@@ -128,16 +134,16 @@ function flapColumns(root: HTMLElement, from: Partial<Record<string, string>>): 
       columns.push({
         el: was,
         final: '',
-        at: (t) => (t < FLAP.delay ? word.text : ''),
-        land: FLAP.delay,
+        at: (t) => (t < delay ? word.text : ''),
+        land: delay,
         shown: was.textContent || null,
         was: true,
       });
     }
-    const plan = flapPlan(word.chars.length);
+    const plan = flapPlan(word.chars.length, timing);
     word.chars.forEach((el, index) => {
       const final = el.dataset.flapC ?? '';
-      const step = nameStep(plan[index]);
+      const step = nameStep(plan[index], delay);
       column(el, (t) => flapGlyph(final, '', step, t, index + wordIndex * 5), step.land);
     });
   });
@@ -173,10 +179,11 @@ export function primeFlap(root: HTMLElement, from: Partial<Record<string, string
  * Turns every FlapWord under `root` into place from the words it is leaving
  * (`from[role]`), on one rAF loop that runs only for the flap and writes a
  * character only when it changes. Takes over a primed board where it
- * stands. Returns a stop that puts every word straight back.
+ * stands. `timing` times it to its moment (a switch's transit: at once, and
+ * down inside it). Returns a stop that puts every word straight back.
  */
-export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}): () => void {
-  const columns = flapColumns(root, from);
+export function runFlap(root: HTMLElement, from: Partial<Record<string, string>> = {}, timing: FlapTiming = {}): () => void {
+  const columns = flapColumns(root, from, timing);
   if (!columns.length) return () => {};
   const end = Math.max(...columns.map((column) => column.land));
   const start = performance.now();
@@ -195,6 +202,98 @@ export function runFlap(root: HTMLElement, from: Partial<Record<string, string>>
     frame = 0;
     columns.forEach((column) => writeColumn(column, null));
   };
+}
+
+/**
+ * Rolls every FlapWord under `root` into place from the words it is leaving
+ * (`from[role]`), a switch's ticket (src/lib/routeShield.ts, ROLL): takes a
+ * primed board over — the name being left, set whole, slides up out of the
+ * name's own box while the new name's cells rise into it from below (the box
+ * clipped; the cells are inline-blocks, moved by their name's own height in
+ * em, nothing measured); a state that changes fades in; the stop number
+ * counts through the stops between, landing with the name. Down within
+ * `timing.budget` (the transit). Returns a stop that puts every word back.
+ */
+export function runRoll(root: HTMLElement, from: Partial<Record<string, string>> = {}, timing: { budget?: number } = {}): () => void {
+  const ms = rollMs(timing.budget);
+  const anims: Animation[] = [];
+  const clipped: HTMLElement[] = [];
+  const overlays: HTMLElement[] = [];
+  const counters: Array<{ el: HTMLElement; final: string; at: (t: number) => string; shown: string | null }> = [];
+  let frame = 0;
+  root.querySelectorAll<HTMLElement>('[data-flap]').forEach((word) => {
+    const role = word.dataset.flap ?? '';
+    const chars = Array.from(word.querySelectorAll<HTMLElement>('[data-flap-c]'));
+    const final = chars.map((el) => el.dataset.flapC ?? '').join('');
+    const leaving = (from[role] ?? '').replace(/\s+/g, '').toUpperCase();
+    const overlay = role === 'name' ? word.querySelector<HTMLElement>(':scope > [data-flap-was]') : null;
+    // The primed board lets go: every cell shows its own glyph from here.
+    chars.forEach((el) => el.removeAttribute('data-show'));
+    if (overlay) overlay.textContent = '';
+    if (!leaving || leaving === final) return;
+    if (role === 'name') {
+      const box = word.parentElement;
+      if (overlay) {
+        overlay.textContent = (from.name ?? '').trim();
+        overlays.push(overlay);
+        anims.push(overlay.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-110%)' }], { duration: ms, easing: CSS_EASE.turn, fill: 'forwards' }));
+      }
+      if (box) {
+        box.style.clipPath = 'inset(0 -0.3em)';
+        clipped.push(box);
+      }
+      // From below the box as it stands at the start (the name being left
+      // may take more lines than the new one: NEW YORK → MIAMI), by the
+      // lines of the name's words, spaced (NEW YORK takes two).
+      const words = Array.from(word.querySelectorAll<HTMLElement>(':scope > .flap-w'))
+        .map((w) => Array.from(w.querySelectorAll<HTMLElement>('[data-flap-c]')).map((el) => el.dataset.flapC ?? '').join(''));
+      const lines = Math.max(signLines(words.join(' ')), signLines((from.name ?? '').trim() || 'X'));
+      const drop = `translateY(${(lines * TICKET_NAME_LINE + 0.12).toFixed(2)}em)`;
+      chars.forEach((el) => anims.push(el.animate([{ transform: drop }, { transform: 'translateY(0)' }], { duration: ms, easing: CSS_EASE.turn, fill: 'backwards' })));
+      return;
+    }
+    if (role === 'code') {
+      chars.forEach((el) => anims.push(el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: CSS_EASE.travel, fill: 'backwards' })));
+      return;
+    }
+    if (role === 'num') {
+      chars.forEach((el, index) => counters.push({
+        el,
+        final: el.dataset.flapC ?? '',
+        // Down as the name reads (EASE.turn has made most of its way by
+        // half its time), not after it.
+        at: (t) => flapNumber(final, leaving, t, 0, ms / 2)[index] ?? (el.dataset.flapC ?? ''),
+        shown: null,
+      }));
+    }
+  });
+  const write = (counter: (typeof counters)[number], glyph: string | null) => {
+    const show = glyph == null || glyph === counter.final ? null : glyph;
+    if (counter.shown === show) return;
+    counter.shown = show;
+    if (show == null) counter.el.removeAttribute('data-show');
+    else counter.el.setAttribute('data-show', show);
+  };
+  const start = performance.now();
+  const tick = () => {
+    frame = 0;
+    const t = performance.now() - start;
+    counters.forEach((counter) => write(counter, counter.at(t)));
+    if (t < ms) frame = requestAnimationFrame(tick);
+  };
+  if (counters.length) tick();
+  const done = window.setTimeout(() => stop(), ms + 40);
+  function stop() {
+    window.clearTimeout(done);
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    anims.forEach((anim) => anim.cancel());
+    anims.length = 0;
+    clipped.forEach((box) => box.style.removeProperty('clip-path'));
+    overlays.forEach((overlay) => { overlay.textContent = ''; });
+    counters.forEach((counter) => write(counter, null));
+  }
+  return stop;
 }
 
 /** A shield's drawing (src/lib/routeShield.ts, SHIELD_FORMS): its state's

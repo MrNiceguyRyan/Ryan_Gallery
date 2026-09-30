@@ -75,14 +75,14 @@ test('the entry goes straight down onto stop 01: its cover is simply there, whol
 test('the phone deals its ticket whole: nothing wipes or zooms a photograph in', () => {
   const chapter = readFileSync(new URL('../src/components/home/ArchiveChapter.tsx', import.meta.url), 'utf8');
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  // The one develop (developIn) is played by a switch (the next place's
-  // print developing inside the still ticket, owner, 2026-09-28: 切换中赋予
-  // 我们现有的动效) and by the arrival from the open map (owner, 2026-09-29:
-  // 封面出现动效很差) — never anywhere else.
-  const developIn = chapter.slice(chapter.indexOf('const developIn = ('), chapter.indexOf('// This cover arrives over'));
-  assert.match(developIn, /maskPosition/);
-  assert.doesNotMatch(chapter.replace(developIn, ''), /maskPosition|DEVELOP_MASK\b(?!,)/);
-  assert.equal((chapter.match(/developIn\(record, plate, dock, mine,/g) ?? []).length, 2);
+  // Nothing wipes a photograph in: through a switch, an arrival and a
+  // let-go the print shrinks into the ticket's strip as a miniature of the
+  // cover and grows back out of it (owner, 2026-09-29: 先缩小成类似机票那样;
+  // the develop's mask left an empty dark well, and the full-size print's
+  // corner, often just sky). No mask is written on a docked print at all.
+  assert.doesNotMatch(chapter, /maskPosition|DEVELOP_MASK|developStrip/);
+  assert.match(chapter, /print\.animate\(printFrames,/);
+  assert.match(chapter, /print\.animate\(\[printStyle\(form, 0\)\]/);
   // The phone's card is the same ticket (its tear, its stub), dealt at the
   // foot of the screen, sized from the photograph's own ratio.
   assert.match(chapter, /phoneCard\(window\.innerWidth, window\.innerHeight, cardRatio\)/);

@@ -261,11 +261,34 @@ export const pad2 = (value: number) => String(value).padStart(2, '0');
 // The story's kept stub prints the same name at the same size, so the two
 // fly like for like (MagazineLayout, StubFace).
 export const SIGN_NAME_MEASURE = 142;
+/** The sign's name's line height, em (global.css `.archive-ticket-sign__name`). */
+export const TICKET_NAME_LINE = 0.95;
 export const SIGN_NAME_MAX = 30;
 export const SIGN_NAME_MIN = 15;
 export function signNameSize(name: string): number {
   const longest = Math.max(1, ...name.trim().split(/\s+/).map((word) => word.length));
   return Math.max(SIGN_NAME_MIN, Math.min(SIGN_NAME_MAX, Math.floor(SIGN_NAME_MEASURE / (longest * 0.66))));
+}
+/** How many lines the name takes inside the rule: a greedy wrap at
+ *  SIGN_NAME_MEASURE, at its own size (`signNameSize`), ~0.66em a bold
+ *  capital and ~0.3em a space — the same estimate the size is set by, never
+ *  measured. MIAMI, ORLANDO, PAGE and ZION take one line; BRYCE CANYON and
+ *  NEW YORK two. The ticket a cover folds into on a switch is cut to the
+ *  archive's tallest sign (src/lib/coverDock.ts, TICKET). */
+export function signLines(name: string): number {
+  const size = signNameSize(name);
+  const words = name.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return 1;
+  let lines = 1;
+  let run = 0;
+  words.forEach((word) => {
+    const w = word.length * 0.66 * size;
+    if (run > 0 && run + 0.3 * size + w > SIGN_NAME_MEASURE) {
+      lines += 1;
+      run = w;
+    } else run += (run > 0 ? 0.3 * size : 0) + w;
+  });
+  return lines;
 }
 
 // ── One shield per place, and how they stack ──
@@ -485,6 +508,24 @@ export const FLAP = {
   /** The whole word is down by delay + this (DUR.scene). */
   budget: 1000,
 } as const;
+// ── The roll: a ticket's name on a switch ──
+// Owner, 2026-09-29: 地点文字滚动. On a switch the ticket is small and the
+// flap's bold capitals turning at 25 a second read as 乱码 (XHIEFCB,
+// BRARS ZRFRBH) and flickered more than anything else on the screen. So a
+// switch's ticket ROLLS its name instead (RouteShield `runRoll`): the name
+// being left slides up out of the sign's rule while the new one rolls up
+// into it from below, masked by the rule, on EASE.turn (away at once, a long
+// settle); a state that changes comes in on a cross-fade (never letters that
+// are no state: "SB" on New York's shield); the stop number counts through
+// the real stops between, down as the name reads. ROLL.ms, down
+// well inside the transit (TICKET.transitMinMs ≥ 480), compressed only for a
+// shorter one.
+export const ROLL = { ms: 320, minMs: 120 } as const;
+/** The roll's length inside a transit of `budget` ms. */
+export function rollMs(budget?: number): number {
+  return budget == null || !Number.isFinite(budget) ? ROLL.ms : Math.max(ROLL.minMs, Math.min(ROLL.ms, Math.round(budget)));
+}
+
 /** A state that changes turns through this many letters, each this long. */
 export const CODE_FLIPS = 2;
 export const CODE_TICK = 36;
@@ -497,39 +538,58 @@ export interface FlapStep {
   flips: number;
 }
 
+/** A flap timed to its moment: `delay` before the board turns (FLAP.delay
+ *  by default: the landing registers first) and the `budget` it must land
+ *  in (FLAP.budget). A switch turns its ticket's name while the ticket is
+ *  in transit (src/lib/coverDock.ts, "The switch"): from the relay at once
+ *  (`delay: 0`), inside the transit (`budget`: expandAt − relayAt). */
+export interface FlapTiming {
+  delay?: number;
+  budget?: number;
+}
+/** A timed flap is never compressed past this flip tick, ms (below it the
+ *  board reads as a blur, not letters turning): a twelve-letter name in a
+ *  541 ms transit flips every ~18 ms. */
+export const FLAP_MIN_TICK = 16;
+
 /** The flap's plan for `count` characters (spaces included, which simply do
- *  not turn). Compressed evenly if a long word would run past the budget. */
-export function flapPlan(count: number): FlapStep[] {
+ *  not turn). Compressed evenly if a long word would run past the budget —
+ *  a timed flap (`timing.budget`) no further than FLAP_MIN_TICK a flip. */
+export function flapPlan(count: number, timing: FlapTiming = {}): FlapStep[] {
+  const delay = timing.delay ?? FLAP.delay;
+  const budget = timing.budget ?? FLAP.budget;
   const raw = Array.from({ length: count }, (_, index) => {
-    const start = FLAP.delay + FLAP.stagger * index;
+    const start = delay + FLAP.stagger * index;
     const flips = FLAP.base + index;
     return { start, flips, land: start + FLAP.tick * flips };
   });
   const last = raw.length ? raw[raw.length - 1].land : 0;
-  const limit = FLAP.delay + FLAP.budget;
+  const limit = delay + budget;
   if (last <= limit) return raw;
-  const k = (limit - FLAP.delay) / (last - FLAP.delay);
+  let k = (limit - delay) / (last - delay);
+  if (timing.budget != null) k = Math.max(k, FLAP_MIN_TICK / FLAP.tick);
   return raw.map((step) => ({
-    start: Math.round(FLAP.delay + (step.start - FLAP.delay) * k),
+    start: Math.round(delay + (step.start - delay) * k),
     flips: step.flips,
-    land: Math.round(FLAP.delay + (step.land - FLAP.delay) * k),
+    land: Math.round(delay + (step.land - delay) * k),
   }));
 }
 
-/** A name cell's turn: from FLAP.delay (when the name being left goes) to
- *  its planned landing, one flip each FLAP.turn. */
-export function nameStep(step: FlapStep): FlapStep {
+/** A name cell's turn: from the flap's delay (when the name being left
+ *  goes) to its planned landing, one flip each FLAP.turn. */
+export function nameStep(step: FlapStep, delay: number = FLAP.delay): FlapStep {
   return {
-    start: FLAP.delay,
+    start: delay,
     land: step.land,
-    flips: Math.max(2, Math.round((step.land - FLAP.delay) / FLAP.turn)),
+    flips: Math.max(2, Math.round((step.land - delay) / FLAP.turn)),
   };
 }
 
-/** The state's plan: each letter two quick flips, a stagger apart. */
-export function codePlan(count: number): FlapStep[] {
+/** The state's plan: each letter two quick flips, a stagger apart, from
+ *  the flap's delay. */
+export function codePlan(count: number, delay: number = FLAP.delay): FlapStep[] {
   return Array.from({ length: count }, (_, index) => {
-    const start = FLAP.delay + FLAP.stagger * index;
+    const start = delay + FLAP.stagger * index;
     return { start, flips: CODE_FLIPS, land: start + CODE_TICK * CODE_FLIPS };
   });
 }

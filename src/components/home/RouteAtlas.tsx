@@ -31,6 +31,7 @@ import {
   SHIELD_SCALE,
   pad2,
   shieldForm,
+  signLines,
   stackShields,
   stateCode,
   typeBox,
@@ -38,15 +39,27 @@ import {
 } from '../../lib/routeShield';
 import {
   DOCK,
-  SWITCH_COVER,
-  arrivalDelay,
+  GIVE_WAY,
+  TICKET,
+  TICKET_EXPAND_MS,
+  TICKET_FOLD_MS,
+  afterOpening,
+  arrivalSchedule,
   centreFor,
   coverDock,
   coverStubRect,
   dockShown,
+  expandAtFor,
+  giveWay,
   glideAt,
+  stepBack,
   planDock,
+  glideShare,
   railBox,
+  rideAt,
+  stageBox,
+  ticketGlide,
+  yieldAxis,
   type DockArrive,
   type DockAsk,
   type DockCamera,
@@ -54,6 +67,7 @@ import {
   type DockEntry,
   type DockSwitch,
   type Point,
+  type Yield,
 } from '../../lib/coverDock';
 import { stockPaper } from '../../lib/ticketStock';
 import { isAtlasInterfaceReady, scheduleAtlasIdleFallback } from '../../lib/atlasReadiness';
@@ -90,7 +104,7 @@ import {
   planFlight,
   planSwitch,
 } from '../../lib/explorerCamera';
-import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, PHONE_CARD, entryLandsAt, phoneFocalY, phoneStubRect, setEntryLandsAt } from '../../lib/explorer';
+import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, PHONE_CARD, entryLandsAt, phoneFocalY, phoneStubRect, phoneTicketScale, setEntryLandsAt } from '../../lib/explorer';
 import { drifted as viewDrifted, holds, mapView, offerOf, overLimb, phoneView, plateAt } from '../../lib/explorerDrift';
 
 // A switch's turn and the covers' glide with it: the house's `turn` curve
@@ -191,6 +205,10 @@ interface Props {
    *  the entrance lie above it, and the camera should hold the pose the globe
    *  rises in (its tiles loading) by the time the glide brings it up. */
   engage?: boolean;
+  /** The covers' dock (the desktop's): a layer of the atlas's own, over the
+   *  map and its tones and its route shields — but the place in hand's own
+   *  shield while a ticket travels (`data-shields-over`). */
+  onDockHost?: (host: HTMLDivElement | null) => void;
 }
 
 interface ChapterRouteStop {
@@ -754,6 +772,7 @@ export default function RouteAtlas({
   eager = false,
   holdReveal = false,
   engage = false,
+  onDockHost,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const routeAtlasRef = useRef<HTMLElement>(null);
@@ -1006,7 +1025,7 @@ export default function RouteAtlas({
     // was last written), else its shield's foot — projected here, not read
     // from the last publish, which runs after this pass on the same event
     // and would leave the box a frame behind a drag.
-    const dockedPlace = dockedEntry && !pinRef.current ? shieldPlaces.find((place) => place.id === dockedId) : null;
+    const dockedPlace = dockedEntry && !pinRef.current && !glideRef.current ? shieldPlaces.find((place) => place.id === dockedId) : null;
     const dockedPoint = dockedPlace ? map.project(dockedPlace.coordinates) : null;
     const dockedFoot: Point | null = !dockedEntry
       ? null
@@ -1014,10 +1033,10 @@ export default function RouteAtlas({
         ? { x: Math.round(dockedPoint.x) - bleed, y: Math.round(dockedPoint.y) - bleed }
         : dockWrittenRef.current;
     // The cover's own box (atlas px): a shield it lies over is not printed —
-    // one corner for every place can't keep every cover off every other
-    // shield in a cluster as tight as Utah's (Zion lies below-left of Bryce
-    // Canyon at its rest), and half a shield under a ticket's edge reads as
-    // a mistake. It comes back as soon as the ticket leaves it.
+    // the corners are chosen to hide none (src/lib/coverDock.ts,
+    // `chooseCorners`), but a reader's drag can still lay a ticket over a
+    // neighbour, and half a shield under a ticket's edge reads as a mistake.
+    // It comes back as soon as the ticket leaves it.
     const coverBox = dockedEntry && dockedFoot
       ? {
           left: dockedFoot.x + dockedEntry.offset.x,
@@ -1026,8 +1045,13 @@ export default function RouteAtlas({
           bottom: dockedFoot.y + dockedEntry.offset.y + dockedEntry.photoH,
         }
       : null;
+    // While a ticket travels (`data-shields-over`) the whole cover is not
+    // there to hide anything: the shields are printed, and pass under the
+    // small ticket as the ground turns (the place in hand's own is drawn
+    // over it, and the ticket gives way to it).
+    const ticketing = routeAtlasRef.current?.hasAttribute('data-shields-over') ?? false;
     const underCover = (x: number, y: number, w: number, h: number) => {
-      if (!coverBox) return false;
+      if (!coverBox || ticketing) return false;
       const across = Math.min(x + w / 2, coverBox.right) - Math.max(x - w / 2, coverBox.left);
       const down = Math.min(y, coverBox.bottom) - Math.max(y - h, coverBox.top);
       return across > 0 && down > 0 && across * down > 0.4 * w * h;
@@ -1127,7 +1151,11 @@ export default function RouteAtlas({
       }
       if (z !== pose.z && pose.marker) {
         pose.z = z;
-        pose.marker.style.zIndex = String(z);
+        // The place in hand's own shield over the covers' dock while its
+        // ticket travels (`--shields-over`, global.css) — the ticket gives
+        // way to it, so they never meet but at the joint; every other shield
+        // passes under a ticket. The pile's order either way.
+        pose.marker.style.zIndex = rank === 2 ? `calc(var(--shields-over, 0) + ${z})` : String(z);
       }
       if (count !== pose.count && pose.sign) {
         pose.count = count;
@@ -1227,9 +1255,11 @@ export default function RouteAtlas({
     };
   }, [mapLoaded, shieldPlaces, signs]);
   // ── The covers' dock (src/lib/coverDock.ts) ──
-  // The plan — every place set on the one dock point, its cover at the one
-  // corner of its shield, the cover's size — DERIVED once per layout from the
-  // viewport, each cover's ratio and region tab. The camera reads it for
+  // The plan — each place's corner of its shield (the one that hides no
+  // other shield and keeps its route clear), the point its corner's places
+  // stand on, the cover's size and the ticket it folds into — DERIVED once
+  // per layout from the viewport, each cover's ratio, its state's tab, its
+  // name and its route. The camera reads it for
   // where it sets each place; the chapters for their covers. The phone deals
   // its card at the foot of the screen instead (no plan).
   const dockPlanRef = useRef<Readonly<Record<string, DockEntry>> | null>(null);
@@ -1240,15 +1270,33 @@ export default function RouteAtlas({
   // Where the cover shown was last written (atlas px).
   const dockWrittenRef = useRef<Point | null>(null);
   // ── The switch (src/lib/coverDock.ts, "The switch") ──
-  // A switch under way — the cover leaving under the one arriving — until
-  // SWITCH_COVER.leaveMs after take-off; and the pin: where the covers are
-  // written instead of their place's foot, from take-off until the camera
-  // is down (the dock's point, or a glide to it on the camera's own curve
-  // when the reader had dragged the ticket away), and a short glide back
-  // onto the shield when the reader takes the map from a turn.
+  // A switch under way — the cover leaving folds into its ticket, the one
+  // arriving is laid on it at the relay, opens as the camera settles, puts
+  // its tip out — until its extras are in (`end`); the chapters play their
+  // parts off its times, and a publish is made at each of them (a resting
+  // map draws nothing). The glide: where the ticket lies through it (still,
+  // or riding the ground to a new corner, `ticketGlide`), from take-off
+  // until the camera is down. And the pin: where the cover shown is
+  // written instead of its place's foot when the camera is brought back
+  // onto the place in hand (the dock's point, or a glide to it on the
+  // camera's own curve), and a short glide back onto the shield when the
+  // reader takes the map from a turn.
   const dockSwitchRef = useRef<DockSwitch | null>(null);
   const switchKeyRef = useRef(0);
-  const switchTimerRef = useRef(0);
+  const switchTimersRef = useRef<number[]>([]);
+  // Where the ticket lies at `now`, from the places' feet this frame (a
+  // ticket riding the ground reads them; one lying still does not).
+  // (`base`: where it lies before it gives way to its shields; `step`: the
+  // step it last took — a new glide takes both up, so a new choice mid-way
+  // carries the step on rather than baking it into where the ticket lies.)
+  const glideRef = useRef<{
+    at: (now: number, points: Readonly<Record<string, Point>>) => Point;
+    until: number;
+    base?: (now: number, points: Readonly<Record<string, Point>>) => Point;
+    step?: () => Point | null;
+  } | null>(null);
+  // The plan's revision (a new layout: a resize): part of the publish's key.
+  const planRevRef = useRef(0);
   type Pin = { from: Point; to: Point | 'foot'; t0: number; ms: number; ease: (k: number) => number };
   const pinRef = useRef<Pin | null>(null);
   const pinFrameRef = useRef(0);
@@ -1257,6 +1305,7 @@ export default function RouteAtlas({
   // with its shield, and played in by its chapter from `at`.
   const dockArriveRef = useRef<DockArrive | null>(null);
   const arriveKeyRef = useRef(0);
+  const arriveTimersRef = useRef<number[]>([]);
   useLayoutEffect(() => {
     if (!signs || !viewportReady || mobile) {
       dockPlanRef.current = null;
@@ -1271,6 +1320,8 @@ export default function RouteAtlas({
     };
     const chapters: DockChapter[] = chapterRoute.map((entry, index) => ({
       id: entry.stop.id,
+      name: entry.stop.name,
+      lines: signLines(entry.stop.name),
       coordinates: entry.stop.coordinates,
       zoom: chapterRestZooms[index] ?? HOP.restZoom,
       ratio: entry.stop.coverRatio ?? 1.5,
@@ -1282,6 +1333,11 @@ export default function RouteAtlas({
             coordinates: other.stop.coordinates,
             ...shieldOf(other.stop.region, SHIELD_SCALE.ahead),
           }])),
+      // Its two legs (the route closes, the last stop onto the first).
+      route: {
+        prev: chapterRoute[(index - 1 + chapterRoute.length) % chapterRoute.length]?.stop.coordinates,
+        next: chapterRoute[(index + 1) % chapterRoute.length]?.stop.coordinates,
+      },
       stock: stockPaper(entry.stop.slug),
     }));
     // The place's camera at rest, as the camera effect sets it: its centre
@@ -1297,13 +1353,18 @@ export default function RouteAtlas({
     };
     const plan = planDock(chapters, vw, vh, camera);
     dockPlanRef.current = plan;
+    planRevRef.current += 1;
+    // A glide planned on the last layout's seats is over (the camera's run
+    // is torn down with it, and its switch ended).
+    glideRef.current = null;
     coverDock.setPlan(plan);
     mapRef.current?.getMap()?.triggerRepaint();
   }, [chapterRestZooms, chapterRoute, layoutRevision, mobile, signs, viewportReady]);
   useEffect(() => () => {
     coverDock.setPlan(null);
     coverDock.publish({ at: null, points: {} });
-    window.clearTimeout(switchTimerRef.current);
+    switchTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    arriveTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     cancelAnimationFrame(pinFrameRef.current);
   }, []);
   // The stub hand-off (src/lib/explorer.ts): where stop 01's stub will rest
@@ -1333,7 +1394,9 @@ export default function RouteAtlas({
   // seen sliding into its seat: covers appear directly); once shown it STAYS
   // while its place is in hand, riding every move the reader makes of the
   // map, and goes when the place is let go or the camera leaves. Through a
-  // switch it is pinned instead (`pinRef`).
+  // switch the ticket lies where the glide says (`glideRef`), each cover
+  // written at its own foot for it (`pins`), so both tickets lie on one
+  // point whatever their corners.
   // The viewfinder's readouts hang off the place in hand, wherever the
   // reader has taken the map (or at the pin, through a switch).
   const publishedKeyRef = useRef("");
@@ -1347,38 +1410,77 @@ export default function RouteAtlas({
     });
     const at = dockShown(dockAtRef.current, dockAskRef.current, (id) => !!points[id]);
     dockAtRef.current = at;
+    const now = performance.now();
+    const plan = dockPlanRef.current;
+    const planned = at && plan ? plan[at] ?? null : null;
+    // A publish next frame too: a glide goes on whether or not the map
+    // draws (a resting camera draws nothing).
+    let again = false;
     // The pin, this frame.
     let pin: Point | null = null;
-    const pinned = pinRef.current;
-    if (pinned) {
-      const now = performance.now();
-      const live = pinned.to === 'foot' ? (at ? points[at] : null) : pinned.to;
-      if (!live) {
-        pinRef.current = null;
-      } else {
-        pin = glideAt(pinned.from, live, now - pinned.t0, pinned.ms, pinned.ease);
-        if (pinned.to === 'foot' && now - pinned.t0 >= pinned.ms) {
+    let written: Point | null = null;
+    const glide = glideRef.current;
+    if (glide && planned) {
+      const lies = glide.at(now, points);
+      written = { x: Math.round(lies.x - planned.ticket.x), y: Math.round(lies.y - planned.ticket.y) };
+      again = now < glide.until;
+    } else {
+      const pinned = pinRef.current;
+      if (pinned) {
+        const live = pinned.to === 'foot' ? (at ? points[at] : null) : pinned.to;
+        if (!live) {
           pinRef.current = null;
-          pin = null;
-        } else if (!pinFrameRef.current) {
-          // A glide goes on whether or not the map draws (a resting camera
-          // draws nothing): the next frame publishes again.
-          pinFrameRef.current = requestAnimationFrame(() => {
-            pinFrameRef.current = 0;
-            publishDockRef.current();
-          });
+        } else {
+          pin = glideAt(pinned.from, live, now - pinned.t0, pinned.ms, pinned.ease);
+          if (pinned.to === 'foot' && now - pinned.t0 >= pinned.ms) {
+            pinRef.current = null;
+            pin = null;
+          } else again = true;
         }
       }
+      written = pin ?? (at ? points[at] ?? null : null);
     }
-    const written = pin ?? (at ? points[at] ?? null : null);
     dockWrittenRef.current = written;
     const sw = dockSwitchRef.current;
+    // Each cover's own foot through a switch: the arriving one where it is
+    // written, the carrier where its ticket lies on the same pixels.
+    let pins: Record<string, Point> | null = null;
+    if (at && written && planned && (glide || (sw && sw.from !== at))) {
+      pins = { [at]: written };
+      const carrier = sw && sw.from !== at ? plan?.[sw.from] : null;
+      if (sw && carrier) {
+        pins[sw.from] = { x: written.x + planned.ticket.x - carrier.ticket.x, y: written.y + planned.ticket.y - carrier.ticket.y };
+      }
+    }
+    if (again && !pinFrameRef.current) {
+      pinFrameRef.current = requestAnimationFrame(() => {
+        pinFrameRef.current = 0;
+        publishDockRef.current();
+      });
+    }
     const arrive = dockArriveRef.current;
-    const key = `${cameraKey(map)}|${at}|${pin ? `${pin.x},${pin.y}` : '-'}|${sw ? sw.key : 0}|${arrive ? arrive.key : 0}|${coverDock.plan() ? 1 : 0}|${currentStopRef.current}`;
+    // While a ticket travels (a switch until it opens, an arrival from its
+    // ink until it opens) the place in hand's own shield is drawn over the
+    // covers' dock (global.css); the others pass under the ticket.
+    const ticketing = (!!sw && now < sw.expandAt) || (!!arrive && now >= arrive.inkAt && now < arrive.expandAt);
+    const atlasEl = routeAtlasRef.current;
+    if (atlasEl && atlasEl.hasAttribute('data-shields-over') !== ticketing) {
+      if (ticketing) atlasEl.setAttribute('data-shields-over', '');
+      else atlasEl.removeAttribute('data-shields-over');
+    }
+    // The switch's beats passed so far: each is a publish of its own.
+    const beats = sw ? [sw.relayAt, sw.cutAt, sw.expandAt, sw.tipAt, sw.extrasAt].filter((t) => now >= t).length : 0;
+    const pinsKey = pins ? Object.entries(pins).map(([id, p]) => `${id}:${p.x},${p.y}`).join(';') : '-';
+    // The layout is in the key, and the points themselves: a resize (and
+    // the padding the camera takes up for the new layout) moves every point
+    // with the camera standing still; so is the plan's revision.
+    const size = canvasSizeRef.current;
+    const pointsKey = Object.values(points).map((p) => `${p.x},${p.y}`).join(';');
+    const key = `${cameraKey(map)}|${size.width}x${size.height}|${pointsKey}|${at}|${pin ? `${pin.x},${pin.y}` : '-'}|${pinsKey}|${sw ? `${sw.key}.${sw.rev}.${beats}` : 0}|${arrive ? arrive.key : 0}|${plan ? planRevRef.current : 0}|${currentStopRef.current}`;
     if (key === publishedKeyRef.current) return;
     publishedKeyRef.current = key;
-    coverDock.publish({ at, points, switch: sw, pin, arrive });
-    const held = pin ?? (currentStopRef.current ? points[currentStopRef.current] : null);
+    coverDock.publish({ at, points, switch: sw, pin, pins, arrive });
+    const held = pin ?? (pins && at ? pins[at] : null) ?? (currentStopRef.current ? points[currentStopRef.current] : null);
     if (held) viewfinderRef.current?.focal(held);
   };
   const publishDockRef = useRef(publishDock);
@@ -1390,12 +1492,25 @@ export default function RouteAtlas({
     dockAskRef.current = ask;
     mapRef.current?.getMap()?.triggerRepaint();
   };
-  // A switch is over: the leaving cover goes (it lies under the new one).
+  // A switch is over: its extras are in, or it is cut short (a let-go, a
+  // tear, a cut, the atlas torn down).
   const endSwitch = () => {
-    window.clearTimeout(switchTimerRef.current);
-    switchTimerRef.current = 0;
+    switchTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    switchTimersRef.current = [];
     if (!dockSwitchRef.current) return;
     dockSwitchRef.current = null;
+    publishDockRef.current();
+  };
+  // A switch published: a publish at each of its beats (the relay, the
+  // carrier's cut, the opening, the tip), and its end.
+  const scheduleSwitch = (sw: DockSwitch) => {
+    switchTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    switchTimersRef.current = [];
+    const now = performance.now();
+    [sw.relayAt, sw.cutAt, sw.expandAt, sw.tipAt, sw.extrasAt].forEach((t) => {
+      if (t > now) switchTimersRef.current.push(window.setTimeout(() => publishDockRef.current(), t - now + 1));
+    });
+    switchTimersRef.current.push(window.setTimeout(endSwitch, Math.max(0, sw.end - now)));
     publishDockRef.current();
   };
   // The arriving ticket is torn (its story): the one under it must not show
@@ -2147,14 +2262,28 @@ export default function RouteAtlas({
         if (!disposed) window.dispatchEvent(new CustomEvent(ATLAS_IDLE_EVENT, { detail: { id } }));
       });
     };
-    // The pin lets go: the covers go back onto their shield's foot — at the
-    // landing that is the dock's point itself, so nothing moves; cut short by
-    // the reader's hand, a short glide to wherever the shield now stands.
+    // The pin lets go (and a switch's glide): the covers go back onto their
+    // shield's foot — at the landing that is the dock's point itself, so
+    // nothing moves; cut short by the reader's hand, a short glide to
+    // wherever the shield now stands.
     const releasePin = () => {
+      const glided = glideRef.current;
+      glideRef.current = null;
       const pinned = pinRef.current;
-      if (!pinned || pinned.to === 'foot') return;
-      const from = dockWrittenRef.current ?? pinned.to;
-      pinRef.current = { from, to: 'foot', t0: performance.now(), ms: reducedMotion ? 0 : DUR_MS.swap, ease: bezierFn(EASE.arrive) };
+      if (!glided && (!pinned || pinned.to === 'foot')) return;
+      const from = dockWrittenRef.current ?? (pinned && pinned.to !== 'foot' ? pinned.to : null);
+      pinRef.current = from ? { from, to: 'foot', t0: performance.now(), ms: reducedMotion ? 0 : DUR_MS.swap, ease: bezierFn(EASE.arrive) } : null;
+    };
+    // The reader takes the map mid-switch: the cover opens now (or as its
+    // ticket is laid, if the fold is still running), its tip after it; the
+    // name may still be turning as it opens (a rare path).
+    const retimeOnTake = () => {
+      const sw = dockSwitchRef.current;
+      const now = performance.now();
+      if (!sw || now >= sw.end || now >= sw.expandAt) return;
+      const next: DockSwitch = { ...sw, rev: sw.rev + 1, ...afterOpening(Math.max(now, sw.relayAt)) };
+      dockSwitchRef.current = next;
+      scheduleSwitch(next);
     };
     const land = (arrived: boolean) => {
       const done = flying;
@@ -2169,6 +2298,7 @@ export default function RouteAtlas({
       }
       writeRouteTrim(done.trimTo);
       releasePin();
+      if (!arrived) retimeOnTake();
       const held = currentRef.current;
       const heldIndex = indexOf(held);
       if (arrived) {
@@ -2201,14 +2331,18 @@ export default function RouteAtlas({
       // moves are read again once it is down: `readDrift`).
       markOffered(null);
       if (next.kind !== 'release') tellDrift(false);
+      const arriveWas = dockArriveRef.current;
       dockArriveRef.current = null;
       if (next.kind === 'release') {
         // Nothing in hand: its cover fades from the map (nothing tears), its
         // shield steps back among the others, the viewfinder has nothing to
         // read.
         pinRef.current = null;
-        endSwitch();
+        glideRef.current = null;
+        // Let go before the switch ends: its end is published with nothing
+        // in hand, so a ticket mid-switch fades as it is, never opened first.
         setDockAt(null);
+        endSwitch();
         clearPlantTimers();
         markInboundStop(null);
         // Its shield steps back among the others and its labels clear (the
@@ -2224,8 +2358,9 @@ export default function RouteAtlas({
         // entrance's opening words (HomePage veils the swap).
         flying = { token: next.token, kind: 'home', index: -1, from: -1, center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, origin: [0, 0], trimFrom: 0, trimTo: 0, tip: null, tipping: false, carry: false, entry: false };
         pinRef.current = null;
-        endSwitch();
+        glideRef.current = null;
         setDockAt(null);
+        endSwitch();
         markInboundStop(null);
         map.stop();
         map.jumpTo({ center: [phoneApproach.longitude, phoneApproach.latitude], zoom: phoneApproach.zoom, pitch: phoneApproach.pitch, bearing: phoneApproach.bearing, padding: { top: 0, right: 0, bottom: 0, left: 0 } });
@@ -2253,18 +2388,74 @@ export default function RouteAtlas({
       const origin: GeoCoordinate = [live.lng, live.lat];
       // The switch: a cover on screen at take-off is carried through the
       // turn (not on the phone's entry, and never under a cut, which is
-      // unseen).
-      const shown = dockAtRef.current;
+      // unseen). A ticket arriving from the open map that has not inked in
+      // yet is not on screen: it goes unseen, and this is an arrival too.
+      const now = performance.now();
+      let shown = dockAtRef.current;
+      if (shown && arriveWas && arriveWas.id === shown && now < arriveWas.inkAt) shown = null;
       const switching = next.kind === 'fly' && !!shown;
       // From the open map (nothing shown): the arrival — the ticket asked
       // for from take-off too, riding in with its shield, played in by its
       // chapter as the camera settles (coverDock.ts "The arrival").
       const arriving = next.kind === 'fly' && !shown && !reducedMotion;
+      // A new choice mid-switch (never stacking: one carrier on screen and
+      // the newest destination). The switch under way — or a ticket still
+      // arriving from the open map, whose inking-in is its relay — says
+      // which ticket carries this one, by where it is:
+      //  - still folding (before its relay): the one folding carries on, and
+      //    the new cover is laid on it at the same relay ('fold'; itself, if
+      //    the reader turns back to it: 'self');
+      //  - in transit (a ticket): it carries, and the new ticket is laid on
+      //    it at once, its picture dissolving in over the one under it
+      //    ('lay');
+      //  - opening, or open with its tip out: it folds back from where it
+      //    is, over the share it had opened ('back').
+      // The same place asked again keeps its switch, timed off the new
+      // flight.
+      const prev: { from: string; to: string; relayAt: number; expandAt: number } | null = (() => {
+        const sw = dockSwitchRef.current;
+        if (sw && now < sw.end) return sw;
+        if (arriveWas && shown === arriveWas.id && now < arriveWas.extrasAt + TICKET.extrasInMs) {
+          return { from: arriveWas.id, to: arriveWas.id, relayAt: arriveWas.inkAt, expandAt: arriveWas.expandAt };
+        }
+        return null;
+      })();
+      // The carrier is cut once the arriving ticket's picture has dissolved
+      // in over it.
+      let carrier = switching ? shown : null;
+      let mode: DockSwitch['mode'] = 'fold';
+      let relayAt = now + TICKET.foldAt + TICKET_FOLD_MS;
+      let cutAt = relayAt + TICKET.dissolveMs;
+      let sameSwitch = false;
+      if (switching && prev) {
+        if (now < prev.relayAt) {
+          carrier = prev.from;
+          relayAt = prev.relayAt;
+          cutAt = relayAt + TICKET.dissolveMs;
+          sameSwitch = prev.to === destId;
+          mode = carrier === destId ? 'self' : 'fold';
+        } else if (now < prev.expandAt) {
+          carrier = prev.to;
+          sameSwitch = prev.to === destId;
+          mode = 'lay';
+          relayAt = now;
+          cutAt = now + TICKET.dissolveMs;
+        } else {
+          carrier = prev.to;
+          sameSwitch = prev.to === destId;
+          mode = 'back';
+          const open = Math.min(1, Math.max(0, (now - prev.expandAt) / TICKET_EXPAND_MS));
+          relayAt = now + Math.max(TICKET.foldBackMinMs, Math.round(TICKET_FOLD_MS * open));
+          cutAt = relayAt + TICKET.dissolveMs;
+        }
+      }
+      const carrierIndex = carrier ? indexOf(carrier) : -1;
       flying = {
         token: next.token,
         kind: next.kind,
         index,
-        from: next.kind === 'entry' || next.kind === 'finish' ? -1 : from,
+        // The sign turns from the words on the ticket that carries it.
+        from: next.kind === 'entry' || next.kind === 'finish' ? -1 : carrierIndex >= 0 ? carrierIndex : from,
         center: dest.center,
         zoom: dest.zoom,
         origin,
@@ -2276,7 +2467,8 @@ export default function RouteAtlas({
         entry: next.kind === 'entry' || next.kind === 'finish' || !!next.entry,
       };
       setCameraState('flying');
-      announce('atlas:depart', index, flying.from);
+      // (The same switch asked again keeps its board turning.)
+      if (!sameSwitch) announce('atlas:depart', index, flying.from);
       clearPlantTimers();
       if (next.kind === 'fly') {
         // The arriving place's shield lifts at once and the one left relaxes
@@ -2293,8 +2485,9 @@ export default function RouteAtlas({
         // that covers the map, a cut is all anyone could see); the cover in
         // hand is the destination's at once.
         pinRef.current = null;
-        endSwitch();
+        glideRef.current = null;
         setDockAt(null);
+        endSwitch();
         map.stop();
         map.jumpTo(dest);
         const place = viewfinderPlace(index);
@@ -2330,20 +2523,172 @@ export default function RouteAtlas({
         curve = plan.curve;
         easing = voyageEase;
       }
-      if (flying.carry && shown) {
-        // The ticket stays where it lies: pinned at the dock's point (or
+      if (flying.carry && shown && carrier) {
+        // The switch (src/lib/coverDock.ts, "The switch"), every beat off
+        // this flight's own clock: the carrier folds into its ticket where
+        // it lies, the destination's ticket is laid on it at the relay and
+        // lies still — or rides the ground to its own corner — until the
+        // camera has made 95% of its move, then opens in place and puts its
+        // tip out. The same place with nothing under way: the camera is
+        // brought back onto it, the cover pinned (at the dock's point, or
         // gliding back to it with the camera, if the reader had dragged it
-        // away), and, from another place's cover, the switch — the arriving
-        // cover laid over the leaving one until SWITCH_COVER.leaveMs.
+        // away).
+        const plan = dockPlanRef.current;
         const to = planFocal(index);
-        pinRef.current = { from: dockWrittenRef.current ?? to, to, t0: performance.now(), ms: durationMs, ease: easing };
-        window.clearTimeout(switchTimerRef.current);
-        if (shown !== destId) {
-          switchKeyRef.current += 1;
-          dockSwitchRef.current = { key: switchKeyRef.current, from: shown, to: destId };
-          switchTimerRef.current = window.setTimeout(endSwitch, SWITCH_COVER.leaveMs);
+        const written = dockWrittenRef.current;
+        const seen = coverDock.frame().points;
+        const held = glideRef.current;
+        const lies = held
+          ? (held.base ?? held.at)(now, seen)
+          : written && plan?.[shown] ? { x: written.x + plan[shown].ticket.x, y: written.y + plan[shown].ticket.y } : null;
+        const heldStep = held?.step?.() ?? null;
+        const seatTo = plan?.[destId] ? { x: to.x + plan[destId].ticket.x, y: to.y + plan[destId].ticket.y } : null;
+        // A change of corner with the place gone to still on the screen
+        // (Zion below-left → Bryce Canyon above-left): the ticket rides the
+        // ground — the carrier folding at its own shield, the arriving one
+        // swinging round its shield to its own corner (coverDock `rideAt`) —
+        // never sliding down a track of its own past its shield, nor lying
+        // over its own sign as the planet turns it under. A far leg (the
+        // place off the screen) lies still, or glides to its new seat on the
+        // camera's own clock.
+        const carrierEntry = carrier ? plan?.[carrier] : null;
+        const destEntry = plan?.[destId] ?? null;
+        const stage = stageBox(window.innerWidth, window.innerHeight);
+        const footTo = seen[destId];
+        const ride = !prev && !!carrier && carrier === shown && !!carrierEntry && !!destEntry && carrierEntry.quadrant !== destEntry.quadrant &&
+          !!footTo && footTo.x > stage.left && footTo.x < stage.right && footTo.y > stage.top && footTo.y < stage.bottom;
+        // The ticket gives way to the shields of its switch (coverDock
+        // `giveWay`): the one it goes to never comes up through it, the one
+        // it leaves never goes out through it; it steps across their run
+        // (the ground's, from the flight's own plan: where the place gone to
+        // stands now and where the camera sets it). Riding the ground to a
+        // new corner it rides the shield it goes to, and the one it leaves
+        // is only another shield once it is laid on.
+        const travel = footTo ? { x: to.x - footTo.x, y: to.y - footTo.y } : { x: 0, y: 0 };
+        const axis = yieldAxis(travel);
+        // The shield it leaves starts at its own corner (nothing to step
+        // for); the one it goes to may stand anywhere about the cover as it
+        // starts to fold (a neighbour's, 60 px off), so the ticket leans into
+        // its way over the fold (or a fold's length, laid on in transit) —
+        // wholly by the relay, when its ticket is seen — on that switch's own
+        // clock when it is the same place asked again.
+        const leaning = sameSwitch ? dockSwitchRef.current : null;
+        const leanFrom = leaning ? leaning.t0 : now;
+        const leanMs = Math.max(TICKET_FOLD_MS, (leaning ? leaning.relayAt : relayAt) - leanFrom);
+        const yieldTo = (t: number, points: Readonly<Record<string, Point>>, riding: boolean): Yield[] => {
+          const out: Yield[] = [];
+          const b = points[destId];
+          const k = Math.min(1, Math.max(0, (t - leanFrom) / leanMs));
+          // (Turned back to itself before its relay: its own shield had only
+          // just left its corner — kept clear as it was, as the one it left.)
+          if (b && destEntry) {
+            out.push(mode === 'self'
+              ? { foot: b, shield: destEntry.shield, quadrant: destEntry.quadrant, axis, leaving: true }
+              : { foot: b, shield: destEntry.shield, quadrant: destEntry.quadrant, axis, weight: k * k * (3 - 2 * k) });
+          }
+          // (Laid on a ticket still in transit, the one under it never came
+          // to its corner: its shield may stand anywhere, across the ticket
+          // from its own side — it passes under the new one like any other.)
+          const a = carrier && carrier !== destId && mode !== 'lay' ? points[carrier] : null;
+          if (a && carrierEntry && !riding) out.push({ foot: a, shield: carrierEntry.shield, quadrant: carrierEntry.quadrant, axis, leaving: true });
+          return out;
+        };
+        // (Out at once, back at a walk: `stepBack` — from the step the glide
+        // it follows had taken, if any.)
+        // (Home by the touchdown: never still drifting once the camera is
+        // down.)
+        const touchdown = now + durationMs;
+        const smoothstep01 = (k: number) => {
+          const c = Math.min(1, Math.max(0, k));
+          return c * c * (3 - 2 * c);
+        };
+        const giving = (at: (t: number, points: Readonly<Record<string, Point>>) => Point, riding: boolean, expand: number, home: number) => {
+          let was: { step: Point; t: number } | null = heldStep ? { step: heldStep, t: now } : null;
+          return {
+            at: (t: number, points: Readonly<Record<string, Point>>) => {
+              const base = at(t, points);
+              if (!destEntry) return base;
+              const want = giveWay(base, { w: destEntry.ticketW, h: destEntry.ticketH }, yieldTo(t, points, riding));
+              // (Down by the touchdown whatever it gave way for: the covers
+              // at rest are clear of every shield by the plan.)
+              const down = 1 - smoothstep01((t - expand) / Math.max(1, home - expand));
+              const need = { x: want.x * down, y: want.y * down };
+              const step = stepBack(was?.step ?? null, need, was ? t - was.t : 0, GIVE_WAY.backPxMs, home - t);
+              was = { step, t };
+              return { x: base.x + step.x, y: base.y + step.y };
+            },
+            base: at,
+            step: () => was?.step ?? null,
+          };
+        };
+        const glideOn = (relay: number, expand: number) => {
+          if (ride && carrier && carrierEntry && destEntry) {
+            const from = carrier;
+            const share = glideShare(relay - now, expand - now, easing, durationMs);
+            glideRef.current = {
+              ...giving((t, points) => {
+                const a = points[from];
+                const b = points[destId];
+                if (!a || !b) return lies ?? seatTo ?? { x: 0, y: 0 };
+                return rideAt(
+                  { x: a.x + carrierEntry.ticket.x, y: a.y + carrierEntry.ticket.y },
+                  { x: b.x + destEntry.ticket.x, y: b.y + destEntry.ticket.y },
+                  share(t - now),
+                );
+              }, true, expand, Math.max(expand, touchdown)),
+              until: expand,
+            };
+            return;
+          }
+          glideRef.current = lies && seatTo
+            ? { ...giving(((g) => (t: number) => g(t - now))(ticketGlide(lies, seatTo, relay - now, expand - now, easing, durationMs)), false, expand, Math.max(expand, touchdown)), until: expand }
+            : null;
+        };
+        const was = dockSwitchRef.current;
+        if (shown === destId && !prev) {
+          pinRef.current = { from: written ?? to, to, t0: now, ms: durationMs, ease: easing };
+          glideRef.current = null;
+          endSwitch();
+        } else if (sameSwitch) {
+          // Asked again mid-switch: the opening waits for this flight (a
+          // ticket still arriving from the open map simply goes on).
+          if (was && now < was.expandAt) {
+            const expandAt = now + expandAtFor(Math.max(0, was.relayAt - now), durationMs, easing);
+            const retimed: DockSwitch = { ...was, rev: was.rev + 1, ...afterOpening(expandAt) };
+            dockSwitchRef.current = retimed;
+            pinRef.current = null;
+            glideOn(Math.max(now, was.relayAt), expandAt);
+            scheduleSwitch(retimed);
+          } else if (was) {
+            // Already opening where it lies: brought back with the camera.
+            if (!glideRef.current) pinRef.current = { from: written ?? to, to, t0: now, ms: durationMs, ease: easing };
+          } else {
+            dockArriveRef.current = arriveWas;
+            pinRef.current = null;
+          }
         } else {
-          dockSwitchRef.current = null;
+          const expandAt = now + expandAtFor(relayAt - now, durationMs, easing);
+          switchKeyRef.current += 1;
+          const carried = chapterRoute[carrierIndex]?.stop;
+          const sw: DockSwitch = {
+            key: switchKeyRef.current,
+            rev: 0,
+            from: carrier,
+            to: destId,
+            mode,
+            t0: now,
+            relayAt,
+            cutAt,
+            ...afterOpening(expandAt),
+            toRatio: chapterRoute[index].stop.coverRatio ?? 1.5,
+            ticketScale: phoneTicketScale(window.innerWidth, window.innerHeight, chapterRoute.map((entry) => entry.stop.coverRatio ?? 1.5)),
+            ...(carried ? { fromLines: signLines(carried.name), fromRatio: carried.coverRatio ?? 1.5 } : null),
+          };
+          pinRef.current = null;
+          glideOn(relayAt, expandAt);
+          dockSwitchRef.current = sw;
+          setDockAt({ id: destId, appear: true, stay: true });
+          scheduleSwitch(sw);
         }
         setDockAt({ id: destId, appear: true, stay: true });
       } else if (arriving) {
@@ -2351,12 +2696,14 @@ export default function RouteAtlas({
         // its shield. The tip, if any, is planned below; the arrival is
         // timed off the whole landing there.
         pinRef.current = null;
+        glideRef.current = null;
         endSwitch();
         setDockAt({ id: destId, appear: true, stay: true });
       } else {
         pinRef.current = null;
-        endSwitch();
+        glideRef.current = null;
         setDockAt(null);
+        endSwitch();
       }
       // Never a tip and a fall at once (有点晕): from the open planet (square
       // on) the flight keeps its pitch and bearing all the way down, and the
@@ -2370,14 +2717,20 @@ export default function RouteAtlas({
         ? { pitch: dest.pitch, bearing: dest.bearing, ms: Math.max(500, Math.round(((tipDeg * Math.PI) / 2 / TIP_DEG_PER_S) * 1000)) }
         : null;
       if (arriving) {
-        // Its ticket starts ARRIVAL.leadMs before the touchdown (at once
-        // when the camera is all but there already). DERIVED from the
-        // flight's own plan: the screen px it covers (world px at the start
-        // zoom) and when it lands.
+        // Its ticket inks in, opens by the touchdown and puts its tip out
+        // (at once when the camera is all but there already). DERIVED from
+        // the flight's own plan: the screen px it covers (world px at the
+        // start zoom) and when it lands.
         const landMs = durationMs + (flying.tip?.ms ?? 0);
         const travelPx = Math.max(u1, Math.abs(dest.zoom - zoomNow) * 200);
+        const beats = arrivalSchedule(landMs, travelPx);
         arriveKeyRef.current += 1;
-        dockArriveRef.current = { key: arriveKeyRef.current, id: destId, at: performance.now() + arrivalDelay(landMs, travelPx) };
+        dockArriveRef.current = { key: arriveKeyRef.current, id: destId, inkAt: now + beats.inkAt, expandAt: now + beats.expandAt, tipAt: now + beats.tipAt, extrasAt: now + beats.extrasAt };
+        // A publish as it inks in and as it opens (the shields drawn over the
+        // ticket between), whether or not the camera still moves.
+        window.clearTimeout(arriveTimersRef.current[0]);
+        window.clearTimeout(arriveTimersRef.current[1]);
+        arriveTimersRef.current = [beats.inkAt, beats.expandAt].map((t) => window.setTimeout(() => publishDockRef.current(), t + 1));
         publishDockRef.current();
       }
       const place = viewfinderPlace(index);
@@ -2418,6 +2771,22 @@ export default function RouteAtlas({
       land(arrived);
     };
     map.on('moveend', onMoveEnd);
+    // A press on a shield in flight is that shield's own click (a choice),
+    // not the reader taking the map: it never reaches the map's handlers,
+    // which end a flight on any press (Mapbox's pan goes active on the
+    // mousedown or touchstart itself). It ended the turn short as the
+    // shield was pressed — the reader's hand (`land(false)`): the opening
+    // pulled in to that instant, before the click's own choice — so the
+    // place flown to, its shield clicked again from the relay on, opened
+    // and put its tip out with a second of flight still to run (review,
+    // 2026-09-29). Its click comes all the same.
+    const pressTarget = map.getCanvasContainer();
+    const holdShieldPress = (event: Event) => {
+      if (!flying || flying.kind === 'home') return;
+      if ((event.target as Element | null)?.closest?.('.place-shield__sign')) event.stopPropagation();
+    };
+    pressTarget.addEventListener('mousedown', holdShieldPress, true);
+    pressTarget.addEventListener('touchstart', holdShieldPress, { capture: true, passive: true });
     // In flight the travelled line runs on under the camera, as far as the
     // ground it has covered.
     const onFlightMove = () => {
@@ -2755,6 +3124,8 @@ export default function RouteAtlas({
       delete document.documentElement.dataset.atlasLandedAt;
       disposed = true;
       map.off('moveend', onMoveEnd);
+      pressTarget.removeEventListener('mousedown', holdShieldPress, true);
+      pressTarget.removeEventListener('touchstart', holdShieldPress, true);
       map.off('move', onFlightMove);
       map.off('move', onFreeMove);
       map.off('movestart', onReaderMoveStart);
@@ -2768,6 +3139,7 @@ export default function RouteAtlas({
         map.stop();
         // The covers go back onto their shield (no pin outlives its turn).
         pinRef.current = null;
+        glideRef.current = null;
         endSwitch();
         onArriveRef.current?.(done.token, false);
       }
@@ -3576,6 +3948,11 @@ export default function RouteAtlas({
           </div>
         </motion.footer>
       )}
+      {/* The covers' dock: each place's cover rides here, beside its shield
+          (ArchiveChapter portals it in; src/lib/coverDock.ts places it every
+          camera frame) — over the map, its tones and its instruments, and
+          under the route shields while a ticket travels. */}
+      {!mobile && onDockHost && <div ref={onDockHost} className="archive-dock-host archive-dock-host--atlas" />}
     </section>
   );
 }

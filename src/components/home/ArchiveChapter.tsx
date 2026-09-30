@@ -1,4 +1,4 @@
-import { Fragment, memo, type PointerEvent as ReactPointerEvent, useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from 'react';
+import { Fragment, memo, type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useLayoutEffect, useRef, useState, useMemo, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
   animate,
@@ -12,29 +12,32 @@ import {
   type MotionValue,
 } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { FlapWord, RouteShield, primeFlap, runFlap } from './RouteShield';
-import { pad2, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
+import { FlapWord, RouteShield, primeFlap, runFlap, runRoll } from './RouteShield';
+import { pad2, signLines, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
 import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import { usePressGive } from '../../lib/usePressGive';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
-import { CSS_EASE, DUR_MS, EASE, SPRING, smootherstep } from '../../lib/motion';
+import { CSS_EASE, EASE, SPRING, smootherstep } from '../../lib/motion';
 import {
   ARRIVAL,
-  DEVELOP_MASK,
   DOCK,
-  SWITCH_COVER,
-  arrivalClipFrames,
+  TICKET,
+  TICKET_EXPAND_MS,
+  TICKET_FOLD_MS,
+  afterOpening,
   awaySide,
   coverDock,
   coverRatioOf,
-  developSweep,
-  foldClip,
-  matPolygon,
-  switchClip,
+  printStyle,
+  ticketFold,
+  ticketFrames,
+  ticketStyle,
+  tipPopFrames,
   type DockArrive,
-  type DockEntry,
+  type DockSwitch,
+  type TicketForm,
 } from '../../lib/coverDock';
 import { STUB_LANDED_EVENT, phoneCard, type PhoneCard } from '../../lib/explorer';
 import {
@@ -69,9 +72,6 @@ interface ArchiveChapterProps {
   chapterIndex?: number;
   /** How many chapters the archive holds — the stub prints "03 / 06". */
   chapterTotal?: number;
-  /** The card stock of each ticket still bound under this one, nearest
-   *  first (src/lib/ticketStock.ts): the pad's sheets are printed on them. */
-  padStocks?: readonly string[];
   /** Minimal shared-element hooks for a later Homepage -> Story handoff. */
   sharedLayoutId?: string;
   sharedImageRef?: React.Ref<HTMLDivElement>;
@@ -106,9 +106,14 @@ interface ArchiveChapterProps {
    *  there, beside its place's shield, and placed every camera frame
    *  (src/lib/coverDock.ts); the section keeps the chapter's rail. */
   dockHost?: HTMLElement | null;
-  /** The first place of a region of two or more carries the region's line
-   *  ("REGION FLORIDA · 2 PLACES · 32 FRAMES") as a tab on its cover. */
-  regionTab?: { region: string; places: number; frames: number } | null;
+  /** Its state, boxed on a tab on its cover's top edge (owner, 2026-09-29:
+   *  封面的州名可以框起来，我想要这个更醒目一点); the first place of a region of
+   *  two or more keeps the region's figures on it ("REGION [FLORIDA] 2
+   *  PLACES · 32 FRAMES"). */
+  stateTab?: { state: string; places?: number; frames?: number } | null;
+  /** The archive's one ticket height (src/lib/coverDock.ts, TICKET): the
+   *  phone's card folds to it (the desktop reads it off the dock's plan). */
+  ticketHeight?: number;
   /** The phone's explorer: the ticket is dealt as a card at the foot of the
    *  screen (src/lib/explorer.ts, phoneCard), not beside its shield. */
   phone?: boolean;
@@ -165,9 +170,10 @@ const TICKET_STUB = DOCK.stub;
 // the story closes (`archive:reseat`), so the next visit finds it as it was.
 // The stub's score runs on one clock, `stubClock`, 0 whole → 1 gone over
 // TEAR_MS.
-// A docked cover let go fades out over this long (global.css `.archive-dock`,
-// mirrored), on the fade curve.
-const DOCK_FADE_MS = DUR_MS.out;
+// A docked cover let go is gone this long after (global.css `.archive-dock`,
+// mirrored: its ink fades over DUR.swap from 200 ms, as its fold ends), and
+// is put back whole, unseen, a beat later.
+const DOCK_FADE_MS = 520;
 // …and while the stub's rip runs, nothing of the stub may cross into the
 // face: its seat is cut away to the left of the seam.
 const STUB_SEAM_CLIP = 'polygon(-100vw -100vh, calc(100% + 100vw) -100vh, calc(100% + 100vw) calc(100% + 100vh), -100vw calc(100% + 100vh), -100vw 100%, 0% 100%, 0% 0%, -100vw 0%)';
@@ -191,15 +197,13 @@ const FLAP_DOCK_WAIT_MS = 1600;
 // curve as the map halo, route head and left-hand directory.
 const smoothFocus = smootherstep;
 // ── The switch (src/lib/coverDock.ts, "The switch") ──
-// Laid over the ticket it replaces, a docked cover turns into its place's in
-// place: its outline runs from the leaving ticket's to its own (clip-path,
-// both covers, anchored at the stub's top-right: nothing is laid out again),
-// its card eases from the leaving stock to its own (the stub, its caret and
-// its sign's band, each a colour of its own), its print develops in over the leaving
-// photograph from the corner by the stub (the house's develop mask), and its
-// sign turns from the place left. A print not yet decoded holds the develop
-// back this long at most.
-const DEVELOP_WAIT_MS = 600;
+// A docked cover travels a switch as a ticket carrying its picture: it
+// shrinks into it (a clip and a translate of the plate, a scale of its
+// print: nothing is laid out again), is relayed to the arriving place's
+// cover — laid on the same pixels, its card easing from the leaving stock to
+// its own (the stub, its caret, its sign's band), its sign rolling from the
+// place left, its miniature dissolving in over the leaving one's — and
+// grows open in place; then its tip pops out, then its tab and cue.
 
 /**
  * ArchiveChapter — a collection's homepage entry. Two layouts:
@@ -221,7 +225,6 @@ function ArchiveChapter({
   chapterProgress,
   chapterIndex,
   chapterTotal,
-  padStocks,
   sharedLayoutId,
   sharedImageRef,
   sharedImageSourceRef,
@@ -235,7 +238,8 @@ function ArchiveChapter({
   stubAwaited = false,
   nextStop,
   dockHost = null,
-  regionTab = null,
+  stateTab = null,
+  ticketHeight = 172,
   phone = false,
   railShown = false,
 }: ArchiveChapterProps) {
@@ -469,16 +473,16 @@ function ArchiveChapter({
   const ticket = variant === 'cover' && Boolean(desktopMotion);
   // ── The dock (src/lib/coverDock.ts) ──
   // A ticket is not printed in its section: it rides on the atlas, beside its
-  // place's shield, at the dock's one corner (on a phone it is dealt at the
-  // foot of the screen instead, `phone`). The section keeps the chapter's
-  // rail (the name, the lede). The atlas publishes, every camera frame, where
-  // each place stands and the place whose cover shows; the cover is written
-  // there, and shows only while its place is in hand — it arrives as the
-  // camera settles on it from the open map (unrolled from its shield's
-  // corner: "The arrival" below), rides with its shield
-  // wherever the reader takes the map, stays where it lies through a switch
-  // (pinned: "The switch" below), and folds back into that corner as it
-  // fades when the place is let go.
+  // place's shield, at its place's corner (the dock's plan; on a phone it is
+  // dealt at the foot of the screen instead, `phone`). The section keeps the
+  // chapter's rail (the name, the lede). The atlas publishes, every camera
+  // frame, where each place stands and the place whose cover shows; the
+  // cover is written there, and shows only while its place is in hand — it
+  // arrives as the camera settles on it from the open map (a ticket inked in
+  // beside its shield, opened, its tip put out: "The arrival" below), rides
+  // with its shield wherever the reader takes the map, travels a switch as a
+  // ticket where it lies (pinned: "The switch" below), and folds into its
+  // ticket as it fades when the place is let go.
   const docked = ticket;
   const dockRef = useRef<HTMLDivElement>(null);
   const dockEntry = useSyncExternalStore(
@@ -510,284 +514,642 @@ function ArchiveChapter({
   const dockAppearRef = useRef<(() => void) | null>(null);
   const plateRef = useRef<HTMLDivElement>(null);
 
-  // ── The switch (src/lib/coverDock.ts, "The switch") ──
-  // The arriving cover (`in`) is laid over the leaving one (`out`), both
-  // pinned where the ticket lay; each plays its half on the compositor or
-  // as a paint (clip-path, three colours, a mask): nothing here is laid
-  // out again or measured.
-  const switchRef = useRef<{
+  // ── The switch, the arrival, the let-go (src/lib/coverDock.ts) ──
+  // One play at a time per cover: its part in a switch — the ticket that
+  // carries it (`out`: it shrinks into its ticket, and is cut once the
+  // arriving one's picture is over it) or the one arriving (`in`: held
+  // hidden in its ticket form from the click, laid on at the relay, grown
+  // open, its tip popped out) — or an arrival from the open map. Every
+  // visual beat is a WAAPI animation started at its own absolute time on the
+  // document's timeline (`startAt`), so two covers' beats land in one frame;
+  // what is seen and what is not (the relay, the cut) is decided in the
+  // published frame, where every cover hears it in one task. Nothing is laid
+  // out again or measured: a clip, a translate, a scale, colours, opacity.
+  type Play = {
+    kind: 'switch' | 'arrive' | 'letgo';
     key: number;
     role: 'in' | 'out';
+    mode: DockSwitch['mode'] | 'arrive';
     anims: Animation[];
+    plate: Animation | null;
+    /** The photograph shrinking into the strip, or growing out of it. */
+    print: Animation | null;
+    /** The arriving miniature dissolving in over the one under it. */
+    dissolve: Animation | null;
+    /** The phone's card coming to the one ticket size as it folds (or, laid
+     *  on a ticket in transit, from that ticket to its own place)… */
+    carry: Animation | null;
+    /** …and, arriving, growing out of it to its own size as it opens. */
+    grow: Animation | null;
+    tip: Animation | null;
     timers: number[];
-    develop: Animation | null;
-  } | null>(null);
-  const clearDevelop = (print: HTMLElement | null) => {
-    if (!print) return;
-    print.style.removeProperty('mask-image');
-    print.style.removeProperty('-webkit-mask-image');
-    print.style.removeProperty('mask-size');
-    print.style.removeProperty('-webkit-mask-size');
-    print.style.removeProperty('mask-repeat');
-    print.style.removeProperty('-webkit-mask-repeat');
+    relayed: boolean;
+    cut: boolean;
+    /** When this carrier is cut (its switch's `cutAt`). */
+    cutAt: number;
+    /** Seen at all yet (an arrival before its ink, a destination before its
+     *  relay: not). */
+    inked: boolean;
   };
-  // Ends this cover's part in a switch: `finish` plays what is left to its
-  // end at once (a print half developed is printed whole).
-  const endSwitch = (finish = false) => {
-    const record = switchRef.current;
-    if (!record) return;
-    switchRef.current = null;
-    record.timers.forEach((timer) => window.clearTimeout(timer));
-    record.anims.forEach((anim) => anim.cancel());
-    record.develop?.cancel();
-    const dock = dockRef.current;
+  const playRef = useRef<Play | null>(null);
+  const arrivedTimerRef = useRef(0);
+  // The roll, started at the relay (the sign effect below sets it).
+  const relayFlapRef = useRef<((budget: number) => void) | null>(null);
+  const parts = () => {
     const plate = plateRef.current;
-    clearDevelop(plate?.querySelector<HTMLElement>('.archive-photo-frame__print') ?? null);
-    plate?.querySelector<HTMLElement>('.archive-photo-frame__mat')?.removeAttribute('data-on');
+    return {
+      dock: dockRef.current,
+      plate,
+      cover: dockRef.current?.querySelector<HTMLElement>('.archive-dock__cover') ?? null,
+      caret: plate?.querySelector<HTMLElement>('.archive-plate__caret') ?? null,
+      print: plate?.querySelector<HTMLElement>('.archive-photo-frame__print') ?? null,
+      name: plate?.querySelector<HTMLElement>('.archive-ticket-sign__name') ?? null,
+    };
+  };
+  // An animation started at `time` (performance.now() ms: the document's
+  // timeline counts from the same origin); before it, its fill says.
+  const startAt = (anim: Animation, time: number) => {
+    anim.startTime = time;
+    return anim;
+  };
+  const alive = (anim: Animation | null): anim is Animation => !!anim && anim.playState !== 'finished' && anim.playState !== 'idle';
+  // Held where it is now, this very frame (a pause alone takes hold a frame
+  // later: the ticket read and the ticket held would differ by a frame).
+  const holdNow = (anim: Animation) => {
+    const at = anim.currentTime;
+    anim.pause();
+    if (at != null) anim.currentTime = at;
+  };
+  // The ticket this plate folds into (DERIVED: the plan, or the phone's
+  // card and the archive's ticket height).
+  const ticketForm = (): TicketForm | null => {
+    if (phone) {
+      if (!card) return null;
+      const plateSize = { w: card.photoW + TICKET_STUB, h: card.photoH };
+      const w = Math.min(TICKET.face, card.photoW) + TICKET_STUB;
+      const h = Math.min(card.photoH, ticketHeight);
+      return { plate: plateSize, w, h, fold: ticketFold('phone', plateSize, w, h).fold };
+    }
+    const mine = coverDock.plan()?.[collection._id];
+    if (!mine) return null;
+    return { plate: { w: mine.photoW + TICKET_STUB, h: mine.photoH }, w: mine.ticketW, h: mine.ticketH, fold: mine.fold };
+  };
+  // Ends this cover's play at once and clears everything it wrote: the plate
+  // whole, the photograph full size, the tip at rest. `finish`: the cover in
+  // hand (a tear, a switch cut short) — its tab and cue come in on it.
+  const settlePlay = (finish = false) => {
+    const play = playRef.current;
+    playRef.current = null;
+    const { dock, plate, cover, caret, print, name } = parts();
+    if (play) {
+      play.timers.forEach((timer) => window.clearTimeout(timer));
+      play.anims.forEach((anim) => anim.cancel());
+    }
+    plate?.style.removeProperty('clip-path');
+    plate?.style.removeProperty('transform');
+    print?.style.removeProperty('transform');
+    print?.style.removeProperty('opacity');
+    caret?.style.removeProperty('transform');
+    if (phone && (play?.carry || play?.grow)) {
+      cover?.style.removeProperty('transform');
+      cover?.style.removeProperty('transform-origin');
+    }
+    name?.style.removeProperty('height');
+    name?.style.removeProperty('overflow');
     dock?.removeAttribute('data-switch');
-    if (finish && record.role === 'in') {
-      dock?.setAttribute('data-arrived', '');
-      window.setTimeout(() => dock?.removeAttribute('data-arrived'), SWITCH_COVER.extrasMs);
+    dock?.removeAttribute('data-ticket');
+    dock?.removeAttribute('data-arriving');
+    if (finish && play?.role === 'in' && dock) {
+      dock.setAttribute('data-arrived', '');
+      window.clearTimeout(arrivedTimerRef.current);
+      arrivedTimerRef.current = window.setTimeout(() => dock.removeAttribute('data-arrived'), TICKET.extrasInMs);
     }
   };
-  // The card eased from one stock to another: only what is printed in it —
-  // the stub, the caret cut from it, the sign's shield band — each on its
-  // own (animating the inherited stock itself restyled the whole ticket
-  // every frame).
-  const paperFrom = (plate: HTMLElement, from: string, to: string, hold: boolean): Animation[] => {
-    const timing: KeyframeAnimationOptions = { duration: SWITCH_COVER.paperMs, easing: CSS_EASE.travel, ...(hold ? { fill: 'forwards' as const } : null) };
-    const anims: Animation[] = [];
+  // Gone at once, no fade: a destination given up before its relay, an
+  // arrival before its ink (never seen), or a carrier a newer switch has
+  // dropped (a ticket already over it: it would linger where it lies).
+  const cutUnseen = () => {
+    const dock = dockRef.current;
+    dock?.setAttribute('data-cut', '');
+    dock?.removeAttribute('data-leaving');
+    settlePlay();
+    if (dock) requestAnimationFrame(() => requestAnimationFrame(() => dock.removeAttribute('data-cut')));
+  };
+  // Let go mid-play: it holds where it is while it fades (put back at the
+  // reseat).
+  const freezePlay = () => {
+    const play = playRef.current;
+    if (!play) return;
+    play.timers.forEach((timer) => window.clearTimeout(timer));
+    play.timers = [];
+    play.anims.forEach((anim) => { if (anim.playState !== 'finished') holdNow(anim); });
+  };
+  const newPlay = (kind: Play['kind'], key: number, role: Play['role'], mode: Play['mode'], cutAt = 0): Play => {
+    const play: Play = { kind, key, role, mode, anims: [], plate: null, print: null, dissolve: null, carry: null, grow: null, tip: null, timers: [], relayed: false, cut: false, cutAt, inked: false };
+    playRef.current = play;
+    return play;
+  };
+  const later = (play: Play, time: number, run: () => void) => {
+    play.timers.push(window.setTimeout(() => { if (playRef.current === play) run(); }, Math.max(0, time - performance.now())));
+  };
+  // ── The beats ──
+  // The tip: back into its corner (DUR.flick, the exit curve), out of it —
+  // popped, past its size and back, a beat of its own (coverDock
+  // `tipPopFrames`) — about the point where it meets the plate (global.css
+  // `transform-origin` per corner). From where it stands, if it was moving.
+  const retractTip = (play: Play, time: number) => {
+    const { caret } = parts();
+    if (!caret) return;
+    if (play.tip) {
+      try { play.tip.commitStyles(); } catch { /* not rendered: from rest */ }
+      play.tip.cancel();
+    }
+    play.tip = startAt(caret.animate([{ transform: 'scale(0)' }], { duration: TICKET.tipOutMs, easing: CSS_EASE.leave, fill: 'forwards' }), time);
+    play.anims.push(play.tip);
+  };
+  const popTip = (play: Play | null, time: number) => {
+    const { caret } = parts();
+    if (!caret) return null;
+    // It holds the tip in until `time` itself: whatever put it in goes.
+    if (play?.tip) {
+      play.tip.cancel();
+      play.anims = play.anims.filter((anim) => anim !== play.tip);
+    }
+    caret.style.removeProperty('transform');
+    const tip = startAt(caret.animate(tipPopFrames(CSS_EASE), { duration: TICKET.tipInMs, fill: 'backwards' }), time);
+    tip.onfinish = () => tip.cancel();
+    if (play) {
+      play.tip = tip;
+      play.anims.push(tip);
+    }
+    return tip;
+  };
+  // The cover shrinks into its ticket at the corner by its shield — the clip
+  // closing on it, the photograph shrinking into the strip as a miniature of
+  // itself — (`dir` 'let-go': on the exit curve), over `ms` (a fold back is
+  // shorter). From where it stands, if it was opening.
+  const foldPlate = (play: Play, form: TicketForm, time: number, dir: 'fold' | 'let-go', ms?: number) => {
+    const { plate, print } = parts();
+    if (!plate) return;
+    const openingPlate = alive(play.plate) ? play.plate : null;
+    const openingPrint = alive(play.print) ? play.print : null;
+    const { frames, print: printFrames, ms: total } = ticketFrames(form, dir);
+    if (openingPlate) {
+      try { openingPlate.commitStyles(); } catch { /* fold from whole */ }
+      openingPlate.cancel();
+      play.plate = startAt(plate.animate([ticketStyle(form, 0, 0)], { duration: ms ?? TICKET_FOLD_MS, easing: CSS_EASE.plane, fill: 'forwards' }), time);
+    } else {
+      play.plate = startAt(plate.animate(frames, { duration: ms ?? total, easing: 'linear', fill: 'forwards' }), time);
+    }
+    play.anims.push(play.plate);
+    if (!print) return;
+    if (openingPlate || openingPrint) {
+      if (openingPrint) {
+        try { openingPrint.commitStyles(); } catch { /* from full size */ }
+        openingPrint.cancel();
+      }
+      play.print = startAt(print.animate([printStyle(form, 0)], { duration: ms ?? TICKET_FOLD_MS, easing: CSS_EASE.plane, fill: 'forwards' }), time);
+    } else {
+      play.print = startAt(print.animate(printFrames, { duration: ms ?? total, easing: 'linear', fill: 'forwards' }), time);
+    }
+    play.anims.push(play.print);
+  };
+  // The plate held in its ticket form (the photograph a miniature in the
+  // strip) until `time`, then grown open in place, the photograph growing
+  // with it; when it is open everything is cancelled (the clip `none`: the
+  // corner free for the tip).
+  const expandPlate = (play: Play, form: TicketForm, time: number, hold: boolean) => {
+    const { plate, print } = parts();
+    if (!plate) return;
+    const { frames, print: printFrames, ms } = ticketFrames(form, 'expand');
+    const timing: KeyframeAnimationOptions = { duration: ms, easing: 'linear', fill: hold ? 'both' : 'forwards' };
+    play.plate = startAt(plate.animate(frames, timing), time);
+    play.anims.push(play.plate);
+    if (!print) return;
+    play.print = startAt(print.animate(printFrames, timing), time);
+    play.anims.push(play.print);
+  };
+  // The relay: the arriving ticket's miniature dissolves in over the one
+  // under it (the only thing on the two tickets that differs).
+  const dissolveIn = (play: Play, time: number) => {
+    const { print } = parts();
+    if (!print) return;
+    play.dissolve = startAt(print.animate([{ opacity: 0 }, { opacity: 1 }], { duration: TICKET.dissolveMs, easing: CSS_EASE.travel, fill: 'backwards' }), time);
+    play.anims.push(play.dissolve);
+  };
+  // The card eases from `from` to its own stock — the stub, its caret and
+  // its sign's band, each a colour of its own (animating the stock itself
+  // restyled the whole ticket every frame) — from `time` over `ms`; before
+  // it, the card is `from`.
+  const paperFrom = (play: Play, from: string, time: number, ms: number) => {
+    const { plate } = parts();
+    const to = stockPaper(collection.slug);
+    if (!plate || !from || from === to) return;
+    const timing: KeyframeAnimationOptions = { duration: Math.max(1, ms), easing: CSS_EASE.travel, fill: 'backwards' };
     const stub = plate.querySelector<HTMLElement>('.archive-ticket-stub');
     const caret = plate.querySelector<HTMLElement>('.archive-plate__caret[data-half="stub"]');
     const band = plate.querySelector<SVGElement>('.archive-ticket-sign__shield .route-shield__band');
-    if (stub) anims.push(stub.animate([{ backgroundColor: from }, { backgroundColor: to }], timing));
-    if (caret) anims.push(caret.animate([{ backgroundColor: from }, { backgroundColor: to }], timing));
-    if (band) anims.push(band.animate([{ fill: from }, { fill: to }], timing));
-    return anims;
+    if (stub) play.anims.push(startAt(stub.animate([{ backgroundColor: from }, { backgroundColor: to }], timing), time));
+    // (The caret's stock is its `color`: its edge is the sign's rule.)
+    if (caret) play.anims.push(startAt(caret.animate([{ color: from }, { color: to }], timing), time));
+    if (band) play.anims.push(startAt(band.animate([{ fill: from }, { fill: to }], timing), time));
   };
-  // The print develops in, from the corner by the stub (held back, a moment
-  // at most, for a print not yet decoded), `delay` ms from now, over `ms`;
-  // the mat under it goes when it is done.
-  const developIn = (
-    record: NonNullable<typeof switchRef.current>,
-    plate: HTMLElement,
-    dock: HTMLElement,
-    mine: DockEntry | null,
-    delay: number,
-    ms: number,
-  ) => {
-    const mat = plate.querySelector<HTMLElement>('.archive-photo-frame__mat');
-    const print = plate.querySelector<HTMLElement>('.archive-photo-frame__print');
-    if (print) {
-      const sweep = developSweep(mine ? mine.photoW / Math.max(1, mine.photoH) : cardRatio);
-      print.style.setProperty('mask-image', DEVELOP_MASK);
-      print.style.setProperty('-webkit-mask-image', DEVELOP_MASK);
-      print.style.setProperty('mask-size', '400% 100%');
-      print.style.setProperty('-webkit-mask-size', '400% 100%');
-      print.style.setProperty('mask-repeat', 'no-repeat');
-      print.style.setProperty('-webkit-mask-repeat', 'no-repeat');
-      const develop = print.animate(
-        [
-          { maskPosition: `${sweep.from.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.from.toFixed(2)}% 0` },
-          { maskPosition: `${sweep.to.toFixed(2)}% 0`, webkitMaskPosition: `${sweep.to.toFixed(2)}% 0` },
-        ] as Keyframe[],
-        { duration: ms, delay, easing: CSS_EASE.develop, fill: 'both' },
-      );
-      record.develop = develop;
-      const image = print.querySelector('img');
-      if (image && !image.complete) {
-        develop.pause();
-        let started = false;
-        const go = () => {
-          if (started || switchRef.current !== record) return;
-          started = true;
-          develop.play();
-        };
-        image.decode?.().then(go, go);
-        record.timers.push(window.setTimeout(go, DEVELOP_WAIT_MS));
-      }
-      develop.onfinish = () => {
-        if (switchRef.current !== record || record.develop !== develop) return;
-        record.develop = null;
-        develop.cancel();
-        clearDevelop(print);
-        mat?.removeAttribute('data-on');
-        // The outline was set already: the switch is over for this cover.
-        if (!dock.hasAttribute('data-switch')) switchRef.current = null;
-      };
-    }
+  // The sign's rule starts at the carrier's name lines (a one-line and a
+  // two-line name: a 28 px step at the relay otherwise) and eases to its
+  // own from the relay, A to B on a clock (EASE.travel: on the arrive
+  // curve's first frames the rule's edge jumped 10–12 px a frame).
+  // Stub-local, inside the ticket's clip; nothing is read back.
+  const ruleFrom = (play: Play, fromLines: number | undefined, time: number) => {
+    const { name } = parts();
+    const own = signLines(collection.name);
+    if (!name || !fromLines || fromLines === own) return;
+    const height = (lines: number) => `${(lines * TICKET.nameLine).toFixed(2)}em`;
+    name.style.height = height(fromLines);
+    name.style.overflow = 'hidden';
+    const rule = startAt(name.animate([{ height: height(fromLines) }, { height: height(own) }], { duration: TICKET.ruleMs, easing: CSS_EASE.travel, fill: 'forwards' }), time);
+    rule.onfinish = () => {
+      name.style.removeProperty('height');
+      name.style.removeProperty('overflow');
+      rule.cancel();
+    };
+    play.anims.push(rule);
   };
-  // This cover arrives over `fromId`'s.
-  const switchIn = (fromId: string, key: number) => {
-    endSwitch();
-    const dock = dockRef.current;
-    const plate = plateRef.current;
+  // The phone's cards stand centred at the foot of the screen, each at its
+  // own scale. A switch folds every card into ONE ticket size on the screen
+  // (`ticketScale`, the smallest card's: src/lib/explorer.ts,
+  // phoneTicketScale) — a card larger than it shrinks to it AS IT FOLDS,
+  // about its ticket's corner (the card's bottom-right), which it brings
+  // onto the arriving card's; a card at it stays as it is. The arriving card
+  // waits at that same size on its own corner, so the relay lays one ticket
+  // on the other exactly and the transit holds one size, then grows out of
+  // it to its own size as it opens (arrive, then open). Never a card grown
+  // to a larger one's scale on its way into a ticket (review, 2026-09-29:
+  // Miami's card swelled 25 px taller "shrinking" to Orlando's). DERIVED
+  // from the cards; from where it stands, if it was already moving.
+  const ticketK = (scale: number | undefined, other?: PhoneCard) =>
+    (card ? Math.min(scale ?? Math.min(card.scale, other?.scale ?? card.scale), card.scale) / card.scale : 1);
+  const ticketTransform = (k: number, dx = 0) => ({ transform: `translate(${dx.toFixed(2)}px, 0px) scale(${k.toFixed(4)})`, transformOrigin: '100% 100%' });
+  const phoneCarry = (play: Play, toRatio: number | undefined, time: number, ms: number, scale: number | undefined) => {
+    const { cover } = parts();
+    if (!phone || !card || !cover || !toRatio) return;
+    const dest = phoneCard(window.innerWidth, window.innerHeight, toRatio);
+    const k = ticketK(scale, dest);
+    const dx = ((dest.photoW + TICKET_STUB) * dest.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 / card.scale;
+    const to = ticketTransform(k, dx);
+    // (Still moving, or holding where it came to: from there.)
+    const running = [play.carry, play.grow].filter((anim): anim is Animation => !!anim && anim.playState !== 'idle');
+    if (running.length) {
+      running.forEach((anim) => {
+        try { anim.commitStyles(); } catch { /* from rest */ }
+        anim.cancel();
+      });
+      play.grow = null;
+    } else if (Math.abs(k - 1) < 1e-3 && Math.abs(dx) < 0.25) return;
+    const frames = running.length ? [to] : [ticketTransform(1), to];
+    play.carry = startAt(cover.animate(frames, { duration: Math.max(1, ms), easing: CSS_EASE.plane, fill: 'forwards' }), time);
+    play.anims.push(play.carry);
+  };
+  // The arriving card grows out of the ticket to its own size as it opens
+  // (`time`: the opening; `hold`: at the ticket's size until then — else
+  // whatever brought it there holds it).
+  const phoneGrow = (play: Play, scale: number | undefined, time: number, hold: boolean) => {
+    const { cover } = parts();
+    if (!phone || !card || !cover) return;
+    const k = ticketK(scale);
+    if (Math.abs(k - 1) < 1e-3) return;
+    play.grow = startAt(cover.animate([ticketTransform(k), ticketTransform(1)], { duration: TICKET_EXPAND_MS, easing: CSS_EASE.plane, fill: hold ? 'both' : 'forwards' }), time);
+    play.anims.push(play.grow);
+  };
+  // A card laid on a ticket still in transit (a new choice mid-transit):
+  // it starts at the size and place that ticket has on the screen now (one
+  // read of its transform, at the relay, as its stock is read), holds it
+  // while its picture dissolves in over the one under it, and comes to its
+  // own ticket's place over a fold's length once that one is gone (the
+  // same size: only the corner moves, if the cards differ in width).
+  const phoneLay = (play: Play, under: HTMLElement | null, fromRatio: number | undefined, time: number, scale: number | undefined) => {
+    const { cover } = parts();
+    const below = under?.querySelector<HTMLElement>('.archive-dock__cover') ?? null;
+    if (!phone || !card || !cover || !below || !fromRatio) return;
+    // (It holds as it is from here — its own part pauses it too — so what is
+    // read is where it stays.)
+    below.getAnimations().forEach((anim) => { if (anim.playState === 'running') holdNow(anim); });
+    const now = getComputedStyle(below).transform;
+    const m = now && now !== 'none' ? new DOMMatrixReadOnly(now) : new DOMMatrixReadOnly();
+    const out = phoneCard(window.innerWidth, window.innerHeight, fromRatio);
+    const k = (m.a * out.scale) / card.scale;
+    const dx = (((out.photoW + TICKET_STUB) * out.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 + m.e * out.scale) / card.scale;
+    const own = ticketK(scale);
+    if (Math.abs(k - own) < 1e-3 && Math.abs(dx) < 0.25) return;
+    play.carry = startAt(cover.animate(
+      [ticketTransform(k, dx), ticketTransform(own)],
+      { duration: TICKET_FOLD_MS, easing: CSS_EASE.plane, fill: 'both' },
+    ), time + TICKET.dissolveMs);
+    play.anims.push(play.carry);
+  };
+  // After the opening: the tip, then — once it is down — the tab and the
+  // cue (`data-arrived`). The phone has no tip: its tab and "View story"
+  // come in as the card finishes opening.
+  const openAndTip = (play: Play, beats: { expandAt: number; expandEnd: number; tipAt: number; extrasAt: number }) => {
+    const { dock } = parts();
+    const extrasAt = phone ? beats.expandEnd - TICKET.phoneExtrasLead : beats.extrasAt;
+    later(play, beats.expandAt, () => {
+      dock?.removeAttribute('data-ticket');
+      play.inked = true;
+    });
+    later(play, beats.expandEnd, () => {
+      [play.plate, play.print, play.carry, play.grow].forEach((anim) => anim?.cancel());
+      play.anims = play.anims.filter((anim) => anim !== play.plate && anim !== play.print && anim !== play.carry && anim !== play.grow);
+      play.plate = null;
+      play.print = null;
+      play.carry = null;
+      play.grow = null;
+    });
+    later(play, extrasAt, () => {
+      dock?.removeAttribute('data-switch');
+      dock?.setAttribute('data-arrived', '');
+    });
+    later(play, Math.max(extrasAt + TICKET.extrasInMs, beats.tipAt + TICKET.tipInMs), () => {
+      dock?.removeAttribute('data-arrived');
+      settlePlay();
+    });
+  };
+  // ── The roles ──
+  // The arriving place's cover: hidden in its ticket form from the click
+  // (`data-ticket="wait"`, set here, in the frame's own task, before any
+  // paint), laid on at the relay — its miniature dissolving in over the
+  // leaving one's ("lay": at once, over a ticket in transit) — grown open at
+  // `expandAt`, its tip out at `tipAt`, its tab and cue once the tip is down.
+  const switchIn = (sw: DockSwitch) => {
+    settlePlay();
+    const { dock, plate } = parts();
     if (!dock || !plate) return;
-    const plan = coverDock.plan();
-    const mine: DockEntry | null = phone ? null : plan?.[collection._id] ?? null;
-    const theirs: DockEntry | null = phone ? null : plan?.[fromId] ?? null;
-    const leaving = document.querySelector<HTMLElement>(`[data-cover-for="archive-item-${CSS.escape(fromId)}"] .archive-plate`);
-    const fromStock = theirs?.stock ?? leaving?.style.getPropertyValue('--stub-paper').trim() ?? '';
-    const myStock = stockPaper(collection.slug);
-    const record = { key, role: 'in' as const, anims: [] as Animation[], timers: [] as number[], develop: null as Animation | null };
-    switchRef.current = record;
+    // (It may be the cover just left, cut at its relay: it is in hand again.)
+    dock.removeAttribute('data-cut');
+    dock.removeAttribute('data-leaving');
+    const play = newPlay('switch', sw.key, 'in', sw.mode, sw.cutAt);
     dock.setAttribute('data-switch', 'in');
-    if (reduce) {
+    dock.setAttribute('data-ticket', sw.mode === 'lay' ? '' : 'wait');
+    const form = ticketForm();
+    if (reduce || !form) {
       // Values, not structure: the ticket is the next place's at once.
-      endSwitch(true);
+      settlePlay(true);
       return;
     }
-    // The card: from the stock it leaves to its own.
-    if (fromStock && fromStock !== myStock) record.anims.push(...paperFrom(plate, fromStock, myStock, false));
-    // The outline: from the leaving ticket's to its own, anchored at the
-    // stub's top-right (desktop; the phone's cards are dealt whole).
-    const mat = plate.querySelector<HTMLElement>('.archive-photo-frame__mat');
-    if (mine && theirs) {
-      const own = { w: mine.photoW + TICKET_STUB, h: mine.photoH };
-      const from = { w: theirs.photoW + TICKET_STUB, h: theirs.photoH };
-      if (own.w !== from.w || own.h !== from.h) {
-        record.anims.push(plate.animate(
-          [{ clipPath: switchClip(own, from) }, { clipPath: switchClip(own, own) }],
-          { duration: SWITCH_COVER.shapeMs, easing: CSS_EASE.travel },
-        ));
-      }
-      const matShape = matPolygon({ w: mine.photoW, h: mine.photoH }, { w: theirs.photoW, h: theirs.photoH });
-      if (mat && matShape) {
-        mat.style.clipPath = matShape;
-        mat.setAttribute('data-on', '');
-      }
-    } else if (mat) {
-      mat.style.clipPath = 'none';
-      mat.setAttribute('data-on', '');
-    }
-    // The print develops in over the one leaving, from the corner by the
-    // stub.
-    developIn(record, plate, dock, mine, SWITCH_COVER.developDelay, SWITCH_COVER.developMs);
-    // The outline set, the tab, the cue and the pad come in on it.
-    record.timers.push(window.setTimeout(() => {
-      if (switchRef.current !== record) return;
-      dock.removeAttribute('data-switch');
-      dock.setAttribute('data-arrived', '');
-      record.timers.push(window.setTimeout(() => dock.removeAttribute('data-arrived'), SWITCH_COVER.extrasMs));
-      if (!record.develop) switchRef.current = null;
-    }, SWITCH_COVER.shapeMs));
-  };
-  // This cover leaves under `toId`'s: it lies still under the arriving one,
-  // its outline running to the arriving one's, its card to the arriving
-  // stock (whatever of it still shows below or beside the new ticket).
-  const switchOut = (toId: string, key: number) => {
-    // An arrival cut short by the next switch: its print is printed whole
-    // (the ticket it came over has gone from under it).
-    const was = switchRef.current;
-    if (was?.role === 'in' && was.develop) {
-      was.develop.finish();
-    }
-    endSwitch();
-    const dock = dockRef.current;
-    const plate = plateRef.current;
-    if (!dock || !plate) return;
-    const record = { key, role: 'out' as const, anims: [] as Animation[], timers: [] as number[], develop: null as Animation | null };
-    switchRef.current = record;
-    dock.setAttribute('data-switch', 'out');
-    if (reduce || phone) return;
     const plan = coverDock.plan();
-    const mine = plan?.[collection._id];
-    const theirs = plan?.[toId];
-    if (!mine || !theirs) return;
-    const own = { w: mine.photoW + TICKET_STUB, h: mine.photoH };
-    const to = { w: theirs.photoW + TICKET_STUB, h: theirs.photoH };
-    if (own.w !== to.w || own.h !== to.h) {
-      record.anims.push(plate.animate(
-        [{ clipPath: switchClip(own, own) }, { clipPath: switchClip(own, to) }],
-        { duration: SWITCH_COVER.shapeMs, easing: CSS_EASE.travel, fill: 'forwards' },
-      ));
+    const leaving = document.querySelector<HTMLElement>(`[data-cover-for="archive-item-${CSS.escape(sw.from)}"]`);
+    // The stock it is laid on: the carrier's own, or — a ticket in transit,
+    // mid-ease — its colour now (one read, at the relay).
+    let fromStock = plan?.[sw.from]?.stock ?? leaving?.querySelector<HTMLElement>('.archive-plate')?.style.getPropertyValue('--stub-paper').trim() ?? '';
+    if (sw.mode === 'lay') {
+      const stub = leaving?.querySelector<HTMLElement>('.archive-ticket-stub');
+      if (stub) fromStock = getComputedStyle(stub).backgroundColor || fromStock;
+      phoneLay(play, leaving, sw.fromRatio, sw.relayAt, sw.ticketScale);
     }
-    const toStock = theirs.stock;
-    const myStock = stockPaper(collection.slug);
-    if (toStock && toStock !== myStock) record.anims.push(...paperFrom(plate, myStock, toStock, true));
+    // (The phone's card: at the ticket's size from the relay — or brought
+    // there from the ticket it is laid on — and grown to its own as it opens.)
+    phoneGrow(play, sw.ticketScale, sw.expandAt, !play.carry);
+    expandPlate(play, form, sw.expandAt, true);
+    dissolveIn(play, sw.relayAt);
+    play.tip = popTip(play, sw.tipAt);
+    paperFrom(play, fromStock, sw.relayAt, Math.min(TICKET.paperMaxMs, sw.expandAt - sw.relayAt));
+    ruleFrom(play, sw.fromLines, sw.relayAt);
+    openAndTip(play, sw);
   };
-  // The plate's own size (photograph + stub), from the plan or the phone's
-  // card: DERIVED, never measured.
-  const plateSize = (): { w: number; h: number } | null => {
-    if (phone) return card ? { w: card.photoW + TICKET_STUB, h: card.photoH } : null;
-    const mine = coverDock.plan()?.[collection._id];
-    return mine ? { w: mine.photoW + TICKET_STUB, h: mine.photoH } : null;
+  // A new timing of the switch this cover is arriving in (the reader took
+  // the map mid-turn, or asked for this place again): the opening and the
+  // tip move.
+  const retimeIn = (sw: DockSwitch) => {
+    const play = playRef.current;
+    const { dock } = parts();
+    if (!play || !dock) return;
+    play.timers.forEach((timer) => window.clearTimeout(timer));
+    play.timers = [];
+    // (Turned back to itself, the plate is still folding until its relay.)
+    if (play.mode !== 'self' || play.relayed) {
+      [play.plate, play.print].forEach((anim) => { if (alive(anim)) anim.startTime = sw.expandAt; });
+    }
+    if (alive(play.grow)) play.grow.startTime = sw.expandAt;
+    if (play.tip) play.tip.startTime = sw.tipAt;
+    openAndTip(play, sw);
+  };
+  // The relay (in the frame it passes, for every cover at once): the
+  // arriving ticket is seen, and its name rolls in inside the transit —
+  // timed from this frame, not the planned relay (a frame or a late tap
+  // behind it), so it is down by the opening.
+  const relayIn = (sw: DockSwitch, now: number) => {
+    const play = playRef.current;
+    const { dock } = parts();
+    if (!play || !dock) return;
+    play.relayed = true;
+    play.inked = true;
+    dock.setAttribute('data-ticket', '');
+    if (play.mode === 'self') {
+      // Turned back to itself: folded, it is held as a ticket (its own
+      // picture in the strip) until it grows open again.
+      const form = ticketForm();
+      const fold = [play.plate, play.print];
+      if (form) expandPlate(play, form, sw.expandAt, true);
+      fold.forEach((anim) => anim?.cancel());
+      return;
+    }
+    relayFlapRef.current?.(Math.max(0, sw.expandAt - Math.max(now, sw.relayAt)));
+  };
+  // The ticket carrying the switch: from whole it shrinks into its ticket
+  // ('fold'); a ticket in transit stays one ('lay'); a cover opening folds
+  // back from where it is, over what is left before the relay ('back'). It
+  // is cut at `cutAt`, the arriving picture over it.
+  const switchOut = (sw: DockSwitch) => {
+    const { dock } = parts();
+    if (!dock) return;
+    const was = playRef.current;
+    const form = ticketForm();
+    const now = performance.now();
+    if (was?.kind === 'switch' && was.mode === 'self' && !was.relayed) {
+      // Turned back to itself and away again before its relay (A → B → A →
+      // C, or a key held down round the route): it never stopped folding,
+      // and it carries this switch on the same fold — only its pending
+      // opening and tip are given up (the tip held in from where it is).
+      was.timers.forEach((timer) => window.clearTimeout(timer));
+      was.timers = [];
+      Object.assign(was, { key: sw.key, role: 'out', mode: 'fold', cut: false, cutAt: sw.cutAt });
+      dock.setAttribute('data-switch', 'out');
+      dock.removeAttribute('data-arrived');
+      if (reduce || !form) return;
+      retractTip(was, now);
+      phoneCarry(was, sw.toRatio, now, Math.max(1, sw.relayAt - now), sw.ticketScale);
+      return;
+    }
+    if (sw.mode === 'fold' || !was) {
+      if (was) settlePlay();
+      const play = newPlay('switch', sw.key, 'out', sw.mode, sw.cutAt);
+      dock.setAttribute('data-switch', 'out');
+      if (reduce || !form) return;
+      retractTip(play, now);
+      foldPlate(play, form, now + TICKET.foldAt, 'fold');
+      phoneCarry(play, sw.toRatio, now + TICKET.foldAt, TICKET_FOLD_MS, sw.ticketScale);
+      return;
+    }
+    // It was arriving: it carries now.
+    was.timers.forEach((timer) => window.clearTimeout(timer));
+    was.timers = [];
+    Object.assign(was, { kind: 'switch', key: sw.key, role: 'out', mode: sw.mode, cut: false, cutAt: sw.cutAt });
+    dock.setAttribute('data-switch', 'out');
+    dock.removeAttribute('data-arrived');
+    dock.removeAttribute('data-arriving');
+    if (reduce || !form) return;
+    if (sw.mode === 'lay') {
+      // Still a ticket: it holds as it is (the tip in, its picture in the
+      // strip) — its own picture whole at once, so the one it was laid on
+      // can go from under it unseen.
+      was.dissolve?.finish();
+      [was.plate, was.print, was.tip, was.carry, was.grow].forEach((anim) => { if (alive(anim)) holdNow(anim); });
+      return;
+    }
+    // 'back': folds back from where it is, its tip in first, by the relay.
+    const ms = Math.max(1, sw.relayAt - now);
+    retractTip(was, now);
+    foldPlate(was, form, now, 'fold', ms);
+    phoneCarry(was, sw.toRatio, now, ms, sw.ticketScale);
+  };
+  // Turned back to before its relay (A → B → A): the carrier is the arriving
+  // cover, in place — no relay to another, no roll — held as a ticket (its
+  // own picture in the strip) and grown open at the new `expandAt`.
+  const switchSelf = (sw: DockSwitch) => {
+    const { dock } = parts();
+    const was = playRef.current;
+    const form = ticketForm();
+    if (!dock || !was || !form || reduce) {
+      settlePlay(true);
+      return;
+    }
+    was.timers.forEach((timer) => window.clearTimeout(timer));
+    was.timers = [];
+    Object.assign(was, { kind: 'switch', key: sw.key, role: 'in', mode: 'self', relayed: false, cut: false, inked: true });
+    dock.removeAttribute('data-cut');
+    dock.removeAttribute('data-leaving');
+    dock.setAttribute('data-switch', 'in');
+    dock.setAttribute('data-ticket', '');
+    // (The phone's card, on its way to the other card's corner, comes back to
+    // its own at the ticket's size, and grows out of it as it opens.)
+    phoneCarry(was, cardRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()), sw.ticketScale);
+    phoneGrow(was, sw.ticketScale, sw.expandAt, !was.carry);
+    popTip(was, sw.tipAt);
+    openAndTip(was, sw);
+  };
+  // A frame's switch, heard once per key and timing (`held`: the place in
+  // hand this frame, if any).
+  const onSwitch = (sw: DockSwitch | null, at: boolean, held: string | null) => {
+    const me = collection._id;
+    const play = playRef.current;
+    const mine = !!sw && (sw.from === me || sw.to === me);
+    if (!mine) {
+      if (!play || play.kind !== 'switch') return;
+      if (play.role === 'in') {
+        if (!play.relayed && play.mode !== 'self') cutUnseen();
+        else if (at) settlePlay(true);
+        else freezePlay();
+      } else if (play.cut) settlePlay();
+      // A carrier a newer switch has dropped before its cut (a ticket laid
+      // over it, now carrying the new one), or whose switch ended with its
+      // place still in hand (cut short: a resize), is gone at once, unseen
+      // under the ticket over it — it must not linger and fade where it lies.
+      else if (sw || held) cutUnseen();
+      // (A carrier not yet cut, its switch given up with nothing in hand —
+      // let go — folds on as it fades, and is put back at the reseat.)
+      return;
+    }
+    if (sw.from === me && sw.to === me) {
+      if (play?.mode === 'self' && play.key === sw.key) retimeIn(sw);
+      else switchSelf(sw);
+      return;
+    }
+    if (sw.to === me) {
+      if (play?.kind === 'switch' && play.role === 'in' && play.key === sw.key) retimeIn(sw);
+      else switchIn(sw);
+      return;
+    }
+    // Still folding for the switch this one replaces: it carries on (the
+    // phone's card now coming to the newest card's scale, from where it is).
+    if (play?.kind === 'switch' && play.role === 'out') {
+      play.key = sw.key;
+      play.cutAt = sw.cutAt;
+      if (!play.cut && !reduce && phone) phoneCarry(play, sw.toRatio, performance.now(), Math.max(1, sw.relayAt - performance.now()), sw.ticketScale);
+      return;
+    }
+    switchOut(sw);
+  };
+  // A frame's beats: the relay, the carrier's cut.
+  const onBeat = (sw: DockSwitch, now: number) => {
+    const play = playRef.current;
+    if (!play || play.kind !== 'switch' || play.key !== sw.key) return;
+    if (play.role === 'in' && !play.relayed && now >= sw.relayAt) relayIn(sw, now);
+    if (play.role === 'out' && !play.cut && now >= sw.cutAt) {
+      play.cut = true;
+      const { dock } = parts();
+      dock?.setAttribute('data-cut', '');
+      dock?.removeAttribute('data-leaving');
+    }
   };
   // ── The arrival (src/lib/coverDock.ts, "The arrival") ──
   // This cover, asked for from the open map, shown from take-off but not
-  // yet seen: at `arrive.at` its ink comes up, its stub unrolls from the
-  // corner by the shield, its face opens across and its print develops in;
-  // the tab, the cue and the pad come in on the set outline.
+  // yet seen: at `inkAt` its ticket inks in beside its shield, its picture
+  // a miniature in the strip; at `expandAt` it grows open; at `tipAt` its
+  // tip pops out, and once it is down its tab and cue come in.
   const arriveIn = (arrive: DockArrive) => {
-    endSwitch();
-    const dock = dockRef.current;
-    const plate = plateRef.current;
+    settlePlay();
+    const { dock, plate } = parts();
     if (!dock || !plate) return;
-    const record = { key: arrive.key, role: 'in' as const, anims: [] as Animation[], timers: [] as number[], develop: null as Animation | null };
-    switchRef.current = record;
+    dock.removeAttribute('data-cut');
+    const play = newPlay('arrive', arrive.key, 'in', 'arrive');
     dock.setAttribute('data-switch', 'in');
-    if (reduce) {
-      endSwitch(true);
+    dock.setAttribute('data-ticket', '');
+    const form = ticketForm();
+    if (reduce || !form) {
+      settlePlay(true);
       return;
     }
-    const delay = Math.max(0, arrive.at - performance.now());
-    // Out of the hand until it starts (it is on the map, unseen).
+    // Out of the hand until it inks in (it is on the map, unseen).
     dock.setAttribute('data-arriving', '');
-    record.timers.push(window.setTimeout(() => dock.removeAttribute('data-arriving'), delay));
-    record.anims.push(dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ARRIVAL.inkMs, delay, easing: CSS_EASE.arrive, fill: 'backwards' }));
-    const own = plateSize();
-    if (own) {
-      const clip = arrivalClipFrames(own, TICKET_STUB);
-      record.anims.push(plate.animate(clip.frames, { duration: clip.ms, delay, easing: 'linear', fill: 'backwards' }));
-    }
-    // The dark card ground shows where the print has not developed yet.
-    const mat = plate.querySelector<HTMLElement>('.archive-photo-frame__mat');
-    if (mat) {
-      mat.style.clipPath = 'none';
-      mat.setAttribute('data-on', '');
-    }
-    const mine: DockEntry | null = phone ? null : coverDock.plan()?.[collection._id] ?? null;
-    developIn(record, plate, dock, mine, delay + ARRIVAL.developDelay, ARRIVAL.developMs);
-    record.timers.push(window.setTimeout(() => {
-      if (switchRef.current !== record) return;
-      dock.removeAttribute('data-switch');
-      dock.setAttribute('data-arrived', '');
-      record.timers.push(window.setTimeout(() => dock.removeAttribute('data-arrived'), SWITCH_COVER.extrasMs));
-      record.anims.forEach((anim) => anim.cancel());
-      record.anims = [];
-      if (!record.develop) switchRef.current = null;
-    }, delay + ARRIVAL.extrasAt));
+    later(play, arrive.inkAt, () => {
+      dock.removeAttribute('data-arriving');
+      play.inked = true;
+      play.relayed = true;
+    });
+    play.anims.push(startAt(dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ARRIVAL.inkMs, easing: CSS_EASE.arrive, fill: 'backwards' }), arrive.inkAt));
+    expandPlate(play, form, arrive.expandAt, true);
+    play.tip = popTip(play, arrive.tipAt);
+    openAndTip(play, { ...afterOpening(arrive.expandAt), tipAt: arrive.tipAt, extrasAt: arrive.extrasAt });
   };
-  // ── Letting go: the arrival backwards ──
+  // ── Letting go: the fold, backwards ──
   // The ticket let go (the empty map, Escape, the reader's own hand taking
-  // its place away) folds back into the corner by its shield as it fades.
-  const foldRef = useRef<Animation | null>(null);
-  const unfold = () => {
-    foldRef.current?.cancel();
-    foldRef.current = null;
+  // its place away) puts its tip back, shrinks into its ticket at its seat on
+  // the exit curve (its picture a miniature in the strip), and fades as it
+  // rides away with its shield (global.css). Mid-play, it holds where it is
+  // instead.
+  const letGo = () => {
+    const play = playRef.current;
+    if (play) {
+      if (play.role === 'in' && !play.inked) cutUnseen();
+      else freezePlay();
+      return;
+    }
+    const form = ticketForm();
+    if (reduce || !form) return;
+    const fold = newPlay('letgo', 0, 'out', 'fold');
+    const now = performance.now();
+    retractTip(fold, now);
+    foldPlate(fold, form, now + TICKET.foldAt, 'let-go');
   };
-  const foldAway = () => {
-    unfold();
-    const plate = plateRef.current;
-    const own = plateSize();
-    if (reduce || !plate || !own) return;
-    foldRef.current = plate.animate(
-      [{ clipPath: switchClip(own, own) }, { clipPath: foldClip(own, TICKET_STUB) }],
-      { duration: ARRIVAL.foldMs, easing: CSS_EASE.leave, fill: 'forwards' },
-    );
-  };
+  const onSwitchRef = useRef(onSwitch);
+  onSwitchRef.current = onSwitch;
+  const onBeatRef = useRef(onBeat);
+  onBeatRef.current = onBeat;
   const arriveInRef = useRef(arriveIn);
   arriveInRef.current = arriveIn;
-  const foldAwayRef = useRef(foldAway);
-  foldAwayRef.current = foldAway;
-  const unfoldRef = useRef(unfold);
-  unfoldRef.current = unfold;
-  const switchInRef = useRef(switchIn);
-  switchInRef.current = switchIn;
-  const switchOutRef = useRef(switchOut);
-  switchOutRef.current = switchOut;
-  const endSwitchRef = useRef(endSwitch);
-  endSwitchRef.current = endSwitch;
+  const letGoRef = useRef(letGo);
+  letGoRef.current = letGo;
+  const settlePlayRef = useRef(settlePlay);
+  settlePlayRef.current = settlePlay;
 
   useEffect(() => {
     if (!dockReady) return;
@@ -796,33 +1158,57 @@ function ArchiveChapter({
     const me = collection._id;
     let shown = false;
     let leaving = false;
-    let seenKey = 0;
+    let seenSwitch = '';
     let seenArrive = 0;
     let hiddenAt = Number.NEGATIVE_INFINITY;
     let reseatTimer = 0;
+    // Let go mid-switch, a ticket fades where it lies (it was pinned there:
+    // back on its foot it would jump), until it is put back.
+    let hold = false;
     let lastX = Number.NaN;
     let lastY = Number.NaN;
+    // Gone: once its fade is done, the ticket is put back whole for the next
+    // visit (a stub torn off for the story, a fold, a tip), unseen.
+    const reseatLater = () => {
+      window.clearTimeout(reseatTimer);
+      hiddenAt = performance.now();
+      reseatTimer = window.setTimeout(() => {
+        if (dockShownRef.current) return;
+        hold = false;
+        settlePlayRef.current();
+        reseatRef.current();
+      }, DOCK_FADE_MS + 60);
+    };
     const off = coverDock.subscribe((frame) => {
       const at = frame.at === me;
       const sw = frame.switch ?? null;
-      const out = !at && !!sw && sw.from === me;
-      // A new switch this cover is part of.
-      if (sw && sw.key !== seenKey && (sw.to === me || sw.from === me)) {
-        seenKey = sw.key;
-        if (sw.to === me && at) switchInRef.current(sw.from, sw.key);
-        else if (sw.from === me) switchOutRef.current(sw.to, sw.key);
+      const now = performance.now();
+      // A new switch (or a new timing of it), or none: this cover's part.
+      const heard = sw ? `${sw.key}.${sw.rev}` : '';
+      if (heard !== seenSwitch) {
+        seenSwitch = heard;
+        onSwitchRef.current(sw, at, frame.at);
       }
+      // Its beats, in this frame, for every cover at once.
+      if (sw) onBeatRef.current(sw, now);
+      const out = !at && !!sw && sw.from === me;
       if (out !== leaving) {
         leaving = out;
         if (out) {
-          dock.setAttribute('data-leaving', '');
+          if (playRef.current?.role !== 'out' || !playRef.current.cut) dock.setAttribute('data-leaving', '');
         } else {
-          // Its switch is over: it goes from under the new ticket at once —
-          // no fade, which would show its whole outline for a moment.
-          dock.setAttribute('data-cut', '');
-          if (switchRef.current?.role === 'out') endSwitchRef.current();
           dock.removeAttribute('data-leaving');
-          requestAnimationFrame(() => requestAnimationFrame(() => dock.removeAttribute('data-cut')));
+          // Its switch is over: gone at once (it was cut at the relay) —
+          // unless it is the cover in hand again, or was let go while still
+          // folding (it fades as it folds, where it lies).
+          const play = playRef.current;
+          if (!at && play?.role === 'out' && !play.cut) {
+            hold = true;
+            reseatLater();
+          } else if (!at) {
+            dock.setAttribute('data-cut', '');
+            requestAnimationFrame(() => requestAnimationFrame(() => dock.removeAttribute('data-cut')));
+          }
         }
       }
       if (at !== shown) {
@@ -830,39 +1216,42 @@ function ArchiveChapter({
         dockShownRef.current = at;
         window.clearTimeout(reseatTimer);
         if (at) {
-          unfoldRef.current();
-          const arrive = frame.arrive;
-          if (arrive && arrive.id === me && arrive.key !== seenArrive) {
-            seenArrive = arrive.key;
-            arriveInRef.current(arrive);
-          }
+          hold = false;
+          // In hand again (the cover just left, cut at its relay, chosen
+          // back): nothing of that cut outlives it — a let-go of it later
+          // must fold and fade, not vanish.
+          dock.removeAttribute('data-cut');
           dock.setAttribute('data-at', '');
           const appeared = dockAppearRef.current;
           dockAppearRef.current = null;
           appeared?.();
         } else {
           dock.removeAttribute('data-at');
-          dock.removeAttribute('data-arriving');
-          // Let go while arriving: nothing of the switch stays.
-          if (switchRef.current?.role === 'in') endSwitchRef.current();
-          // Let go (not handed on in a switch): it folds back into the
-          // corner by its shield as it fades.
-          if (!out) foldAwayRef.current();
-          hiddenAt = performance.now();
-          // Gone: once its fade is done, the ticket is put back whole for
-          // the next visit (a stub torn off for the story).
-          reseatTimer = window.setTimeout(() => {
-            unfoldRef.current();
-            reseatRef.current();
-          }, DOCK_FADE_MS + 60);
+          // Let go (not handed on in a switch, not cut unseen): it folds
+          // back into its ticket as it fades — or, a ticket mid-switch
+          // (pinned), holds as it is, where it lies.
+          if (!out && !dock.hasAttribute('data-cut')) {
+            const play = playRef.current;
+            if (play?.kind === 'switch' && play.role === 'in' && play.inked) hold = true;
+            letGoRef.current();
+          }
+          reseatLater();
         }
+      }
+      // A ticket arriving from the open map, once per key.
+      const arrive = frame.arrive;
+      if (at && arrive && arrive.id === me && arrive.key !== seenArrive) {
+        seenArrive = arrive.key;
+        arriveInRef.current(arrive);
       }
       // The phone's card is dealt at the foot of the screen: nothing to place.
       if (phone) return;
-      // Hidden, its fade long done: nothing to place until it shows again.
-      if (!at && !out && performance.now() - hiddenAt > DOCK_FADE_MS + 120) return;
-      // Pinned through a switch (where the ticket lies), else at its foot.
-      const point = frame.pin && (at || out) ? frame.pin : frame.points[me];
+      // Hidden, its fade long done (or fading where it lies): nothing to
+      // place until it shows again.
+      if (hold || (!at && !out && performance.now() - hiddenAt > DOCK_FADE_MS + 120)) return;
+      // Through a switch, where its ticket lies; pinned (the camera brought
+      // back onto it); else at its foot.
+      const point = frame.pins?.[me] ?? (frame.pin && (at || out) ? frame.pin : frame.points[me]);
       if (!point || (point.x === lastX && point.y === lastY)) return;
       lastX = point.x;
       lastY = point.y;
@@ -872,15 +1261,16 @@ function ArchiveChapter({
       off();
       window.clearTimeout(reseatTimer);
       dockShownRef.current = false;
-      endSwitchRef.current();
+      settlePlayRef.current();
     };
   }, [collection._id, dockReady, phone]);
 
   // ── The stub hand-off (src/lib/explorer.ts) ──
   // Stop 01 on an entry the entrance brings the stub for: the photograph
-  // shows, the stub and its caret wait (global.css `[data-stub-awaited]`),
-  // and show inside STUB_LANDED_EVENT itself — the frame the entrance's
-  // copy goes.
+  // shows, the stub and the tip wait (global.css `[data-stub-awaited]`), and
+  // show inside STUB_LANDED_EVENT itself — the frame the entrance's copy
+  // goes — the tip coming out of its corner as it lands (its pop set up
+  // before the stub shows, so no frame has it out).
   useLayoutEffect(() => {
     const plate = plateRef.current;
     if (!plate) return;
@@ -889,10 +1279,15 @@ function ArchiveChapter({
       return;
     }
     plate.setAttribute('data-stub-awaited', '');
-    const landed = () => plate.removeAttribute('data-stub-awaited');
+    const landed = () => {
+      if (!reduce) popTip(null, performance.now());
+      plate.removeAttribute('data-stub-awaited');
+    };
     window.addEventListener(STUB_LANDED_EVENT, landed);
     return () => window.removeEventListener(STUB_LANDED_EVENT, landed);
-  }, [dockReady, stubAwaited]);
+    // popTip reads only refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dockReady, reduce, stubAwaited]);
 
   const tearFrameRef = useRef<TearFrame>({ w: 0, h: 0, vw: 0 });
   // The stub's box, for its tear (the score turned round).
@@ -1059,14 +1454,12 @@ function ArchiveChapter({
   // goes into the story's rail (MagazineLayout, KeptStub) and back onto this
   // ticket at the close. Under reduced motion the stub fades in place.
   // Mid-switch, the switch ends first (the ticket under this one must not
-  // show through the tear's gap; this print is printed whole).
+  // show through the tear's gap): the cover whole, printed, its tip at rest
+  // (no pop).
   const tearStubThen = (go: () => void) => {
     if (!ticket || !dockShownRef.current) return false;
     if (stubTornRef.current) return false;
-    if (switchRef.current) {
-      switchRef.current.develop?.finish();
-      endSwitch(true);
-    }
+    if (playRef.current) settlePlay(true);
     coverDock.settle();
     stubTornRef.current = true;
     setStubTorn(true);
@@ -1132,11 +1525,13 @@ function ArchiveChapter({
   // open map, none on the entry):
   //  - At take-off the board is SET to the stop being left (`primeFlap`), so
   //    the ticket reads "MIAMI" until it turns — the name it lands with is
-  //    never shown settled first and turned back. It turns as soon as its
-  //    cover is up: at once on a switch (the ticket in hand becomes this
-  //    one where it lies, and the board turns while the planet does, like
-  //    the reference's), or when it appears at its shield after a flight
-  //    from the open map (at most FLAP_DOCK_WAIT_MS after the landing).
+  //    never shown settled first and turned back. On a switch it ROLLS at
+  //    the relay, as its ticket is laid on the one leaving (地点文字滚动: the
+  //    old name up out of the rule, the new one up into it — the flap's
+  //    turning capitals read as 乱码 on a small ticket — down inside the
+  //    transit, while the planet turns: the switch's `relayIn`, `runRoll`);
+  //    failing that, it turns as it appears at its shield (at most
+  //    FLAP_DOCK_WAIT_MS after the landing).
   //  - A take-off anywhere else puts this board back; so does a landing
   //    elsewhere, and FLAP_PRIME_MAX_MS with no turn at all.
   // Never on a first paint, a restore, a snap or the entry (whose ticket
@@ -1171,7 +1566,7 @@ function ArchiveChapter({
       pending = null;
       unprime();
     };
-    const start = () => {
+    const start = (roll?: { budget: number }) => {
       const root = signRef.current;
       const from = pending;
       cancelWait();
@@ -1180,10 +1575,13 @@ function ArchiveChapter({
       window.clearTimeout(primeTimer);
       primeTimer = 0;
       stopFlap?.();
-      // runFlap takes the primed board over where it stands.
+      // Either takes the primed board over where it stands. A switch's
+      // ticket rolls its name in (地点文字滚动: on a small ticket the flap's
+      // turning capitals read as 乱码); a landing with no switch turns it.
       clearPrime = null;
-      stopFlap = runFlap(root, from);
+      stopFlap = roll ? runRoll(root, from, roll) : runFlap(root, from);
     };
+    relayFlapRef.current = (budget) => start({ budget });
     const onDepart = (event: Event) => {
       const detail = (event as CustomEvent<SignTrip>).detail;
       reset();
@@ -1195,10 +1593,7 @@ function ArchiveChapter({
         pending = null;
         unprime();
       }, FLAP_PRIME_MAX_MS);
-      // A switch shows this cover at once (the next published frame); from
-      // the open map it appears at the landing.
-      if (dockShownRef.current) start();
-      else dockAppearRef.current = start;
+      // It turns at the relay (the switch's `relayIn`), not before.
     };
     const onArrive = (event: Event) => {
       const detail = (event as CustomEvent<SignTrip>).detail;
@@ -1221,6 +1616,7 @@ function ArchiveChapter({
     return () => {
       window.removeEventListener('atlas:depart', onDepart);
       window.removeEventListener('atlas:arrive', onArrive);
+      relayFlapRef.current = null;
       reset();
     };
   }, [collection._id, docked, reduce, ticket]);
@@ -1296,6 +1692,13 @@ function ArchiveChapter({
   // (The one rule the dock sizes a docked cover by, src/lib/coverDock.ts.)
   const coverRatio = useMemo(() => coverRatioOf(coverBase), [coverBase]);
   const plateRatio = variant === 'cover' ? coverRatio : null;
+  // A docked photograph is exactly its planned size (the plan's, or the
+  // phone card's: whole px, its own ratio to within a pixel), so the ticket
+  // it folds into, and the stub the entrance lands on, are the plan's to the
+  // pixel.
+  const frameRatio = dockEntry && !phone
+    ? `${dockEntry.photoW} / ${dockEntry.photoH}`
+    : phone && card ? `${card.photoW} / ${card.photoH}` : String(plateRatio);
   // What the stub prints: only fields the archive already holds. No invented
   // codes. Space Grotesk has tabular figures, so the rows line up.
   const stubRows = useMemo(() => {
@@ -1372,15 +1775,12 @@ function ArchiveChapter({
       onPointerEnter={handlePhotoPointerEnter}
       onPointerMove={handlePhotoPointerMove}
       onPointerLeave={handlePhotoPointerLeave}
-      style={plateRatio ? { aspectRatio: String(plateRatio) } : undefined}
+      style={plateRatio ? { aspectRatio: frameRatio } : undefined}
       className={`archive-photo-frame relative ${plateRatio ? '' : aspectClass} overflow-hidden`}
     >
-      {/* A switch's mat: the card's dark ground where this photograph reaches
-          past the one it replaces, until it has developed there (see "The
-          switch"). Nothing at rest. */}
-      {ticket && <i className="archive-photo-frame__mat" aria-hidden="true" />}
-      {/* The print: what a switch develops in (its mask, written only while
-          it runs). */}
+      {/* The print: what a switch shrinks into the ticket's strip and grows
+          back out of it, a miniature of the cover (its transform and ink
+          written only while it runs). */}
       <div className="archive-photo-frame__print absolute inset-0">
         {/* The hand's layer: only a pointer over the photograph moves it (the
             hover breath and parallax). Nothing on the page's scroll does. */}
@@ -1415,7 +1815,7 @@ function ArchiveChapter({
 
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
+        className="archive-plate__view pointer-events-none absolute bottom-5 right-[max(1.25rem,env(safe-area-inset-right))] z-10 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/14 bg-[#171b15]/72 px-4 font-ui text-[9px] uppercase tracking-[0.1em] text-white/76 shadow-[0_10px_28px_rgba(7,9,6,0.18)] lg:hidden"
       >
         View story <ArrowRight size={12} />
       </span>
@@ -1606,6 +2006,24 @@ function ArchiveChapter({
       onKeyDown: _onKeyDown,
       ...coverPointer
     } = interactive;
+    // While it is a ticket (a switch, an arrival) the cover answers nothing:
+    // no give, and a click is swallowed — never a tear, and never through to
+    // the map, where a click lets the place go. It answers again once open.
+    const ticketed = () => dockRef.current?.hasAttribute('data-ticket') ?? false;
+    const dockPointer = {
+      ...coverPointer,
+      onPointerDownCapture: (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (ticketed()) return;
+        coverPointer.onPointerDownCapture(event);
+      },
+      onClick: (event: React.MouseEvent) => {
+        if (ticketed()) {
+          event.stopPropagation();
+          return;
+        }
+        coverPointer.onClick();
+      },
+    };
     const ticketPlate = (
       <div
         ref={plateRef}
@@ -1632,9 +2050,9 @@ function ArchiveChapter({
             shield the map signs this place with — its state's two letters,
             its stop number — beside "Stop / 06", and the place's name set
             big inside a guide sign's enamel rule, on the chapter's own card.
-            On a switch the shield and the name turn into place like a
-            departure board while the planet turns (`atlas:depart`), the
-            card easing from the stock it leaves. Below the sign, the
+            On a switch the name rolls into place while the planet turns
+            (`atlas:depart`, `runRoll`), the card easing from the stock it
+            leaves. Below the sign, the
             admission rows; at the foot, the way on: "Next stop". The seat
             is the stub's own box: while the stub is torn off (opening the
             story) it clips at the seam, so nothing of the stub swings into
@@ -1717,29 +2135,12 @@ function ArchiveChapter({
         </aside>
         </div>
 
-        {/* The tickets still bound under this one: the pad thins as the
-            archive is read, each sheet the next chapter's own card, solid
-            (at half strength and less they read as smears on the lit map),
-            the next one on top and the later ones' edges under it. */}
-        {chapterTotal != null && chapterTotal - index - 1 > 0 && (
-          <span className="archive-ticket-pad" aria-hidden="true">
-            {Array.from({ length: Math.min(3, chapterTotal - index - 1) }, (_, sheet) => (
-              <i
-                key={sheet}
-                style={{
-                  top: sheet * 4,
-                  zIndex: 3 - sheet,
-                  ...(padStocks?.[sheet] ? { background: `color-mix(in oklab, ${padStocks[sheet]} 72%, #0e110c)` } : null),
-                }}
-              />
-            ))}
-          </span>
-        )}
-
-        {/* The caret: the plate's corner nearest its shield points at it,
-            as the reference's board points at its stop — part of the card
-            (the photograph's dark edge or the stub's stock, whichever half
-            that corner is), never a line across the gap. */}
+        {/* The tip (尖): the plate's corner nearest its shield points at
+            it, as the reference's board points at its stop — part of the
+            card (the photograph's dark edge or the stub's stock, whichever
+            half that corner is), never a line across the gap. Through a
+            switch it goes back into that corner first and comes out of it
+            last, once the cover is open (尖…等封面切换过去之后再冒出来). */}
         <i
           className="archive-plate__caret"
           data-half={quadrant === 'tr' || quadrant === 'br' ? 'face' : 'stub'}
@@ -1753,8 +2154,10 @@ function ArchiveChapter({
     // region's tab on the edge away from the shield.
     // On a phone the card is dealt at the foot of the screen, whole, scaled
     // to fit across (never below PHONE_CARD.minScale, src/lib/explorer.ts).
+    // (The phone's tab is set back to the screen's size — its state a
+    // constant 15px however far the card is scaled: `--card-scale`.)
     const seatStyle = phone && card
-      ? { transform: `scale(${card.scale})` }
+      ? ({ transform: `scale(${card.scale})`, '--card-scale': card.scale } as CSSProperties)
       : dockEntry ? { left: dockEntry.offset.x, top: dockEntry.offset.y } : undefined;
     const dock = dockReady && dockHost && (phone ? card : dockEntry) ? createPortal(
       <div
@@ -1762,22 +2165,30 @@ function ArchiveChapter({
         className={`archive-dock${phone ? ' archive-dock--phone' : ''}`}
         data-cover-for={id}
         data-quadrant={phone ? 'phone' : quadrant}
+        // Where "Open story" hangs: off the place's own route (coverDock
+        // `cueSlot`).
+        data-cue={!phone && dockEntry ? `${dockEntry.cue.edge}-${dockEntry.cue.side}` : undefined}
       >
         <div
           className="archive-dock__seat"
           style={seatStyle}
         >
-          {regionTab && !phone && (
-            <div className="archive-dock__tab font-ui" data-side={side} aria-hidden="true">
+          {/* The state, boxed in the sign's own enamel rule (州名可以框起来，
+              更醒目): outlined, no fill, no lime. The region's figures ride
+              on its first place's tab. */}
+          {stateTab && (
+            <div className="archive-dock__tab font-ui" data-side={phone ? 'left' : side} aria-hidden="true">
               <span className="archive-dock__tab-label">Region</span>
-              <span className="archive-dock__tab-region">{regionTab.region}</span>
-              <span className="archive-dock__tab-figures">
-                {regionTab.places} places · {regionTab.frames} frames
-              </span>
+              <span className="archive-dock__tab-state">{stateTab.state}</span>
+              {stateTab.places != null && (
+                <span className="archive-dock__tab-figures">
+                  {stateTab.places} places · {stateTab.frames} frames
+                </span>
+              )}
             </div>
           )}
           <motion.div
-            {...coverPointer}
+            {...dockPointer}
             aria-hidden="true"
             style={{ scale: pressGive.scale }}
             className="archive-dock__cover group relative cursor-pointer"

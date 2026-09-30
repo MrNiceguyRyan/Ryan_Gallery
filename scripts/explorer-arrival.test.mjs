@@ -1,110 +1,102 @@
 // Run offline: node --experimental-strip-types --test scripts/explorer-arrival.test.mjs
 // Owner, 2026-09-29: 当地球页空置的时候，点开一个地点的动效和封面出现动效很差 (the
-// arrival from the open map), and 右下角这些按钮太多了，没有美感 (the controls).
+// arrival from the open map, now in the switch's own language: the ticket,
+// the opening, then the tip — 先缩小成类似机票那样…到位之后展开封面，然后…尖冒出来),
+// and 右下角这些按钮太多了，没有美感 (the controls).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { ARRIVAL, DOCK, arrivalClipFrames, arrivalDelay, foldClip, switchClip } from '../src/lib/coverDock.ts';
+import { ARRIVAL, TICKET, TICKET_EXPAND_MS, arrivalSchedule } from '../src/lib/coverDock.ts';
 import { EASE, bezierFn, voyageEase, DUR_MS } from '../src/lib/motion.ts';
 import { SWITCH } from '../src/lib/explorerCamera.ts';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-const insets = (clip) => clip.match(/inset\(([^)]+)\)/)[1].split(' ').map((v) => parseFloat(v));
 
-test('the ticket starts as the camera settles: ARRIVAL.leadMs before the touchdown, never before the click reads', () => {
-  // The turn (1.4 s on the reference's curve): the ticket starts 880 ms in,
-  // when the planet has turned ~90% of its way.
+test('the arrival in the switch\'s language: the ticket inks in, is printed, opens by the touchdown, then its tip', () => {
+  // Nowhere to go (the camera all but there): at once past the shield's lift.
+  // The tab and the cue wait for the tip to be down (TICKET.extrasGap).
+  const extras = TICKET.tipInMs + TICKET.extrasGap;
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, 3), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, Number.NaN), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
+  // A real flight: open as the camera settles, the tip out at the touchdown.
+  assert.deepEqual(arrivalSchedule(1800, 500), { inkAt: 980, expandAt: 1340, tipAt: 1800, extrasAt: 1800 + extras });
   const turn = bezierFn(EASE.turn);
-  const onTurn = arrivalDelay(SWITCH.ms, 400);
-  assert.equal(onTurn, SWITCH.ms - ARRIVAL.leadMs);
-  assert.ok(turn(onTurn / SWITCH.ms) >= 0.85, `turn at ${turn(onTurn / SWITCH.ms)}`);
-  // A far leg on the house's sine (up to SWITCH.farMaxMs): past four fifths.
-  const far = arrivalDelay(SWITCH.farMaxMs, 1600);
-  assert.ok(voyageEase(far / SWITCH.farMaxMs) >= 0.8);
-  // Nowhere to go (the camera is all but there): at once after the shield's
-  // lift, not after a turn of nothing.
-  assert.equal(arrivalDelay(SWITCH.ms, 3), ARRIVAL.minDelayMs);
-  assert.equal(arrivalDelay(SWITCH.ms, Number.NaN), ARRIVAL.minDelayMs);
-  // Never sooner than the floor, whatever the flight.
-  assert.equal(arrivalDelay(300, 500), ARRIVAL.minDelayMs);
-  assert.ok(ARRIVAL.minDelayMs >= DUR_MS.in, 'the shield lifts first');
-});
-
-test('it is whole soon after the touchdown: outline, extras and print', () => {
-  const land = SWITCH.ms;
-  const start = arrivalDelay(land, 400);
-  const outline = ARRIVAL.openDelay + ARRIVAL.openMs;
-  assert.ok(start + outline <= land + 400, 'the outline is set within 0.4 s of the touchdown');
-  assert.ok(ARRIVAL.extrasAt >= outline, 'the tab, cue and pad wait for the outline');
-  assert.ok(start + ARRIVAL.developDelay + ARRIVAL.developMs <= land + 800, 'the print is whole within 0.8 s of it');
-  // The stub unrolls before the face is half open (the sign comes first).
-  assert.ok(ARRIVAL.unrollMs <= ARRIVAL.openDelay + ARRIVAL.openMs / 2);
-  // The ink comes up quickly: no hard first edge, no slow fade either.
+  const onTurn = arrivalSchedule(SWITCH.ms, 400);
+  assert.equal(onTurn.tipAt, SWITCH.ms, 'the tip comes out as the camera touches down');
+  assert.ok(turn(onTurn.expandAt / SWITCH.ms) >= 0.85, `turn at ${turn(onTurn.expandAt / SWITCH.ms)}`);
+  const far = arrivalSchedule(SWITCH.farMaxMs, 1600);
+  assert.ok(voyageEase(far.expandAt / SWITCH.farMaxMs) >= 0.8);
+  // Never sooner than the floor, whatever the flight: the shield lifts first.
+  assert.equal(arrivalSchedule(300, 500).inkAt, ARRIVAL.minDelayMs);
+  assert.ok(ARRIVAL.minDelayMs >= DUR_MS.in);
+  // The ticket (its picture a miniature in the strip) is on the map before
+  // it opens, its ink quick (no hard first edge, no slow fade), its opening
+  // the switch's.
+  for (const land of [300, 900, 1400, 2000, 2600]) {
+    const s = arrivalSchedule(land, 400);
+    assert.equal(s.expandAt - s.inkAt, ARRIVAL.printMs);
+    assert.equal(s.tipAt - s.expandAt, TICKET_EXPAND_MS + TICKET.tipGap);
+  }
   assert.ok(ARRIVAL.inkMs >= 120 && ARRIVAL.inkMs <= 240);
-  // Letting go folds back as it fades (the dock's own fade).
-  assert.equal(ARRIVAL.foldMs, DUR_MS.out);
+  // No unroll or open of its own any more: the switch's ticket opens it.
+  for (const gone of ['leadMs', 'unrollMs', 'openDelay', 'openMs', 'developDelay', 'developMs', 'extrasAt', 'foldMs']) {
+    assert.equal(ARRIVAL[gone], undefined, gone);
+  }
 });
 
-test('the outline unrolls from the corner by the shield: the stub down, then the face across', () => {
-  const own = { w: 900, h: 480 };
-  const { frames, ms } = arrivalClipFrames(own, DOCK.stub, 20);
-  assert.equal(ms, ARRIVAL.openDelay + ARRIVAL.openMs);
-  assert.equal(frames[0].offset, 0);
-  assert.equal(frames.at(-1).offset, 1);
-  // The first frame: only the pad strip over the stub's top (the caret, by
-  // the shield); the last: the whole plate, exactly as a switch leaves it.
-  const [top0, right0, bottom0, left0] = insets(frames[0].clipPath);
-  assert.equal(top0, -12);
-  assert.equal(right0, -12);
-  assert.equal(bottom0, own.h);
-  assert.equal(left0, own.w - DOCK.stub);
-  assert.equal(frames.at(-1).clipPath, switchClip(own, own));
-  // Monotonic: it only ever opens.
-  let prev = insets(frames[0].clipPath);
-  frames.slice(1).forEach(({ clipPath }) => {
-    const now = insets(clipPath);
-    assert.ok(now[2] <= prev[2] + 1e-9 && now[3] <= prev[3] + 1e-9, clipPath);
-    prev = now;
-  });
-  // Before the face opens, only the stub's width is seen.
-  frames.filter((f) => f.offset * ms < ARRIVAL.openDelay).forEach((f) => assert.equal(insets(f.clipPath)[3], own.w - DOCK.stub));
-  // A plate narrower than a stub (never, but) is not clipped past itself.
-  const thin = arrivalClipFrames({ w: 120, h: 300 }, DOCK.stub, 4);
-  assert.equal(insets(thin.frames[0].clipPath)[3], 0);
+test('letting go runs the fold backwards: the tip in, the ticket folded at its seat, the ink gone by 520 (360 by the reader\'s hand)', () => {
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const css = source('src/styles/global.css');
+  assert.match(chapter, /const DOCK_FADE_MS = 520;/);
+  assert.match(css, /\.archive-dock \{[^}]*transition: opacity var\(--dur-swap\) var\(--ease-fade\) 200ms, visibility 0s linear 520ms;/);
+  assert.match(css, /\.archive-dock-host\[data-let-go\] \.archive-dock:not\(\[data-at\]\):not\(\[data-leaving\]\) \{\s*transition: opacity var\(--dur-in\) var\(--ease-fade\) 160ms, visibility 0s linear 360ms;/);
+  assert.equal(DUR_MS.swap + 200, 520);
+  assert.equal(DUR_MS.in + 160, 360);
+  const letGo = chapter.slice(chapter.indexOf('const letGo = () => {'), chapter.indexOf('const onSwitchRef'));
+  assert.match(letGo, /retractTip\(fold, now\);/);
+  // The fold shrinks the picture into the strip with the plate (no dark
+  // ground: foldPlate runs the print's frames too).
+  assert.match(letGo, /foldPlate\(fold, form, now \+ TICKET\.foldAt, 'let-go'\);/);
+  assert.doesNotMatch(letGo, /printToMat|\bmat\b/);
+  // Under reduced motion nothing folds (the dock is hidden at once).
+  assert.match(letGo, /if \(reduce \|\| !form\) return;/);
+  // The tab and the cue fade with the tip going back.
+  assert.match(css, /\.archive-dock:is\(\[data-switch\], :not\(\[data-at\]\)\) :is\(\.archive-dock__tab, \.archive-plate__view\) \{\s*opacity: 0;\s*transition: opacity var\(--dur-flick\) var\(--ease-fade\);/);
 });
 
-test('letting go folds the ticket back into the same corner', () => {
-  const own = { w: 900, h: 480 };
-  const [top, right, bottom, left] = insets(foldClip(own, DOCK.stub));
-  assert.equal(top, -12);
-  assert.equal(right, -12);
-  assert.equal(left, own.w - DOCK.stub);
-  assert.ok(Math.abs(bottom - (own.h * 2) / 3) < 0.1);
-});
-
-test('wiring: the atlas asks for the arriving ticket at take-off and says when it starts', () => {
+test('wiring: the atlas asks for the arriving ticket at take-off and says when it inks in, opens, puts its tip out', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   const home = source('src/components/home/HomePage.tsx');
   const css = source('src/styles/global.css');
-  // From the open map (nothing shown), not under reduced motion.
+  // From the open map (nothing shown — or a ticket not inked in yet), not
+  // under reduced motion.
+  assert.match(atlas, /if \(shown && arriveWas && arriveWas\.id === shown && now < arriveWas\.inkAt\) shown = null;/);
   assert.match(atlas, /const arriving = next\.kind === 'fly' && !shown && !reducedMotion;/);
   assert.match(atlas, /carry: \(switching \|\| arriving\) && !reducedMotion,/);
   // Not pinned: it rides in with its shield.
   assert.match(atlas, /\} else if \(arriving\) \{\s+(?:\/\/[^\n]*\n\s+)*pinRef\.current = null;/);
   // Timed off the flight's own landing, derived.
   assert.match(atlas, /const landMs = durationMs \+ \(flying\.tip\?\.ms \?\? 0\);/);
-  assert.match(atlas, /at: performance\.now\(\) \+ arrivalDelay\(landMs, travelPx\)/);
+  assert.match(atlas, /const beats = arrivalSchedule\(landMs, travelPx\);/);
+  assert.match(atlas, /inkAt: now \+ beats\.inkAt, expandAt: now \+ beats\.expandAt, tipAt: now \+ beats\.tipAt, extrasAt: now \+ beats\.extrasAt/);
   // Every flight clears the last one's arrival; it is published with the frame.
-  assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, arrive \}\);/);
+  assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, pins, arrive \}\);/);
   // The chapter plays it once per key, and folds a ticket let go.
-  assert.match(chapter, /if \(arrive && arrive\.id === me && arrive\.key !== seenArrive\) \{/);
-  assert.match(chapter, /if \(!out\) foldAwayRef\.current\(\);/);
-  // Its words come in with it.
+  assert.match(chapter, /if \(at && arrive && arrive\.id === me && arrive\.key !== seenArrive\) \{/);
+  assert.match(chapter, /if \(!out && !dock\.hasAttribute\('data-cut'\)\) \{\s+const play = playRef\.current;\s+if \(play\?\.kind === 'switch' && play\.role === 'in' && play\.inked\) hold = true;\s+letGoRef\.current\(\);/);
+  const arriveIn = chapter.slice(chapter.indexOf('const arriveIn = ('), chapter.indexOf('const letGo = () => {'));
+  assert.match(arriveIn, /expandPlate\(play, form, arrive\.expandAt, true\);/);
+  assert.match(arriveIn, /popTip\(play, arrive\.tipAt\)/);
+  assert.match(arriveIn, /startAt\(dock\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: ARRIVAL\.inkMs,/);
+  // Its words come in as it opens.
+  assert.match(home, /arrive\.expandAt - performance\.now\(\)/);
   assert.match(home, /'--place-delay': `\$\{railDelay \+ ARRIVAL\.inkMs\}ms`/);
   assert.match(css, /opacity 560ms var\(--ease-arrive\) var\(--place-delay, var\(--dur-in\)\)/);
-  // Out of the hand until it starts.
+  // Out of the hand until it inks in; swallowed while a ticket.
   assert.match(css, /\.archive-dock\[data-arriving\] \.archive-dock__seat \{\s*pointer-events: none;/);
+  assert.match(chapter, /const ticketed = \(\) => dockRef\.current\?\.hasAttribute\('data-ticket'\) \?\? false;/);
+  assert.match(chapter, /if \(ticketed\(\)\) \{\s+event\.stopPropagation\(\);\s+return;/);
 });
 
 test('the controls are one bar: every function kept, labelled, reachable', () => {

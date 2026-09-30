@@ -19,8 +19,13 @@ import {
   codePlan,
   flapGlyph,
   flapNumber,
+  FLAP_MIN_TICK,
+  ROLL,
+  TICKET_NAME_LINE,
   flapPlan,
+  rollMs,
   nameStep,
+  signLines,
   shieldForm,
   signNameSize,
   stackShields,
@@ -220,6 +225,83 @@ test('the split-flap lands left to right, inside DUR.scene', () => {
   assert.equal(long.length, 40);
 });
 
+test('a timed flap lands inside its budget: at once, down inside it, never a blur', () => {
+  // A flap timed to a moment (FlapTiming: { delay: 0, budget }) — a switch's
+  // ticket rolls its name instead (runRoll, below), the flap stays for a
+  // landing that turns its board; the plan holds for any budget, 541 ms here
+  // (the 1400 turn's transit).
+  for (const name of ['MIAMI', 'ORLANDO', 'PAGE', 'ZION', 'BRYCE CANYON', 'NEW YORK']) {
+    const cells = name.replace(/\s+/g, '').length;
+    const plan = flapPlan(cells, { delay: 0, budget: 541 });
+    assert.equal(plan[0].start, 0);
+    assert.ok(plan.at(-1).land <= 541, `${name} lands at ${plan.at(-1).land}`);
+    const tick = ((plan.at(-1).land - plan.at(-1).start) / plan.at(-1).flips);
+    assert.ok(tick >= FLAP_MIN_TICK - 0.5, `${name}: a flip every ${tick.toFixed(1)} ms`);
+    plan.forEach((step) => assert.equal(nameStep(step, 0).start, 0));
+  }
+  // Twelve letters (with the space): compressed, floored at the tick.
+  const twelve = flapPlan(12, { delay: 0, budget: 541 });
+  assert.ok(twelve.at(-1).land <= 541);
+  assert.ok(FLAP_MIN_TICK >= 16);
+  // A budget too short for the floor lands late rather than blurring.
+  const tight = flapPlan(12, { delay: 0, budget: 100 });
+  assert.ok(tight.at(-1).land > 100);
+  // The defaults are unchanged.
+  assert.deepEqual(flapPlan(11), flapPlan(11, {}));
+  assert.equal(flapPlan(11)[0].start, FLAP.delay);
+});
+
+test('a switch ROLLS its ticket\'s name: the old up out of the rule, the new up into it, down inside the transit', async () => {
+  // 地点文字滚动: on a small ticket the flap's turning capitals read as 乱码
+  // (XHIEFCB, BRARS ZRFRBH). The roll is one calm move, on EASE.turn.
+  const { TICKET } = await import('../src/lib/coverDock.ts');
+  assert.ok(ROLL.ms >= 280 && ROLL.ms <= 360);
+  assert.ok(ROLL.ms <= TICKET.transitMinMs, 'down inside the shortest transit');
+  assert.equal(rollMs(), ROLL.ms);
+  assert.equal(rollMs(541), ROLL.ms);
+  assert.equal(rollMs(200), 200);
+  assert.equal(rollMs(10), ROLL.minMs);
+  assert.equal(rollMs(Number.NaN), ROLL.ms);
+  assert.equal(TICKET_NAME_LINE, TICKET.nameLine);
+  const shield = source('src/components/home/RouteShield.tsx');
+  const roll = shield.slice(shield.indexOf('export function runRoll('), shield.indexOf('/** A shield\'s drawing'));
+  // The name: the new cells rise from below the box as it stands at the
+  // start (the taller of the two names, by their words: NEW YORK is two
+  // lines), the old name set whole slides up out of it, the box clipped.
+  assert.match(roll, /const lines = Math\.max\(signLines\(words\.join\(' '\)\), signLines\(\(from\.name \?\? ''\)\.trim\(\) \|\| 'X'\)\);/);
+  assert.match(roll, /overlay\.animate\(\[\{ transform: 'translateY\(0\)' \}, \{ transform: 'translateY\(-110%\)' \}\], \{ duration: ms, easing: CSS_EASE\.turn/);
+  assert.match(roll, /box\.style\.clipPath = 'inset\(0 -0\.3em\)';/);
+  // A state that changes fades in: no letters that are no state.
+  assert.match(roll, /if \(role === 'code'\) \{\s+chars\.forEach\(\(el\) => anims\.push\(el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/);
+  assert.doesNotMatch(roll, /flapGlyph/);
+  // The number counts through the real stops, down as the name reads.
+  assert.match(roll, /flapNumber\(final, leaving, t, 0, ms \/ 2\)/);
+});
+
+test('the sign\'s lines, and the ticket they set: 144 for one, 172 for two, from the CSS itself', async () => {
+  assert.deepEqual(['Miami', 'Orlando', 'Page', 'Zion', 'Bryce Canyon', 'New York'].map(signLines), [1, 1, 1, 1, 2, 2]);
+  assert.equal(signLines('Massachusetts'), 1, 'one word never wraps (its size comes down instead)');
+  const { TICKET, ticketH, archiveTicketH } = await import('../src/lib/coverDock.ts');
+  assert.equal(ticketH(1), 144);
+  assert.equal(ticketH(2), 172);
+  assert.equal(archiveTicketH(['Miami', 'Orlando', 'Page', 'Zion', 'Bryce Canyon', 'New York'].map((name) => ({ name, lines: signLines(name) }))), 172);
+  // TICKET.head is the sign as global.css sets it: the stub's top padding
+  // less the sign's margin, the sign's padding, the tallest shield row, the
+  // gap, and 12 px of card under the rule.
+  const css = source('src/styles/global.css');
+  const stubPad = Number(css.match(/\.archive-ticket-stub \{[^}]*padding: (\d+)px/)[1]);
+  const sign = css.match(/\.archive-ticket-sign \{([^}]*)\}/)[1];
+  const marginTop = Number(sign.match(/margin: (-?\d+)px/)[1]);
+  const [padTop, , padBottom] = sign.match(/padding: (\d+)px (\d+)px (\d+)px/).slice(1).map(Number);
+  const gap = Number(sign.match(/gap: (\d+)px/)[1]);
+  const shieldPx = Number(css.match(/\.archive-ticket-sign__shield \{\s*--shield: (\d+)px;/)[1]);
+  const line = Number(css.match(/\.archive-ticket-sign__name \{[^}]*line-height: ([\d.]+);/)[1]);
+  const tallest = Math.max(...Object.values(SHIELD_FORMS).map((form) => form.h));
+  assert.deepEqual([stubPad, marginTop, padTop, padBottom, gap, shieldPx, line, tallest], [20, -8, 12, 15, 14, 46, 0.95, 108]);
+  assert.equal(TICKET.head, stubPad + marginTop + padTop + Math.ceil((shieldPx * tallest) / 100) + gap + padBottom + 12);
+  assert.equal(TICKET.nameLine, line);
+});
+
 test('each character turns through its own width class and lands on itself', () => {
   const [step] = flapPlan(1);
   assert.equal(flapGlyph('M', 'O', step, 0, 0), 'O', 'before its start it still shows the stop being left');
@@ -330,7 +412,8 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   // left (none from the open map, none on the entry), once the cover is up.
   assert.match(atlas, /window\.dispatchEvent\(new CustomEvent\(type, \{ detail: \{ id: to\.id, from: signFrom\(from\) \} \}\)\)/);
   assert.match(atlas, /announce\('atlas:depart', index, flying\.from\)/);
-  assert.match(atlas, /from: next\.kind === 'entry' \|\| next\.kind === 'finish' \? -1 : from,/);
+  // (Through a switch, from the words on the ticket that carries it.)
+  assert.match(atlas, /from: next\.kind === 'entry' \|\| next\.kind === 'finish' \? -1 : carrierIndex >= 0 \? carrierIndex : from,/);
   assert.match(chapter, /primeFlap\(root, detail\.from\)/);
   assert.doesNotMatch(chapter + home, /archive:voyage-end/);
   assert.match(shield, /export function primeFlap/);
@@ -343,12 +426,17 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   // A flip is cut to its own cell, by a clip (overflow would move the baseline).
   assert.match(css, /\.flap-c\[data-show\] \{[^}]*clip-path: inset\(-0\.2em 0\)/);
   // No move between places tears (owner, 2026-09-28: 地点之间的移动现在不需要
-  // 撕票根动效): the sign turns in place while the planet does — at take-off
-  // on a switch, as soon as the cover is up.
+  // 撕票根动效): the sign turns in place while the planet does — primed at
+  // take-off, turned at the relay, as the ticket is laid on (地点文字滚动).
   assert.doesNotMatch(home, /case 'tear': \{|'tear-then'/);
   assert.doesNotMatch(chapter, /archive:tear-then|tearThen\b/);
   assert.match(chapter, /pending = detail\.from;\s+clearPrime = primeFlap\(root, detail\.from\);/);
-  assert.match(chapter, /if \(dockShownRef\.current\) start\(\);\s+else dockAppearRef\.current = start;/);
+  // A switch's ticket ROLLS its name in at the relay (地点文字滚动; on a
+  // small ticket the flap's turning capitals read as 乱码), inside the
+  // transit; a landing with no switch still turns it.
+  assert.match(chapter, /relayFlapRef\.current = \(budget\) => start\(\{ budget \}\);/);
+  assert.match(chapter, /relayFlapRef\.current\?\.\(Math\.max\(0, sw\.expandAt - Math\.max\(now, sw\.relayAt\)\)\);/);
+  assert.match(chapter, /stopFlap = roll \? runRoll\(root, from, roll\) : runFlap\(root, from\);/);
   assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.

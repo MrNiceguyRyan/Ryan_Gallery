@@ -298,6 +298,10 @@ export const PHONE_CARD = {
   dockBottom: 76,
   /** What hangs under the plate ("Open story"), px. */
   below: 34,
+  /** The state's tab on the card's top edge (its name boxed), screen px:
+   *  set back to the screen's own size whatever the card's scale (global.css
+   *  `.archive-dock--phone .archive-dock__tab`), so its state reads 15px. */
+  tab: 30,
 } as const;
 
 export interface PhoneCard {
@@ -305,7 +309,8 @@ export interface PhoneCard {
   photoH: number;
   /** The ticket's scale (its type stays legible: ≥ minScale). */
   scale: number;
-  /** The card's height on screen with what hangs under it, px. */
+  /** The card's height on screen with what rides on it (the state's tab)
+   *  and what hangs under it, px. */
   h: number;
 }
 
@@ -320,7 +325,17 @@ export function phoneCard(vw: number, vh: number, ratio: number): PhoneCard {
     photoH = Math.max(80, Math.floor((across / scale - PHONE_CARD.stub) / r));
   }
   const photoW = Math.floor(photoH * r);
-  return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) };
+  return { photoW, photoH, scale, h: Math.ceil(photoH * scale + PHONE_CARD.below) + PHONE_CARD.tab };
+}
+
+/** The phone's one ticket scale: the smallest card's across the archive (a
+ *  landscape card's, PHONE_CARD.minScale on a phone). A switch folds every
+ *  card into a ticket of this one size on the screen — a card larger than
+ *  it shrinks into it, never one smaller swells to a larger card's — and
+ *  the arriving card grows out of it to its own (review, 2026-09-29: Miami
+ *  → Orlando's card grew 25 px taller as it "shrank" into its ticket). */
+export function phoneTicketScale(vw: number, vh: number, ratios: readonly number[]): number {
+  return ratios.length ? Math.min(...ratios.map((ratio) => phoneCard(vw, vh, ratio).scale)) : PHONE_CARD.minScale;
 }
 
 /** Where the phone card's stub rests on the screen (viewport px): the card
