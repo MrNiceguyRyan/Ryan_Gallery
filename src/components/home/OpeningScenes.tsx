@@ -43,7 +43,8 @@ import {
 // (`.of-bl`). The server's first paint is the proof (act 0): a sheet of the
 // newspaper's newsprint over the first match cut, its marks and its slug,
 // the first cut's lime anchor over it, unprinted — the stylesheet brings
-// the lights down, the island prints the plates. The first match cut is
+// the lights down, the head script prints the plates (src/lib/proofPlates.ts).
+// The first match cut is
 // drawn under it from the first paint: the stylesheet sets it (the anchor,
 // its giant, the words on its line) exactly where the island will.
 //
@@ -191,18 +192,17 @@ function Marks({ crops = true }: { crops?: boolean }) {
 function ProofSheet() {
   return <div className="of-proof" data-proof aria-hidden="true" />;
 }
-/** Its marks (the pages' own registration mark and step bar; no crop
- *  marks) and its slug, above the soft edge so the hairlines stay crisp.
- *  Each plate's label comes with its plate, on the clock. */
+/** Its marks (the pages' own registration mark; no crop marks, and its
+ *  step bar is not drawn) and its slug, above the soft edge so the hairlines
+ *  stay crisp. The slug is printed whole from the first paint: a proof lists
+ *  its plates before they print, and nothing at its foot moves while the
+ *  reader waits. */
 function ProofMarks() {
   return (
     <div className="of-proof-marks" data-proof-marks aria-hidden="true">
       <Marks crops={false} />
       <p className="of-proof__slug of-mono">
-        {PROOF_SLUG.head}{' '}
-        <span className="of-proof__wide">{PROOF_SLUG.wide}</span>{' '}
-        <span data-plate="1">{PROOF_SLUG.plates[0]}</span>{' '}
-        <span data-plate="2">{PROOF_SLUG.plates[1]}</span>
+        {PROOF_SLUG.head} <span className="of-proof__wide">{PROOF_SLUG.wide}</span> {PROOF_SLUG.plates.join(' ')}
       </p>
     </div>
   );

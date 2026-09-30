@@ -5,6 +5,7 @@ import type { Collection } from '../types';
 import HomePage from '../components/home/HomePage';
 import OpeningFilm from '../components/home/OpeningFilm';
 import { reelHeadScript } from '../lib/reelVisit';
+import { proofHeadScript } from '../lib/proofPlates';
 import { pickPictures } from '../lib/openingFilm';
 import '../styles/opening.css';
 import '../styles/entrance.css';
@@ -78,6 +79,10 @@ const openingPictures = pickPictures(Array.isArray(collections) ? collections : 
         tab session it is skipped instead (data-reel="skip": the layer is not
         shown and the page opens on the opening words), src/lib/reelVisit.ts. */}
     <script is:inline set:html={reelHeadScript()} />
+    {/* The film's first beats, from its first paint (the proof's plates on
+        its own sixth, and a tap on the Skip pill before the island is up):
+        src/lib/proofPlates.ts. */}
+    <script is:inline set:html={proofHeadScript()} />
   </Fragment>
   {/* The opening film: a retro editorial type film, over the page. Its
       first frame (a dark CRT, a blinking cursor) is the server's markup, so
