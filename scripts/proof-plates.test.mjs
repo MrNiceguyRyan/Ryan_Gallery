@@ -29,7 +29,7 @@ const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 // A document streaming in, with just enough of a browser for the script.
-function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNow = false, lights = true, sheetPending = false, faceMs = 0, faceNever = false } = {}) {
+function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNow = false, lights = true, sheetPending = false, faceMs = 0, faceNever = false, hidden = false, perf = false } = {}) {
   const attrs = { 'data-reel': 'reel' };
   if (opening != null) attrs['data-opening'] = opening;
   const root = {
@@ -38,7 +38,8 @@ function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNo
     hasAttribute: (k) => k in attrs,
     removeAttribute: (k) => delete attrs[k],
   };
-  const clock = { now: 0 };
+  // clock.stale: what the timeline still reads in a tab that draws no frame.
+  const clock = { now: 0, stale: null };
   const timers = [];
   const setTimeout = (fn, ms) => timers.push({ at: clock.now + ms, fn });
   const advance = async (to) => {
@@ -62,7 +63,25 @@ function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNo
   const block = element('block');
   const word = element('word');
   let lightsReady;
-  const lightsAnim = { animationName: 'of-proof-lights', startTime: null, ready: new Promise((r) => (lightsReady = r)) };
+  // The lights: a CSS animation, restartable (cancel: idle, a new resolved
+  // ready; play: pending until its next frame, a new ready).
+  const lightsAnim = {
+    animationName: 'of-proof-lights',
+    startTime: null,
+    playState: 'running',
+    restarts: 0,
+    ready: new Promise((r) => (lightsReady = r)),
+    cancel() {
+      this.startTime = null;
+      this.playState = 'idle';
+      this.ready = Promise.resolve(this);
+    },
+    play() {
+      this.playState = 'running';
+      this.restarts += 1;
+      this.ready = new Promise((r) => (lightsReady = r));
+    },
+  };
   const vignette = { getAnimations: () => (lights ? [lightsAnim, { animationName: 'of-failsafe' }] : []) };
   const found = [];
   if (vignetteNow) found.push(vignette);
@@ -85,10 +104,12 @@ function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNo
   }
   let faceDone;
   const face = new Promise((r) => (faceDone = r));
+  let visibility = hidden ? 'hidden' : 'visible';
   const document = {
     readyState,
     documentElement: root,
-    timeline: { get currentTime() { return clock.now; } },
+    get visibilityState() { return visibility; },
+    timeline: { get currentTime() { return clock.stale ?? clock.now; } },
     fonts: { load: (f, sample) => { document.fontAsked = [f, sample]; return face; } },
     getElementsByClassName: (c) => (c === 'of-frame__vignette' ? found : []),
     querySelector: (sel) => (sel === '.of-key[data-key="0"] [data-block]' ? block : sel === '.of-key[data-key="0"] [data-word]' ? word : null),
@@ -97,7 +118,9 @@ function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNo
     removeEventListener: (type, fn) => (listeners[type] = (listeners[type] ?? []).filter((l) => l.fn !== fn)),
   };
   const window = {};
-  const context = vm.createContext({ window, document, location: { search }, setTimeout, MutationObserver, Promise, Math, Number, JSON });
+  const globals = { window, document, location: { search }, setTimeout, MutationObserver, Promise, Math, Number, JSON };
+  if (perf) globals.performance = { now: () => clock.now };
+  const context = vm.createContext(globals);
   const run = () => vm.runInContext(V.proofHeadScript(), context);
   // The island's own start (an in-site arrival: no head script, no taps).
   const runIsland = () => vm.runInContext(`(${V.proofPlates.toString()})(${JSON.stringify(V.PLATES)}, false)`, context);
@@ -142,6 +165,20 @@ function sandbox({ opening = '', search = '', readyState = 'loading', vignetteNo
       await flush();
     },
     tap: (target) => (listeners.click ?? []).forEach((l) => l.fn({ target })),
+    lights: lightsAnim,
+    // The tab hidden, or shown (its visibilitychange; the time it is shown).
+    hide: async () => {
+      visibility = 'hidden';
+      (listeners.visibilitychange ?? []).forEach((l) => l.fn());
+      await flush();
+    },
+    show: async (at) => {
+      clock.now = at;
+      visibility = 'visible';
+      (listeners.visibilitychange ?? []).slice().forEach((l) => l.fn());
+      await flush();
+      await flush();
+    },
     faceMs,
   };
 }
@@ -326,6 +363,67 @@ test('a tap on the Skip pill before the island is up: html[data-skip-pending], a
   late.tap(pill);
   assert.equal(late.attrs['data-skip-pending'], '');
   assert.equal(late.anims.length, 2);
+});
+
+test('a tab opened in the background: nothing counted or laid while it is hidden; shown, the lights go down again from its first frame and the grid is counted from there', async () => {
+  const s = sandbox({ hidden: true });
+  s.run();
+  const plates = s.window.__proofPlates;
+  assert.equal((s.listeners.visibilitychange ?? []).length, 1, 'listening for the tab to be shown');
+  await s.stream();
+  // Its timeline stands still: the lights "start" at 0 and play unseen.
+  await s.firstFrame(0);
+  await s.faceIn(0);
+  await s.advance(V.PLATES.wait + 1);
+  assert.equal(s.anims.length, 0, 'no plate laid while hidden');
+  assert.equal(plates.lime, null);
+  assert.equal(s.lights.restarts, 0);
+  // Shown at 3000: in the event itself (before its first frame is drawn),
+  // the lights go down again; nothing laid until they have their new start.
+  await s.show(3000);
+  assert.equal(s.lights.restarts, 1, 'the lights restarted');
+  assert.equal(s.lights.startTime, null, 'pending: they start on the first frame drawn');
+  assert.equal(s.anims.length, 0);
+  // The first frame the reader sees.
+  await s.firstFrame(3016);
+  assert.ok(close(plates.origin, 3016), `${plates.origin}`);
+  assert.ok(close(plates.lime, 3016 + 2 * CUT), `${plates.lime}`);
+  assert.ok(close(await plates.decided, 3016 + 2 * CUT));
+  const [b, w] = s.anims;
+  assert.ok(close(b.startTime, 3016 - F.GRID_HAIR_MS) && close(w.startTime, 3016 - F.GRID_HAIR_MS), 'from the first frame the reader sees');
+  assert.equal(valueAt(b, 3016 + 2 * CUT - 1), F.PRELUDE.unprinted);
+  assert.equal(valueAt(w, 3016 + 4 * CUT - 1), 0);
+  assert.equal((s.listeners.visibilitychange ?? []).length, 0, 'let go once decided');
+  // Shown again later: the lights are never played twice.
+  await s.hide();
+  await s.show(9000);
+  assert.equal(s.lights.restarts, 1);
+});
+
+test('hidden after it was seen: nothing laid while hidden; shown again, the lights are not played twice and the lime is on the first sixth of their grid it can make, whatever the stale timeline reads', async () => {
+  const s = sandbox({ perf: true });
+  s.run();
+  await s.stream();
+  await s.firstFrame(1000);
+  await s.hide();
+  await s.faceIn(1100);
+  assert.equal(s.anims.length, 0, 'no plate laid while hidden');
+  // Shown at 6000; the timeline still reads the last frame it drew.
+  s.clock.stale = 1100;
+  await s.show(6000);
+  assert.equal(s.lights.restarts, 0, 'seen: never played twice');
+  const lime = s.window.__proofPlates.lime;
+  assert.ok(close(lime, F.limeBeat(1000, 6000 + V.PLATES.lead)), `${lime}`);
+  assert.ok(lime >= 6000 + V.PLATES.lead, 'never a beat already spent');
+  assert.ok(close((lime - 1000) / CUT, Math.round((lime - 1000) / CUT)), 'on the lights\' grid');
+  // Shown throughout: the listener has nothing to do.
+  const v = sandbox();
+  v.run();
+  await v.stream();
+  await v.firstFrame(1000);
+  await v.faceIn(1010);
+  assert.equal(v.lights.restarts, 0);
+  assert.ok(close(v.window.__proofPlates.lime, 1000 + 2 * CUT));
 });
 
 test('nothing for the verification hook, a document already loaded, or a film that does not play', () => {

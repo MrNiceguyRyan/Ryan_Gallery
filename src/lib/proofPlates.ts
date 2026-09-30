@@ -20,6 +20,13 @@
 //     and the ink plate (the word) a third of a second after it: WAAPI on
 //     opacity from the proof's first frame, held unprinted (the
 //     stylesheet's own values) to a hair before its beat (GRID_HAIR_MS).
+//   - Never while the page is hidden. A tab opened in the background draws
+//     no frame: its timeline stands still, its lights play unseen, and a
+//     grid counted from them is spent before the tab is shown (the reader
+//     would land on the finished title card, the page a moment later). It
+//     waits to be shown; on the page's first showing the lights go down
+//     again (restarted in the visibilitychange event, before that first
+//     frame is drawn), and the grid is counted from there.
 //   - It takes a tap on the Skip pill before the island is up (the pill is
 //     drawn from 0.12 s; the island's own handler exists only once it has
 //     hydrated): html[data-skip-pending] (the pill held pressed), and no
@@ -29,7 +36,10 @@
 // window.__proofPlates is its record for the island: the origin, the lime's
 // beat, its animations. The island prints the page on the first sixth it can
 // make, never sooner than a third of a second after the word (pageStart),
-// lays the same keys on its own clock, and stops the tap listener. On an
+// keeps these animations as the plates (it never lays a second animation on
+// the same element: two opacity animations on one element take both off the
+// compositor, and under load the plates would print late, off the cuts'
+// grid), and stops the tap listener. On an
 // in-site arrival (no head script: the document was swapped in whole) the
 // island starts the same function itself, without the tap listener.
 //
@@ -119,6 +129,11 @@ export function proofPlates(cfg: PlatesConfig, taps: boolean): ProofPlates {
   var root = doc.documentElement;
   var done = false;
   var begun = false;
+  // Whether the page has been shown yet. A tab opened in the background has
+  // not been: its timeline stands still and its lights play unseen, and a
+  // grid counted from them would be spent before anyone could see it.
+  var seen = doc.visibilityState !== 'hidden';
+  var waiting: (() => void)[] = [];
   var settle: (value: number | null) => void = function () {};
   var noop = function () {};
   var plates: ProofPlates = {
@@ -136,7 +151,60 @@ export function proofPlates(cfg: PlatesConfig, taps: boolean): ProofPlates {
   function end(value: number | null) {
     if (done) return;
     done = true;
+    doc.removeEventListener('visibilitychange', shownNow);
     settle(value);
+  }
+  // The proof's lights: the stylesheet's animation on the vignette.
+  function lightsOf(vignette: Element | undefined): CSSAnimation | null {
+    if (!vignette || typeof vignette.getAnimations !== 'function') return null;
+    var all = vignette.getAnimations({ subtree: true });
+    for (var i = 0; i < all.length; i += 1) {
+      if ((all[i] as CSSAnimation).animationName === cfg.lights) return all[i] as CSSAnimation;
+    }
+    return null;
+  }
+  // Their start on the timeline, once they have one (read again after a
+  // restart, which replaces their ready promise).
+  function started(lights: CSSAnimation, tries: number): Promise<number | null> {
+    return lights.ready.then(noop, noop).then(function (): number | null | Promise<number | null> {
+      if (lights.startTime == null && lights.playState !== 'idle' && tries > 0) return started(lights, tries - 1);
+      return lights.startTime == null ? null : Number(lights.startTime);
+    });
+  }
+  // The page shown. For the first time: the lights go down again from here,
+  // so the whole count-in plays from the first frame the reader sees. This
+  // is the event itself (before that frame is drawn), and it comes before
+  // anything that waits for it (below).
+  function shownNow() {
+    if (doc.visibilityState === 'hidden') return;
+    if (!seen) {
+      seen = true;
+      var lights = lightsOf(doc.getElementsByClassName(cfg.vignette)[0]);
+      if (lights) {
+        try {
+          lights.cancel();
+          lights.play();
+        } catch (e) {
+          // The lights as they are (the grid counted from them).
+        }
+      }
+    }
+    var ready = waiting;
+    waiting = [];
+    for (var i = 0; i < ready.length; i += 1) ready[i]();
+  }
+  // Nothing is counted, and no plate laid, while the page is hidden.
+  function whenShown() {
+    return new Promise<void>(function (resolve) {
+      if (doc.visibilityState !== 'hidden') resolve();
+      else waiting.push(resolve);
+    });
+  }
+  // The earliest a plate laid now takes effect: the timeline's time stands
+  // still in a tab that draws no frame, so the clock's own reading as well.
+  function now() {
+    var t = Number(doc.timeline.currentTime) || 0;
+    return typeof performance !== 'undefined' && performance.now ? Math.max(t, performance.now()) : t;
   }
   // A plate: one animation from the proof's first frame, held at its
   // unprinted value to a hair before its beat, filled both ways (laid with
@@ -183,11 +251,7 @@ export function proofPlates(cfg: PlatesConfig, taps: boolean): ProofPlates {
     sheetsIn()
       .then(function () {
         if (done) return;
-        var lights: CSSAnimation | null = null;
-        var all = vignette.getAnimations({ subtree: true });
-        for (var i = 0; i < all.length; i += 1) {
-          if ((all[i] as CSSAnimation).animationName === cfg.lights) lights = all[i] as CSSAnimation;
-        }
+        var lights = lightsOf(vignette);
         if (!lights || !doc.timeline) {
           end(null);
           return;
@@ -196,21 +260,27 @@ export function proofPlates(cfg: PlatesConfig, taps: boolean): ProofPlates {
         var cap = new Promise(function (resolve) {
           setTimeout(resolve, cfg.wait);
         });
-        return Promise.all([shown.ready, Promise.race([face, cap])]).then(function () {
-          if (done) return;
-          if (shown.startTime == null) {
-            end(null);
-            return;
-          }
-          var origin = Number(shown.startTime);
-          var ready = Number(doc.timeline.currentTime) + cfg.lead;
-          var first = origin + cfg.lime * cfg.cut;
-          var at = first + Math.max(0, Math.ceil((ready - first) / cfg.cut - 1e-6)) * cfg.cut;
-          plates.origin = origin;
-          print(origin, at);
-          plates.lime = at;
-          end(at);
-        });
+        return Promise.all([started(shown, 2), Promise.race([face, cap])])
+          .then(whenShown)
+          .then(function () {
+            // Their start as the reader saw it (restarted if never shown).
+            return started(shown, 2);
+          })
+          .then(function (start) {
+            if (done) return;
+            if (start == null) {
+              end(null);
+              return;
+            }
+            var origin = start;
+            var ready = now() + cfg.lead;
+            var first = origin + cfg.lime * cfg.cut;
+            var at = first + Math.max(0, Math.ceil((ready - first) / cfg.cut - 1e-6)) * cfg.cut;
+            plates.origin = origin;
+            print(origin, at);
+            plates.lime = at;
+            end(at);
+          });
       })
       .catch(function () {
         end(null);
@@ -226,6 +296,7 @@ export function proofPlates(cfg: PlatesConfig, taps: boolean): ProofPlates {
     face = Promise.resolve();
   }
   try {
+    doc.addEventListener('visibilitychange', shownNow);
     if (taps) {
       var onTap = function (event: Event) {
         // Once the island is up (data-opening="run") the tap is its own.

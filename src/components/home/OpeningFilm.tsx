@@ -413,7 +413,8 @@ function scratchOf(f: number): [number, number, number, number] {
  * for good, unprinted; the stylesheet brings the lights down, and the head
  * script, src/lib/proofPlates.ts, prints the plates on the proof's sixth
  * before this island is up). The island takes the proof over (the head
- * script's record, or its own when there was none), loads every face the
+ * script's record, or its own when there was none — the plates' own
+ * animations kept, never a second on their elements), loads every face the
  * film sets (at most FONT_WAIT_MS), measures the words, and lays the clock
  * on the proof's own grid: the page on the first sixth it can make, never
  * sooner than a third of a second after the word (pageStart). The whole film is WAAPI
@@ -686,6 +687,12 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     // the verification hook (it lays them on its own clock).
     const plates: ProofPlates | null = seekParam != null ? null : (headPlates ?? proofPlates(PLATES, false));
     if (pendingSkip) plates?.hold();
+    /** Printed by the plates' own animation (laid before the clock, on the
+     *  proof's grid). That animation stays the element's only one: a second
+     *  on the same opacity takes both off the compositor, and under load the
+     *  plates would print on the main thread's time, late and off the cuts'
+     *  grid. */
+    const platePrinted = (el: Element | null) => !!el && !!plates?.anims.some((a) => (a.effect as KeyframeEffect | null)?.target === el);
     /** The lime plate's beat on the film's clock (the word's is two sixths
      *  later): the plan's on a fast load; earlier on a slow one, where the
      *  plates were printed before the island was up. */
@@ -1240,15 +1247,17 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
 
       // ── Act 0: the proof — the plates on the clock; the sheet let go at the page ──
       // (The lights are the stylesheet's, from the first paint, and the
-      // clock was counted from them. The plates are where the head script
-      // printed them, with its very keys, so taking them over changes no
-      // pixel; without it they are this clock's own beats.)
+      // clock was counted from them. The plates the head script printed
+      // are its own animations, kept as they are — the page is laid on
+      // their grid; without them they are this clock's own beats.)
       {
         const pr = plan.prelude;
         // The lime plate (its first impression, setting to full), and a
         // third of a second on, the ink plate (the word).
-        preKeys(q('[data-key="0"] [data-block]'), proofLimeKeys(limeAt));
-        pre(q('[data-key="0"] [data-word]'), 0, [[wordAt(), 1]]);
+        const block0 = q('[data-key="0"] [data-block]');
+        const word0 = q('[data-key="0"] [data-word]');
+        if (!platePrinted(block0)) preKeys(block0, proofLimeKeys(limeAt));
+        if (!platePrinted(word0)) pre(word0, 0, [[wordAt(), 1]]);
         // The film's grain comes with the page (unseen before: drawn warm).
         const grainEl = q('[data-grain]');
         pre(grainEl, WARM_OPACITY, [[pr.end, 1], [acts.hand.start, 0]]);

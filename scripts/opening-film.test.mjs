@@ -17,7 +17,8 @@
 // any second, a mid ground turning nothing; the proof turns none); the
 // proof (its beats on the sixth, its clock counted from its first frame,
 // the stylesheet's lights at rest when down, both plates printed from the
-// first paint by the head script and taken over by the clock, so a slow
+// first paint by the head script and kept by the clock — the plates' own
+// animations, never a second on their elements — so a slow
 // load holds a finished title card, the lime never stands alone longer than
 // its beat, the word never in a stand-in face while its face can come); the
 // anchor (one centre, one
@@ -427,7 +428,7 @@ test('the proof is the first paint: a flat sheet; the stylesheet brings the ligh
   assert.ok(main.indexOf('of-frame__paper') < at('<Cut key') && at('<ProofSheet') > at('<Cut key'), 'the paper first, the pages, then the sheet');
 });
 
-test('the proof\'s plates: the lime a third of a second before the word, setting to full a frame before it; the island takes them over with the head script\'s own keys', () => {
+test('the proof\'s plates: the lime a third of a second before the word, setting to full a frame before it; the island keeps the head script\'s own animations (the same keys, laid by the island only where there were none)', () => {
   const P0 = F.PRELUDE;
   const CUT = F.CUT_MS;
   const ink = F.proofInk();
@@ -446,8 +447,14 @@ test('the proof\'s plates: the lime a third of a second before the word, setting
   }
   assert.deepEqual(F.proofLimeKeys(), F.proofLimeKeys(-P0.beats.lime * CUT));
   const island = read('../src/components/home/OpeningFilm.tsx');
-  assert.match(island, /preKeys\(q\('\[data-key="0"\] \[data-block\]'\), proofLimeKeys\(limeAt\)\);/);
-  assert.match(island, /pre\(q\('\[data-key="0"\] \[data-word\]'\), 0, \[\[wordAt\(\), 1\]\]\);/);
+  // The island lays the plates only where they were not printed before it:
+  // the plates' own animations are kept, the only ones on their elements
+  // (a second opacity animation on one element takes both off the
+  // compositor, and under load the plates printed late, off the cuts' grid).
+  assert.match(island, /const block0 = q\('\[data-key="0"\] \[data-block\]'\);\s*const word0 = q\('\[data-key="0"\] \[data-word\]'\);\s*if \(!platePrinted\(block0\)\) preKeys\(block0, proofLimeKeys\(limeAt\)\);\s*if \(!platePrinted\(word0\)\) pre\(word0, 0, \[\[wordAt\(\), 1\]\]\);/);
+  assert.match(island, /const platePrinted = \(el: Element \| null\) => !!el && !!plates\?\.anims\.some\(\(a\) => \(a\.effect as KeyframeEffect \| null\)\?\.target === el\);/);
+  assert.equal((island.match(/proofLimeKeys\(/g) ?? []).length, 1, 'the lime laid in one place only');
+  assert.equal((island.match(/\[data-key="0"\] \[data-(block|word)\]/g) ?? []).length, 2, 'the plates\' elements touched in one place only');
   assert.match(island, /const wordAt = \(\) => limeAt \+ \(PRELUDE\.beats\.lime - PRELUDE\.beats\.word\) \* CUT_MS;/);
   assert.match(island, /let limeAt: number = plan\.prelude\.lime;/);
   // The proof's part on the clock reaches back to the earliest plate.
