@@ -11,6 +11,7 @@ import '../styles/opening.css';
 import '../styles/entrance.css';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 import { withSampleChapters } from '../lib/storyChaptersSample';
+import { COLLECTION_ZH_FIELDS, withZh } from '../i18n/content';
 
 // ─── GROQ: All collections with photos + location data ───
 // `chapters`: the story's optional sub-chapters, each with its photographs as
@@ -31,6 +32,7 @@ const collectionsQuery = `
     mapLocation,
     description,
     introduction,
+    ${COLLECTION_ZH_FIELDS},
     "chapters": chapters[defined(title)] {
       _key,
       title,
@@ -63,7 +65,7 @@ const fetchedCollections = await fetchSanityWithRetry(() =>
   sanityClient.fetch<Collection[]>(collectionsQuery),
 );
 const collections = Array.isArray(fetchedCollections)
-  ? fetchedCollections.map((collection) => withSampleChapters(collection))
+  ? fetchedCollections.map((collection) => withZh(withSampleChapters(collection)))
   : fetchedCollections;
 // Three of his frames for the film (the pill's life, the grid paper's
 // print, the magazine's plate), each at its own ratio.

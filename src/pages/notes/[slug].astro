@@ -5,6 +5,10 @@
 // pull quotes hung into the rail and numbered photographs, the end mark, then
 // the end page: the chapters it is about (on their own stock, the Story's end
 // page) and the notes before and after it.
+// 中 / EN: every label and date in both languages; his title, dek and
+// captions beside their Chinese twins where he wrote them, and a Chinese
+// body (bodyZh) as a second text the page shows in Chinese instead
+// (notes.css, "中 / EN").
 import Layout from '../../layouts/Layout.astro';
 import Nav from '../../components/Nav';
 import Arrow from '../../components/notes/Arrow.astro';
@@ -16,12 +20,14 @@ import '../../styles/notes.css';
 import { loadNotes } from '../../lib/notesData';
 import {
   CJK_SERIF_CSS,
+  blockLang,
   formatNoteDate,
   imageSize,
   isoDay,
   langOf,
   noteDescription,
   noteHasHan,
+  noteInChinese,
   noteNeighbours,
   noteNumbers,
   orientation,
@@ -31,6 +37,9 @@ import {
   shareCardUrl,
   type Note,
 } from '../../lib/notes';
+import { i18nAttrs, tr } from '../../i18n/dict';
+import T from '../../i18n/T.astro';
+import Bi from '../../i18n/Bi.astro';
 
 export async function getStaticPaths() {
   const { notes } = await loadNotes();
@@ -50,8 +59,11 @@ const cover = note.cover ?? null;
 const coverSize = cover ? imageSize(cover) : null;
 const coverShape = coverSize ? orientation(coverSize.width, coverSize.height) : null;
 const coverLeads = coverShape === 'landscape';
+const inChinese = noteInChinese(note);
 const minutes = readingMinutes(note);
+const minutesZh = readingMinutes(inChinese);
 const description = noteDescription(note);
+const descriptionZh = noteDescription(inChinese);
 const titleLang = langOf(note.title);
 const shareCard = cover ? shareCardUrl(cover) : '';
 const hasChinese = noteHasHan(note);
@@ -59,6 +71,12 @@ const hasChinese = noteHasHan(note);
 // note when a newer one exists, else the first chapter's "Read the story".
 const limeOnChapter = !next;
 const where = (place: Note['places'][number]) => [place.region, place.year].filter(Boolean).join(', ');
+const whereZh = (place: Note['places'][number]) => [place.regionZh || place.region, place.year].filter(Boolean).join('，');
+// The text in each language it is written in: the body alone (it shows in
+// both), or the body and its Chinese, each shown in its own language.
+const texts: Array<{ body: Note['body']; l?: 'en' | 'zh' }> = note.bodyZh?.length
+  ? [{ body: note.body, l: 'en' }, { body: note.bodyZh, l: 'zh' }]
+  : [{ body: note.body }];
 
 const siteUrl = (Astro.site ?? new URL('https://ryanxugallery.com')).toString().replace(/\/$/, '');
 const articleSchema = {
@@ -78,7 +96,9 @@ const articleSchema = {
 
 <Layout
   title={`${note.title} | Ryan`}
-  description={description || 'A note by Ryan Xu.'}
+  description={description || tr('en', 'note.descriptionFallback')}
+  titleZh={note.titleZh ? `${note.titleZh} | Ryan` : undefined}
+  descriptionZh={descriptionZh || tr('zh', 'note.descriptionFallback')}
   ogImage={shareCard || undefined}
   ogType="article"
   dark={true}
@@ -114,35 +134,39 @@ const articleSchema = {
     <article class="note" aria-labelledby="note-title">
       <header class="note-head n-grid">
         <p class="note-kicker" data-enter="kicker">
-          <a class="n-label font-ui" href="/notes">Notes</a>
-          <span class="n-label font-ui">No. {pad2(number)}</span>
+          <a class="n-label font-ui" href="/notes"><T k="note.kicker" /></a>
+          <span class="n-label font-ui"><T k="notes.number" vars={{ nn: pad2(number) }} /></span>
         </p>
-        <h1 class="note-title font-serif" id="note-title" lang={titleLang}>
-          <span class="note-title__line" data-enter="title">{note.title}</span>
+        <h1 class="note-title font-serif" id="note-title" lang={blockLang(note.title, note.titleZh)}>
+          <span class="note-title__line" data-enter="title"><Bi en={note.title} zh={note.titleZh} /></span>
         </h1>
-        {note.dek && <p class="note-dek font-serif" lang={langOf(note.dek)} data-enter="dek">{note.dek}</p>}
+        {note.dek && (
+          <p class="note-dek font-serif" lang={blockLang(note.dek, note.dekZh)} data-enter="dek"><Bi en={note.dek} zh={note.dekZh} /></p>
+        )}
         <dl class="note-credits" data-enter="credits">
           <div>
-            <dt class="n-label font-ui">Words</dt>
-            <dd class="font-serif">Ryan Xu</dd>
+            <dt class="n-label font-ui"><T k="note.credit.words" /></dt>
+            <dd class="font-serif" lang="en">Ryan Xu</dd>
           </div>
           <div>
-            <dt class="n-label font-ui">Filed</dt>
-            <dd class="font-serif"><time datetime={isoDay(note.publishedAt)}>{formatNoteDate(note.publishedAt)}</time></dd>
+            <dt class="n-label font-ui"><T k="note.credit.filed" /></dt>
+            <dd class="font-serif">
+              <time datetime={isoDay(note.publishedAt)}><Bi en={formatNoteDate(note.publishedAt)} zh={formatNoteDate(note.publishedAt, 'zh')} /></time>
+            </dd>
           </div>
           <div>
-            <dt class="n-label font-ui">Reading</dt>
-            <dd class="font-serif">{minutes} min</dd>
+            <dt class="n-label font-ui"><T k="note.credit.reading" /></dt>
+            <dd class="font-serif"><Bi en={tr('en', 'note.credit.minutes', { n: minutes })} zh={tr('zh', 'note.credit.minutes', { n: minutesZh })} /></dd>
           </div>
           {note.sample && (
             <div class="note-credits__line">
-              <dt class="n-label font-ui">Status</dt>
-              <dd class="n-label font-ui">示例 · Sample</dd>
+              <dt class="n-label font-ui"><T k="note.credit.status" /></dt>
+              <dd class="n-label font-ui"><T k="notes.sample" /></dd>
             </div>
           )}
           {note.places.length > 0 && (
             <div class="note-credits__line">
-              <dt class="n-label font-ui">Places</dt>
+              <dt class="n-label font-ui"><T k="note.credit.places" /></dt>
               <dd><PlaceTags places={note.places} /></dd>
             </div>
           )}
@@ -156,15 +180,17 @@ const articleSchema = {
       )}
 
       <div class="note-flow n-grid">
-        <div class="note-body" data-enter="body">
-          <NoteBody body={note.body} slug={note.slug}>
-            {cover && coverSize && !coverLeads && (
-              <div class="note-float-wrap">
-                <NoteFigure image={cover} width={coverSize.width} height={coverSize.height} placement="float" eager />
-              </div>
-            )}
-          </NoteBody>
-        </div>
+        {texts.map((text) => (
+          <div class="note-body" data-enter="body" data-note-text={text.l}>
+            <NoteBody body={text.body} slug={note.slug}>
+              {cover && coverSize && !coverLeads && (
+                <div class="note-float-wrap">
+                  <NoteFigure image={cover} width={coverSize.width} height={coverSize.height} placement="float" eager />
+                </div>
+              )}
+            </NoteBody>
+          </div>
+        ))}
       </div>
 
       {/* The end page: the chapters the note is about, each on its own stock
@@ -174,9 +200,14 @@ const articleSchema = {
         {note.places.length > 0 && (
           <section class="note-chapters" aria-labelledby="note-chapters-label">
             <h2 class="note-chapters__label n-label font-ui" id="note-chapters-label">
-              {note.places.length === 1
-                ? ['The chapter', where(note.places[0])].filter(Boolean).join(' · ')
-                : 'The chapters'}
+              {note.places.length === 1 ? (
+                <Bi
+                  en={[tr('en', 'note.chapter.one'), where(note.places[0])].filter(Boolean).join(' · ')}
+                  zh={[tr('zh', 'note.chapter.one'), whereZh(note.places[0])].filter(Boolean).join(' · ')}
+                />
+              ) : (
+                <T k="note.chapter.many" />
+              )}
             </h2>
             <ul class="note-chapter-list">
               {note.places.map((place, index) => (
@@ -198,10 +229,12 @@ const articleSchema = {
                       </span>
                     )}
                     <span class="note-chapter__text">
-                      {note.places.length > 1 && where(place) && <span class="n-label font-ui">{where(place)}</span>}
-                      <span class="note-chapter__name font-serif">{place.name}</span>
+                      {note.places.length > 1 && where(place) && (
+                        <span class="n-label font-ui"><Bi en={where(place)} zh={whereZh(place)} /></span>
+                      )}
+                      <span class="note-chapter__name font-serif"><Bi en={place.name} zh={place.nameZh} /></span>
                       <span class="note-chapter__go n-label font-ui">
-                        Read the story<Arrow class:list={['note-arrow', limeOnChapter && index === 0 && 'note-arrow--lime']} />
+                        <T k="note.readStory" /><Arrow class:list={['note-arrow', limeOnChapter && index === 0 && 'note-arrow--lime']} />
                       </span>
                     </span>
                   </a>
@@ -212,18 +245,18 @@ const articleSchema = {
         )}
 
         {(previous || next) && (
-          <nav class="note-turn" aria-label="More notes">
+          <nav class="note-turn" {...i18nAttrs({ 'aria-label': 'note.turnAria' })}>
             {previous && (
               <a class="note-turn__prev" href={`/notes/${previous.slug}`} data-astro-prefetch>
-                <span class="n-label font-ui">Previous · No. {pad2(numbers.get(previous.slug) ?? 0)}</span>
-                <span class="note-turn__title font-serif" lang={langOf(previous.title)}>{previous.title}</span>
+                <span class="n-label font-ui"><T k="note.previous" vars={{ nn: pad2(numbers.get(previous.slug) ?? 0) }} /></span>
+                <span class="note-turn__title font-serif" lang={blockLang(previous.title, previous.titleZh)}><Bi en={previous.title} zh={previous.titleZh} /></span>
               </a>
             )}
             {next && (
               <a class="note-turn__next" href={`/notes/${next.slug}`} data-astro-prefetch>
-                <span class="n-label font-ui">Next · No. {pad2(numbers.get(next.slug) ?? 0)}</span>
-                <span class="note-turn__title font-serif" lang={langOf(next.title)}>
-                  {next.title}<Arrow class="note-arrow note-arrow--lime note-turn__arrow" />
+                <span class="n-label font-ui"><T k="note.next" vars={{ nn: pad2(numbers.get(next.slug) ?? 0) }} /></span>
+                <span class="note-turn__title font-serif" lang={blockLang(next.title, next.titleZh)}>
+                  <Bi en={next.title} zh={next.titleZh} /><Arrow class="note-arrow note-arrow--lime note-turn__arrow" />
                 </span>
               </a>
             )}
@@ -231,8 +264,8 @@ const articleSchema = {
         )}
 
         <p class="note-end__links">
-          <a class="n-textlink n-label font-ui" href="/notes">All notes</a>
-          <a class="n-textlink n-label font-ui" href="/">Back to the archive</a>
+          <a class="n-textlink n-label font-ui" href="/notes"><T k="note.allNotes" /></a>
+          <a class="n-textlink n-label font-ui" href="/"><T k="notes.backToArchive" /></a>
         </p>
       </footer>
     </article>

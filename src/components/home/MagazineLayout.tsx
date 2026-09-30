@@ -9,6 +9,9 @@ import {
   pullQuote,
   storyDek,
 } from '../../lib/narratives';
+import { Bi, T, useLang, useT } from '../../i18n/react';
+import { tr, type Key } from '../../i18n/dict';
+import { paragraphsOf } from '../../i18n/content';
 import { useHoverCapable } from '../../lib/useHoverCapable';
 import { usePressGive } from '../../lib/usePressGive';
 import { useInViewOnce } from '../../lib/useInViewOnce';
@@ -21,6 +24,7 @@ import { plateRows, type PlateRows } from '../../lib/plateRows';
 import {
   css,
   formatPosition,
+  formatPositionZh,
   frameRatio,
   isLandscape,
   openerRect,
@@ -36,8 +40,6 @@ import {
 } from '../../lib/storyPlan';
 import { planEntrances, playEntrance, POP_EASE, SHUTTER_BLADES, type SlotEntrance } from '../../lib/storyEntrance';
 import {
-  CONTENTS_LABEL,
-  PART_LABEL,
   chapterAnchor,
   contentsLabelOpacity,
   contentsOpacity,
@@ -385,7 +387,7 @@ export function photoOrigin(frame: HTMLElement, image: HTMLImageElement | null):
 function storyPlanFor(story: Collection) {
   const { frames, sections } = groupChapters(storyFrames(story.photos ?? [], story.coverImageUrl), story.chapters);
   const ratios = frames.map(frameRatio);
-  return { frames, ratios, sections, slots: storySlots(story.slug, ratios, !!pullQuote(story.slug), sections) };
+  return { frames, ratios, sections, slots: storySlots(story.slug, ratios, !!(story.pullQuote || pullQuote(story.slug)), sections) };
 }
 
 /** The shape of a story's frame 01 without its photographs (a lightweight
@@ -586,6 +588,10 @@ function settleFrame(node: HTMLElement) {
 
 interface FrameShared {
   collectionName: string;
+  /** The story's name in Chinese (its own when there is none). */
+  collectionNameZh: string;
+  /** A frame's own place (photo.location.city) in Chinese, when there is one. */
+  placeZh: (place: string) => string | undefined;
   total: number;
   canHover: boolean;
   /** Marks the hovered frame on the DOM. The dim and the inner zoom are CSS
@@ -598,14 +604,14 @@ interface FrameShared {
 
 /** A slot's caption, printed under its frames: the numbers in full ink, a
  *  frame's own place after its number where it is not the story's. */
-function CaptionText({ frames, places }: { frames: readonly number[]; places: readonly string[] }) {
+function CaptionText({ frames, places, placeZh }: { frames: readonly number[]; places: readonly string[]; placeZh: FrameShared['placeZh'] }) {
   return (
     <>
       {slotCaption(frames, places).map((part, index) => (
         <span key={part.no} className="story-cap__part">
           {index > 0 && <span aria-hidden="true" className="story-cap__sep">·</span>}
           <b>{part.no}</b>
-          {part.place && <span>{part.place}</span>}
+          {part.place && <span><Bi en={part.place} zh={placeZh(part.place)} /></span>}
         </span>
       ))}
     </>
@@ -687,7 +693,11 @@ function StoryFrame({
   // What is announced: the frame's number, its written title if it has one
   // (every Sanity title today is machine-made, so none do) and its place.
   const workTitle = photoDescription(photo);
-  const accessibleLabel = [`Frame ${pad2(index + 1)}`, workTitle, place || shared.collectionName].filter(Boolean).join(', ');
+  // Its name in the reader's language (English while hydrating: useT).
+  const t = useT();
+  const zh = useLang() === 'zh';
+  const where = place ? (zh ? shared.placeZh(place) ?? place : place) : zh ? shared.collectionNameZh : shared.collectionName;
+  const accessibleLabel = [t('story.frameLabel', { nn: pad2(index + 1) }), workTitle, where].filter(Boolean).join(zh ? '，' : ', ');
   // On touch devices the grid is never dimmed: a tap would flash the dim
   // before the viewer opened.
   const interactiveHover = shared.canHover && !reduce;
@@ -729,11 +739,11 @@ function StoryFrame({
           })}
           onClick={(event) => shared.onOpen(index, event.currentTarget)}
           data-frame-index={index}
-          aria-label={`Open ${accessibleLabel}`}
+          aria-label={t('story.frameOpenAria', { label: accessibleLabel })}
           className="story-frame story-focus group relative block w-full cursor-pointer overflow-hidden text-left"
         >
           {hasError && (
-            <span className="story-frame__error font-ui">Frame unavailable</span>
+            <span className="story-frame__error font-ui"><T k="story.frameUnavailable" /></span>
           )}
           {/* The file's own shape from its width and height: the box is
               right before a byte of the picture has arrived. */}
@@ -780,10 +790,21 @@ function storyParagraphs(collection: Collection): string[] {
   return collection.description ? [collection.description] : [];
 }
 
+/** The same words in Chinese, paragraph for paragraph where there are some
+ *  (src/i18n/content.ts withZh has already chosen: his introductionZh, else
+ *  our draft while the English is the code's); [] where there are none, and
+ *  the page prints the English. */
+function storyParagraphsZh(collection: Collection): string[] {
+  const written = (collection.introduction ?? []).some((block) => (block.children ?? []).some((span) => span.text?.trim()));
+  const zh = paragraphsOf(collection.introductionZh);
+  if (written || (collection.slug && EDITORIAL_FALLBACKS[collection.slug]?.length)) return zh;
+  return collection.description && collection.descriptionZh ? [collection.descriptionZh] : [];
+}
+
 /** A paragraph that ends a section: a small square of ink after its last word. */
-const EndMarked = ({ text }: { text: string }) => (
+const EndMarked = ({ text, zh }: { text: string; zh?: string }) => (
   <p>
-    {text}
+    <Bi en={text} zh={zh} />
     <span className="story-endmark" aria-hidden="true" />
   </p>
 );
@@ -833,16 +854,25 @@ function ChapterOpener({ section, heading, style }: ChapterOpenerProps & { style
         <p className="story-chapter__label font-ui">
           {numbered && (
             <span>
-              {PART_LABEL}&nbsp;<b aria-hidden="true">{roman(section.no)}</b>
-              <span className="sr-only">{section.no}</span>
+              {/* "Part III" / "第 III 部分": the Roman numeral is the device;
+                  a screen reader hears "Part 3" / "第 3 部分". */}
+              <span aria-hidden="true">
+                <Bi
+                  en={<>{tr('en', 'story.part')}&nbsp;<b>{roman(section.no)}</b></>}
+                  zh={<>第&nbsp;<b>{roman(section.no)}</b>&nbsp;{tr('zh', 'story.part')}</>}
+                />
+              </span>
+              <span className="sr-only"><T k="story.partSr" vars={{ n: section.no }} /></span>
             </span>
           )}
           {numbered && section.kicker && <span className="story-chapter__sep" aria-hidden="true">·</span>}
-          {section.kicker && <span lang={titleLang(section.kicker)}>{section.kicker}</span>}
+          {section.kicker && <span lang={titleLang(section.kicker) ?? 'en'}>{section.kicker}</span>}
         </p>
       )}
-      <Heading className="story-chapter__title font-serif" tabIndex={-1} lang={titleLang(section.title)}>{section.title}</Heading>
-      {section.intro && <p className="story-chapter__intro font-serif" lang={titleLang(section.intro)}>{section.intro}</p>}
+      <Heading className="story-chapter__title font-serif" tabIndex={-1} lang={titleLang(section.title) ?? 'en'}>
+        {numbered ? section.title : <T k="story.moreFrames" />}
+      </Heading>
+      {section.intro && <p className="story-chapter__intro font-serif" lang={titleLang(section.intro) ?? 'en'}>{section.intro}</p>}
     </div>
   );
 }
@@ -862,7 +892,7 @@ function ChapterContents({
   return (
     <div className="story-toc-track">
       <nav ref={navRef} className="story-toc" aria-labelledby={labelId}>
-        <p id={labelId} className="story-toc__label font-ui">{CONTENTS_LABEL}</p>
+        <p id={labelId} className="story-toc__label font-ui"><T k="story.contents" /></p>
         <ol className="story-toc__list">
           {sections.map((section, index) => (
             <li key={section.key} className="story-toc__item">
@@ -883,12 +913,14 @@ function ChapterContents({
                 <span className="story-toc__no font-serif">
                   {section.no !== null && (
                     <>
-                      <span className="sr-only">{`${PART_LABEL} ${section.no} `}</span>
+                      <span className="sr-only"><T k="story.partSr" vars={{ n: section.no }} />{' '}</span>
                       <span aria-hidden="true">{roman(section.no)}</span>
                     </>
                   )}
                 </span>
-                <span className="story-toc__title font-serif" lang={titleLang(section.short)}>{section.short}</span>
+                <span className="story-toc__title font-serif" lang={titleLang(section.short) ?? 'en'}>
+                  {section.no !== null ? section.short : <T k="story.moreFrames" />}
+                </span>
                 <span className="story-toc__frames font-ui" aria-hidden="true">{frameSpan(section)}</span>
               </a>
             </li>
@@ -977,7 +1009,9 @@ function SlotView({
   ratios,
   places,
   paragraphs,
+  paragraphsZh,
   quote,
+  quoteZh,
   arrive,
   armed,
   shared,
@@ -989,7 +1023,10 @@ function SlotView({
   ratios: readonly number[];
   places: readonly string[];
   paragraphs: readonly string[];
+  /** The same paragraphs in Chinese, where there are some. */
+  paragraphsZh: readonly string[];
   quote: string;
+  quoteZh?: string;
   /** How its frames arrive (planEntrances); a pair shares one. */
   arrive: SlotEntrance | null;
   armed: boolean;
@@ -1038,7 +1075,7 @@ function SlotView({
         arrive={arrive}
         armed={armed}
         order={at}
-        caption={captionFrames ? <CaptionText frames={captionFrames} places={places} /> : null}
+        caption={captionFrames ? <CaptionText frames={captionFrames} places={places} placeZh={shared.placeZh} /> : null}
         sizes={frameSizes(kind, frame.w.v / 1728, at)}
         wide={kind === 'SCREEN'}
         eager={false}
@@ -1049,6 +1086,7 @@ function SlotView({
   };
   const frames = box.frames.map((_, at) => figure(at));
   const [lede, part2] = paragraphs;
+  const [ledeZh, part2Zh] = paragraphsZh;
   return (
     <section
       className="story-slot"
@@ -1061,17 +1099,17 @@ function SlotView({
       style={{ '--slot-top': css(box.top) } as CSSProperties}
     >
       {kind === 'LEDE' && lede && (
-        <div className="story-text story-lede font-serif" style={textStyle(0)}><p>{lede}</p></div>
+        <div className="story-text story-lede font-serif" style={textStyle(0)}><p><Bi en={lede} zh={ledeZh} /></p></div>
       )}
       {kind === 'LEDE2' && (
         <>
-          {lede && <div className="story-text story-lede font-serif" style={textStyle(0)}><p>{lede}</p></div>}
+          {lede && <div className="story-text story-lede font-serif" style={textStyle(0)}><p><Bi en={lede} zh={ledeZh} /></p></div>}
           {part2 && (
             <div className="story-text story-prose font-serif" style={textStyle(1)}>
               {/* In a story in chapters the numbers are the chapters': the
                   introduction's second paragraph is not Part II there. */}
               {partNumeral &&<span className="story-part-no font-serif" aria-hidden="true">II</span>}
-              <EndMarked text={part2} />
+              <EndMarked text={part2} zh={part2Zh} />
             </div>
           )}
         </>
@@ -1080,12 +1118,12 @@ function SlotView({
       {kind === 'PART' && part2 && (
         <div className="story-text story-prose font-serif" style={textStyle(0)}>
           <span className="story-part-no font-serif" aria-hidden="true">II</span>
-          <EndMarked text={part2} />
+          <EndMarked text={part2} zh={part2Zh} />
         </div>
       )}
       {kind === 'QUOTE' && quote && (
         <blockquote className="story-text story-quote font-serif" style={textStyle(0)}>
-          <p>{`\u201C${quote}\u201D`}</p>
+          <p><Bi en={`\u201C${quote}\u201D`} zh={quoteZh ? `\u201C${quoteZh}\u201D` : undefined} /></p>
         </blockquote>
       )}
       {frames}
@@ -1167,19 +1205,28 @@ function StubFace({
   total,
   frames,
   cities,
+  citiesZh,
   reading,
   reduce,
 }: {
-  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year'>;
+  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year' | 'locationZh' | 'regionZh'>;
   ordinal: string;
   total: string;
   frames: number;
   /** The frame's own place per frame number (0 is the arrival's "00",
    *  printed with the first frame's), '' where it is the chapter's. */
   cities: string[];
+  /** The same in Chinese (the English where a place has no Chinese). */
+  citiesZh: string[];
   reading: StubReading;
   reduce: boolean;
 }) {
+  // The city is printed straight onto the DOM (below), so it is printed in
+  // the reader's language: English while hydrating, then the stored one, and
+  // reprinted in place (no lift) on a toggle.
+  const lang = useLang();
+  const citiesRef = useRef(cities);
+  citiesRef.current = lang === 'zh' ? citiesZh : cities;
   const ticksRef = useRef<HTMLSpanElement>(null);
   const stripRef = useRef<HTMLSpanElement>(null);
   const cityRef = useRef<HTMLSpanElement>(null);
@@ -1194,26 +1241,33 @@ function StubFace({
   };
   useMotionValueEvent(reading.ink, 'change', paintInk);
   useMotionValueEvent(reading.shown, 'change', paintShown);
-  useMotionValueEvent(reading.frame, 'change', (frame) => printCity(cityRef.current, cityLabel(cities[frame]), reduce));
+  useMotionValueEvent(reading.frame, 'change', (frame) => printCity(cityRef.current, cityLabel(citiesRef.current[frame]), reduce));
   // A print whose reading moved between its render and its commit catches
   // up before it is painted.
   useLayoutEffect(() => {
     paintInk(reading.ink.get());
     paintShown(reading.shown.get());
     const city = cityRef.current;
-    const label = cityLabel(cities[reading.frame.get()]);
+    const label = cityLabel(citiesRef.current[reading.frame.get()]);
     if (city && city.textContent !== label) city.textContent = label;
     // Once, at mount: afterwards the subscriptions above keep it current.
   }, []);
+  // A toggle reprints the city in place, with no lift (nothing is moving).
+  useEffect(() => {
+    const city = cityRef.current;
+    if (!city) return;
+    printCity(city, cityLabel(citiesRef.current[reading.frame.get()]), true);
+  }, [lang, reading]);
 
   // Guarded as the rest of this file guards it: not every record's
   // `location` is a string.
   const location = typeof chapter.location === 'string' ? chapter.location.trim() : '';
   // What the homepage stub prints under REGION: the region, else the place.
   const region = (typeof chapter.region === 'string' && chapter.region.trim()) || location;
-  const stubRows: Array<[string, string]> = [];
-  if (region) stubRows.push(['Region', region]);
-  if (chapter.year) stubRows.push(['Year', String(chapter.year)]);
+  const regionZh = (typeof chapter.region === 'string' && chapter.region.trim() ? chapter.regionZh : chapter.locationZh) || undefined;
+  const stubRows: Array<[Key, string, string | undefined]> = [];
+  if (region) stubRows.push(['story.stub.region', region, regionZh]);
+  if (chapter.year) stubRows.push(['story.stub.year', String(chapter.year), undefined]);
 
   return (
     <>
@@ -1245,10 +1299,10 @@ function StubFace({
         </div>
         {stubRows.length > 0 && (
           <dl className="story-stub__rows">
-            {stubRows.map(([label, value]) => (
+            {stubRows.map(([label, value, valueZh]) => (
               <div key={label} className="story-stub__row">
-                <dt>{label}</dt>
-                <dd>{value}</dd>
+                <dt><T k={label} /></dt>
+                <dd><Bi en={value} zh={valueZh} /></dd>
               </div>
             ))}
           </dl>
@@ -1262,7 +1316,7 @@ function StubFace({
               are all Miami). Always in the line, empty when there is none,
               so it can be reprinted without a render. */}
           <span ref={cityRef} className="story-stub__city">{cityLabel(cities[first.frame])}</span>
-          <span className="story-stub__label">Frame&nbsp;</span>
+          <span className="story-stub__label"><T k="story.stub.frame" />&nbsp;</span>
           <span className="story-stub__count rolling-figure">
             <span className="rolling-figure__sizer">{pad2(frames)}</span>
             <span className="rolling-figure__window">
@@ -1333,6 +1387,7 @@ function KeptStub({
   ordinal,
   total,
   cities,
+  citiesZh,
   reading,
   armed,
   released,
@@ -1346,10 +1401,11 @@ function KeptStub({
   /** Frame indices per slot, in reading order (`slotRows`). */
   rows: number[][];
   frames: number;
-  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year'>;
+  chapter: Pick<Collection, 'name' | 'slug' | 'location' | 'region' | 'year' | 'locationZh' | 'regionZh'>;
   ordinal: string;
   total: string;
   cities: string[];
+  citiesZh: string[];
   reading: StubReading;
   /** False only while a standalone /works page is still its server HTML: the
    *  stub is sent waiting below the fold, and is handed in from hydration
@@ -1524,6 +1580,7 @@ function KeptStub({
           total={total}
           frames={frames}
           cities={cities}
+          citiesZh={citiesZh}
           reading={reading}
           reduce={reduce}
         />
@@ -1691,24 +1748,25 @@ function Arrow({ left = false, className }: { left?: boolean; className?: string
  *  is the posters' own, reprinted because the map page crops past it. */
 function Credits({ camera, map }: { camera: string; map: boolean }) {
   const [site, notice] = MAP_CREDIT.split(' · ');
+  const noticeZh = tr('zh', 'story.mapCredit').split(' · ')[1];
   return (
     <dl className="story-credits">
       <div>
-        <dt className="font-ui">Photographs</dt>
-        <dd className="font-serif">Ryan Xu</dd>
+        <dt className="font-ui"><T k="story.credits.photographs" /></dt>
+        <dd className="font-serif" lang="en">Ryan Xu</dd>
       </div>
       {camera && (
         <div>
-          <dt className="font-ui">Camera</dt>
+          <dt className="font-ui"><T k="story.credits.camera" /></dt>
           <dd className="font-serif">{camera}</dd>
         </div>
       )}
       {map && (
         <div>
-          <dt className="font-ui">Map</dt>
+          <dt className="font-ui"><T k="story.credits.map" /></dt>
           <dd className="font-serif">
             {site}
-            <small className="font-ui">{notice}</small>
+            <small className="font-ui"><Bi en={notice} zh={noticeZh} /></small>
           </dd>
         </div>
       )}
@@ -1727,20 +1785,24 @@ function Credits({ camera, map }: { camera: string; map: boolean }) {
    global.css); every other way in paints it set. */
 function OpeningSpread({
   name,
+  nameZh,
   heading,
   ordinal,
   total,
   dek,
+  dekZh,
   camera,
   terrain,
   entering,
   waiting,
 }: {
   name: string;
+  nameZh?: string;
   heading: 'h1' | 'h2';
   ordinal: string;
   total: string;
   dek: string;
+  dekZh?: string;
   camera: string;
   terrain: string;
   /** Arrived by a grow: the map develops once it has landed and decoded. */
@@ -1748,6 +1810,8 @@ function OpeningSpread({
   waiting: boolean;
 }) {
   const Heading = heading;
+  const t = useT();
+  const lang = useLang();
   const terrainRef = useRef<HTMLImageElement>(null);
   // Whether the map is still on its way. Read once at mount on a grown
   // arrival (warmTerrain has normally decoded it during the grow); never on
@@ -1758,7 +1822,7 @@ function OpeningSpread({
     if (image?.complete && image.naturalWidth > 0) setDecoding(false);
   }, []);
   return (
-    <section className="story-spread" aria-label={`${name}, opening`}>
+    <section className="story-spread" aria-label={t('story.spreadAria', { name: lang === 'zh' && nameZh ? nameZh : name })}>
       {/* Pending: the map and the gradient that sets the type on it
           develop together once the photograph has landed, so the grow's
           flat stock hands over to a flat stock. */}
@@ -1781,10 +1845,10 @@ function OpeningSpread({
       <div className="story-spread__type">
         <p className="story-kicker font-ui">{ordinal} / {total}</p>
         <Heading className="story-title font-serif">
-          <span className="story-title__line">{name}</span>
+          <span className="story-title__line"><Bi en={name} zh={nameZh} /></span>
         </Heading>
         <div className="story-spread__meta">
-          {dek && <p className="story-dek font-serif">{dek}</p>}
+          {dek && <p className="story-dek font-serif"><Bi en={dek} zh={dekZh} /></p>}
           <Credits camera={camera} map={!!terrain} />
         </div>
       </div>
@@ -1809,6 +1873,7 @@ function EndPage({
   terrain,
   camera,
   position,
+  positionZh,
   frameCount,
   nextCollection,
   nextOrdinal,
@@ -1828,6 +1893,7 @@ function EndPage({
   terrain: string;
   camera: string;
   position: string;
+  positionZh: string;
   frameCount: number;
   nextCollection: Collection | null;
   nextOrdinal: string;
@@ -1842,9 +1908,11 @@ function EndPage({
   onShare: () => void;
   onTop: () => void;
   isShared: boolean;
-  shareStatus: string;
+  shareStatus: Key | '';
   shareFallbackUrl: string;
 }) {
+  const t = useT();
+  const lang = useLang();
   const [nextRef, inView] = useInViewOnce<HTMLButtonElement>('0px 0px -18% 0px', 0.2);
   // Until the page is armed the end is simply there. Arming hides the Next
   // line at once (every "not yet" transition is instant), below the fold.
@@ -1856,14 +1924,18 @@ function EndPage({
     if (inView && nextCollection) void warmTerrain(terrainFor(nextCollection));
   }, [inView, nextCollection]);
   const region = typeof collection.region === 'string' ? collection.region.trim() : '';
-  const facts: Array<[string, string]> = [
-    ['Place', region && !labelsMatch(collection.name, region) ? `${collection.name}, ${region}` : collection.name],
+  const nameZh = collection.nameZh || collection.name;
+  const withRegion = region && !labelsMatch(collection.name, region);
+  // [label, English, Chinese]: the figures and the camera read the same.
+  const facts: Array<[Key, string, string | undefined]> = [
+    ['story.facts.place', withRegion ? `${collection.name}, ${region}` : collection.name, withRegion ? `${nameZh}，${collection.regionZh || region}` : nameZh],
   ];
-  if (position) facts.push(['Position', position]);
-  if (collection.year) facts.push(['Year', String(collection.year)]);
-  facts.push(['Frames', String(frameCount)]);
-  if (camera) facts.push(['Camera', camera]);
-  facts.push(['Photographs', 'Ryan Xu']);
+  if (position) facts.push(['story.facts.position', position, positionZh]);
+  if (collection.year) facts.push(['story.facts.year', String(collection.year), undefined]);
+  facts.push(['story.facts.frames', String(frameCount), undefined]);
+  if (camera) facts.push(['story.facts.camera', camera, undefined]);
+  facts.push(['story.facts.photographs', 'Ryan Xu', undefined]);
+  const nextName = nextCollection ? (lang === 'zh' && nextCollection.nameZh ? nextCollection.nameZh : nextCollection.name) : '';
   const nextDims = nextCollection?.coverImageUrl ? fileDims(nextCollection.coverImageUrl) : null;
   const coverWaiting = { opacity: 0, y: 14, WebkitMaskPosition: '100% 0%', maskPosition: '100% 0%' };
   const coverRest = { opacity: 1, y: 0, WebkitMaskPosition: '0% 0%', maskPosition: '0% 0%' };
@@ -1922,7 +1994,7 @@ function EndPage({
   return (
     <footer className="story-end" style={stockStyle(collection.slug)}>
       <div className="story-end__plates">
-        <p className="story-label font-ui">Plates</p>
+        <p className="story-label font-ui"><T k="story.plates" /></p>
         <ol
           ref={platesRef}
           className="story-plates"
@@ -1938,7 +2010,7 @@ function EndPage({
                   type="button"
                   className="story-plate story-focus"
                   data-plate-index={index}
-                  aria-label={`Open frame ${pad2(index + 1)}`}
+                  aria-label={t('story.plateAria', { nn: pad2(index + 1) })}
                   onClick={(event) => onOpenPlate(index, event.currentTarget)}
                 >
                   <img
@@ -1964,7 +2036,7 @@ function EndPage({
             <img
               className="story-terrain-ink"
               src={terrain}
-              alt={`Map of ${collection.name}`}
+              alt={t('story.mapAlt', { name: lang === 'zh' ? nameZh : collection.name })}
               width={2000}
               height={1126}
               loading="lazy"
@@ -1972,14 +2044,14 @@ function EndPage({
               draggable={false}
             />
           </div>
-          <p className="story-end__credit font-ui">{MAP_CREDIT}</p>
+          <p className="story-end__credit font-ui"><Bi en={MAP_CREDIT} zh={tr('zh', 'story.mapCredit')} /></p>
         </div>
       )}
       <dl className="story-end__facts">
-        {facts.map(([label, value]) => (
+        {facts.map(([label, value, valueZh]) => (
           <div key={label}>
-            <dt className="font-ui">{label}</dt>
-            <dd className="font-serif">{value}</dd>
+            <dt className="font-ui"><T k={label} /></dt>
+            <dd className="font-serif"><Bi en={value} zh={valueZh} /></dd>
           </div>
         ))}
       </dl>
@@ -1993,7 +2065,7 @@ function EndPage({
               const card = event.currentTarget.querySelector<HTMLElement>('[data-next-cover]');
               onTurn(card ?? event.currentTarget);
             }}
-            aria-label={`Read next story: ${nextCollection.name}`}
+            aria-label={t('story.nextAria', { name: nextName })}
           >
             {nextCollection.coverImageUrl && (
               // The next story's frame 01 at its own ratio (it used to be
@@ -2033,7 +2105,10 @@ function EndPage({
                   animate={{ y: reduce || shown ? '0%' : '112%' }}
                   transition={{ duration: reduce || !shown ? 0 : DUR.plane, delay: reduce || !shown ? 0 : 0.12, ease: EASE.arrive }}
                 >
-                  <i>Next,</i> {nextCollection.name}
+                  <Bi
+                    en={<><i>{tr('en', 'story.next')}</i> {nextCollection.name}</>}
+                    zh={<>{tr('zh', 'story.next')}{nextCollection.nameZh || nextCollection.name}</>}
+                  />
                   <Arrow className="story-next__arrow" />
                 </motion.span>
               </span>
@@ -2043,15 +2118,15 @@ function EndPage({
       )}
       <div className="story-end__links">
         <button type="button" className="story-link font-ui story-focus" onClick={onShare}>
-          {isShared ? 'Link copied' : 'Share this story'}
+          <T k={isShared ? 'story.shared' : 'story.share'} />
         </button>
         <button type="button" className="story-link font-ui story-focus" onClick={onTop}>
-          Back to the opening
+          <T k="story.backToOpening" />
         </button>
       </div>
       <div className={shareFallbackUrl ? 'story-end__share' : 'sr-only'}>
         <p role="status" aria-live="polite" aria-atomic="true" className="font-ui">
-          {shareStatus}
+          {shareStatus && <T k={shareStatus} />}
         </p>
         {shareFallbackUrl && (
           <input
@@ -2059,7 +2134,7 @@ function EndPage({
             tabIndex={0}
             readOnly
             value={shareFallbackUrl}
-            aria-label="Story link — select and copy"
+            aria-label={t('story.linkAria')}
             onFocus={(event) => event.currentTarget.select()}
             onClick={(event) => event.currentTarget.select()}
             className="story-end__share-input font-ui story-focus"
@@ -2139,6 +2214,7 @@ function LightboxShell({
   activeIndex,
   onClose,
   collectionName,
+  collectionNameZh,
   origin,
   resolveTarget,
 }: {
@@ -2146,6 +2222,7 @@ function LightboxShell({
   activeIndex: number;
   onClose: () => void;
   collectionName: string;
+  collectionNameZh?: string;
   origin: LightboxOrigin | null;
   resolveTarget: (index: number) => LightboxTarget | null;
 }) {
@@ -2155,6 +2232,7 @@ function LightboxShell({
       initialIndex={activeIndex}
       onClose={onClose}
       collectionName={collectionName}
+      collectionNameZh={collectionNameZh}
       origin={origin}
       resolveTarget={resolveTarget}
     />
@@ -2258,7 +2336,7 @@ export default function MagazineLayout({
   // frame folio read the offset.
   const { scrollY } = useScroll({ container: containerRef });
   const [isShared, setIsShared] = useState(false);
-  const [shareStatus, setShareStatus] = useState('');
+  const [shareStatus, setShareStatus] = useState<Key | ''>('');
   const [shareFallbackUrl, setShareFallbackUrl] = useState('');
   const shareResetTimerRef = useRef<number | null>(null);
   const shareAttemptRef = useRef(0);
@@ -2388,19 +2466,40 @@ export default function MagazineLayout({
       return city && !labelsMatch(collection.name, city) && !labelsMatch(location, city) ? city : '';
     });
   }, [collection.location, collection.name, photos]);
+  // Each place in Chinese (photo.location.cityZh), where it has one.
+  const placeZhMap = useMemo(() => {
+    const map = new Map<string, string>();
+    photos.forEach((photo) => {
+      const city = typeof photo?.location?.city === 'string' ? photo.location.city.trim() : '';
+      const zh = typeof photo?.location?.cityZh === 'string' ? photo.location.cityZh.trim() : '';
+      if (city && zh) map.set(city, zh);
+    });
+    return map;
+  }, [photos]);
+  const placeZh = useCallback((place: string) => placeZhMap.get(place), [placeZhMap]);
   // The stub's per frame number; 0 (the arrival's "00") carries the first
   // frame's.
   const stubCities = useMemo(() => [places[0] ?? '', ...places], [places]);
+  const stubCitiesZh = useMemo(() => stubCities.map((city) => (city && placeZhMap.get(city)) || city), [placeZhMap, stubCities]);
   const paragraphs = useMemo(() => storyParagraphs(collection), [collection]);
-  const quote = pullQuote(collection.slug);
-  const dek = storyDek(collection.slug) || collection.subtitle || '';
+  const paragraphsZh = useMemo(() => storyParagraphsZh(collection), [collection]);
+  const quote = collection.pullQuote || pullQuote(collection.slug);
+  const quoteZh = collection.pullQuoteZh;
+  const dekFromStory = collection.dek || storyDek(collection.slug);
+  const dek = dekFromStory || collection.subtitle || '';
+  const dekZh = dekFromStory ? collection.dekZh : collection.subtitleZh;
   const camera = useMemo(() => storyCamera(photos.map((photo) => photo.camera)), [photos]);
   const position = formatPosition(photos[0]?.location?.lat, photos[0]?.location?.lng);
+  const positionZh = formatPositionZh(photos[0]?.location?.lat, photos[0]?.location?.lng);
   const terrain = terrainFor(collection);
   const darkMap = !!collection.slug && DARK_TERRAIN.has(collection.slug);
   const region = typeof collection.region === 'string' ? collection.region.trim() : '';
   const location = typeof collection.location === 'string' ? collection.location.trim() : '';
   const dateline = [region || location, collection.year ? String(collection.year) : ''].filter(Boolean).join(', ');
+  const datelineZh = [(region ? collection.regionZh : collection.locationZh) || region || location, collection.year ? String(collection.year) : ''].filter(Boolean).join('，');
+  const t = useT();
+  const lang = useLang();
+  const nameIn = lang === 'zh' && collection.nameZh ? collection.nameZh : collection.name;
   // The story's number is its ticket's: the homepage's chapter order, not the
   // data's (chapterOrdinal). A chapter the issue does not carry falls back to
   // its place in the list it was given.
@@ -2849,14 +2948,14 @@ export default function MagazineLayout({
         ? new URL(`/works/${collection.slug}`, window.location.origin).href
         : window.location.href;
     const shareData = {
-      title: `Ryan Xu | ${collection.name}`,
-      text: collection.description || '',
+      title: t('story.shareTitle', { name: nameIn }),
+      text: (lang === 'zh' && collection.descriptionZh) || collection.description || '',
       url: storyUrl,
     };
     if (navigator.share) {
       try {
         await navigator.share(shareData);
-        if (attempt === shareAttemptRef.current) setShareStatus('Story shared.');
+        if (attempt === shareAttemptRef.current) setShareStatus('story.status.shared');
         return;
       } catch (error) {
         // Dismissing the native share sheet is an intentional cancellation.
@@ -2868,7 +2967,7 @@ export default function MagazineLayout({
       await navigator.clipboard.writeText(storyUrl);
       if (attempt !== shareAttemptRef.current) return;
       setIsShared(true);
-      setShareStatus('Link copied to clipboard.');
+      setShareStatus('story.status.copied');
       shareResetTimerRef.current = window.setTimeout(() => {
         setIsShared(false);
         setShareStatus('');
@@ -2877,7 +2976,7 @@ export default function MagazineLayout({
     } catch {
       if (attempt !== shareAttemptRef.current) return;
       setShareFallbackUrl(storyUrl);
-      setShareStatus('Unable to copy automatically. Select the link below to copy it.');
+      setShareStatus('story.status.manual');
     }
   };
 
@@ -3040,6 +3139,8 @@ export default function MagazineLayout({
   const sharedPanelDelay = canMorphSharedPhoto ? SHARED_CONTENT_DELAY : 0;
   const frameShared: FrameShared = {
     collectionName: collection.name,
+    collectionNameZh: collection.nameZh || collection.name,
+    placeZh,
     total: photos.length,
     canHover,
     onHover: markHoveredFrame,
@@ -3060,7 +3161,9 @@ export default function MagazineLayout({
         ratios={ratios}
         places={places}
         paragraphs={paragraphs}
+        paragraphsZh={paragraphsZh}
         quote={quote}
+        quoteZh={quoteZh}
         arrive={entrances[index + 1]}
         armed={revealArmed}
         shared={frameShared}
@@ -3107,7 +3210,7 @@ export default function MagazineLayout({
         className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry || plateEntry ? 'bg-transparent' : 'bg-black/25'}`}
         role={standalone ? undefined : 'dialog'}
         aria-modal={standalone ? undefined : true}
-        aria-label={`Story: ${collection.name}`}
+        aria-label={t('story.dialogAria', { name: nameIn })}
         inert={!isPresent}
         aria-hidden={lightboxIndex !== null || !isPresent}
       >
@@ -3223,14 +3326,14 @@ export default function MagazineLayout({
               whileTap={reduce ? undefined : { scale: 0.96, x: -4 }}
               transition={{ duration: 0.2, ease: EASE.arrive }}
               className="story-head__back story-focus font-ui"
-              aria-label={`${standalone ? 'Back from' : 'Close'} ${collection.name} story`}
+              aria-label={t(standalone ? 'story.backFromAria' : 'story.closeAria', { name: nameIn })}
             >
               <Arrow left className="story-head__arrow" />
-              Back
+              <T k="story.back" />
             </motion.button>
-            <p className="story-head__name font-ui" aria-hidden="true">{collection.name}</p>
+            <p className="story-head__name font-ui" aria-hidden="true"><Bi en={collection.name} zh={collection.nameZh} /></p>
             <p className="story-head__folio font-ui" aria-hidden="true">
-              <span className="story-head__dateline">{dateline}</span>
+              <span className="story-head__dateline"><Bi en={dateline} zh={datelineZh} /></span>
               <span key={collection._id} ref={folioRef} className="story-head__frame" />
             </p>
           </div>
@@ -3242,10 +3345,12 @@ export default function MagazineLayout({
             <div key={collection._id} className="story-body">
               <OpeningSpread
                 name={collection.name}
+                nameZh={collection.nameZh}
                 heading={heading}
                 ordinal={ordinal}
                 total={total}
                 dek={dek}
+                dekZh={dekZh}
                 camera={camera}
                 terrain={terrain}
                 entering={enteringId === collection._id && !reduce}
@@ -3281,12 +3386,12 @@ export default function MagazineLayout({
                       midday frame): it stands on the map page under the
                       title, as a standfirst, whichever way frame 01 turns. */}
                   <div className="story-open__under">
-                    <p className="story-cap story-open__cap font-ui"><CaptionText frames={[0]} places={places} /></p>
+                    <p className="story-cap story-open__cap font-ui"><CaptionText frames={[0]} places={places} placeZh={placeZh} /></p>
                     <Credits camera={camera} map={!!terrain} />
                   </div>
                   {/* A portrait frame 01 fills the right page: its caption
                       stands on the map page beside it (the phone: under it). */}
-                  <p className="story-cap story-open__cap story-open__cap--side font-ui"><CaptionText frames={[0]} places={places} /></p>
+                  <p className="story-cap story-open__cap story-open__cap--side font-ui"><CaptionText frames={[0]} places={places} placeZh={placeZh} /></p>
                 </div>
                 <div className="story-paper">
                   {sections.length === 0 ? slotViews : (
@@ -3311,6 +3416,7 @@ export default function MagazineLayout({
                     terrain={terrain}
                     camera={camera}
                     position={position}
+                    positionZh={positionZh}
                     frameCount={photos.length}
                     nextCollection={nextCollection}
                     nextOrdinal={nextOrdinal}
@@ -3344,7 +3450,7 @@ export default function MagazineLayout({
                   hairline and "15 Captured Frames"). */}
               <aside className="story-rail">
                 <div className="story-rail__foot">
-                  <p className="sr-only font-ui">{photos.length} frames</p>
+                  <p className="sr-only font-ui"><T k="story.framesSr" vars={{ n: photos.length }} /></p>
                   <KeptStub
                     key={collection._id}
                     stubRef={keptStubRef}
@@ -3357,6 +3463,7 @@ export default function MagazineLayout({
                     ordinal={plateStub?.print?.ordinal ?? ordinal}
                     total={plateStub?.print?.total ?? total}
                     cities={stubCities}
+                    citiesZh={stubCitiesZh}
                     reading={stubReading}
                     armed={revealArmed}
                     released={stubArrived}
@@ -3379,6 +3486,7 @@ export default function MagazineLayout({
             activeIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             collectionName={collection.name}
+            collectionNameZh={collection.nameZh}
             origin={lightboxOrigin}
             resolveTarget={resolveFrameTarget}
           />

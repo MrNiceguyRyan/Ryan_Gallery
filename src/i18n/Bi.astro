@@ -1,0 +1,12 @@
+---
+// A content field with a Chinese twin in static Astro markup: both languages,
+// global.css shows the reader's. <Bi en={place.name} zh={place.nameZh} />
+interface Props {
+  en: string;
+  zh?: string | null;
+}
+
+const { en, zh } = Astro.props;
+const hasZh = typeof zh === 'string' && zh.trim() !== '' && zh !== en;
+---
+{hasZh ? <><span data-l="en">{en}</span><span data-l="zh" lang="zh-Hans">{zh}</span></> : en}

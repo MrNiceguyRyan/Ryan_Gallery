@@ -32,10 +32,123 @@ function slugify(input: string): string {
   return `note-${new Date().toISOString().slice(0, 10)}`
 }
 
+/** 中文版字段的说明（一篇只用一种语言写时，直接写在英文字段里就好，两种模式都会显示它）。 */
+const ZH_HINT = '中文版网站（右上角「中」）显示的内容。留空时，中文版显示上面那一栏。只用中文写的笔记，直接写在上面那一栏即可。'
+
+/** 正文的格式（段落、小标题、引用、照片、金句）：英文和中文正文用同一套。 */
+const bodyMembers = [
+  defineArrayMember({
+    type: 'block',
+    styles: [
+      {title: '正文 Normal', value: 'normal'},
+      {title: '小标题 H2', value: 'h2'},
+      {title: '小小标题 H3', value: 'h3'},
+      {title: '引用 Quote', value: 'blockquote'},
+    ],
+    lists: [],
+    marks: {
+      decorators: [
+        {title: '加粗 Strong', value: 'strong'},
+        {title: '强调 Emphasis（英文斜体 · 中文着重号）', value: 'em'},
+      ],
+      annotations: [
+        defineArrayMember({
+          name: 'link',
+          title: '链接 Link',
+          type: 'object',
+          fields: [
+            defineField({
+              name: 'href',
+              title: '网址 URL',
+              type: 'url',
+              description: '完整网址（https://…）或站内路径（例如 /works/miami）',
+              validation: (rule) =>
+                rule.required().uri({allowRelative: true, scheme: ['http', 'https', 'mailto']}),
+            }),
+          ],
+        }),
+      ],
+    },
+  }),
+  defineArrayMember({
+    name: 'image',
+    title: '照片 Image',
+    type: 'image',
+    options: {hotspot: true},
+    fields: [
+      defineField({
+        name: 'caption',
+        title: '图注 / Caption',
+        type: 'string',
+        description: '显示在照片下方的一句话（可选）。',
+      }),
+      defineField({
+        name: 'captionZh',
+        title: '图注 · 中文',
+        type: 'string',
+        description: ZH_HINT,
+      }),
+      defineField({
+        name: 'alt',
+        title: '图片描述 / Alt text',
+        type: 'string',
+        description: '描述画面内容，给读屏软件和搜索引擎用。',
+      }),
+      defineField({
+        name: 'altZh',
+        title: '图片描述 · 中文',
+        type: 'string',
+        description: ZH_HINT,
+      }),
+    ],
+  }),
+  defineArrayMember({
+    name: 'pullQuote',
+    title: '金句 / Pull quote',
+    type: 'object',
+    fields: [
+      defineField({
+        name: 'text',
+        title: '内容 / Text',
+        type: 'text',
+        rows: 3,
+        description:
+          '会被放大显示在正文中间的一句话，通常摘自这篇文章本身。不用加引号，网页会自动加。建议英文 120 字符、中文 40 字以内；放在离原句至少隔一段的位置（不要紧挨着原句）。',
+        validation: (rule) => [
+          rule.required().max(240),
+          rule
+            .custom((value) => (tooLong(value, 40, 120) ? '金句建议英文 120 字符、中文 40 字以内；放在离原句至少隔一段的位置' : true))
+            .warning(),
+        ],
+      }),
+      defineField({
+        name: 'textZh',
+        title: '内容 · 中文',
+        type: 'text',
+        rows: 3,
+        description: ZH_HINT,
+      }),
+      defineField({
+        name: 'attribution',
+        title: '出处 / Attribution (可选)',
+        type: 'string',
+        description: '如果是别人说的话，写上是谁；自己的话留空。',
+      }),
+    ],
+    preview: {
+      select: {title: 'text', subtitle: 'attribution'},
+      prepare({title, subtitle}) {
+        return {title: title ? `“${title}”` : '金句', subtitle: subtitle || 'Pull quote'}
+      },
+    },
+  }),
+]
+
 export default defineType({
   name: 'note',
   title: '笔记 / Note',
   type: 'document',
+  groups: [{name: 'zh', title: '中文'}],
   fields: [
     defineField({
       name: 'title',
@@ -48,6 +161,14 @@ export default defineType({
           .custom((value) => (tooLong(value, 24, 70) ? '标题建议英文 70 字符、中文 24 字以内，太长在页面上会占好几行' : true))
           .warning(),
       ],
+    }),
+    defineField({
+      name: 'titleZh',
+      title: '标题 · 中文',
+      type: 'string',
+      group: 'zh',
+      description: ZH_HINT,
+      validation: (rule) => rule.max(120),
     }),
     defineField({
       name: 'slug',
@@ -90,6 +211,14 @@ export default defineType({
           .warning(),
     }),
     defineField({
+      name: 'dekZh',
+      title: '导语 · 中文',
+      type: 'text',
+      rows: 3,
+      group: 'zh',
+      description: ZH_HINT,
+    }),
+    defineField({
       name: 'cover',
       title: '封面照片 / Cover (可选)',
       type: 'image',
@@ -101,6 +230,12 @@ export default defineType({
           title: '图片描述 / Alt text',
           type: 'string',
           description: '一句话描述画面内容，给读屏软件和搜索引擎用，例如「羚羊峡谷里的一束正午光」。',
+        }),
+        defineField({
+          name: 'altZh',
+          title: '图片描述 · 中文',
+          type: 'string',
+          description: ZH_HINT,
         }),
       ],
     }),
@@ -119,94 +254,15 @@ export default defineType({
       type: 'array',
       description:
         '正文。段落直接写；小标题用 H2 / H3；引用别人的话用 Quote；插入照片用 + 里的 Image；想把自己的一句话放大当"金句"用 + 里的 Pull quote。强调（I 按钮）：英文显示为斜体，中文没有斜体，显示为字下的着重号。最后一段请以正文段落结束，文末会自动加上结束符号 ■。',
-      of: [
-        defineArrayMember({
-          type: 'block',
-          styles: [
-            {title: '正文 Normal', value: 'normal'},
-            {title: '小标题 H2', value: 'h2'},
-            {title: '小小标题 H3', value: 'h3'},
-            {title: '引用 Quote', value: 'blockquote'},
-          ],
-          lists: [],
-          marks: {
-            decorators: [
-              {title: '加粗 Strong', value: 'strong'},
-              {title: '强调 Emphasis（英文斜体 · 中文着重号）', value: 'em'},
-            ],
-            annotations: [
-              defineArrayMember({
-                name: 'link',
-                title: '链接 Link',
-                type: 'object',
-                fields: [
-                  defineField({
-                    name: 'href',
-                    title: '网址 URL',
-                    type: 'url',
-                    description: '完整网址（https://…）或站内路径（例如 /works/miami）',
-                    validation: (rule) =>
-                      rule.required().uri({allowRelative: true, scheme: ['http', 'https', 'mailto']}),
-                  }),
-                ],
-              }),
-            ],
-          },
-        }),
-        defineArrayMember({
-          name: 'image',
-          title: '照片 Image',
-          type: 'image',
-          options: {hotspot: true},
-          fields: [
-            defineField({
-              name: 'caption',
-              title: '图注 / Caption',
-              type: 'string',
-              description: '显示在照片下方的一句话（可选）。',
-            }),
-            defineField({
-              name: 'alt',
-              title: '图片描述 / Alt text',
-              type: 'string',
-              description: '描述画面内容，给读屏软件和搜索引擎用。',
-            }),
-          ],
-        }),
-        defineArrayMember({
-          name: 'pullQuote',
-          title: '金句 / Pull quote',
-          type: 'object',
-          fields: [
-            defineField({
-              name: 'text',
-              title: '内容 / Text',
-              type: 'text',
-              rows: 3,
-              description:
-                '会被放大显示在正文中间的一句话，通常摘自这篇文章本身。不用加引号，网页会自动加。建议英文 120 字符、中文 40 字以内；放在离原句至少隔一段的位置（不要紧挨着原句）。',
-              validation: (rule) => [
-                rule.required().max(240),
-                rule
-                  .custom((value) => (tooLong(value, 40, 120) ? '金句建议英文 120 字符、中文 40 字以内；放在离原句至少隔一段的位置' : true))
-                  .warning(),
-              ],
-            }),
-            defineField({
-              name: 'attribution',
-              title: '出处 / Attribution (可选)',
-              type: 'string',
-              description: '如果是别人说的话，写上是谁；自己的话留空。',
-            }),
-          ],
-          preview: {
-            select: {title: 'text', subtitle: 'attribution'},
-            prepare({title, subtitle}) {
-              return {title: title ? `“${title}”` : '金句', subtitle: subtitle || 'Pull quote'}
-            },
-          },
-        }),
-      ],
+      of: bodyMembers,
+    }),
+    defineField({
+      name: 'bodyZh',
+      title: '正文 · 中文',
+      type: 'array',
+      group: 'zh',
+      description: ZH_HINT + ' 格式和上面的正文一样。',
+      of: bodyMembers,
     }),
     defineField({
       name: 'featured',

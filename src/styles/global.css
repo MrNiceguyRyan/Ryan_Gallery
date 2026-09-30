@@ -72,10 +72,8 @@ html.lenis body {
   overflow: hidden;
 }
 
-/* The site nav (Nav.tsx and the homepage's own copy). The pills answer in
-   background and colour only (chrome never scales) and the wordmark only
-   fades to 0.6, on the hover pair: 200 ms in, 400 ms out, arrive curve. The
-   hover values themselves stay in the markup's hover: utilities. */
+/* The site nav (Nav.tsx and the homepage's own copy). The wordmark only
+   fades to 0.6, on the hover pair: 200 ms in, 400 ms out, arrive curve. */
 .nav-pill {
   transition-property: background-color, border-color, color;
   transition-duration: var(--dur-out);
@@ -84,6 +82,280 @@ html.lenis body {
 .nav-pill:hover,
 .nav-pill:focus-visible {
   transition-duration: var(--dur-in);
+}
+
+/* ── The nav set: MAP · NOTES · ABOUT │ 中 EN (Nav.tsx NavSet) ──
+   The explorer bar's twin (.explorer-bar, the foot of the homepage): the same
+   object — bone on translucent olive, one hairline, a 2px rim, 46px tall,
+   40px targets, Space Grotesk 10px/500 at 0.08em — so the two instruments at
+   the page's two right-hand corners read as one set. It answers in
+   background and colour only (chrome never scales): 200 ms in, 400 ms out.
+   The page the reader is on is in full bone over a hairline rule (the
+   printed contents line's mark; it takes no width, so the set never shifts);
+   the language in use sits under a soft bone thumb. The keyboard's ring is
+   the lime, as on the bar. */
+.site-navset {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 46px;
+  padding: 2px;
+  border: 1px solid rgba(244, 244, 237, 0.16);
+  border-radius: 999px;
+  background: rgba(22, 26, 18, 0.66);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 10px 30px rgba(6, 8, 5, 0.28);
+}
+.site-navset__link,
+.site-lang__opt {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(244, 244, 237, 0.84);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-out) var(--ease-arrive), color var(--dur-out) var(--ease-arrive);
+}
+.site-navset__link {
+  min-width: 40px;
+  padding: 0 15px;
+}
+/* A toggle never moves the set: each link keeps the wider of its two
+   labels (both sit in one grid cell; the other language is kept for its
+   width, invisible and unread), so the bar's edge stays where it was. */
+.site-navset__link {
+  display: inline-grid;
+  place-items: center;
+}
+.site-navset__link > [data-l] {
+  grid-area: 1 / 1;
+}
+html[data-lang='zh'] .site-navset__link > [data-l='en'],
+html:not([data-lang='zh']) .site-navset__link > [data-l='zh'] {
+  display: inline !important;
+  visibility: hidden;
+}
+.site-navset__link:hover {
+  background: rgba(244, 244, 237, 0.08);
+  color: #F4F4ED;
+  transition-duration: var(--dur-in);
+}
+.site-navset__link:active {
+  background: rgba(244, 244, 237, 0.12);
+}
+.site-navset__link[aria-current] {
+  color: #F4F4ED;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(244, 244, 237, 0.86);
+  text-underline-offset: 6px;
+}
+.site-navset__link:focus-visible,
+.site-lang__opt:focus-visible {
+  outline: 2px solid #D2FF00;
+  outline-offset: 1px;
+}
+.site-navset__rule {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: rgba(244, 244, 237, 0.16);
+}
+/* 中 / EN. The setting is drawn from html[data-lang], written before the
+   first paint, so it is right before the island hydrates. */
+.site-lang {
+  position: relative;
+  display: flex;
+  height: 40px;
+}
+.site-lang__opt {
+  z-index: 1;
+  width: 40px;
+  color: rgba(244, 244, 237, 0.5);
+}
+/* 中 is set in the Chinese sans a size up, so its body stands as tall as
+   the EN caps beside it. */
+.site-lang__opt[lang='zh-Hans'] {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.site-lang__opt:hover {
+  color: rgba(244, 244, 237, 0.84);
+  transition-duration: var(--dur-in);
+}
+html[data-lang='zh'] .site-lang__opt[lang='zh-Hans'],
+html:not([data-lang='zh']) .site-lang__opt[lang='en'] {
+  color: #F4F4ED;
+}
+.site-lang__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(244, 244, 237, 0.13);
+  translate: 0 0;
+  transition: translate 320ms var(--ease-arrive);
+}
+html:not([data-lang='zh']) .site-lang__thumb {
+  translate: 40px 0;
+}
+/* The phone: 44px-tall targets in a 48px bar, the labels closer, so the
+   wordmark and the whole set (NOTES included) fit a 390px screen with the
+   page's 24px gutters, and a 360px one with the wordmark a step down. */
+@media (max-width: 767px) {
+  .site-navset {
+    height: 48px;
+  }
+  .site-navset__link,
+  .site-lang,
+  .site-lang__opt,
+  .site-lang__thumb {
+    height: 44px;
+  }
+  .site-navset__link {
+    min-width: 44px;
+    padding: 0 7px;
+    letter-spacing: 0.06em;
+  }
+  .site-navset__rule {
+    margin: 0 2px;
+  }
+  .site-lang__opt,
+  .site-lang__thumb {
+    width: 36px;
+  }
+  html:not([data-lang='zh']) .site-lang__thumb {
+    translate: 36px 0;
+  }
+}
+@media (max-width: 379px) {
+  .nav-wordmark {
+    font-size: 16px;
+  }
+  .site-navset__link {
+    padding: 0 4px;
+  }
+  .site-lang__opt,
+  .site-lang__thumb {
+    width: 32px;
+  }
+  html:not([data-lang='zh']) .site-lang__thumb {
+    translate: 32px 0;
+  }
+}
+/* The smallest phones (320px, with NOTES in the set): the labels a step
+   down and the targets closer, still 44px tall. */
+@media (max-width: 340px) {
+  .nav-wordmark {
+    font-size: 15px;
+  }
+  .site-navset__link {
+    min-width: 0;
+    padding: 0 3px;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+  }
+  .site-navset__rule {
+    margin: 0 1px;
+  }
+  .site-lang__opt,
+  .site-lang__thumb {
+    width: 28px;
+  }
+  .site-lang__opt[lang='zh-Hans'] {
+    font-size: 11px;
+  }
+  html:not([data-lang='zh']) .site-lang__thumb {
+    translate: 28px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-lang__thumb {
+    transition-duration: 0s;
+  }
+}
+
+/* ── 中 / EN: one language on screen (src/i18n/runtime.ts) ──
+   Every visible string is in the markup in both languages; html[data-lang]
+   (written before the first paint) shows one. Hidden is display:none, so a
+   screen reader reads one language too. */
+html[data-lang='zh'] [data-l='en'],
+html:not([data-lang='zh']) [data-l='zh'] {
+  display: none !important;
+}
+
+/* ── Chinese type ──
+   Fraunces and Space Grotesk have no Han glyphs, and a Chinese web font is
+   megabytes, so Chinese is set in the reader's own system faces, chosen to
+   stand beside the house pair: a Song (Songti SC on the Mac, Noto Serif
+   CJK / Source Han Serif where installed) where the page speaks in
+   Fraunces, a Hei (PingFang SC, Noto Sans CJK, Microsoft YaHei) where it
+   speaks in Space Grotesk. The stacks in @theme already fall back to them
+   per glyph. In Chinese mode the few punctuation marks the Latin faces also
+   carry — the dash, the curly quotes, the ellipsis — are taken from the
+   Chinese face instead, so ——, “” and … are the Chinese ones (a joined
+   dash, centred dots), never Fraunces' Latin ones inside a Chinese line.
+   local() needs a face's full or PostScript name; a face that is not there
+   simply fails and the stack falls through. */
+@font-face {
+  font-family: 'Han Punct Serif';
+  src: local('Songti SC Regular'), local('STSongti-SC-Regular'), local('Noto Serif SC Regular'),
+    local('NotoSerifSC-Regular'), local('Noto Serif CJK SC Regular'), local('NotoSerifCJKsc-Regular'),
+    local('Source Han Serif SC Regular'), local('SourceHanSerifSC-Regular'), local('SimSun');
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+@font-face {
+  font-family: 'Han Punct Sans';
+  src: local('PingFang SC Regular'), local('PingFangSC-Regular'), local('Noto Sans SC Regular'),
+    local('NotoSansSC-Regular'), local('Noto Sans CJK SC Regular'), local('NotoSansCJKsc-Regular'),
+    local('Source Han Sans SC Regular'), local('SourceHanSansSC-Regular'), local('Microsoft YaHei');
+  unicode-range: U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+html[data-lang='zh'] {
+  --font-display: 'Han Punct Serif', "Fraunces", "Fraunces Fallback", ui-serif, Georgia, "Songti SC", "Noto Serif SC", "Source Han Serif SC", "Noto Serif CJK SC", STSong, SimSun, serif;
+  --font-ui: 'Han Punct Sans', "Space Grotesk", "Grotesk Fallback", ui-sans-serif, system-ui, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+}
+/* Han text is tuned where it is printed: every Chinese string is a
+   [data-l='zh'] span (or carries lang="zh-Hans"), and it reads its role from
+   the nearest face above it through three custom properties (an inherited
+   custom property is the nearest ancestor's, so a Grotesk label inside a
+   Fraunces block gets the label's values):
+   - --zh-min: the smallest a Chinese line is set. An uppercase Latin label
+     reads at 9-10px; a Han character does not (its strokes close up below
+     ~12px), so Chinese is lifted to the floor and never shrunk.
+   - --zh-track: Chinese is never tracked negative (Fraunces headlines are)
+     and only lightly positive (the labels' 0.08-0.1em opens Han too far).
+   - --zh-leading: a floor for the line. A Han line fills its em box, so
+     the Latin leading (0.82 on a display headline) would make lines touch; an
+     inline line-height can only raise a line, so prose keeps its own 1.6+.
+   No case, no italic: text-transform is moot, and an italic of a Chinese
+   face is a synthetic slant, so a Chinese line is always upright (emphasis in
+   Chinese is carried by the words, as in print). */
+.font-serif { --zh-min: 13px; --zh-track: 0.02em; --zh-leading: 1.32; }
+.font-ui { --zh-min: 12px; --zh-track: 0.06em; --zh-leading: 1.4; }
+[data-l='zh'] {
+  font-size: max(1em, var(--zh-min, 12px));
+  letter-spacing: var(--zh-track, 0.03em);
+  line-height: var(--zh-leading, 1.4);
+  font-style: normal;
+  text-autospace: normal;
+  line-break: strict;
+}
+[data-l='zh'] :is(em, i, cite) {
+  font-style: normal;
 }
 .nav-wordmark {
   transition: opacity var(--dur-out) var(--ease-arrive);
@@ -6512,6 +6784,10 @@ html[data-axis] .about-cover {
 }
 /* The card's one lime. */
 .about-statement .about-lime { color: var(--about-lime); }
+/* In Chinese ("永远在追逐 / 光。") the marked words are the Song face,
+   upright, and the two lines keep close to the English 0.96: the Han
+   leading floor (1.4, "Chinese type") would set them a line apart. */
+.about-statement { --zh-leading: 1.16; }
 
 /* ── The correspondence ticket (ContactTicket.tsx) ──
    Where the pill was: the homepage ticket's anatomy on the olive matte —

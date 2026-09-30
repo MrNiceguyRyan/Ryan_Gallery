@@ -931,6 +931,20 @@
 }
 
 /* ── Chinese ── */
+/* 中 / EN. The page carries both languages and html[data-lang] shows one
+   (global.css); html[lang] follows it, so an element with no lang of its
+   own is :lang(zh) in Chinese mode. His words carry their own lang unless
+   they have a Chinese twin (src/lib/notes.ts blockLang): an English note
+   read in Chinese keeps its English setting, and a title or dek with a
+   twin is set as Chinese exactly when the twin is the one showing. A note
+   with a whole Chinese text (bodyZh) prints the text twice, one .note-body
+   per language ([slug].astro), each set as a note written in it, and the
+   page shows the reader's. (Whole paragraphs, not [data-l] spans: global.css
+   sizes those as inline Chinese.) */
+html[data-lang='zh'] .note-body[data-note-text='en'],
+html:not([data-lang='zh']) .note-body[data-note-text='zh'] {
+  display: none !important;
+}
 /* The Chinese serif. A page with Chinese on it links Noto Serif SC
    (CJK_SERIF_CSS, src/lib/notes.ts) and marks itself data-cjk-serif; the
    webfont then comes straight after the Latin faces, so every device sets
@@ -979,6 +993,9 @@
 .notes-item__title:lang(zh) {
   line-height: 1.16;
   font-weight: 500;
+  /* A Chinese twin's span (global.css [data-l='zh']) keeps this leading
+     rather than the serif's inline floor. */
+  --zh-leading: 1.16;
 }
 .note-title:lang(zh) {
   font-size: calc(var(--n-title) * 0.72);

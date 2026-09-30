@@ -194,17 +194,17 @@ test('reading time and description work in both languages', () => {
 });
 
 test('the nav reads MAP · NOTES · ABOUT, and NOTES only once a note is live', () => {
+  // One set for every page (Nav.tsx NAV_LINKS, printed by NavSet); the
+  // homepage prints the same set, not a copy of it.
   const nav = readFileSync(new URL('../src/components/Nav.tsx', import.meta.url), 'utf8');
-  const map = nav.indexOf("label: 'Map'");
-  const notes = nav.indexOf("label: 'Notes'");
-  const about = nav.indexOf("label: 'About'");
+  const map = nav.indexOf("key: 'nav.map'");
+  const notes = nav.indexOf("key: 'nav.notes'");
+  const about = nav.indexOf("key: 'nav.about'");
   assert.ok(map > 0 && notes > map && about > notes);
-  assert.match(nav, /\.\.\.\(NOTES_LIVE \? \[\{ href: '\/notes', label: 'Notes' \}\] : \[\]\)/);
+  assert.match(nav, /\.\.\.\(NOTES_LIVE \? \[\{ href: '\/notes', key: 'nav\.notes' as Key \}\] : \[\]\)/);
   const home = readFileSync(new URL('../src/components/home/HomePage.tsx', import.meta.url), 'utf8');
-  const homeMap = home.indexOf('>\n              Map\n');
-  const homeNotes = home.indexOf('{NOTES_LIVE && (');
-  const homeAbout = home.indexOf('href="/about"');
-  assert.ok(homeMap > 0 && homeNotes > homeMap && homeAbout > homeNotes);
+  assert.match(home, /import \{ NavSet \} from '\.\.\/Nav';/);
+  assert.match(home, /<NavSet mapHref=\{atlasHref\} tabbable=\{navPillsVisible\} \/>/);
   const config = readFileSync(new URL('../astro.config.mjs', import.meta.url), 'utf8');
   assert.match(config, /__NOTES_LIVE__: JSON\.stringify\(notesLive\)/);
   const layout = readFileSync(new URL('../src/layouts/Layout.astro', import.meta.url), 'utf8');

@@ -9,6 +9,9 @@ import { getMapboxToken } from '../config/mapbox';
 import { fetchSanityWithRetry } from '../lib/sanityFetch';
 import { travelChapters } from '../lib/travelSilver';
 import { pad2 } from '../lib/proofSheet';
+import { COLLECTION_ZH_FIELDS, allWithZh } from '../i18n/content';
+import { i18nAttrs, tr } from '../i18n/dict';
+import T from '../i18n/T.astro';
 
 const currentPath = Astro.url.pathname;
 
@@ -26,6 +29,7 @@ const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Collecti
     year,
     routeOrder,
     mapLocation,
+    ${COLLECTION_ZH_FIELDS},
     "photos": *[_type == "photo" && references(^._id)] | order(_createdAt desc) {
       _id,
       "imageUrl": image.asset->url,
@@ -36,7 +40,9 @@ const collections = await fetchSanityWithRetry(() => sanityClient.fetch<Collecti
   }
 `));
 
-const chapters = travelChapters(collections);
+// Their Chinese (names, regions, the frames' places) resolved once, here, so
+// the islands print both languages (src/i18n/content.ts).
+const chapters = travelChapters(allWithZh(collections));
 const mapboxToken = getMapboxToken();
 
 // ── The edition's figures (the homepage prologue's own: chapters, frames,
@@ -45,9 +51,16 @@ const frames = chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0)
 const yearValues = [...new Set(chapters.map((chapter) => chapter.year).filter(Boolean))].sort();
 const years = yearValues.length > 1 ? `${yearValues[0]}–${yearValues[yearValues.length - 1]}` : (yearValues[0] ?? '');
 const ogPhoto = chapters[0]?.coverUrl;
+
+// The headline in each language: the lime word is {accent} in the sentence,
+// wherever the language puts it (为档案制图。).
+const headline = (['en', 'zh'] as const).map((lang) => {
+  const [before, after = ''] = tr(lang, 'travel.title').split('{accent}');
+  return { lang, before, accent: tr(lang, 'travel.titleAccent'), after };
+});
 ---
 
-<Layout title="Map | Ryan" description="Geo-tagged photographic archive. Every frame placed on the map across the United States." dark={true} ogImage={ogPhoto ? `${ogPhoto}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}>
+<Layout title={tr('en', 'travel.meta.title')} description={tr('en', 'travel.meta.description')} titleZh={tr('zh', 'travel.meta.title')} descriptionZh={tr('zh', 'travel.meta.description')} dark={true} ogImage={ogPhoto ? `${ogPhoto}?auto=format&w=1200&h=630&fit=crop&q=85` : undefined}>
   {/* Mapbox-only connection hints. Its CSS ships with the island so ClientRouter
        navigation cannot start the map before its styles are available. */}
   <Fragment slot="head">
@@ -85,11 +98,13 @@ const ogPhoto = chapters[0]?.coverUrl;
                mid-phrase ("…Territory ·" / "Geographic Index"), which only
                became visible once the masthead cleared the nav. -->
           <p class="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/56 md:tracking-[0.1em]">
-            <span class="whitespace-nowrap">The Territory · Geographic Index</span>
-            <span class="whitespace-nowrap xl:hidden">· {pad2(chapters.length)} chapters · {frames} frames</span>
+            <span class="whitespace-nowrap"><T k="travel.eyebrow" /></span>
+            <span class="whitespace-nowrap xl:hidden"><T k="travel.eyebrowFigures" vars={{ chapters: pad2(chapters.length), frames }} /></span>
           </p>
           <h1 class="travel-workspace__title font-serif text-[clamp(1.85rem,8.3vw,2.45rem)] uppercase leading-[0.86] tracking-tight text-[#F4F4ED] md:text-[clamp(2.6rem,4.8vw,4.15rem)]">
-            Mapping the <span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">Archive.</span>
+            {headline.map(({ lang, before, accent, after }) => (
+              <span data-l={lang} lang={lang === 'zh' ? 'zh-Hans' : undefined}>{before}<span style="color: rgb(var(--accent-r), var(--accent-g), var(--accent-b));">{accent}</span>{after}</span>
+            ))}
           </h1>
         </div>
 
@@ -99,7 +114,7 @@ const ogPhoto = chapters[0]?.coverUrl;
                  ring every chapter stands on. The page's one lime mark is
                  "Archive." above; everything the map says is ink and bone. */}
             <span class="travel-legend-ring" aria-hidden="true"></span>
-            {pad2(chapters.length)} chapters · {pad2(frames)} frames{years ? ` · ${years}` : ''}
+            <span><T k="travel.legend" vars={{ chapters: pad2(chapters.length), frames: pad2(frames) }} />{years ? ` · ${years}` : ''}</span>
           </span>
         </div>
       </div>
@@ -108,7 +123,7 @@ const ogPhoto = chapters[0]?.coverUrl;
     <section
       id="atlas-map"
       class="relative -mt-2 mx-auto flex min-h-0 w-full max-w-[1920px] flex-1 px-0 pb-0 md:-mt-3 md:px-5 md:pb-5 xl:px-6"
-      aria-label="Interactive photographic atlas"
+      {...i18nAttrs({ 'aria-label': 'travel.mapAria' })}
     >
       {/* This region owns every remaining pixel in the viewport. Map gestures
            stay fully enabled; list and detail surfaces isolate their scrolling. */}
@@ -120,6 +135,15 @@ const ogPhoto = chapters[0]?.coverUrl;
 </Layout>
 
 <style is:global>
+  /* 中: the headline is one line (为档案制图。). The Han leading floor
+     (global.css "Chinese type", 1.32) is for lines that stack; on this one
+     it only added a third of an em over the headline, and the masthead is
+     bottom-aligned at a fixed height, so it pushed the eyebrow up into the
+     nav's scrim band the masthead's height was set to clear. */
+  .travel-workspace__title [data-l='zh'] {
+    line-height: 1;
+  }
+
   @media (max-width: 1023px) and (max-height: 520px) and (orientation: landscape) {
     .travel-workspace .atlas-mobile-sheet {
       max-height: min(62svh, calc(100% - 4.5rem)) !important;

@@ -6,6 +6,9 @@ import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 import { reelRouterScript } from '../lib/reelVisit';
 import { isStorySampleBuild } from '../lib/storyChaptersSample';
+import { langHeadScript } from '../i18n/runtime';
+import { tr } from '../i18n/dict';
+import T from '../i18n/T.astro';
 
 // When this build was made, in the build machine's local time. Printed ONLY on
 // the preview worker (the inline script before </body> checks the hostname),
@@ -17,6 +20,12 @@ const buildStamp = new Date().toLocaleString('sv-SE', { hour12: false }).slice(0
 interface Props {
   title?: string;
   description?: string;
+  /** The title and description in Chinese: a Chinese reader's tab and
+   *  bookmark (the page is one URL; src/i18n/runtime.ts swaps them before
+   *  the first paint). Share cards and JSON-LD stay English — a crawler
+   *  reads the page without its script. */
+  titleZh?: string;
+  descriptionZh?: string;
   ogImage?: string;
   ogType?: string;
   dark?: boolean;
@@ -26,8 +35,10 @@ interface Props {
 }
 
 const {
-  title = 'Ryan | Visual Archive',
-  description = 'A curated collection of photographic moments — shot on Nikon Zf, engineered with intention.',
+  title = tr('en', 'meta.defaultTitle'),
+  description = tr('en', 'meta.defaultDescription'),
+  titleZh = Astro.props.title ? undefined : tr('zh', 'meta.defaultTitle'),
+  descriptionZh = Astro.props.description ? undefined : tr('zh', 'meta.defaultDescription'),
   ogImage = 'https://cdn.sanity.io/images/z610fooo/production/e69f9258142218c5cd649a9c01d4fe89d0335563-6048x4032.jpg?auto=format&w=1200&h=630&fit=crop&q=85',
   ogType = 'website',
   dark = false,
@@ -98,8 +109,13 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
     {/* Mapbox CSS is bundled with the Travel island; only its API hosts are preconnected there. */}
 
     <!-- Primary Meta -->
-    <title>{title}</title>
-    <meta name="description" content={description} />
+    <title data-zh={titleZh && titleZh !== title ? titleZh : undefined}>{title}</title>
+    <meta name="description" content={description} data-zh={descriptionZh && descriptionZh !== description ? descriptionZh : undefined} />
+    {/* 中 / EN before the first paint: the stored language on <html>
+        (lang, data-lang), the title and description in it
+        (src/i18n/runtime.ts). After the two it swaps and before the body
+        is parsed: nothing paints in the wrong language. */}
+    <script is:inline set:html={langHeadScript()} />
     <link rel="canonical" href={canonicalURL} />
     <meta name="theme-color" content={dark ? '#282c20' : '#ffffff'} />
 
@@ -113,6 +129,8 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
     <meta property="og:image:height" content="630" />
     <meta property="og:site_name" content="Ryan Xu | Visual Archive" />
     <meta property="og:locale" content="en_US" />
+    {/* The same page reads in Chinese (中 / EN, one URL). */}
+    <meta property="og:locale:alternate" content="zh_CN" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -145,7 +163,7 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
         href="#main-content"
         class="fixed left-4 top-4 z-[100] inline-flex min-h-11 -translate-y-[160%] items-center rounded-full bg-[#F4F4ED] px-5 font-ui text-[10px] font-bold uppercase tracking-[0.1em] text-[#171b15] transition-transform duration-200 focus:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
       >
-        Skip to content
+        <T k="a11y.skipToContent" />
       </a>
     )}
     <slot />
@@ -196,6 +214,9 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
           font-family: ui-monospace, monospace;
           font-size: 12px;
           color: #444;
+        }
+        html[data-lang='zh'] body::before {
+          content: "© Ryan Xu · ryanxugallery.com — 仅供浏览，请勿传播。";
         }
       }
 
@@ -543,7 +564,7 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
         stamp.id = 'preview-build-stamp';
         stamp.className = 'font-ui';
         stamp.setAttribute('aria-hidden', 'true');
-        stamp.textContent = 'Preview · build ' + buildStamp;
+        stamp.textContent = (document.documentElement.getAttribute('data-lang') === 'zh' ? '预览 · 构建 ' : 'Preview · build ') + buildStamp;
         // Legible on purpose. The first 9px / 62% version was not seen: the
         // audit found every "old version" report was a view of the NEW build
         // judged from a first screen that is identical to production.

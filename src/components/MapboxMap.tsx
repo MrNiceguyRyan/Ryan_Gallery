@@ -15,7 +15,10 @@ import { flightMs, greatCircleKm, landingCamera, leadOf, routeKm, sheetHeight } 
 import type { SheetMode, TravelChapter, TravelViewport } from '../lib/travelSilver';
 import TravelIndex, { TravelRows } from './travel/TravelIndex';
 import type { TravelFlight } from './travel/TravelIndex';
-import TravelTicket, { warmPlate } from './travel/TravelTicket';
+import TravelTicket, { TwinT, warmPlate } from './travel/TravelTicket';
+import { Bi, T, useLang, useT } from '../i18n/react';
+import { pick, tr, type Key } from '../i18n/dict';
+import { bindMapLanguage } from '../lib/mapLanguage';
 
 // ─── The map ───
 // /travel's map is the original atlas (owner, 2026-09-27: 只需要中间的地图这样
@@ -159,6 +162,9 @@ function TravelLandmark({
 }
 
 const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11';
+/** The faces the basemap draws Han labels in (mapbox-gl renders CJK glyphs
+ *  locally, from this CSS font list): the page's own Hei stack. */
+const MAP_HAN_FONTS = '"PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif';
 
 /**
  * Grade dark-v11 into the same olive emulsion the homepage atlas uses, so the
@@ -269,9 +275,11 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
       return (
         <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
           <span className="mb-4 h-2 w-2 rounded-full bg-[#F4F4ED]/80" aria-hidden="true" />
-          <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas unavailable</p>
-          <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">The geographic archive could not be drawn.</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Retry atlas</button>
+          <p className="font-serif text-2xl uppercase text-[#F4F4ED]"><T k="travel.map.error.title" /></p>
+          <p className="mt-2 max-w-sm font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"><T k="travel.map.error.body" /></p>
+          <button onClick={() => this.setState({ hasError: false, error: null })} className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 transition-colors duration-300 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">
+            <T k="travel.map.error.retry" />
+          </button>
         </div>
       );
     }
@@ -285,6 +293,8 @@ class MapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
 // and Midtown; they share its number and its selection.
 interface MapPlace {
   city: string;
+  /** The place in Chinese; absent, the English prints. */
+  cityZh?: string;
   lng: number;
   lat: number;
   frames: number;
@@ -296,6 +306,7 @@ interface MapPlace {
   lead: boolean;
   /** The chapter's region (Florida, Utah, Arizona…), for a cluster's name. */
   region: string;
+  regionZh?: string;
 }
 
 type AtlasClusterFeature = {
@@ -345,11 +356,17 @@ function atlasFeatureKey(feature: AtlasClusterFeature) {
 }
 
 /** A cluster names its region; the Southwest's three canyons are Utah and
- *  Arizona together. */
-function clusterName(regions: string[]) {
-  if (regions.length === 1) return regions[0];
-  if (regions.length > 0 && regions.every((region) => region === 'Utah' || region === 'Arizona')) return 'Southwest';
-  return 'Locations';
+ *  Arizona together. Decided on the English regions; named in both
+ *  languages (a region's Chinese is its chapter's regionZh). */
+function clusterName(members: MapPlace[]): { en: string; zh?: string } {
+  const regions = Array.from(new Set(members.map((member) => member.region)));
+  if (regions.length === 1) {
+    return { en: regions[0], zh: members.find((member) => member.region === regions[0] && member.regionZh)?.regionZh };
+  }
+  const key = regions.length > 0 && regions.every((region) => region === 'Utah' || region === 'Arizona')
+    ? 'travel.map.cluster.southwest'
+    : 'travel.map.cluster.locations';
+  return { en: tr('en', key), zh: tr('zh', key) };
 }
 
 // ─── Camera ───
@@ -398,6 +415,13 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
     [],
   );
+  // 中 / EN: one-language strings (aria-labels, a title) in the reader's
+  // language; everything visible is both languages in the markup.
+  const t = useT();
+  const lang = useLang();
+  // The basemap's own labels follow the toggle (src/lib/mapLanguage.ts);
+  // bound once the style has loaded, unbound with the map.
+  const mapLanguageUnbindRef = useRef<(() => void) | null>(null);
 
   const [mobileLayout, setMobileLayout] = useState(false);
   const [viewState, setViewState] = useState(FINAL_VIEW);
@@ -443,6 +467,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   const frameCount = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
   const places = useMemo<MapPlace[]>(() => chapters.flatMap((chapter, index) => chapter.places.map((place, placeIndex) => ({
     city: place.city,
+    cityZh: place.cityZh,
     lng: place.lng,
     lat: place.lat,
     frames: place.frames,
@@ -450,6 +475,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     chapterNo: index + 1,
     lead: placeIndex === chapter.lead,
     region: chapter.region || chapter.name,
+    regionZh: chapter.region ? chapter.regionZh : chapter.nameZh,
   }))), [chapters]);
   const archiveBounds = useMemo(() => {
     if (!places.length) return null;
@@ -486,6 +512,8 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
   useEffect(() => () => {
     if (clusterZoomFrameRef.current) window.cancelAnimationFrame(clusterZoomFrameRef.current);
     delete document.documentElement.dataset.atlasReady;
+    mapLanguageUnbindRef.current?.();
+    mapLanguageUnbindRef.current = null;
   }, []);
 
   // The arrival ring plays once; it is taken away after it has gone, so a
@@ -1004,6 +1032,15 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
       if (window.matchMedia('(pointer: coarse)').matches) map.touchZoomRotate.disableRotation();
       gradeAtlasBasemap(map);
       silenceArchivePlaceLabels(map, archiveNames);
+      // The basemap's place names in the reader's language, after the
+      // grade and the silencing above (those set paint, visibility and
+      // filters; this rewrites only text-field), and again on every toggle.
+      // The style is never swapped here (mapStyle is a constant); a reload
+      // would come back through mapLanguage's own style.load listener.
+      // (Cast: mapbox-gl types getLayoutProperty's name as a layout key,
+      // which mapLanguage's structural MapLike does not admit.)
+      mapLanguageUnbindRef.current?.();
+      mapLanguageUnbindRef.current = bindMapLanguage(map);
       map.on('moveend', (event: any) => moveEndRef.current(event));
       // A hand on the map takes the camera: the flight it stopped lands nowhere.
       map.on('dragstart', () => { flightSlugRef.current = null; });
@@ -1028,6 +1065,31 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     document.documentElement.dataset.atlasReady = 'true';
     window.dispatchEvent(new CustomEvent('gallery:atlas-ready'));
   }, []);
+
+  // Mapbox's own controls name themselves in English (mapbox-gl reads its UI
+  // strings once, as each control is added): the zoom buttons, the
+  // attribution toggle, the logo and the canvas are named here in the
+  // reader's language, and again on every toggle. The English is left as
+  // Mapbox wrote it until the page has been in Chinese.
+  const controlsNamedRef = useRef(false);
+  useEffect(() => {
+    if (!layersReady || (lang === 'en' && !controlsNamedRef.current)) return;
+    const container = mapRef.current?.getMap().getContainer();
+    if (!container) return;
+    controlsNamedRef.current = true;
+    const name = (selector: string, key: Key, iconTitle: boolean) => {
+      const text = tr(lang, key);
+      container.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+        element.setAttribute('aria-label', text);
+        if (iconTitle) element.firstElementChild?.setAttribute('title', text);
+      });
+    };
+    name('.mapboxgl-ctrl-zoom-in', 'travel.map.ctrl.zoomIn', true);
+    name('.mapboxgl-ctrl-zoom-out', 'travel.map.ctrl.zoomOut', true);
+    name('.mapboxgl-ctrl-attrib-button', 'travel.map.ctrl.attribution', true);
+    name('.mapboxgl-ctrl-logo', 'travel.map.ctrl.logo', false);
+    name('canvas.mapboxgl-canvas', 'travel.map.ctrl.canvas', false);
+  }, [lang, layersReady]);
 
 
   // Mapbox does not recompute its canvas or camera padding when a phone
@@ -1170,28 +1232,41 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
     return values.length > 1 ? `${values[0]}–${values[values.length - 1]}` : values[0] ?? '';
   }, [chapters]);
 
-  // The status pill: every state it can say (sized together), and the one it
-  // says now — named only once the camera has landed there.
-  const statusLabels = useMemo(
-    () => Array.from(new Set(['Select a city or marker', ...chapters.map((chapter) => `Viewing ${chapter.name}`)])),
-    [chapters],
-  );
-  const statusLabel = landedChapter ? `Viewing ${landedChapter.name}` : 'Select a city or marker';
+  // The status pill: every state it can say (sized together, in both
+  // languages — the hidden language is display:none, so the cell is sized by
+  // the one on screen), and the one it says now — named only once the camera
+  // has landed there.
+  const statusLabels = useMemo(() => {
+    const labels = [{ key: 'select', en: tr('en', 'travel.map.status.select'), zh: tr('zh', 'travel.map.status.select') }];
+    const seen = new Set([labels[0].en]);
+    chapters.forEach((chapter) => {
+      const en = tr('en', 'travel.map.status.viewing', { name: chapter.name });
+      if (seen.has(en)) return;
+      seen.add(en);
+      labels.push({ key: `viewing-${chapter.slug}`, en, zh: tr('zh', 'travel.map.status.viewing', { name: chapter.nameZh || chapter.name }) });
+    });
+    return labels;
+  }, [chapters]);
+  const statusLabel = landedChapter ? tr('en', 'travel.map.status.viewing', { name: landedChapter.name }) : tr('en', 'travel.map.status.select');
 
   if (!mapboxToken) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
       <span className="mb-4 h-2 w-2 rounded-full bg-[#F4F4ED]/70" aria-hidden="true" />
-      <p className="font-serif text-2xl uppercase text-[#F4F4ED]">Atlas offline</p>
-      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">Map access is not available in this build.</p>
-      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+      <p className="font-serif text-2xl uppercase text-[#F4F4ED]"><T k="travel.map.offline.title" /></p>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"><T k="travel.map.offline.body" /></p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">
+        <T k="travel.map.returnHome" />
+      </a>
     </div>
   );
   if (chapters.length === 0) return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center bg-[#171b15] px-8 text-center md:rounded-[1.35rem]">
       <span className="mb-4 h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
-      <p className="font-serif text-2xl uppercase text-[#F4F4ED]">No coordinates yet</p>
-      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58">New photographic locations will appear here.</p>
-      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">Return home</a>
+      <p className="font-serif text-2xl uppercase text-[#F4F4ED]"><T k="travel.map.empty.title" /></p>
+      <p className="mt-2 font-ui text-[10px] uppercase tracking-[0.1em] text-white/58"><T k="travel.map.empty.body" /></p>
+      <a href="/" className="mt-5 inline-flex min-h-11 items-center rounded-full border border-white/14 px-5 font-ui text-[9px] uppercase tracking-[0.1em] text-white/72 hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]">
+        <T k="travel.map.returnHome" />
+      </a>
     </div>
   );
 
@@ -1221,6 +1296,9 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
             }}
             mapboxAccessToken={mapboxToken}
             mapStyle={MAP_STYLE}
+            // Han labels (the basemap in Chinese) are drawn in the reader's
+            // own face rather than from downloaded glyph ranges.
+            localIdeographFontFamily={MAP_HAN_FONTS}
             style={{ width: '100%', height: '100%' }}
             attributionControl={false}
             onLoad={handleMapLoad}
@@ -1263,7 +1341,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                   members = [];
                 }
                 const memberSlugs = Array.from(new Set(members.map((member) => member.slug)));
-                const label = clusterName(Array.from(new Set(members.map((member) => member.region))));
+                const label = clusterName(members);
                 const isActiveCluster = !!selectedSlug && memberSlugs.includes(selectedSlug);
                 const isHoveredCluster = !!hoveredSlug && memberSlugs.includes(hoveredSlug);
                 const engagedCluster = isActiveCluster || isHoveredCluster;
@@ -1299,7 +1377,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                     >
                       <motion.button
                         type="button"
-                        aria-label={`Explore ${label} cluster, ${count} locations`}
+                        aria-label={t('travel.map.clusterAria', { label: pick(lang, label.en, label.zh), count })}
                         tabIndex={markerInteractive ? 0 : -1}
                         onClick={(event) => { event.stopPropagation(); handleClusterClick(feature.id as number, featureLng, featureLat); }}
                         className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
@@ -1380,7 +1458,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                               : `color 420ms ${CSS_EASE.arrive}, font-size 420ms ${CSS_EASE.arrive}, letter-spacing 420ms ${CSS_EASE.arrive}`,
                           }}
                         >
-                          {label}
+                          <Bi en={label.en} zh={label.zh} />
                         </span>
                       </motion.button>
                     </div>
@@ -1424,7 +1502,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                   >
                     <motion.button
                       type="button"
-                      aria-label={`Explore ${place.city}, ${place.frames} frames`}
+                      aria-label={t('travel.map.placeAria', { city: pick(lang, place.city, place.cityZh), frames: place.frames })}
                       tabIndex={markerInteractive ? 0 : -1}
                       onClick={(event) => { event.stopPropagation(); selectChapter(place.slug); }}
                       className="group relative flex cursor-pointer items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#D2FF00]"
@@ -1509,7 +1587,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                           zIndex: 10,
                         }}
                       >
-                        {place.city}
+                        <Bi en={place.city} zh={place.cityZh} />
                       </span>
                       {/* The leader: one hairline drawn from the mark towards
                           its name, undrawn at rest. */}
@@ -1554,10 +1632,10 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                     style={{ ['--pulse-min' as never]: 0.35, ['--pulse-dur' as never]: '1.65s' }}
                   />
                   <p className="font-ui text-[8px] uppercase tracking-[0.1em] text-white/48">
-                    {mapLoadFailed ? 'Atlas unavailable' : 'Charting the archive'}
+                    <T k={mapLoadFailed ? 'travel.map.error.title' : 'travel.map.loading.charting'} />
                   </p>
                   <p className="font-ui text-[9px] uppercase tracking-[0.1em] text-white/48">
-                    {mapLoadFailed ? 'Map tiles could not be loaded' : `${frameCount} geotagged frames`}
+                    {mapLoadFailed ? <T k="travel.map.loading.tilesFailed" /> : <T k="travel.map.loading.frames" vars={{ n: frameCount }} />}
                   </p>
                   {mapLoadFailed && (
                     <button
@@ -1565,7 +1643,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                       onClick={() => window.location.reload()}
                       className="mt-2 min-h-11 rounded-full border border-white/14 px-5 font-ui text-[8px] uppercase tracking-[0.1em] text-white/68 transition-colors hover:border-[#D2FF00]/45 hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
                     >
-                      Retry map
+                      <T k="travel.map.retry" />
                     </button>
                   )}
                 </div>
@@ -1582,8 +1660,8 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
               type="button"
               onClick={resetView}
               className="atlas-reset-control flex h-11 w-11 items-center justify-center rounded-full text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00]"
-              title="Reset view"
-              aria-label="Reset view"
+              title={t('travel.map.resetView')}
+              aria-label={t('travel.map.resetView')}
             >
               <RotateCcw size={16} aria-hidden="true" />
             </button>
@@ -1602,23 +1680,23 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
             <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_0_1.5px_rgba(11,14,9,0.5)]" />
             <span className="grid">
               {statusLabels.map((label) => {
-                const current = label === statusLabel;
+                const current = label.en === statusLabel;
                 return (
                   <span
-                    key={label}
+                    key={label.key}
                     className="col-start-1 row-start-1 whitespace-nowrap"
                     style={{
                       opacity: current ? 1 : 0,
                       transition: `opacity ${prefersReduced ? 0 : DUR_MS.in}ms ${current ? CSS_EASE.arrive : CSS_EASE.fade}`,
                     }}
                   >
-                    {label}
+                    <Bi en={label.en} zh={label.zh} />
                   </span>
                 );
               })}
             </span>
             <span className="h-3 w-px bg-white/14" />
-            <span className="text-white/54">Drag to move · Scroll to zoom</span>
+            <span className="text-white/54"><T k="travel.map.hint" /></span>
           </div>
 
           {/* Phone: the map owns the viewport and the index becomes one
@@ -1647,7 +1725,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
               }
             }}
             data-lenis-prevent
-            aria-label="Atlas index"
+            aria-label={t('travel.map.sheetAria')}
           >
             <div className="atlas-mobile-sheet__header relative flex min-h-[78px] shrink-0 items-stretch">
               <button
@@ -1667,18 +1745,18 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                 {mobileSheet === 'detail' && selectedChapter ? (
                   <span className="flex min-w-0 flex-1 items-baseline gap-3 overflow-hidden">
                     <span className="travel-sheet__no font-serif">{selectedChapter.ordinal}</span>
-                    <span className="min-w-0 truncate font-serif text-[20px] uppercase leading-none text-[#F4F4ED]">{selectedChapter.name}</span>
+                    <span className="min-w-0 truncate font-serif text-[20px] uppercase leading-none text-[#F4F4ED]"><Bi en={selectedChapter.name} zh={selectedChapter.nameZh} /></span>
                   </span>
                 ) : (
                   <span className="min-w-0 flex-1 overflow-hidden">
-                    <span className="block font-ui text-[9px] font-medium uppercase tracking-[0.1em] text-[#F4F4ED]/90">Index</span>
+                    <span className="block font-ui text-[9px] font-medium uppercase tracking-[0.1em] text-[#F4F4ED]/90"><T k="travel.index" /></span>
                     <span className="mt-1.5 block truncate font-ui text-[9px] uppercase tracking-[0.1em] text-[#F4F4ED]/56">
-                      {String(chapters.length).padStart(2, '0')} chapters · {frameCount} frames{years ? ` · ${years}` : ''}
+                      <T k="travel.legend" vars={{ chapters: String(chapters.length).padStart(2, '0'), frames: frameCount }} />{years ? ` · ${years}` : ''}
                     </span>
                   </span>
                 )}
                 <span className="shrink-0 whitespace-nowrap font-ui text-[9px] font-medium uppercase tracking-[0.1em] text-white/72">
-                  {mobileSheet === 'peek' ? 'Open' : mobileSheet === 'detail' ? 'Index' : 'Close'}
+                  <T k={mobileSheet === 'peek' ? 'travel.map.sheet.open' : mobileSheet === 'detail' ? 'travel.index' : 'travel.map.sheet.close'} />
                 </span>
               </button>
               {mobileSheet === 'detail' && selectedChapter && (
@@ -1687,18 +1765,19 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
                   onClick={() => deselect()}
                   className="flex w-12 shrink-0 items-center justify-center text-white/62 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#D2FF00]"
                   style={{ marginRight: 'max(0.5rem, env(safe-area-inset-right))' }}
-                  aria-label={`Close ${selectedChapter.name}`}
+                  aria-label={t('travel.map.sheet.closeAria', { name: pick(lang, selectedChapter.name, selectedChapter.nameZh) })}
                 >
                   <X size={16} aria-hidden="true" />
                 </button>
               )}
             </div>
+            {/* Both languages as spans (a screen reader hears the one on
+                screen): a one-language string would change right after
+                hydration and announce the collapsed index a second time. */}
             <span className="sr-only font-ui" aria-live="polite">
               {mobileSheet === 'detail' && selectedChapter
-                ? `${selectedChapter.name} open`
-                : mobileSheet === 'browse'
-                  ? 'Index open'
-                  : 'Index collapsed'}
+                ? <TwinT k="travel.map.sheet.liveOpen" en={{ name: selectedChapter.name }} zh={{ name: selectedChapter.nameZh || selectedChapter.name }} />
+                : <T k={mobileSheet === 'browse' ? 'travel.map.sheet.liveIndexOpen' : 'travel.map.sheet.liveIndexClosed'} />}
             </span>
 
             <AnimatePresence mode="wait" initial={false}>
@@ -1748,7 +1827,7 @@ function MapboxMapInner({ chapters, mapboxToken }: { chapters: TravelChapter[]; 
             their contrast. ── */}
         <aside
           className="relative z-10 -ml-12 hidden h-full min-h-0 w-[340px] flex-col pl-12 lg:flex xl:-ml-20 xl:w-[420px] xl:pl-20"
-          aria-label="Index of chapters"
+          aria-label={t('travel.map.railAria')}
         >
           <div className="pointer-events-none absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-transparent via-[#30352a]/52 to-[#30352a]" aria-hidden="true" />
           <div className="relative flex h-full min-h-0 flex-col bg-[#30352a]" data-lenis-prevent>

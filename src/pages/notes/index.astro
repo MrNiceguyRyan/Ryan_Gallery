@@ -5,27 +5,36 @@
 // four on, the newest leads and the rest are contents rows (planList). With
 // nothing published it is a quiet page that nothing links to (the nav's NOTES
 // appears with the first note).
+// 中 / EN: every label and date in both languages, a note's title and dek
+// beside their Chinese twins where he wrote them (src/i18n/runtime.ts).
 import Layout from '../../layouts/Layout.astro';
 import Nav from '../../components/Nav';
 import PlaceTags from '../../components/notes/PlaceTags.astro';
 import NotesScroll from '../../components/notes/NotesScroll.astro';
 import '../../styles/notes.css';
+import { sanityClient } from 'sanity:client';
+import { fetchSanityWithRetry } from '../../lib/sanityFetch';
 import { loadNotes } from '../../lib/notesData';
 import {
   CJK_SERIF_CSS,
+  blockLang,
   formatNoteDateShort,
-  hasHan,
   imageSrcSet,
   imageSize,
   imageUrl,
+  hasHan,
   isoDay,
-  langOf,
+  noteInChinese,
   noteNumbers,
   pad2,
   planList,
   readingMinutes,
   shareCardUrl,
 } from '../../lib/notes';
+import { siteText } from '../../i18n/content';
+import { i18nAttrs, tr } from '../../i18n/dict';
+import T from '../../i18n/T.astro';
+import Bi from '../../i18n/Bi.astro';
 
 const currentPath = Astro.url.pathname;
 const { notes, sample } = await loadNotes();
@@ -34,14 +43,26 @@ const count = notes.length;
 const rows = planList(notes);
 const firstCover = notes.find((note) => note.cover)?.cover;
 const ogImage = firstCover ? shareCardUrl(firstCover) : undefined;
-const hasChinese = notes.some((note) => hasHan(note.title) || hasHan(note.dek));
-const DEK = 'Reflections on the work and the journey behind it.';
+const hasChinese = notes.some((note) => [note.title, note.dek, note.titleZh, note.dekZh].some(hasHan));
+// The dek under the title: siteSettings.notesDek (and its Chinese) once he
+// has written it, else the page's own line and our draft (siteText).
+const settings = await fetchSanityWithRetry(() =>
+  sanityClient.fetch<{ notesDek?: string; notesDekZh?: string } | null>(`*[_type == "siteSettings"][0] { notesDek, notesDekZh }`),
+);
+const DEK = siteText(settings).notesDek;
 const numberOf = (slug: string) => pad2(numbers.get(slug) ?? 0);
+const title = tr('en', 'notes.title');
+const description = count ? tr('en', 'notes.description', { dek: DEK.en }) : tr('en', 'notes.descriptionEmpty');
+const descriptionZh = count ? tr('zh', 'notes.description', { dek: DEK.zh ?? DEK.en }) : tr('zh', 'notes.descriptionEmpty');
+// Both languages of a label whose figures differ by language.
+const pair = (en: string, zh: string) => ({ en, zh });
 ---
 
 <Layout
-  title="Notes | Ryan"
-  description={count ? `Notes by Ryan Xu — ${DEK}` : 'Notes by Ryan Xu.'}
+  title={title}
+  description={description}
+  titleZh={tr('zh', 'notes.title')}
+  descriptionZh={descriptionZh}
   ogImage={ogImage || undefined}
   dark={true}
 >
@@ -74,52 +95,58 @@ const numberOf = (slug: string) => pad2(numbers.get(slug) ?? 0);
       {/* /about's running head: the section on the left, the count on the
           right once there is more than one, a hairline under both. */}
       <div class="notes-runhead" data-enter="kicker">
-        <span class="n-label n-label--ink font-ui">The Notes</span>
-        {count > 1 && <span class="n-label font-ui">{pad2(count)} notes</span>}
+        <span class="n-label n-label--ink font-ui"><T k="notes.runhead" /></span>
+        {count > 1 && <span class="n-label font-ui"><T k="notes.count" vars={{ nn: pad2(count) }} /></span>}
         <span class="notes-runhead__rule" aria-hidden="true"></span>
       </div>
       <h1 class="notes-mast__title font-serif">
-        <span class="note-title__line" data-enter="title">Notes</span>
+        <span class="note-title__line" data-enter="title"><T k="notes.h1" /></span>
       </h1>
-      <p class="notes-mast__dek font-serif" data-enter="dek">{DEK}</p>
+      <p class="notes-mast__dek font-serif" data-enter="dek"><Bi en={DEK.en} zh={DEK.zh} /></p>
     </header>
 
     {count > 0 ? (
-      <ol class="notes-list" aria-label="Notes, newest first" data-enter="credits">
+      <ol class="notes-list" {...i18nAttrs({ 'aria-label': 'notes.listAria' })} data-enter="credits">
         {rows.map((row, index) => {
           const note = row.note;
+          const date = pair(formatNoteDateShort(note.publishedAt), formatNoteDateShort(note.publishedAt, 'zh'));
           if (row.kind === 'row') {
             return (
               <li class:list={['notes-row n-grid', row.yearBefore && 'notes-row--year']}>
                 {row.yearBefore && <span class="notes-row__year n-label n-label--ink font-ui">{row.yearBefore}</span>}
                 <div class="notes-row__rule" aria-hidden="true"></div>
                 <div class="notes-row__meta">
-                  <span class="n-label n-label--ink font-ui">No. {numberOf(note.slug)}</span>
-                  <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}>{formatNoteDateShort(note.publishedAt)}</time>
+                  <span class="n-label n-label--ink font-ui"><T k="notes.number" vars={{ nn: numberOf(note.slug) }} /></span>
+                  <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}><Bi en={date.en} zh={date.zh} /></time>
                 </div>
-                <h2 class="notes-row__title font-serif" lang={langOf(note.title)}>
-                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch>{note.title}</a>
+                <h2 class="notes-row__title font-serif" lang={blockLang(note.title, note.titleZh)}>
+                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch><Bi en={note.title} zh={note.titleZh} /></a>
                 </h2>
                 <PlaceTags places={note.places} raised />
               </li>
             );
           }
           const size = note.cover ? imageSize(note.cover) : null;
-          const minutes = readingMinutes(note);
+          const minutes = pair(
+            tr('en', 'notes.minRead', { n: readingMinutes(note) }),
+            tr('zh', 'notes.minRead', { n: readingMinutes(noteInChinese(note)) }),
+          );
           return (
             <li class:list={['notes-item n-grid', row.kind === 'lead' && 'notes-item--lead']}>
               <div class="notes-item__rule" aria-hidden="true"></div>
               <div class="notes-item__meta">
-                <span class="n-label n-label--ink font-ui">No. {numberOf(note.slug)}</span>
-                <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}>{formatNoteDateShort(note.publishedAt)}</time>
-                <span class="n-label font-ui">{minutes} min read</span>
-                {note.sample && <span class="n-label n-label--ink font-ui">示例 · Sample</span>}
+                <span class="n-label n-label--ink font-ui"><T k="notes.number" vars={{ nn: numberOf(note.slug) }} /></span>
+                <time class="n-label font-ui" datetime={isoDay(note.publishedAt)}><Bi en={date.en} zh={date.zh} /></time>
+                <span class="n-label font-ui"><Bi en={minutes.en} zh={minutes.zh} /></span>
+                {note.sample && <span class="n-label n-label--ink font-ui"><T k="notes.sample" /></span>}
               </div>
               <div class="notes-item__body">
-                <h2 class="notes-item__title font-serif" lang={langOf(note.title)}>
-                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch>{note.title}</a>
+                <h2 class="notes-item__title font-serif" lang={blockLang(note.title, note.titleZh)}>
+                  <a class="notes-item__link" href={`/notes/${note.slug}`} data-astro-prefetch><Bi en={note.title} zh={note.titleZh} /></a>
                 </h2>
-                {note.dek && <p class="notes-item__dek font-serif" lang={langOf(note.dek)}>{note.dek}</p>}
+                {note.dek && (
+                  <p class="notes-item__dek font-serif" lang={blockLang(note.dek, note.dekZh)}><Bi en={note.dek} zh={note.dekZh} /></p>
+                )}
                 <PlaceTags places={note.places} raised />
               </div>
               {note.cover && size && (
@@ -142,10 +169,10 @@ const numberOf = (slug: string) => pad2(numbers.get(slug) ?? 0);
         })}
       </ol>
     ) : (
-      <section class="n-grid" aria-label="No notes yet">
+      <section class="n-grid" {...i18nAttrs({ 'aria-label': 'notes.emptyAria' })}>
         <div class="notes-empty" data-enter="credits">
-          <p class="notes-empty__line font-serif">Nothing has been filed here yet.</p>
-          <a class="n-textlink n-label font-ui" href="/">Back to the archive</a>
+          <p class="notes-empty__line font-serif"><T k="notes.empty" /></p>
+          <a class="n-textlink n-label font-ui" href="/"><T k="notes.backToArchive" /></a>
         </div>
       </section>
     )}

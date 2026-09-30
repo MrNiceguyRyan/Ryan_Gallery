@@ -28,7 +28,7 @@ import { ARRIVAL, archiveTicketH, coverDock, coverOf, coverRatioOf } from '../..
 import { signLines } from '../../lib/routeShield';
 import { DUR, DUR_MS, EASE, bezierFn } from '../../lib/motion';
 import { ARRIVAL_EASE, ARRIVAL_SECONDS, distinctRegions } from '../../lib/boardingPass';
-import { NOTES_LIVE } from '../../lib/notesNav';
+import { NavSet } from '../Nav';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
 import {
   ARRIVAL_INERT_MS,
@@ -1415,7 +1415,6 @@ export default function HomePage({ collections }: Props) {
   }, []);
 
   const pageInert = storyActive || indexOpen;
-  const navButton = 'nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 max-[379px]:min-w-[3.25rem] max-[379px]:px-2.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75';
   const currentCity = currentIndex >= 0 ? orderedCities.find((city) => city._id === current) ?? null : null;
   const atlasHref = currentCity?.slug
     ? `/travel?place=${encodeURIComponent(currentCity.slug)}#atlas-map`
@@ -1552,37 +1551,9 @@ export default function HomePage({ collections }: Props) {
               pointerEvents: navPillsVisible ? 'auto' : 'none',
             }}
           >
-            <motion.a
-              whileTap={reduce ? undefined : { scale: 0.97 }}
-              transition={{ duration: DUR.flick, ease: EASE.arrive }}
-              href={atlasHref}
-              data-astro-prefetch="hover"
-              tabIndex={navPillsVisible ? 0 : -1}
-              className={navButton}
-            >
-              Map
-            </motion.a>
-            {NOTES_LIVE && (
-              <motion.a
-                whileTap={reduce ? undefined : { scale: 0.97 }}
-                transition={{ duration: DUR.flick, ease: EASE.arrive }}
-                href="/notes"
-                data-astro-prefetch="hover"
-                tabIndex={navPillsVisible ? 0 : -1}
-                className={navButton}
-              >
-                Notes
-              </motion.a>
-            )}
-            <motion.a
-              whileTap={reduce ? undefined : { scale: 0.97 }}
-              transition={{ duration: DUR.flick, ease: EASE.arrive }}
-              href="/about"
-              tabIndex={navPillsVisible ? 0 : -1}
-              className={navButton}
-            >
-              About
-            </motion.a>
+            {/* The nav set, shared with every page (Nav.tsx): MAP · NOTES ·
+                ABOUT and 中 / EN. */}
+            <NavSet mapHref={atlasHref} tabbable={navPillsVisible} />
           </div>
         </nav>
 

@@ -4,6 +4,11 @@
 // crossheads, quoted passages, photographs at their own ratio and pull
 // quotes. The inline HTML comes from renderInline (src/lib/notes.ts), which
 // escapes every span and writes only <strong>, <em>, <br> and safe links.
+// 中 / EN: every block carries its own words' lang (html[lang] follows the
+// reader's toggle, so an English block without one would be set as Chinese
+// in Chinese mode); a pull quote with a Chinese twin prints both and follows
+// the page. A whole Chinese body (bodyZh) is a second NoteBody ([slug].astro).
+import Bi from '../../i18n/Bi.astro';
 import NoteFigure from './NoteFigure.astro';
 import type { NoteBodyBlock } from '../../lib/notes';
 import { endmarkMissing, planBody } from '../../lib/notes';
@@ -28,23 +33,24 @@ if (endmarkMissing(pieces)) {
   }
   if (piece.kind === 'quote') {
     return (
-      <figure class="note-quote" lang={piece.lang}>
+      <figure class="note-quote" lang={piece.textZh ? undefined : piece.lang ?? 'en'}>
         <blockquote class="note-quote__text font-serif">
-          <p>{`“${piece.text}”`}</p>
+          <p><Bi en={`“${piece.text}”`} zh={piece.textZh ? `“${piece.textZh}”` : undefined} /></p>
         </blockquote>
         {piece.attribution && <figcaption class="note-quote__by n-label font-ui">{piece.attribution}</figcaption>}
       </figure>
     );
   }
   const html = piece.endmark ? `${piece.html}${endmark}` : piece.html;
-  if (piece.style === 'h2') return <h2 class="note-h2 font-serif" lang={piece.lang} set:html={html} />;
-  if (piece.style === 'h3') return <h3 class="note-h3 font-ui" lang={piece.lang} set:html={html} />;
+  const lang = piece.lang ?? 'en';
+  if (piece.style === 'h2') return <h2 class="note-h2 font-serif" lang={lang} set:html={html} />;
+  if (piece.style === 'h3') return <h3 class="note-h3 font-ui" lang={lang} set:html={html} />;
   if (piece.style === 'blockquote') {
     return (
-      <blockquote class="note-passage font-serif" lang={piece.lang}>
+      <blockquote class="note-passage font-serif" lang={lang}>
         <p set:html={html} />
       </blockquote>
     );
   }
-  return <p class:list={['note-p font-serif', piece.lede && 'note-lede']} lang={piece.lang} set:html={html} />;
+  return <p class:list={['note-p font-serif', piece.lede && 'note-lede']} lang={lang} set:html={html} />;
 })}

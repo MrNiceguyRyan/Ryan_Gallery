@@ -1,6 +1,9 @@
 ---
 // The chapters a note is about, as small tickets printed on each chapter's
 // own stock (src/lib/ticketStock.ts), each a link to that chapter's story.
+// 中 / EN: the chapter's name in both (its Chinese from notesData.ts).
+import Bi from '../../i18n/Bi.astro';
+import { i18nAttrs } from '../../i18n/dict';
 import { placeStockStyle, type NotePlace } from '../../lib/notes';
 
 interface Props {
@@ -13,11 +16,11 @@ const { places, raised = false } = Astro.props;
 ---
 
 {places.length > 0 && (
-  <ul class:list={['note-tags', raised && 'note-tags--raised']} aria-label="Places in this note">
+  <ul class:list={['note-tags', raised && 'note-tags--raised']} {...i18nAttrs({ 'aria-label': 'note.placeTagsAria' })}>
     {places.map((place) => (
       <li>
         <a class="note-tag font-ui" href={`/works/${place.slug}`} style={placeStockStyle(place.slug)}>
-          {place.name}
+          <Bi en={place.name} zh={place.nameZh} />
         </a>
       </li>
     ))}

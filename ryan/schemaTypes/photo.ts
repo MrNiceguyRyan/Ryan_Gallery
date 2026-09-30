@@ -103,6 +103,12 @@ export default defineType({
           description: 'e.g. "Paris", "Santorini", "Tokyo Shibuya"',
         }),
         defineField({
+          name: 'cityZh',
+          title: '地点 · 中文',
+          type: 'string',
+          description: '中文版网站显示的地点，例如「中城」「曼哈顿」。留空时，中文版显示英文。',
+        }),
+        defineField({
           name: 'country',
           title: 'Country',
           type: 'string',

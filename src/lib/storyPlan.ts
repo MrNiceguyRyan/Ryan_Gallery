@@ -584,3 +584,10 @@ export function formatPosition(lat: number | null | undefined, lng: number | nul
   const part = (value: number, positive: string, negative: string) => `${Math.abs(value).toFixed(2)}° ${value >= 0 ? positive : negative}`;
   return `${part(lat as number, 'N', 'S')}, ${part(lng as number, 'E', 'W')}`;
 }
+
+/** The same in Chinese, hemisphere first: "北纬 25.76°，西经 80.19°". */
+export function formatPositionZh(lat: number | null | undefined, lng: number | null | undefined): string {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+  const part = (value: number, positive: string, negative: string) => `${value >= 0 ? positive : negative} ${Math.abs(value).toFixed(2)}°`;
+  return `${part(lat as number, '北纬', '南纬')}，${part(lng as number, '东经', '西经')}`;
+}
