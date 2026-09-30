@@ -30,12 +30,10 @@ import {
   cueBox,
   dockPoint,
   glideShare,
-  GIVE_WAY,
-  giveWay,
+  nameDownAt,
   printStyle,
-  rideAt,
-  stepBack,
-  yieldAxis,
+  SHIELD_ROOM,
+  shieldShift,
   tipPopFrames,
   easeInverse,
   glideAt,
@@ -60,7 +58,7 @@ import { activeChapters, chapterSections } from '../src/lib/chapterOrder.ts';
 import { EXPLORE_PITCH } from '../src/lib/explorerCamera.ts';
 import { chapterPoint } from '../src/lib/geo.ts';
 import { EASE, bezierFn, voyageEase } from '../src/lib/motion.ts';
-import { SHIELD_MAP_PX, SHIELD_SCALE, shieldForm, signLines, stateCode } from '../src/lib/routeShield.ts';
+import { FLAP, SHIELD_MAP_PX, SHIELD_SCALE, flapSpan, shieldForm, shieldZoomScale, signLines, stateCode } from '../src/lib/routeShield.ts';
 import { greatCirclePoint } from '../src/lib/routeGeometry.ts';
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -79,6 +77,7 @@ const cameraFor = (vw, vh) => ({ focal: { x: (0.78 * vw - 264) / 2, y: 0.48 * vh
 
 // The archive as the homepage reads it, with each chapter's rest zoom
 // (RouteAtlas hopRestZooms: neighbours ≥150px apart, 5.05 to 5.98), its
+// shields as drawn there (their state's scale × the zoom's, SHIELD_ZOOM), its
 // sign's name lines, its two legs (the route closes, 06 onto 01) and — every
 // place with a region — its state's tab.
 function archiveChapters() {
@@ -96,6 +95,7 @@ function archiveChapters() {
     let nearest = Infinity;
     places.forEach((other, j) => { if (j !== index) nearest = Math.min(nearest, px(coords, other.coords, 5.05)); });
     const zoom = Math.max(5.05, Math.min(5.98, 5.05 + Math.log2(150 / nearest)));
+    const shieldZoom = shieldZoomScale(zoom);
     return {
       id: city._id,
       name: city.name.trim(),
@@ -104,10 +104,11 @@ function archiveChapters() {
       zoom,
       ratio: coverRatioOf(city.coverImageUrl ?? city.photos?.[0]?.imageUrl) ?? 1.5,
       tab: !!city.region?.trim(),
-      shield: shieldOf(city.region, SHIELD_SCALE.current),
+      shield: shieldOf(city.region, SHIELD_SCALE.current * shieldZoom),
+      shieldZoom,
       neighbours: places.filter((_, j) => j !== index).map((other) => ({
         coordinates: other.coords,
-        ...shieldOf(other.city.region, SHIELD_SCALE.ahead),
+        ...shieldOf(other.city.region, SHIELD_SCALE.ahead * shieldZoom),
       })),
       route: { prev: places[(index - 1 + n) % n].coords, next: places[(index + 1) % n].coords },
     };
@@ -116,7 +117,8 @@ function archiveChapters() {
 // The corners' points and the covers' sizes, as planDock derives them.
 function corners(chapters, vw, vh) {
   const stage = stageBox(vw, vh);
-  const sizes = chapters.map((c) => coverSize(c.ratio, stage));
+  const room = chapters.reduce((m, c) => ({ w: Math.max(m.w, c.shield.w), h: Math.max(m.h, c.shield.h) }), { w: 0, h: 0 });
+  const sizes = chapters.map((c) => coverSize(c.ratio, stage, room));
   const pairs = chapters.map((c, i) => ({ shield: c.shield, size: sizes[i], tab: c.tab }));
   const points = Object.fromEntries(QUADRANTS.map((q) => [q, dockPoint(stage, pairs, q).point]));
   return { stage, sizes, points };
@@ -266,12 +268,19 @@ test('the archive\'s plan: one dock per corner — each place at its own, the co
     // Pure: the same screen plans the same way.
     assert.deepEqual(planDock(chapters, vw, vh, camera), plan);
   }
-  // Stop 01 stands where it stood (52a37be): the entrance's stub lands there.
+  // Stop 01's stub, where the entrance lands the pass's (derived: with the
+  // shields a little larger at a rest, SHIELD_ZOOM, the plate stands a few
+  // px further off its 64 px shield — (852, 208) at 1×).
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
   const miami = plan[chapters[0].id];
   assert.equal(miami.quadrant, 'bl');
-  assert.deepEqual(miami.point, { x: 1074, y: 200 });
-  assert.deepEqual(coverStubRect(miami), { x: 852, y: 208, w: 190, h: 479, rotate: 0 });
+  assert.deepEqual(miami.point, { x: 1074, y: 207 });
+  assert.deepEqual(coverStubRect(miami), { x: 845, y: 215, w: 190, h: 479, rotate: 0 });
+  // Every shield the plan draws is the one the map draws at the place's rest.
+  chapters.forEach((c) => {
+    assert.equal(plan[c.id].shieldZoom, shieldZoomScale(c.zoom));
+    assert.ok(Math.abs(plan[c.id].shield.w - SHIELD_MAP_PX * SHIELD_SCALE.current * shieldZoomScale(c.zoom)) < 1e-9);
+  });
 });
 
 test('"Open story" hangs off its own route: New York\'s goes up into the tab\'s band', () => {
@@ -380,12 +389,12 @@ test('the ticket: 340×172, seated at the plate\'s corner by its shield, at ever
       });
     }
   }
-  // At 1728 the tickets lie at (702, 208) below-left and (702, 663) above.
+  // At 1728 the tickets lie at (695, 215) below-left and (695, 656) above.
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
   const at = (id) => [plan[id].point.x + plan[id].ticket.x, plan[id].point.y + plan[id].ticket.y];
-  assert.deepEqual(at(chapters[0].id), [702, 208]);
-  assert.deepEqual(at(chapters[4].id), [702, 663]);
-  assert.deepEqual(at(chapters[5].id), [702, 663]);
+  assert.deepEqual(at(chapters[0].id), [695, 215]);
+  assert.deepEqual(at(chapters[4].id), [695, 656]);
+  assert.deepEqual(at(chapters[5].id), [695, 656]);
 });
 
 test('the fold and the opening: a clip and a translate, one edge by the shield never moving', () => {
@@ -470,23 +479,41 @@ test('the fold and the opening: a clip and a translate, one edge by the shield n
   }
 });
 
-test('the beats: off the flight\'s own clock', () => {
+test('the beats: off the flight\'s own clock, and never before the name is down', () => {
   const turn = bezierFn(EASE.turn);
   const t = switchSchedule(1400, turn);
   assert.equal(t.relayAt, TICKET.foldAt + TICKET.faceMs);
   assert.equal(t.relayAt, 380);
+  // The board's retract: FLAP.pause before the relay (the leaving ticket's
+  // name keeps its first letters as it folds; the arriving one's cascade
+  // starts as it is laid on).
+  assert.equal(t.flapAt, t.relayAt - FLAP.pause);
+  assert.equal(t.flapAt, 220);
   assert.ok(Math.abs(t.expandAt - 921) <= 2, `turn ${t.expandAt}`);
   assert.equal(t.expandEnd, t.expandAt + 440);
   assert.ok(Math.abs(t.expandEnd - 1361) <= 2);
   assert.equal(t.tipAt, t.expandEnd + TICKET.tipGap);
   assert.ok(t.tipAt + TICKET.tipInMs <= 1610);
-  // 然后尖冒出来: the tip is a beat of its own — popped past its size and
-  // back, with visible travel — and the tab and the cue wait until it is
-  // down (they took the eye from it), 120–150 ms more.
+  // 到位之后展开封面: the name is down (and read) before the ticket opens —
+  // on the 1400 turn MIAMI, PAGE, ZION and ORLANDO within the camera's own
+  // 95%, NEW YORK and BRYCE CANYON a little after it.
+  const opens = Object.fromEntries(['Miami', 'Orlando', 'Page', 'Zion', 'Bryce Canyon', 'New York'].map((name) => [name, switchSchedule(1400, turn, name).expandAt]));
+  for (const [name, expandAt] of Object.entries(opens)) {
+    assert.ok(expandAt >= t.flapAt + flapSpan(name) + FLAP.hold, `${name} opens at ${expandAt}, its name down at ${t.flapAt + flapSpan(name)}`);
+    assert.ok(expandAt >= t.expandAt);
+  }
+  assert.ok(Math.abs(opens.Miami - 921) <= 2);
+  assert.ok(Math.abs(opens.Orlando - 921) <= 2, `ORLANDO ${opens.Orlando}`);
+  assert.equal(opens['Bryce Canyon'], 220 + 919 + FLAP.hold);
+  assert.equal(opens['New York'], 220 + 691 + FLAP.hold);
+  assert.equal(nameDownAt(100, ''), 0, 'no name: nothing to wait for');
+  assert.equal(nameDownAt(100, 'Zion'), 100 + flapSpan('Zion') + FLAP.hold);
+  // 然后尖冒出来: the tip is a beat of its own, out of its corner on the
+  // house curve — and never past its size (no overshoot in the switch).
   assert.ok(TICKET.tipInMs >= 200 && TICKET.tipInMs <= 260);
-  assert.ok(TICKET.tipPop >= 1.2 && TICKET.tipPop <= 1.35);
-  const pop = tipPopFrames({ arrive: 'A', travel: 'T' });
-  assert.deepEqual(pop.map((f) => f.transform), ['scale(0)', `scale(${TICKET.tipPop})`, 'scale(1)']);
+  assert.equal(TICKET.tipPop, undefined);
+  const pop = tipPopFrames({ arrive: 'A' });
+  assert.deepEqual(pop.map((f) => f.transform), ['scale(0)', 'scale(1)']);
   assert.equal(pop[0].easing, 'A');
   assert.ok(TICKET.extrasGap >= 120 && TICKET.extrasGap <= 150);
   assert.equal(t.extrasAt, t.tipAt + TICKET.tipInMs + TICKET.extrasGap);
@@ -501,8 +528,9 @@ test('the beats: off the flight\'s own clock', () => {
   assert.ok(Math.abs(switchSchedule(2000, voyageEase).expandAt - 1713) <= 2);
   for (let land = 860; land <= 2600; land += 20) {
     for (const ease of [turn, voyageEase]) {
-      const s = switchSchedule(land, ease);
+      const s = switchSchedule(land, ease, 'Bryce Canyon');
       assert.ok(s.expandAt - s.relayAt >= TICKET.transitMinMs, `${land}`);
+      assert.ok(s.expandAt >= s.flapAt + flapSpan('Bryce Canyon') + FLAP.hold);
     }
   }
   assert.ok(Math.abs(easeInverse((x) => x, 0.3) - 0.3) < 1e-9);
@@ -511,254 +539,127 @@ test('the beats: off the flight\'s own clock', () => {
   assert.equal(TICKET.leanPx, 0);
 });
 
-test('the glide: a ticket rides the camera\'s own clock to its new corner, slower than the ground', () => {
+test('the glide: one straight run to a new corner on the camera\'s own clock, a share of the ground\'s pace', () => {
+  // 封面的移动动效可以继续优化: the ticket lies still on the screen as the
+  // reference's board does while the planet turns under it; to a new corner
+  // it glides there once — from the click, on the flight's own curve, in a
+  // straight line, there by the opening — so at every frame it moves a fixed
+  // share of the ground's pace (the seats lie nearer than the ground runs),
+  // never faster, never sideways, nothing past its seat and back.
   const chapters = archiveChapters();
+  const turn = bezierFn(EASE.turn);
+  for (const [vw, vh] of SCREENS) {
+    const camera = cameraFor(vw, vh);
+    const plan = planDock(chapters, vw, vh, camera);
+    const n = chapters.length;
+    for (let i = 0; i < n; i += 1) {
+      for (const j of [(i + 1) % n, (i - 1 + n) % n]) {
+        const a = plan[chapters[i].id];
+        const b = plan[chapters[j].id];
+        const from = { x: a.point.x + a.ticket.x, y: a.point.y + a.ticket.y };
+        const to = { x: b.point.x + b.ticket.x, y: b.point.y + b.ticket.y };
+        const seat = Math.hypot(to.x - from.x, to.y - from.y);
+        if (a.quadrant === b.quadrant) {
+          // One corner: the ticket does not move at all.
+          assert.ok(seat <= (a.quadrant === 'bl' ? 0 : 4), `${vw}: ${chapters[i].name} → ${chapters[j].name} ${seat}`);
+          continue;
+        }
+        // The ground: the place gone to, from where it stands at the place
+        // left's rest to its own point.
+        const start = projectAt(chapters[j].coordinates, a.centre, chapters[i].zoom, camera);
+        const ground = Math.hypot(b.point.x - start.x, b.point.y - start.y);
+        for (const [D, ease] of [[1400, turn], [1400, voyageEase], [2000, voyageEase]]) {
+          const s = switchSchedule(D, ease, chapters[j].name);
+          const g = ticketGlide(from, to, s.expandAt, ease, D);
+          assert.deepEqual(g(0), from, 'from where it lay, at the click');
+          assert.deepEqual(g(s.expandAt), to, 'there by the opening');
+          assert.deepEqual(g(D + 100), to);
+          let prev = from;
+          for (let t = 1; t <= s.expandAt; t += 1) {
+            const p = g(t);
+            const step = Math.hypot(p.x - prev.x, p.y - prev.y);
+            const groundStep = ground * (ease(t / D) - ease((t - 1) / D));
+            assert.ok(step <= groundStep + 1e-6, `${vw} ${chapters[i].name} → ${chapters[j].name} (${D}): ${step.toFixed(3)} px/ms against the ground's ${groundStep.toFixed(3)} at ${t}`);
+            // On the straight run between the two seats, one way only.
+            const across = Math.abs((p.x - from.x) * (to.y - from.y) - (p.y - from.y) * (to.x - from.x)) / seat;
+            assert.ok(across < 1e-6, 'never sideways');
+            assert.ok((p.x - prev.x) * (to.x - from.x) + (p.y - prev.y) * (to.y - from.y) >= -1e-9, 'never back');
+            prev = p;
+          }
+        }
+      }
+    }
+  }
+  // Zion → Bryce Canyon at 1728: 441 px down, against the 687 px or so the
+  // ground runs.
   const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
   const zion = plan[chapters[3].id];
   const bryce = plan[chapters[4].id];
-  const from = { x: zion.point.x + zion.ticket.x, y: zion.point.y + zion.ticket.y };
-  const to = { x: bryce.point.x + bryce.ticket.x, y: bryce.point.y + bryce.ticket.y };
-  assert.deepEqual([from, to], [{ x: 702, y: 208 }, { x: 702, y: 663 }]);
-  const ground = Math.hypot(bryce.point.x - zion.point.x, bryce.point.y - zion.point.y);
-  for (const D of [1400, 2000]) {
-    const s = switchSchedule(D, voyageEase);
-    const g = ticketGlide(from, to, s.relayAt, s.expandAt, voyageEase, D);
-    assert.deepEqual(g(0), from);
-    assert.deepEqual(g(s.relayAt), from, 'still until the relay');
-    assert.deepEqual(g(s.expandAt), to, 'there by the opening');
-    let prev = from;
-    let peak = 0;
-    let groundPeak = 0;
-    for (let t = 1; t <= D; t += 1) {
-      const p = g(t);
-      assert.ok(p.y >= prev.y - 1e-9, 'monotonic');
-      peak = Math.max(peak, Math.hypot(p.x - prev.x, p.y - prev.y));
-      groundPeak = Math.max(groundPeak, ground * (voyageEase(t / D) - voyageEase((t - 1) / D)));
-      prev = p;
-    }
-    assert.ok(peak <= groundPeak, `${D}: the ticket ${peak.toFixed(3)} px/ms, the ground ${groundPeak.toFixed(3)}`);
-  }
+  assert.deepEqual([zion.point.x + zion.ticket.x, zion.point.y + zion.ticket.y, bryce.point.x + bryce.ticket.x, bryce.point.y + bryce.ticket.y], [695, 215, 695, 656]);
   // With nowhere to go it lies still.
-  const still = ticketGlide(from, from, 380, 921, voyageEase, 1400);
-  assert.deepEqual(still(700), from);
+  const still = ticketGlide({ x: 9, y: 9 }, { x: 9, y: 9 }, 921, voyageEase, 1400);
+  assert.deepEqual(still(700), { x: 9, y: 9 });
+  // The share is the camera's own clock up to the opening.
+  const share = glideShare(900, turn, 1400);
+  assert.equal(share(0), 0);
+  assert.equal(share(900), 1);
+  assert.ok(Math.abs(share(450) - turn(450 / 1400) / turn(900 / 1400)) < 1e-12);
 });
 
-test('a change of corner rides the ground: the carrier at its own shield, the arriving ticket swung round its shield', () => {
-  // The two seats as their shields stand each frame (the ground moving
-  // under both): until the relay the ticket is the leaving one's at its own
-  // shield; by the opening the arriving one's at its own corner; between,
-  // on the camera's own clock — continuous at both ends, always between the
-  // two seats as they stand, and on a far leg's sine moving one way only on
-  // the screen (on the 1400 turn the ground has done 63% by the relay, and
-  // the ticket rises at most a few tens of px against it as it swings).
-  const turn = bezierFn(EASE.turn);
-  const seat = (foot, e) => ({ x: foot.x + e.x, y: foot.y + e.y });
-  const zionTicket = { x: -373, y: 8 };
-  const bryceTicket = { x: -373, y: -228 };
-  for (const [D, ease] of [[1400, turn], [2000, voyageEase]]) {
-    const s = switchSchedule(D, ease);
-    const share = glideShare(s.relayAt, s.expandAt, ease, D);
-    let prev = null;
-    let back = 0;
-    for (let t = 0; t <= D; t += 5) {
-      const g = ease(t / D) * 687;
-      const zion = { x: 1074, y: 200 + g };
-      const bryce = { x: 1060, y: 204 + g };
-      const a = seat(zion, zionTicket);
-      const b = seat(bryce, bryceTicket);
-      const p = rideAt(a, b, share(t));
-      if (t <= s.relayAt) assert.deepEqual(p, a);
-      if (t >= s.expandAt) assert.deepEqual(p, b);
-      assert.ok(p.y >= Math.min(a.y, b.y) - 1e-9 && p.y <= Math.max(a.y, b.y) + 1e-9);
-      if (prev) back += Math.max(0, prev.y - p.y);
-      prev = p;
-    }
-    assert.ok(back <= (ease === turn ? 40 : 1e-6), `${D}: ${back.toFixed(1)} px against the ground`);
-  }
-  assert.deepEqual(rideAt({ x: 0, y: 0 }, { x: 0, y: 100 }, 0.25), { x: 0, y: 25 });
-});
-
-test('a ticket in transit gives way: no shield of its switch ever through it, its seat exact', () => {
-  // Review, 2026-09-29: parked on its seat, the ticket lay across the way of
-  // the shield it goes to (New York → Miami: Miami's 01 came up through the
-  // face and sat on MIAMI for 0.4 s) and of the one it leaves (Bryce's 05
-  // along the stub's foot as it folded). It steps across the shield's run,
-  // to its own side of it, a joint's gap clear — only while the shield runs
-  // level with it — and at the corner itself not at all.
-  const chapters = archiveChapters();
-  const size = { w: 340, h: 172 };
-  for (const quadrant of QUADRANTS) {
-    const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant });
-    for (const chapter of chapters) {
-      const e = plan[chapter.id];
-      assert.deepEqual(e.shield, chapter.shield, 'the plan keeps the shield it drew');
-      const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
-      const at = (foot, axis) => giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis }]);
-      // At its corner: nothing to step for, either way.
-      assert.deepEqual(at(e.point, 'x'), { x: 0, y: 0 }, quadrant);
-      assert.deepEqual(at(e.point, 'y'), { x: 0, y: 0 }, quadrant);
-    }
-  }
-  // Every run into the corner (arriving: the shield it goes to) and out of
-  // it (leaving: the one it leaves), from every side, straight or bowed as a
-  // flight's zoom bows them: never a pixel of the shield on the ticket, the
-  // step eased in (no more than a few px per px of the shield's run), and
-  // nought at the corner.
-  const sq = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
-  const plan = planDock(chapters, 1728, 1000, cameraFor(1728, 1000));
-  for (const quadrant of QUADRANTS) {
-    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant })[chapters[0].id];
-    const F = e.point;
-    const seat = { x: F.x + e.ticket.x, y: F.y + e.ticket.y };
-    for (let deg = 0; deg < 360; deg += 10) {
-      for (const bow of [0, 0.25, -0.25]) {
-        const dir = { x: Math.cos((deg * Math.PI) / 180), y: Math.sin((deg * Math.PI) / 180) };
-        const reach = 1400;
-        // A run from `reach` px off the corner, bowed sideways by `bow`.
-        const along = (k) => ({
-          x: F.x + dir.x * reach * (1 - k) - dir.y * reach * bow * Math.sin(Math.PI * k),
-          y: F.y + dir.y * reach * (1 - k) + dir.x * reach * bow * Math.sin(Math.PI * k),
-        });
-        const travel = { x: -dir.x, y: -dir.y };
-        const axis = yieldAxis(travel);
-        let prev = null;
-        let prevFoot = null;
-        for (let i = 0; i <= 2800; i += 1) {
-          const foot = along(i / 2800);
-          const step = giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis }]);
-          const ticket = { left: seat.x + step.x, top: seat.y + step.y, right: seat.x + step.x + size.w, bottom: seat.y + step.y + size.h };
-          assert.ok(sq(ticket, shieldBox(foot, e.shield)) <= 0.5, `${quadrant} from ${deg}° bow ${bow}: the shield on the ticket at ${i}`);
-          if (prev) {
-            const moved = Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y);
-            const stepped = Math.hypot(step.x - prev.x, step.y - prev.y);
-            assert.ok(stepped <= 4 * moved + 0.3, `${quadrant} from ${deg}° bow ${bow}: a jump of ${stepped.toFixed(1)} px for ${moved.toFixed(1)} of run`);
-          }
-          prev = step;
-          prevFoot = foot;
-        }
-        assert.deepEqual(prev, { x: 0, y: 0 }, `${quadrant} from ${deg}°: nought at the corner`);
-      }
-    }
-  }
-  // The shield it leaves: from the corner out along every run, straight or
-  // bowed, at the ground's speed (1 px/ms) — stepped for only while it runs
-  // level with the ticket, never a pixel on it, and let go of at a walk
-  // (`stepBack`), never a jump.
-  for (const quadrant of QUADRANTS) {
-    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant })[chapters[0].id];
-    const F = e.point;
-    const seat = { x: F.x + e.ticket.x, y: F.y + e.ticket.y };
-    for (let deg = 0; deg < 360; deg += 10) {
-      for (const bow of [0, 0.2, -0.2]) {
-        const dir = { x: Math.cos((deg * Math.PI) / 180), y: Math.sin((deg * Math.PI) / 180) };
-        const along = (k) => ({
-          x: F.x + dir.x * 1400 * k - dir.y * 1400 * bow * Math.sin(Math.PI * k),
-          y: F.y + dir.y * 1400 * k + dir.x * 1400 * bow * Math.sin(Math.PI * k),
-        });
-        const axis = yieldAxis(dir);
-        let prev = null;
-        let prevFoot = null;
-        for (let i = 0; i <= 2800; i += 1) {
-          const foot = along(i / 2800);
-          const need = giveWay(seat, size, [{ foot, shield: e.shield, quadrant, axis, leaving: true }]);
-          const step = stepBack(prev, need, prevFoot ? Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y) : 0);
-          if (i === 0) assert.deepEqual(step, { x: 0, y: 0 }, `${quadrant} leaving ${deg}°: nothing to step for at the corner`);
-          const ticket = { left: seat.x + step.x, top: seat.y + step.y, right: seat.x + step.x + size.w, bottom: seat.y + step.y + size.h };
-          assert.ok(sq(ticket, shieldBox(foot, e.shield)) <= 0.5, `${quadrant} leaving ${deg}° bow ${bow}: the shield on the ticket at ${i}`);
-          if (prev) {
-            const moved = Math.hypot(foot.x - prevFoot.x, foot.y - prevFoot.y);
-            const stepped = Math.hypot(step.x - prev.x, step.y - prev.y);
-            assert.ok(stepped <= 4 * moved + 0.3, `${quadrant} leaving ${deg}° bow ${bow}: a jump of ${stepped.toFixed(1)} px for ${moved.toFixed(1)} of run`);
-          }
-          prev = step;
-          prevFoot = foot;
-        }
-      }
-    }
-  }
-  {
-    // A neighbour left behind that comes to rest just past the ticket's foot
-    // (Zion under Bryce Canyon's ticket) is not stepped from; one coming on
-    // (the place gone to) is leant into from as far.
-    const e = planDock(chapters, 1728, 1000, cameraFor(1728, 1000), { quadrant: 'tl' })[chapters[4].id];
-    const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
-    const foot = { x: seat.x + size.w - 30, y: seat.y + size.h + 60 + e.shield.h };
-    assert.deepEqual(giveWay(seat, size, [{ foot, shield: e.shield, quadrant: 'bl', axis: 'x', leaving: true }]), { x: 0, y: 0 });
-    assert.ok(giveWay(seat, size, [{ foot, shield: e.shield, quadrant: 'bl', axis: 'x' }]).x < -20);
-  }
-  // Across the run: a shield that comes up or down → the ticket steps
-  // sideways; one that comes across → up or down.
-  assert.equal(yieldAxis({ x: 314, y: -2042 }), 'x');
-  assert.equal(yieldAxis({ x: 1892, y: 49 }), 'y');
-  // The place gone to may stand anywhere as the cover starts to fold: its
-  // way is leant into (weight 0 → 1), the place left's is not (it starts at
-  // its own corner).
-  const e = plan[chapters[0].id];
-  const seat = { x: e.point.x + e.ticket.x, y: e.point.y + e.ticket.y };
-  const beside = { x: seat.x + 200, y: seat.y + 60 };
-  const full = giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x' }]);
-  assert.ok(full.x < -10);
-  assert.deepEqual(giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x', weight: 0 }]), { x: 0, y: 0 });
-  assert.equal(giveWay(seat, size, [{ foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x', weight: 0.5 }]).x, Math.round(full.x * 5) / 10);
-  // Two shields asking for the same side share one step (the further).
-  const two = giveWay(seat, size, [
-    { foot: beside, shield: e.shield, quadrant: e.quadrant, axis: 'x' },
-    { foot: { x: beside.x - 40, y: beside.y }, shield: e.shield, quadrant: e.quadrant, axis: 'x' },
-  ]);
-  assert.ok(two.x <= full.x && two.x >= full.x - 41);
-  // Out at once, back at a walk (GIVE_WAY.backPxMs): a shield leaving at the
-  // ground's speed let the ticket spring back faster than its own shield.
-  assert.deepEqual(stepBack(null, { x: -40, y: 0 }, 16), { x: -40, y: 0 });
-  assert.deepEqual(stepBack({ x: -20, y: 0 }, { x: -60, y: 0 }, 16), { x: -60, y: 0 });
-  assert.deepEqual(stepBack({ x: 0, y: 0 }, { x: -60, y: 45 }, 16), { x: -60, y: 45 }, 'out from nothing: at once');
-  assert.deepEqual(stepBack({ x: -60, y: 10 }, { x: 0, y: 0 }, 10), { x: -60 + 10 * GIVE_WAY.backPxMs, y: 10 - 10 * GIVE_WAY.backPxMs });
-  assert.deepEqual(stepBack({ x: -2, y: 0 }, { x: 30, y: 0 }, 16), { x: 30, y: 0 });
-  assert.deepEqual(stepBack({ x: -30, y: 0 }, { x: 30, y: 0 }, 16), { x: -30 + 16 * GIVE_WAY.backPxMs, y: 0 });
-  // …but home by the time the cover is open: with 40 ms left, a 100 px step
-  // goes 16/40 of the way this frame, and the rest by then.
-  assert.deepEqual(stepBack({ x: -100, y: 0 }, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 40), { x: -60, y: 0 });
-  assert.deepEqual(stepBack({ x: -100, y: 0 }, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 10), { x: 0, y: 0 });
-  {
-    let was = { x: -120, y: 30 };
-    for (let t = 0; t < 400; t += 16) was = stepBack(was, { x: 0, y: 0 }, 16, GIVE_WAY.backPxMs, 400 - t);
-    assert.deepEqual(was, { x: 0, y: 0 });
-  }
-  assert.ok(GIVE_WAY.backPxMs <= 0.5 && GIVE_WAY.reach >= 200);
-});
-
-test('wiring: the travelling ticket gives way on its glide; only the place in hand is lifted over it', () => {
+test('a ticket in transit steps aside for nothing: every shield passes under it', () => {
+  // The give-way (a ticket stepping up to 170 px across a shield's way, New
+  // York → Miami) is gone: the ticket lies still over the turning ground, as
+  // the reference's board does, and the shields — the place in hand's own
+  // too — pass under the covers' dock.
+  const lib = source('src/lib/coverDock.ts');
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const css = source('src/styles/global.css');
-  // Both glides (lying still or gliding; riding the ground to a new corner)
-  // give way, off the shields' feet as the atlas projects them.
-  assert.match(atlas, /const axis = yieldAxis\(travel\);/);
-  assert.match(atlas, /const travel = footTo \? \{ x: to\.x - footTo\.x, y: to\.y - footTo\.y \} : \{ x: 0, y: 0 \};/);
-  assert.match(atlas, /const want = giveWay\(base, \{ w: destEntry\.ticketW, h: destEntry\.ticketH \}, yieldTo\(t, points, riding\)\);/);
-  assert.match(atlas, /const step = stepBack\(was\?\.step \?\? null, need, was \? t - was\.t : 0, GIVE_WAY\.backPxMs, home - t\);/);
-  assert.match(atlas, /const touchdown = now \+ durationMs;/);
-  assert.equal((atlas.match(/, expand, Math\.max\(expand, touchdown\)\)/g) ?? []).length, 2);
-  // Down by the touchdown whatever it gave way for (the covers at rest are
-  // clear of every shield by the plan).
-  assert.match(atlas, /const down = 1 - smoothstep01\(\(t - expand\) \/ Math\.max\(1, home - expand\)\);/);
-  assert.match(atlas, /\.\.\.giving\(\(t, points\) => \{/);
-  assert.match(atlas, /\{ \.\.\.giving\(\(\(g\) => \(t: number\) => g\(t - now\)\)\(ticketGlide\(lies, seatTo, relay - now, expand - now, easing, durationMs\)\), false, expand, Math\.max\(expand, touchdown\)\), until: expand \}/);
-  // A new choice mid-way takes up where the ticket lay before it gave way
-  // and the step it had taken (never baked into where it lies).
-  assert.match(atlas, /\? \(held\.base \?\? held\.at\)\(now, seen\)/);
-  assert.match(atlas, /let was: \{ step: Point; t: number \} \| null = heldStep \? \{ step: heldStep, t: now \} : null;/);
-  // The place gone to leant into over the fold; the one left while lying
-  // still (a riding ticket rides).
-  assert.match(atlas, /const leanFrom = leaning \? leaning\.t0 : now;/);
-  assert.match(atlas, /out\.push\(mode === 'self'\s+\? \{ foot: b, shield: destEntry\.shield, quadrant: destEntry\.quadrant, axis, leaving: true \}/);
-  assert.match(atlas, /const leanMs = Math\.max\(TICKET_FOLD_MS, \(leaning \? leaning\.relayAt : relayAt\) - leanFrom\);/);
-  assert.match(atlas, /if \(a && carrierEntry && !riding\) out\.push\(\{ foot: a, shield: carrierEntry\.shield, quadrant: carrierEntry\.quadrant, axis, leaving: true \}\);/);
-  // (Not the ticket under a new one laid on in transit: it never came to
-  // its corner, and its shield may stand across the ticket from its side.)
-  assert.match(atlas, /const a = carrier && carrier !== destId && mode !== 'lay' \? points\[carrier\] : null;/);
-  // Only the place in hand's shield comes over the covers while a ticket
-  // travels; every other passes under.
-  assert.match(css, /\.route-atlas\[data-shields-over\] \{\s*--shields-over: 30;\s*\}/);
-  assert.match(atlas, /pose\.marker\.style\.zIndex = rank === 2 \? `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)` : String\(z\);/);
+  for (const gone of ['giveWay', 'stepBack', 'yieldAxis', 'GIVE_WAY', 'rideAt', 'Yield', 'shields-over', 'leanFrom', 'smoothstep01']) {
+    assert.doesNotMatch(lib + atlas + css, new RegExp(`\\b${gone}\\b`), gone);
+  }
+  assert.match(atlas, /pose\.marker\.style\.zIndex = String\(z\);/);
+  assert.match(css, /\.archive-dock-host--atlas \{\s*z-index: 25;\s*\}/);
+  // The glide is read off nothing on the ground: screen-anchored.
+  assert.match(atlas, /const glideRef = useRef<\{\s*at: \(now: number\) => Point;\s*until: number;\s*\} \| null>\(null\);/);
+  assert.match(atlas, /const glide = lies && seatTo \? ticketGlide\(lies, seatTo, expand - now, easing, durationMs\) : null;/);
+  // A new choice mid-way takes it up from where it lies.
+  assert.match(atlas, /const lies = held\s+\? held\.at\(now\)/);
+});
+
+test('a cover riding its shield keeps its joint\'s gap at every zoom', () => {
+  // The shields grow with the zoom (SHIELD_ZOOM); the plan sets the cover a
+  // joint's gap off its shield as drawn at the rest. Zoomed out (or in) with
+  // the place in hand, the cover's corner keeps that gap to the shield as
+  // drawn then, so the tip still meets it.
+  const shield = { w: 60, h: 64 };
+  const box = (point, s) => ({ left: point.x - s.w / 2, top: point.y - s.h, right: point.x + s.w / 2, bottom: point.y });
+  for (const quadrant of QUADRANTS) {
+    const entry = { quadrant, shield, shieldZoom: 1.3 };
+    assert.deepEqual(shieldShift(entry, 1.3), { x: 0, y: 0 }, 'nought at its rest');
+    for (const scale of [1, 1.1, 1.2, 1.35]) {
+      const k = scale / 1.3;
+      const drawn = { w: shield.w * k, h: shield.h * k };
+      const foot = { x: 500, y: 500 };
+      const shift = shieldShift(entry, scale);
+      const plate = plateRect({ x: foot.x + shift.x, y: foot.y + shift.y }, shield, { w: 400, h: 300 }, quadrant);
+      const s = box(foot, drawn);
+      const gapX = quadrant[1] === 'l' ? s.left - plate.right : plate.left - s.right;
+      const gapY = quadrant[0] === 'b' ? plate.top - foot.y : s.top - plate.bottom;
+      assert.ok(Math.abs(gapX - DOCK.gap) <= 0.5, `${quadrant} ${scale}: across ${gapX}`);
+      assert.ok(Math.abs(gapY - DOCK.gap) <= 0.5, `${quadrant} ${scale}: down ${gapY}`);
+    }
+  }
+  assert.deepEqual(shieldShift({ quadrant: 'bl', shield, shieldZoom: 1.3 }, undefined), { x: 0, y: 0 });
+  // Wiring: the atlas publishes the scale and writes the cover in hand's
+  // foot with the shift; the chapter writes its own foot with it.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, pins, arrive, shieldZoom: quantised \}\);/);
+  assert.match(atlas, /const shift = shieldShift\(entry, quantised\);/);
+  assert.match(atlas, /written = pin \?\? \(at \? footOf\(at\) : null\);/);
+  assert.match(chapter, /const shift = entry \? shieldShift\(entry, frame\.shieldZoom\) : null;/);
+  // The cover's room beside its shield is the largest shield the plan draws.
+  assert.deepEqual(SHIELD_ROOM, { w: 48, h: 56 });
 });
 
 test('a press on a shield in flight is its click, never the reader taking the map', () => {
@@ -790,9 +691,11 @@ test('a switch keeps the ticket where it lies: its own pin for each cover, the r
   const css = source('src/styles/global.css');
   // Through a switch the cover is carried: asked for from take-off.
   assert.match(atlas, /return flying\.carry && id === held \? \{ id, appear: true, stay: true \} : null;/);
-  // Each cover is written at its own pin, else the pin, else its foot; only
-  // a changed point is written.
-  assert.match(chapter, /const point = frame\.pins\?\.\[me\] \?\? \(frame\.pin && \(at \|\| out\) \? frame\.pin : frame\.points\[me\]\);/);
+  // Each cover is written at its own pin, else the pin, else its foot (a
+  // joint's gap off its shield as drawn: `shieldShift`); only a changed
+  // point is written.
+  assert.match(chapter, /let point = frame\.pins\?\.\[me\] \?\? \(frame\.pin && \(at \|\| out\) \? frame\.pin : null\);/);
+  assert.match(chapter, /const foot = frame\.points\[me\];/);
   assert.match(chapter, /if \(!point \|\| \(point\.x === lastX && point\.y === lastY\)\) return;/);
   // Both tickets on one point: the carrier's pin is the arriving one's,
   // moved by the difference of their seats.
@@ -934,15 +837,15 @@ test('wiring: the atlas publishes on its render, the chapters ride it', () => {
   assert.match(chapter, /dock\.style\.transform = `translate3d\(\$\{point\.x\}px, \$\{point\.y\}px, 0\)`/);
   assert.match(chapter, /data-cover-for=\{id\}/);
   assert.match(chapter, /createPortal\(/);
-  // The desktop's dock is a layer of the atlas's own (under the place in
-  // hand's own shield while a ticket travels, over every other shield);
-  // the phone's is the page's.
+  // The desktop's dock is a layer of the atlas's own, over every shield (a
+  // ticket in transit lies still over the turning ground); the phone's is
+  // the page's.
   assert.match(home, /onDockHost=\{desktopLayout \? setDockHost : undefined\}/);
   assert.match(atlas, /\{!mobile && onDockHost && <div ref=\{onDockHost\} className="archive-dock-host archive-dock-host--atlas" \/>\}/);
   assert.match(home, /<div ref=\{setDockHost\} className="archive-dock-host archive-dock-host--phone" data-let-go=\{letGo \? '' : undefined\} \/>/);
   assert.match(css, /\.archive-dock-host--atlas \{\s*z-index: 25;\s*\}/);
-  assert.match(css, /\.route-atlas\[data-shields-over\] \{\s*--shields-over: 30;\s*\}/);
-  assert.match(atlas, /pose\.marker\.style\.zIndex = rank === 2 \? `calc\(var\(--shields-over, 0\) \+ \$\{z\}\)` : String\(z\);/);
+  assert.match(atlas, /pose\.marker\.style\.zIndex = String\(z\);/);
+  assert.match(atlas, /atlasEl\.setAttribute\('data-ticket-transit', ''\)/);
   assert.match(atlas, /const ticketing = \(!!sw && now < sw\.expandAt\) \|\| \(!!arrive && now >= arrive\.inkAt && now < arrive\.expandAt\);/);
   // The place in hand's rail shows with its cover (the dock's frame).
   assert.match(home, /coverDock\.subscribe\(\(frame\) => \{/);
@@ -1062,16 +965,71 @@ test('the state, boxed; the pad gone; the old switch gone', () => {
   }
 });
 
+test('票根上已经有region了，只出现一处: the state once, boxed on the tab; every stub\'s tear has its guide', () => {
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const css = source('src/styles/global.css');
+  const entrance = source('src/styles/entrance.css');
+  // The stub prints no REGION row: the state is on the cover once, on its tab.
+  const start = chapter.indexOf('const stubRows = useMemo(() => {');
+  const rows = chapter.slice(start, chapter.indexOf('}, [collection]);', start));
+  assert.ok(rows.length > 100);
+  assert.doesNotMatch(rows, /'Region'|collection\.region/);
+  assert.match(rows, /rows\.push\(\['Frames'/);
+  assert.match(chapter, /<span className="archive-dock__tab-state">\{stateTab\.state\}<\/span>/);
+  // 所有票根的撕口处做一个下划线指引: a hairline in the stub's own ink down its
+  // perforation (6 px in from the holes, a dash between every two), from
+  // under the top notch to above the bottom one, quiet on every stock,
+  // brighter while pointed at; the rip takes it as it runs. No lime.
+  const guide = css.match(/\.archive-ticket-stub::after \{([^}]*)\}/)[1];
+  assert.match(guide, /left: 6px;/);
+  assert.match(guide, /width: 1px;/);
+  assert.match(guide, /repeating-linear-gradient\(180deg, currentColor 0 2px, transparent 2px 6px, currentColor 6px 8px\)/);
+  assert.match(guide, /clip-path: inset\(max\(12px, var\(--ticket-torn, 0px\)\) 0 12px 0\);/);
+  assert.ok(Number(guide.match(/opacity: ([\d.]+);/)[1]) <= 0.5, 'quiet');
+  assert.match(css, /\.archive-dock__cover:is\(:hover, :focus-visible\) \.archive-ticket-stub::after \{\s*opacity: 0\.78;/);
+  assert.match(css, /\.archive-ticket-stub \{[^}]*color: var\(--stub-ink\);/, 'its own ink');
+  // The dashes fall between the holes: the holes every --ticket-pitch (8 px)
+  // from half a pitch down; the dashes on the pitch itself.
+  assert.match(css, /--ticket-pitch: 8px;/);
+  // The rip's own clock writes --ticket-torn on the stub (the guide goes
+  // with the paper it guided).
+  assert.match(chapter, /put\(stub, '--ticket-torn', tornPx\);/);
+  // The boarding pass's stub: the same guide in the pass's ink, from under
+  // its band; taken by its rip (--bp-torn).
+  const pass = entrance.match(/\.bp-stub::after \{([^}]*)\}/)[1];
+  assert.match(pass, /repeating-linear-gradient\(180deg, currentColor 0 1px, transparent 1px 5px, currentColor 5px 6px\)/);
+  assert.match(pass, /clip-path: inset\(max\(calc\(var\(--bp-band-h\) \+ 4px\), var\(--bp-torn, 0px\)\) 0 calc\(var\(--bp-notch\) \+ 4px\) 0\);/);
+  assert.match(entrance, /--bp-pitch: 6px;/);
+  assert.match(entrance, /\.bp-seat:has\(> \.bp-tear:is\(:hover, :focus-visible\)\) \.bp-stub::after \{\s*opacity: 0\.72;/);
+  for (const block of [guide, pass]) assert.doesNotMatch(block, /d2ff00|210,\s*255,\s*0/i);
+});
+
+test('a resize mid-switch resumes the switch on the new layout', () => {
+  // 1728 → 1280 mid Zion → Bryce Canyon: the camera's run was torn down with
+  // the old layout and the flight ended as the reader's hand — Bryce left
+  // off the screen, and let go. A flight between places torn down by a new
+  // layout is asked again of the next run (the same token), from the live
+  // camera.
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /relayoutAtRef\.current = performance\.now\(\);\s+cancelAnimationFrame\(frame\);/);
+  assert.match(atlas, /if \(performance\.now\(\) - relayoutAtRef\.current < RELAYOUT_MS && done\.kind === 'fly' && flightRef\.current\?\.token === done\.token\) answeredFlightRef\.current = null;\s+else onArriveRef\.current\?\.\(done\.token, false\);/);
+  assert.match(atlas, /const pending = flightRef\.current;\s+if \(pending && pending\.token !== answeredFlightRef\.current\) \{/);
+});
+
 test('a portrait cover keeps most of the height it had in the column', () => {
   // In the column a portrait cover stood 780px on the owner's screen; at
   // 0.64 of the stage it had 531 (46% of its area).
   const stage = stageBox(1728, 1000);
-  const portrait = coverSize(2 / 3, stage);
-  const landscape = coverSize(1.5, stage);
+  // (Beside the place in hand's shield as drawn at a rest: 1.4 × 1.3 × 34,
+  // Florida's the tallest form.)
+  const shield = { w: SHIELD_MAP_PX * SHIELD_SCALE.current * shieldZoomScale(5.05) };
+  shield.h = (shield.w * 108) / 100;
+  const portrait = coverSize(2 / 3, stage, shield);
+  const landscape = coverSize(1.5, stage, shield);
   assert.ok(portrait.photoH >= 640, `portrait ${portrait.photoW}×${portrait.photoH}`);
   assert.ok(landscape.photoW >= 700, `landscape ${landscape.photoW}×${landscape.photoH}`);
   // Still whole on the stage at every corner (the plan test holds the rest).
-  assert.ok(portrait.photoH + DOCK.tab + DOCK.below + DOCK.gap + 56 <= stage.bottom - stage.top);
+  assert.ok(portrait.photoH + DOCK.tab + DOCK.below + DOCK.gap + shield.h <= stage.bottom - stage.top);
 });
 
 test('a cover appears once its place is in hand and the camera is down, and stays while it is', () => {

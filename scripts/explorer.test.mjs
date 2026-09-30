@@ -101,9 +101,9 @@ test('a switch can be interrupted: a new choice mid-turn turns on from there', (
   // carries by phase (src/lib/coverDock.ts, "The switch"), never stacking;
   // the same place with nothing under way is pinned back to its dock.
   assert.match(atlas, /pinRef\.current = \{ from: written \?\? to, to, t0: now, ms: durationMs, ease: easing \};/);
-  // (Where it lay before it gave way to its shields, the step it had taken
-  // carried on: coverDock `giveWay`.)
-  assert.match(atlas, /const held = glideRef\.current;\s+const lies = held\s+\? \(held\.base \?\? held\.at\)\(now, seen\)/);
+  // (From where the ticket lies on its glide: screen-anchored, never read
+  // off the ground.)
+  assert.match(atlas, /const held = glideRef\.current;[\s\S]{0,200}const lies = held\s+\? held\.at\(now\)/);
   assert.match(atlas, /from: carrier,\s+to: destId,\s+mode,/);
   const chapter = source('src/components/home/ArchiveChapter.tsx');
   // An arriving ticket that becomes the carrier holds (in transit) or folds

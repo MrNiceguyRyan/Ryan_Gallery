@@ -27,7 +27,7 @@
 
 import { EASE, bezierFn } from './motion.ts';
 import { greatCirclePoint } from './routeGeometry.ts';
-import { TICKET_NAME_LINE, signNameSize } from './routeShield.ts';
+import { FLAP, TICKET_NAME_LINE, flapSpan, signNameSize } from './routeShield.ts';
 
 export type Quadrant = 'tr' | 'tl' | 'br' | 'bl';
 
@@ -114,9 +114,15 @@ export function coverRatioOf(url: string | undefined | null): number | null {
   return Number.isFinite(ratio) && ratio > 0 ? Math.min(2.4, Math.max(0.45, ratio)) : null;
 }
 
+/** The room a cover leaves its shield beside it, px: the largest shield the
+ *  archive draws at a rest (the place in hand's, SHIELD_SCALE.current at
+ *  its zoom's scale) — 48 × 56 at 1×. */
+export const SHIELD_ROOM: Size = { w: 48, h: 56 };
+
 /** The cover's size on this stage: the photograph at its own ratio and the
- *  stub beside it, as large as the stage lets every corner still fit. */
-export function coverSize(ratio: number, stage: Box) {
+ *  stub beside it, as large as the stage lets every corner still fit beside
+ *  a shield of `shield` (the largest the plan draws). */
+export function coverSize(ratio: number, stage: Box, shield: Size = SHIELD_ROOM) {
   const stageW = stage.right - stage.left;
   const stageH = stage.bottom - stage.top;
   const byHeight = stageH * DOCK.photoShareH;
@@ -124,8 +130,8 @@ export function coverSize(ratio: number, stage: Box) {
   // Never more than a corner can hold, whatever the floor says: the plate,
   // the joint and a shield side by side across the stage, and the plate with
   // its tab, cue, joint and a shield down it.
-  const fitsW = (stageW - DOCK.gap - 48 - DOCK.stub) / ratio;
-  const fitsH = stageH - DOCK.tab - DOCK.below - DOCK.gap - 56;
+  const fitsW = (stageW - DOCK.gap - Math.max(SHIELD_ROOM.w, Math.ceil(shield.w)) - DOCK.stub) / ratio;
+  const fitsH = stageH - DOCK.tab - DOCK.below - DOCK.gap - Math.max(SHIELD_ROOM.h, Math.ceil(shield.h));
   const photoH = Math.floor(Math.min(fitsW, fitsH, clamp(Math.min(byHeight, byWidth), DOCK.photoMinH, DOCK.photoMaxH)));
   const photoW = Math.floor(photoH * ratio);
   return { photoW, photoH, w: photoW + DOCK.stub, h: photoH };
@@ -333,6 +339,9 @@ export interface DockChapter {
   /** The stops either side of it on the route (the last closes onto the
    *  first): a cover keeps off its own legs. */
   route?: { prev?: readonly [number, number]; next?: readonly [number, number] };
+  /** The shields' zoom scale at its rest (`shieldZoomScale(zoom)`): the
+   *  scale `shield` and `neighbours` are drawn at. */
+  shieldZoom?: number;
   /** The ticket's card stock (src/lib/ticketStock.ts): a switch eases the
    *  ticket from the stock it leaves to this one. */
   stock?: string;
@@ -362,9 +371,13 @@ export interface DockEntry {
   ticketH: number;
   fold: Point;
   ticket: Point;
-  /** Its shield's box as the plan drew it (the current scale): the one a
-   *  travelling ticket keeps clear of (`giveWay`). */
+  /** Its shield's box as the plan drew it (the current scale, at its rest
+   *  zoom's `shieldZoomScale`): the cover stands a joint's gap off it. At
+   *  another zoom the cover keeps the gap to the shield as drawn then
+   *  (`shieldShift`). */
   shield: Size;
+  /** The zoom scale its shield was planned at (DockChapter.shieldZoom). */
+  shieldZoom: number;
   /** Where its "Open story" hangs (`cueSlot`): off its own route. */
   cue: CueSlot;
   /** How much of its neighbours' shields the cover would hide (px²) and how
@@ -470,12 +483,13 @@ export const TICKET = {
    *  under it (EASE.travel) — the only change is the picture, a cross-fade,
    *  never a dark tile — then the leaving one is cut. */
   dissolveMs: 180,
-  /** 过去…地点文字滚动: the transit. The arriving ticket lies where the
-   *  leaving one did (or rides the ground to its own corner), its name
-   *  rolling in; it lasts at least this long… */
+  /** 过去…字条跳转切换: the transit. The arriving ticket lies where the
+   *  leaving one did (or glides with the ground to its own corner), its name
+   *  turning on the board (src/lib/routeShield.ts, FLAP); it lasts at least
+   *  this long… */
   transitMinMs: 480,
   /** …and 到位之后展开封面: it opens when the camera has made this share of
-   *  its move. */
+   *  its move — and never before its name is down (FLAP.hold after it). */
   landShare: 0.95,
   /** The card eases from the stock it leaves (EASE.travel), at most this. */
   paperMaxMs: 620,
@@ -489,11 +503,11 @@ export const TICKET = {
   openAt: 0,
   openMs: 440,
   /** 然后…尖冒出来: the tip comes out of the corner that faces the shield,
-   *  this long after the cover is open — out past its size (`tipPop`) and
-   *  back, a beat of its own… */
+   *  this long after the cover is open, on the house curve (expo out: it is
+   *  out at once and settles) — a beat of its own, and no overshoot (the
+   *  switch's motion is calm: nothing past its mark and back)… */
   tipGap: 20,
   tipInMs: 220,
-  tipPop: 1.3,
   /** …and only once it is down, this beat later, the tab and "Open story"
    *  come back (DUR.out, EASE.arrive): they took the eye from the tip. */
   extrasGap: 130,
@@ -619,7 +633,10 @@ export function planDock(
   options: { quadrant?: Quadrant; slack?: number } = {},
 ): Record<string, DockEntry> {
   const stage = stageBox(vw, vh);
-  const sizes = chapters.map((chapter) => coverSize(chapter.ratio, stage));
+  // (Beside the largest shield the plan draws: the place in hand's, at its
+  // rest zoom's scale.)
+  const room = chapters.reduce<Size>((max, c) => ({ w: Math.max(max.w, c.shield.w), h: Math.max(max.h, c.shield.h) }), { w: 0, h: 0 });
+  const sizes = chapters.map((chapter) => coverSize(chapter.ratio, stage, room));
   const pairs = chapters.map((chapter, index) => ({ shield: chapter.shield, size: sizes[index], tab: chapter.tab }));
   const docks = Object.fromEntries(QUADRANTS.map((q) => [q, dockPoint(stage, pairs, q)])) as Record<Quadrant, { point: Point; overflow: number }>;
   const points = Object.fromEntries(QUADRANTS.map((q) => [q, docks[q].point])) as Record<Quadrant, Point>;
@@ -659,12 +676,29 @@ export function planDock(
       fold,
       ticket: { x: offset.x + seat.x, y: offset.y + seat.y },
       shield: { w: chapter.shield.w, h: chapter.shield.h },
+      shieldZoom: chapter.shieldZoom ?? 1,
       cue,
       covered: Math.round(covered),
       overflow,
     };
   });
   return plan;
+}
+
+/** How far a cover riding its shield stands off its planned place when the
+ *  shield is drawn at zoom scale `scale` rather than the plan's (the reader
+ *  has zoomed the map in hand, or the camera is still settling): its corner
+ *  keeps the joint's gap to the shield's corner as drawn, so the tip meets
+ *  the shield at every zoom. Whole px (the cover is written on whole px);
+ *  0, 0 at the plan's own scale. */
+export function shieldShift(entry: Pick<DockEntry, 'quadrant' | 'shield' | 'shieldZoom'>, scale: number | undefined): Point {
+  if (!scale || !entry.shieldZoom) return { x: 0, y: 0 };
+  const k = scale / entry.shieldZoom - 1;
+  const right = entry.quadrant === 'tr' || entry.quadrant === 'br';
+  const top = entry.quadrant === 'tr' || entry.quadrant === 'tl';
+  const x = Math.round(((right ? 1 : -1) * entry.shield.w * k) / 2);
+  const y = top ? Math.round(-entry.shield.h * k) : 0;
+  return { x: x || 0, y: y || 0 };
 }
 
 /** Where a docked cover's stub rests on the screen (viewport px) once its
@@ -685,28 +719,39 @@ export function coverStubRect(entry: DockEntry) {
 // ── The switch ──
 // Owner, 2026-09-29: 我发现封面总是右上角突出一个尖指向地标，封面之间的切换有点怪，
 // 我觉得这个尖可以等封面切换过去之后再冒出来，封面切换动画过程中先缩小成类似机票那样
-// 过去，地点文字滚动，到位之后展开封面，然后右上角的尖冒出来. A move between
-// places is one turn of the planet, and the cover travels it as a ticket;
-// every beat is derived from the flight's own clock (`switchSchedule`):
+// 过去，地点文字滚动，到位之后展开封面，然后右上角的尖冒出来 — and 2026-09-30:
+// 字条跳转切换，和目标网站的效果一致; 封面的移动动效可以继续优化. A move between
+// places is one turn of the planet, and the cover travels it as a ticket
+// that lies still on the screen, as the reference's board does while its
+// planet turns under it; every beat is derived from the flight's own clock
+// (`switchSchedule`):
 //  - the tip goes back into its corner, the tab and "Open story" fade;
 //  - the cover shrinks into its ticket at the corner by its shield — the
 //    face closes toward the perforation, the stub rolls up to the ticket's
 //    height, the photograph shrinks into the strip as a miniature of itself
 //    (`ticketFrames`) — while the planet makes the fast half of its turn;
+//    FLAP.pause before the fold ends, its name retracts to its first letters
+//    (the board's first beat, src/lib/routeShield.ts FLAP);
 //  - the relay: the arriving place's cover, held hidden in its ticket form
 //    since the click, is laid on exactly the same pixels (the same stock,
-//    the sign primed with the same words) and its miniature dissolves in
-//    over the leaving one's; then the leaving one is cut;
-//  - the transit: the ticket lies still (or, to a new corner, rides the
-//    ground with its shield and swings round it, `rideAt`) while its name
-//    rolls in (src/lib/routeShield.ts, ROLL) and its card eases to its own
-//    stock;
-//  - at 95% of the camera's move the cover grows open in place, the
-//    photograph growing with it; then the tip pops out of the corner that
-//    faces the shield, and once it is down the tab and the cue come back.
+//    the same letters kept) and its miniature dissolves in over the leaving
+//    one's; then the leaving one is cut;
+//  - the transit: the ticket lies still — or, to a new corner, glides there
+//    in one straight run on the camera's own clock from the click
+//    (`ticketGlide`), always slower than the ground — while its name
+//    cascades into place from the relay and its card eases to its own stock;
+//    every shield passes under it (nothing steps aside);
+//  - once the camera has made 95% of its move and the name is down, the
+//    cover grows open in place, the photograph growing with it; then the tip
+//    comes out of the corner that faces the shield, and once it is down the
+//    tab and the cue come back.
 // No line anywhere: the tip is a corner of the card.
 export interface SwitchTimes {
   relayAt: number;
+  /** The board's retract (FLAP.pause before the relay: the leaving ticket's
+   *  name keeps its first letters, and the arriving one's cascade starts as
+   *  it is laid on). */
+  flapAt: number;
   expandAt: number;
   expandEnd: number;
   tipAt: number;
@@ -726,23 +771,35 @@ export function easeInverse(ease: (t: number) => number, y: number) {
   return (lo + hi) / 2;
 }
 
+/** When the arriving ticket's name is down and read, ms on the same clock as
+ *  `flapAt` (its board's retract): the whole cascade (src/lib/routeShield.ts,
+ *  `flapSpan`) and FLAP.hold. 0 with no name to turn. */
+export function nameDownAt(flapAt: number, name: string | null | undefined) {
+  const span = name ? flapSpan(name) : 0;
+  return span > 0 ? flapAt + span + FLAP.hold : 0;
+}
+
 /** When a switch's cover opens, ms after the click, for a relay at
  *  `relayAt` and a camera that lands `landMs` after the click on `ease`:
  *  when the camera has made TICKET.landShare of its move, never before a
- *  transit of TICKET.transitMinMs. */
-export function expandAtFor(relayAt: number, landMs: number, ease: (t: number) => number) {
-  return Math.round(Math.max(relayAt + TICKET.transitMinMs, easeInverse(ease, TICKET.landShare) * landMs));
+ *  transit of TICKET.transitMinMs, and never before its name is down
+ *  (`nameDown`, on the same clock: `nameDownAt`). */
+export function expandAtFor(relayAt: number, landMs: number, ease: (t: number) => number, nameDown = 0) {
+  return Math.round(Math.max(relayAt + TICKET.transitMinMs, easeInverse(ease, TICKET.landShare) * landMs, nameDown));
 }
 
 /** A switch's beats, ms after the click, for a camera that lands `landMs`
- *  after it on `ease`: the relay as the fold ends (380), the opening when
- *  the camera has made TICKET.landShare of its move (921 on the 1400 turn),
- *  never before a transit of TICKET.transitMinMs, the tip 20 ms after the
- *  opening, the extras with it. */
-export function switchSchedule(landMs: number, ease: (t: number) => number): SwitchTimes {
+ *  after it on `ease`, to the place named `name`: the relay as the fold
+ *  ends (380), the board's retract FLAP.pause before it (220), the opening
+ *  when the camera has made TICKET.landShare of its move (921 on the 1400
+ *  turn) and the name is down (ORLANDO 914, BRYCE CANYON 1199), never before
+ *  a transit of TICKET.transitMinMs, the tip 20 ms after the opening, the
+ *  extras once it is down. */
+export function switchSchedule(landMs: number, ease: (t: number) => number, name?: string): SwitchTimes {
   const relayAt = TICKET.foldAt + TICKET.faceMs;
-  const expandAt = expandAtFor(relayAt, landMs, ease);
-  return { relayAt, ...afterOpening(expandAt) };
+  const flapAt = relayAt - FLAP.pause;
+  const expandAt = expandAtFor(relayAt, landMs, ease, nameDownAt(flapAt, name));
+  return { relayAt, flapAt, ...afterOpening(expandAt) };
 }
 
 /** The beats after an opening at `expandAt`: its end, the tip, the tab and
@@ -754,13 +811,12 @@ export function afterOpening(expandAt: number) {
   return { expandAt, expandEnd, tipAt, extrasAt, end: extrasAt + TICKET.extrasInMs };
 }
 
-/** The tip's pop (WAAPI keyframes, scale about its corner): out past its
- *  size on the house curve, back to it on the travel curve — visible
- *  travel, a beat of its own (a 4 px nub on a 70 ms expo-out did not read). */
-export function tipPopFrames(ease: { arrive: string; travel: string }) {
+/** The tip coming out (WAAPI keyframes, scale about its corner): from
+ *  nothing to its size on the house curve over TICKET.tipInMs — the 16 px
+ *  caret reads as it grows, and it never passes its size. */
+export function tipPopFrames(ease: { arrive: string }) {
   return [
     { offset: 0, transform: 'scale(0)', easing: ease.arrive },
-    { offset: 0.55, transform: `scale(${TICKET.tipPop})`, easing: ease.travel },
     { offset: 1, transform: 'scale(1)' },
   ];
 }
@@ -846,177 +902,37 @@ export function ticketFrames(form: TicketForm, dir: 'fold' | 'expand' | 'let-go'
 }
 
 /**
- * Where the ticket lies (its top-left, viewport px) `t` ms after the click,
+ * Where the ticket lies (its top-left, viewport px) `t` ms after the click
  * when its corner changes with the place (Zion below-left → Bryce Canyon
- * above-left): still at `from` until the relay, then riding the camera's own
- * remaining clock (`ease` over `D` ms) to `to`, there by the opening — it
- * moves with the ground, and on a far leg's sine slower than it. With
- * nowhere to go it simply lies still.
+ * above-left, New York above-left → Miami below-left): one straight run from
+ * `from` to `to` on the camera's own clock from the click (`glideShare`: the
+ * flight's `ease` over its `D` ms), there by the opening. It moves as the
+ * ground moves, a fixed share of the ground's pace at every frame — the two
+ * seats lie nearer than the ground runs (453 px against the 687 Bryce's
+ * shield comes at 1728: 0.69 of its speed), so never faster — never
+ * sideways, nothing past its seat and back, no step of its own. With
+ * nowhere to go (the same corner) it lies still.
  */
-export function ticketGlide(from: Point, to: Point, relayAt: number, expandAt: number, ease: (t: number) => number, D: number) {
-  const share = glideShare(relayAt, expandAt, ease, D);
+export function ticketGlide(from: Point, to: Point, expandAt: number, ease: (t: number) => number, D: number) {
+  const share = glideShare(expandAt, ease, D);
   return (t: number): Point => {
     const g = share(t);
     return { x: from.x + (to.x - from.x) * g, y: from.y + (to.y - from.y) * g };
   };
 }
 
-/** The share of a glide made at `t` (0 until the relay, 1 from the
- *  opening): the camera's own remaining clock (`ease` over `D` ms) from the
- *  relay to the opening — so a ticket that moves, moves as the ground does. */
-export function glideShare(relayAt: number, expandAt: number, ease: (t: number) => number, D: number) {
+/** The share of a glide made `t` ms after the click (0 at the click, 1 from
+ *  the opening): the camera's own clock (`ease` over `D` ms) up to the
+ *  opening — so a ticket that moves, moves as the ground does. */
+export function glideShare(expandAt: number, ease: (t: number) => number, D: number) {
   const c = (t: number) => ease(clamp(t / Math.max(1, D), 0, 1));
-  const c0 = c(relayAt);
   const c1 = c(expandAt);
   return (t: number) => {
-    if (t <= relayAt) return 0;
+    if (t <= 0) return 0;
     if (t >= expandAt) return 1;
-    if (c1 - c0 > 1e-6) return clamp((c(t) - c0) / (c1 - c0), 0, 1);
-    return (t - relayAt) / Math.max(1, expandAt - relayAt);
+    if (c1 > 1e-6) return clamp(c(t) / c1, 0, 1);
+    return t / Math.max(1, expandAt);
   };
-}
-
-/**
- * Where the ticket lies (its top-left, viewport px) when its corner changes
- * with a place still on the screen (Zion below-left → Bryce Canyon
- * above-left): riding the ground. `from` and `to` are the two seats as
- * their shields stand THIS frame (each shield's foot + its cover's ticket
- * offset), `g` the share of the swing made (`glideShare`: the camera's own
- * clock, EASE.turn on a turn): until the relay it is the leaving ticket at
- * its own shield (folding with the ground, never over its own sign);
- * through the transit it rides the arriving shield and swings from the
- * leaving seat to its own corner round it, as fast as the ground moves —
- * never overtaking the shield it goes to, never a track of its own across
- * the map; by the opening it is at its seat.
- */
-export function rideAt(from: Point, to: Point, g: number): Point {
-  const k = clamp(g, 0, 1);
-  return { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
-}
-
-// ── Giving way ──
-// A ticket in transit lies still (or glides on the camera's clock) while the
-// planet turns under it, and the shields of its switch travel with the
-// ground: the one it goes to comes in to its corner, the one it leaves goes
-// out of it. Lying still, it lay across their way — the shield it goes to
-// came up through its face and sat on its name before it reached the
-// corner (review, 2026-09-29). So the ticket gives way: never a shield
-// through it, never its own shield on it. It steps ACROSS the shield's way
-// (sideways from a shield that comes up or down, up or down from one that
-// comes across) toward its own side of that shield — the side its corner
-// puts it on — just as far as keeps a joint's gap between them, and only
-// while the shield runs level with it: it leans into the step as the
-// shield nears it from the far side (over GIVE_WAY.reach px), at once from
-// its own corner's side (a shield comes to rest a joint's gap off the
-// corner there: nothing to step for). At the corner itself the step is
-// nought, so the ticket comes to its seat exactly. DERIVED each frame from
-// the shields' feet as the atlas projects them (never a box read off the
-// page).
-export const GIVE_WAY = {
-  /** How far off (px, between the boxes) a shield coming from the ticket's
-   *  far side starts to move it: the step eases in over this much of its
-   *  run, or over the step's own length if that is longer (the ground's own
-   *  speed, never a jump). */
-  reach: 300,
-  /** It steps aside as fast as the shield comes (nothing ever runs through
-   *  it), and back no faster than this, px/ms (`stepBack`): a shield
-   *  leaving it at the ground's speed let it spring back faster than its
-   *  own shield moved. */
-  backPxMs: 0.4,
-} as const;
-
-/** A shield a travelling ticket gives way to: its foot this frame, its box,
- *  the ticket's corner of it, the axis the ticket steps along (across the
- *  shield's run: `yieldAxis`), how far into giving way it is yet (1 by
- *  default: the place gone to may stand anywhere about the cover as it
- *  starts to fold, so the ticket leans into its way over the fold), and
- *  whether it is the shield the ticket leaves (`leaving`: it starts at the
- *  ticket's own corner and only ever runs level with it from there — the
- *  ticket steps for it only while it does, never ahead of it: a neighbour
- *  that stops just past the ticket's foot is not stepped from). */
-export interface Yield {
-  foot: Point;
-  shield: Size;
-  quadrant: Quadrant;
-  axis: 'x' | 'y';
-  weight?: number;
-  leaving?: boolean;
-}
-
-/** The axis a ticket steps along for a shield running `travel` px on the
- *  screen: across it (a shield that comes mostly up or down → sideways). */
-export function yieldAxis(travel: Point): 'x' | 'y' {
-  return Math.abs(travel.x) >= Math.abs(travel.y) ? 'y' : 'x';
-}
-
-const smoothstep = (k: number) => {
-  const t = clamp(k, 0, 1);
-  return t * t * (3 - 2 * t);
-};
-
-/** The step (px) a ticket of `size` whose top-left lies at `at` takes to
- *  give way to `shields`: per axis, the furthest step each way (two
- *  shields that ask for the same side share one step). 0, 0 when nothing
- *  runs through it. */
-export function giveWay(at: Point, size: Size, shields: readonly Yield[], reach: number = GIVE_WAY.reach): Point {
-  const gap = DOCK.gap;
-  const ticket: Box = { left: at.x, top: at.y, right: at.x + size.w, bottom: at.y + size.h };
-  const steps = { x: [0, 0], y: [0, 0] };
-  for (const { foot, shield, quadrant, axis, weight = 1, leaving = false } of shields) {
-    const box: Box = { left: foot.x - shield.w / 2, top: foot.y - shield.h, right: foot.x + shield.w / 2, bottom: foot.y };
-    // The ticket's side of the shield, each way (its corner): -1 left/up.
-    const sx = quadrant === 'tl' || quadrant === 'bl' ? -1 : 1;
-    const sy = quadrant === 'tl' || quadrant === 'tr' ? -1 : 1;
-    const across = axis === 'x';
-    // How far it must step to its side to keep the joint's gap.
-    const need = across
-      ? Math.max(0, sx < 0 ? ticket.right + gap - box.left : box.right + gap - ticket.left)
-      : Math.max(0, sy < 0 ? ticket.bottom + gap - box.top : box.bottom + gap - ticket.top);
-    if (need <= 0) continue;
-    // How far off the shield runs the other way (≤ 0: level with it), and
-    // from which side: its own corner's (the ticket's side is -s there) or
-    // the far one.
-    const off = across
-      ? Math.max(box.top - ticket.bottom, ticket.top - box.bottom)
-      : Math.max(box.left - ticket.right, ticket.left - box.right);
-    const ownSide = across
-      ? (box.top + box.bottom > ticket.top + ticket.bottom ? 1 : -1) === -sy
-      : (box.left + box.right > ticket.left + ticket.right ? 1 : -1) === -sx;
-    // (A long step — a shield that comes on from behind the ticket, from
-    // well across it — is leant into from as far off as the step is long,
-    // so the ticket never outruns the shield it makes way for.)
-    const lean = off <= 0 ? 1 : 1 - smoothstep(off / (ownSide || leaving ? gap : Math.max(1, reach, need)));
-    const step = clamp(weight, 0, 1) * lean * need * (across ? sx : sy);
-    const slot = steps[axis];
-    if (step < 0) slot[0] = Math.min(slot[0], step);
-    else slot[1] = Math.max(slot[1], step);
-  }
-  const f = (n: number) => Math.round(n * 10) / 10 || 0;
-  return { x: f(steps.x[0] + steps.x[1]), y: f(steps.y[0] + steps.y[1]) };
-}
-
-/** The step a ticket takes this frame, from the one it had `ms` ago and the
- *  one it needs now (`giveWay`): out at once, however far (never a shield
- *  through it), back toward it no faster than `rate` px/ms — but back by
- *  `left` ms from now whatever it is (the cover open at its seat, never
- *  still drifting home once the camera is down). */
-export function stepBack(was: Point | null, need: Point, ms: number, rate: number = GIVE_WAY.backPxMs, left = Infinity): Point {
-  if (!was) return need;
-  const dt = Math.max(0, ms);
-  const due = (a: number, b: number) => (Number.isFinite(left) ? Math.abs(a - b) * Math.min(1, dt / Math.max(dt, left)) : 0);
-  const roomFor = (a: number, b: number) => Math.max(dt * rate, due(a, b));
-  const axis = (a: number, b: number) => {
-    // Out from where it stands, or further out the same way: at once.
-    if ((a === 0 || Math.sign(b) === Math.sign(a)) && Math.abs(b) >= Math.abs(a)) return b;
-    if (a !== 0 && Math.sign(b) !== Math.sign(a) && b !== 0) {
-      // Out the other way (a second shield): back to nothing first.
-      const room = roomFor(a, 0);
-      return Math.abs(a) <= room ? b : a - Math.sign(a) * room;
-    }
-    const room = roomFor(a, b);
-    return Math.abs(a - b) <= room ? b : a - Math.sign(a - b) * room;
-  };
-  return { x: axis(was.x, need.x), y: axis(was.y, need.y) };
 }
 
 // ── The arrival: a ticket from the open map ──
@@ -1116,6 +1032,10 @@ export interface DockSwitch {
    *  end of those. */
   t0: number;
   relayAt: number;
+  /** The board's retract (src/lib/routeShield.ts, FLAP): the carrier's name
+   *  keeps its first letters from here, and the arriving ticket's board is
+   *  timed from it (FLAP.pause before the relay; at a lay, the lay itself). */
+  flapAt: number;
   cutAt: number;
   expandAt: number;
   expandEnd: number;
@@ -1153,6 +1073,10 @@ export interface DockFrame {
   pins?: Readonly<Record<string, Point>> | null;
   /** A ticket arriving from the open map (see "The arrival"). */
   arrive?: DockArrive | null;
+  /** The shields' zoom scale this frame (src/lib/routeShield.ts,
+   *  `shieldZoomScale`): a cover riding its shield keeps its joint's gap to
+   *  the shield as drawn (`shieldShift`). */
+  shieldZoom?: number;
 }
 
 export interface DockArrive {

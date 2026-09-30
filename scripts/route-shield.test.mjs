@@ -8,23 +8,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-  CODE_FLIPS,
   FLAP,
   SHIELD_FORMS,
   SHIELD_MAP_PX,
   SHIELD_SCALE,
+  SHIELD_ZOOM,
   SIGN_NAME_MAX,
   SIGN_NAME_MEASURE,
   STACK_PEEK,
-  codePlan,
-  flapGlyph,
-  flapNumber,
-  FLAP_MIN_TICK,
-  ROLL,
   TICKET_NAME_LINE,
-  flapPlan,
-  rollMs,
-  nameStep,
+  flapSpan,
+  shieldZoomScale,
   signLines,
   shieldForm,
   signNameSize,
@@ -141,13 +135,58 @@ const slotsAt = (points, current, inbound = null, { px = SHIELD_MAP_PX, scales =
 });
 
 test('at every chapter\'s resting camera the shields stand apart, each on its place', () => {
-  for (const { current, pts } of REST) {
-    const placed = stackShields(slotsAt(pts, current));
-    for (const [id, value] of placed) {
-      assert.equal(value.dy, 0, `${current}: ${id} is not lifted`);
-      assert.equal(value.count, 0, `${current}: ${id} is in no pile`);
+  // At 1× and at the zoom's scale they are drawn at there (SHIELD_ZOOM).
+  for (const px of [SHIELD_MAP_PX, SHIELD_MAP_PX * shieldZoomScale(5.05)]) {
+    for (const { current, pts } of REST) {
+      const placed = stackShields(slotsAt(pts, current, null, { px }));
+      for (const [id, value] of placed) {
+        assert.equal(value.dy, 0, `${current} at ${px}: ${id} is not lifted`);
+        assert.equal(value.count, 0, `${current} at ${px}: ${id} is in no pile`);
+      }
     }
   }
+});
+
+test('地图放大之后，路牌也可以稍微放大一点: the shields grow with the zoom, 1× on the planet, 1.3× at a rest', () => {
+  assert.deepEqual({ ...SHIELD_ZOOM }, { from: 2, to: 5.05, max: 1.3 });
+  assert.equal(shieldZoomScale(1.1), 1, 'the whole planet');
+  assert.equal(shieldZoomScale(2), 1);
+  assert.equal(shieldZoomScale(5.05), 1.3, 'every rest (5.05–5.98)');
+  assert.equal(shieldZoomScale(5.98), 1.3);
+  assert.equal(shieldZoomScale(9), 1.3, 'no further in');
+  assert.equal(shieldZoomScale(Number.NaN), 1);
+  // Smooth: never a step (a smoothstep: at its steepest 1.5× the mean rise,
+  // 0.0074 a 0.05 of zoom), flat at both ends, always growing.
+  const steepest = (1.5 * (SHIELD_ZOOM.max - 1) * 0.05) / (SHIELD_ZOOM.to - SHIELD_ZOOM.from);
+  let prev = shieldZoomScale(1.5);
+  for (let z = 1.55; z <= 6.5; z += 0.05) {
+    const s = shieldZoomScale(z);
+    assert.ok(s >= prev - 1e-12, `grows at ${z}`);
+    assert.ok(s - prev <= steepest + 1e-9, `smooth at ${z}: ${s - prev}`);
+    prev = s;
+  }
+  assert.ok(shieldZoomScale(5.0) - shieldZoomScale(4.95) < 0.001, 'flat into a rest');
+  // Its top is the lowest rest zoom (RouteAtlas HOP.restZoom).
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.equal(Number(atlas.match(/restZoom: ([\d.]+),/)[1]), SHIELD_ZOOM.to);
+  // Legibility at a rest (1728): an ahead shield's stop number (Florida's,
+  // 0.38 of the width) stands 10 px tall or more; the phone's 8.
+  const cap = (px, scale) => px * scale * 0.38 * 0.7 * shieldZoomScale(5.05);
+  assert.ok(cap(SHIELD_MAP_PX, SHIELD_SCALE.ahead) >= 10);
+  assert.ok(cap(26, SHIELD_SCALE.ahead) >= 8);
+  // The atlas draws it: the zoom's scale on each shield (about its foot's
+  // point, no transition), stacked and cleared at the size drawn, the lift
+  // set under it; the dock planned at the rest's scale.
+  const place = atlas.slice(atlas.indexOf('const placeShields = () => {'), atlas.indexOf('const placeShieldsRef'));
+  assert.match(place, /const zoomScale = Math\.round\(shieldZoomScale\(map\.getZoom\(\)\) \* 500\) \/ 500;/);
+  assert.match(place, /const w = shieldPx \* drawn \* zoomScale;/);
+  assert.match(place, /pose\.el\.style\.scale = zoomScale === 1 \? '' : String\(zoomScale\);/);
+  assert.match(place, /pose\.el\.style\.setProperty\('--lift', `\$\{Math\.round\(\(lift \/ zoomScale\) \* 100\) \/ 100\}px`\);/);
+  assert.doesNotMatch(place, /getBoundingClientRect|offsetWidth|clientWidth/);
+  assert.match(atlas, /shield: shieldOf\(entry\.stop\.region, SHIELD_SCALE\.current \* shieldZoom\),/);
+  assert.match(atlas, /\.\.\.shieldOf\(other\.stop\.region, SHIELD_SCALE\.ahead \* shieldZoom\),/);
+  const css = source('src/styles/global.css');
+  assert.match(css, /\.place-shield \{\s*position: relative;\s*display: block;\s*transform: translateY\(var\(--lift, 0px\)\);[^}]*transform-origin: 50% 100%;\s*transition: transform 160ms var\(--ease-arrive\);\s*\}/);
 });
 
 test('where shields meet they stack: stop order, the current on top, a buried head lifted', () => {
@@ -202,80 +241,23 @@ test('every name on the ticket\'s sign is one size, inside the enamel rule', () 
 });
 
 
-test('the split-flap lands left to right, inside DUR.scene', () => {
-  const plan = flapPlan('BRYCE CANYON'.length);
-  assert.equal(plan[0].start, FLAP.delay);
-  for (let index = 1; index < plan.length; index += 1) {
-    assert.ok(plan[index].start > plan[index - 1].start);
-    assert.ok(plan[index].land > plan[index - 1].land);
-  }
-  assert.ok(plan[plan.length - 1].land <= FLAP.delay + FLAP.budget);
-  // Every cell of the name turns from FLAP.delay (when the name being left,
-  // set whole, goes) to its own landing, one flip each FLAP.turn.
-  for (const step of plan) {
-    const turn = nameStep(step);
-    assert.equal(turn.start, FLAP.delay);
-    assert.equal(turn.land, step.land);
-    assert.ok(turn.flips >= 2);
-    assert.ok(Math.abs((turn.land - turn.start) / turn.flips - FLAP.turn) <= FLAP.turn / 2);
-  }
-  // A very long word is compressed, not cut.
-  const long = flapPlan(40);
-  assert.ok(long[39].land <= FLAP.delay + FLAP.budget);
-  assert.equal(long.length, 40);
-});
-
-test('a timed flap lands inside its budget: at once, down inside it, never a blur', () => {
-  // A flap timed to a moment (FlapTiming: { delay: 0, budget }) — a switch's
-  // ticket rolls its name instead (runRoll, below), the flap stays for a
-  // landing that turns its board; the plan holds for any budget, 541 ms here
-  // (the 1400 turn's transit).
-  for (const name of ['MIAMI', 'ORLANDO', 'PAGE', 'ZION', 'BRYCE CANYON', 'NEW YORK']) {
-    const cells = name.replace(/\s+/g, '').length;
-    const plan = flapPlan(cells, { delay: 0, budget: 541 });
-    assert.equal(plan[0].start, 0);
-    assert.ok(plan.at(-1).land <= 541, `${name} lands at ${plan.at(-1).land}`);
-    const tick = ((plan.at(-1).land - plan.at(-1).start) / plan.at(-1).flips);
-    assert.ok(tick >= FLAP_MIN_TICK - 0.5, `${name}: a flip every ${tick.toFixed(1)} ms`);
-    plan.forEach((step) => assert.equal(nameStep(step, 0).start, 0));
-  }
-  // Twelve letters (with the space): compressed, floored at the tick.
-  const twelve = flapPlan(12, { delay: 0, budget: 541 });
-  assert.ok(twelve.at(-1).land <= 541);
-  assert.ok(FLAP_MIN_TICK >= 16);
-  // A budget too short for the floor lands late rather than blurring.
-  const tight = flapPlan(12, { delay: 0, budget: 100 });
-  assert.ok(tight.at(-1).land > 100);
-  // The defaults are unchanged.
-  assert.deepEqual(flapPlan(11), flapPlan(11, {}));
-  assert.equal(flapPlan(11)[0].start, FLAP.delay);
-});
-
-test('a switch ROLLS its ticket\'s name: the old up out of the rule, the new up into it, down inside the transit', async () => {
-  // 地点文字滚动: on a small ticket the flap's turning capitals read as 乱码
-  // (XHIEFCB, BRARS ZRFRBH). The roll is one calm move, on EASE.turn.
+test('the split-flap is the reference\'s board (scripts/split-flap.test.mjs holds it)', async () => {
   const { TICKET } = await import('../src/lib/coverDock.ts');
-  assert.ok(ROLL.ms >= 280 && ROLL.ms <= 360);
-  assert.ok(ROLL.ms <= TICKET.transitMinMs, 'down inside the shortest transit');
-  assert.equal(rollMs(), ROLL.ms);
-  assert.equal(rollMs(541), ROLL.ms);
-  assert.equal(rollMs(200), 200);
-  assert.equal(rollMs(10), ROLL.minMs);
-  assert.equal(rollMs(Number.NaN), ROLL.ms);
+  assert.equal(FLAP.keep, 3);
+  assert.equal(FLAP.pause, 160);
+  assert.equal(FLAP.stagger, 35);
+  assert.equal(FLAP.tick, 22);
+  assert.equal(FLAP.base, 6);
+  // A twelve-letter name is down 919 ms after its retract: inside DUR.scene.
+  assert.ok(flapSpan('Bryce Canyon') <= 1000);
   assert.equal(TICKET_NAME_LINE, TICKET.nameLine);
+  // The roll (地点文字滚动, 2026-09-29) is gone: the owner asked for the
+  // board back (字条跳转切换，和目标网站的效果一致).
   const shield = source('src/components/home/RouteShield.tsx');
-  const roll = shield.slice(shield.indexOf('export function runRoll('), shield.indexOf('/** A shield\'s drawing'));
-  // The name: the new cells rise from below the box as it stands at the
-  // start (the taller of the two names, by their words: NEW YORK is two
-  // lines), the old name set whole slides up out of it, the box clipped.
-  assert.match(roll, /const lines = Math\.max\(signLines\(words\.join\(' '\)\), signLines\(\(from\.name \?\? ''\)\.trim\(\) \|\| 'X'\)\);/);
-  assert.match(roll, /overlay\.animate\(\[\{ transform: 'translateY\(0\)' \}, \{ transform: 'translateY\(-110%\)' \}\], \{ duration: ms, easing: CSS_EASE\.turn/);
-  assert.match(roll, /box\.style\.clipPath = 'inset\(0 -0\.3em\)';/);
-  // A state that changes fades in: no letters that are no state.
-  assert.match(roll, /if \(role === 'code'\) \{\s+chars\.forEach\(\(el\) => anims\.push\(el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/);
-  assert.doesNotMatch(roll, /flapGlyph/);
-  // The number counts through the real stops, down as the name reads.
-  assert.match(roll, /flapNumber\(final, leaving, t, 0, ms \/ 2\)/);
+  const lib = source('src/lib/routeShield.ts');
+  for (const gone of ['runRoll', 'ROLL', 'rollMs', 'codePlan', 'nameStep', 'flapNumber', 'FLAP_MIN_TICK', 'CODE_FLIPS']) {
+    assert.doesNotMatch(shield + lib, new RegExp(`\\b${gone}\\b`), gone);
+  }
 });
 
 test('the sign\'s lines, and the ticket they set: 144 for one, 172 for two, from the CSS itself', async () => {
@@ -301,59 +283,6 @@ test('the sign\'s lines, and the ticket they set: 144 for one, 172 for two, from
   assert.equal(TICKET.head, stubPad + marginTop + padTop + Math.ceil((shieldPx * tallest) / 100) + gap + padBottom + 12);
   assert.equal(TICKET.nameLine, line);
 });
-
-test('each character turns through its own width class and lands on itself', () => {
-  const [step] = flapPlan(1);
-  assert.equal(flapGlyph('M', 'O', step, 0, 0), 'O', 'before its start it still shows the stop being left');
-  assert.equal(flapGlyph('M', '', step, 0, 0), '', 'or nothing, past the end of that name');
-  for (let t = step.start; t < step.land; t += 7) {
-    for (let seed = 0; seed < 12; seed += 1) {
-      // Wide cells turn through wide letters, narrow through narrow, and
-      // no other cell ever shows an M or a W (they overprinted: "EDAMI").
-      const wide = flapGlyph('M', 'O', step, t, seed);
-      assert.match(wide, /^[MWQO]$/);
-      assert.notEqual(wide, 'M');
-      const narrow = flapGlyph('I', 'O', step, t, seed);
-      assert.match(narrow, /^[IJLT]$/);
-      assert.notEqual(narrow, 'I');
-      const middle = flapGlyph('R', 'O', step, t, seed);
-      assert.doesNotMatch(middle, /^[MWR]$/);
-      assert.match(middle, /^[A-Z]$/);
-      assert.match(flapGlyph('4', '1', step, t, seed), /^[0-9]$/);
-    }
-  }
-  assert.equal(flapGlyph('M', 'O', step, step.land, 0), 'M');
-  assert.equal(flapGlyph(' ', 'O', step, step.start + 5, 0), ' ');
-});
-
-test('only what changes turns', () => {
-  const [step] = flapPlan(1);
-  // A character already right never churns.
-  for (let t = 0; t < step.land; t += 7) assert.equal(flapGlyph('A', 'A', step, t, 2), 'A');
-  // The stop number counts through the real stops between, never past
-  // the route: 01 → 02 is one turn, at the end; 03 → 05 passes 04.
-  const [start, land] = [FLAP.delay, 600];
-  const seen = (final, from) => {
-    const values = [];
-    for (let t = 0; t <= land; t += 5) {
-      const value = flapNumber(final, from, t, start, land);
-      if (values[values.length - 1] !== value) values.push(value);
-    }
-    return values;
-  };
-  assert.deepEqual(seen('02', '01'), ['01', '02']);
-  assert.equal(flapNumber('02', '01', land - 1, start, land), '01', 'the turn lands with the name');
-  assert.deepEqual(seen('05', '03'), ['03', '04', '05']);
-  assert.deepEqual(seen('06', '05'), ['05', '06']);
-  assert.deepEqual(seen('03', '03'), ['03']);
-  assert.deepEqual(seen('01', ''), ['01'], 'nothing to count from: simply printed');
-  // The state turns only when it changes, and then only twice.
-  const plan = codePlan(2);
-  assert.equal(plan[0].flips, CODE_FLIPS);
-  assert.ok(CODE_FLIPS <= 2);
-  assert.ok(plan[1].land <= FLAP.delay + FLAP.budget);
-});
-
 
 test('the map stands a shield on each place, the ticket prints that shield', () => {
   const atlas = source('src/components/home/RouteAtlas.tsx');
@@ -419,7 +348,7 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   assert.match(shield, /export function primeFlap/);
   // A new state's letters turn in from a blank band, never the old state's
   // letters printed on the new state's form (FL on Arizona's outline).
-  assert.match(shield, /flapGlyph\(final, '', plan\[index\], t,/);
+  assert.match(shield, /const glyph = flapGlyph\(final, '', step, t, salt, index\);/);
   // The name being left is set whole, never cut into the new name's cells.
   assert.match(shield, /role === 'name' && <span className="flap-was"/);
   assert.match(css, /\.archive-ticket-sign__name \{\s*position: relative;/);
@@ -430,13 +359,16 @@ test('the map stands a shield on each place, the ticket prints that shield', () 
   // take-off, turned at the relay, as the ticket is laid on (地点文字滚动).
   assert.doesNotMatch(home, /case 'tear': \{|'tear-then'/);
   assert.doesNotMatch(chapter, /archive:tear-then|tearThen\b/);
-  assert.match(chapter, /pending = detail\.from;\s+clearPrime = primeFlap\(root, detail\.from\);/);
-  // A switch's ticket ROLLS its name in at the relay (地点文字滚动; on a
-  // small ticket the flap's turning capitals read as 乱码), inside the
-  // transit; a landing with no switch still turns it.
-  assert.match(chapter, /relayFlapRef\.current = \(budget\) => start\(\{ budget \}\);/);
-  assert.match(chapter, /relayFlapRef\.current\?\.\(Math\.max\(0, sw\.expandAt - Math\.max\(now, sw\.relayAt\)\)\);/);
-  assert.match(chapter, /stopFlap = roll \? runRoll\(root, from, roll\) : runFlap\(root, from\);/);
+  assert.match(chapter, /pending = detail\.from;[\s\S]{0,300}clearPrime = primeFlap\(root, detail\.from\);/);
+  // A switch's board: the leaving ticket's name retracts as it folds (at
+  // the switch's `flapAt`), the arriving ticket takes the turn up at the
+  // relay, timed from that retract (字条跳转切换，和目标网站的效果一致); a
+  // landing with no switch turns it from its own moment.
+  assert.match(chapter, /relayFlapRef\.current = \(origin, force\) => start\(\{ origin, force \}\);/);
+  assert.match(chapter, /relayFlapRef\.current\?\.\(sw\.flapAt\);/);
+  assert.match(chapter, /stopFlap = runFlap\(root, from, timing\);/);
+  assert.match(chapter, /retractName\(play, sw\.flapAt\);/);
+  assert.match(chapter, /play\.unretract = retractFlap\(root\);/);
   assert.doesNotMatch(chapter, /armScrollGoRef|atlasPlace|archive:onward/);
   // The story's kept stub is headed by the same sign, its three marks set
   // at the ticket's sizes.
