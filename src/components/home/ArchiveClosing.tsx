@@ -4,6 +4,8 @@ import type { Collection } from '../../types';
 import {
   LOOSE,
   LOUPE,
+  PAGE_BOUNDS,
+  PANEL_BOUNDS,
   PROOF,
   SCORE,
   anchorSrc,
@@ -184,10 +186,19 @@ interface Props {
   /** The issue's chapters, in the homepage's reading order (HomePage's
    *  `orderedCities`): the same list the ticket stubs are printed from. */
   collections: Collection[];
-  /** Back to the start: the entrance's opening words, a new pass (HomePage). */
-  onBackToStart: () => void;
+  /** Back to the start: the entrance's opening words, a new pass (HomePage).
+   *  The page's links line only. */
+  onBackToStart?: () => void;
   /** Open a chapter's story from the sheet (HomePage owns the overlay). */
   onOpenStory?: (collectionId: string, request: ClosingStoryRequest) => void;
+  /** Where the sheet is set. 'page': the closing's own screen, its ending
+   *  played on arrival. 'panel': the contact sheet of the explorer's places
+   *  panel (ExplorerControls, 2026-09-30) — the sheet at rest from its first
+   *  frame (the panel's own paper opens round it), set in the panel's room
+   *  (lib/proofSheet PANEL_BOUNDS), no kicker and no links; where the sheet
+   *  cannot be set (the phone, a narrow window) the rolls flow down it
+   *  instead (FlowSheet). */
+  frame?: 'page' | 'panel';
 }
 
 /** Untransformed document offset, as the homepage timeline measures it. */
@@ -243,8 +254,9 @@ function fitTitle(ruler: HTMLElement, measure: number) {
   return size;
 }
 
-export default function ArchiveClosing({ collections, onBackToStart, onOpenStory }: Props) {
+export default function ArchiveClosing({ collections, onBackToStart, onOpenStory, frame = 'page' }: Props) {
   const reduce = useReducedMotion();
+  const panel = frame === 'panel';
   const chapters = useMemo(() => proofChapters(collections), [collections]);
   const total = useMemo(() => chapters.reduce((sum, chapter) => sum + chapter.frames.length, 0), [chapters]);
   const years = useMemo(() => yearSpan(chapters.map((chapter) => chapter.year)), [chapters]);
@@ -286,7 +298,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       const key = `${W}x${H}@${dpr}:${metrics.ordinalEm.toFixed(3)},${metrics.metaW},${metrics.countEm.toFixed(3)},${metrics.figureEm.map((em) => em.toFixed(3)).join(',')}`;
       if (!force && key === geoKeyRef.current) return;
       geoKeyRef.current = key;
-      const layout = proofLayout(W, H, chapters, metrics);
+      const layout = proofLayout(W, H, chapters, metrics, panel ? PANEL_BOUNDS : PAGE_BOUNDS);
       if (!layout) {
         setGeo(null);
         return;
@@ -328,7 +340,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       disposed = true;
       observer?.disconnect();
     };
-  }, [chapters]);
+  }, [chapters, panel]);
 
   // ── The ending's state, kept outside React: nothing re-renders per frame ─
   type Phase = 'armed' | 'waiting' | 'playing' | 'rest';
@@ -366,9 +378,10 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
     engineRef.current = engine;
     if (phaseRef.current === null) {
       // First layout. A closing already on (or past) the screen was reached
-      // by a jump — a restored scroll, a deep link — and is shown at rest.
+      // by a jump — a restored scroll, a deep link — and is shown at rest;
+      // the panel's sheet is always at rest.
       const p = (window.scrollY + window.innerHeight - documentTop(section)) / Math.max(1, section.offsetHeight);
-      phaseRef.current = p > 0 ? 'rest' : 'armed';
+      phaseRef.current = panel || p > 0 ? 'rest' : 'armed';
     } else if (phaseRef.current !== 'armed') {
       // A resize mid-play (or while waiting) jumps to the rest state.
       pendingRef.current += 1;
@@ -380,7 +393,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       engine.dispose();
       hands.dispose();
     };
-  }, [geo, chapters, reduce]);
+  }, [geo, chapters, reduce, panel]);
 
   // Decode the sheet before the camera needs it.
   useEffect(() => {
@@ -405,6 +418,11 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
+    // The panel's sheet is never played: its files are wanted at once.
+    if (panel) {
+      setPrepared(true);
+      return;
+    }
     let sectionTop = 0;
     let sectionH = 1;
     let viewH = 1;
@@ -527,7 +545,7 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       stopStill();
       pendingRef.current += 1;
     };
-  }, [reduce]);
+  }, [reduce, panel]);
 
   const layout = geo?.layout;
   const zoom = geo?.zoom;
@@ -542,21 +560,32 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
       // closes: the closing itself, focused by script, never tabbed to.
       tabIndex={-1}
       data-archive-closing=""
-      className="archive-closing relative z-0 h-[100svh] min-h-[600px] overflow-hidden bg-[#20241a] text-[#F4F4ED]"
+      data-frame={frame}
+      className={panel
+        ? 'archive-closing archive-closing--panel relative z-0 h-full overflow-hidden text-[#F4F4ED]'
+        : 'archive-closing relative z-0 h-[100svh] min-h-[600px] overflow-hidden bg-[#20241a] text-[#F4F4ED]'}
     >
       {/* The bottom edge of the page above: page-coloured, curved, flattening.
           Hidden by CSS, not by branching on `reduce`, so server and client
-          render the same tree under reduced motion. */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[16svh] origin-top bg-[#282c20] motion-reduce:hidden"
-        style={{ scaleY: lipScale, borderRadius: '0 0 50% 50% / 0 0 100% 100%' }}
-      />
+          render the same tree under reduced motion. The panel has no page
+          above it. */}
+      {!panel && (
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[16svh] origin-top bg-[#282c20] motion-reduce:hidden"
+          style={{ scaleY: lipScale, borderRadius: '0 0 50% 50% / 0 0 100% 100%' }}
+        />
+      )}
 
       <motion.div
         className="absolute inset-0 flex flex-col justify-center"
-        style={reduce ? undefined : { y: stageY }}
+        style={reduce || panel ? undefined : { y: stageY }}
       >
+        {/* The panel's sheet where the proof cannot be set: the rolls flow
+            down the panel, one after another. */}
+        {panel && !geo && (
+          <FlowSheet chapters={chapters} onOpen={(chapter, request) => openStoryRef.current?.(chapter.id, request)} />
+        )}
         {/* The copy: the real heading, figures and links. Server-rendered in
             flow with its final values; placed into the sheet's empty room
             once the client has the layout. Under the proof, so a stub in the
@@ -567,20 +596,23 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
           ref={copyRef}
           className={geo ? 'closing-copy is-placed' : 'closing-copy safe-inline-page mx-auto w-full max-w-6xl'}
           style={geo ? { left: geo.copy.x, top: geo.copy.y, width: geo.copy.w } : undefined}
+          hidden={panel && !geo}
         >
-          <p
-            className="closing-kicker font-ui"
-            style={geo && layout ? { left: layout.kicker.x - geo.copy.x, top: layout.kicker.y - geo.copy.y } : undefined}
-          >
-            <span className="closing-kicker__lead" aria-hidden="true">
-              <span className="closing-kicker__dot" />
-              <span className="closing-kicker__count">{pad2(chapters.length)} / {pad2(chapters.length)}</span>
-            </span>
-            <span className="sr-only">{chapters.length} of {chapters.length} chapters.</span>
-            <span className="closing-kicker__rule" aria-hidden="true" />
-            <span className="closing-kicker__done">Archive complete</span>
-            <span className="closing-kicker__rest">· Every frame, 01–{pad2(total)}</span>
-          </p>
+          {!panel && (
+            <p
+              className="closing-kicker font-ui"
+              style={geo && layout ? { left: layout.kicker.x - geo.copy.x, top: layout.kicker.y - geo.copy.y } : undefined}
+            >
+              <span className="closing-kicker__lead" aria-hidden="true">
+                <span className="closing-kicker__dot" />
+                <span className="closing-kicker__count">{pad2(chapters.length)} / {pad2(chapters.length)}</span>
+              </span>
+              <span className="sr-only">{chapters.length} of {chapters.length} chapters.</span>
+              <span className="closing-kicker__rule" aria-hidden="true" />
+              <span className="closing-kicker__done">Archive complete</span>
+              <span className="closing-kicker__rest">· Every frame, 01–{pad2(total)}</span>
+            </p>
+          )}
 
           <h2
             id="archive-closing-title"
@@ -613,27 +645,29 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
             ))}
           </dl>
 
-          <div className="closing-links font-ui">
-            <button
-              type="button"
-              onClick={onBackToStart}
-              className="inline-flex min-h-11 items-center uppercase text-[#D2FF00]/85 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-            >
-              Back to the start ↑
-            </button>
-            <a
-              href="/about"
-              className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-            >
-              About →
-            </a>
-            <a
-              href="/travel"
-              className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
-            >
-              Map →
-            </a>
-          </div>
+          {!panel && (
+            <div className="closing-links font-ui">
+              <button
+                type="button"
+                onClick={onBackToStart}
+                className="inline-flex min-h-11 items-center uppercase text-[#D2FF00]/85 transition-colors hover:text-[#D2FF00] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+              >
+                Back to the start ↑
+              </button>
+              <a
+                href="/about"
+                className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+              >
+                About →
+              </a>
+              <a
+                href="/travel"
+                className="inline-flex min-h-11 items-center text-white/72 transition-colors hover:text-[#F4F4ED] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D2FF00]"
+              >
+                Map →
+              </a>
+            </div>
+          )}
         </div>
 
         {/* The proof sheet: every frame, the kept stubs, the editor's marks.
@@ -837,6 +871,66 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
         )}
       </motion.div>
     </section>
+  );
+}
+
+// ── The rolls, flowing (the panel where the proof cannot be set) ───────────
+// The phone's contact sheet, and a desktop window too narrow for the proof:
+// one roll per place, in route order, down the panel — its stub on the
+// place's own card stock (ordinal, place, region · year, the count), then
+// its frames at their own ratios in justified lines, the cover ringed. A
+// stub opens the story (the keyboard's way in, as on the proof); a frame
+// opens it at that frame, the story growing out of it. The frames are
+// decorative to a screen reader (everything on them is in the stubs).
+
+const FLOW_H = 58;
+
+export function FlowSheet({ chapters, onOpen }: {
+  chapters: readonly ProofChapter[];
+  onOpen: (chapter: ProofChapter, request: ClosingStoryRequest) => void;
+}) {
+  const dpr = typeof window === 'undefined' ? 2 : Math.min(3, window.devicePixelRatio || 1);
+  const fileW = (ratio: number) => Math.min(640, Math.ceil((FLOW_H * ratio * dpr) / 80) * 80);
+  return (
+    <div className="flow-sheet" data-lenis-prevent>
+      {chapters.map((chapter) => (
+        <section key={chapter.id} className="flow-roll" aria-label={`${chapter.ordinal} ${chapter.place}`}>
+          <button
+            type="button"
+            className="flow-stub"
+            style={stockStyle(chapter.slug)}
+            aria-label={`Open ${chapter.place}, chapter ${chapter.ordinal} of ${pad2(chapters.length)}, ${chapter.frames.length} frames`}
+            onClick={(event) => onOpen(chapter, {
+              returnFocus: event.detail === 0 ? event.currentTarget : event.currentTarget.closest<HTMLElement>('[data-archive-closing]'),
+            })}
+          >
+            <span className="flow-stub__no font-serif">{chapter.ordinal}</span>
+            <span className="flow-stub__meta font-ui">
+              <span className="flow-stub__place">{chapter.place}</span>
+              <span className="flow-stub__sub">{stubSub(chapter)}</span>
+            </span>
+            <b className="flow-stub__count font-serif">{pad2(chapter.frames.length)}</b>
+          </button>
+          <div className="flow-frames" aria-hidden="true">
+            {chapter.frames.map((frame, k) => (
+              <figure
+                key={`${frame.url}-${k}`}
+                className={`flow-frame${frame.isCover ? ' is-cover' : ''}`}
+                style={{ flexGrow: frame.ratio, flexBasis: Math.round(FLOW_H * frame.ratio) }}
+                onClick={(event) => onOpen(chapter, {
+                  frameUrl: frame.url,
+                  returnFocus: event.currentTarget.closest<HTMLElement>('[data-archive-closing]'),
+                  source: event.currentTarget,
+                })}
+              >
+                <img alt="" loading="lazy" decoding="async" draggable={false} src={frameSrc(frame.url, fileW(frame.ratio))} />
+              </figure>
+            ))}
+            <i className="flow-frames__rest" />
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 

@@ -16,7 +16,7 @@ import type { Collection } from '../../types';
 import ArchiveChapter from './ArchiveChapter';
 import ArchiveClosing, { type ClosingStoryRequest } from './ArchiveClosing';
 import EntranceIntro from './EntranceIntro';
-import ExplorerControls, { type ExplorerPlace } from './ExplorerControls';
+import ExplorerControls, { type ExplorerPlace, type PanelView } from './ExplorerControls';
 import MagazineLayout, { photoOrigin, readStubMarks, type PlateOrigin, type PlateStub } from './MagazineLayout';
 import type { AtlasFlight, RouteStop } from './RouteAtlas';
 import { ARCHIVE_ENTRANCE_PHASES, entrancePhase } from '../../lib/archiveEntrance';
@@ -449,8 +449,15 @@ export default function HomePage({ collections }: Props) {
   const [lastPlace, setLastPlace] = useState<string | null>(null);
   const [viewDrifted, setViewDrifted] = useState(false);
   const [letGo, setLetGo] = useState(false);
+  // The places panel (ExplorerControls): open, and which view — the list of
+  // places or the contact sheet (the Index, folded into it 2026-09-30). It
+  // opens on the list every time.
   const [listOpen, setListOpen] = useState(false);
-  const [indexOpen, setIndexOpen] = useState(false);
+  const [panelView, setPanelView] = useState<PanelView>('places');
+  const openPanel = useCallback((open: boolean) => {
+    setListOpen(open);
+    if (open) setPanelView('places');
+  }, []);
   // A sequence per gesture: a gesture's later steps (after the admission) are
   // dropped when another gesture has come since.
   const gestureRef = useRef(0);
@@ -1017,12 +1024,12 @@ export default function HomePage({ collections }: Props) {
   // Escape lets the ticket in hand go, calmly (its cover fades; nothing
   // tears), as a click on the empty map does. ← and → step to the previous
   // and next place, as the reference's keys do — from anywhere on the page
-  // but the map itself (its own arrows pan it), a field, the list or an
-  // open story or Index.
+  // but the map itself (its own arrows pan it), a field, the places panel
+  // (its list or its contact sheet) or an open story.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (storyOpenRef.current || indexOpen || listOpen) return;
+      if (storyOpenRef.current || listOpen) return;
       if (explorerRef.current.phase !== 'explore') return;
       if (event.key === 'Escape') {
         if (explorerRef.current.current) dispatchRef.current({ type: 'dismiss' });
@@ -1044,7 +1051,7 @@ export default function HomePage({ collections }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [indexOpen, listOpen]);
+  }, [listOpen]);
 
   // ── The story ──
   const closeCollection = useCallback(() => {
@@ -1222,29 +1229,6 @@ export default function HomePage({ collections }: Props) {
     return () => cancelAnimationFrame(frame);
   }, [selectedCollection]);
 
-  // ── The Index: the archive's contact sheet, over the map ──
-  const indexReturnRef = useRef<HTMLElement | null>(null);
-  const openIndex = useCallback(() => {
-    indexReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setListOpen(false);
-    setIndexOpen(true);
-  }, []);
-  const closeIndex = useCallback(() => {
-    setIndexOpen(false);
-    window.requestAnimationFrame(() => indexReturnRef.current?.focus({ preventScroll: true }));
-  }, []);
-  useEffect(() => {
-    if (!indexOpen) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !storyOpenRef.current) {
-        event.preventDefault();
-        closeIndex();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [closeIndex, indexOpen]);
-
   // The wordmark and the pills come in at once on every layout (there is no
   // opener card to wait for any more; the opening film, when it plays, keeps
   // the nav under it: global.css, html[data-reel]). `walkin-in` on the body
@@ -1391,7 +1375,6 @@ export default function HomePage({ collections }: Props) {
   const stepToRef = useRef(stepTo);
   stepToRef.current = stepTo;
   const leave = useCallback(() => {
-    setIndexOpen(false);
     setListOpen(false);
     dispatchRef.current({ type: 'leave' });
   }, []);
@@ -1414,7 +1397,7 @@ export default function HomePage({ collections }: Props) {
     return section ? documentTop(section) : null;
   }, []);
 
-  const pageInert = storyActive || indexOpen;
+  const pageInert = storyActive;
   const navButton = 'nav-pill inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-full border border-white/10 bg-[#171b15]/80 px-3.5 max-[379px]:min-w-[3.25rem] max-[379px]:px-2.5 font-ui text-[9px] font-semibold uppercase tracking-[0.1em] text-white shadow-[0_10px_34px_rgba(7,9,6,0.18)] hover:bg-[#171b15]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D2FF00] md:min-w-[5.5rem] md:bg-[#171b15]/60 md:px-6 md:text-[10px] md:backdrop-blur-xl md:hover:bg-[#171b15]/75';
   const currentCity = currentIndex >= 0 ? orderedCities.find((city) => city._id === current) ?? null : null;
   const atlasHref = currentCity?.slug
@@ -1463,6 +1446,12 @@ export default function HomePage({ collections }: Props) {
     return [city._id, next ? { name: next.name, number: next.number, region: next.region, slug: next.slug } : null] as const;
   })), [orderedCities, placeIds, places]);
   const stepNext = useCallback(() => stepTo(1), [stepTo]);
+  // The Index: the archive's contact sheet, the places panel's second view
+  // (ExplorerControls). Every frame, one roll per place; a stub or a frame
+  // opens its story over it.
+  const contactSheet = useMemo(() => (
+    <ArchiveClosing collections={orderedCities} onOpenStory={openStoryFromClosing} frame="panel" />
+  ), [orderedCities, openStoryFromClosing]);
   const chapters = orderedCities.map((city, index) => (
     <ArchiveChapter
       key={city._id}
@@ -1656,11 +1645,14 @@ export default function HomePage({ collections }: Props) {
                 prev={prevPlace}
                 next={nextPlace}
                 listOpen={listOpen}
-                onListOpen={setListOpen}
+                onListOpen={openPanel}
+                view={panelView}
+                onView={setPanelView}
+                sheet={contactSheet}
+                suspended={storyActive}
                 onPrev={() => stepTo(-1)}
                 onNext={() => stepTo(1)}
                 onSelect={select}
-                onIndex={openIndex}
                 onEngage={setEngagedChapterId}
                 visible={free}
                 recentre={{ shown: recentreOn, place: recentrePlace, onRecentre: recentre }}
@@ -1694,7 +1686,11 @@ export default function HomePage({ collections }: Props) {
                 prev={prevPlace}
                 next={nextPlace}
                 listOpen={listOpen}
-                onListOpen={setListOpen}
+                onListOpen={openPanel}
+                view={panelView}
+                onView={setPanelView}
+                sheet={contactSheet}
+                suspended={storyActive}
                 onPrev={() => stepTo(-1)}
                 onNext={() => stepTo(1)}
                 onSelect={select}
@@ -1711,40 +1707,6 @@ export default function HomePage({ collections }: Props) {
             pass). Under the nav. */}
         <div className="home-veil" data-shown={pageVeiled ? '' : undefined} aria-hidden="true" />
       </div>
-
-      {/* ── The Index: the archive's contact sheet, over the map (desktop) ── */}
-      <AnimatePresence>
-        {indexOpen && desktopLayout && (
-          <motion.div
-            key="index"
-            className="explorer-index"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Index of the archive"
-            initial={reduce ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduce ? 0 : DUR.out, ease: EASE.arrive }}
-            inert={storyActive}
-          >
-            <ArchiveClosing
-              collections={orderedCities}
-              onBackToStart={leave}
-              onOpenStory={openStoryFromClosing}
-            />
-            {/* PROPOSED copy: "Close index". */}
-            <button
-              type="button"
-              className="explorer-index__close font-ui"
-              onClick={closeIndex}
-              // eslint-disable-next-line jsx-a11y/no-autofocus
-              autoFocus
-            >
-              Close index <span aria-hidden="true">×</span>
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Collection detail overlay (MagazineLayout) ── */}
       <AnimatePresence onExitComplete={finishStoryClose}>
