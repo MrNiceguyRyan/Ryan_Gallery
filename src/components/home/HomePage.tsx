@@ -51,6 +51,7 @@ import {
   type ExplorerState,
 } from '../../lib/explorer';
 import { recentreShown, recentreTarget } from '../../lib/explorerDrift';
+import { keepExplorerPlace, keptExplorerPlace, markPassTorn, restoredPlace } from '../../lib/reelVisit';
 import { ENTRY, ENTRY_FINISH, ENTRY_SPAN, finishEntry as finishEntryPlan } from '../../lib/explorerCamera';
 
 // Keep parsing separate from mounting. The handoff can warm these chunks while
@@ -82,6 +83,12 @@ const ROUTE_FALLBACKS: Record<string, [number, number]> = {
 // cover in hand's print is decoded — never longer than STILL_CAP_MS.
 // Returns a cancel.
 const STILL_CAP_MS = 2500;
+/** The way back's veil lifts over this long (entrance.css
+ *  `.home-veil[data-way-back]`, the same number). */
+const WAY_BACK_LIFT_MS = 720;
+/** …and not before this long after the page came in (the router's fall of
+ *  the page left, Layout.astro's `fall`, is 0.5 s). */
+const WAY_BACK_HOLD_MS = 500;
 function holdUntilStill(then: () => void): () => void {
   let over = false;
   let idle = false;
@@ -222,6 +229,7 @@ interface DeferredRouteAtlasProps {
   eager?: boolean;
   holdReveal?: boolean;
   engage?: boolean;
+  onSettled?: () => void;
 }
 
 function RouteAtlasFallback({ mobile = false, entryProgress }: {
@@ -265,12 +273,24 @@ function RouteAtlasFallback({ mobile = false, entryProgress }: {
 // cover up), and the atlas only needs to when its own props change (the
 // move asked for, the place in hand).
 const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
-  // The map is the page: it mounts at once (its chunk is warmed below).
+  // The map is the page: it mounts at once (its chunk is warmed below) —
+  // once the page is hydrated. The server draws the stand-in itself, never
+  // a Suspense boundary: the lazy chunk is never ready on the server, so the
+  // boundary went out pending ("$?"), and a page swapped in by the router
+  // (every way back home) hydrated it as a server error (React #419, one on
+  // every return, measured 2026-09-30).
+  const [client, setClient] = useState(false);
+  useEffect(() => setClient(true), []);
+  const fallback = <RouteAtlasFallback mobile={props.mobile} entryProgress={props.entryProgress} />;
   return (
     <div className="h-full w-full">
-      <Suspense fallback={<RouteAtlasFallback mobile={props.mobile} entryProgress={props.entryProgress} />}>
-        <RouteAtlas {...props} />
-      </Suspense>
+      {client ? (
+        <Suspense fallback={fallback}>
+          <RouteAtlas {...props} />
+        </Suspense>
+      ) : (
+        fallback
+      )}
     </div>
   );
 });
@@ -699,6 +719,13 @@ export default function HomePage({ collections }: Props) {
           goHome();
           next();
           return;
+        case 'restore':
+          // The way back: the camera set on the place in hand under the
+          // page's veil (a cut, counted as an entry so the map says when it
+          // is down and still: the veil lifts on it).
+          nextFlight('cut', effect.id, true);
+          next();
+          return;
         default:
           next();
       }
@@ -715,6 +742,9 @@ export default function HomePage({ collections }: Props) {
       setLastPlace(step.state.current);
       setLetGo(false);
     }
+    // Kept for the way back (a later visit in this session opens on the
+    // explorer as the reader left it: src/lib/reelVisit.ts).
+    if (step.state.phase !== 'globe' || action.type === 'leave') keepExplorerPlace(step.state.current);
     announceExplorer({ phase: step.state.phase, current: step.state.current });
     if (step.effects.length) {
       gestureRef.current += 1;
@@ -786,6 +816,8 @@ export default function HomePage({ collections }: Props) {
   // cut straight onto the place in hand, its clocks at their ends — no entry
   // replayed, nothing half-played left pending.
   const layoutRef = useRef(desktopLayout);
+  // The way back is under way (below): its veil is up.
+  const wayBackRef = useRef(false);
   useEffect(() => {
     if (layoutRef.current === desktopLayout) return;
     layoutRef.current = desktopLayout;
@@ -800,7 +832,9 @@ export default function HomePage({ collections }: Props) {
     }
     const entering = state.phase === 'entering';
     if (entering) dispatchRef.current({ type: 'entered' });
-    if (state.current) nextFlight('cut', state.current, entering && !desktopLayout);
+    // (The way back, still under its veil — a phone's page hydrates on the
+    // desktop's layout first — is an entry too: the map says when it is down.)
+    if (state.current) nextFlight('cut', state.current, (entering && !desktopLayout) || wayBackRef.current);
   }, [desktopLayout, entryProgress, nextFlight]);
 
   // ── The hand-over: the explorer takes the page ──
@@ -942,12 +976,80 @@ export default function HomePage({ collections }: Props) {
     const enter = (event?: Event) => {
       const ask = ((event as CustomEvent<ExploreRequest> | undefined)?.detail ?? window.__archiveExploreAsked ?? {}) as ExploreRequest;
       delete window.__archiveExploreAsked;
+      // On the way to the globe (the pass torn, or passed by): a later visit
+      // in this session opens there (src/lib/reelVisit.ts).
+      markPassTorn();
       if (ask.stubHandoff && explorerRef.current.phase === 'globe') setStubAwaited(stopOne(placeIdsRef.current));
       handOverRef.current(() => dispatchRef.current({ type: 'enter' }), ask);
     };
     if (window.__archiveExploreAsked) enter();
     window.addEventListener(EXPLORE_EVENT, enter);
     return () => window.removeEventListener(EXPLORE_EVENT, enter);
+  }, []);
+
+  // ── The way back (src/lib/reelVisit.ts `homeOpening`) ──
+  // Owner, 2026-09-30: 从其他地区回到home的时候，直接回到地球处，不需要再一次撕开
+  // 机票了. A later visit in this session, the pass already torn, is marked
+  // on <html> before the first paint (data-home="explorer": the entrance is
+  // not drawn, the page's veil is up — entrance.css). Before that paint is
+  // replaced, the explorer is set as the reader left it: the entrance taken
+  // off, the globe let go, the desktop's entry clock at its end, and the
+  // place that was in hand restored (the camera cut onto it, its cover up;
+  // else nothing in hand, the planet as the map opens on it). No film, no
+  // pass, no tear, no descent. The veil lifts (WAY_BACK_LIFT_MS, even; a cut
+  // under reduced motion) once the map is still with its tiles in and the
+  // cover's print is decoded — never later than STILL_CAP_MS, never sooner
+  // than WAY_BACK_HOLD_MS (the page left is still falling away).
+  const settledRef = useRef<() => void>(() => {});
+  const onAtlasSettled = useCallback(() => settledRef.current(), []);
+  // The veil's own lift for the way back (entrance.css `[data-way-back]`: a
+  // slow, even dissolve), until it has lifted.
+  const [wayBack, setWayBack] = useState(false);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (root.dataset.home !== 'explorer') return;
+    delete root.dataset.home;
+    setWayBack(true);
+    wayBackRef.current = true;
+    entranceOnRef.current = false;
+    setEntranceOn(false);
+    setGlobeHeld(false);
+    entryProgress.set(1);
+    setPageVeiled(true);
+    const id = restoredPlace(keptExplorerPlace(), placeIdsRef.current);
+    dispatchRef.current({ type: 'restore', id });
+    let lifted = false;
+    let stop = () => {};
+    let done = 0;
+    const began = performance.now();
+    const lift = () => {
+      if (lifted) return;
+      lifted = true;
+      stop();
+      // Never under the page it came from (the router's fall, 0.5 s): one
+      // move at a time.
+      done = window.setTimeout(() => {
+        wayBackRef.current = false;
+        setPageVeiled(false);
+        done = window.setTimeout(() => setWayBack(false), WAY_BACK_LIFT_MS + 80);
+      }, Math.max(0, began + WAY_BACK_HOLD_MS - performance.now()));
+    };
+    if (id) {
+      stop = holdUntilStill(lift);
+    } else {
+      const cap = window.setTimeout(lift, STILL_CAP_MS);
+      settledRef.current = lift;
+      stop = () => {
+        window.clearTimeout(cap);
+        settledRef.current = () => {};
+      };
+    }
+    return () => {
+      stop();
+      window.clearTimeout(done);
+    };
+    // Once, at the page's first paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── The opening film (OpeningFilm, its own island above this one) ──
@@ -1060,6 +1162,7 @@ export default function HomePage({ collections }: Props) {
       const state = { ...explorerRef.current, current: onScreen._id };
       explorerRef.current = state;
       setExplorer(state);
+      keepExplorerPlace(state.current);
       announceExplorer({ phase: state.phase, current: state.current });
       gestureRef.current += 1;
       nextFlight('cut', onScreen._id);
@@ -1441,6 +1544,7 @@ export default function HomePage({ collections }: Props) {
       onLeave={leaveFromMap}
       onDrift={setViewDrifted}
       onArrive={onArrive}
+      onSettled={onAtlasSettled}
       eager
       holdReveal={globeHeld}
       // The map is the page's second half: the camera holds the pose the
@@ -1709,7 +1813,12 @@ export default function HomePage({ collections }: Props) {
         {/* Back to the start: the page is veiled while the explorer gives
             way to the opening words (never a scroll back up through the
             pass). Under the nav. */}
-        <div className="home-veil" data-shown={pageVeiled ? '' : undefined} aria-hidden="true" />
+        <div
+          className="home-veil"
+          data-shown={pageVeiled ? '' : undefined}
+          data-way-back={wayBack ? '' : undefined}
+          aria-hidden="true"
+        />
       </div>
 
       {/* ── The Index: the archive's contact sheet, over the map (desktop) ── */}

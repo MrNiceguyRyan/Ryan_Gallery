@@ -16,6 +16,28 @@
   --ec-side: max(24px, 6vw);
 }
 
+/* ── The way back (src/lib/reelVisit.ts `homeOpening`) ──────────────────
+   A later visit in the session, the pass already torn: straight to the
+   globe. Written on <html> before the first paint (data-home="explorer"),
+   so the entrance is never drawn and the page's veil is up from the first
+   frame; HomePage then sets the explorer as the reader left it under the
+   veil and lifts it once the map is still (the veil's own fade: global.css
+   .home-veil). Under reduced motion the veil cuts, as the rest does. */
+html[data-home='explorer'] .entrance { display: none; }
+html[data-home='explorer'] .home-veil {
+  opacity: 1;
+  transition: none;
+}
+/* The lift: slow and even (HomePage WAY_BACK_LIFT_MS), the globe and the
+   cover in hand coming up through the page's own ground. */
+.home-veil[data-way-back]:not([data-shown]) {
+  transition: opacity 720ms var(--ease-travel);
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-veil,
+  .home-veil[data-way-back]:not([data-shown]) { transition-duration: 0s; }
+}
+
 /* ── The one screen ─────────────────────────────────────────────────────
    It never scrolls by hand (the body is clipped, HomePage): on a screen too
    short for all of it, the screen itself scrolls inside. */
