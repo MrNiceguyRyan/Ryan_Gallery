@@ -310,6 +310,25 @@ export const SHIELD_MAP_PX = 34;
 /** How a shield carries its state, as the CSS scales it (global.css, "The
  *  place shields"; scripts/route-shield.test.mjs holds the two together). */
 export const SHIELD_SCALE = { ahead: 0.9, past: 0.94, inbound: 1.1, current: 1.4 } as const;
+/** Owner, 2026-09-30: 地图放大之后，路牌也可以稍微放大一点，不然看不清. The shields
+ *  grow a little with the map's zoom, on top of their state's scale: 1× on
+ *  the whole planet (zoom `from` and out), easing up to `max` at a place's
+ *  rest (`to`: RouteAtlas HOP.restZoom, the lowest rest zoom — every place
+ *  rests at 5.05–5.98, so every place rests at `max`). 1.3, the middle of
+ *  the range asked for: an ahead shield's stop number then stands 10.5 px
+ *  tall at a rest on the desktop (8.1 at 1×) and 8.1 px on the phone (6.2),
+ *  the active one's state letters 7.2 px (5.5); every rest still keeps its
+ *  shields apart and its cover's corner (scripts/route-shield.test.mjs,
+ *  scripts/cover-dock.test.mjs). The active shield keeps its lift
+ *  (SHIELD_SCALE.current) on top of it. DERIVED from the camera's zoom,
+ *  never measured; the covers' dock is planned at the rest scale
+ *  (RouteAtlas, "The dock"). */
+export const SHIELD_ZOOM = { from: 2, to: 5.05, max: 1.3 } as const;
+export function shieldZoomScale(zoom: number): number {
+  if (!Number.isFinite(zoom)) return 1;
+  const k = Math.min(1, Math.max(0, (zoom - SHIELD_ZOOM.from) / (SHIELD_ZOOM.to - SHIELD_ZOOM.from)));
+  return 1 + (SHIELD_ZOOM.max - 1) * k * k * (3 - 2 * k);
+}
 /** A shield showing less than this beyond the one in front of it (above,
  *  below or to either side) is buried: its head is lifted this far above
  *  the other's, px. */
@@ -476,169 +495,118 @@ export function stackShields(slots: readonly StackSlot[], gap = STACK_GAP): Map<
 }
 
 // ── The split-flap: a stop's name arriving ──
-// On a landing further along the route the ticket's state, number and name
-// run a departure board's flap into place (下一站同样产生位置字母跳转功能,
-// after 11 mois sans toi(t)'s name switch, rebuilt on the site's own
-// timings), from the stop the camera left. The board is set to that stop the
-// moment the camera takes off (`primeFlap`), so the name the ticket carries
-// in is the one being left and nothing already read is ever turned back.
-// The name being left is shown whole, as it was set (the word's `was`
-// overlay) — mapped letter by letter onto the new name's cells it came out
-// cut and re-spaced ("BRY CECA" in NEW YORK's seven, "ORLA" in PAGE's four).
-// FLAP.delay after the landing it goes and every cell of the new name turns,
-// one flip each FLAP.turn, landing left to right on the plan (the first
-// FLAP.base flips of FLAP.tick after FLAP.delay, each later character
-// FLAP.stagger and a flip later). Only what changes turns: a name already
-// right stays down; the state turns only when the state changes (FL → AZ,
-// two flips, `CODE_FLIPS`), in from a blank band — the shield already wears
-// the new state's form, and FL's letters on Arizona's outline read as a
-// misprint; the stop number counts through the real stops
-// between (03 → 04 → 05), its last step landing with the name's last
-// character. Short and legible: a twelve-letter name lands inside
-// DUR.scene. Reduced motion shows the word, no flap.
+// Owner, 2026-09-30: 封面上的地点我喜欢是和之前一样字条跳转切换，和目标网站的效果一致，
+// 这个很重要. The ticket's name turns as 11 mois sans toi(t)'s board does
+// (its `c_`, measured frame by frame: scratchpad wf29/ref/SPEC.md §2.3),
+// on the reference's own numbers:
+//   - t0: the name being left RETRACTS to its first FLAP.keep letters
+//     ("MIAMI" → "MIA");
+//   - FLAP.pause later, letter i starts at FLAP.stagger · i and shows
+//     FLAP.base + i random capitals, one every FLAP.tick, then settles on its
+//     own — left to right, a departure board's cascade ("ORLANDO" is down
+//     634 ms after the retract, "BRYCE CANYON" 919).
+// The reference's word reflows as its letters change width; ours never
+// moves: every character is a box of its own final glyph's width (FlapWord),
+// a flip is printed over it and drawn from the characters of its own width
+// class (a W in the cell of an I overprinted its neighbours: "EDAMI"), and
+// the words keep their line breaks, so a two-line name never falls to one
+// line mid-turn. The letters kept from the name being left are set as it was
+// set, one box each, over the new name's blank cells, and each goes as the
+// cell under it starts. The stop number and a state that changes turn on the
+// same board, on the same numbers (the digits and the letters in their own
+// boxes: tabular figures, fixed letter cells); a state that stays does not
+// turn, and a new state's letters turn in from a blank band (the shield
+// already wears the new state's form: FL on Arizona's outline reads as a
+// misprint). Only what changes turns. Reduced motion shows the word, no flap.
 export const FLAP = {
-  /** DUR.flick: the landing registers, then the board turns. */
-  delay: 120,
-  stagger: 32,
-  tick: 24,
-  /** Flips for the first character; each later one adds one. */
-  base: 5,
-  /** How long each flip of the name is shown while it turns, ms. */
-  turn: 40,
-  /** The whole word is down by delay + this (DUR.scene). */
-  budget: 1000,
+  /** The name being left retracts to this many of its letters… */
+  keep: 3,
+  /** …and holds them this long… */
+  pause: 160,
+  /** …then letter i starts at stagger · i ms… */
+  stagger: 35,
+  /** …and shows base + i random letters, one every tick ms, then settles. */
+  base: 6,
+  tick: 22,
+  /** A cover opens round its sign only once the name has settled, and this
+   *  long after it (the settled word is read before the ticket moves again). */
+  hold: 60,
 } as const;
-// ── The roll: a ticket's name on a switch ──
-// Owner, 2026-09-29: 地点文字滚动. On a switch the ticket is small and the
-// flap's bold capitals turning at 25 a second read as 乱码 (XHIEFCB,
-// BRARS ZRFRBH) and flickered more than anything else on the screen. So a
-// switch's ticket ROLLS its name instead (RouteShield `runRoll`): the name
-// being left slides up out of the sign's rule while the new one rolls up
-// into it from below, masked by the rule, on EASE.turn (away at once, a long
-// settle); a state that changes comes in on a cross-fade (never letters that
-// are no state: "SB" on New York's shield); the stop number counts through
-// the real stops between, down as the name reads. ROLL.ms, down
-// well inside the transit (TICKET.transitMinMs ≥ 480), compressed only for a
-// shorter one.
-export const ROLL = { ms: 320, minMs: 120 } as const;
-/** The roll's length inside a transit of `budget` ms. */
-export function rollMs(budget?: number): number {
-  return budget == null || !Number.isFinite(budget) ? ROLL.ms : Math.max(ROLL.minMs, Math.min(ROLL.ms, Math.round(budget)));
-}
-
-/** A state that changes turns through this many letters, each this long. */
-export const CODE_FLIPS = 2;
-export const CODE_TICK = 36;
 
 export interface FlapStep {
-  /** ms after the flap starts. */
+  /** ms after the retract: the character starts to turn… */
   start: number;
-  /** ms after the flap starts: the character is down. */
+  /** …and is down. */
   land: number;
   flips: number;
 }
 
-/** A flap timed to its moment: `delay` before the board turns (FLAP.delay
- *  by default: the landing registers first) and the `budget` it must land
- *  in (FLAP.budget). A switch turns its ticket's name while the ticket is
- *  in transit (src/lib/coverDock.ts, "The switch"): from the relay at once
- *  (`delay: 0`), inside the transit (`budget`: expandAt − relayAt). */
-export interface FlapTiming {
-  delay?: number;
-  budget?: number;
-}
-/** A timed flap is never compressed past this flip tick, ms (below it the
- *  board reads as a blur, not letters turning): a twelve-letter name in a
- *  541 ms transit flips every ~18 ms. */
-export const FLAP_MIN_TICK = 16;
-
-/** The flap's plan for `count` characters (spaces included, which simply do
- *  not turn). Compressed evenly if a long word would run past the budget —
- *  a timed flap (`timing.budget`) no further than FLAP_MIN_TICK a flip. */
-export function flapPlan(count: number, timing: FlapTiming = {}): FlapStep[] {
-  const delay = timing.delay ?? FLAP.delay;
-  const budget = timing.budget ?? FLAP.budget;
-  const raw = Array.from({ length: count }, (_, index) => {
-    const start = delay + FLAP.stagger * index;
+/** The board's plan for a word of `count` characters (spaces included: the
+ *  cascade runs through them, as the reference's does, though a space
+ *  itself never turns), ms after the retract. */
+export function flapPlan(count: number): FlapStep[] {
+  return Array.from({ length: Math.max(0, count) }, (_, index) => {
+    const start = FLAP.pause + FLAP.stagger * index;
     const flips = FLAP.base + index;
     return { start, flips, land: start + FLAP.tick * flips };
   });
-  const last = raw.length ? raw[raw.length - 1].land : 0;
-  const limit = delay + budget;
-  if (last <= limit) return raw;
-  let k = (limit - delay) / (last - delay);
-  if (timing.budget != null) k = Math.max(k, FLAP_MIN_TICK / FLAP.tick);
-  return raw.map((step) => ({
-    start: Math.round(delay + (step.start - delay) * k),
-    flips: step.flips,
-    land: Math.round(delay + (step.land - delay) * k),
-  }));
 }
 
-/** A name cell's turn: from the flap's delay (when the name being left
- *  goes) to its planned landing, one flip each FLAP.turn. */
-export function nameStep(step: FlapStep, delay: number = FLAP.delay): FlapStep {
-  return {
-    start: delay,
-    land: step.land,
-    flips: Math.max(2, Math.round((step.land - delay) / FLAP.turn)),
-  };
-}
+/** The characters a word turns through: its letters, one space between
+ *  words (FlapWord sets them so). */
+export const flapText = (text: string) => text.trim().replace(/\s+/g, ' ').toUpperCase();
 
-/** The state's plan: each letter two quick flips, a stagger apart, from
- *  the flap's delay. */
-export function codePlan(count: number, delay: number = FLAP.delay): FlapStep[] {
-  return Array.from({ length: count }, (_, index) => {
-    const start = delay + FLAP.stagger * index;
-    return { start, flips: CODE_FLIPS, land: start + CODE_TICK * CODE_FLIPS };
-  });
+/** How long after the retract the whole word is down, ms (0 for nothing):
+ *  MIAMI 520, ORLANDO 634, PAGE 463, NEW YORK 691, BRYCE CANYON 919. */
+export function flapSpan(text: string): number {
+  const plan = flapPlan(flapText(text).length);
+  return plan.length ? plan[plan.length - 1].land : 0;
 }
 
 // Each character turns only through characters of its own width class, in a
-// cell as wide as the character it lands on: a wide M or W flipped through
-// the cell of an I overprinted its neighbours ("EDAMI", "ORLDMYU"). Narrow
-// capitals turn through narrow ones, M and W through the wide round ones,
-// everything else through the middle of the alphabet.
+// cell as wide as the character it lands on: narrow capitals through narrow
+// ones, M and W through the wide round ones, everything else through the
+// middle of the alphabet; the figures are tabular, all one width.
 const NARROW = 'IJLT';
 const WIDE = 'MWQO';
 const MIDDLE = 'ABCDEFGHKNOPRSUVXYZ';
 const DIGITS = '0123456789';
-const NARROW_DIGITS = '17';
-function flipSet(final: string): string {
-  if (/\d/.test(final)) return final === '1' ? NARROW_DIGITS : DIGITS;
+export function flipSet(final: string): string {
+  if (/\d/.test(final)) return DIGITS;
   if (NARROW.includes(final)) return NARROW;
   if (final === 'M' || final === 'W') return WIDE;
   return MIDDLE;
 }
 
-/** What a character shows at `t` ms into the flap: the character it is
- *  leaving (`from`, before its start), a flip of its own width class, or
- *  itself once down — at once, if it is the character it is leaving.
- *  `seed` varies the flips per character so no two columns turn alike. */
-export function flapGlyph(final: string, from: string, step: FlapStep, t: number, seed: number): string {
-  if (final === ' ' || !final.trim()) return final;
-  if (from === final) return final;
-  if (t >= step.land) return final;
-  if (t < step.start) return from;
-  const flip = Math.floor((t - step.start) / Math.max(1, (step.land - step.start) / step.flips));
-  const set = flipSet(final);
-  // A cheap deterministic scatter, never the final character itself.
-  let index = (seed * 7 + flip * 11 + final.charCodeAt(0)) % set.length;
-  if (set[index] === final) index = (index + 3) % set.length;
-  if (set[index] === final) index = (index + 1) % set.length;
-  return set[index];
+/** A scatter as random as the reference's `Math.random()` per flip, but a
+ *  function of (seed, cell, flip): the same run reads the same at any frame,
+ *  so a frame dropped or repeated never changes a letter out of turn. */
+export function flapNoise(seed: number, cell: number, flip: number): number {
+  let h = (seed ^ Math.imul(cell + 1, 0x9e3779b1) ^ Math.imul(flip + 1, 0x85ebca77)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-/** The stop number at `t`: the number being left until `start`, then every
- *  real stop between, one step each, the last landing at `land` (with the
- *  name's last character) — 01 → 02 is a single turn at the end, 03 → 05
- *  passes 04. Anything that is not a number, or the same number, is simply
- *  shown. */
-export function flapNumber(final: string, from: string, t: number, start: number, land: number): string {
-  const to = Number.parseInt(final, 10);
-  const was = Number.parseInt(from, 10);
-  if (!/^\d+$/.test(final) || !/^\d+$/.test(from) || was === to || t >= land) return final;
-  const steps = Math.abs(to - was);
-  const k = t < start ? 0 : Math.min(steps - 1, Math.floor(((t - start) / Math.max(1, land - start)) * steps));
-  return String(was + Math.sign(to - was) * k).padStart(final.length, '0');
+/** What a character shows `t` ms after the retract: `before` until its
+ *  start (the letter kept from the name being left, the number being left,
+ *  or nothing), then a random character of its own width class every tick
+ *  — never the one it lands on — then itself. */
+export function flapGlyph(final: string, before: string, step: FlapStep, t: number, seed: number, cell: number): string {
+  if (!final.trim()) return final;
+  if (t >= step.land) return final;
+  if (t < step.start) return before;
+  const flip = Math.floor((t - step.start) / FLAP.tick);
+  const set = flipSet(final).replace(final, '');
+  return set[Math.floor(flapNoise(seed, cell, flip) * set.length)] ?? final;
+}
+
+/** Whether the letter the name being left keeps at `index` still shows `t`
+ *  ms after the retract (t < 0: the name whole): the first FLAP.keep stay
+ *  through the pause, each until the new name's cell at its place starts
+ *  (gone at the pause past the new name's end). */
+export function keptShows(index: number, newCount: number, t: number): boolean {
+  if (t < 0) return true;
+  if (index >= FLAP.keep) return false;
+  return t < (index < newCount ? FLAP.pause + FLAP.stagger * index : FLAP.pause);
 }

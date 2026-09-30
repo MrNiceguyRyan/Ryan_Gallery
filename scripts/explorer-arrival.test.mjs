@@ -81,7 +81,7 @@ test('wiring: the atlas asks for the arriving ticket at take-off and says when i
   assert.match(atlas, /const beats = arrivalSchedule\(landMs, travelPx\);/);
   assert.match(atlas, /inkAt: now \+ beats\.inkAt, expandAt: now \+ beats\.expandAt, tipAt: now \+ beats\.tipAt, extrasAt: now \+ beats\.extrasAt/);
   // Every flight clears the last one's arrival; it is published with the frame.
-  assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, pins, arrive \}\);/);
+  assert.match(atlas, /coverDock\.publish\(\{ at, points, switch: sw, pin, pins, arrive, shieldZoom: quantised \}\);/);
   // The chapter plays it once per key, and folds a ticket let go.
   assert.match(chapter, /if \(at && arrive && arrive\.id === me && arrive\.key !== seenArrive\) \{/);
   assert.match(chapter, /if \(!out && !dock\.hasAttribute\('data-cut'\)\) \{\s+const play = playRef\.current;\s+if \(play\?\.kind === 'switch' && play\.role === 'in' && play\.inked\) hold = true;\s+letGoRef\.current\(\);/);

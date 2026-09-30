@@ -12,8 +12,8 @@ import {
   type MotionValue,
 } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { FlapWord, RouteShield, primeFlap, runFlap, runRoll } from './RouteShield';
-import { pad2, signLines, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
+import { FlapWord, RouteShield, primeFlap, retractFlap, runFlap } from './RouteShield';
+import { flapText, pad2, signLines, signNameSize as nameSizeFor, stateCode } from '../../lib/routeShield';
 import type { Collection } from '../../types';
 import { excerpt } from '../../lib/narratives';
 import { useHoverCapable } from '../../lib/useHoverCapable';
@@ -31,6 +31,7 @@ import {
   coverDock,
   coverRatioOf,
   printStyle,
+  shieldShift,
   ticketFold,
   ticketFrames,
   ticketStyle,
@@ -513,6 +514,8 @@ function ArchiveChapter({
   // Called once when the cover next appears (the sign's flap waits for it).
   const dockAppearRef = useRef<(() => void) | null>(null);
   const plateRef = useRef<HTMLDivElement>(null);
+  // The ticket's sign (its shield, stop and name): the board.
+  const signRef = useRef<HTMLDivElement>(null);
 
   // ── The switch, the arrival, the let-go (src/lib/coverDock.ts) ──
   // One play at a time per cover: its part in a switch — the ticket that
@@ -550,11 +553,16 @@ function ArchiveChapter({
     /** Seen at all yet (an arrival before its ink, a destination before its
      *  relay: not). */
     inked: boolean;
+    /** The carrier's name retracted to its first letters (the board's first
+     *  beat, at its switch's `flapAt`), and how to put it back. */
+    retracted: boolean;
+    unretract: (() => void) | null;
   };
   const playRef = useRef<Play | null>(null);
   const arrivedTimerRef = useRef(0);
-  // The roll, started at the relay (the sign effect below sets it).
-  const relayFlapRef = useRef<((budget: number) => void) | null>(null);
+  // The board, taken up at the relay (the sign effect below sets it): the
+  // turn timed from its retract (`origin`), `force` onto its own name.
+  const relayFlapRef = useRef<((origin: number, force?: boolean) => void) | null>(null);
   const parts = () => {
     const plate = plateRef.current;
     return {
@@ -604,6 +612,8 @@ function ArchiveChapter({
     if (play) {
       play.timers.forEach((timer) => window.clearTimeout(timer));
       play.anims.forEach((anim) => anim.cancel());
+      play.unretract?.();
+      play.unretract = null;
     }
     plate?.style.removeProperty('clip-path');
     plate?.style.removeProperty('transform');
@@ -645,7 +655,7 @@ function ArchiveChapter({
     play.anims.forEach((anim) => { if (anim.playState !== 'finished') holdNow(anim); });
   };
   const newPlay = (kind: Play['kind'], key: number, role: Play['role'], mode: Play['mode'], cutAt = 0): Play => {
-    const play: Play = { kind, key, role, mode, anims: [], plate: null, print: null, dissolve: null, carry: null, grow: null, tip: null, timers: [], relayed: false, cut: false, cutAt, inked: false };
+    const play: Play = { kind, key, role, mode, anims: [], plate: null, print: null, dissolve: null, carry: null, grow: null, tip: null, timers: [], relayed: false, cut: false, cutAt, inked: false, retracted: false, unretract: null };
     playRef.current = play;
     return play;
   };
@@ -683,6 +693,20 @@ function ArchiveChapter({
       play.anims.push(tip);
     }
     return tip;
+  };
+  // The board's first beat on the leaving ticket (src/lib/routeShield.ts,
+  // FLAP): at `time` (its switch's `flapAt`) its name keeps its first
+  // letters, so the ticket laid on it at the relay — FLAP.pause into the
+  // same turn — takes them up on the same pixels. Put back when its play
+  // ends (it is cut by then, unseen).
+  const retractName = (play: Play, time: number) => {
+    if (reduce) return;
+    later(play, time, () => {
+      const root = signRef.current;
+      if (!root || play.retracted) return;
+      play.retracted = true;
+      play.unretract = retractFlap(root);
+    });
   };
   // The cover shrinks into its ticket at the corner by its shield — the clip
   // closing on it, the photograph shrinking into the strip as a miniature of
@@ -933,9 +957,9 @@ function ArchiveChapter({
     openAndTip(play, sw);
   };
   // The relay (in the frame it passes, for every cover at once): the
-  // arriving ticket is seen, and its name rolls in inside the transit —
-  // timed from this frame, not the planned relay (a frame or a late tap
-  // behind it), so it is down by the opening.
+  // arriving ticket is seen, and its board takes the turn up where it stands
+  // (timed from the switch's retract, the letters the leaving ticket kept
+  // set over its blank cells), down before the opening.
   const relayIn = (sw: DockSwitch, now: number) => {
     const play = playRef.current;
     const { dock } = parts();
@@ -950,9 +974,15 @@ function ArchiveChapter({
       const fold = [play.plate, play.print];
       if (form) expandPlate(play, form, sw.expandAt, true);
       fold.forEach((anim) => anim?.cancel());
+      // Its name, retracted as it folded, turns back into place (the board
+      // takes the cells over from here).
+      if (play.retracted) {
+        play.unretract = null;
+        relayFlapRef.current?.(sw.flapAt, true);
+      }
       return;
     }
-    relayFlapRef.current?.(Math.max(0, sw.expandAt - Math.max(now, sw.relayAt)));
+    relayFlapRef.current?.(sw.flapAt);
   };
   // The ticket carrying the switch: from whole it shrinks into its ticket
   // ('fold'); a ticket in transit stays one ('lay'); a cover opening folds
@@ -976,6 +1006,7 @@ function ArchiveChapter({
       dock.removeAttribute('data-arrived');
       if (reduce || !form) return;
       retractTip(was, now);
+      if (!was.retracted) retractName(was, sw.flapAt);
       phoneCarry(was, sw.toRatio, now, Math.max(1, sw.relayAt - now), sw.ticketScale);
       return;
     }
@@ -986,6 +1017,7 @@ function ArchiveChapter({
       if (reduce || !form) return;
       retractTip(play, now);
       foldPlate(play, form, now + TICKET.foldAt, 'fold');
+      retractName(play, sw.flapAt);
       phoneCarry(play, sw.toRatio, now + TICKET.foldAt, TICKET_FOLD_MS, sw.ticketScale);
       return;
     }
@@ -1009,11 +1041,13 @@ function ArchiveChapter({
     const ms = Math.max(1, sw.relayAt - now);
     retractTip(was, now);
     foldPlate(was, form, now, 'fold', ms);
+    retractName(was, sw.flapAt);
     phoneCarry(was, sw.toRatio, now, ms, sw.ticketScale);
   };
   // Turned back to before its relay (A → B → A): the carrier is the arriving
-  // cover, in place — no relay to another, no roll — held as a ticket (its
-  // own picture in the strip) and grown open at the new `expandAt`.
+  // cover, in place — no relay to another — held as a ticket (its own
+  // picture in the strip), its name turned back into place if it had
+  // retracted (at its relay), and grown open at the new `expandAt`.
   const switchSelf = (sw: DockSwitch) => {
     const { dock } = parts();
     const was = playRef.current;
@@ -1250,8 +1284,16 @@ function ArchiveChapter({
       // place until it shows again.
       if (hold || (!at && !out && performance.now() - hiddenAt > DOCK_FADE_MS + 120)) return;
       // Through a switch, where its ticket lies; pinned (the camera brought
-      // back onto it); else at its foot.
-      const point = frame.pins?.[me] ?? (frame.pin && (at || out) ? frame.pin : frame.points[me]);
+      // back onto it); else at its foot — its corner a joint's gap off its
+      // shield as the shield is drawn at this zoom (coverDock `shieldShift`:
+      // nought at its rest).
+      let point = frame.pins?.[me] ?? (frame.pin && (at || out) ? frame.pin : null);
+      if (!point) {
+        const foot = frame.points[me];
+        const entry = coverDock.plan()?.[me];
+        const shift = entry ? shieldShift(entry, frame.shieldZoom) : null;
+        point = foot && shift ? { x: foot.x + shift.x, y: foot.y + shift.y } : foot;
+      }
       if (!point || (point.x === lastX && point.y === lastY)) return;
       lastX = point.x;
       lastY = point.y;
@@ -1518,18 +1560,18 @@ function ArchiveChapter({
   };
 
   // ── The sign turns into place ──
-  // 下一站同样产生位置字母跳转功能: the stub's shield and name run a departure
-  // board's flap (src/lib/routeShield.ts, FLAP) from the place the camera
-  // left. RouteAtlas tells the page at take-off (`atlas:depart`) and at
-  // touchdown (`atlas:arrive`), with the place left as `from` (none from the
-  // open map, none on the entry):
+  // 字条跳转切换，和目标网站的效果一致: the stub's name, number and state turn
+  // as the reference's board does (src/lib/routeShield.ts, FLAP) from the
+  // place the camera left. RouteAtlas tells the page at take-off
+  // (`atlas:depart`) and at touchdown (`atlas:arrive`), with the place left
+  // as `from` (none from the open map, none on the entry):
   //  - At take-off the board is SET to the stop being left (`primeFlap`), so
   //    the ticket reads "MIAMI" until it turns — the name it lands with is
-  //    never shown settled first and turned back. On a switch it ROLLS at
-  //    the relay, as its ticket is laid on the one leaving (地点文字滚动: the
-  //    old name up out of the rule, the new one up into it — the flap's
-  //    turning capitals read as 乱码 on a small ticket — down inside the
-  //    transit, while the planet turns: the switch's `relayIn`, `runRoll`);
+  //    never shown settled first and turned back. On a switch the leaving
+  //    ticket's name retracts to its first letters as it folds (`flapAt`,
+  //    the switch's `retractName`), and the arriving ticket's board takes the
+  //    turn up at the relay, as it is laid on (`relayIn`: timed from that
+  //    retract, the cascade starting as it is seen), down before it opens;
   //    failing that, it turns as it appears at its shield (at most
   //    FLAP_DOCK_WAIT_MS after the landing).
   //  - A take-off anywhere else puts this board back; so does a landing
@@ -1537,7 +1579,6 @@ function ArchiveChapter({
   // Never on a first paint, a restore, a snap or the entry (whose ticket
   // comes up with nothing to turn from), and never under reduced motion,
   // where the sign is simply printed.
-  const signRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ticket || reduce) return;
     const id = collection._id;
@@ -1566,7 +1607,7 @@ function ArchiveChapter({
       pending = null;
       unprime();
     };
-    const start = (roll?: { budget: number }) => {
+    const start = (timing?: { origin?: number; force?: boolean }) => {
       const root = signRef.current;
       const from = pending;
       cancelWait();
@@ -1575,19 +1616,21 @@ function ArchiveChapter({
       window.clearTimeout(primeTimer);
       primeTimer = 0;
       stopFlap?.();
-      // Either takes the primed board over where it stands. A switch's
-      // ticket rolls its name in (地点文字滚动: on a small ticket the flap's
-      // turning capitals read as 乱码); a landing with no switch turns it.
+      // Takes the primed board over where it stands: at a switch's relay,
+      // timed from its retract; on a landing with no switch, from now.
       clearPrime = null;
-      stopFlap = roll ? runRoll(root, from, roll) : runFlap(root, from);
+      stopFlap = runFlap(root, from, timing);
     };
-    relayFlapRef.current = (budget) => start({ budget });
+    relayFlapRef.current = (origin, force) => start({ origin, force });
     const onDepart = (event: Event) => {
       const detail = (event as CustomEvent<SignTrip>).detail;
       reset();
       const root = signRef.current;
       if (!detail || detail.id !== id || !detail.from || !root) return;
       pending = detail.from;
+      // Turned back to its own place mid-fold: nothing to set (its name as
+      // it stands, retracted or whole, is its board; `relayIn` turns it back).
+      if (flapText(detail.from.name ?? '') === flapText(collection.name)) return;
       clearPrime = primeFlap(root, detail.from);
       primeTimer = window.setTimeout(() => {
         pending = null;
@@ -1700,11 +1743,11 @@ function ArchiveChapter({
     ? `${dockEntry.photoW} / ${dockEntry.photoH}`
     : phone && card ? `${card.photoW} / ${card.photoH}` : String(plateRatio);
   // What the stub prints: only fields the archive already holds. No invented
-  // codes. Space Grotesk has tabular figures, so the rows line up.
+  // codes. Space Grotesk has tabular figures, so the rows line up. No region
+  // (owner, 2026-09-30: 票根上已经有region了，我希望只出现一处即可): the state
+  // is on the cover once, boxed on its tab.
   const stubRows = useMemo(() => {
     const rows: Array<[string, string]> = [];
-    const region = collection.region ?? collection.location;
-    if (region) rows.push(['Region', region]);
     const frames = collection.photoCount ?? collection.photos?.length;
     if (frames) rows.push(['Frames', String(frames).padStart(2, '0')]);
     if (collection.year) rows.push(['Year', String(collection.year)]);
@@ -2050,8 +2093,8 @@ function ArchiveChapter({
             shield the map signs this place with — its state's two letters,
             its stop number — beside "Stop / 06", and the place's name set
             big inside a guide sign's enamel rule, on the chapter's own card.
-            On a switch the name rolls into place while the planet turns
-            (`atlas:depart`, `runRoll`), the card easing from the stock it
+            On a switch the name turns on the board while the planet turns
+            (`atlas:depart`, `runFlap`), the card easing from the stock it
             leaves. Below the sign, the
             admission rows; at the foot, the way on: "Next stop". The seat
             is the stub's own box: while the stub is torn off (opening the

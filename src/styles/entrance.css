@@ -563,6 +563,33 @@ html:is([data-reel='reel'], [data-reel='flight'], [data-reel='landed']) .entranc
   width: 6px;
   background: linear-gradient(90deg, rgba(21, 24, 15, 0.3), rgba(21, 24, 15, 0));
 }
+/* The tear guide (owner, 2026-09-30: 所有票根的撕口处做一个下划线指引; the
+   covers' stubs carry the same, global.css): a hairline in the pass's own
+   ink ruled down the perforation, a dash between every two holes, from
+   under the band to above the bottom notch; brighter while the stub is
+   pointed at or focused (it invites the tear). The rip takes it as it runs
+   (`--bp-torn`). */
+.bp-stub::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  z-index: 3;
+  width: 1px;
+  background: repeating-linear-gradient(180deg, currentColor 0 1px, transparent 1px 5px, currentColor 5px 6px);
+  opacity: 0.4;
+  pointer-events: none;
+  clip-path: inset(max(calc(var(--bp-band-h) + 4px), var(--bp-torn, 0px)) 0 calc(var(--bp-notch) + 4px) 0);
+  transition: opacity var(--dur-out) var(--ease-fade);
+}
+.bp-seat:has(> .bp-tear:is(:hover, :focus-visible)) .bp-stub::after {
+  opacity: 0.72;
+  transition: opacity var(--dur-in) var(--ease-arrive);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bp-stub::after { transition: none !important; }
+}
 
 /* The print. */
 .bp-band {
