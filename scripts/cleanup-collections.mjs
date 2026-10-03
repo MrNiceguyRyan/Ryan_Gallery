@@ -7,6 +7,8 @@
  *                                                     (also delete photo-less
  *                                                      collections — destructive)
  *
+ * Requires: SANITY_TOKEN env var for CMS access
+ *
  * Fixes surfaced by the audit:
  *   - "New York " → "New York"  (trailing-space name)
  *   - empty duplicate "Orlando" + empty "Arizona"  (0 photos → noise in the
@@ -17,9 +19,11 @@
  */
 import { createClient } from '@sanity/client';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = process.env.SANITY_TOKEN;
+if (!SANITY_TOKEN) {
+  console.error('SANITY_TOKEN environment variable is required for Sanity writes.');
+  process.exit(1);
+}
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
