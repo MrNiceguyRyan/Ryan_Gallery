@@ -7,6 +7,8 @@
  *                                                     (also delete photo-less
  *                                                      collections — destructive)
  *
+ * Requires: SANITY_TOKEN env var for Sanity access.
+ *
  * Fixes surfaced by the audit:
  *   - "New York " → "New York"  (trailing-space name)
  *   - empty duplicate "Orlando" + empty "Arizona"  (0 photos → noise in the
@@ -16,10 +18,9 @@
  * and only ever touches collections with exactly 0 referencing photos.
  */
 import { createClient } from '@sanity/client';
+import { getRequiredSanityToken } from './sanity-token.mjs';
 
-const SANITY_TOKEN =
-  process.env.SANITY_TOKEN ||
-  'sk3kQRk6iCVf7vXT1NxgxryfDgXpLTf3Ye990cWMyL8mCT8lT4kWgF4NRvbBaUBO40Ddfm88gPfZ9rUsj';
+const SANITY_TOKEN = getRequiredSanityToken();
 
 const APPLY = process.argv.includes('--apply');
 const DELETE_EMPTY = process.argv.includes('--delete-empty');
