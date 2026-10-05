@@ -292,7 +292,7 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     const moveTo = (slot: 'below' | 'above') => {
       s.legSlot = slot;
       s.legLeaving = 0;
-      window.clearTimeout(s.legTimer);
+      if (s.legTimer) window.clearTimeout(s.legTimer);
       s.legTimer = 0;
       if (metaRef.current) metaRef.current.style.transform = `translate(${cx}px, ${metaTop(slot)}px) translateX(-50%)`;
     };
@@ -304,7 +304,8 @@ export const AtlasViewfinder = forwardRef<ViewfinderHandle, {
     }
     if (!here) {
       s.legLeaving = 0;
-      window.clearTimeout(s.legTimer);
+      // (Every frame of a flight comes through here: no timer, no call.)
+      if (s.legTimer) window.clearTimeout(s.legTimer);
       s.legTimer = 0;
       setYield(metaYieldRef.current, false);
       return;
