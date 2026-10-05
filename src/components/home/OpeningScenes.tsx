@@ -49,10 +49,9 @@ import {
 // its giant, the words on its line) exactly where the island will.
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
-// the anchor, the printed matter's own words (but the dictionary, Webster's
-// 1913: public domain), the layers' captions, notes, stamps and receipts, the leader
-// cards, the credit, the YOU line. No place is named but in two tiny easter
-// eggs (EGGS in src/lib/openingFilm.ts).
+// the anchor, the printed matter's own words, the layers' captions, notes,
+// stamps and receipts, the leader card, the credit, the YOU line. No place
+// is named but in one tiny easter egg (EGGS in src/lib/openingFilm.ts).
 
 const vars = (v: Record<string, string | number>) => v as CSSProperties;
 
@@ -474,73 +473,6 @@ function Newspaper() {
   );
 }
 
-/** A dictionary entry: its headword bold, the rest in the book face. */
-function Entry({ text }: { text: string }) {
-  const at = text.indexOf(',');
-  return (
-    <p>
-      <b>{text.slice(0, at)}</b>
-      {text.slice(at)}
-    </p>
-  );
-}
-
-function Dictionary() {
-  const c = SHEETS.dictionary;
-  return (
-    <>
-      <div className="of-dict__head font-ui">
-        {c.head.map((x) => (
-          <span key={x}>{x}</span>
-        ))}
-      </div>
-      <div className="of-dict__above font-serif">
-        {c.above.map((x) => (
-          <Entry key={x} text={x} />
-        ))}
-      </div>
-      <Row side="r" className="of-dict__def font-serif">
-        {c.row[1]}
-      </Row>
-      <div className="of-dict__below font-serif" data-clear="[data-base]">
-        <p>
-          <span className="of-dict__pencil">{c.below[0].slice(0, c.below[0].indexOf(' 2.'))}</span>
-          {c.below[0].slice(c.below[0].indexOf(' 2.'))}
-        </p>
-        {c.below.slice(1).map((x) => (
-          <Entry key={x} text={x} />
-        ))}
-        <p className="of-dict__note font-serif">
-          {c.note}
-          <Arrow dir="l" className="of-dict__arrow" />
-        </p>
-      </div>
-      <figure className="of-dict__fig">
-        <svg viewBox="0 0 120 80" aria-hidden="true">
-          <defs>
-            <pattern id="of-hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
-              <path d="M0 0 V3" />
-            </pattern>
-          </defs>
-          <rect className="of-dict__hatch" x="8" y="6" width="104" height="70" />
-          {[0, 1, 2].map((r) =>
-            [0, 1, 2, 3].map((c2) => <rect key={`${r}${c2}`} className="of-dict__drawer" x={14 + c2 * 25} y={12 + r * 21} width={21} height={16} />),
-          )}
-        </svg>
-        <figcaption className="of-dict__cap font-serif">{c.fig}</figcaption>
-      </figure>
-      <div className="of-dict__tabs" aria-hidden="true">
-        {c.tabs.map((t, k) => (
-          <span key={t} className={`of-dict__tab font-ui${k === 0 ? ' of-dict__tab--on' : ''}`}>
-            {t}
-          </span>
-        ))}
-      </div>
-      <p className="of-dict__key font-serif">{c.key}</p>
-    </>
-  );
-}
-
 function Magazine({ picture }: { picture?: OpeningPicture }) {
   const c = SHEETS.magazine;
   return (
@@ -578,48 +510,6 @@ function Magazine({ picture }: { picture?: OpeningPicture }) {
     </>
   );
 }
-
-function Slate() {
-  const c = SHEETS.slate;
-  return (
-    <>
-      <div className="of-slate__sticks" aria-hidden="true">
-        <span className="of-slate__stick of-slate__stick--top" />
-        <span className="of-slate__stick of-slate__stick--base" />
-      </div>
-      <div className="of-slate__prod">
-        <span className="of-slate__label font-ui">{c.prod[0]}</span>
-        <span className="of-slate__hand font-serif">{c.prod[1]}</span>
-        <span className="of-slate__tape font-serif">{c.tape}</span>
-      </div>
-      <Row side="l" className="of-slate__label of-slate__rowl font-ui">
-        {c.row[0]}
-      </Row>
-      <Row side="r" className="of-slate__hand of-slate__rowr font-serif">
-        {c.row[1]}
-      </Row>
-      <div className="of-slate__cells">
-        {c.cells.map(([label, value]) => (
-          <span key={label} className="of-slate__cell">
-            <span className="of-slate__label font-ui">{label}</span>
-            <span className="of-slate__hand font-serif">{value}</span>
-          </span>
-        ))}
-      </div>
-      <div className="of-slate__wedge" aria-hidden="true">
-        {Array.from({ length: 10 }, (_, k) => (
-          <i key={k} style={vars({ '--k': k })} />
-        ))}
-      </div>
-      <div className="of-slate__foot font-ui">
-        {c.foot.map((x) => (
-          <span key={x}>{x}</span>
-        ))}
-      </div>
-    </>
-  );
-}
-
 
 function Ticket() {
   const c = SHEETS.ticket;
@@ -671,54 +561,6 @@ function Ticket() {
           <span key={x}>{x}</span>
         ))}
       </div>
-    </>
-  );
-}
-
-function Passport() {
-  const c = SHEETS.passport;
-  return (
-    <>
-      <svg className="of-pass__emblem" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="46" />
-        <circle cx="50" cy="50" r="38" />
-        <path d="M50 16 L58 42 L84 42 L63 58 L71 84 L50 68 L29 84 L37 58 L16 42 L42 42 Z" />
-      </svg>
-      <p className="of-pass__serial" aria-hidden="true">
-        {c.serial.split('').map((d, k) => (
-          <span key={k} className="of-pass__holes font-ui">
-            {d}
-          </span>
-        ))}
-      </p>
-      <span className="of-pass__stamp of-pass__stamp--a font-ui">{c.stamps[0]}</span>
-      <span className="of-pass__stamp of-pass__stamp--b font-ui">
-        <span>{c.stamps[1]}</span>
-        <span className="of-pass__no">{c.stamps[3]}</span>
-      </span>
-      <span className="of-pass__stamp of-pass__stamp--c font-ui">{c.stamps[2]}</span>
-      {/* The egg: a park's cancellation stamp, in the page's corner. */}
-      <svg className="of-pass__park" viewBox="0 0 100 100" aria-hidden="true">
-        <defs>
-          <path id="of-park-ring" d="M50 50 m -36 0 a 36 36 0 1 1 72 0 a 36 36 0 1 1 -72 0" />
-        </defs>
-        <circle cx="50" cy="50" r="46" />
-        <circle cx="50" cy="50" r="28" />
-        <text className="font-ui">
-          <textPath href="#of-park-ring">{c.park}</textPath>
-        </text>
-      </svg>
-      <Row side="l" className="of-pass__visas font-ui">
-        {c.row[0]}
-      </Row>
-      <Row side="r" className="of-pass__end font-serif">
-        {c.row[1]}
-      </Row>
-      <p className="of-pass__mrz of-mono">
-        <span>{c.mrz}</span>
-        <span>{c.mrz2}</span>
-      </p>
-      <span className="of-pass__page font-ui">{c.page}</span>
     </>
   );
 }
@@ -790,8 +632,7 @@ function Postcard({ picture }: { picture?: OpeningPicture }) {
 }
 
 /** What a sheet's paper carries under its words (the spread's pages, the
- *  ticket, the passport's cover, the form, the border): printed ink goes
- *  over it. */
+ *  ticket, the form, the border): printed ink goes over it. */
 function SheetBack({ kind }: { kind: SheetKind }) {
   switch (kind) {
     case 'magazine':
@@ -811,12 +652,6 @@ function SheetBack({ kind }: { kind: SheetKind }) {
           </div>
         </>
       );
-    case 'passport':
-      return (
-        <div className="of-pass__cover" aria-hidden="true">
-          <span className="of-pass__guilloche" />
-        </div>
-      );
     case 'telegram':
       return <div className="of-wire__form" aria-hidden="true" />;
     case 'postcard':
@@ -830,16 +665,10 @@ function Sheet({ kind, pictures }: { kind: SheetKind; pictures: readonly Opening
   switch (kind) {
     case 'newspaper':
       return <Newspaper />;
-    case 'dictionary':
-      return <Dictionary />;
     case 'magazine':
       return <Magazine picture={pictures[1]} />;
-    case 'slate':
-      return <Slate />;
     case 'ticket':
       return <Ticket />;
-    case 'passport':
-      return <Passport />;
     case 'telegram':
       return <Telegram />;
     case 'postcard':
@@ -887,26 +716,23 @@ function Chrome({ index, s }: { index: number; s: Scene }) {
 }
 
 // ── Act 3: the typewriter relay ───────────────────────────────────────────
-// The same line on eight machines, each in its own face (the island sets
+// The same line on five machines, each in its own face (the island sets
 // every machine's size so its capitals are one height, and its line so the
 // baseline and the left edge are one): only the machine is cut round it,
 // and the typed count carries on.
 const INK = ribbon(TYPED);
 const RELAY_FACE: Record<StyleId, string> = {
   mac: 'font-ui of-rf--pixel',
-  crt: 'of-mono of-rf--dot',
   film: 'font-ui of-rf--edge',
-  label: 'font-ui of-rf--emboss',
   beige: 'font-ui of-rf--sans',
-  bone: 'font-serif of-rf--serif',
   grid: 'font-serif of-rf--hand',
   paper: 'of-mono of-rf--type',
 };
 
-/** The hand-drawn looping arrow on the grid paper, drawn in six stages
+/** The hand-drawn looping arrow on the grid paper, drawn in four stages
  *  (each a longer stretch of one path; the island shows them in turn). */
 const ARROW = 'M34 188 C 20 140, 60 104, 104 118 C 150 132, 142 184, 104 180 C 70 176, 78 118, 132 96 C 176 78, 222 70, 262 44';
-const ARROW_STAGES = [0.16, 0.33, 0.5, 0.67, 0.84, 1];
+const ARROW_STAGES = [0.25, 0.5, 0.75, 1];
 const FILM_PERFS = Array.from({ length: 30 }, (_, i) => <i key={i} />);
 
 function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPicture[] }) {
@@ -920,7 +746,7 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
       </span>
     ));
   }
-  const grows = id === 'label' || id === 'grid';
+  const grows = id === 'grid';
   return (
     <div className={`of-mat of-mat--${id}`} data-mat={id}>
       <div className="of-mat__ground">
@@ -942,13 +768,6 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
             <span className="of-mac__icon of-mac__icon--b" />
           </span>
         )}
-        {id === 'crt' && (
-          // A terminal's status line: the screen is a machine, not a field
-          // of colour (PROPOSED copy).
-          <span className="of-crt__status of-mono" aria-hidden="true">
-            READY
-          </span>
-        )}
         {id === 'film' && (
           <span className="of-film__strip" aria-hidden="true">
             <span className="of-film__perfs of-film__perfs--t">{FILM_PERFS}</span>
@@ -963,7 +782,6 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
             <span className="of-film__perfs of-film__perfs--b">{FILM_PERFS}</span>
           </span>
         )}
-        {id === 'label' && <span className="of-label__gloss" aria-hidden="true" />}
         {id === 'beige' && (
           <span className="of-beige__screen" aria-hidden="true">
             <span className="of-beige__bar">
@@ -982,7 +800,6 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
             <span className="of-beige__ruler" />
           </span>
         )}
-        {id === 'bone' && <span className="of-bone__margin" aria-hidden="true" />}
         {id === 'grid' && (
           <>
             <span className="of-grid__print" aria-hidden="true">
@@ -1005,12 +822,6 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
             {line}
             <Bl />
           </span>
-          {id === 'crt' && (
-            // The phosphor's bloom: the same line, soft, under the dots.
-            <span className={`of-typed of-typed--bloom ${RELAY_FACE[id]}`} aria-hidden="true">
-              {TYPED}
-            </span>
-          )}
         </Reveal>
         {grows && <i className={`of-grow-end of-grow-end--${id}`} data-grow-end aria-hidden="true" />}
         {/* The cursor: the island moves it and shows it; its ink blinks on
@@ -1031,47 +842,33 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
 
 // ── Act 4: the leader ─────────────────────────────────────────────────────
 // Projected: light on the dark, a little soft, with a halo. PROPOSED copy.
+// One card now, the countdown's (the five seconds took the other five).
 function Leader({ card }: { card: LeaderCard }) {
-  let body: ReactNode;
-  if (card === 'count-3' || card === 'count-2') {
-    body = (
-      <>
-        <svg className="of-leader__dial" viewBox="0 0 200 200" aria-hidden="true">
-          {/* The projector's halo, drawn in the picture (no filter on the
-              card: a filtered card cost a frame as it came up). */}
-          <filter id={`of-dial-glow-${card}`} x="-10%" y="-10%" width="120%" height="120%">
-            <feGaussianBlur stdDeviation="1.4" result="g" />
-            <feMerge>
-              <feMergeNode in="g" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <g filter={`url(#of-dial-glow-${card})`}>
-            <circle cx="100" cy="100" r="92" />
-            <circle cx="100" cy="100" r="74" />
-            <path d="M100 0 V200 M0 100 H200" />
-          </g>
-        </svg>
-        <span className="of-leader__n font-ui">{card === 'count-3' ? '3' : '2'}</span>
-      </>
-    );
-  } else if (card === 'head') {
-    body = <span className="of-leader__head font-ui">HEAD</span>;
-  } else if (card === '35mm') {
-    body = <span className="of-leader__v font-ui">35MM</span>;
-  } else if (card === 'reel') {
-    body = <span className="of-leader__reel font-ui">REEL 01</span>;
-  } else {
-    body = <span className="of-leader__word font-ui">ARCHIVE</span>;
-  }
   return (
     <div className={`of-leader of-leader--${card}`} data-leader={card}>
-      {body}
+      <svg className="of-leader__dial" viewBox="0 0 200 200" aria-hidden="true">
+        {/* The projector's halo, drawn in the picture (no filter on the
+            card: a filtered card cost a frame as it came up). */}
+        <filter id={`of-dial-glow-${card}`} x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="1.4" result="g" />
+          <feMerge>
+            <feMergeNode in="g" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <g filter={`url(#of-dial-glow-${card})`}>
+          <circle cx="100" cy="100" r="92" />
+          <circle cx="100" cy="100" r="74" />
+          <path d="M100 0 V200 M0 100 H200" />
+        </g>
+      </svg>
+      <span className="of-leader__n font-ui">{card.slice('count-'.length)}</span>
     </div>
   );
 }
 
-const PERF_ROW = Array.from({ length: 11 }, (_, i) => <i key={i} />);
+/** The frame line's perforations (what the slip shows past the frame). */
+const PERF_ROW = Array.from({ length: 3 }, (_, i) => <i key={i} />);
 const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
 
 /**
@@ -1080,8 +877,8 @@ const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
  * marks, the grain; the relay's machines
  * over them; the hand-off's lime block; for the burn the sepia and its
  * canvas and — past its foot — the frame line and perforations a slip
- * shows), the dark of the burn with its leader and lit perforations, and the
- * dark of the end with the title. `pictures`: his photographs (the prints,
+ * shows), the dark of the burn with its leader card, and the dark of the
+ * end with the title. `pictures`: his photographs (the prints,
  * the magazine's plate, the lightbox's frames).
  */
 export default function OpeningScenes({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
@@ -1124,8 +921,8 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
             its perforations, and the top of the next frame. */}
         <div className="of-frame__next" data-next aria-hidden="true">
           <div className="of-frame__line">
-            <span className="of-frame__perfs of-frame__perfs--l">{PERF_ROW.slice(0, 3)}</span>
-            <span className="of-frame__perfs of-frame__perfs--r">{PERF_ROW.slice(0, 3)}</span>
+            <span className="of-frame__perfs of-frame__perfs--l">{PERF_ROW}</span>
+            <span className="of-frame__perfs of-frame__perfs--r">{PERF_ROW}</span>
           </div>
           <div className="of-frame__below" />
         </div>
@@ -1134,9 +931,6 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
       {LEADER.map((card) => (
         <Leader key={card} card={card} />
       ))}
-      <div className="of-perfrow" data-perfrow aria-hidden="true">
-        {PERF_ROW}
-      </div>
 
       <div className="of-end" data-end>
         <div className="of-end__ground" />

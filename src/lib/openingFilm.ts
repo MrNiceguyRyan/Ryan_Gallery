@@ -1,94 +1,119 @@
-// ── The opening film: a retro editorial type film (v6) ──
+// ── The opening film: a retro editorial type film (v7, five seconds) ──
 // The homepage opens on a short film (src/components/home/OpeningFilm.tsx,
 // its scenes in OpeningScenes.tsx, its materials in src/styles/opening.css).
 // The owner's spec (2026-09-28, "复古编辑部动态排版") and his changes of
 // 2026-09-29 (no place names — keep the suspense; match cuts through many
 // kinds of printed matter round a fixed lime anchor; a typed line relayed
-// across machines; no limit on the length; the single words FIRST, then the
-// relay — "先单独的字，再轮到打字接力"; richer, more layered pages; black-and-
-// white pages and a stronger colour rhythm, in runs, never abrupt), in six
-// acts, after a count-in:
+// across machines; the single words FIRST, then the relay — "先单独的字，再
+// 轮到打字接力"; richer, more layered pages; black-and-white pages and a
+// stronger colour rhythm, in runs, never abrupt). Then, 2026-10-05: "现在我
+// 觉得开头的动画可以再短一点点 控制在5秒" — the whole opening, from the first
+// paint to the landing done (the page's own words in place, input free),
+// within five seconds. It was 10.1 s. Every act is kept, each COMPRESSED
+// rather than cut (what he loved: the printed matter's quick cuts, "第一版
+// 各种杂志报纸做的文字快切这样的也很好", "快切部分效果也不错"; the relay
+// across machines with the antique computer; the single words first):
 //
-//   0. The proof (1 s, before the clock). The owner, 2026-09-29: "然后开头
-//      动画最开端是直接播放，有点突兀了，可以加一个小小的开场" (the very
-//      start just plays, a little abrupt: add a small opening). The first
-//      paint is a printer's proof on the newspaper's own newsprint, a flat,
-//      even sheet: the lights go down, the lime plate prints the anchor's
-//      block, the ink plate prints ARCHIVE into it, and the first page is
-//      printed round it — four beats a third of a second apart, on the
-//      film's sixth, then the cuts at double time. Light on light: it turns
-//      nothing over. It is what the reader sees while the island and the
-//      faces come (the busy first page used to sit there frozen, about to
-//      snap): its beats are the stylesheet's and a head script's, from the
-//      first paint, so on a slow load it holds as a finished title card —
-//      ARCHIVE on its lime plate — until the island prints the page.
-//   1. Match cuts round a fixed lime anchor (3⅓ s, 17 scenes on a sixth of
-//      a second — the owner's "缩短3-4秒", 2026-09-29, took it down from 5.7 s
-//      and 25): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU. The first paint
-//      is the proof (act 0), with the first page drawn under it, unseen.
-//      The block's centre, its height and the word's cap
-//      height never move; only the word and its face change (Fraunces 900,
-//      Fraunces italic, Space Grotesk 700, Fraunces 400, the monospace).
-//      Round it the frame is recomposed every cut, alternating an editorial
-//      page (giant cropped Fraunces words drifting with a motion blur of
-//      pre-drawn copies; words beside the anchor; layered print — a taped
-//      photograph, a torn clipping, a receipt, a stamp, a margin note, a pull
-//      quote, registration marks) and a piece of printed matter built round
-//      the word (a newspaper, a dictionary, a magazine, a slate, a ticket, a
-//      passport, a telegram, a postcard). The colour comes in runs: paper
-//      for ARCHIVE, black and white for CAMERA, the ticket stocks' brown and
-//      maroon for TRAVEL, paper again for THOUGHT and YOU.
+//   act                      before     now
+//   0. the proof             1000 ms    500 ms (four beats a sixth apart)
+//   1. the match cuts        3333       1667 (17 pages → 10, each a sixth)
+//   2. the hand-off           333        167 (two twelfths)
+//   3. the relay             2333        917 (8 machines → 5; 11 twelfths)
+//   4. the burn               917        375 (22 frames at 24 fps → 9)
+//   5. the dark, typed        875        292 (7 keys, a 24th each)
+//   6. the end title          625        292 (the morph, the credits
+//                                        rising, the formed title held)
+//      landing A              700        555
+//      first paint → landed  10.11 s     4.74 s (measured, real time: a
+//                                        desktop 4.74, a phone at a
+//                                        quarter of the CPU 4.79; a
+//                                        sixth more on a load whose
+//                                        first face misses its beat)
+//
+//   0. The proof (half a second, before the clock). The owner, 2026-09-29:
+//      "然后开头动画最开端是直接播放，有点突兀了，可以加一个小小的开场" (the
+//      very start just plays, a little abrupt: add a small opening). The
+//      first paint is a printer's proof on the newspaper's own newsprint, a
+//      flat, even sheet: the lights go down, the lime plate prints the
+//      anchor's block, the ink plate prints ARCHIVE into it, and the first
+//      page is printed round it — four beats a sixth apart, the cuts' own
+//      grid. Light on light: it turns nothing over. It is what the reader
+//      sees while the island and the faces come: its beats are the
+//      stylesheet's and a head script's, from the first paint, so on a slow
+//      load it holds as a finished title card — ARCHIVE on its lime plate —
+//      until the island prints the page.
+//   1. Match cuts round a fixed lime anchor (1⅔ s: ten pages, each a sixth
+//      of a second): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU, each word
+//      on two kinds of printed matter — an editorial page and a piece of
+//      printed matter, by turns. The block's centre, its height and the
+//      word's cap height never move; only the word and its face change
+//      (Fraunces 900, Fraunces italic, Space Grotesk 700, Fraunces 400, the
+//      monospace). Round it the frame is recomposed every cut, alternating
+//      an editorial page (giant cropped Fraunces words drifting with a
+//      motion blur of pre-drawn copies; words beside the anchor; layered
+//      print — a taped photograph, a torn clipping, a receipt, a stamp, a
+//      margin note, a pull quote, registration marks) and a piece of printed
+//      matter built round the word (a newspaper, a magazine, a ticket, a
+//      telegram, a postcard). The colour comes in runs: paper for ARCHIVE,
+//      black and white for CAMERA, the ticket stocks for TRAVEL, paper again
+//      for THOUGHT and YOU. (The dictionary, the slate, the passport and
+//      seven editorial pages went: the pages most like their neighbours.)
 //   2. The hand-off: the page cuts away under the anchor; the lime block
 //      alone glides and shrinks into the first machine's cursor.
-//   3. A typewriter relay (2⅓ s): "an archive of travel" is typed, and every
-//      few letters the whole frame hard-cuts to another machine — a 1-bit
-//      desktop computer, a dark terminal, a strip of film on a lightbox, a
-//      label maker's tape, a word processor, a bare page, grid paper, a
-//      typewriter — slow to fast, each in its own face (a bitmap, a dot
-//      matrix, an edge print, embossed capitals, a sans, a serif, a hand, the
-//      typewriter's), all on one left edge, one baseline, one cap height; the
-//      typed count carries on across every cut.
+//   3. A typewriter relay (11 twelfths): "an archive of travel" is typed,
+//      and every four letters the whole frame hard-cuts to another machine —
+//      the antique 1-bit computer, a strip of film on a lightbox, a word
+//      processor, grid paper, the typewriter — slow to fast (the computer
+//      longest), each in its own face (a bitmap, an edge print, a sans, a
+//      hand, the typewriter's), all on one left edge, one baseline, one cap
+//      height; the typed count carries on across every cut. All five are
+//      light: the dark terminal and the label maker's tape went with the
+//      time, because a quarter second of dark between light machines, a
+//      second from the burn's dark, read as a flash (the owner hates 晃眼).
 //   4. A film burn, stepped at 24 fps, on the typewriter's paper: flicker,
 //      scratches and gate weave, a frame slip, a burn spreading from the
 //      line on an fbm mask (a WebGL shader on its own canvas), the frame
-//      darkening and sliding out at 6°, a black frame, six leader cards one
-//      frame each, and a row of lit sprocket holes into the dark.
-//   5. The dark: "ryan xu" is typed on the film's base, with a lime block
-//      cursor (the act's one lime) that blinks once more when done.
+//      darkening and sliding out at 6°, and a leader's countdown card.
+//   5. The dark: "ryan xu" is typed on the film's base, a key a 24th, with a
+//      lime block cursor (the act's one lime).
 //   6. The end title: that line is struck in the title's case ("Ryan Xu")
 //      and turns, letter by letter, into his name in Fraunces — set exactly
 //      as the first screen sets it (face, case, tracking), so it flies home
 //      without changing at all — with CAMERA · ARCHIVE · TRAVEL · THOUGHT
-//      under it, and YOU.
+//      rising under it, and YOU.
 //
 // Then it lands (landing A, "words fly home"): the dark dissolves into the
 // first screen, his name glides home first, whole (the signature), and
 // CAMERA, TRAVEL, ARCHIVE, THOUGHT (and YOU, when the page has a place for
 // it) follow into their places in the entrance's opening words
-// (src/components/home/EntranceIntro.tsx).
+// (src/components/home/EntranceIntro.tsx), in either language (the page
+// prints both; the shown one is the target: src/i18n shownMatch).
 //
-// No place names: the places are the archive's suspense. The only ones in
-// the film are two tiny easter eggs (EGGS: a dateline in a newspaper column,
-// a park's cancellation stamp in a passport's corner), never large, never
-// the keyword, never centred.
+// No place names: the places are the archive's suspense. The only one in
+// the film is a tiny easter egg (EGGS: a dateline in a newspaper column),
+// never large, never the keyword, never centred.
 //
-// Smooth, by the spec's definition: every hard cut falls on its act's grid —
-// the match cuts on the sixth of a second (CUT_MS: 10 vsyncs at 60 Hz, 20 at
-// 120 Hz), the hand-off and the relay on the twelfth (FRAME12_MS), the burn
-// on the 24th, the dark and the title on the eighth (BEAT_MS); the anchor
-// never moves; the drift runs on across a cut (the same way or a quarter
-// turn); no fallback face, no blank frame, no dropped frame at a cut (the
-// fonts and his photographs are in before the clock starts, every page is
-// drawn a quarter second before its cut, and everything is transform and
-// opacity on one clock). The proof's beats are on the same sixth, counted
-// from its first frame: the clock is taken from the proof's own start
-// (pageStart, filmStart), so the count-in and the cuts are one grid.
+// Smooth, by the spec's definition: every hard cut falls on its act's grid,
+// and every grid is whole vsyncs — the proof and the match cuts on the
+// sixth of a second (CUT_MS: 10 vsyncs at 60 Hz, 20 at 120 Hz), the
+// hand-off and the relay on the twelfth (FRAME12_MS: 5 and 10), the burn,
+// the dark and the title on the 24th (FRAME24_MS: the film's own rate; 5
+// vsyncs at 120 Hz); the anchor never moves; the drift runs on across a cut
+// (the same way or a quarter turn); no fallback face, no blank frame, no
+// dropped frame at a cut (the fonts are in before the clock starts, every
+// page is painted well before its cut and rastered just before it, the
+// clock is laid only once its keyframes are, and everything is transform
+// and opacity on one clock). The proof's beats are on the same sixth,
+// counted from its first frame: the clock is taken from the proof's own
+// start (pageStart, filmStart), so the count-in and the cuts are one grid.
+// Never more than three turns of light in any second (FLIP_BUDGET; this cut
+// turns three times in all, never twice in a second but at CAMERA's run).
 //
 // It plays once a tab session (src/lib/reelVisit.ts). While it plays (the
-// proof too), ONLY the Skip pill skips it (to the end title and a hurried
-// landing — never a hard cut to the page); a wheel, a touch, a key or a click anywhere else
-// does nothing at all (the page's scroll is held). Reduced motion gets the
-// end title as a still and a calm crossfade.
+// proof too), ONLY the Skip pill skips it (to the formed end title and a
+// hurried landing — never a hard cut to the page); a wheel, a touch, a key
+// or a click anywhere else does nothing at all (the page's scroll is held).
+// Reduced motion gets the end title as a still and a calm crossfade.
 //
 // Everything in this module is pure (no DOM): the whole film is DATA here —
 // the acts, the scenes (each {face, ground, giants, side words, layers} or a
@@ -130,9 +155,10 @@ export const CUT_MS = 1000 / 6;
 /** The hand-off and the relay cut on the twelfth of a second (five vsyncs at
  *  60 Hz, ten at 120 Hz). */
 export const FRAME12_MS = 1000 / 12;
-/** The dark, the title and the landing: the eighth of a second. */
+/** An eighth of a second (a measure some timings are still given in). */
 export const BEAT_MS = 125;
-/** The burn is stepped at 24 fps. */
+/** The burn, the dark and the title are stepped at 24 fps (the film's own
+ *  rate; five vsyncs at 120 Hz). */
 export const FRAME24_MS = 1000 / 24;
 /** Below this width the page is the compact tree (HomePage's `lg`). */
 export const PHONE_MAX_WIDTH = 1023;
@@ -158,15 +184,16 @@ export interface Span {
 // flat, even sheet with its registration mark and its slug. The lights go
 // down (the frame's vignette comes in), the lime plate prints the anchor's
 // block, the ink plate prints its word, and the page is printed round it —
-// four beats a third of a second apart, then the cuts at double time.
+// four beats a sixth of a second apart, the cuts' own grid (they were a
+// third of a second apart; the owner's five seconds, 2026-10-05).
 // None of it waits for the island (its hydration is what the proof covers):
 // the stylesheet brings the lights down from the first paint, and a small
 // script in the page's head (src/lib/proofPlates.ts, from its first paint)
 // prints both plates on the proof's own sixth — the lime on the first beat
 // once the word's face is in (PROOF_FACE, at most PROOF_FACE_WAIT_MS), the
-// word a third of a second after it, whatever the island is doing. The
+// word a sixth of a second after it, whatever the island is doing. The
 // island takes the proof over on the same grid and prints the page on the
-// first sixth it can make, never sooner than a third of a second after the
+// first sixth it can make, never sooner than a sixth of a second after the
 // word (pageStart). So a fast load is the four beats; a slow one holds a
 // finished title card — ARCHIVE on its lime plate — until the page, never
 // an empty sheet (the owner's eye: a blank, still sheet reads as a page
@@ -179,17 +206,17 @@ export interface Span {
 export const PRELUDE = {
   /** Sixths before the page on a fast load: the first paint, the lime
    *  plate, the ink plate. */
-  beats: { paint: 6, lime: 4, word: 2 },
+  beats: { paint: 3, lime: 2, word: 1 },
   /** The lights go down across this many sixths from the first paint (the
    *  stylesheet; the first paint is a flat, even sheet). */
-  lights: 2,
+  lights: 1,
   /** The lime plate before its beat: drawn, never seen (the pages' own warm
    *  opacity: its raster is done before it prints). */
   unprinted: 0.002,
   /** The lime plate's first impression, and its ink setting to full (ms, on
    *  the house curve). */
   limeInk: 0.64,
-  set: 250,
+  set: 125,
   /** The newspaper's newsprint (.of-sheet--newspaper): proof and first page
    *  are one sheet, so only ink arrives with the page. */
   ground: '#e9e5d8',
@@ -197,7 +224,7 @@ export const PRELUDE = {
    *  culled), and unseen (under half an 8-bit level). */
   sheet: 0.998,
 } as const;
-export const PRELUDE_MS = PRELUDE.beats.paint * CUT_MS; // 1000
+export const PRELUDE_MS = PRELUDE.beats.paint * CUT_MS; // 500
 /** The clock is laid this much ahead of the proof's grid: the proof's beats
  *  (and so every cut after them) fall exactly on frame times — a sixth is
  *  ten vsyncs from the proof's first frame — and a step laid exactly on a
@@ -208,7 +235,7 @@ export const GRID_HAIR_MS = 0.25;
 /** The lime plate's ink from its beat: its first impression setting to full
  *  on the house curve (`samples` steps of 25 ms, linear between: under 0.013
  *  of opacity off the curve anywhere). `at`: ms after the beat. */
-export function proofInk(samples = 10) {
+export function proofInk(samples = Math.ceil(PRELUDE.set / 25)) {
   const curve = bezierFn(EASE.arrive);
   const out: { at: number; opacity: number }[] = [{ at: 0, opacity: PRELUDE.limeInk }];
   for (let i = 1; i <= samples; i += 1) {
@@ -219,7 +246,7 @@ export function proofInk(samples = 10) {
 }
 /** The lime plate on the film's clock (its beat at film time `lime`): held
  *  unprinted to its beat, then its ink (proofInk). */
-export function proofLimeKeys(lime: number = -PRELUDE.beats.lime * CUT_MS, samples = 10) {
+export function proofLimeKeys(lime: number = -PRELUDE.beats.lime * CUT_MS, samples = Math.ceil(PRELUDE.set / 25)) {
   return [{ t: lime, opacity: PRELUDE.unprinted as number }, ...proofInk(samples).map(({ at, opacity }) => ({ t: lime + at, opacity }))];
 }
 /** The proof's slug, at its foot, printed whole from the first paint (a real
@@ -238,8 +265,8 @@ export function limeBeat(origin: number, ready: number) {
 }
 /** Film 0 (the page) on document.timeline, once the plates are printed (the
  *  lime's beat `lime`, on the proof's grid): the first sixth at or after
- *  `ready` (the earliest the island's keyframes take effect: now +
- *  CLOCK_LEAD_MS), never sooner than a third of a second after the word. */
+ *  `ready` (the earliest the island's keyframes take effect: once they are
+ *  laid, plus CLOCK_LEAD_MS), never sooner than a sixth after the word. */
 export function pageStart(lime: number, ready: number) {
   const first = lime + PRELUDE.beats.lime * CUT_MS;
   const k = Math.max(0, Math.ceil((ready - first) / CUT_MS - 1e-6));
@@ -259,7 +286,10 @@ export function filmStart(origin: number | null, ready: number) {
 /** The first paint's anchor as the stylesheet sets it (opening.css --c0,
  *  --c0w, --c0l, --c0b), per cap height: the widest keyword's block
  *  (THOUGHT in Fraunces 400, 6.7286 caps of ink at 100 px, and its
- *  padding); the first word's block (ARCHIVE in Fraunces 900); where its
+ *  padding — the widest the film has set; kept as the anchor's measure in
+ *  the five-second cut, which no longer sets THOUGHT in it, so the anchor
+ *  is the size the owner approved); the first word's block (ARCHIVE in
+ *  Fraunces 900); where its
  *  pen is from the block's left edge; its baseline below its top, per em
  *  (the stylesheet sets it at --c0 / 0.7, and 0.7 is its cap height per
  *  em); and the optical size the stylesheet pins it at — its size at the
@@ -482,15 +512,12 @@ export interface Layers {
 }
 
 /** The printed matter (each drawn by its own sheet in OpeningScenes). */
-export type SheetKind = 'newspaper' | 'dictionary' | 'magazine' | 'slate' | 'ticket' | 'passport' | 'telegram' | 'postcard';
+export type SheetKind = 'newspaper' | 'magazine' | 'ticket' | 'telegram' | 'postcard';
 /** How each sheet reads (its paper, or the dark it is laid on). */
 export const SHEET_TONE: Record<SheetKind, Tone> = {
   newspaper: 'light',
-  dictionary: 'light',
   magazine: 'dark',
-  slate: 'dark',
   ticket: 'mid',
-  passport: 'mid',
   telegram: 'light',
   postcard: 'light',
 };
@@ -535,10 +562,9 @@ export const TEXTURE = [
 /** The credit along the foot of every editorial page (centred). */
 export const CREDIT = 'Ryan Xu · A personal archive of travel and thought';
 
-/** The printed matter's words (PROPOSED copy, except the dictionary, which
- *  is Webster's 1913 — public domain). `row`: the words either side of the
- *  anchor on its line; `above` / `below`: the lines over and under it. No
- *  place in any of it, but for the two eggs (EGGS). */
+/** The printed matter's words (PROPOSED copy). `row`: the words either side
+ *  of the anchor on its line; `above` / `below`: the lines over and under
+ *  it. No place in any of it, but for the egg (EGGS). */
 export const SHEETS = {
   newspaper: {
     edition: ['Saturday Edition', 'No. 1,204', 'Two Cents'],
@@ -558,24 +584,6 @@ export const SHEETS = {
     ],
     folio: 'A1',
   },
-  dictionary: {
-    head: ['Archipelago', '79', 'Archly'],
-    above: [
-      'Ar′chi·pel′a·go, n.; pl. -goes. Any sea or broad sheet of water interspersed with many islands or with a group of islands.',
-      'Ar′chi·tect, n. 1. A person skilled in the art of building; one who makes it his occupation to form plans and designs of buildings. 2. A contriver, designer, or maker.',
-      'Ar′chi·trave, n. (Arch.) The lower division of an entablature, or that part which rests immediately on the column.',
-    ],
-    row: ['', 'n.; pl. Archives. [F. archives, L. archivum, Gr. archeion government house.]'],
-    below: [
-      '1. pl. The place in which public records or historic documents are kept. 2. pl. Public records or documents preserved as evidence of facts; as, the archives of a country or family.',
-      'Ar′chi·vist, n. A keeper of archives or records.',
-      'Ar′chi·volt, n. (Arch.) The architectural member surrounding the curved opening of an arch.',
-    ],
-    tabs: ['A', 'B', 'C', 'D', 'E', 'F'],
-    fig: 'Fig. 12. — A press of drawers.',
-    key: 'ā, as in fāte; ă, as in făt; ä, as in fär; ē, as in mēte; ĭ, as in ĭn; ō, as in ōld; ŏ, as in nŏt',
-    note: 'cf. record',
-  },
   magazine: {
     kicker: 'The Picture Issue — Feature',
     deck: 'Twenty-four frames a second, and the one that stays.',
@@ -588,18 +596,6 @@ export const SHEETS = {
     caption: 'Photograph: Ryan Xu',
     runs: ['The Picture Issue', 'Feature'],
     folios: ['42', '43'],
-  },
-  slate: {
-    prod: ['Prod.', 'A personal archive'],
-    row: ['Roll 001', 'Scene 01 · Take 1'],
-    cells: [
-      ['Roll', '001'],
-      ['Scene', '01'],
-      ['Take', '1'],
-      ['Fps', '24'],
-    ],
-    foot: ['35 mm', 'Sync', 'Day'],
-    tape: 'mos',
   },
   ticket: {
     head: ['Single journey', 'Second class'],
@@ -620,15 +616,6 @@ export const SHEETS = {
     receipt: ['Fare', '1 × single', 'Paid', 'Thank you'],
     code: '4127 0417 11',
   },
-  passport: {
-    row: ['Visas', 'Endorsements'],
-    stamps: ['Admitted', 'Entry', 'Exit', 'No. 36'],
-    park: 'ZION NATIONAL PARK · UT',
-    mrz: 'P<ARCHIVE<<TRAVEL<<THOUGHT<<<<<<<<<<<<<<<<',
-    mrz2: '0417002536<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<04',
-    page: '17',
-    serial: '0417025',
-  },
   telegram: {
     fields: ['Received at 16.40', 'Words 17', 'Charges paid'],
     above: 'ARRIVED STOP LIGHT HOLDING STOP',
@@ -646,12 +633,10 @@ export const SHEETS = {
   },
 } as const;
 
-/** The easter eggs: the only place names in the film — tiny (6–7 px), in a
- *  corner of a page, never the keyword, never large, never centred. */
-export const EGGS = [
-  { sheet: 'newspaper', text: SHEETS.newspaper.dateline, px: 7 },
-  { sheet: 'passport', text: SHEETS.passport.park, px: 6 },
-] as const;
+/** The easter egg: the only place name in the film — tiny (7 px), in a
+ *  column of the newspaper, never the keyword, never large, never centred
+ *  (the passport's park stamp went with the passport). */
+export const EGGS = [{ sheet: 'newspaper', text: SHEETS.newspaper.dateline, px: 7 }] as const;
 /** The places on his route: named nowhere in the film but the eggs. */
 export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New York', 'Florida', 'Arizona', 'Utah', 'Manhattan', 'Washington'] as const;
 
@@ -659,72 +644,28 @@ export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New Yo
 const RECEIPT_LAB = ['DEV + CONTACT', '135 · 36 EXP', '1 ROLL', 'PUSH +1', 'TOTAL  ——', 'THANK YOU'] as const;
 const RECEIPT_ROAD = ['1 × SINGLE', 'OUT  ——', 'RETURN  ——', 'PAID', 'KEEP FOR INSPECTION'] as const;
 
-/** Every scene, in order: seventeen, four a keyword (three for THOUGHT, two
- *  for YOU), an editorial page and a piece of printed matter by turns. The
- *  owner found the film long (2026-09-29, "缩短3-4秒"): the pages most like
- *  their neighbours went (the catalogue card, the strip of negatives, the
- *  book, the notebook and four editorial pages) and every page now holds one
- *  sixth — but the first (drawn from the first paint, under the proof), two, and the last
- *  (YOU, before the hand-off), three. The drift turns only by a quarter
- *  between neighbours, so the motion runs on across every cut; the face
+/** Every scene, in order: ten, two a keyword — a piece of printed matter
+ *  and an editorial page, strictly by turns, so every keyword is seen in
+ *  two kinds of printed matter — each a sixth of a second. The owner's five seconds
+ *  (2026-10-05) took it from seventeen: the pages most like their
+ *  neighbours went (the dictionary, the slate, the passport, and the
+ *  editorial pages NEGATIVE, LENS, ROUTE and INK), and the first page and
+ *  YOU's now hold one sixth like the rest (they held two and three). The
+ *  drift turns only by a quarter between neighbours, so the motion runs on
+ *  across every cut (three pages turned a quarter to keep it so); the face
  *  changes at every cut. The colour in runs: ARCHIVE on paper, CAMERA in
- *  black and white, TRAVEL in the ticket stocks (rust, maroon), THOUGHT and
- *  YOU on paper again with a second ink. */
+ *  black and white, TRAVEL in the ticket stocks, THOUGHT and YOU on paper
+ *  again with a second ink. */
 export const SCENES: readonly Scene[] = [
   // ── ARCHIVE: paper ──
   {
     word: 'ARCHIVE',
     face: 'f900',
-    slots: 2,
+    slots: 1,
     drift: 'right',
     driftPx: 36,
     sheet: 'newspaper',
     giants: [{ text: 'LEDGER', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
-  },
-  {
-    word: 'ARCHIVE',
-    face: 'fit',
-    slots: 1,
-    drift: 'right',
-    driftPx: 40,
-    ground: 'bone',
-    ink: 'maroon',
-    giants: [
-      { text: 'NEGA', face: 'f900', cap: 0.42, x: -0.03, y: 0.34, align: 'l' },
-      { text: 'TIVE', face: 'f900', cap: 0.42, x: 1.03, y: 1, yCap: 0.16, align: 'r' },
-    ],
-    side: [
-      { text: 'Collected', role: 'caps', at: 'l', row: 0 },
-      { text: 'kept by hand', role: 'italic', at: 'r', row: 0 },
-      { text: 'Plate I', role: 'thin', at: 'r', row: 1 },
-    ],
-    deco: {
-      ringed: 'The',
-      ring: [0.08, 0.64],
-      texture: [
-        { at: [0.8, 0.66], text: 0, w: 150 },
-        { at: [0.035, 0.42], text: 2, w: 132 },
-      ],
-      metaL: 'Visual archive · Vol. I',
-      metaR: 'Roll 01 · Frame 02',
-    },
-    layers: {
-      density: 'dense',
-      run: ['The Archive — Vol. I', '12'],
-      print: { pic: 0, treat: 'duotone', ink: 'maroon', at: [0.68, 0.1], w: 0.17, rot: 2.5, caption: 'Plate 2 · a contact print', tape: true, phone: true },
-      clip: { head: 'Found in a drawer', text: 1, at: [0.05, 0.72], w: 0.19, rot: -2.2 },
-      note: { text: 'sharper than the last', at: [0.05, 0.58], rot: -4, arrow: 'r' },
-      marks: true,
-    },
-  },
-  {
-    word: 'ARCHIVE',
-    face: 'f900',
-    slots: 1,
-    drift: 'down',
-    driftPx: 30,
-    sheet: 'dictionary',
-    giants: [{ text: 'A', face: 'f400', cap: 0.45, x: -0.03, y: 1, yCap: 0.3, align: 'l' }],
   },
   {
     word: 'ARCHIVE',
@@ -804,53 +745,23 @@ export const SCENES: readonly Scene[] = [
       marks: true,
     },
   },
+  // ── TRAVEL: the ticket stocks ──
   {
-    word: 'CAMERA',
+    word: 'TRAVEL',
     face: 'sg700',
     slots: 1,
-    drift: 'right',
-    driftPx: 34,
-    sheet: 'slate',
-    giants: [{ text: 'TAKE', face: 'f900', cap: 0.44, x: 0.5, y: 1, yCap: 0.52, align: 'c' }],
+    // A quarter turn from CAMERA's rise.
+    drift: 'left',
+    driftPx: 36,
+    sheet: 'ticket',
+    giants: [{ text: 'SINGLE', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
   },
-  {
-    word: 'CAMERA',
-    face: 'f400',
-    slots: 1,
-    drift: 'right',
-    driftPx: 40,
-    ground: 'slate',
-    giants: [
-      { text: 'LENS', face: 'f900', cap: 0.45, x: 0.02, y: 0.35, align: 'l' },
-      { text: 'FOCUS', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.1, align: 'r' },
-    ],
-    side: [
-      { text: 'Field notes', role: 'caps', at: 'l', row: 0 },
-      { text: 'after the rain', role: 'italic', at: 'r', row: 0 },
-      { text: 'Index', role: 'thin', at: 'l', row: 1 },
-    ],
-    deco: {
-      ringed: 'on',
-      ring: [0.9, 0.32],
-      texture: [
-        { at: [0.82, 0.62], text: 2, w: 138 },
-        { at: [0.035, 0.64], text: 7, w: 130 },
-      ],
-      metaL: 'Contact sheet 10',
-      metaR: 'Frame 10',
-    },
-    layers: {
-      density: 'calm',
-      print: { pic: 2, treat: 'negative', at: [0.7, 0.7], w: 0.15, rot: 0, caption: 'Neg. 14 — reversed', phone: true },
-      barcode: { code: '0417 0010', at: [0.07, 0.08] },
-    },
-  },
-  // ── TRAVEL: the ticket stocks ──
   {
     word: 'TRAVEL',
     face: 'f900',
     slots: 1,
-    drift: 'down',
+    // The ticket's way on (it fell, after the slate's run).
+    drift: 'left',
     driftPx: 34,
     ground: 'rust',
     giants: [
@@ -880,63 +791,25 @@ export const SCENES: readonly Scene[] = [
       clip: { head: 'Notes from the road', text: 4, at: [0.72, 0.7], w: 0.18, rot: 1.8 },
     },
   },
-  {
-    word: 'TRAVEL',
-    face: 'sg700',
-    slots: 1,
-    drift: 'left',
-    driftPx: 36,
-    sheet: 'ticket',
-    giants: [{ text: 'SINGLE', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
-  },
-  {
-    word: 'TRAVEL',
-    face: 'fit',
-    slots: 1,
-    drift: 'left',
-    driftPx: 40,
-    ground: 'maroon',
-    giants: [
-      { text: 'ROUTE', face: 'f900', cap: 0.43, x: 1.04, y: 0.33, align: 'r' },
-      { text: 'NORTH', face: 'f400', cap: 0.34, x: -0.03, y: 1, yCap: 0.12, align: 'l' },
-    ],
-    side: [
-      { text: 'On foot', role: 'caps', at: 'l', row: 0 },
-      { text: 'between trains', role: 'italic', at: 'r', row: 0 },
-      { text: 'Appendix', role: 'thin', at: 'l', row: -1 },
-    ],
-    deco: {
-      ringed: 'a',
-      ring: [0.9, 0.64],
-      texture: [
-        { at: [0.82, 0.3], text: 0, w: 138 },
-        { at: [0.035, 0.66], text: 3, w: 128 },
-      ],
-      metaL: 'Contact sheet 14',
-      metaR: 'Frame 14',
-    },
-    layers: {
-      density: 'calm',
-      run: ['Between trains', '57'],
-      tabs: ['I', 'II', 'III', 'IV', 'V'],
-      clip: { head: 'The long way round', text: 4, at: [0.06, 0.1], w: 0.17, rot: -1.5, phone: true },
-    },
-  },
-  {
-    word: 'TRAVEL',
-    face: 'f900',
-    slots: 1,
-    drift: 'up',
-    driftPx: 36,
-    sheet: 'passport',
-    giants: [{ text: 'VISA', face: 'f900', cap: 0.44, x: -0.03, y: 0.3, align: 'l' }],
-  },
   // ── THOUGHT: paper, a green second ink ──
   {
     word: 'THOUGHT',
-    face: 'fit',
+    face: 'mono',
     slots: 1,
-    drift: 'right',
+    // A quarter turn from the rust page's.
+    drift: 'down',
+    driftPx: 32,
+    sheet: 'telegram',
+    giants: [{ text: 'TELEGRAM', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
+  },
+  {
+    word: 'THOUGHT',
+    // Fraunces 400 (it was the italic: the postcard's, two pages on, now
+    // follows it — a face change at every cut).
+    face: 'f400',
+    slots: 1,
+    // The telegram's way on (it ran right, after the passport).
+    drift: 'down',
     driftPx: 40,
     ground: 'bone',
     ink: 'green',
@@ -965,53 +838,14 @@ export const SCENES: readonly Scene[] = [
       pull: { text: 'Written down, it stays.', at: [0.64, 0.1], w: 0.2, phone: true },
     },
   },
-  {
-    word: 'THOUGHT',
-    face: 'mono',
-    slots: 1,
-    drift: 'down',
-    driftPx: 32,
-    sheet: 'telegram',
-    giants: [{ text: 'TELEGRAM', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
-  },
-  {
-    word: 'THOUGHT',
-    face: 'f400',
-    slots: 1,
-    drift: 'right',
-    driftPx: 40,
-    ground: 'bone',
-    giants: [
-      { text: 'INK', face: 'f900', cap: 0.45, x: -0.02, y: 0.35, align: 'l' },
-      { text: 'PAPER', face: 'f400', cap: 0.36, x: 1.03, y: 1, yCap: 0.12, align: 'r' },
-    ],
-    side: [
-      { text: 'Second printing', role: 'caps', at: 'l', row: 0 },
-      { text: 'still developing', role: 'italic', at: 'r', row: 0 },
-      { text: 'Folio', role: 'thin', at: 'l', row: -1 },
-    ],
-    deco: {
-      ringed: 'on',
-      ring: [0.9, 0.66],
-      texture: [
-        { at: [0.82, 0.3], text: 4, w: 138 },
-        { at: [0.035, 0.64], text: 2, w: 128 },
-      ],
-      metaL: 'Visual archive',
-      metaR: 'Frame 22',
-    },
-    layers: {
-      density: 'calm',
-      run: ['Second printing', '93'],
-      marks: true,
-    },
-  },
   // ── YOU: paper, a blue second ink ──
   {
     word: 'YOU',
     face: 'fit',
     slots: 1,
-    drift: 'up',
+    // A quarter turn from the day book's fall (it rose, after a page that
+    // ran right).
+    drift: 'right',
     driftPx: 32,
     sheet: 'postcard',
     giants: [{ text: 'POST CARD', face: 'f900', cap: 0.36, x: 0.5, y: 0.19, align: 'c' }],
@@ -1019,9 +853,9 @@ export const SCENES: readonly Scene[] = [
   {
     word: 'YOU',
     face: 'f900',
-    slots: 3,
+    slots: 1,
     drift: 'up',
-    driftPx: 44,
+    driftPx: 40,
     ground: 'bone',
     giants: [
       { text: 'FIRST', face: 'f400', cap: 0.4, x: 0.5, y: 0.33, align: 'c' },
@@ -1049,6 +883,7 @@ export const SCENES: readonly Scene[] = [
     },
   },
 ];
+
 /** The scenes each layout plays (indices into SCENES): every one on both. */
 export const ACT_CUTS: Record<FilmLayout, readonly number[]> = {
   desktop: SCENES.map((_, i) => i),
@@ -1060,11 +895,11 @@ export const ACT_CUTS: Record<FilmLayout, readonly number[]> = {
 export const GLIDE_EASE = [0.2, 0.7, 0.1, 1] as const;
 /** The last page cuts away under the anchor (a hard cut, on the sixth the
  *  last scene ends); the lime block alone glides and shrinks into the first
- *  machine's cursor across four twelfths, on the glide curve, and becomes it
+ *  machine's cursor across two twelfths, on the glide curve, and becomes it
  *  (the same lime box, on the same frame). The anchor's word goes with the
  *  page: never a word shrinking into a cursor. */
 export const HAND = {
-  frames: 4,
+  frames: 2,
   ease: GLIDE_EASE,
 } as const;
 
@@ -1074,35 +909,39 @@ export const HAND = {
 export const TYPED = 'an archive of travel';
 
 /** The machines the line is typed on, in order, how long each is on screen
- *  (twelfths of a second) and how many keys it strikes: slow to fast (2⅓ s
- *  in all, down from 3 s: the last four machines a sixth each), then the
- *  typewriter's paper holds (the last letter, the cursor blinking, the
- *  burn — which is on the same paper for its first half second). Each sets the line in its own face (the owner's "字体模范的切换"):
- *  a 1-bit desktop's bitmap, a film's edge print, a terminal's dot matrix, a
- *  label maker's embossed capitals, a word processor's sans, a bare page's
- *  serif, a hand on grid paper, the typewriter's — on one left edge, one
- *  baseline, one cap height. Light (the desktop, the lightbox), then the
- *  dark run (the terminal, the tape on its desk), then light to the burn:
- *  the relay turns the picture over twice. Every machine strikes a visible letter (never
- *  only a space), and its first key falls on its own cut (RELAY_KEYS). */
-export type StyleId = 'mac' | 'film' | 'crt' | 'label' | 'beige' | 'bone' | 'grid' | 'paper';
-export type RelayFace = 'pixel' | 'dot' | 'edge' | 'emboss' | 'sans' | 'serif' | 'hand' | 'type';
+ *  (twelfths of a second) and how many keys it strikes: slow to fast — the
+ *  antique computer a quarter second (and under the hand-off before it, so
+ *  it is on screen five twelfths), every other machine a sixth (11 twelfths
+ *  in all, down from 28) — then the typewriter's paper holds (the last
+ *  letter, the cursor blinking, the burn — which is on the same paper for
+ *  its first quarter second). Four keys a machine, the line twice as fast
+ *  as it was (about 24 letters a second: the relay's own acceleration).
+ *  Each sets the line in its own face (the owner's "字体模范的切换"): the
+ *  1-bit computer's bitmap, a film's edge print, a word processor's sans, a
+ *  hand on grid paper, the typewriter's — on one left edge, one baseline,
+ *  one cap height. All light: the dark terminal and the label maker's tape
+ *  went (with a quarter second each, the dark run between light machines a
+ *  second before the burn's dark read as a flash), and so did the bare
+ *  page (the typewriter's paper's twin). Every machine strikes a visible
+ *  letter (never only a space), and its first key falls on its own cut
+ *  (RELAY_KEYS). */
+export type StyleId = 'mac' | 'film' | 'beige' | 'grid' | 'paper';
+export type RelayFace = 'pixel' | 'edge' | 'sans' | 'hand' | 'type';
 export const STYLES: readonly { id: StyleId; face: RelayFace; frames: number; keys: number; tone: Tone }[] = [
-  { id: 'mac', face: 'pixel', frames: 8, keys: 4, tone: 'light' },
-  { id: 'film', face: 'edge', frames: 4, keys: 4, tone: 'light' },
-  { id: 'crt', face: 'dot', frames: 4, keys: 3, tone: 'dark' },
-  { id: 'label', face: 'emboss', frames: 3, keys: 2, tone: 'dark' },
-  { id: 'beige', face: 'sans', frames: 2, keys: 2, tone: 'light' },
-  { id: 'bone', face: 'serif', frames: 2, keys: 2, tone: 'light' },
-  { id: 'grid', face: 'hand', frames: 2, keys: 2, tone: 'light' },
-  { id: 'paper', face: 'type', frames: 3, keys: 1, tone: 'light' },
+  { id: 'mac', face: 'pixel', frames: 3, keys: 4, tone: 'light' },
+  { id: 'film', face: 'edge', frames: 2, keys: 4, tone: 'light' },
+  { id: 'beige', face: 'sans', frames: 2, keys: 4, tone: 'light' },
+  { id: 'grid', face: 'hand', frames: 2, keys: 4, tone: 'light' },
+  { id: 'paper', face: 'type', frames: 2, keys: 4, tone: 'light' },
 ];
 export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
 /** The machine the burn takes (the last). */
 export const BURN_STYLE: StyleId = 'paper';
 
-/** The cursor's blink period (steps, half on and half off). */
-export const CURSOR_MS = 530;
+/** The cursor's blink period (steps, half on and half off): a third of a
+ *  second — half on, half off, each a sixth, the film's own grid (it was
+ *  the desktop's 530 ms; the burn now takes the paper within 0.35 s). */
+export const CURSOR_MS = 1000 / 3;
 /** The blink on the film's clock: on at `start`, then off and on every half
  *  period until `end` (the times it changes, and to what). */
 export function blinkSteps(start: number, end: number, period = CURSOR_MS): [number, 0 | 1][] {
@@ -1111,14 +950,14 @@ export function blinkSteps(start: number, end: number, period = CURSOR_MS): [num
   for (let k = 1; start + k * half < end; k += 1) out.push([start + k * half, k % 2 === 0 ? 1 : 0]);
   return out;
 }
-/** The first letter three twelfths after the cursor has landed. */
-export const TYPE_AT = 3 * FRAME12_MS;
+/** The first letter a twelfth after the cursor has landed. */
+export const TYPE_AT = FRAME12_MS;
 /** The relay's keys: each machine's first on its own cut (a new machine
- *  arrives with a new letter, never a keystroke a frame before a cut), the
- *  rest evenly across its time — about ten letters a second. A key at
+ *  arrives with a new letter, never a keystroke two frames before a cut),
+ *  the rest evenly across its time — about 24 letters a second. A key at
  *  least `jitterClear` ms from both of its machine's cuts is nudged by up
  *  to ±`jitter` ms (seeded); none falls in the `quiet` ms before a cut. */
-export const RELAY_KEYS = { jitter: 20, jitterClear: 70, quiet: 50, seed: 41 } as const;
+export const RELAY_KEYS = { jitter: 8, jitterClear: 60, quiet: 33, seed: 41 } as const;
 
 /** When each character of `text` appears: the first at `start`, the last
  *  at `last` (neither nudged), evenly between, each nudged by a seeded
@@ -1188,44 +1027,40 @@ export const GLYPH_MORPH = {
 
 // ── Act 4: the film burn (24 fps) ─────────────────────────────────────────
 // On the typewriter's paper (the relay's last machine). Frame numbers are
-// 0–21 from the act's start (22 frames: one black frame, not two, and three
-// frames of lit perforations, not four — the owner's shorter film). The canvas (a fragment
-// shader) is drawn only when the frame number changes; everything else is
-// held on the frame by stepped keyframes.
+// 0–8 from the act's start: nine frames, every stage of the burn kept and
+// each a frame or two shorter (it was 22 frames: the five seconds took the
+// black frame, five of the six leader cards and the three frames of lit
+// perforations). The canvas (a fragment shader) is drawn only when the
+// frame number changes; everything else is held on the frame by stepped
+// keyframes.
 export const BURN = {
-  frames: 22,
-  /** f0–2: flicker (brightness ±10%), scratches and dust; gate weave from
-   *  f0 to f11 (±1 px a frame). */
-  flicker: [0, 3] as const,
+  frames: 9,
+  /** f0–1: flicker (brightness ±10%), scratches and dust; gate weave from
+   *  f0 until the frame has gone (±1 px a frame). */
+  flicker: [0, 2] as const,
   weavePx: 1,
-  /** f3: the frame slips up a quarter, showing the frame line and the
+  /** f2: the frame slips up a quarter, showing the frame line and the
    *  perforations. */
-  slip: 3,
+  slip: 2,
   slipShare: 0.25,
-  /** f4–8: the burn spreads from beside the typed line (its radius a share
-   *  of the frame's diagonal) and the frame outside it turns sepia. */
-  burn: [4, 9] as const,
-  radius: [0.025, 0.065, 0.12, 0.19, 0.27, 0.36, 0.45, 0.55] as const,
-  sepia: [0.3, 0.45, 0.58, 0.7, 0.8, 0.86, 0.9, 0.9] as const,
-  /** f9–11: all of it darkens to a deep brown-black and slides out at 6° —
+  /** f3–5: the burn spreads from beside the typed line (its radius a share
+   *  of the frame's diagonal, frame by frame from f3 on, growing as the
+   *  frame goes) and the frame outside it turns sepia. */
+  burn: [3, 6] as const,
+  radius: [0.05, 0.15, 0.3, 0.44, 0.56] as const,
+  sepia: [0.42, 0.64, 0.8, 0.88, 0.9] as const,
+  /** f6–7: all of it darkens to a deep brown-black and slides out at 6° —
    *  UP, the way the slip went (the motion runs on; a slide down would
    *  reverse it). */
-  out: [9, 12] as const,
-  darkness: [0.38, 0.68, 0.9] as const,
-  slide: [-0.1, -0.38, -0.86] as const,
+  out: [6, 8] as const,
+  darkness: [0.55, 0.9] as const,
+  slide: [-0.24, -0.86] as const,
   slideDeg: 6,
-  /** f12 black; f13–18 the leader, one card a frame; f19–21 the lit
-   *  perforations carry it into the dark. */
-  black: [12, 13] as const,
-  leader: [13, 19] as const,
-  perfs: [19, 22] as const,
-  /** The lit perforations, frame by frame: where the row is (a share of the
-   *  height, climbing) and how bright (fading). */
-  perfY: [0.8, 0.47, 0.14] as const,
-  perfO: [0.95, 0.72, 0.4] as const,
+  /** f8: the leader's countdown card, into the dark. */
+  leader: [8, 9] as const,
 } as const;
-/** The leader's cards, one frame each (PROPOSED copy, awaiting the owner). */
-export const LEADER = ['count-3', 'head', '35mm', 'reel', 'archive', 'count-2'] as const;
+/** The leader's card, one frame (it was six, a frame each). */
+export const LEADER = ['count-2'] as const;
 export type LeaderCard = (typeof LEADER)[number];
 /** The burn's colours, from the front inward: bone at the very edge (its
  *  brightest: never a white flash), then heat to char. */
@@ -1236,8 +1071,8 @@ export const BURN_HOLE = '#140D08';
 /** Frame f's flicker (−1 dark … 1 light) and gate weave (px), seeded. */
 export function burnFrame(f: number) {
   const rand = seeded(9000 + f * 31);
-  // The flicker is the burn's first three frames only (f0–2), as the spec
-  // has it: a short flutter, not a strobe running into the burn.
+  // The flicker is the burn's first frames only (f0–1: light, then dark),
+  // as the spec has it: a short flutter, not a strobe running into the burn.
   const flick = f < BURN.flicker[1] ? (f % 2 === 0 ? 1 : -1) * (0.45 + rand() * 0.55) : 0;
   const weave: Vec2 = f < BURN.out[1] ? [Math.round((rand() * 2 - 1) * BURN.weavePx), Math.round((rand() * 2 - 1) * BURN.weavePx)] : [0, 0];
   return { flick, weave };
@@ -1277,10 +1112,14 @@ export function frameAt(f: number) {
 
 // ── Act 5: the dark ───────────────────────────────────────────────────────
 export const DARK_TYPED = 'ryan xu';
-/** Fourteen letters a second (it was twelve; the dark is a beat shorter). */
-export const DARK_CPS = 14;
-/** The first letter a beat into the act; the blink after the last. */
-export const DARK_TYPE_AT = BEAT_MS;
+/** The dark is seven 24ths: a key a 24th from its first frame (the lime
+ *  cursor comes with the first letter), the last on its seventh, then the
+ *  title. It was seven beats (the keys at fourteen a second, a blink after
+ *  the last): the five seconds folded it into the title's rhythm. */
+export const DARK_FRAMES = 7;
+export const DARK_CPS = 24;
+/** The first letter on the act's first frame. */
+export const DARK_TYPE_AT = 0;
 
 // ── Act 6: the end title ──────────────────────────────────────────────────
 /** The typed line turns into the title: struck in the title's case on the
@@ -1289,12 +1128,15 @@ export const DARK_TYPE_AT = BEAT_MS;
  *  (GLYPH_MORPH) as the line grows to the title's size; the credits come up
  *  under it. */
 export const TITLE = {
-  morph: 375,
+  /** Seven 24ths: the morph across five of them (it was 375 ms of a 625 ms
+   *  title), the credits rising with it, the formed title held two. */
+  frames: 7,
+  morph: 5 * FRAME24_MS,
   swap: GLYPH_MORPH.fade,
   box: GLYPH_MORPH.box,
-  cursorOut: 120,
-  sub: [250, 480] as const,
-  you: [300, 500] as const,
+  cursorOut: 2 * FRAME24_MS,
+  sub: [1 * FRAME24_MS, 5 * FRAME24_MS] as const,
+  you: [2 * FRAME24_MS, 5 * FRAME24_MS] as const,
   rise: 10,
 } as const;
 /** The end title's words (PROPOSED: the YOU line). His name is set as the
@@ -1316,12 +1158,12 @@ export const ACT_MS = {
   hand: HAND.frames * FRAME12_MS,
   /** Act 3: the machines' twelfths. */
   type: STYLES.reduce((s, x) => s + x.frames, 0) * FRAME12_MS,
-  /** Act 4: 22 frames at 24 fps. */
+  /** Act 4: nine frames at 24 fps. */
   burn: BURN.frames * FRAME24_MS,
-  /** Act 5: the dark, typed (seven beats). */
-  dark: 7 * BEAT_MS,
-  /** Act 6: the end title (five beats). */
-  title: 5 * BEAT_MS,
+  /** Act 5: the dark, typed (seven 24ths). */
+  dark: DARK_FRAMES * FRAME24_MS,
+  /** Act 6: the end title (seven 24ths). */
+  title: TITLE.frames * FRAME24_MS,
 } as const;
 
 // ── The plan: the whole film as spans on one clock ────────────────────────
@@ -1348,9 +1190,8 @@ export interface FilmPlan {
   /** Act 3: the machines, and when each character of TYPED appears. */
   styles: (Span & { id: StyleId })[];
   typing: number[];
-  /** Act 5: when each character of DARK_TYPED appears; the blink after. */
+  /** Act 5: when each character of DARK_TYPED appears (a 24th apart). */
   darkTyping: number[];
-  blink: Span;
   /** The landing starts here (the film's length). */
   length: number;
 }
@@ -1378,11 +1219,10 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
   const type = { start: hand.end, end: styles[styles.length - 1].end };
   const typing = relayTimes(styles);
   const burn = { start: type.end, end: onGrid(type.end / FRAME24_MS + BURN.frames, FRAME24_MS) };
-  const dark = { start: burn.end, end: burn.end + ACT_MS.dark };
-  const title = { start: dark.end, end: dark.end + ACT_MS.title };
-  const darkTyping = typeTimes(DARK_TYPED, dark.start + DARK_TYPE_AT, dark.start + DARK_TYPE_AT + ((DARK_TYPED.length - 1) * 1000) / DARK_CPS, 18, 77);
-  // The blink: off half a period before the title… and on again as it begins.
-  const blink = { start: title.start - CURSOR_MS / 2, end: title.start };
+  const dark = { start: burn.end, end: onGrid(burn.end / FRAME24_MS + DARK_FRAMES, FRAME24_MS) };
+  const title = { start: dark.end, end: onGrid(dark.end / FRAME24_MS + TITLE.frames, FRAME24_MS) };
+  // On the 24th, unjittered: the keys are the act's own frames.
+  const darkTyping = typeTimes(DARK_TYPED, dark.start + DARK_TYPE_AT, dark.start + DARK_TYPE_AT + ((DARK_TYPED.length - 1) * 1000) / DARK_CPS, 0, 77);
   return {
     layout,
     prelude: { start: -PRELUDE_MS, lime: -PRELUDE.beats.lime * CUT_MS, word: -PRELUDE.beats.word * CUT_MS, end: 0 },
@@ -1391,7 +1231,6 @@ export function filmPlan(layout: FilmLayout): FilmPlan {
     styles,
     typing,
     darkTyping,
-    blink,
     length: title.end,
   };
 }
@@ -1486,10 +1325,10 @@ export const INPUT_POLICY: Record<FilmInput, 'skip' | 'hold' | 'ignore'> = {
 
 // ── Skip ───────────────────────────────────────────────────────────────────
 // The Skip pill takes the film to the end title with FF_TAIL ms of it left
-// (the title formed, its credits up), then the landing plays HURRIED (every
-// landing beat at FF_RATE). Never a hard cut to the page, never back, and
-// nothing once the landing has begun.
-export const FF_TAIL = 250;
+// (the title formed, its credits up: the two 24ths it is held), then the
+// landing plays HURRIED (every landing beat at FF_RATE). Never a hard cut to
+// the page, never back, and nothing once the landing has begun.
+export const FF_TAIL = 2 * FRAME24_MS;
 export const FF_RATE = 1.35;
 export function fastForwardTarget(plan: FilmPlan, t: number): number | null {
   const end = plan.length;
@@ -1501,8 +1340,11 @@ export function fastForwardTarget(plan: FilmPlan, t: number): number | null {
 // ── The globe behind ──────────────────────────────────────────────────────
 // The film says the globe may come up this long before the landing (a skip
 // says so at once). The page holds the globe until the boarding pass is
-// torn instead, whatever the film says.
-export const GLOBE_LEAD_MS = 2900;
+// torn instead, whatever the film says — so the film says it with the
+// landing (one word to the page, not a second one mid-film that set the
+// whole homepage rendering again under the cuts, on the phone's busiest
+// half second; it was 2.9 s before the landing).
+export const GLOBE_LEAD_MS = 0;
 export const globeReleaseAt = (plan: FilmPlan) => Math.max(0, plan.length - GLOBE_LEAD_MS);
 
 // ── One ink box: a word turning from one face into another ────────────────
@@ -1578,11 +1420,16 @@ export function morphScales(srcW: number, dstW: number) {
 //    page's words take over under a short cross-dissolve (`settle`): the
 //    same word at the same place in two rasters, so the eye never sees a
 //    frame change.
+// The five seconds (2026-10-05) took it from 0.7 s to 0.555 s, every part
+// in proportion: his name's flight 470 → 400 ms (its fastest 52 px a 60th
+// at 1728 × 1000, from 44: still the calm curve, far from the old dart's
+// 70), the credits' 360 → 300 ms a stagger of 16 ms apart, the dark gone
+// by 360 ms.
 export const LANDING_A = {
   /** The dark dissolves into the page: gone before the first word is home. */
-  dissolve: [0, 440] as const,
+  dissolve: [0, 360] as const,
   /** His name: both words at once, on one clock. */
-  name: { delay: 0, fly: 470, yLead: 0.86 } as const,
+  name: { delay: 0, fly: 400, yLead: 0.86 } as const,
   /** The title's own letters fly the first share of the name's flight and
    *  hand it to the clones there, at speed (a clone's layer draws its text
    *  up to a pixel off the title's: at rest, the hand-over ticked). */
@@ -1592,9 +1439,9 @@ export const LANDING_A = {
    *  his name; the fall (or the rise) leads the slide a little (`yLead`: a
    *  word bound for another line is on its own line before it slides along
    *  it). */
-  start: 140,
-  stagger: 22,
-  fly: 360,
+  start: 110,
+  stagger: 16,
+  fly: 300,
   yLead: 0.72,
   /** The credits' turn into the page's face, as a share of their flight:
    *  the letters' shared ink boxes across `morph`, the faces swapped in one
@@ -1607,17 +1454,17 @@ export const LANDING_A = {
    *  page's own shaping and kerning): the clone that lands IS the word. */
   plain: 0.3,
   /** Home: the clones dissolve into the page's own words (ms). */
-  settle: 110,
+  settle: 80,
   /** The rest of the opening words (the kicker first, the name's line's
    *  other words a block later, the nav last) comes up round the landed
    *  words; no block a flying word lands on rises before every word is home
    *  (landingAEnd), so nothing comes up under a word still sliding in. */
-  rest: 440,
-  done: 700,
+  rest: 360,
+  done: 555,
   /** The end title's YOU line (only its lead, "Admit one ·", when YOU
    *  flies to the cover's own "you"): gone before the first flight reaches
    *  its row (never crossed). */
-  youOut: [0, 100] as const,
+  youOut: [0, 80] as const,
 } as const;
 /** The words that fly home, in the end title's order (his name, the
  *  credits, then YOU). YOU is optional: the entrance will give it a place
@@ -1636,7 +1483,8 @@ export const LANDING_TARGETS: Record<FlyWord, { from: string; to: string }> = Ob
 /** The landing curve: a calm, even ease-in-out with a soft arrival — its
  *  fastest 2.0 times its mean, a little before the middle (the first
  *  landing's (0.38, 0, 0.2, 1) peaked at 2.7 times: his name moved 70 px
- *  in one 60th of a second, a dart; now 43 at 1728 × 1000). */
+ *  in one 60th of a second, a dart; now 52 at 1728 × 1000, its flight
+ *  400 ms). */
 export const FLY_EASE = [0.4, 0, 0.4, 1] as const;
 
 /** The words his name is made of: they fly as one (LANDING_A.name). */

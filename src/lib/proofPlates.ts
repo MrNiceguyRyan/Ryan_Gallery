@@ -17,7 +17,7 @@
 //     waits for it (at most PROOF_FACE_WAIT_MS from the proof's first frame:
 //     never ARCHIVE in a stand-in face while it can still come), then
 //     prints the lime plate on the first sixth of the grid it can make,
-//     and the ink plate (the word) a third of a second after it: WAAPI on
+//     and the ink plate (the word) a sixth of a second after it: WAAPI on
 //     opacity from the proof's first frame, held unprinted (the
 //     stylesheet's own values) to a hair before its beat (GRID_HAIR_MS).
 //   - Never while the page is hidden. A tab opened in the background draws
@@ -35,7 +35,7 @@
 //
 // window.__proofPlates is its record for the island: the origin, the lime's
 // beat, its animations. The island prints the page on the first sixth it can
-// make, never sooner than a third of a second after the word (pageStart),
+// make, never sooner than a sixth of a second after the word (pageStart),
 // keeps these animations as the plates (it never lays a second animation on
 // the same element: two opacity animations on one element take both off the
 // compositor, and under load the plates would print late, off the cuts'
@@ -66,7 +66,9 @@ export interface PlatesConfig {
   lime: number;
   word: number;
   /** A plate is laid at least this long before its beat (its keyframes are
-   *  in before it: three frames). */
+   *  in before it: two frames — the lime's first beat is a sixth from the
+   *  proof's first frame, and every ms of lead is one the face has not got
+   *  to arrive in before that beat is missed). */
   lead: number;
   hair: number;
   /** The lime plate before its beat (drawn, unseen: the stylesheet's own
@@ -111,7 +113,7 @@ export const PLATES: PlatesConfig = {
   cut: CUT_MS,
   lime: PRELUDE.beats.paint - PRELUDE.beats.lime,
   word: PRELUDE.beats.lime - PRELUDE.beats.word,
-  lead: 50,
+  lead: 34,
   hair: GRID_HAIR_MS,
   unprinted: PRELUDE.unprinted,
   ink: proofInk().map(({ at, opacity }) => [at, opacity] as [number, number]),
