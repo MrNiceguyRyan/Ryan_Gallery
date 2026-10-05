@@ -1,6 +1,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref, type RefObject } from 'react';
 import { encodeQr, qrPath } from '../../lib/qrCode';
 import { useLang } from '../../i18n/react';
+import { viewport } from '../../lib/viewport';
 import { tr } from '../../i18n/dict';
 import {
   HOVER_PEEL_DEG,
@@ -232,8 +233,12 @@ export default function BoardingPass({ fields, handle, interactive, onTear, onFr
       const r = carried().getBoundingClientRect();
       home = { left: r.left - drawn.x, top: r.top - drawn.y, right: r.right - drawn.x, bottom: r.bottom - drawn.y };
     };
-    const vw = () => document.documentElement.clientWidth || window.innerWidth;
-    const vh = () => window.innerHeight;
+    // The screen's size, from the resize-read cache (src/lib/viewport.ts):
+    // `bounds()` runs on every tick of the paper while it is carried, and a
+    // live read there brought the whole page's style up to date every frame
+    // of a drag (187 times in a two-drag gesture on a phone, traced).
+    const vw = () => viewport().cw;
+    const vh = () => viewport().h;
     // Unbounded until it has been taken up (its home is read then).
     const FREE = { lo: { x: -Infinity, y: -Infinity }, hi: { x: Infinity, y: Infinity } };
     const bounds = () => (home ? offsetBounds(home, vw(), vh()) : FREE);

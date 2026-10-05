@@ -296,7 +296,8 @@ test("the phone's switch: every card folds into one ticket size, never swells, a
   // The atlas hands every switch the one scale; the carrier comes to it at
   // the arriving card's corner as it folds; the arriving card waits at it
   // and grows out of it to its own as it opens.
-  assert.match(atlas, /ticketScale: phoneTicketScale\(window\.innerWidth, window\.innerHeight, chapterRoute\.map\(\(entry\) => entry\.stop\.coverRatio \?\? 1\.5\)\),/);
+  // (The screen's size from the resize-read cache, src/lib/viewport.ts.)
+  assert.match(atlas, /ticketScale: phoneTicketScale\(viewW, viewport\(\)\.h, chapterRoute\.map\(\(entry\) => entry\.stop\.coverRatio \?\? 1\.5\)\),/);
   assert.match(chapter, /const k = ticketK\(scale, dest\);/);
   assert.match(chapter, /Math\.min\(scale \?\? Math\.min\(card\.scale, other\?\.scale \?\? card\.scale\), card\.scale\) \/ card\.scale/);
   assert.match(chapter, /phoneGrow\(play, sw\.ticketScale, sw\.expandAt, !play\.carry\);/);
@@ -413,9 +414,12 @@ test('the globe rises already facing stop 01, and the entry is the descent alone
   assert.match(pose, /const share = entryEase\(clamp01\(progress\)\);\s*const zoom = startZoom \+ \(target\.zoom - startZoom\) \* share;/);
   assert.match(atlas, /const GLOBE_TIP_FROM = 0\.2;/);
   assert.match(atlas, /const frame = entryFrame\(\{/);
-  assert.match(atlas, /rise: \{ x: document\.documentElement\.clientWidth \/ 2, y: focalPoint\.y \},/);
+  assert.match(atlas, /rise: \{ x: viewCw \/ 2, y: focalPoint\.y \},/);
   assert.match(atlas, /dock: planFocal\(entryIndex\),/);
-  assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(document\.documentElement\.clientWidth, viewportH\), aim\.zoom\);/);
+  assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(viewCw, viewportH\), aim\.zoom\);/);
+  // Every frame of the descent: the width from the resize-read cache, never a
+  // live read of the document's (it forced a style pass each frame).
+  assert.match(atlas, /const viewCw = viewport\(\)\.cw;/);
   // The rise's planet is whole on screen (DERIVED from the viewport, never
   // measured): its limb's apparent radius clears the top by 7% of the height
   // and stays within the atlas column. Mapbox below zoom 5: a sphere of
@@ -482,7 +486,8 @@ test('a switch is the reference\'s turn: 1.4 s, its ENTER curve, no climb to spe
   }
   if (process.env.EXPLORER_NUMBERS) console.log(`switch lift at 1728: ${rows.join(', ')}`);
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  assert.match(atlas, /const plan = planSwitch\(w0, u1, dest\.zoom - zoomNow, window\.innerWidth\);\s+durationMs = plan\.durationMs;\s+curve = plan\.curve;\s+easing = plan\.ease === 'sine' \? voyageEase : turnEase;/);
+  assert.match(atlas, /const viewW = viewport\(\)\.w;/);
+  assert.match(atlas, /const plan = planSwitch\(w0, u1, dest\.zoom - zoomNow, viewW\);\s+durationMs = plan\.durationMs;\s+curve = plan\.curve;\s+easing = plan\.ease === 'sine' \? voyageEase : turnEase;/);
   // The shields: the one arrived at lifts at the click (the reference's
   // active stop, 1.45 from its foot), the one left relaxes.
   assert.match(atlas, /if \(next\.kind === 'fly'\) \{[\s\S]{0,200}markCurrentStop\(destId\);/);
@@ -614,7 +619,11 @@ test('the stub hand-off: a derived target, a landing event, a stub that waits', 
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const target = atlas.slice(atlas.indexOf('window.__archiveCoverStubTarget = () => {'), atlas.indexOf('delete window.__archiveCoverStubTarget'));
   assert.match(target, /coverStubRect\(planned\)/);
-  assert.match(target, /phoneStubRect\(window\.innerWidth, window\.innerHeight/);
+  // Asked every frame of the stub's flight: the size from the resize-read
+  // cache (src/lib/viewport.ts), never the window's live size.
+  assert.match(target, /const view = viewport\(\);/);
+  assert.match(target, /phoneStubRect\(view\.w, view\.h/);
+  assert.doesNotMatch(target, /window\.inner(Width|Height)/);
   assert.doesNotMatch(target, /getBoundingClientRect|offset(Width|Height|Top|Left)|client(Width|Height)/);
   assert.equal((atlas.match(/entryLanded\(entryIndex\);/g) ?? []).length, 2, 'the descent down, and reduced motion\'s cut');
   assert.match(atlas, /if \(done\.entry\) entryLanded\(done\.index\);/);

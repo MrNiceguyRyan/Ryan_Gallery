@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@astrojs/react';
 import sanity from '@sanity/astro';
 import sitemap from '@astrojs/sitemap';
+import mapboxPixelRatio from './scripts/mapbox-pixel-ratio.mjs';
 
 // Astro's build also starts a temporary Vite server. Keep its dependency
 // cache separate so a build cannot replace the React modules in a live preview.
@@ -95,7 +96,9 @@ export default defineConfig({
     defaultStrategy: 'hover',
   },
   vite: {
-    plugins: [tailwindcss()],
+    // mapboxPixelRatio: the homepage map's resolution cap (mapbox-gl has no
+    // option; src/lib/mapPixelRatio.ts).
+    plugins: [tailwindcss(), mapboxPixelRatio()],
     // Pre-bundle the lazily hydrated map and homepage motion stacks so Vite
     // does not invalidate them while their Astro islands are loading.
     optimizeDeps: {
