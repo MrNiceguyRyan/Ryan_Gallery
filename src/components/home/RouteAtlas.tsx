@@ -6,7 +6,7 @@ import { T, useLang } from '../../i18n/react';
 import { tr } from '../../i18n/dict';
 import { getLang, type Lang } from '../../i18n/lang';
 import { MAP_BURN, MAP_INK } from '../../lib/mapInk';
-import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
+import MapGL, { Marker } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import {
   AnimatePresence,
@@ -602,6 +602,120 @@ function addWaterTint(map: { getLayer: (id: string) => unknown; getSource: (id: 
     paint: { 'fill-color': WATER_TINT.color, 'fill-opacity': WATER_TINT.opacity, 'fill-antialias': false },
   } as never, before);
 }
+/**
+ * The atlas's own marks, over the basemap and its names (the order the
+ * page's react-map-gl layers used to stand in, appended on load): the
+ * graticule; the whole route (its burn and its dashes, in as the atlas
+ * engages) and the travelled one (trimmed by the camera); on the planet the
+ * page brings up, its route and its dots (printed in by the descent). Every
+ * value the page changes afterwards is written by hand (the camera: trims
+ * and inks; the atlas: the whole route's opacity), so nothing re-reads them
+ * on a style change. Idempotent.
+ */
+function addAtlasMarks(
+  map: {
+    getSource: (id: string) => unknown;
+    getLayer: (id: string) => unknown;
+    addSource: (id: string, source: never) => void;
+    addLayer: (layer: never) => void;
+  },
+  { mobile, prologue, route, stops, engaged, reducedMotion, trim }: {
+    mobile: boolean;
+    prologue: boolean;
+    route: unknown;
+    stops: unknown;
+    engaged: boolean;
+    reducedMotion: boolean;
+    trim: [number, number];
+  },
+) {
+  const layout = { 'line-cap': 'round', 'line-join': 'round' };
+  const fade = { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 };
+  const source = (id: string, data: unknown, extra?: object) => {
+    if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data, ...extra } as never);
+  };
+  const layer = (spec: { id: string } & Record<string, unknown>) => {
+    if (!map.getLayer(spec.id)) map.addLayer(spec as never);
+  };
+  source('atlas-graticule', NORTH_AMERICA_GRATICULE);
+  layer({
+    id: 'atlas-graticule-line',
+    type: 'line',
+    source: 'atlas-graticule',
+    layout,
+    paint: { 'line-color': '#AEB6A9', 'line-width': 0.55, 'line-opacity': mobile ? 0.055 : 0.045 },
+  });
+  source('route-all', route, { lineMetrics: true });
+  layer({
+    id: 'route-all-glow',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: {
+      'line-color': MAP_BURN,
+      'line-width': 4,
+      'line-opacity': engaged ? 0.16 : 0,
+      'line-opacity-transition': fade,
+      'line-blur': 3,
+      'line-trim-offset': [1, 1],
+    },
+  });
+  layer({
+    id: 'route-all-line',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: {
+      'line-color': MAP_INK,
+      'line-width': 1,
+      'line-dasharray': [3, 4],
+      'line-opacity': engaged ? 0.5 : 0,
+      'line-opacity-transition': fade,
+      'line-trim-offset': [1, 1],
+    },
+  });
+  layer({
+    id: 'route-travelled-glow',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_BURN, 'line-width': 4.5, 'line-opacity': 0.22, 'line-blur': 3, 'line-trim-offset': trim },
+  });
+  layer({
+    id: 'route-travelled-line',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_INK, 'line-width': 1.5, 'line-dasharray': [5, 2.5], 'line-opacity': 0.92, 'line-trim-offset': trim },
+  });
+  if (!prologue) return;
+  // Seeded dark: the camera prints them in with the descent.
+  layer({
+    id: 'prologue-route',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_INK, 'line-width': 1.15, 'line-dasharray': [3, 2.5], 'line-opacity': 0 },
+  });
+  source('prologue-stops', stops);
+  // Each place a small dot of white ink with a hard knockout of burn round
+  // it, upright to the viewer.
+  layer({
+    id: 'prologue-stops-dot',
+    type: 'circle',
+    source: 'prologue-stops',
+    paint: {
+      'circle-radius': 2.25,
+      'circle-color': MAP_INK,
+      'circle-stroke-color': MAP_BURN,
+      'circle-stroke-width': 1.25,
+      'circle-pitch-alignment': 'viewport',
+      'circle-opacity': 0,
+      'circle-stroke-opacity': 0,
+    },
+  });
+}
+
 // The phone's shields, css px (the desktop's SHIELD_MAP_PX is 34).
 const SHIELD_PHONE_PX = 26;
 // Where the phone's camera waits while the entrance is read (the torn pass
@@ -708,6 +822,25 @@ function unwrapTransform(map: { transform: unknown; painter?: { transform: unkno
   if (!raw || raw === proxied) return false;
   map.transform = raw;
   if (map.painter) map.painter.transform = raw;
+  return true;
+}
+
+/**
+ * Mapbox's attribution control, deaf to style changes from the map's load on
+ * (see its call in `onLoad`): it rebuilt and re-parsed its credit line on
+ * every one, and the camera makes one every frame of a flight. Found by its
+ * own methods (react-map-gl adds it through the Map's `attributionControl`
+ * option); its 'sourcedata' and 'moveend' listeners are left as they are.
+ * Says whether it found the control.
+ */
+function quietAttribution(map: { off: (type: string, listener: unknown) => unknown; _controls?: unknown[] }) {
+  type Control = { _updateAttributions?: unknown; _updateData?: unknown };
+  const control = (map._controls ?? []).find((candidate): candidate is Control =>
+    !!candidate &&
+    typeof (candidate as Control)._updateAttributions === 'function' &&
+    typeof (candidate as Control)._updateData === 'function');
+  if (!control) return false;
+  map.off('styledata', control._updateData);
   return true;
 }
 
@@ -1635,6 +1768,45 @@ export default function RouteAtlas({
       geometry: { type: 'Point' as const, coordinates: stop.coordinates },
     })),
   }), [mappedStops]);
+  // ── The atlas's own marks (addAtlasMarks) ──
+  // Made by hand at the map's load, not as react-map-gl's <Source> and
+  // <Layer>: each of those re-rendered on EVERY style change of the map
+  // (react-map-gl subscribes them to 'styledata', a <Source> through a
+  // timer of its own), and the camera writes the travelled route's trim — a
+  // style change — on every frame of a flight: ten React components rendered
+  // and four timers set every frame of every switch, for layers whose paint
+  // only ever changes by hand anyway (2026-10-05). What the page changes of
+  // them is written here: the whole route comes in as the atlas engages.
+  const fullRouteRef = useRef(fullRoute);
+  fullRouteRef.current = fullRoute;
+  const prologueStopsRef = useRef(prologueStops);
+  prologueStopsRef.current = prologueStops;
+  const atlasEngagedRef = useRef(atlasEngaged);
+  atlasEngagedRef.current = atlasEngaged;
+  // The data the marks were made with (a new route — new stops — is set on them).
+  const marksDataRef = useRef<{ route: unknown; stops: unknown } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !mapLoaded) return;
+    const fade = { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 };
+    ([['route-all-glow', 0.16], ['route-all-line', 0.5]] as const).forEach(([id, on]) => {
+      if (!map.getLayer(id)) return;
+      map.setPaintProperty(id, 'line-opacity-transition', fade);
+      map.setPaintProperty(id, 'line-opacity', atlasEngaged ? on : 0);
+    });
+  }, [atlasEngaged, mapLoaded, reducedMotion]);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    const made = marksDataRef.current;
+    if (!map || !mapLoaded || !made) return;
+    if (made.route !== fullRoute) {
+      (map.getSource('route-all') as { setData?: (data: unknown) => void } | undefined)?.setData?.(fullRoute);
+    }
+    if (prologue && made.stops !== prologueStops) {
+      (map.getSource('prologue-stops') as { setData?: (data: unknown) => void } | undefined)?.setData?.(prologueStops);
+    }
+    marksDataRef.current = { route: fullRoute, stops: prologueStops };
+  }, [fullRoute, mapLoaded, prologue, prologueStops]);
   const staticMapUrl = useMemo(
     () => staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, mapboxToken, mobile],
@@ -3404,6 +3576,18 @@ export default function RouteAtlas({
           }
           map.touchZoomRotate.disableRotation();
           map.setTerrain(null);
+          // The credit line stays, unchanged, without the parse it did on
+          // every frame of a flight. Mapbox's attribution control rebuilds
+          // its text on EVERY style change — each source's credit parsed as
+          // a whole HTML document (DOMParser) — and the camera writes the
+          // travelled route's trim, a paint property and so a style change,
+          // on every frame of a flight: 450 ms of a phone's (CPU ×4) main
+          // thread across six switches, for a credit that never changes
+          // (traced 2026-10-05). It stops listening to style changes; every
+          // source that comes, goes or shows (Mapbox's 'sourcedata' metadata
+          // and visibility) still updates it, and its "Improve this map" link
+          // still follows the view on every moveend.
+          quietAttribution(map as never);
           // The prologue globe is photographic: satellite imagery at globe
           // zooms, in the archive's grade (globeLook) and lit by one key
           // light (planetLight). The same layer, unchanged, is the reader's
@@ -3578,6 +3762,19 @@ export default function RouteAtlas({
             }, firstLabel);
             addWaterTint(map, firstLabel);
           }
+          // The atlas's own marks, over the basemap and its names: the
+          // graticule, the whole route and the travelled one, and the
+          // planet's route and dots (addAtlasMarks).
+          addAtlasMarks(map as never, {
+            mobile,
+            prologue,
+            route: fullRouteRef.current,
+            stops: prologueStopsRef.current,
+            engaged: atlasEngagedRef.current,
+            reducedMotion,
+            trim: initialRouteTrim,
+          });
+          marksDataRef.current = { route: fullRouteRef.current, stops: prologueStopsRef.current };
           // Keep-out, the /travel technique: an invisible icon on every
           // place, so the basemap does not set a town's name across the
           // ground a shield stands on.
@@ -3619,106 +3816,9 @@ export default function RouteAtlas({
           }
         }}
       >
-        <Source key="atlas-graticule" id="atlas-graticule" type="geojson" data={NORTH_AMERICA_GRATICULE}>
-          <Layer
-            id="atlas-graticule-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': '#AEB6A9',
-              'line-width': 0.55,
-              'line-opacity': mobile ? 0.055 : 0.045,
-            }}
-          />
-        </Source>
-        <Source key="route-all" id="route-all" type="geojson" data={fullRoute} lineMetrics>
-          <Layer
-            id="route-all-glow"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_BURN,
-              'line-width': 4,
-              'line-opacity': atlasEngaged ? 0.16 : 0,
-              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-              'line-blur': 3,
-              'line-trim-offset': [1, 1],
-            }}
-          />
-          <Layer
-            id="route-all-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_INK,
-              'line-width': 1,
-              'line-dasharray': [3, 4],
-              'line-opacity': atlasEngaged ? 0.5 : 0,
-              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-              'line-trim-offset': [1, 1],
-            }}
-          />
-          <Layer
-            id="route-travelled-glow"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_BURN,
-              'line-width': 4.5,
-              'line-opacity': 0.22,
-              'line-blur': 3,
-              'line-trim-offset': initialRouteTrim,
-            }}
-          />
-          <Layer
-            id="route-travelled-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_INK,
-              'line-width': 1.5,
-              'line-dasharray': [5, 2.5],
-              'line-opacity': 0.92,
-              'line-trim-offset': initialRouteTrim,
-            }}
-          />
-          {prologue && (
-            <Layer
-              id="prologue-route"
-              type="line"
-              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{
-                'line-color': MAP_INK,
-                'line-width': 1.15,
-                'line-dasharray': [3, 2.5],
-                // Seeded dark, once: the camera prints it in with the
-                // descent, and a value here that changed per render would
-                // be re-applied behind its back.
-                'line-opacity': 0,
-              }}
-            />
-          )}
-        </Source>
-        {prologue && (
-          <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
-            {/* Each place a small dot of white ink with a hard knockout of
-                burn round it, upright to the viewer. */}
-            <Layer
-              id="prologue-stops-dot"
-              type="circle"
-              paint={{
-                'circle-radius': 2.25,
-                'circle-color': MAP_INK,
-                'circle-stroke-color': MAP_BURN,
-                'circle-stroke-width': 1.25,
-                'circle-pitch-alignment': 'viewport',
-                'circle-opacity': 0,
-                'circle-stroke-opacity': 0,
-              }}
-            />
-          </Source>
-        )}
-  
+        {/* The graticule, the route and the planet's dots are the map's own
+            layers, added by hand at its load (addAtlasMarks, in onLoad). */}
+
         {/* The places: one shield per place (PlaceShield), upright to the
             camera, the point of its foot on the place itself. Every place
             the archive has photographs of is here. */}
@@ -3745,7 +3845,7 @@ export default function RouteAtlas({
       </MapGL>
   ) : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [atlasEngaged, chapterRoute, classicInterfaceOpacity, engagedChapterId, fullRoute, globeChannel, globeRevealed, initialRouteTrim, mapEligible, mapboxToken, mobile, onEngage, onSelect, phoneApproach, prologue, prologueStops, readerHasMap, reducedMotion, shieldPlaces, shieldPx]);
+  [chapterRoute, classicInterfaceOpacity, engagedChapterId, globeChannel, globeRevealed, mapEligible, mapboxToken, mobile, onEngage, onSelect, phoneApproach, prologue, readerHasMap, reducedMotion, shieldPlaces, shieldPx]);
 
   if (chapterRoute.length < 1 || !viewportReady) {
     return (

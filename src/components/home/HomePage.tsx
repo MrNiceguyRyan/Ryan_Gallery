@@ -1417,7 +1417,12 @@ export default function HomePage({ collections }: Props) {
   // and over the rail's words too (they lie on the map), not only over the
   // bare canvas — a quarter of the screen used to be dead to it. Handed on to
   // the map's canvas as the same wheel, at the same point; the list and the
-  // Index keep their own scroll.
+  // Index keep their own scroll. Listened for on the covers' dock and the
+  // rail themselves, not on the window: a window that cancels wheels makes
+  // the browser hand EVERY wheel to the main thread before it scrolls, so
+  // the Index's sheet and the list scrolled only when the map's frame let
+  // them (2026-10-05).
+  const [railEl, setRailEl] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!free) return;
     const onWheel = (event: WheelEvent) => {
@@ -1444,9 +1449,10 @@ export default function HomePage({ collections }: Props) {
         cancelable: true,
       }));
     };
-    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
-    return () => window.removeEventListener('wheel', onWheel, { capture: true });
-  }, [free]);
+    const hosts = [dockHost, railEl].filter((host): host is HTMLDivElement => !!host);
+    hosts.forEach((host) => host.addEventListener('wheel', onWheel, { passive: false }));
+    return () => hosts.forEach((host) => host.removeEventListener('wheel', onWheel));
+  }, [dockHost, free, railEl]);
   // A click on the empty map: the ticket in hand is let go, calmly (its
   // cover fades, its shield steps back; nothing tears) — as the reference's
   // board goes when the globe itself is clicked.
@@ -1700,6 +1706,7 @@ export default function HomePage({ collections }: Props) {
                   right of the page; with nothing in hand, the archive's own
                   line. It lets the pointer through to the map elsewhere. */}
               <div
+                ref={setRailEl}
                 data-archive-column
                 className="explorer-rail"
                 data-entered={entered ? '' : undefined}
@@ -1775,7 +1782,7 @@ export default function HomePage({ collections }: Props) {
                 {atlas}
               </div>
               <div ref={setDockHost} className="archive-dock-host archive-dock-host--phone" data-let-go={letGo ? '' : undefined} />
-              <div data-archive-column className="explorer-rail explorer-rail--phone">
+              <div ref={setRailEl} data-archive-column className="explorer-rail explorer-rail--phone">
                 <h2 className="sr-only font-ui"><T k="home.placesHeading" /></h2>
                 {chapters}
               </div>
