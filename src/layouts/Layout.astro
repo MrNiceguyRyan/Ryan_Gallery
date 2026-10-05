@@ -392,6 +392,23 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
         }
       }, true);
 
+      // ── Every in-site arrival asks for the page itself ──
+      // Each page is a folder in the static build (/about/index.html), and
+      // the host answers /about with a 307 to /about/: one more round trip on
+      // a phone's network before every ClientRouter arrival (the nav, a
+      // story's link, a note). The router fetches the folder straight away;
+      // where it lands is the URL the redirect would have given. First of
+      // the preparation listeners, so the ones below read the same address.
+      document.addEventListener('astro:before-preparation', function(e) {
+        var to = e && e.to;
+        if (!to || to.origin !== window.location.origin) return;
+        var path = to.pathname;
+        if (path === '/' || path.charAt(path.length - 1) === '/' || /\.[a-z0-9]+$/i.test(path)) return;
+        var folder = new URL(to.href);
+        folder.pathname = path + '/';
+        e.to = folder;
+      });
+
       // ── Filmstrip scroll restoration ──
       // Save scroll position when leaving Homepage. A direct Home link restores
       // it before the incoming transition snapshot; browser history traversal

@@ -157,4 +157,34 @@ assert.equal(checkEscape({ prevented: true }).closes, 0, 'Already-consumed Escap
 assert.equal(checkEscape({ standalone: true }).closes, 0, 'Escape must not navigate away from a standalone Story');
 assert.match(magazine, /inert=\{!isPresent\}/, 'Outgoing Story content must stop accepting pointer and keyboard actions');
 
-console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, and layered Escape handling');
+// ── Every in-site arrival asks for the folder (no 307 from the host) ──
+// Layout's first preparation listener rewrites /about to /about/ (the URL
+// the host's redirect would have landed on) and leaves everything else.
+const folderBegin = layout.indexOf('      // ── Every in-site arrival asks for the page itself ──');
+const folderEnd = layout.indexOf('      // ── Filmstrip scroll restoration ──', folderBegin);
+assert.ok(folderBegin > 0 && folderEnd > folderBegin, 'The folder rewrite is in Layout, before the filmstrip listener');
+const folderCode = layout.slice(folderBegin, folderEnd);
+function folderOf(to, origin = 'https://ryanxugallery.com') {
+  const document = new EventTarget();
+  const window = { location: { origin } };
+  vm.runInNewContext(folderCode, { document, window, URL });
+  const event = new Event('astro:before-preparation');
+  event.to = new URL(to, origin);
+  document.dispatchEvent(event);
+  return event.to.href.replace(origin, '');
+}
+assert.equal(folderOf('/about'), '/about/', 'A page is asked for as its folder');
+assert.equal(folderOf('/travel'), '/travel/');
+assert.equal(folderOf('/notes'), '/notes/');
+assert.equal(folderOf('/works/miami'), '/works/miami/', 'A story too (the Map\'s link, Keep Reading)');
+assert.equal(folderOf('/notes/sample'), '/notes/sample/');
+assert.equal(folderOf('/travel?place=miami#atlas-map'), '/travel/?place=miami#atlas-map', 'The query and the hash ride along');
+assert.equal(folderOf('/'), '/', 'Home is already its folder');
+assert.equal(folderOf('/about/'), '/about/', 'A folder is left alone');
+assert.equal(folderOf('/sitemap-index.xml'), '/sitemap-index.xml', 'A file is left alone');
+assert.equal(folderOf('https://example.com/about'), 'https://example.com/about', 'Another site is left alone');
+// It is the first preparation listener: the ones after it read the folder.
+const firstPrep = layout.indexOf("document.addEventListener('astro:before-preparation'");
+assert.ok(firstPrep > folderBegin && firstPrep < folderEnd, 'The rewrite is registered before every other preparation listener');
+
+console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, layered Escape handling, and folder-first arrivals');

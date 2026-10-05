@@ -1,0 +1,20 @@
+---
+// The Chinese serif (Noto Serif SC, src/lib/notes.ts CJK_SERIF_CSS) for a
+// page with Chinese on it, linked so that it never holds the first paint.
+//
+// The stylesheet is only @font-face rules: ~120 KB from Google (440 KB of
+// CSS once unpacked, every unicode-range slice of four weights), and as a
+// plain render-blocking <link> the page waited for all of it before
+// painting a word — on a phone's network, and from where Google is slow,
+// that is the whole wait. Its faces are `display=swap`, so what the reader
+// sees is unchanged: the Chinese is set in the system face first and in
+// the serif once its slices arrive, exactly as before; only the page is
+// there sooner. Loaded as print media and switched to all once it has
+// arrived (the swap keeps a link that is already on the page, see Astro's
+// persistedHeadElement); without script, the <noscript> link.
+import { CJK_SERIF_CSS } from '../../lib/notes';
+---
+
+<link rel="preload" as="style" href={CJK_SERIF_CSS} />
+<link rel="stylesheet" href={CJK_SERIF_CSS} media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href={CJK_SERIF_CSS} /></noscript>

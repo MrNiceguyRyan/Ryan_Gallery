@@ -18,8 +18,8 @@ import PlaceTags from '../../components/notes/PlaceTags.astro';
 import NotesScroll from '../../components/notes/NotesScroll.astro';
 import '../../styles/notes.css';
 import { loadNotes } from '../../lib/notesData';
+import CjkSerifLink from '../../components/shared/CjkSerifLink.astro';
 import {
-  CJK_SERIF_CSS,
   blockLang,
   formatNoteDate,
   imageSize,
@@ -106,7 +106,7 @@ const articleSchema = {
 >
   <Fragment slot="head">
     {note.sample && <meta name="robots" content="noindex, follow" />}
-    {hasChinese && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
+    {hasChinese && <CjkSerifLink />}
   </Fragment>
   <Nav client:load currentPath={currentPath} scrim />
   <main
