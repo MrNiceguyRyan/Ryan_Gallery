@@ -144,6 +144,65 @@ function holdUntilStill(then: () => void): () => void {
   return stop;
 }
 
+// ── The map's start-up waits for the opening film ──
+// Round wf45, 2026-10-05 (the film's track measured it): on a phone the
+// map's start-up — its WebGL context, its style, its shaders, its first
+// tiles — ran under the opening film, about a second in: for a moment the
+// whole main thread and extra GPU work, and 0–3 of the film's frames
+// dropped at its hand-off in some runs. The film says when it has landed
+// (OPENING_EVENT 'page', its last word also kept on
+// window.__archiveOpening; html[data-opening] goes at the same moment): the
+// map mounts in the first idle moment after that. With no film over the
+// page — a second view, the way back home, a reload deep in the page — it
+// mounts at once, as before. It still has its time to load the globe: the
+// pass cannot be torn until the cover has set itself and the pass has
+// assembled, ~2.5 s after the landing. Never held longer than
+// FILM_HOLD_CAP_MS (a film that never says it has landed).
+const FILM_HOLD_CAP_MS = 12000;
+function filmOverPage() {
+  const root = document.documentElement;
+  const reel = root.dataset.reel;
+  if (reel === 'skip' || reel === 'page' || root.dataset.home === 'explorer') return false;
+  if (window.__archiveOpening?.state === 'page') return false;
+  return root.hasAttribute('data-opening');
+}
+/** Run `then` once no film covers the page (at once if none does).
+ *  Returns a cancel. */
+function afterFilm(then: () => void): () => void {
+  if (!filmOverPage()) {
+    then();
+    return () => {};
+  }
+  let over = false;
+  let idle = 0;
+  let timer = 0;
+  const stop = () => {
+    window.removeEventListener(OPENING_EVENT, onOpening);
+    window.clearTimeout(timer);
+    if (idle && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idle);
+  };
+  const run = () => {
+    if (over) return;
+    over = true;
+    stop();
+    then();
+  };
+  function onOpening(event: Event) {
+    if ((event as CustomEvent<OpeningDetail>).detail?.state !== 'page') return;
+    window.removeEventListener(OPENING_EVENT, onOpening);
+    window.clearTimeout(timer);
+    // (Safari has no idle callback: a beat after the landing instead.)
+    if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(run, { timeout: 300 });
+    else timer = window.setTimeout(run, 60);
+  }
+  window.addEventListener(OPENING_EVENT, onOpening);
+  timer = window.setTimeout(run, FILM_HOLD_CAP_MS);
+  return () => {
+    over = true;
+    stop();
+  };
+}
+
 function documentTop(node: HTMLElement) {
   let top = 0;
   let current: HTMLElement | null = node;
@@ -276,13 +335,14 @@ function RouteAtlasFallback({ mobile = false, entryProgress }: {
 // move asked for, the place in hand).
 const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
   // The map is the page: it mounts at once (its chunk is warmed below) —
-  // once the page is hydrated. The server draws the stand-in itself, never
+  // once the page is hydrated, or, under the opening film, once the film has
+  // landed (`afterFilm`). The server draws the stand-in itself, never
   // a Suspense boundary: the lazy chunk is never ready on the server, so the
   // boundary went out pending ("$?"), and a page swapped in by the router
   // (every way back home) hydrated it as a server error (React #419, one on
   // every return, measured 2026-09-30).
   const [client, setClient] = useState(false);
-  useEffect(() => setClient(true), []);
+  useEffect(() => afterFilm(() => setClient(true)), []);
   const fallback = <RouteAtlasFallback mobile={props.mobile} entryProgress={props.entryProgress} />;
   return (
     <div className="h-full w-full">
