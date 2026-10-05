@@ -5,7 +5,7 @@
 // browser's pieces mocked — the document streaming in, the stylesheets, the
 // proof's lights (its CSS animation), the first word's face, the timeline,
 // the Skip pill's tap. Held here: the lime on the proof's own sixth once the
-// face is in (or its wait is up), the word a third of a second after it,
+// face is in (or its wait is up), the word a sixth of a second after it,
 // both held at the stylesheet's own unprinted values to a hair before their
 // beats and filled both ways (never a composited first keyframe before the
 // start: the lime flash); no plate laid after a tap on the pill, which
@@ -25,6 +25,9 @@ const load = async (file) => {
 const V = await load('../src/lib/proofPlates.ts');
 const F = await load('../src/lib/openingFilm.ts');
 const CUT = F.CUT_MS;
+// The lime's beat from the proof's first frame, and the word's after it.
+const LIME = V.PLATES.lime * CUT;
+const WORD = V.PLATES.word * CUT;
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -215,7 +218,7 @@ test('the config is the plan\'s: the grid, the beats, the face and its wait, the
   assert.doesNotMatch(V.proofPlates.toString(), /requestAnimationFrame/, 'never asks for a frame (before the stylesheets, one is a blank frame)');
 });
 
-test('a fast load: the lime on the proof\'s third sixth, the word a third of a second on; held unprinted to a hair before each, filled both ways', async () => {
+test('a fast load: the lime on the proof\'s second sixth, the word a sixth of a second on; held unprinted to a hair before each, filled both ways', async () => {
   const s = sandbox();
   s.run();
   const plates = s.window.__proofPlates;
@@ -226,7 +229,8 @@ test('a fast load: the lime on the proof\'s third sixth, the word a third of a s
   await s.faceIn(900);
   assert.equal(s.anims.length, 0, 'nothing before the proof\'s first frame');
   await s.firstFrame(1000);
-  const lime = 1000 + 2 * CUT;
+  const lime = 1000 + LIME;
+  assert.ok(close(LIME, CUT) && close(WORD, CUT), 'four beats a sixth apart (the five seconds)');
   assert.ok(close(plates.origin, 1000) && close(plates.lime, lime), JSON.stringify(plates));
   assert.ok(close(await plates.decided, lime));
   const [b, w] = s.anims;
@@ -244,7 +248,7 @@ test('a fast load: the lime on the proof\'s third sixth, the word a third of a s
   assert.ok(close(valueAt(b, lime - hair), F.PRELUDE.limeInk), 'its first impression on its beat, a hair ahead');
   assert.equal(valueAt(b, lime + F.PRELUDE.set), 1);
   assert.equal(valueAt(b, lime + 5000), 1, 'at rest printed');
-  const wordAt = lime + 2 * CUT;
+  const wordAt = lime + WORD;
   assert.equal(valueAt(w, wordAt - hair - 0.01), 0);
   assert.equal(valueAt(w, wordAt - hair), 1);
   assert.equal(valueAt(w, wordAt + 5000), 1);
@@ -264,7 +268,7 @@ test('a slow face: the lime on the first sixth after it (never alone longer than
   assert.ok(close(lime, 1000 + 5 * CUT), `${lime}`);
   assert.ok(close(s.window.__proofPlates.lime, lime));
   const [b, w] = s.anims;
-  assert.ok(close(valueAt(w, lime + 2 * CUT - F.GRID_HAIR_MS), 1) && valueAt(w, lime + 2 * CUT - 1) === 0, 'the word a third of a second after the lime');
+  assert.ok(close(valueAt(w, lime + WORD - F.GRID_HAIR_MS), 1) && valueAt(w, lime + WORD - 1) === 0, 'the word a sixth of a second after the lime');
   assert.ok(valueAt(b, lime - 1) < 0.01);
   // The face never comes: printed when its wait is up (a stand-in face).
   const n = sandbox({ faceNever: true });
@@ -307,7 +311,7 @@ test('the stream: the vignette found as it streams in; the stylesheets waited fo
   await s.sheetIn();
   await s.faceIn(1010);
   await flush();
-  assert.ok(close(s.window.__proofPlates.lime, 1000 + 2 * CUT));
+  assert.ok(close(s.window.__proofPlates.lime, 1000 + LIME));
   // Already in the document (the island starts it on an in-site arrival):
   // at once, and no taps of its own.
   const now = sandbox({ vignetteNow: true, readyState: 'complete' });
@@ -316,7 +320,7 @@ test('the stream: the vignette found as it streams in; the stylesheets waited fo
   assert.equal((now.listeners.click ?? []).length, 0);
   await now.firstFrame(1000);
   await now.faceIn(1010);
-  assert.ok(close(p.lime, 1000 + 2 * CUT));
+  assert.ok(close(p.lime, 1000 + LIME));
   // No lights (reduced motion, an engine without them): nothing, at once.
   const rm = sandbox({ lights: false });
   rm.run();
@@ -387,12 +391,12 @@ test('a tab opened in the background: nothing counted or laid while it is hidden
   // The first frame the reader sees.
   await s.firstFrame(3016);
   assert.ok(close(plates.origin, 3016), `${plates.origin}`);
-  assert.ok(close(plates.lime, 3016 + 2 * CUT), `${plates.lime}`);
-  assert.ok(close(await plates.decided, 3016 + 2 * CUT));
+  assert.ok(close(plates.lime, 3016 + LIME), `${plates.lime}`);
+  assert.ok(close(await plates.decided, 3016 + LIME));
   const [b, w] = s.anims;
   assert.ok(close(b.startTime, 3016 - F.GRID_HAIR_MS) && close(w.startTime, 3016 - F.GRID_HAIR_MS), 'from the first frame the reader sees');
-  assert.equal(valueAt(b, 3016 + 2 * CUT - 1), F.PRELUDE.unprinted);
-  assert.equal(valueAt(w, 3016 + 4 * CUT - 1), 0);
+  assert.equal(valueAt(b, 3016 + LIME - 1), F.PRELUDE.unprinted);
+  assert.equal(valueAt(w, 3016 + LIME + WORD - 1), 0);
   assert.equal((s.listeners.visibilitychange ?? []).length, 0, 'let go once decided');
   // Shown again later: the lights are never played twice.
   await s.hide();
@@ -423,7 +427,7 @@ test('hidden after it was seen: nothing laid while hidden; shown again, the ligh
   await v.firstFrame(1000);
   await v.faceIn(1010);
   assert.equal(v.lights.restarts, 0);
-  assert.ok(close(v.window.__proofPlates.lime, 1000 + 2 * CUT));
+  assert.ok(close(v.window.__proofPlates.lime, 1000 + LIME));
 });
 
 test('nothing for the verification hook, a document already loaded, or a film that does not play', () => {
