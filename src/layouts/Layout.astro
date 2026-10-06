@@ -2,8 +2,9 @@
 // Keep Mapbox's base styles across ClientRouter head swaps. A cached lazy
 // island does not re-run its CSS side effect when returning to the Homepage.
 import 'mapbox-gl/dist/mapbox-gl.css';
-// The two webfonts' rules (Google's own, the same files from fonts.gstatic.com):
-// in the page's stylesheet, so no first paint waits on fonts.googleapis.com.
+// The two webfonts (Fraunces, Space Grotesk): their rules and their files are
+// our own (src/styles/fonts.css, src/assets/fonts/), so no first paint and no
+// first word waits on Google's hosts.
 import '../styles/fonts.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
@@ -101,11 +102,6 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" sizes="32x32" />
     <link rel="shortcut icon" href="/favicon.ico?v=3" />
-    {/* The webfonts' files (Fraunces, Space Grotesk) come from here; their
-        rules are in the page's own stylesheet (src/styles/fonts.css). There
-        is no render-blocking request to fonts.googleapis.com any more: it
-        was a connection to a third host before every first paint. */}
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     {/* Sanity CDN — every image on the site comes through here, so warm the TLS */}
     <link rel="preconnect" href="https://cdn.sanity.io" crossorigin />
     {/* mapbox preconnect only on /travel */}

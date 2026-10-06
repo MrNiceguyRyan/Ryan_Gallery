@@ -205,11 +205,11 @@ assert.ok(firstPrep > folderBegin && firstPrep < folderEnd, 'The rewrite is regi
   assert.match(cjk, /<noscript><link rel="stylesheet" href=\{CJK_SERIF_CSS\} \/><\/noscript>/, 'Without script it is a plain stylesheet');
 }
 
-// ── The webfonts: Google's own rules in our stylesheet, no first paint
-// waiting on fonts.googleapis.com, the same nine files from fonts.gstatic.com.
+// ── The webfonts: their rules and their nine files are our own — no first
+// paint and no first word waiting on Google's hosts.
 {
   assert.doesNotMatch(layout, /<link[^>]*fonts\.googleapis\.com/, 'No render-blocking request to fonts.googleapis.com');
-  assert.match(layout, /<link rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin \/>/, 'The font files\' host is still preconnected');
+  assert.doesNotMatch(layout, /fonts\.gstatic\.com/, 'The font files are served from our own site: no Google host to warm');
   const fontsAt = layout.indexOf("import '../styles/fonts.css';");
   assert.ok(fontsAt > 0 && fontsAt < layout.indexOf("import '../styles/global.css';"), 'Layout imports the font rules with its stylesheet');
   const fonts = fs.readFileSync(`${root}/src/styles/fonts.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -217,14 +217,20 @@ assert.ok(firstPrep > folderBegin && firstPrep < folderEnd, 'The rewrite is regi
   assert.equal(faces.length, 18, 'Every face Google answers for the request: Fraunces 2 × 3 subsets, Space Grotesk 4 weights × 3');
   for (const face of faces) {
     assert.match(face, /font-display: swap;/);
-    assert.match(face, /src: url\(https:\/\/fonts\.gstatic\.com\/s\/(fraunces\/v38|spacegrotesk\/v22)\/[\w-]+\.woff2\) format\('woff2'\);/);
+    assert.match(face, /src: url\('\.\.\/assets\/fonts\/(fraunces-(roman|italic)|space-grotesk)-(vietnamese|latin-ext|latin)\.woff2'\) format\('woff2'\);/);
     assert.match(face, /font-family: '(Fraunces|Space Grotesk)';/);
     assert.match(face, /unicode-range: U\+/);
   }
   const files = new Set(faces.map((face) => face.match(/url\(([^)]+)\)/)[1]));
   assert.equal(files.size, 9, 'The same nine files');
+  for (const file of files) {
+    const bytes = fs.readFileSync(new URL(file.replace(/'/g, ''), `file://${root}/src/styles/`));
+    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2', `${file} is a woff2 file`);
+  }
+  const shipped = fs.readdirSync(`${root}/src/assets/fonts`).filter((f) => f.endsWith('.woff2'));
+  assert.equal(shipped.length, 9, 'Exactly the nine files are kept: no stray font ships');
   assert.ok(faces.some((face) => /font-style: normal;\s*font-weight: 400 900;/.test(face) && /U\+0000-00FF/.test(face)), 'Fraunces roman, the whole weight axis, latin');
   assert.ok(faces.some((face) => /font-style: italic;\s*font-weight: 400 600;/.test(face) && /U\+0000-00FF/.test(face)), 'Fraunces italic, latin');
 }
 
-console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, layered Escape handling, folder-first arrivals, and the webfonts\' rules in our own stylesheet');
+console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, layered Escape handling, folder-first arrivals, and the webfonts served from our own site');
