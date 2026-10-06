@@ -9,7 +9,8 @@ import { chapterOrder } from '../lib/chapterOrder';
 import { exposureTotals } from '../lib/exposureRecord';
 import { PORTRAIT_FALLBACK, PORTRAIT_SIZES, PORTRAIT_WIDTHS, portraitCropUrl } from '../lib/aboutPortrait';
 import { loadNotes } from '../lib/notesData';
-import { CJK_SERIF_CSS, featuredNote, formatNoteDateShort, hasHan, langOf, noteNumbers, pad2 } from '../lib/notes';
+import { featuredNote, formatNoteDateShort, hasHan, langOf, noteNumbers, pad2 } from '../lib/notes';
+import CjkSerifLink from '../components/shared/CjkSerifLink.astro';
 import { siteText } from '../i18n/content';
 import { tr } from '../i18n/dict';
 
@@ -121,7 +122,7 @@ const note: AboutNote | null = teased
   dark={true}
 >
   <Fragment slot="head">
-    {noteCjk && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
+    {noteCjk && <CjkSerifLink />}
   </Fragment>
   {/* How the page arrives, decided before its first paint and written on
       <html> (global.css, "/about: the profile"): the contributor cover in

@@ -2,6 +2,9 @@
 // Keep Mapbox's base styles across ClientRouter head swaps. A cached lazy
 // island does not re-run its CSS side effect when returning to the Homepage.
 import 'mapbox-gl/dist/mapbox-gl.css';
+// The two webfonts' rules (Google's own, the same files from fonts.gstatic.com):
+// in the page's stylesheet, so no first paint waits on fonts.googleapis.com.
+import '../styles/fonts.css';
 import '../styles/global.css';
 import { ClientRouter } from 'astro:transitions';
 import { reelRouterScript } from '../lib/reelVisit';
@@ -98,14 +101,14 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" sizes="32x32" />
     <link rel="shortcut icon" href="/favicon.ico?v=3" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    {/* The webfonts' files (Fraunces, Space Grotesk) come from here; their
+        rules are in the page's own stylesheet (src/styles/fonts.css). There
+        is no render-blocking request to fonts.googleapis.com any more: it
+        was a connection to a third host before every first paint. */}
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     {/* Sanity CDN — every image on the site comes through here, so warm the TLS */}
     <link rel="preconnect" href="https://cdn.sanity.io" crossorigin />
     {/* mapbox preconnect only on /travel */}
-    {/* One combined request; dropped the unused Noto Sans SC (Chinese) family
-        that was a ~91 KB render-blocking stylesheet for nothing. */}
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
     {/* Mapbox CSS is bundled with the Travel island; only its API hosts are preconnected there. */}
 
     <!-- Primary Meta -->
@@ -391,6 +394,31 @@ const notesSample = process.env.NOTES_SAMPLE === '1' || undefined;
           e.preventDefault();
         }
       }, true);
+
+      // ── Every in-site arrival asks for the page itself ──
+      // Each page is a folder in the static build (/about/index.html), and
+      // the host answers /about with a 307 to /about/: one more round trip on
+      // a phone's network before every ClientRouter arrival (the nav, a
+      // story's link, a note). The router fetches the folder straight away;
+      // where it lands is the URL the redirect would have given. First of
+      // the preparation listeners, so the ones below read the same address.
+      document.addEventListener('astro:before-preparation', function(e) {
+        var to = e && e.to;
+        if (!to || to.origin !== window.location.origin) return;
+        var path = to.pathname;
+        if (path === '/' || path.charAt(path.length - 1) === '/' || /\.[a-z0-9]+$/i.test(path)) return;
+        var folder = new URL(to.href);
+        folder.pathname = path + '/';
+        e.to = folder;
+      });
+      // A stylesheet that waits as print media on a full load, so it never
+      // holds the first paint (the Chinese serif, CjkSerifLink.astro), is
+      // already loaded by the router before an in-site swap: on the incoming
+      // page it applies at once, as a plain stylesheet did.
+      document.addEventListener('astro:before-swap', function(e) {
+        var links = e && e.newDocument ? e.newDocument.querySelectorAll('link[rel="stylesheet"][data-swap-media]') : [];
+        for (var i = 0; i < links.length; i += 1) links[i].setAttribute('media', 'all');
+      });
 
       // ── Filmstrip scroll restoration ──
       // Save scroll position when leaving Homepage. A direct Home link restores

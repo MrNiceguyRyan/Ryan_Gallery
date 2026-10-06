@@ -15,8 +15,8 @@ import '../../styles/notes.css';
 import { sanityClient } from 'sanity:client';
 import { fetchSanityWithRetry } from '../../lib/sanityFetch';
 import { loadNotes } from '../../lib/notesData';
+import CjkSerifLink from '../../components/shared/CjkSerifLink.astro';
 import {
-  CJK_SERIF_CSS,
   blockLang,
   formatNoteDateShort,
   imageSrcSet,
@@ -68,7 +68,7 @@ const pair = (en: string, zh: string) => ({ en, zh });
 >
   <Fragment slot="head">
     {(count === 0 || sample) && <meta name="robots" content="noindex, follow" />}
-    {hasChinese && <link rel="stylesheet" href={CJK_SERIF_CSS} />}
+    {hasChinese && <CjkSerifLink />}
   </Fragment>
   <Nav client:load currentPath={currentPath} scrim />
   <main
