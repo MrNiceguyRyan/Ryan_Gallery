@@ -1,20 +1,25 @@
 // Run offline: node --experimental-strip-types --test scripts/opening-film.test.mjs
 //
-// The opening film (src/lib/openingFilm.ts), v6 — the owner's spec of
-// 2026-09-28 ("复古编辑部动态排版") and his changes of 2026-09-29: no place
-// names (suspense; two tiny easter eggs allowed); the single words FIRST —
-// ~25 match cuts on a sixth of a second through editorial pages and printed
-// matter round a fixed lime anchor (17 since the owner's "缩短3-4秒", the
-// film 3–4 s shorter), the first of them drawn under the proof, the film's
-// first paint (act 0, a count-in on the sixth, the owner's "可以加一个小小的
-// 开场") — then the lime block handed off into the cursor of a typewriter
-// relay across eight machines, each in its own face; richer, layered pages;
-// black-and-white pages and colour in runs; no limit on the length. Held
-// here: the act order; every cut on its act's grid (the match cuts the
-// sixth, the hand-off and the relay the twelfth, the burn the 24th, the dark
-// and the title the eighth); the relay (slow to fast, typing continuous, one
-// left edge, baseline and cap height); the flash budget (≤ 6 turns, ≤ 3 in
-// any second, a mid ground turning nothing; the proof turns none); the
+// The opening film (src/lib/openingFilm.ts), v7 — the owner's spec of
+// 2026-09-28 ("复古编辑部动态排版"), his changes of 2026-09-29 (no place
+// names — suspense; a tiny easter egg allowed; the single words FIRST, match
+// cuts on a sixth of a second through editorial pages and printed matter
+// round a fixed lime anchor, the first of them drawn under the proof, the
+// film's first paint — act 0, a count-in on the sixth, the owner's "可以加
+// 一个小小的开场" — then the lime block handed off into the cursor of a
+// typewriter relay across machines, each in its own face; richer, layered
+// pages; black-and-white pages and colour in runs), and of 2026-10-05: "现在
+// 我觉得开头的动画可以再短一点点 控制在5秒" — from the first paint to the
+// landing done within five seconds (it was 10.1 s), every act kept and
+// compressed: ten pages, two a keyword (an editorial page and a piece of
+// printed matter); five machines; nine frames of burn; the dark typed and
+// the title on the 24th; a 0.555 s landing. Held here: the five seconds
+// (with a missed beat to spare); the act order; every cut on its act's grid
+// and every grid whole vsyncs (the match cuts the sixth, the hand-off and
+// the relay the twelfth, the burn, the dark and the title the 24th); the
+// relay (slow to fast, typing continuous, one left edge, baseline and cap
+// height); the flash budget (≤ 6 turns, ≤ 3 in any second, a mid ground
+// turning nothing; the proof turns none); the
 // proof (its beats on the sixth, its clock counted from its first frame,
 // the stylesheet's lights at rest when down, both plates printed from the
 // first paint by the head script and kept by the clock — the plates' own
@@ -51,11 +56,35 @@ const onGrid = (t, unit, from = 0) => close((t - from) / unit, Math.round((t - f
 const PLANS = { desktop: F.filmPlan('desktop'), phone: F.filmPlan('phone') };
 const SOURCES = ['../src/lib/openingFilm.ts', '../src/components/home/OpeningScenes.tsx', '../src/components/home/OpeningFilm.tsx', '../src/styles/opening.css'];
 
-// The film as it stood before the owner's "缩短3-4秒" (2026-09-29): 11 625 ms
-// to the landing, 12 325 ms to the page.
-const BEFORE_MS = 11625 + 700;
+// The owner's five seconds (2026-10-05): from the first paint to the landing
+// done — with a beat to spare (the proof's lime waits a sixth for a face
+// still on its way, on a cold load), so the reader's own load is in it too.
+// It was 10 117 ms (measured 10.1 s, desktop and phone).
+const FIVE_S = 5000;
+const BEFORE_MS = 1000 + 8416.667 + 700;
+const firstPaintToLanded = (plan) => F.PRELUDE_MS + plan.length + F.LANDING_A.done;
 
-test('the acts: contiguous from 0, the single words first, then the relay; the landing inside 0.7 s', () => {
+test('the five seconds: first paint to the landing done ≤ 5000 ms, with a missed beat to spare; every act still there', () => {
+  for (const [layout, plan] of Object.entries(PLANS)) {
+    const total = firstPaintToLanded(plan);
+    assert.ok(total <= FIVE_S - F.CUT_MS, `${layout}: ${total.toFixed(1)} ms (a missed beat: ${(total + F.CUT_MS).toFixed(1)})`);
+    assert.ok(BEFORE_MS - total > 5000, `${layout}: ${(BEFORE_MS - total).toFixed(0)} ms shorter than it was`);
+    for (const id of F.ACT_ORDER) assert.ok(plan.acts[id].end - plan.acts[id].start > 0, `${layout}: ${id} is there`);
+    assert.ok(F.PRELUDE_MS > 0, 'the proof is there');
+  }
+  // Each act's share (ms): the plan the owner's sheet shows.
+  const p = PLANS.desktop;
+  const len = (id) => p.acts[id].end - p.acts[id].start;
+  assert.ok(close(F.PRELUDE_MS, 500), 'the proof: half a second');
+  assert.ok(close(len('cuts'), 10 * F.CUT_MS), 'ten pages, a sixth each');
+  assert.ok(close(len('hand'), 2 * F.FRAME12_MS));
+  assert.ok(close(len('type'), 11 * F.FRAME12_MS));
+  assert.ok(close(len('burn'), 9 * F.FRAME24_MS));
+  assert.ok(close(len('dark') + len('title'), 14 * F.FRAME24_MS));
+  assert.equal(F.LANDING_A.done, 555);
+});
+
+test('the acts: contiguous from 0, the single words first, then the relay; the landing inside 0.6 s', () => {
   assert.deepEqual([...F.ACT_ORDER], ['cuts', 'hand', 'type', 'burn', 'dark', 'title']);
   for (const [layout, plan] of Object.entries(PLANS)) {
     let at = 0;
@@ -65,31 +94,31 @@ test('the acts: contiguous from 0, the single words first, then the relay; the l
     }
     assert.ok(close(at, plan.length));
     assert.equal(plan.acts.cuts.start, 0, 'the match cuts open the film (the first page is the first paint)');
-    // The match cuts about three and a third seconds (twenty sixths: the
-    // first page two, the last three, every other one).
+    // The match cuts a second and two thirds (ten sixths, a page each).
     const cuts = plan.acts.cuts.end - plan.acts.cuts.start;
-    assert.ok(cuts >= 3000 && cuts <= 4000, `act 1 ${cuts} ms`);
-    // The hand-off: four twelfths.
+    assert.ok(cuts >= 1500 && cuts <= 2000, `act 1 ${cuts} ms`);
+    // The hand-off: two twelfths.
     assert.ok(close(plan.acts.hand.end - plan.acts.hand.start, F.HAND.frames * F.FRAME12_MS));
-    // The relay is the owner's two to three seconds.
+    assert.equal(F.HAND.frames, 2);
+    // The relay: about a second (it was the owner's two to three).
     const relay = plan.acts.type.end - plan.acts.type.start;
-    assert.ok(relay >= 2000 && relay <= 3000, `relay ${relay} ms`);
+    assert.ok(relay >= 800 && relay <= 1200, `relay ${relay} ms`);
     assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, F.BURN.frames * F.FRAME24_MS), 'the burn: its frames at 24 fps');
-    assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, 7 * F.BEAT_MS));
-    // The owner: "缩短3-4秒" — the whole of it, to the page, 3–4 s shorter
-    // than it was (and every act still there).
-    const total = plan.length + F.LANDING_A.done;
-    assert.ok(BEFORE_MS - total >= 3000 && BEFORE_MS - total <= 4000, `${layout}: ${total} ms, ${BEFORE_MS - total} ms shorter`);
+    assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, F.DARK_FRAMES * F.FRAME24_MS));
+    assert.ok(close(plan.acts.title.end - plan.acts.title.start, F.TITLE.frames * F.FRAME24_MS));
   }
   const others = F.FLY_ORDER.length - F.NAME_WORDS.length;
   assert.ok(F.landingAHome(others) + F.LANDING_A.settle <= F.LANDING_A.done, 'every word home, and the page\'s own, inside the landing');
 });
 
-test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th, the eighth', () => {
+test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th — every grid whole vsyncs', () => {
   assert.ok(close(F.FRAME12_MS, 1000 / 12));
   assert.ok(close(F.CUT_MS, 1000 / 6));
   assert.ok(close(F.FRAME24_MS, 1000 / 24));
-  assert.equal(F.BEAT_MS, 125);
+  // Whole vsyncs: a sixth is 10 at 60 Hz, a twelfth 5, a 24th 5 at 120 Hz.
+  for (const [grid, hz] of [[F.CUT_MS, 60], [F.FRAME12_MS, 60], [F.FRAME24_MS, 120], [F.CUT_MS, 120], [F.FRAME12_MS, 120]]) {
+    assert.ok(close((grid * hz) / 1000, Math.round((grid * hz) / 1000), 1e-9), `${grid} ms at ${hz} Hz`);
+  }
   for (const plan of Object.values(PLANS)) {
     // The match cuts: every one on a sixth from the clock's start.
     for (const c of plan.cuts) {
@@ -100,6 +129,8 @@ test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th,
     // The hand-off and the machines on the twelfth.
     for (const t of [plan.acts.hand.start, plan.acts.hand.end]) assert.ok(onGrid(t, F.FRAME12_MS), `hand ${t}`);
     for (const s of plan.styles) assert.ok(onGrid(s.start, F.FRAME12_MS) && onGrid(s.end, F.FRAME12_MS), `${s.id} ${s.start}`);
+    // The proof's beats on the sixth (before the clock).
+    for (const t of [plan.prelude.start, plan.prelude.lime, plan.prelude.word, plan.prelude.end]) assert.ok(onGrid(t, F.CUT_MS), `proof beat ${t}`);
     // The burn's frames on the 24th from its start.
     for (let f = 0; f < F.BURN.frames; f += 1) {
       const t = F.burnFrameStart(plan, f);
@@ -109,40 +140,44 @@ test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th,
     }
     assert.equal(F.burnFrameAt(plan, plan.acts.burn.start - 1), -1);
     assert.equal(F.burnFrameAt(plan, plan.acts.burn.end), -1);
-    // The dark, the title and the landing on the eighth from the dark.
-    for (const t of [plan.acts.dark.start, plan.acts.title.start, plan.acts.title.start + F.TITLE.morph, plan.length]) {
-      assert.ok(onGrid(t, F.BEAT_MS, plan.acts.dark.start), `beat ${t}`);
+    // The dark's keys, the title, its morph's end and the landing on the
+    // 24th from the dark (the skip lands on it too).
+    for (const t of [plan.acts.dark.start, ...plan.darkTyping, plan.acts.title.start, plan.acts.title.start + F.TITLE.morph, plan.length, plan.length - F.FF_TAIL]) {
+      assert.ok(onGrid(t, F.FRAME24_MS, plan.acts.dark.start), `24th ${t}`);
     }
     // And every act starts on the 24th and the twelfth from the clock's
-    // start (a sixth is two twelfths, an eighth three 24ths).
+    // start (a sixth is two twelfths).
     for (const a of Object.values(plan.acts)) assert.ok(onGrid(a.start, F.FRAME24_MS), `act at ${a.start}`);
-    assert.ok(F.hardCuts(plan).length >= 28);
+    assert.ok(F.hardCuts(plan).length >= 18, `${F.hardCuts(plan).length} cuts`);
   }
 });
 
-test('act 3: the relay — eight machines, each its own face, slow to fast, the typing continuous across the cuts', () => {
+test('act 3: the relay — five machines, each its own face, slow to fast, the typing continuous across the cuts', () => {
   assert.equal(F.TYPED, 'an archive of travel');
   const ids = F.STYLES.map((s) => s.id);
-  assert.ok(ids.length >= 6 && ids.length <= 8, 'six to eight machines');
+  assert.ok(ids.length >= 4 && ids.length <= 6, 'four to six machines');
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(ids.at(-1), F.BURN_STYLE, 'the burn takes the last');
-  // The owner's machines: an antique 1-bit computer first (where the lime
-  // block lands), a strip of film on a lightbox and a label maker's tape in
-  // place of the blue screen and the maroon paper; no blue, no red machine.
+  // The owner's machines: the antique 1-bit computer first (where the lime
+  // block lands), a strip of film on a lightbox; no blue, no red machine.
   assert.equal(ids[0], 'mac');
-  for (const id of ['film', 'label']) assert.ok(ids.includes(id), id);
+  assert.ok(ids.includes('film'));
   for (const id of ['deep', 'bars', 'pill']) assert.ok(!ids.includes(id), id);
   // Every machine imitates its own face.
   assert.equal(new Set(F.STYLES.map((s) => s.face)).size, ids.length, 'a face a machine');
   // Slow to fast: each machine no longer than the one before, the paper
-  // (the last) holds for the burn; the first long.
+  // (the last) holds for the burn; the first the longest, and on screen
+  // under the hand-off before it.
   const frames = F.STYLES.map((s) => s.frames);
   for (let i = 1; i < frames.length - 1; i += 1) assert.ok(frames[i] <= frames[i - 1], `${ids[i]} ${frames[i]}`);
-  assert.ok(frames[0] * F.FRAME12_MS >= 600, 'the first is on long enough to be read');
+  assert.ok(frames[0] > frames[1], 'the antique computer the longest');
+  assert.ok((F.HAND.frames + frames[0]) * F.FRAME12_MS >= 400, 'the first is on long enough to be read');
   assert.ok(frames.at(-2) * F.FRAME12_MS <= 250, 'the fastest at a quarter second');
-  // Light, one dark run, light: the relay turns the picture twice.
+  // All light: in the five seconds a dark run between light machines, a
+  // second before the burn's dark, read as a flash — the relay turns
+  // nothing over.
   const tones = F.STYLES.map((s) => s.tone).filter((t) => t !== 'mid');
-  assert.equal(tones.filter((t, i) => i > 0 && t !== tones[i - 1]).length, 2);
+  assert.equal(tones.filter((t, i) => i > 0 && t !== tones[i - 1]).length, 0);
   for (const plan of Object.values(PLANS)) {
     const times = plan.typing;
     assert.equal(times.length, F.TYPED.length);
@@ -158,8 +193,10 @@ test('act 3: the relay — eight machines, each its own face, slow to fast, the 
     assert.equal(F.STYLES.reduce((n, s) => n + s.keys, 0), F.TYPED.length, 'every letter struck');
     const paper = plan.styles.at(-1);
     assert.ok(times.at(-1) >= paper.start && times.at(-1) < plan.acts.burn.start, 'the last letter on the paper, before the burn');
+    // Fast — the relay's own acceleration — but never two letters a frame.
     const cps = ((times.length - 1) * 1000) / (times.at(-1) - times[0]);
-    assert.ok(cps >= 7.5 && cps <= 11, `${cps.toFixed(1)} a second`);
+    assert.ok(cps >= 18 && cps <= 30, `${cps.toFixed(1)} a second`);
+    for (let i = 1; i < times.length; i += 1) assert.ok(times[i] - times[i - 1] >= 1000 / 30, `keys ${i} ${(times[i] - times[i - 1]).toFixed(1)} ms apart`);
     // The cursor: solid while it types, blinking after the last letter.
     const steps = F.cursorSteps(plan);
     for (const [t, v] of steps) assert.ok(!(t > times[0] && t < times.at(-1) && v === 0), `off while typing at ${t}`);
@@ -254,8 +291,8 @@ const keyframesOf = (css, name) => {
 test('act 0: the proof — a count-in on the sixth, before the clock (the plan untouched)', () => {
   const P0 = F.PRELUDE;
   const { paint, lime, word } = P0.beats;
-  assert.ok(close(F.PRELUDE_MS, 6 * F.CUT_MS));
-  assert.ok(F.PRELUDE_MS <= 1000 + 1e-6, 'small: a second at most (the owner\'s "小小的开场", after his "缩短3-4秒")');
+  assert.ok(close(F.PRELUDE_MS, 3 * F.CUT_MS));
+  assert.ok(F.PRELUDE_MS <= 500 + 1e-6, 'small: half a second at most (the owner\'s "小小的开场", within his five seconds)');
   for (const b of [paint, lime, word]) assert.ok(Number.isInteger(b), `${b}: whole sixths`);
   assert.ok(paint > lime && lime > word && word > 0, 'the paint, the lime plate, the ink plate, then the page');
   assert.ok(close(F.PRELUDE_MS, paint * F.CUT_MS));
@@ -272,10 +309,10 @@ test('act 0: the proof — a count-in on the sixth, before the clock (the plan u
     assert.ok(close(pr.start, -F.PRELUDE_MS) && close(pr.lime, -lime * F.CUT_MS) && close(pr.word, -word * F.CUT_MS) && pr.end === 0, `${layout}: ${JSON.stringify(pr)}`);
     for (const t of [pr.start, pr.lime, pr.word, pr.end]) assert.ok(onGrid(t, F.CUT_MS, pr.start), `${layout}: a beat at ${t}, on the sixth from the first paint`);
     assert.equal(plan.acts.cuts.start, 0, 'film 0 is still the first page: no act, no cut moves');
-    assert.ok(close(plan.cuts[1].start - pr.end, 2 * F.CUT_MS), 'the first page holds its two sixths after the proof');
-    // The owner's shorter film stays shorter: first paint to the page.
-    const fpToPage = F.PRELUDE_MS + plan.length + F.LANDING_A.done;
-    assert.ok(fpToPage <= BEFORE_MS - 2000, `${layout}: ${fpToPage.toFixed(1)} ms from the first paint to the page`);
+    assert.ok(close(plan.cuts[1].start - pr.end, F.CUT_MS), 'the first page holds its sixth after the proof');
+    // The five seconds: first paint to the page.
+    const fpToPage = firstPaintToLanded(plan);
+    assert.ok(fpToPage <= FIVE_S - F.CUT_MS, `${layout}: ${fpToPage.toFixed(1)} ms from the first paint to the page`);
     // Light on light: the proof turns nothing over.
     const tl = F.toneTimeline(plan);
     assert.equal(tl[0].tone, 'light');
@@ -283,10 +320,11 @@ test('act 0: the proof — a count-in on the sixth, before the clock (the plan u
     const flips = F.toneFlips(plan);
     const without = F.toneFlips({ ...plan, prelude: { start: 0, lime: 0, word: 0, end: 0 } });
     assert.deepEqual(flips.map((t) => Math.round(t * 1e3)), without.map((t) => Math.round(t * 1e3)), 'the proof adds no turn');
-    const want = [5 * F.CUT_MS, 13 * F.CUT_MS, 28 * F.CUT_MS, 5250, 6375];
+    // CAMERA's black and white in, paper again at THOUGHT, the burn's dark.
+    const want = [2 * F.CUT_MS, 6 * F.CUT_MS, F.burnFrameStart(plan, F.BURN.out[0])];
     assert.equal(flips.length, want.length);
     flips.forEach((t, i) => assert.ok(close(t, want[i], 1e-5), `turn ${i}: ${t}`));
-    assert.ok(flips[0] - pr.start >= 1800, 'no turn in the first 1.8 s from the first paint');
+    assert.ok(flips[0] - pr.start >= 800, 'no turn before the proof and the first two pages have been read');
   }
   assert.ok(F.luminance(P0.ground) > 0.6, 'newsprint: light');
   assert.ok(Math.abs(F.luminance('#D2FF00') - F.luminance(P0.ground)) < 0.1, 'the lime plate is a change of hue, not of light');
@@ -305,25 +343,25 @@ test('act 0: the proof — a count-in on the sixth, before the clock (the plan u
   for (const n of F.PLACE_NAMES) for (const text of slug) assert.doesNotMatch(text, new RegExp(`\\b${n}\\b`, 'i'), text);
 });
 
-test('the proof\'s clock: the plates on the proof\'s sixth from its first frame; the page on the first sixth the island can make, never sooner than a third of a second after the word', () => {
+test('the proof\'s clock: the plates on the proof\'s sixth from its first frame; the page on the first sixth the island can make, never sooner than a sixth after the word', () => {
   const CUT = F.CUT_MS;
   const { paint, lime, word } = F.PRELUDE.beats;
   // The lime's beat (the head script's): its own beat, or the first sixth
   // after.
-  assert.ok(close(F.limeBeat(1000, 1100), 1000 + 2 * CUT), 'the face in: the lime on its own beat');
-  assert.ok(close(F.limeBeat(1000, 1000 + 2 * CUT), 1000 + 2 * CUT), 'ready on the beat');
-  assert.ok(close(F.limeBeat(1000, 1500), 1000 + 3 * CUT), 'a sixth late');
-  // The page (the island): a third of a second after the word, or the
-  // first sixth after the island is ready.
-  assert.ok(close(F.pageStart(1000 + 2 * CUT, 1100), 2000), 'fast: the page a second after the first paint');
-  assert.ok(close(F.pageStart(1000 + 2 * CUT, 2000), 2000), 'ready on the page\'s beat');
-  assert.ok(close(F.pageStart(1000 + 2 * CUT, 2800), 2000 + 5 * CUT), 'a slow island: the title card holds');
+  assert.ok(close(F.limeBeat(1000, 1100), 1000 + CUT), 'the face in: the lime on its own beat');
+  assert.ok(close(F.limeBeat(1000, 1000 + CUT), 1000 + CUT), 'ready on the beat');
+  assert.ok(close(F.limeBeat(1000, 1200), 1000 + 2 * CUT), 'a sixth late');
+  // The page (the island): a sixth after the word, or the first sixth
+  // after the island is ready.
+  assert.ok(close(F.pageStart(1000 + CUT, 1100), 1500), 'fast: the page half a second after the first paint');
+  assert.ok(close(F.pageStart(1000 + CUT, 1500), 1500), 'ready on the page\'s beat');
+  assert.ok(close(F.pageStart(1000 + CUT, 2800), 1500 + 8 * CUT), 'a slow island: the title card holds');
   // The fallback (no plates were printed): the plan's own count-in.
-  assert.ok(close(F.filmStart(1000, 1100), 2000), 'fast: the page a second after the first paint');
-  assert.ok(close(F.filmStart(1000, 1000 + 2 * CUT), 2000), 'ready on the lime\'s own beat');
-  assert.ok(close(F.filmStart(1000, 1400), 2000 + CUT), 'a sixth late');
-  assert.ok(close(F.filmStart(1000, 2800), 2000 + 9 * CUT), 'a slow island');
-  assert.ok(close(F.filmStart(null, 500), 500 + 4 * CUT), 'no proof to count from: the lime when ready');
+  assert.ok(close(F.filmStart(1000, 1100), 1500), 'fast: the page half a second after the first paint');
+  assert.ok(close(F.filmStart(1000, 1000 + CUT), 1500), 'ready on the lime\'s own beat');
+  assert.ok(close(F.filmStart(1000, 1200), 1500 + CUT), 'a sixth late');
+  assert.ok(close(F.filmStart(1000, 2800), 1500 + 10 * CUT), 'a slow island');
+  assert.ok(close(F.filmStart(null, 500), 500 + 2 * CUT), 'no proof to count from: the lime when ready');
   const rand = F.seeded(4061);
   for (let i = 0; i < 2000; i += 1) {
     const o = rand() * 5000;
@@ -337,7 +375,7 @@ test('the proof\'s clock: the plates on the proof\'s sixth from its first frame;
     // The island: the page.
     const page = F.pageStart(limeAt, ready);
     assert.ok(onGrid(page, CUT, o), `the page on the proof's grid: ${o} ${ready}`);
-    assert.ok(page - limeAt >= lime * CUT - 1e-6, 'the word a third of a second after the lime, the page a third after the word — never sooner');
+    assert.ok(page - limeAt >= lime * CUT - 1e-6, 'the word a sixth after the lime, the page a sixth after the word — never sooner');
     assert.ok(page >= ready - 1e-6 && page < Math.max(ready, limeAt + lime * CUT) + CUT, 'the first sixth the island can make');
     // The fallback is the same grid (the island printing its own plates).
     const t0 = F.filmStart(o, ready);
@@ -429,7 +467,7 @@ test('the proof is the first paint: a flat sheet; the stylesheet brings the ligh
   assert.ok(main.indexOf('of-frame__paper') < at('<Cut key') && at('<ProofSheet') > at('<Cut key'), 'the paper first, the pages, then the sheet');
 });
 
-test('the proof\'s plates: the lime a third of a second before the word, setting to full a frame before it; the island keeps the head script\'s own animations (the same keys, laid by the island only where there were none)', () => {
+test('the proof\'s plates: the lime a sixth of a second before the word, setting to full a frame before it; the island keeps the head script\'s own animations (the same keys, laid by the island only where there were none)', () => {
   const P0 = F.PRELUDE;
   const CUT = F.CUT_MS;
   const ink = F.proofInk();
@@ -487,6 +525,10 @@ test('the island: one clock from the proof\'s first frame; it takes the head scr
   assert.match(begin, /if \(a\.startTime == null\) a\.startTime = t0 - PRELUDE_MS;/);
   assert.match(begin, /if \(pendingSkip\) \{[\s\S]*?proof\.forEach\(\(a\) => a\.finish\(\)\);\s*plates\?\.hold\(\);\s*plates\?\.anims\.forEach\(\(a\) => a\.finish\(\)\);[\s\S]*?\} else \{/);
   assert.ok(begin.indexOf("setAttribute('data-clock', '')") < begin.indexOf('build();'), 'the clock and the keyframes in one task');
+  // The clock never starts before its keyframes are laid: laid late (a slow
+  // phone), the page goes to a later sixth of the same grid.
+  assert.match(begin, /build\(\);\s*if \(!pendingSkip && seekParam == null\) \{[\s\S]*?const late = nowMs\(\) \+ CLOCK_LEAD_MS - \(t0 \+ GRID_HAIR_MS\);\s*if \(late > 0\) \{\s*const shift = Math\.ceil\(late \/ CUT_MS - 1e-6\) \* CUT_MS;\s*shiftAll\(shift\);/);
+  assert.ok(begin.indexOf('shiftAll(shift)') < begin.indexOf('schedule();'), 'shifted before the moments are scheduled');
   assert.match(island, /\.filter\(\s*\(a\) => typeof \(a as CSSAnimation\)\.animationName === 'string' && \(a as CSSAnimation\)\.animationName\.startsWith\('of-proof'\),?\s*\)/);
   // The head script's record, taken over once (and its taps stopped) before
   // anything else; its own when there was none; none for ?filmT.
@@ -605,29 +647,31 @@ test('one ink box, letter by letter: a letter fitted into its own box is itself;
   assert.ok(close(F.morphAt(0.4, [0.2, 0.6]), 0.5));
 });
 
-test('act 1: the keywords in the owner\'s order, a new face at every cut, 15–20 scenes', () => {
+test('act 1: the keywords in the owner\'s order, a new face at every cut, ten scenes', () => {
   const S = F.SCENES;
-  assert.ok(S.length >= 15 && S.length <= 20, `${S.length} scenes`);
+  assert.ok(S.length >= 9 && S.length <= 12, `${S.length} scenes`);
   const groups = [];
   S.forEach((s) => (groups.at(-1) === s.word ? null : groups.push(s.word)));
   assert.deepEqual(groups, ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']);
-  // Three or four pages a keyword; YOU two (a short hold, but read).
+  // Two pages a keyword, each a different kind of printed matter: an
+  // editorial page and a piece of printed matter (the owner's quick cuts
+  // through magazines and newspapers, kept in the five seconds).
   const count = (w) => S.filter((s) => s.word === w).length;
-  for (const w of ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT']) assert.ok(count(w) >= 3 && count(w) <= 4, `${w} ${count(w)}`);
-  assert.equal(count('YOU'), 2);
+  for (const w of ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']) {
+    assert.equal(count(w), 2, `${w} ${count(w)}`);
+    const pages = S.filter((s) => s.word === w);
+    assert.equal(pages.filter((s) => s.sheet).length, 1, `${w}: one piece of printed matter`);
+    assert.equal(pages.filter((s) => !s.sheet).length, 1, `${w}: one editorial page`);
+  }
   for (const plan of Object.values(PLANS)) {
     assert.equal(plan.cuts.at(-1).word, 'YOU', 'YOU is the last page before the hand-off');
     assert.equal(plan.cuts[0].word, 'ARCHIVE');
     for (let i = 1; i < plan.cuts.length; i += 1) assert.notEqual(plan.cuts[i].face, plan.cuts[i - 1].face, 'every cut changes the face');
     for (const face of F.FACE_ORDER) assert.ok(plan.cuts.some((c) => c.face === face), face);
   }
-  // The first page (the first paint) holds two sixths, YOU's last three —
-  // the longest, before the hand-off; every page between them one.
-  const slots = S.map((s) => s.slots);
-  assert.equal(slots[0], 2);
-  S.slice(1, -1).forEach((s, k) => assert.equal(s.slots, 1, `${k + 1}: ${s.slots}`));
-  assert.equal(slots.at(-1), 3);
-  assert.equal(Math.max(...slots), slots.at(-1));
+  // Every page a sixth: the first (the proof was its hold) and YOU's last
+  // (the hand-off carries its block on) like the rest.
+  S.forEach((s, k) => assert.equal(s.slots, 1, `${k}: ${s.slots}`));
   assert.equal(F.faceText('ARCHIVE', 'fit'), 'Archive');
   assert.equal(F.faceText('YOU', 'sg700'), 'YOU');
   // The words that must be seen: ARCHIVE, CAMERA, TRAVEL, RYAN XU, YOU —
@@ -643,13 +687,13 @@ test('act 1: the keywords in the owner\'s order, a new face at every cut, 15–2
 test('act 1: editorial pages alternate with printed matter; at least four type tiers and layered print on every page', () => {
   const S = F.SCENES;
   const sheets = S.filter((s) => s.sheet).map((s) => s.sheet);
-  assert.ok(sheets.length >= 8, `${sheets.length} pieces of printed matter`);
+  assert.ok(sheets.length >= 5, `${sheets.length} pieces of printed matter`);
   assert.equal(new Set(sheets).size, sheets.length, 'each kind once');
-  for (const kind of ['newspaper', 'dictionary', 'magazine', 'slate', 'ticket', 'passport', 'telegram', 'postcard']) assert.ok(sheets.includes(kind), kind);
+  for (const kind of ['newspaper', 'magazine', 'ticket', 'telegram', 'postcard']) assert.ok(sheets.includes(kind), kind);
   // Every kind of sheet the film draws is played (none left behind).
   assert.deepEqual(Object.keys(F.SHEETS).sort(), [...sheets].sort());
   assert.deepEqual(Object.keys(F.SHEET_TONE).sort(), [...sheets].sort());
-  assert.ok(S.filter((s) => !s.sheet).length >= 8, 'editorial pages');
+  assert.ok(S.filter((s) => !s.sheet).length >= 5, 'editorial pages');
   for (let i = 1; i < S.length; i += 1) assert.ok(!(S[i].sheet && S[i - 1].sheet), `two sheets in a row at ${i}`);
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   let dense = 0;
@@ -687,15 +731,15 @@ test('act 1: editorial pages alternate with printed matter; at least four type t
   }
   // The rhythm breathes: crowded and calm pages both.
   const eds = S.filter((s) => !s.sheet).length;
-  assert.ok(dense >= 4 && eds - dense >= 4, `${dense} dense of ${eds}`);
+  assert.ok(dense >= 2 && eds - dense >= 2, `${dense} dense of ${eds}`);
   // His own photographs only (the film's three), at their ratio.
   assert.match(scenes, /<Picture picture=\{pictures\[l\.print\.pic\]\}/);
 });
 
-test('no place names: the suspense — only the two tiny eggs, in a corner, never the keyword', () => {
+test('no place names: the suspense — only the tiny egg, in a column, never the keyword', () => {
   const names = F.PLACE_NAMES;
   const eggText = F.EGGS.map((e) => e.text);
-  assert.ok(F.EGGS.length <= 2);
+  assert.ok(F.EGGS.length >= 1 && F.EGGS.length <= 2);
   for (const e of F.EGGS) assert.ok(e.px <= 8, `${e.text} is tiny`);
   // Every word the film shows, but the eggs.
   const shown = [];
@@ -771,36 +815,36 @@ test('act 1: the drift runs on across every cut (the same way, or a quarter turn
   for (let i = 1; i < F.BLUR_COPIES.length; i += 1) assert.ok(F.BLUR_COPIES[i].opacity < F.BLUR_COPIES[i - 1].opacity);
 });
 
-test('act 4: the burn — frames in the spec\'s order, the slip, the leader one frame a card', () => {
-  // 22 frames (it was 24): one black frame, three of lit perforations.
-  assert.equal(F.BURN.frames, 22);
-  assert.deepEqual([...F.BURN.flicker], [0, 3]);
-  assert.equal(F.BURN.slip, 3);
-  assert.deepEqual([...F.BURN.burn], [4, 9]);
-  assert.deepEqual([...F.BURN.out], [9, 12]);
-  assert.deepEqual([...F.BURN.black], [12, 13]);
-  assert.deepEqual([...F.BURN.leader], [13, 19]);
-  assert.deepEqual([...F.BURN.perfs], [19, 22]);
-  assert.equal(F.BURN.perfs[1], F.BURN.frames, 'the perforations end the burn');
+test('act 4: the burn — every stage in the spec\'s order, a frame or two each: flicker, slip, burn, out, the leader\'s card', () => {
+  // Nine frames (it was 22: the black frame, five leader cards and the lit
+  // perforations went with the five seconds).
+  assert.equal(F.BURN.frames, 9);
+  assert.deepEqual([...F.BURN.flicker], [0, 2]);
+  assert.equal(F.BURN.slip, 2);
+  assert.deepEqual([...F.BURN.burn], [3, 6]);
+  assert.deepEqual([...F.BURN.out], [6, 8]);
+  assert.deepEqual([...F.BURN.leader], [8, 9]);
+  assert.equal(F.BURN.leader[1], F.BURN.frames, 'the leader ends the burn');
   assert.equal(F.LEADER.length, F.BURN.leader[1] - F.BURN.leader[0], 'one card a frame');
-  const perfN = F.BURN.perfs[1] - F.BURN.perfs[0];
-  assert.equal(F.BURN.perfY.length, perfN);
-  assert.equal(F.BURN.perfO.length, perfN);
-  for (let k = 1; k < perfN; k += 1) assert.ok(F.BURN.perfY[k] < F.BURN.perfY[k - 1] && F.BURN.perfO[k] < F.BURN.perfO[k - 1], 'climbing, fading');
-  assert.ok(close(F.frameAt(3).y, -0.25));
-  assert.equal(F.frameAt(2).y, 0);
-  assert.equal(F.frameAt(4).y, 0);
-  assert.ok(close(F.frameAt(11).rot, 6));
-  for (let f = 0; f < 12; f += 1) assert.ok(Math.abs(F.frameAt(f).x) <= 1 && Math.abs(F.frameAt(f).weaveY) <= 1);
-  for (let f = 0; f < 3; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) > 0, `flicker f${f}`);
-  for (let f = 3; f < F.BURN.frames; f += 1) assert.equal(F.burnFrame(f).flick, 0, `no flicker f${f}`);
-  for (let f = 9; f < 12; f += 1) assert.ok(F.frameAt(f).y < 0, `slide f${f} up`);
-  assert.ok(F.frameAt(12).y <= -1, 'gone off the top');
-  for (let f = 5; f < 12; f += 1) assert.ok(F.burnRadius(f) > F.burnRadius(f - 1));
-  assert.equal(F.burnRadius(3), 0);
-  assert.equal(F.burnDarkness(8), 0);
-  assert.ok(F.burnDarkness(11) > F.burnDarkness(9));
-  assert.equal(F.burnDarkness(12), 1);
+  assert.ok(F.LEADER[0].startsWith('count-'), 'the countdown card');
+  assert.equal(F.BURN.radius.length, F.BURN.out[1] - F.BURN.burn[0], 'a radius each frame from the burn until the frame has gone');
+  assert.equal(F.BURN.darkness.length, F.BURN.out[1] - F.BURN.out[0]);
+  assert.equal(F.BURN.slide.length, F.BURN.out[1] - F.BURN.out[0]);
+  assert.ok(close(F.frameAt(2).y, -0.25));
+  assert.equal(F.frameAt(1).y, 0);
+  assert.equal(F.frameAt(3).y, 0);
+  assert.ok(close(F.frameAt(7).rot, 6));
+  for (let f = 0; f < 8; f += 1) assert.ok(Math.abs(F.frameAt(f).x) <= 1 && Math.abs(F.frameAt(f).weaveY) <= 1);
+  for (let f = 0; f < 2; f += 1) assert.ok(Math.abs(F.burnFrame(f).flick) > 0, `flicker f${f}`);
+  assert.ok(F.burnFrame(0).flick > 0 && F.burnFrame(1).flick < 0, 'light, then dark');
+  for (let f = 2; f < F.BURN.frames; f += 1) assert.equal(F.burnFrame(f).flick, 0, `no flicker f${f}`);
+  for (let f = 6; f < 8; f += 1) assert.ok(F.frameAt(f).y < 0, `slide f${f} up`);
+  assert.ok(F.frameAt(8).y <= -1, 'gone off the top');
+  for (let f = 4; f < 8; f += 1) assert.ok(F.burnRadius(f) > F.burnRadius(f - 1));
+  assert.equal(F.burnRadius(2), 0);
+  assert.equal(F.burnDarkness(5), 0);
+  assert.ok(F.burnDarkness(7) > F.burnDarkness(6));
+  assert.equal(F.burnDarkness(8), 1);
 });
 
 test('no strobe: light/dark turns ≤ 3 in any second, ≤ 6 in all (a mid ground turns nothing); the burn never brighter than bone', () => {
@@ -835,16 +879,19 @@ test('no strobe: light/dark turns ≤ 3 in any second, ≤ 6 in all (a mid groun
   assert.ok(F.luminance(F.BURN_HOLE) < 0.02);
 });
 
-test('acts 5–6: the dark typed with one lime cursor, then the line turns into the title', () => {
+test('acts 5–6: the dark typed with one lime cursor, a key a 24th, then the line turns into the title, held formed', () => {
   for (const plan of Object.values(PLANS)) {
     const t = plan.darkTyping;
     assert.equal(t.length, F.DARK_TYPED.length);
     assert.equal(t[0], plan.acts.dark.start + F.DARK_TYPE_AT);
+    t.forEach((k, i) => assert.ok(close(k, plan.acts.dark.start + i * F.FRAME24_MS, 1e-6), `key ${i} on its 24th`));
     const cps = ((t.length - 1) * 1000) / (t.at(-1) - t[0]);
-    assert.ok(cps > 10.5 && cps < 14.5, `${cps.toFixed(1)} a second`);
-    assert.ok(plan.blink.start > t.at(-1));
-    assert.ok(close(plan.blink.end - plan.blink.start, F.CURSOR_MS / 2));
-    assert.equal(plan.blink.end, plan.acts.title.start);
+    assert.ok(cps > 20 && cps < 26, `${cps.toFixed(1)} a second`);
+    assert.ok(t.at(-1) < plan.acts.title.start, 'the line is whole a frame before it is struck');
+    // The title: formed (its morph done, its credits up) and held before
+    // the landing — the skip lands on that hold.
+    assert.ok(plan.acts.title.start + F.TITLE.morph <= plan.length - F.FF_TAIL + 1e-6);
+    assert.ok(F.TITLE.sub[1] <= F.TITLE.morph && F.TITLE.you[1] <= F.TITLE.morph, 'the credits up as it forms');
   }
   assert.ok(F.TITLE.morph < F.ACT_MS.title);
   assert.ok(F.TITLE.box[0] <= F.TITLE.swap[0] && F.TITLE.swap[1] <= F.TITLE.box[1]);
@@ -927,7 +974,7 @@ test('the landing\'s words: at both ends — the end title and the entrance\'s c
   assert.match(scenes, /data-fly=\{word\.toLowerCase\(\)\}/);
 });
 
-test('landing A: every word flies from its box to its glyph box — his name first, whole — inside 0.7 s', () => {
+test('landing A: every word flies from its box to its glyph box — his name first, whole — inside 0.6 s', () => {
   const src = { x: 500, y: 300, w: 400, h: 110 };
   const dst = { x: 104, y: 284, w: 700, h: 221 };
   const f = F.flightFor(src, dst, 64, 175, 0);
@@ -959,9 +1006,11 @@ test('landing A: every word flies from its box to its glyph box — his name fir
   // first landing's peaked at 2.7: a dart).
   const peak = Math.max(...Array.from({ length: 97 }, (_, i) => speed((i + 2) / 100)));
   assert.ok(peak <= 2.1, `peak ${peak}`);
-  // Inside 0.7 s (the owner has asked for shorter, never longer), the
-  // page's own words in by then.
-  assert.ok(F.LANDING_A.done <= 700);
+  // Inside 0.6 s (the owner's five seconds; it was 0.7), the page's own
+  // words in by then; his name's flight never shorter than 0.4 s (its
+  // fastest 52 px a 60th at 1728 × 1000: calm, never the old dart).
+  assert.ok(F.LANDING_A.done <= 600);
+  assert.ok(F.LANDING_A.name.fly >= 400);
   const others = F.FLY_ORDER.length - F.NAME_WORDS.length;
   assert.ok(F.landingAHome(others) >= F.LANDING_A.dissolve[1], 'the dark is gone before the page\'s words take over');
   assert.ok(F.landingAHome(others) + F.LANDING_A.settle <= F.LANDING_A.done);
@@ -1084,7 +1133,7 @@ test('landing A: the page\'s words take over pixel for pixel — the clones are 
   // Home: the page's words shown under the clones, which dissolve into them
   // (one drawing), then go.
   const island = read('../src/components/home/OpeningFilm.tsx');
-  assert.match(island, /html\.removeAttribute\('data-open-fly'\);\s*placed\.forEach\(\(\{ wrap \}\) => \{\s*track\(wrap\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: ms\(LANDING_A\.settle\)/);
+  assert.match(island, /html\.removeAttribute\('data-open-fly'\);\s*placed\.forEach\(\(\{ wrap \}\) => \{\s*landAnims\.push\(wrap\.animate\(\[\{ opacity: 1 \}, \{ opacity: 0 \}\], \{ duration: ms\(LANDING_A\.settle\)/);
   assert.ok(F.LANDING_A.settle >= 80 && F.LANDING_A.settle <= 160);
   // Every word lands on the page word's own pen and baseline, set whole.
   assert.match(island, /seat\(word\.box, f\.dstBox\.x, f\.dstBase\);/);
@@ -1105,6 +1154,22 @@ test('input: only the Skip pill skips; wheel, touch, keys and clicks do nothing'
   assert.match(island, /html\.setAttribute\('data-film-lock', ''\)/);
   assert.match(island, /setAttribute\('inert', ''\)/);
   assert.doesNotMatch(island, /body\.style\.overflow/);
+});
+
+test('the landing is laid on the formed title\'s hold and starts on the film\'s clock, at its end (never late by the work of laying it)', () => {
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  // Laid as the title is formed (its last FF_TAIL ms, when nothing moves)…
+  assert.match(island, /if \(t >= plan\.length - FF_TAIL\) \{\s*startLanding\(\);/);
+  assert.match(island, /later\(startLanding, plan\.length - FF_TAIL - t \+ 20\);/);
+  // … every landing animation started at the film's end (laid late, it
+  // starts where it would be by then), the page told as it starts, and the
+  // page's moments counted from that start.
+  assert.match(island, /const startAt = seekParam != null \? nowMs\(\) : Math\.max\(nowMs\(\), t0 \+ plan\.length\);/);
+  assert.match(island, /const track = \(a: Animation\) => \{\s*a\.startTime = startAt;\s*landAnims\.push\(a\);/);
+  assert.match(island, /else later\(tell, startAt - nowMs\(\)\);/);
+  assert.match(island, /later\(finish, wait \+ ms\(Math\.max\(LANDING_A\.done, home \+ LANDING_A\.settle\)\)\);/);
+  // The title is formed (morph done, credits up) when it is laid.
+  for (const plan of Object.values(PLANS)) assert.ok(plan.acts.title.start + F.TITLE.morph <= plan.length - F.FF_TAIL + 1e-6);
 });
 
 test('skip: to the end title with its tail left, never back, nothing once the landing has begun', () => {
@@ -1211,11 +1276,22 @@ test('memory: every scene is drawn only round its own turn (hidden otherwise)', 
   assert.ok(from > 0);
   const hidden = css.slice(from, css.indexOf('{', from));
   assert.match(css.slice(css.indexOf('{', from)), /^\{\s*visibility: hidden;\s*\}/);
-  for (const sel of ['.of-mat', '.of-leader', '.of-end', '.of-cut', '.of-chrome', '.of-key', '.of-handoff', '.of-burn', '.of-perfrow']) {
+  for (const sel of ['.of-mat', '.of-leader', '.of-end', '.of-cut', '.of-chrome', '.of-key', '.of-handoff', '.of-burn']) {
     assert.ok(hidden.includes(sel), sel);
   }
   const island = read('../src/components/home/OpeningFilm.tsx');
-  assert.match(island, /const PREROLL_MS = 250;/);
+  // Painted well ahead (a busy main thread is ridden out), rastered only
+  // just before (WARM).
+  assert.match(island, /const PREROLL_MS = 400;/);
+  assert.match(island, /const WARM_MS = 150;/);
+  // The match cuts' pages four cuts ahead: every cut the compositor's alone
+  // through a half-second stall (the page's hydration and the map's
+  // start-up fall in them on a phone), yet never every page at once (the
+  // compositor's tiles); the rest round their own turn.
+  const drawn = Number(island.match(/const CUTS_DRAWN = (\d+);/)[1]);
+  assert.ok(drawn >= 4 * F.CUT_MS && drawn < F.ACT_MS.cuts - F.CUT_MS, `${drawn} ms ahead`);
+  assert.match(island, /scene\(cutEl, cut\.start, cut\.end, true, CUTS_DRAWN\);\s*if \(chrome\) scene\(chrome, cut\.start, cut\.end, false, CUTS_DRAWN\);\s*scene\(key, cut\.start, cut\.end, false, CUTS_DRAWN\);/);
+  assert.match(island, /const from = Math\.max\(-PRELUDE_MS, start - lead\);/);
   // What the first paint draws is let go once it has played.
   assert.match(island, /if \(start <= 0 \|\| el\.hasAttribute\('data-early'\)\) \{\s*goneAfter\(el, end\);/);
   const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));

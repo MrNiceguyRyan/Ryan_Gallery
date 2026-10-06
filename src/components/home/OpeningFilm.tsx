@@ -19,7 +19,6 @@ import {
   FONT_SAMPLE,
   FONT_WAIT_MS,
   GRID_HAIR_MS,
-  FRAME24_MS,
   GLIDE_EASE,
   HAND,
   INPUT_POLICY,
@@ -263,16 +262,33 @@ const GRAIN_STEPS: Vec2[] = [
 ];
 const GRAIN_LOOP_MS = 200;
 /** A scene may be drawn this long before its turn (and is hidden again once
- *  past it): its first raster is done before its cut, and the film never
- *  holds every scene in memory at once. */
-const PREROLL_MS = 250;
+ *  past it): it is painted well before its cut (a main-thread step, so it
+ *  is let in early enough to ride out a busy main thread), and the film
+ *  never holds every scene in memory at once. The match cuts' pages are let
+ *  in earlier still (CUTS_DRAWN, four cuts ahead): they play over the
+ *  page's own busiest second — its hydration and the map's start-up, up to
+ *  180 ms a task on a phone at a quarter of the CPU — and a page whose
+ *  turn to be let in fell in a stall came late, over bare paper (measured
+ *  with the main thread held for half a second across three cuts: twelve
+ *  frames of blank paper between two dark pages with the quarter second
+ *  this was; two with 400 ms; none with 700 ms, the compositor taking
+ *  every cut alone). The cost is the compositor's tiles for the pages let
+ *  in (measured on a 3× phone through the cuts: 204 MB on average, 258 MB
+ *  at most, against 171 and 209 before; every page drawn from the clock
+ *  was 231 and 349). */
+const PREROLL_MS = 400;
+const CUTS_DRAWN = 700;
 /** How long ahead of its cut a page is drawn at WARM_OPACITY (after it is
  *  let in by PREROLL_MS): a fifth of a bone-to-ink step, unseen. */
 const WARM_MS = 150;
 const WARM_OPACITY = 0.002;
-/** The clock starts this long after its keyframes are laid (they take a
- *  frame or two to lay). */
+/** The clock starts at least this long after its keyframes are laid (the
+ *  compositor takes them a frame or two later). The clock is laid only once
+ *  they are: on a slow phone laying them took longer than the lead, and
+ *  the first sixth was spent before its page was there. */
 const CLOCK_LEAD_MS = 50;
+/** The grid paper's arrow is drawn a stage every two 60ths. */
+const ARROW_STEP_MS = 1000 / 30;
 
 /** The keys that scroll a page (with or without a modifier). */
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ' ', 'Spacebar']);
@@ -445,8 +461,9 @@ function scratchOf(f: number): [number, number, number, number] {
  * script's record, or its own when there was none — the plates' own
  * animations kept, never a second on their elements), loads every face the
  * film sets (at most FONT_WAIT_MS), measures the words, and lays the clock
- * on the proof's own grid: the page on the first sixth it can make, never
- * sooner than a third of a second after the word (pageStart). The whole film is WAAPI
+ * on the proof's own grid: the page on the first sixth it can make once its
+ * keyframes are laid, never sooner than a sixth after the word (pageStart).
+ * The whole film is WAAPI
  * on transform and opacity from that one start (the compositor plays it, so
  * the page's hydration and the map's start-up behind it cannot stutter it),
  * plus the burn's canvas, drawn on the same clock a 24th of a second at a
@@ -458,7 +475,7 @@ function scratchOf(f: number): [number, number, number, number] {
  * It plays once a tab session (src/lib/reelVisit.ts decides before the first
  * paint: html[data-opening] present means it plays). `?filmT=<ms>` (a
  * verification hook, never linked) holds the film still at that time (from
- * −1000, the proof's first frame) and exposes window.__filmSeek.
+ * −PRELUDE_MS = −500, the proof's first frame) and exposes window.__filmSeek.
  */
 export default function OpeningFilm({ pictures = [] }: { pictures?: readonly OpeningPicture[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -522,6 +539,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       globe = true;
       publish();
     };
+    // (The film tells the page the globe may come up with the landing — one
+    // word, not a second one under the cuts: GLOBE_LEAD_MS.)
 
     // ── The page is held while the film plays ──
     let locked = false;
@@ -901,8 +920,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       placeSmallPrint(W, H, short, phoneLayout, blocks, cap);
 
       // The relay: every machine's line in its own face, its capitals as
-      // tall as the terminal's monospace, its baseline on the terminal's,
-      // its left edge the same; where each typed count ends on it.
+      // tall as the typewriter's monospace, its baseline on the
+      // typewriter's, its left edge the same; where each typed count ends
+      // on it.
       const mats = new Map<StyleId, MatGeo>();
       const matEls = qa<HTMLElement>('[data-mat]');
       matEls.forEach((mat) => {
@@ -910,7 +930,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         line.style.fontSize = '';
         line.style.top = '';
       });
-      const refLine = q('[data-mat="crt"] [data-line]')!;
+      const refLine = q(`[data-mat="${BURN_STYLE}"] [data-line]`)!;
       const refTyped = q('[data-typed]', refLine)!;
       const refCap = inkOf(refTyped, 'H').cap;
       const refBase = refLine.offsetTop + baselineIn(refLine);
@@ -1205,18 +1225,19 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         if (end < total) ch.push([end, 0]);
         steps(el, 'opacity', start > 0 ? 0 : on, ch);
       };
-      /** Drawn (visibility) from PREROLL_MS before `start` to just after
-       *  `end`, and not otherwise: a main-thread property, so it is let in
-       *  early and let go late — the compositor's opacity decides the frame
-       *  the scene shows. What the first paint already draws (the first
-       *  page, and the second, unseen, so that its first raster is done
-       *  before the clock) is let go after its end instead. */
-      const live = (el: Element, start: number, end: number) => {
+      /** Drawn (visibility) from `lead` ms before `start` (at the earliest
+       *  as the clock is laid) to just after `end`, and not otherwise: a
+       *  main-thread property, so it is let in early and let go late — the
+       *  compositor's opacity decides the frame the scene shows. What the
+       *  first paint already draws (the first page, and the second, unseen,
+       *  so that its first raster is done before the clock) is let go after
+       *  its end instead. */
+      const live = (el: Element, start: number, end: number, lead = PREROLL_MS) => {
         if (start <= 0 || el.hasAttribute('data-early')) {
           goneAfter(el, end);
           return;
         }
-        const from = Math.max(0, start - PREROLL_MS);
+        const from = Math.max(-PRELUDE_MS, start - lead);
         const forever = end >= total;
         during(el, from, forever ? total : end + 50, [{ visibility: 'visible' }, { visibility: 'visible' }]).effect?.updateTiming({ fill: forever ? 'forwards' : 'none' });
       };
@@ -1226,9 +1247,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         during(el, t + 50, total, [{ visibility: 'hidden' }, { visibility: 'hidden' }]).effect?.updateTiming({ fill: 'forwards' });
       };
       /** Shown and drawn across [start, end). */
-      const scene = (el: Element, start: number, end: number, warm = false) => {
+      const scene = (el: Element, start: number, end: number, warm = false, lead = PREROLL_MS) => {
         shown(el, start, end, 1, warm);
-        live(el, start, end);
+        live(el, start, end, lead);
       };
       /** The grain: its tile moved every 60th of a second across [start, end). */
       const grain = (tile: Element | null, start: number, end: number) => {
@@ -1296,7 +1317,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       {
         const pr = plan.prelude;
         // The lime plate (its first impression, setting to full), and a
-        // third of a second on, the ink plate (the word).
+        // sixth of a second on, the ink plate (the word).
         const block0 = q('[data-key="0"] [data-block]');
         const word0 = q('[data-key="0"] [data-word]');
         if (!platePrinted(block0)) preKeys(block0, proofLimeKeys(limeAt));
@@ -1329,9 +1350,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           return;
         }
         const cut = plan.cuts[k];
-        scene(cutEl, cut.start, cut.end, true);
-        if (chrome) scene(chrome, cut.start, cut.end);
-        scene(key, cut.start, cut.end);
+        scene(cutEl, cut.start, cut.end, true, CUTS_DRAWN);
+        if (chrome) scene(chrome, cut.start, cut.end, false, CUTS_DRAWN);
+        scene(key, cut.start, cut.end, false, CUTS_DRAWN);
         // The giant words drift, the whole cut, one way (their copies ride
         // with them).
         const c = SCENES[index];
@@ -1407,16 +1428,16 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         // where the cursor is.
         const growEnd = q('[data-grow-end]', mat);
         if (growEnd) steps(growEnd, 'transform', tx(0), cur);
-        // The grid paper's arrow, drawn in six stages a 24th apart (each a
-        // longer stretch of the one path), its head with the last.
+        // The grid paper's arrow, drawn in four stages two 60ths apart (each
+        // a longer stretch of the one path), its head with the last.
         const stages = qa<SVGPathElement>('[data-arrow]', mat);
         stages.forEach((path, j) => {
-          const t = m.start + (j + 1) * FRAME24_MS;
-          const off = j < stages.length - 1 ? m.start + (j + 2) * FRAME24_MS : endT;
+          const t = m.start + (j + 1) * ARROW_STEP_MS;
+          const off = j < stages.length - 1 ? m.start + (j + 2) * ARROW_STEP_MS : endT;
           during(path, t, off, [{ opacity: 1 }, { opacity: 1 }]);
         });
         const head = q('[data-arrow-head]', mat);
-        if (head) during(head, m.start + stages.length * FRAME24_MS, endT, [{ opacity: 1 }, { opacity: 1 }]);
+        if (head) during(head, m.start + stages.length * ARROW_STEP_MS, endT, [{ opacity: 1 }, { opacity: 1 }]);
       });
 
       // ── Act 4: the burn ──
@@ -1459,17 +1480,11 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         live(veil, frameT(BURN.burn[0]), frameOut);
       }
       scene(q('[data-burnground]')!, f0, acts.dark.start);
-      // The leader: one card a frame.
+      // The leader: its card, a frame.
       qa<HTMLElement>('[data-leader]').forEach((card, k) => {
         const f = BURN.leader[0] + k;
         scene(card, frameT(f), frameT(f + 1));
       });
-      // The lit perforations climb the screen, a frame at a time, fading.
-      const perfs = q('[data-perfrow]')!;
-      const { perfY, perfO } = BURN;
-      steps(perfs, 'transform', tx(0, perfY[0] * H), perfY.map((y, k) => [frameT(BURN.perfs[0] + k), tx(0, y * H)] as [number, string]));
-      steps(perfs, 'opacity', 0, [...perfO.map((o, k) => [frameT(BURN.perfs[0] + k), o] as [number, number]), [acts.dark.start, 0]]);
-      live(perfs, frameT(BURN.perfs[0]), acts.dark.start);
 
       // ── Acts 5–6: the dark, typed; the title ──
       const end = q('[data-end]')!;
@@ -1496,7 +1511,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // The typed line is struck in capitals on the beat the title begins
       // (the same cells): from there its letters are the morph's.
       steps(reveal, 'opacity', 1, [[t6, 0]]);
-      // The lime cursor: on, riding the typing, one blink after, gone as the
+      // The lime cursor: on with the dark, riding the typing, gone as the
       // line turns into the title.
       const cur5: [number, string][] = plan.darkTyping.map((t, i) => [t, tx((i + 1) * tg.adv)]);
       steps(cursor, 'transform', tx(0), cur5);
@@ -1504,11 +1519,8 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         { offset: 0, opacity: 0 },
         { offset: at(acts.dark.start), opacity: 0 },
         { offset: at(acts.dark.start), opacity: 1 },
-        { offset: at(plan.blink.start), opacity: 1 },
-        { offset: at(plan.blink.start), opacity: 0 },
-        { offset: at(plan.blink.end), opacity: 0 },
-        { offset: at(plan.blink.end), opacity: 1, easing: FADE_CSS },
-        { offset: at(plan.blink.end + TITLE.cursorOut), opacity: 0 },
+        { offset: at(t6), opacity: 1, easing: FADE_CSS },
+        { offset: at(t6 + TITLE.cursorOut), opacity: 0 },
         { offset: 1, opacity: 0 },
       ]);
       // Every typewriter capital turns into its Fraunces capital in one ink
@@ -1565,14 +1577,15 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         scratch: scratchOf(want),
       });
     };
-    // The same loop starts the landing on the frame the film reaches its
+    // The same loop lays the landing on the formed title's hold (its last
+    // FF_TAIL ms, when nothing moves), to start on the film's clock at its
     // end (a timer stands by, and fires late on a busy main thread).
     const burnLoop = (now: number) => {
       burnRaf = 0;
       if (disposed || phase !== 'film') return;
       const t = now - t0;
       drawBurn(t);
-      if (t >= plan.length) {
+      if (t >= plan.length - FF_TAIL) {
         startLanding();
         return;
       }
@@ -1585,8 +1598,10 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       if (seekParam != null) return;
       const t = filmTime();
       later(markSeen, plan.acts.type.start - t);
-      later(releaseGlobe, globeReleaseAt(plan) - t);
-      later(startLanding, plan.length - t + 50);
+      // The globe's word comes with the landing's (one publish), unless the
+      // page is to be told sooner.
+      if (globeReleaseAt(plan) < plan.length) later(releaseGlobe, globeReleaseAt(plan) - t);
+      later(startLanding, plan.length - FF_TAIL - t + 20);
     };
     const shiftAll = (delta: number) => {
       // The film's own list (a finished window is no longer among the
@@ -1626,21 +1641,35 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     onSkipFilm = fastForward;
 
     // ── Landing ──
+    // Laid a little ahead — on the formed title's hold, when nothing moves —
+    // and started on the film's clock, at its end: measuring the words and
+    // building their flights is 60–75 ms of a phone's main thread at a
+    // quarter of the CPU, and laid at the end it started the landing that
+    // much late (the title held, then the flight began on whatever frame the
+    // work ended on). Every landing animation's start is the film's end;
+    // laid late, they start where they would be by then.
     function startLanding() {
       if (phase !== 'film') return;
       phase = 'landing';
       markSeen();
-      releaseGlobe();
-      state = 'landing';
-      publish();
-      skip.classList.add('is-gone');
-      landA();
+      const startAt = seekParam != null ? nowMs() : Math.max(nowMs(), t0 + plan.length);
+      const tell = () => {
+        // One word to the page: landing, and the globe may come up.
+        globe = true;
+        state = 'landing';
+        publish();
+        skip.classList.add('is-gone');
+      };
+      if (seekParam != null) tell();
+      else later(tell, startAt - nowMs());
+      landA(startAt);
     }
 
     // A: the words fly home (src/lib/openingFilm.ts, LANDING_A: his name
     // first, whole; then the others in the cover's reading order; the page's
-    // own words take over under a short cross-dissolve).
-    function landA() {
+    // own words take over under a short cross-dissolve). `startAt`: its
+    // start on document.timeline.
+    function landA(startAt: number) {
       const endLayer = q('[data-end]')!;
       const titleLetters = q('[data-title] [data-gm-unit]', endLayer)!;
       const rate = hurried ? FF_RATE : 1;
@@ -1810,7 +1839,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         return { ...f, wrap, source, target, word, letters };
       });
 
+      /** A landing animation, started on the landing's clock. */
       const track = (a: Animation) => {
+        a.startTime = startAt;
         landAnims.push(a);
         return a;
       };
@@ -1946,9 +1977,11 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       });
 
       if (seekParam != null) return;
+      // The page's moments, on the landing's clock.
+      const wait = Math.max(0, startAt - nowMs());
       later(() => {
         html.dataset.reel = 'landed';
-      }, ms(LANDING_A.rest));
+      }, wait + ms(LANDING_A.rest));
       // Home (every word landed, the dark gone): the page's own words take
       // over under the clones, which dissolve into them — the same word at
       // the same place, so no frame changes — and are then let go.
@@ -1956,15 +1989,15 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       later(() => {
         html.removeAttribute('data-open-fly');
         placed.forEach(({ wrap }) => {
-          track(wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(LANDING_A.settle), fill: 'forwards', easing: 'linear' }));
+          landAnims.push(wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms(LANDING_A.settle), fill: 'forwards', easing: 'linear' }));
         });
         unlock();
         detachInput();
-      }, ms(home));
+      }, wait + ms(home));
       later(() => {
         flightLayer.replaceChildren();
-      }, ms(home + LANDING_A.settle));
-      later(finish, ms(Math.max(LANDING_A.done, home + LANDING_A.settle)));
+      }, wait + ms(home + LANDING_A.settle));
+      later(finish, wait + ms(Math.max(LANDING_A.done, home + LANDING_A.settle)));
     }
 
     // ── Go: the fonts first, then the clock ──
@@ -1998,10 +2031,9 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
           // its first frame — laid a hair ahead, so each beat is taken on its
           // own frame (GRID_HAIR_MS). The plates printed (the head script's):
           // the page on the first sixth the keyframes can make, never sooner
-          // than a third of a second after the word (pageStart), their beats
-          // kept. None printed: the lime on the first beat the keyframes can
-          // make, the word and the page each a third of a second on
-          // (filmStart).
+          // than a sixth after the word (pageStart), their beats kept. None
+          // printed: the lime on the first beat the keyframes can make, the
+          // word and the page each a sixth on (filmStart).
           const ready = nowMs() + CLOCK_LEAD_MS;
           const lime = plates?.lime ?? null;
           if (lime != null) {
@@ -2014,12 +2046,25 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
             t0 = filmStart(seekParam != null ? null : origin, ready) - GRID_HAIR_MS;
             limeAt = plan.prelude.lime;
           }
+        }
+        build();
+        if (!pendingSkip && seekParam == null) {
+          // Laid: the clock never starts before its keyframes are in. Where
+          // laying them took longer than the lead (a slow phone: the page's
+          // first sixth was spent before its page was there), the page goes
+          // to the first later sixth of the same grid — the proof holds a
+          // beat longer, as on any slow load.
+          const late = nowMs() + CLOCK_LEAD_MS - (t0 + GRID_HAIR_MS);
+          if (late > 0) {
+            const shift = Math.ceil(late / CUT_MS - 1e-6) * CUT_MS;
+            shiftAll(shift);
+            if (plates?.lime != null) limeAt -= shift;
+          }
           // One still pending (no frame drawn yet) joins the film's clock.
           proof.forEach((a) => {
             if (a.startTime == null) a.startTime = t0 - PRELUDE_MS;
           });
         }
-        build();
         schedule();
         if (seekParam != null) {
           seek(seekParam);
@@ -2041,7 +2086,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         a.currentTime = Math.min(t, plan.length + 39);
       });
       // The proof's lights (the stylesheet's, from its first frame, a
-      // PRELUDE_MS before film 0): ?filmT=-1000 is the first paint.
+      // PRELUDE_MS before film 0): ?filmT=-500 is the first paint.
       proofAnims().forEach((a) => {
         a.pause();
         a.currentTime = Math.max(0, t + PRELUDE_MS);

@@ -66,6 +66,15 @@ const headline = (['en', 'zh'] as const).map((lang) => {
   <Fragment slot="head">
     <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
     <link rel="preconnect" href="https://events.mapbox.com" crossorigin />
+    {/* The map engine (mapbox-gl, ~470 KB compressed) is this page, and it was
+        asked for only once the map's island had hydrated and mounted: three
+        requests in a row on a phone's network before its first byte. It is
+        asked for with the page's own scripts instead — the very chunk the
+        island imports (react-map-gl's import('mapbox-gl')), so it is fetched
+        once and the island finds it already there. Nothing else changes. */}
+    <script>
+      import('mapbox-gl').catch(() => {});
+    </script>
   </Fragment>
 
   <TravelEntryCover client:load chapters={chapters.length} frames={frames} />
