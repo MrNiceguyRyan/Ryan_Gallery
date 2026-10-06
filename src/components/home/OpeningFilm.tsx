@@ -402,6 +402,22 @@ function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
     gl = null;
   }
   if (!gl) return null;
+  // A phone under memory pressure (iOS Safari above all) may lose the
+  // context at any time, or refuse to make its objects: the burn is then
+  // simply not drawn — never an error, never a stalled film (the frames
+  // under it are the film's own; the canvas is only its light).
+  let lost = false;
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    lost = true;
+  });
+  try {
+    return burnGL(canvas, gl, () => lost || gl!.isContextLost());
+  } catch {
+    return null;
+  }
+}
+function burnGL(canvas: HTMLCanvasElement, gl: WebGLRenderingContext, isLost: () => boolean): BurnGL | null {
   const compile = (type: number, src: string) => {
     const s = gl!.createShader(type)!;
     gl!.shaderSource(s, src);
@@ -432,12 +448,14 @@ function makeBurn(canvas: HTMLCanvasElement): BurnGL | null {
   let ratio = 1;
   return {
     resize(w, h) {
+      if (isLost()) return;
       ratio = Math.min(window.devicePixelRatio || 1, 1.5);
       canvas.width = Math.max(1, Math.round(w * ratio));
       canvas.height = Math.max(1, Math.round(h * ratio));
       gl!.viewport(0, 0, canvas.width, canvas.height);
     },
     draw(v) {
+      if (isLost()) return;
       const g = gl!;
       g.clearColor(0, 0, 0, 0);
       g.clear(g.COLOR_BUFFER_BIT);

@@ -11,7 +11,7 @@
 // pages; black-and-white pages and colour in runs), and of 2026-10-05: "现在
 // 我觉得开头的动画可以再短一点点 控制在5秒" — from the first paint to the
 // landing done within five seconds (it was 10.1 s), every act kept and
-// compressed: ten pages, two a keyword (an editorial page and a piece of
+// compressed: eight pages (ARCHIVE, CAMERA, TRAVEL two a keyword: an editorial page and a piece of
 // printed matter); five machines; nine frames of burn; the dark typed and
 // the title on the 24th; a 0.555 s landing. Held here: the five seconds
 // (with a missed beat to spare); the act order; every cut on its act's grid
@@ -76,9 +76,9 @@ test('the five seconds: first paint to the landing done ≤ 5000 ms, with a miss
   const p = PLANS.desktop;
   const len = (id) => p.acts[id].end - p.acts[id].start;
   assert.ok(close(F.PRELUDE_MS, 500), 'the proof: half a second');
-  assert.ok(close(len('cuts'), 10 * F.CUT_MS), 'ten pages, a sixth each');
+  assert.ok(close(len('cuts'), 8 * F.CUT_MS), 'eight pages, a sixth each');
   assert.ok(close(len('hand'), 2 * F.FRAME12_MS));
-  assert.ok(close(len('type'), 11 * F.FRAME12_MS));
+  assert.ok(close(len('type'), 15 * F.FRAME12_MS));
   assert.ok(close(len('burn'), 9 * F.FRAME24_MS));
   assert.ok(close(len('dark') + len('title'), 14 * F.FRAME24_MS));
   assert.equal(F.LANDING_A.done, 555);
@@ -94,15 +94,16 @@ test('the acts: contiguous from 0, the single words first, then the relay; the l
     }
     assert.ok(close(at, plan.length));
     assert.equal(plan.acts.cuts.start, 0, 'the match cuts open the film (the first page is the first paint)');
-    // The match cuts a second and two thirds (ten sixths, a page each).
+    // The match cuts a second and a third (eight sixths, a page each).
     const cuts = plan.acts.cuts.end - plan.acts.cuts.start;
-    assert.ok(cuts >= 1500 && cuts <= 2000, `act 1 ${cuts} ms`);
+    assert.ok(cuts >= 1300 && cuts <= 2000, `act 1 ${cuts} ms`);
     // The hand-off: two twelfths.
     assert.ok(close(plan.acts.hand.end - plan.acts.hand.start, F.HAND.frames * F.FRAME12_MS));
     assert.equal(F.HAND.frames, 2);
-    // The relay: about a second (it was the owner's two to three).
+    // The relay: a second and a quarter (it was the owner's two to three;
+    // 0.92 s read too fast — 2026-10-06).
     const relay = plan.acts.type.end - plan.acts.type.start;
-    assert.ok(relay >= 800 && relay <= 1200, `relay ${relay} ms`);
+    assert.ok(relay >= 1150 && relay <= 1400, `relay ${relay} ms`);
     assert.ok(close(plan.acts.burn.end - plan.acts.burn.start, F.BURN.frames * F.FRAME24_MS), 'the burn: its frames at 24 fps');
     assert.ok(close(plan.acts.dark.end - plan.acts.dark.start, F.DARK_FRAMES * F.FRAME24_MS));
     assert.ok(close(plan.acts.title.end - plan.acts.title.start, F.TITLE.frames * F.FRAME24_MS));
@@ -148,7 +149,7 @@ test('every hard cut falls on its act\'s grid: the sixth, the twelfth, the 24th 
     // And every act starts on the 24th and the twelfth from the clock's
     // start (a sixth is two twelfths).
     for (const a of Object.values(plan.acts)) assert.ok(onGrid(a.start, F.FRAME24_MS), `act at ${a.start}`);
-    assert.ok(F.hardCuts(plan).length >= 18, `${F.hardCuts(plan).length} cuts`);
+    assert.ok(F.hardCuts(plan).length >= 16, `${F.hardCuts(plan).length} cuts`);
   }
 });
 
@@ -193,9 +194,10 @@ test('act 3: the relay — five machines, each its own face, slow to fast, the t
     assert.equal(F.STYLES.reduce((n, s) => n + s.keys, 0), F.TYPED.length, 'every letter struck');
     const paper = plan.styles.at(-1);
     assert.ok(times.at(-1) >= paper.start && times.at(-1) < plan.acts.burn.start, 'the last letter on the paper, before the burn');
-    // Fast — the relay's own acceleration — but never two letters a frame.
+    // Readable (the owner, 2026-10-06: "稍微慢一点，不然看不清是什么"):
+    // about 16 a second, slow to fast — never the 24 it was.
     const cps = ((times.length - 1) * 1000) / (times.at(-1) - times[0]);
-    assert.ok(cps >= 18 && cps <= 30, `${cps.toFixed(1)} a second`);
+    assert.ok(cps >= 14 && cps <= 19, `${cps.toFixed(1)} a second`);
     for (let i = 1; i < times.length; i += 1) assert.ok(times[i] - times[i - 1] >= 1000 / 30, `keys ${i} ${(times[i] - times[i - 1]).toFixed(1)} ms apart`);
     // The cursor: solid while it types, blinking after the last letter.
     const steps = F.cursorSteps(plan);
@@ -647,17 +649,23 @@ test('one ink box, letter by letter: a letter fitted into its own box is itself;
   assert.ok(close(F.morphAt(0.4, [0.2, 0.6]), 0.5));
 });
 
-test('act 1: the keywords in the owner\'s order, a new face at every cut, ten scenes', () => {
+test('act 1: the keywords in the owner\'s order, a new face at every cut, eight scenes', () => {
   const S = F.SCENES;
-  assert.ok(S.length >= 9 && S.length <= 12, `${S.length} scenes`);
+  assert.equal(S.length, 8, `${S.length} scenes`);
   const groups = [];
   S.forEach((s) => (groups.at(-1) === s.word ? null : groups.push(s.word)));
   assert.deepEqual(groups, ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']);
-  // Two pages a keyword, each a different kind of printed matter: an
-  // editorial page and a piece of printed matter (the owner's quick cuts
-  // through magazines and newspapers, kept in the five seconds).
+  // ARCHIVE, CAMERA and TRAVEL two pages each, an editorial page and a
+  // piece of printed matter (the owner's quick cuts through magazines and
+  // newspapers, kept in the five seconds); THOUGHT and YOU one piece of
+  // printed matter each (2026-10-06: their editorial pages gave the relay
+  // its readable pace).
   const count = (w) => S.filter((s) => s.word === w).length;
-  for (const w of ['ARCHIVE', 'CAMERA', 'TRAVEL', 'THOUGHT', 'YOU']) {
+  for (const w of ['THOUGHT', 'YOU']) {
+    assert.equal(count(w), 1, `${w} ${count(w)}`);
+    assert.ok(S.find((s) => s.word === w).sheet, `${w}: a piece of printed matter`);
+  }
+  for (const w of ['ARCHIVE', 'CAMERA', 'TRAVEL']) {
     assert.equal(count(w), 2, `${w} ${count(w)}`);
     const pages = S.filter((s) => s.word === w);
     assert.equal(pages.filter((s) => s.sheet).length, 1, `${w}: one piece of printed matter`);
@@ -693,8 +701,9 @@ test('act 1: editorial pages alternate with printed matter; at least four type t
   // Every kind of sheet the film draws is played (none left behind).
   assert.deepEqual(Object.keys(F.SHEETS).sort(), [...sheets].sort());
   assert.deepEqual(Object.keys(F.SHEET_TONE).sort(), [...sheets].sort());
-  assert.ok(S.filter((s) => !s.sheet).length >= 5, 'editorial pages');
-  for (let i = 1; i < S.length; i += 1) assert.ok(!(S[i].sheet && S[i - 1].sheet), `two sheets in a row at ${i}`);
+  assert.equal(S.filter((s) => !s.sheet).length, 3, 'editorial pages');
+  // By turns through TRAVEL; the telegram and the postcard close the act.
+  for (let i = 1; i < S.length - 1; i += 1) assert.ok(!(S[i].sheet && S[i - 1].sheet), `two sheets in a row at ${i}`);
   const scenes = read('../src/components/home/OpeningScenes.tsx');
   let dense = 0;
   for (const [i, s] of S.entries()) {
@@ -729,9 +738,12 @@ test('act 1: editorial pages alternate with printed matter; at least four type t
       if (l.print) assert.ok(l.print.w <= 0.2 && l.print.pic >= 0 && l.print.pic <= 2);
     }
   }
-  // The rhythm breathes: crowded and calm pages both.
+  // The rhythm breathes: crowded editorial pages, then the act closes on
+  // two quiet pieces of printed matter (the telegram, the postcard) — the
+  // calm editorial pages went to the relay's readable pace (2026-10-06).
   const eds = S.filter((s) => !s.sheet).length;
-  assert.ok(dense >= 2 && eds - dense >= 2, `${dense} dense of ${eds}`);
+  assert.ok(dense >= 2 && dense <= eds, `${dense} dense of ${eds}`);
+  assert.deepEqual(S.slice(-2).map((s) => s.sheet), ['telegram', 'postcard'], 'the act closes on two quiet sheets');
   // His own photographs only (the film's three), at their ratio.
   assert.match(scenes, /<Picture picture=\{pictures\[l\.print\.pic\]\}/);
 });

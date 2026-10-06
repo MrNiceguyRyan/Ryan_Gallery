@@ -16,9 +16,9 @@
 //
 //   act                      before     now
 //   0. the proof             1000 ms    500 ms (four beats a sixth apart)
-//   1. the match cuts        3333       1667 (17 pages → 10, each a sixth)
+//   1. the match cuts        3333       1333 (17 pages → 8, each a sixth)
 //   2. the hand-off           333        167 (two twelfths)
-//   3. the relay             2333        917 (8 machines → 5; 11 twelfths)
+//   3. the relay             2333       1250 (8 machines → 5; 15 twelfths)
 //   4. the burn               917        375 (22 frames at 24 fps → 9)
 //   5. the dark, typed        875        292 (7 keys, a 24th each)
 //   6. the end title          625        292 (the morph, the credits
@@ -42,10 +42,12 @@
 //      stylesheet's and a head script's, from the first paint, so on a slow
 //      load it holds as a finished title card — ARCHIVE on its lime plate —
 //      until the island prints the page.
-//   1. Match cuts round a fixed lime anchor (1⅔ s: ten pages, each a sixth
-//      of a second): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU, each word
-//      on two kinds of printed matter — an editorial page and a piece of
-//      printed matter, by turns. The block's centre, its height and the
+//   1. Match cuts round a fixed lime anchor (1⅓ s: eight pages, each a
+//      sixth of a second): ARCHIVE → CAMERA → TRAVEL → THOUGHT → YOU —
+//      ARCHIVE, CAMERA and TRAVEL each on an editorial page and a piece of
+//      printed matter, by turns; THOUGHT on the telegram, YOU on the
+//      postcard (the owner, 2026-10-06: the relay "稍微慢一点，不然看不清";
+//      its time came from the day book and FIRST LIGHT pages). The block's centre, its height and the
 //      word's cap height never move; only the word and its face change
 //      (Fraunces 900, Fraunces italic, Space Grotesk 700, Fraunces 400, the
 //      monospace). Round it the frame is recomposed every cut, alternating
@@ -60,7 +62,7 @@
 //      seven editorial pages went: the pages most like their neighbours.)
 //   2. The hand-off: the page cuts away under the anchor; the lime block
 //      alone glides and shrinks into the first machine's cursor.
-//   3. A typewriter relay (11 twelfths): "an archive of travel" is typed,
+//   3. A typewriter relay (15 twelfths): "an archive of travel" is typed,
 //      and every four letters the whole frame hard-cuts to another machine —
 //      the antique 1-bit computer, a strip of film on a lightbox, a word
 //      processor, grid paper, the typewriter — slow to fast (the computer
@@ -644,9 +646,10 @@ export const PLACE_NAMES = ['Miami', 'Orlando', 'Page', 'Zion', 'Bryce', 'New Yo
 const RECEIPT_LAB = ['DEV + CONTACT', '135 · 36 EXP', '1 ROLL', 'PUSH +1', 'TOTAL  ——', 'THANK YOU'] as const;
 const RECEIPT_ROAD = ['1 × SINGLE', 'OUT  ——', 'RETURN  ——', 'PAID', 'KEEP FOR INSPECTION'] as const;
 
-/** Every scene, in order: ten, two a keyword — a piece of printed matter
- *  and an editorial page, strictly by turns, so every keyword is seen in
- *  two kinds of printed matter — each a sixth of a second. The owner's five seconds
+/** Every scene, in order: eight — ARCHIVE, CAMERA and TRAVEL two each (a
+ *  piece of printed matter and an editorial page, by turns), THOUGHT the
+ *  telegram and YOU the postcard — each a sixth of a second. The relay's
+ *  readable pace (2026-10-06) took the day book and FIRST LIGHT. The owner's five seconds
  *  (2026-10-05) took it from seventeen: the pages most like their
  *  neighbours went (the dictionary, the slate, the passport, and the
  *  editorial pages NEGATIVE, LENS, ROUTE and INK), and the first page and
@@ -802,85 +805,16 @@ export const SCENES: readonly Scene[] = [
     sheet: 'telegram',
     giants: [{ text: 'TELEGRAM', face: 'f900', cap: 0.4, x: 0.5, y: 0.2, align: 'c' }],
   },
-  {
-    word: 'THOUGHT',
-    // Fraunces 400 (it was the italic: the postcard's, two pages on, now
-    // follows it — a face change at every cut).
-    face: 'f400',
-    slots: 1,
-    // The telegram's way on (it ran right, after the passport).
-    drift: 'down',
-    driftPx: 40,
-    ground: 'bone',
-    ink: 'green',
-    giants: [
-      { text: 'DAY', face: 'f900', cap: 0.43, x: -0.03, y: 0.34, align: 'l' },
-      { text: 'BOOK', face: 'f400', cap: 0.38, x: 1.03, y: 1, yCap: 0.14, align: 'r' },
-    ],
-    side: [
-      { text: 'Untitled', role: 'caps', at: 'l', row: 0 },
-      { text: 'in passing', role: 'italic', at: 'r', row: 0 },
-      { text: 'Volume II', role: 'thin', at: 'l', row: 1 },
-    ],
-    deco: {
-      ringed: 'The',
-      ring: [0.9, 0.3],
-      texture: [
-        { at: [0.82, 0.62], text: 2, w: 140 },
-        { at: [0.035, 0.62], text: 5, w: 126 },
-      ],
-      metaL: 'Visual archive · Vol. IV',
-      metaR: 'Frame 18',
-    },
-    layers: {
-      density: 'calm',
-      run: ['Day book', '88'],
-      pull: { text: 'Written down, it stays.', at: [0.64, 0.1], w: 0.2, phone: true },
-    },
-  },
   // ── YOU: paper, a blue second ink ──
   {
     word: 'YOU',
     face: 'fit',
     slots: 1,
-    // A quarter turn from the day book's fall (it rose, after a page that
-    // ran right).
+    // A quarter turn from the telegram's fall.
     drift: 'right',
     driftPx: 32,
     sheet: 'postcard',
     giants: [{ text: 'POST CARD', face: 'f900', cap: 0.36, x: 0.5, y: 0.19, align: 'c' }],
-  },
-  {
-    word: 'YOU',
-    face: 'f900',
-    slots: 1,
-    drift: 'up',
-    driftPx: 40,
-    ground: 'bone',
-    giants: [
-      { text: 'FIRST', face: 'f400', cap: 0.4, x: 0.5, y: 0.33, align: 'c' },
-      { text: 'LIGHT', face: 'f900', cap: 0.45, x: 0.5, y: 1, yCap: 0.5, align: 'c' },
-    ],
-    side: [
-      { text: 'Admit one', role: 'caps', at: 'l', row: 0 },
-      { text: 'the passenger', role: 'italic', at: 'r', row: 0 },
-      { text: 'Last frame', role: 'thin', at: 'l', row: 1 },
-    ],
-    deco: {
-      ringed: 'a',
-      ring: [0.9, 0.3],
-      texture: [
-        { at: [0.82, 0.62], text: 1, w: 140 },
-        { at: [0.035, 0.62], text: 2, w: 130 },
-      ],
-      metaL: 'Visual archive',
-      metaR: 'Frame 25 · End of roll',
-    },
-    layers: {
-      density: 'calm',
-      run: ['Visual archive — Vol. V', 'End of roll'],
-      print: { pic: 0, treat: 'halftone', at: [0.08, 0.74], w: 0.14, rot: -1.5, caption: 'Last frame', phone: false },
-    },
   },
 ];
 
@@ -910,12 +844,14 @@ export const TYPED = 'an archive of travel';
 
 /** The machines the line is typed on, in order, how long each is on screen
  *  (twelfths of a second) and how many keys it strikes: slow to fast — the
- *  antique computer a quarter second (and under the hand-off before it, so
- *  it is on screen five twelfths), every other machine a sixth (11 twelfths
- *  in all, down from 28) — then the typewriter's paper holds (the last
- *  letter, the cursor blinking, the burn — which is on the same paper for
- *  its first quarter second). Four keys a machine, the line twice as fast
- *  as it was (about 24 letters a second: the relay's own acceleration).
+ *  antique computer a third of a second (and under the hand-off before it),
+ *  the film strip, the word processor and the grid paper a quarter each,
+ *  the typewriter a sixth (15 twelfths in all, down from 28) — then the
+ *  typewriter's paper holds (the last letter, the cursor blinking, the
+ *  burn — which is on the same paper for its first quarter second). Four
+ *  keys a machine: about 16 letters a second, 12 on the computer rising to
+ *  24 on the typewriter. The owner, 2026-10-06: "打字那段可以稍微慢一点，
+ *  不然看不清是什么" — it was about 24 a second throughout (11 twelfths).
  *  Each sets the line in its own face (the owner's "字体模范的切换"): the
  *  1-bit computer's bitmap, a film's edge print, a word processor's sans, a
  *  hand on grid paper, the typewriter's — on one left edge, one baseline,
@@ -928,10 +864,10 @@ export const TYPED = 'an archive of travel';
 export type StyleId = 'mac' | 'film' | 'beige' | 'grid' | 'paper';
 export type RelayFace = 'pixel' | 'edge' | 'sans' | 'hand' | 'type';
 export const STYLES: readonly { id: StyleId; face: RelayFace; frames: number; keys: number; tone: Tone }[] = [
-  { id: 'mac', face: 'pixel', frames: 3, keys: 4, tone: 'light' },
-  { id: 'film', face: 'edge', frames: 2, keys: 4, tone: 'light' },
-  { id: 'beige', face: 'sans', frames: 2, keys: 4, tone: 'light' },
-  { id: 'grid', face: 'hand', frames: 2, keys: 4, tone: 'light' },
+  { id: 'mac', face: 'pixel', frames: 4, keys: 4, tone: 'light' },
+  { id: 'film', face: 'edge', frames: 3, keys: 4, tone: 'light' },
+  { id: 'beige', face: 'sans', frames: 3, keys: 4, tone: 'light' },
+  { id: 'grid', face: 'hand', frames: 3, keys: 4, tone: 'light' },
   { id: 'paper', face: 'type', frames: 2, keys: 4, tone: 'light' },
 ];
 export const STYLE_TONE = Object.fromEntries(STYLES.map((s) => [s.id, s.tone])) as Record<StyleId, Tone>;
@@ -954,7 +890,7 @@ export function blinkSteps(start: number, end: number, period = CURSOR_MS): [num
 export const TYPE_AT = FRAME12_MS;
 /** The relay's keys: each machine's first on its own cut (a new machine
  *  arrives with a new letter, never a keystroke two frames before a cut),
- *  the rest evenly across its time — about 24 letters a second. A key at
+ *  the rest evenly across its time — about 16 letters a second. A key at
  *  least `jitterClear` ms from both of its machine's cuts is nudged by up
  *  to ±`jitter` ms (seeded); none falls in the `quiet` ms before a cut. */
 export const RELAY_KEYS = { jitter: 8, jitterClear: 60, quiet: 33, seed: 41 } as const;
