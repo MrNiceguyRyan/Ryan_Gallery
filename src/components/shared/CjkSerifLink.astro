@@ -9,12 +9,15 @@
 // that is the whole wait. Its faces are `display=swap`, so what the reader
 // sees is unchanged: the Chinese is set in the system face first and in
 // the serif once its slices arrive, exactly as before; only the page is
-// there sooner. Loaded as print media and switched to all once it has
-// arrived (the swap keeps a link that is already on the page, see Astro's
-// persistedHeadElement); without script, the <noscript> link.
+// there sooner. On a full load it waits as print media and is switched to
+// all once it has arrived; without script, the <noscript> link. An in-site
+// arrival is as before: the router has loaded the sheet before the swap,
+// and Layout's before-swap listener sets it to all on the incoming page
+// (data-swap-media), so it applies from the arrival's first frame (and the
+// swap keeps a link already on the page, Astro's persistedHeadElement).
 import { CJK_SERIF_CSS } from '../../lib/notes';
 ---
 
 <link rel="preload" as="style" href={CJK_SERIF_CSS} />
-<link rel="stylesheet" href={CJK_SERIF_CSS} media="print" onload="this.media='all'" />
+<link rel="stylesheet" href={CJK_SERIF_CSS} media="print" onload="this.media='all'" data-swap-media />
 <noscript><link rel="stylesheet" href={CJK_SERIF_CSS} /></noscript>

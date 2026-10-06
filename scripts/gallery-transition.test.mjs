@@ -187,4 +187,44 @@ assert.equal(folderOf('https://example.com/about'), 'https://example.com/about',
 const firstPrep = layout.indexOf("document.addEventListener('astro:before-preparation'");
 assert.ok(firstPrep > folderBegin && firstPrep < folderEnd, 'The rewrite is registered before every other preparation listener');
 
-console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, layered Escape handling, and folder-first arrivals');
+// A print-media stylesheet that must not hold a full load's first paint
+// (CjkSerifLink) applies at once on an in-site arrival: the router has
+// already loaded it, and the incoming page gets it as a plain stylesheet.
+{
+  const document = new EventTarget();
+  vm.runInNewContext(folderCode, { document, window: { location: { origin: 'https://ryanxugallery.com' } }, URL });
+  const link = { media: 'print', setAttribute(name, value) { this[name] = value; } };
+  let asked = '';
+  const event = new Event('astro:before-swap');
+  event.newDocument = { querySelectorAll: (selector) => { asked = selector; return [link]; } };
+  document.dispatchEvent(event);
+  assert.equal(link.media, 'all', 'The incoming page applies the waiting stylesheet at once');
+  assert.match(asked, /link\[rel="stylesheet"\]\[data-swap-media\]/, 'Only the marked stylesheets');
+  const cjk = fs.readFileSync(`${root}/src/components/shared/CjkSerifLink.astro`, 'utf8');
+  assert.match(cjk, /<link rel="stylesheet" href=\{CJK_SERIF_CSS\} media="print" onload="this\.media='all'" data-swap-media \/>/, 'The Chinese serif waits as print media and is marked for the swap');
+  assert.match(cjk, /<noscript><link rel="stylesheet" href=\{CJK_SERIF_CSS\} \/><\/noscript>/, 'Without script it is a plain stylesheet');
+}
+
+// ── The webfonts: Google's own rules in our stylesheet, no first paint
+// waiting on fonts.googleapis.com, the same nine files from fonts.gstatic.com.
+{
+  assert.doesNotMatch(layout, /<link[^>]*fonts\.googleapis\.com/, 'No render-blocking request to fonts.googleapis.com');
+  assert.match(layout, /<link rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin \/>/, 'The font files\' host is still preconnected');
+  const fontsAt = layout.indexOf("import '../styles/fonts.css';");
+  assert.ok(fontsAt > 0 && fontsAt < layout.indexOf("import '../styles/global.css';"), 'Layout imports the font rules with its stylesheet');
+  const fonts = fs.readFileSync(`${root}/src/styles/fonts.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const faces = fonts.match(/@font-face \{[^}]*\}/g) || [];
+  assert.equal(faces.length, 18, 'Every face Google answers for the request: Fraunces 2 × 3 subsets, Space Grotesk 4 weights × 3');
+  for (const face of faces) {
+    assert.match(face, /font-display: swap;/);
+    assert.match(face, /src: url\(https:\/\/fonts\.gstatic\.com\/s\/(fraunces\/v38|spacegrotesk\/v22)\/[\w-]+\.woff2\) format\('woff2'\);/);
+    assert.match(face, /font-family: '(Fraunces|Space Grotesk)';/);
+    assert.match(face, /unicode-range: U\+/);
+  }
+  const files = new Set(faces.map((face) => face.match(/url\(([^)]+)\)/)[1]));
+  assert.equal(files.size, 9, 'The same nine files');
+  assert.ok(faces.some((face) => /font-style: normal;\s*font-weight: 400 900;/.test(face) && /U\+0000-00FF/.test(face)), 'Fraunces roman, the whole weight axis, latin');
+  assert.ok(faces.some((face) => /font-style: italic;\s*font-weight: 400 600;/.test(face) && /U\+0000-00FF/.test(face)), 'Fraunces italic, latin');
+}
+
+console.log('PASS: duplicate Back, retry after failure, fixed-body scroll, native Back, target-state preservation, ordinary scroll, computed offset, direct Home restore, exit interaction lock, layered Escape handling, folder-first arrivals, and the webfonts\' rules in our own stylesheet');
