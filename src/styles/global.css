@@ -927,6 +927,23 @@ main[data-story-under="true"] [data-archive-column] {
   filter: blur(10px);
   transition-delay: 0.25s;
 }
+/* …and once the story is over the whole screen (its shell faded in and its
+   panel risen, or its plate grown: HomePage marks data-story-covered when
+   MagazineLayout says so), the receded atlas, its covers and the frosted
+   bars over them are not drawn at all — the blur under an opaque story is
+   work no one sees (round wf45: it ran a second under the open story, the
+   whole screen blurred anew on a phone's GPU). Their recede jumps to its
+   end meanwhile (no transition while hidden). The mark only counts beside
+   data-story-under: the commit that begins the close takes that away, so
+   the page is drawn again — as it was, still receded — in the same style
+   pass, and its way back from the recede runs as it always did, before
+   the falling panel uncovers it. */
+main[data-story-under="true"][data-story-covered] :is(.route-atlas, .archive-dock-host:not(.archive-dock-host--atlas), [data-archive-column], .explorer-controls) {
+  visibility: hidden;
+}
+main[data-story-under="true"][data-story-covered] :is(.route-atlas, .archive-dock-host:not(.archive-dock-host--atlas), [data-archive-column]) {
+  transition: none;
+}
 /* The plate a story grew out of (`data-story-source`, set by the Homepage in
    the click). The story's cover plane starts as exactly that plate's window,
    but the plate's title and cue hang past its edges — for the

@@ -69,6 +69,7 @@ import {
   type FilmInput,
   type FilmLayout,
   type FilmPlan,
+  type FlyWord,
   type OpeningDetail,
   type OpeningPicture,
   type OpeningState,
@@ -79,6 +80,7 @@ import { markReelSeen } from '../../lib/reelVisit';
 import { PLATES, proofPlates, type ProofPlates } from '../../lib/proofPlates';
 import { EASE } from '../../lib/motion';
 import { shownMatch } from '../../i18n/lang';
+import { viewport } from '../../lib/viewport';
 import { T, useT } from '../../i18n/react';
 
 const bezier = ([a, b, c, d]: readonly number[]) => `cubic-bezier(${a}, ${b}, ${c}, ${d})`;
@@ -171,25 +173,43 @@ interface Glyph {
   base: number;
   ink: InkBox;
 }
-const fontOf = (style: CSSStyleDeclaration) => `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+const fontOf = (style: Pick<CSSStyleDeclaration, 'fontStyle' | 'fontWeight' | 'fontSize' | 'fontFamily'>) => `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+/** What setGlyphs reads off a face: its computed face (for the canvas) and
+ *  its baseline below its own top (which its own place does not change).
+ *  Read for many faces in one go (the landing's clones), so that no write
+ *  falls between two reads and the layout is brought up to date once. */
+interface FaceRead {
+  font: string;
+  size: number;
+  ls: number;
+  upper: boolean;
+  lift: number;
+}
+function readFace(face: HTMLElement): FaceRead {
+  const style = getComputedStyle(face);
+  return {
+    font: fontOf(style),
+    size: parseFloat(style.fontSize) || 16,
+    ls: style.letterSpacing === 'normal' ? 0 : parseFloat(style.letterSpacing) || 0,
+    upper: style.textTransform === 'uppercase',
+    lift: baselineIn(face),
+  };
+}
 /** Sets a face's letters on their pens, its pen origin at x0 and its
  *  baseline at yB (in its parent's frame), and returns them measured. The
  *  pens are the canvas's, or `pens` (each character's, from x0) where the
- *  page has laid the same text out itself. */
-function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number, pens?: readonly number[] | null): Glyph[] {
-  const style = getComputedStyle(face);
+ *  page has laid the same text out itself. `read`: the face read already
+ *  (readFace): nothing is read here then, only written. */
+function setGlyphs(face: HTMLElement, text: string, x0: number, yB: number, pens?: readonly number[] | null, read?: FaceRead): Glyph[] {
+  const { font, size, ls, upper, lift } = read ?? readFace(face);
   if (!measureContext) measureContext = document.createElement('canvas').getContext('2d');
   const ctx = measureContext;
-  const size = parseFloat(style.fontSize) || 16;
-  const ls = style.letterSpacing === 'normal' ? 0 : parseFloat(style.letterSpacing) || 0;
-  const shown = style.textTransform === 'uppercase' ? text.toUpperCase() : text;
+  const shown = upper ? text.toUpperCase() : text;
   face.style.left = px(x0);
-  face.style.top = '0px';
-  const lift = baselineIn(face);
   face.style.top = px(yB - lift);
   const els = Array.from(face.querySelectorAll<HTMLElement>(':scope > [data-g]'));
   if (ctx) {
-    ctx.font = fontOf(style);
+    ctx.font = font;
     try {
       // Tracking is added by hand below (the same in every engine).
       (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0px';
@@ -591,6 +611,14 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
     let landAnims: Animation[] = [];
     let burn: BurnGL | null = null;
     let burnRaf = 0;
+    // The cover's words watched for a change of size under the film (the
+    // landing's, below); declared here, where finish() can let it go on
+    // every path (reduced motion's too).
+    let coverWatch: ResizeObserver | null = null;
+    const unwatchCover = () => {
+      coverWatch?.disconnect();
+      coverWatch = null;
+    };
 
     const finish = () => {
       if (phase === 'done') return;
@@ -609,6 +637,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       if (burnRaf) cancelAnimationFrame(burnRaf);
       burnRaf = 0;
       overlay.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+      unwatchCover();
       flightLayer.replaceChildren();
       q('[data-title] [data-gm-unit]')?.style.removeProperty('visibility');
       burn?.dispose();
@@ -1642,12 +1671,15 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
 
     // ── Landing ──
     // Laid a little ahead — on the formed title's hold, when nothing moves —
-    // and started on the film's clock, at its end: measuring the words and
-    // building their flights is 60–75 ms of a phone's main thread at a
-    // quarter of the CPU, and laid at the end it started the landing that
-    // much late (the title held, then the flight began on whatever frame the
-    // work ended on). Every landing animation's start is the film's end;
-    // laid late, they start where they would be by then.
+    // and started on the film's clock, at its end: every landing animation's
+    // start is the film's end; laid late, they start where they would be by
+    // then. What it needs from the page — its words at both ends, the clones
+    // that fly, the dark's own opacities — is read before the clock, with
+    // the film's own measuring (planLanding, below), so the frame it is laid
+    // in reads nothing and only writes: read on that frame, between its own
+    // writes, it was 80 forced style and layout passes, 15–16 ms of a
+    // 36–39 ms frame on a phone at a quarter of the CPU, and two dropped
+    // frames in one run of three (round wf45's final check).
     function startLanding() {
       if (phase !== 'film') return;
       phase = 'landing';
@@ -1667,26 +1699,185 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
 
     // A: the words fly home (src/lib/openingFilm.ts, LANDING_A: his name
     // first, whole; then the others in the cover's reading order; the page's
-    // own words take over under a short cross-dissolve). `startAt`: its
-    // start on document.timeline.
-    function landA(startAt: number) {
+    // own words take over under a short cross-dissolve).
+
+    // What a word looks like at either end: its computed face, kept as plain
+    // values (a live style read on the landing's frame would bring the
+    // page's style up to date there). A word that is the same on both ends
+    // (his name: the title sets it as the cover does) is only moved and
+    // scaled — the size is the two faces' own ratio, so it lands as the page
+    // draws it; one whose face changes (the credits' capitals into the
+    // page's Fraunces) turns letter by letter, every letter and its
+    // counterpart held to one ink box, at the start of its flight.
+    interface FaceStyle {
+      fontFamily: string;
+      fontWeight: string;
+      fontStyle: string;
+      fontSize: string;
+      letterSpacing: string;
+      textTransform: string;
+      color: string;
+      fontVariationSettings: string;
+      fontOpticalSizing: string;
+      fontFeatureSettings: string;
+      textShadow: string;
+    }
+    const faceStyle = (el: Element): FaceStyle => {
+      const s = getComputedStyle(el);
+      return {
+        fontFamily: s.fontFamily,
+        fontWeight: s.fontWeight,
+        fontStyle: s.fontStyle,
+        fontSize: s.fontSize,
+        letterSpacing: s.letterSpacing,
+        textTransform: s.textTransform,
+        color: s.color,
+        fontVariationSettings: s.fontVariationSettings,
+        fontOpticalSizing: (s as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing,
+        fontFeatureSettings: s.fontFeatureSettings,
+        textShadow: s.textShadow,
+      };
+    };
+    const casing = (text: string, style: FaceStyle) =>
+      style.textTransform === 'uppercase' ? text.toUpperCase() : style.textTransform === 'lowercase' ? text.toLowerCase() : text;
+    const tracking = (style: FaceStyle) => (style.letterSpacing === 'normal' ? 0 : (parseFloat(style.letterSpacing) || 0) / (parseFloat(style.fontSize) || 16));
+    const sameFace = (a: FaceStyle, b: FaceStyle, aText: string, bText: string) =>
+      a.fontFamily === b.fontFamily &&
+      a.fontWeight === b.fontWeight &&
+      a.fontStyle === b.fontStyle &&
+      casing(aText, a) === casing(bText, b) &&
+      Math.abs(tracking(a) - tracking(b)) < 0.002;
+
+    /** The end title, where each word leaves from: read while it stands
+     *  still — before the clock (or on a refit, the film's keyframes off),
+     *  never under the film's own keyframes (they scale it and raise its
+     *  lines until it has formed); formed, it stands exactly so. */
+    interface TitleWord {
+      src: HTMLElement;
+      rect: Box;
+      scale: number;
+      text: string;
+      style: FaceStyle;
+      ink: Ink;
+      base: number;
+      /** His name's words: their first letter's pen, as the title draws it. */
+      pen: number | null;
+    }
+    interface TitleRead {
+      words: Map<FlyWord, TitleWord>;
+      /** The title's baseline, read off its letters on screen. */
+      base: number | null;
+      /** Where its letters' unit stands (his name sets off from it). */
+      origin: Vec2;
+      /** The dark's own opacities (the stylesheet's: the film never
+       *  animates these). */
+      dark: Map<Element, number>;
+    }
+    let titleRead: TitleRead | null = null;
+    const readTitle = (): TitleRead => {
       const endLayer = q('[data-end]')!;
-      const titleLetters = q('[data-title] [data-gm-unit]', endLayer)!;
-      const rate = hurried ? FF_RATE : 1;
-      const ms = (v: number) => v / rate;
-      const vh = window.innerHeight;
-      const found: { src: HTMLElement; dst: HTMLElement; top: number; left: number; from: number; name: boolean }[] = [];
+      // The title's name as it stands on screen: its letters (the morph's
+      // Fraunces face) on their pens, and its baseline.
+      const titleFace = q('[data-title] [data-gm="to"]', endLayer);
+      const base = titleFace?.querySelector<HTMLElement>(':scope > .of-bl')?.getBoundingClientRect().top ?? null;
+      const words = new Map<FlyWord, TitleWord>();
       FLY_ORDER.forEach((word) => {
         const src = endLayer.querySelector<HTMLElement>(LANDING_TARGETS[word].from);
+        if (!src) return;
+        const r = src.getBoundingClientRect();
+        const text = (src.textContent || '').replace(/\s+/g, ' ').trim();
+        // A word only moved (his name) starts exactly where the title draws
+        // it: its first letter's pen and the title's baseline — so the clone
+        // that takes the title's place is drawn on it (read off the letters
+        // on screen, not the unseen text the title is measured on, a pixel
+        // apart).
+        const at = TITLE_NAME.indexOf(text);
+        const letter = at >= 0 ? titleFace?.querySelector<HTMLElement>(`:scope > [data-g="${at}"]`) : null;
+        words.set(word, {
+          src,
+          rect: { x: r.left, y: r.top, w: r.width, h: r.height },
+          scale: r.height / Math.max(1, src.offsetHeight),
+          text,
+          style: faceStyle(src),
+          ink: inkOf(src, text),
+          base: baselineOf(src),
+          pen: letter ? letter.getBoundingClientRect().left : null,
+        });
+      });
+      const unit = q('[data-title] [data-gm-unit]', endLayer)!.getBoundingClientRect();
+      // The dark: its ground, its perforations and grain, the credits' dots
+      // — and any word with no place to fly to.
+      const dark = new Map<Element, number>();
+      [
+        ...Array.from(endLayer.children).filter((el) => !el.classList.contains('of-end__title')),
+        ...qa('.of-title__sub .of-title__dot, .of-title__sub [data-fly]', endLayer),
+      ].forEach((el) => {
+        const from = Number.parseFloat(getComputedStyle(el).opacity);
+        dark.set(el, Number.isFinite(from) ? from : 1);
+      });
+      return { words, base, origin: [unit.left, unit.top], dark };
+    };
+
+    /** The cover of words under the film, where each word lands: read with
+     *  the title before the clock, and again — in a resize observer's
+     *  callback, the layout already up to date — if one of its words changes
+     *  size under the film (a face that came late: the Chinese serif). */
+    interface CoverWord {
+      dst: HTMLElement;
+      top: number;
+      left: number;
+      size: [number, number];
+      box: Box | null;
+      text: string;
+      style: FaceStyle;
+      ink: Ink;
+      base: number;
+    }
+    const readCover = (): Map<FlyWord, CoverWord> => {
+      const vh = viewport().h;
+      const cover = new Map<FlyWord, CoverWord>();
+      FLY_ORDER.forEach((word) => {
         // The cover is printed in both languages (src/i18n): the hidden
         // copy has no box, and a flight aimed at it would be dropped.
         const dst = shownMatch(document, LANDING_TARGETS[word].to);
-        if (!src || !dst || !dst.getClientRects().length) return;
+        if (!dst || !dst.getClientRects().length) return;
         // A place below the first screen is not a landing: that word stays
         // and goes with the dark.
         const r = dst.getBoundingClientRect();
         if (r.bottom < 0 || r.top > vh) return;
-        found.push({ src, dst, top: r.top, left: r.left, from: src.getBoundingClientRect().top, name: NAME_WORDS.includes(word) });
+        const text = (dst.textContent || '').trim();
+        cover.set(word, { dst, top: r.top, left: r.left, size: [r.width, r.height], box: textBox(dst), text, style: faceStyle(dst), ink: inkOf(dst, text), base: baselineOf(dst) });
+      });
+      return cover;
+    };
+
+    /** The landing as laid before the clock: every word's flight and its
+     *  clones in the flight layer (hidden until their moment), the dark. */
+    interface LandingPlan {
+      placed: {
+        src: HTMLElement;
+        dst: HTMLElement;
+        same: boolean;
+        to: Vec2;
+        flight: ReturnType<typeof flightFor>;
+        wrap: HTMLElement;
+        source: { box: HTMLElement; text: string } | null;
+        target: { box: HTMLElement; text: string } | null;
+        word: { box: HTMLElement; text: string };
+        letters: (readonly [Glyph, Glyph])[] | null;
+      }[];
+      /** The words besides his name (the landing's length). */
+      others: number;
+      dark: { el: Element; from: number }[];
+      origin: Vec2;
+    }
+    let landing: LandingPlan | null = null;
+    const planLanding = (title: TitleRead, cover: Map<FlyWord, CoverWord>): LandingPlan => {
+      flightLayer.replaceChildren();
+      const found = FLY_ORDER.flatMap((word) => {
+        const t = title.words.get(word);
+        const c = cover.get(word);
+        return t && c ? [{ t, c, top: c.top, left: c.left, from: t.rect.y, name: NAME_WORDS.includes(word) }] : [];
       });
       // His name first, its words on one clock (one unit). Then the others,
       // each a little after the one before, by the line they land on: those
@@ -1700,72 +1891,30 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       const others = found.filter((p) => !p.name).sort((a, b) => landingRank(a) - landingRank(b) || a.left - b.left);
       const pairs = [...names, ...others];
 
-      overlay.classList.add('is-landing');
-      html.setAttribute('data-open-fly', '');
-      html.dataset.reel = 'flight';
-
-      // What a word looks like at either end. A word that is the same on both
-      // ends (his name: the title sets it as the cover does) is only moved
-      // and scaled — the size is the two faces' own ratio, so it lands as the
-      // page draws it; one whose face changes (the credits' capitals into
-      // the page's Fraunces) turns letter by letter, every letter and its
-      // counterpart held to one ink box, at the start of its flight.
-      const casing = (text: string, style: CSSStyleDeclaration) =>
-        style.textTransform === 'uppercase' ? text.toUpperCase() : style.textTransform === 'lowercase' ? text.toLowerCase() : text;
-      const tracking = (style: CSSStyleDeclaration) => (style.letterSpacing === 'normal' ? 0 : (parseFloat(style.letterSpacing) || 0) / (parseFloat(style.fontSize) || 16));
-      const sameFace = (a: CSSStyleDeclaration, b: CSSStyleDeclaration, aText: string, bText: string) =>
-        a.fontFamily === b.fontFamily &&
-        a.fontWeight === b.fontWeight &&
-        a.fontStyle === b.fontStyle &&
-        casing(aText, a) === casing(bText, b) &&
-        Math.abs(tracking(a) - tracking(b)) < 0.002;
-
-      // The title's name as it stands on screen: its letters (the morph's
-      // Fraunces face) on their pens, and its baseline — read once, here.
-      const titleFace = q('[data-title] [data-gm="to"]', endLayer);
-      const titleBase = titleFace?.querySelector<HTMLElement>(':scope > .of-bl')?.getBoundingClientRect().top ?? null;
-
       const flights = pairs
-        .map(({ src, dst, name }, i) => {
-          const srcRect = src.getBoundingClientRect();
-          const dstBox = textBox(dst);
-          if (!dstBox || !srcRect.width) return null;
-          const scale = srcRect.height / Math.max(1, src.offsetHeight);
-          const sStyle = getComputedStyle(src);
-          const dStyle = getComputedStyle(dst);
-          const srcText = (src.textContent || '').replace(/\s+/g, ' ').trim();
-          const srcInk = inkOf(src, srcText);
-          const srcBase = baselineOf(src);
-          const dstText = (dst.textContent || '').trim();
-          const dstInk = inkOf(dst, dstText);
-          const dstBase = baselineOf(dst);
+        .map(({ t, c, name }, i) => {
+          const dstBox = c.box;
+          if (!dstBox || !t.rect.w) return null;
+          const { src, scale, style: sStyle, text: srcText, ink: srcInk, base: srcBase } = t;
+          const { dst, style: dStyle, text: dstText, ink: dstInk, base: dstBase } = c;
           const same = sameFace(sStyle, dStyle, srcText, dstText);
           // Ink centre to ink centre; the size from ink height to ink height
           // (the same face: from font size to font size, exactly).
-          let from: Vec2 = [srcRect.left + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * (srcInk.ascent - srcInk.descent)) / 2];
+          let from: Vec2 = [t.rect.x + (scale * (srcInk.right - srcInk.left)) / 2, srcBase - (scale * (srcInk.ascent - srcInk.descent)) / 2];
           const to: Vec2 = [dstBox.x + (dstInk.right - dstInk.left) / 2, dstBase - (dstInk.ascent - dstInk.descent) / 2];
           const srcH = same ? (parseFloat(sStyle.fontSize) || 16) * scale : (srcInk.ascent + srcInk.descent) * scale;
           const dstH = same ? parseFloat(dStyle.fontSize) || 16 : dstInk.ascent + dstInk.descent;
-          if (same && titleBase != null) {
-            // A word only moved (his name) starts exactly where the title
-            // draws it: its first letter's pen and the title's baseline — so
-            // the clone that takes the title's place on this frame is drawn
-            // on it (read off the letters on screen, not the unseen text the
-            // title is measured on, a pixel apart).
-            const at = TITLE_NAME.indexOf(srcText);
-            const letter = at >= 0 ? titleFace?.querySelector<HTMLElement>(`:scope > [data-g="${at}"]`) : null;
-            if (letter) {
-              const k = srcH / Math.max(1e-6, dstH);
-              from = [letter.getBoundingClientRect().left - k * (dstBox.x - to[0]), titleBase - k * (dstBase - to[1])];
-            }
+          if (same && title.base != null && t.pen != null) {
+            const k = srcH / Math.max(1e-6, dstH);
+            from = [t.pen - k * (dstBox.x - to[0]), title.base - k * (dstBase - to[1])];
           }
           const flight = flightFor({ x: from[0], y: from[1], w: 0, h: 0 }, { x: to[0], y: to[1], w: 0, h: 0 }, srcH, dstH, name ? null : i - names.length);
-          return { src, srcText, sStyle, dstText, dStyle, dstBox, dstBase, scale, to, flight, same };
+          return { src, dst, srcText, sStyle, dstText, dStyle, dstBox, dstBase, scale, to, flight, same };
         })
         .filter(<T,>(x: T | null): x is T => x != null);
 
       /** A clone of a word in a face (its letters each a box, for a morph). */
-      const face = (text: string, style: CSSStyleDeclaration, size: number, letters: boolean) => {
+      const face = (text: string, style: FaceStyle, size: number, letters: boolean) => {
         const box = document.createElement('span');
         box.className = 'of-fly__face';
         const shown = casing(text, style);
@@ -1778,7 +1927,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         box.style.color = style.color;
         box.style.lineHeight = 'normal';
         box.style.fontVariationSettings = style.fontVariationSettings;
-        box.style.fontOpticalSizing = (style as CSSStyleDeclaration & { fontOpticalSizing: string }).fontOpticalSizing;
+        box.style.fontOpticalSizing = style.fontOpticalSizing;
         box.style.fontFeatureSettings = style.fontFeatureSettings;
         box.style.textShadow = style.textShadow;
         if (letters) {
@@ -1801,20 +1950,17 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         box.append(probe);
         return { box, text: shown };
       };
-      /** A face set on the page word's own pen and baseline. */
-      const seat = (box: HTMLElement, x: number, base: number) => {
-        box.style.left = px(x);
-        box.style.top = '0px';
-        box.style.top = px(base - baselineIn(box));
-      };
 
-      const placed = flights.map((f) => {
+      // The clones, every one written first: the word as the page sets it
+      // (what lands), and — for a word whose face turns — its letters in
+      // both faces for the turn; each word's faces in a wrap of its own,
+      // hidden until its moment (its animations' own opacity from then on).
+      const built = flights.map((f) => {
         const wrap = document.createElement('div');
         wrap.className = 'of-fly';
+        wrap.style.opacity = '0';
         wrap.style.transformOrigin = `${f.to[0]}px ${f.to[1]}px`;
         const dstSize = parseFloat(f.dStyle.fontSize) || 16;
-        // The word as the page sets it (what lands), and — for a word whose
-        // face turns — its letters in both faces for the turn.
         const word = face(f.dstText, f.dStyle, dstSize, false);
         const target = f.same ? null : face(f.dstText, f.dStyle, dstSize, true);
         const source = f.same ? null : face(f.srcText, f.sStyle, ((parseFloat(f.sStyle.fontSize) || 16) * f.scale) / f.flight.k, true);
@@ -1825,19 +1971,86 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         if (target) wrap.append(target.box);
         wrap.append(word.box);
         flightLayer.append(wrap);
+        return { ...f, wrap, source, target, word };
+      });
+      // … then read, every one (one layout for all of them): each face's
+      // baseline in its own box, its face for the canvas, the source's ink …
+      const lifts = new Map<HTMLElement, number>();
+      const reads = built.map(({ word, target, source }) => {
+        lifts.set(word.box, baselineIn(word.box));
+        return {
+          target: target ? readFace(target.box) : null,
+          source: source ? readFace(source.box) : null,
+          sInk: source ? inkOf(source.box, source.text) : null,
+        };
+      });
+      /** A face set on the page word's own pen and baseline. */
+      const seat = (box: HTMLElement, x: number, base: number) => {
+        box.style.left = px(x);
+        box.style.top = px(base - (lifts.get(box) ?? baselineIn(box)));
+      };
+      // … then set: every word on the page word's own pen and baseline; the
+      // page's letters on the page's own pens; the title's letters round the
+      // same ink centre, at the page's scale.
+      const placed = built.map((f, i) => {
+        const { word, target, source } = f;
         seat(word.box, f.dstBox.x, f.dstBase);
         let letters: (readonly [Glyph, Glyph])[] | null = null;
-        if (source && target) {
-          // The page's letters on the page's own pens; the title's letters
-          // round the same ink centre, at the page's scale.
-          const toLetters = setGlyphs(target.box, target.text, f.dstBox.x, f.dstBase);
-          const sInk = inkOf(source.box, source.text);
+        const read = reads[i];
+        if (source && target && read.source && read.target && read.sInk) {
+          const toLetters = setGlyphs(target.box, target.text, f.dstBox.x, f.dstBase, null, read.target);
+          const sInk = read.sInk;
           const x0 = f.to[0] - (sInk.left + sInk.right) / 2 + sInk.left;
           const yB = f.to[1] + (sInk.ascent - sInk.descent) / 2;
-          letters = pairGlyphs(setGlyphs(source.box, source.text, x0, yB), toLetters);
+          letters = pairGlyphs(setGlyphs(source.box, source.text, x0, yB, null, read.source), toLetters);
         }
-        return { ...f, wrap, source, target, word, letters };
+        return { src: f.src, dst: f.dst, same: f.same, to: f.to, flight: f.flight, wrap: f.wrap, source, target, word, letters };
       });
+      // The words that fly stay in full ink until they are handed to their
+      // clones, in motion; the rest of the dark dissolves.
+      const flying = new Set<Element>(placed.map((f) => f.src));
+      const dark = [...title.dark].filter(([el]) => !flying.has(el)).map(([el, from]) => ({ el, from }));
+      // A word of the cover that changes size under the film moves the
+      // landing: read the cover again and lay the clones again, there.
+      unwatchCover();
+      if (typeof ResizeObserver !== 'undefined' && placed.length) {
+        const was = new Map<Element, [number, number]>();
+        cover.forEach((c) => was.set(c.dst, c.size));
+        const watch = new ResizeObserver((entries) => {
+          if (disposed || phase !== 'film' || coverWatch !== watch || !titleRead) return;
+          const moved = entries.some((entry) => {
+            const box = entry.borderBoxSize?.[0];
+            const w = box ? box.inlineSize : entry.contentRect.width;
+            const h = box ? box.blockSize : entry.contentRect.height;
+            const before = was.get(entry.target);
+            return !!before && (Math.abs(before[0] - w) > 0.05 || Math.abs(before[1] - h) > 0.05);
+          });
+          if (moved) landing = planLanding(titleRead, readCover());
+        });
+        coverWatch = watch;
+        placed.forEach(({ dst }) => watch.observe(dst));
+      }
+      return { placed, others: others.length, dark, origin: title.origin };
+    };
+
+    // `startAt`: its start on document.timeline. It reads nothing: the
+    // landing was laid before the clock (laid now only if it never was —
+    // the title is formed and still on its hold, so it reads true now too).
+    function landA(startAt: number) {
+      if (!landing) landing = planLanding(titleRead ?? readTitle(), readCover());
+      unwatchCover();
+      const { placed, others, dark, origin } = landing;
+      const endLayer = q('[data-end]')!;
+      const titleLetters = q('[data-title] [data-gm-unit]', endLayer)!;
+      const rate = hurried ? FF_RATE : 1;
+      const ms = (v: number) => v / rate;
+
+      // The cover's words the film carries home are marked so as it lands
+      // (the cover need not find them itself on this frame: EntranceIntro).
+      placed.forEach(({ dst }) => dst.setAttribute('data-flown', ''));
+      overlay.classList.add('is-landing');
+      html.setAttribute('data-open-fly', '');
+      html.dataset.reel = 'flight';
 
       /** A landing animation, started on the landing's clock. */
       const track = (a: Animation) => {
@@ -1849,21 +2062,15 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // grain, the credits' dots — and any word with no place to fly to. The
       // words that fly stay in full ink until they are handed to their
       // clones, in motion (below).
-      const flying = new Set<Element>(flights.map((f) => f.src));
-      const dark = [
-        ...Array.from(endLayer.children).filter((el) => !el.classList.contains('of-end__title')),
-        ...qa('.of-title__sub .of-title__dot, .of-title__sub [data-fly]', endLayer).filter((el) => !flying.has(el)),
-      ];
       const dissolve = { duration: ms(LANDING_A.dissolve[1] - LANDING_A.dissolve[0]), delay: ms(LANDING_A.dissolve[0]), fill: 'both' as FillMode, easing: FADE_CSS };
-      dark.forEach((el) => {
-        const from = Number.parseFloat(getComputedStyle(el).opacity);
-        track(el.animate([{ opacity: Number.isFinite(from) ? from : 1 }, { opacity: 0 }], dissolve));
+      dark.forEach(({ el, from }) => {
+        track(el.animate([{ opacity: from }, { opacity: 0 }], dissolve));
       });
       /** An element shown (or hidden) from `at` ms on: one instant. */
       const cut = (el: Element, from: number, to: number, at: number) =>
         track(el.animate([{ opacity: from }, { opacity: to }], { delay: ms(at), duration: 0, fill: 'both' }));
 
-            // YOU's line is gone before the first flight reaches its row (no word
+      // YOU's line is gone before the first flight reaches its row (no word
       // flies across a half-faded line): all of it when YOU has no place on
       // the page to fly to; else its lead ("Admit one ·"), which the words
       // bound for the cover's lower lines drop through (the cover of words
@@ -1953,8 +2160,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // Every other word is handed to its clone as it sets off.
       const lead = placed.find((f) => f.same);
       if (lead) {
-        const origin = titleLetters.getBoundingClientRect();
-        const O: Vec2 = [origin.left, origin.top];
+        const O: Vec2 = origin;
         const from: Vec2 = [lead.to[0] + lead.flight.dx, lead.to[1] + lead.flight.dy];
         titleLetters.style.transformOrigin = '0px 0px';
         track(
@@ -1985,7 +2191,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       // Home (every word landed, the dark gone): the page's own words take
       // over under the clones, which dissolve into them — the same word at
       // the same place, so no frame changes — and are then let go.
-      const home = landingAHome(others.length);
+      const home = landingAHome(others);
       later(() => {
         html.removeAttribute('data-open-fly');
         placed.forEach(({ wrap }) => {
@@ -2005,6 +2211,10 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       if (disposed || phase !== 'wait') return;
       measuredWithFonts = fontsReady();
       geo = layout();
+      // The landing, laid now too, with the film's own measuring: the title
+      // stands still before any of the film's keyframes moves it.
+      titleRead = readTitle();
+      landing = planLanding(titleRead, readCover());
       const canvas = q<HTMLCanvasElement>('[data-burn]')!;
       if (!burn) burn = makeBurn(canvas);
       burn?.resize(geo.W, geo.H);
@@ -2123,7 +2333,13 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         const to = Math.min(t, plan.length - FF_TAIL);
         t0 += t - to;
       }
+      // The film's keyframes off while it is measured (laid again at once,
+      // below, in the same task: no frame is drawn between), so the end
+      // title is read standing still, as it will stand formed.
+      filmAnims.forEach((a) => a.cancel());
       geo = layout();
+      titleRead = readTitle();
+      landing = planLanding(titleRead, readCover());
       burn?.resize(geo.W, geo.H);
       drawnFrame = -2;
       build();
@@ -2199,6 +2415,7 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
       filmAnims.forEach((a) => a.cancel());
       landAnims.forEach((a) => a.cancel());
       burn?.dispose();
+      unwatchCover();
       flightLayer.replaceChildren();
       html.removeAttribute('data-opening');
       html.removeAttribute('data-open-fly');

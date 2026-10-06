@@ -1172,6 +1172,50 @@ test('the landing is laid on the formed title\'s hold and starts on the film\'s 
   for (const plan of Object.values(PLANS)) assert.ok(plan.acts.title.start + F.TITLE.morph <= plan.length - F.FF_TAIL + 1e-6);
 });
 
+test('the landing reads nothing on its own frame: its words, clones and dark are laid before the clock (round wf45)', () => {
+  // Read on the title's hold, between its own writes, the landing was 80
+  // forced style and layout passes — 15–16 ms of a 36–39 ms frame on a phone
+  // at a quarter of the CPU, and two dropped frames in one run of three. Its
+  // frame now only writes: the marks, its animations, its timers.
+  const island = read('../src/components/home/OpeningFilm.tsx');
+  const from = island.indexOf('    function landA(startAt: number) {');
+  const to = island.indexOf('    // ── Go: the fonts first, then the clock ──');
+  assert.ok(from > 0 && to > from, 'landA, before the clock\'s code');
+  const landA = island.slice(from, to);
+  for (const read of ['getBoundingClientRect', 'getComputedStyle', 'getClientRects', 'offsetWidth', 'offsetHeight', 'offsetTop', 'offsetLeft', 'innerHeight', 'clientHeight', 'textBox(', 'baselineOf(', 'baselineIn(', 'inkOf(', 'readFace(']) {
+    assert.ok(!landA.includes(read), `the landing's frame reads nothing: ${read}`);
+  }
+  // Laid only where it never was (the title formed and still, so true then).
+  assert.match(landA, /if \(!landing\) landing = planLanding\(titleRead \?\? readTitle\(\), readCover\(\)\);/);
+  // Laid with the film's own measuring, before the clock: the title read as
+  // it stands still (before any of the film's keyframes moves it) …
+  assert.match(island, /geo = layout\(\);\n\s*\/\/ The landing, laid now too[^\n]*\n[^\n]*\n\s*titleRead = readTitle\(\);\n\s*landing = planLanding\(titleRead, readCover\(\)\);/);
+  // … and on a refit with the film's keyframes off while it is measured
+  // (they scale the title and raise its lines until it has formed).
+  assert.match(island, /filmAnims\.forEach\(\(a\) => a\.cancel\(\)\);\n\s*geo = layout\(\);\n\s*titleRead = readTitle\(\);\n\s*landing = planLanding\(titleRead, readCover\(\)\);\n\s*burn\?\.resize/);
+  // The clones are made, then read all at once (one layout for all of
+  // them), then set: no write between two reads.
+  const plan = island.slice(island.indexOf('    const planLanding = ('), island.indexOf('    function landA(startAt: number) {'));
+  const made = plan.indexOf('const built = flights.map(');
+  const readAll = plan.indexOf('const reads = built.map(');
+  const set = plan.indexOf('const placed = built.map(');
+  assert.ok(made > 0 && readAll > made && set > readAll, 'made, read, set');
+  assert.match(plan, /wrap\.style\.opacity = '0';/, 'hidden until its moment');
+  // A cover word that changes size under the film (a face that came late)
+  // moves the landing: read again in the observer's callback, laid again.
+  assert.match(plan, /new ResizeObserver\(/);
+  assert.match(plan, /if \(moved\) landing = planLanding\(titleRead, readCover\(\)\);/);
+  // The cover's own pass over the same words is spared: the film marks the
+  // words it carries home as it lands, and the cover reads none then.
+  assert.match(landA, /placed\.forEach\(\(\{ dst \}\) => dst\.setAttribute\('data-flown', ''\)\);[\s\S]*html\.dataset\.reel = 'flight';/);
+  const intro = read('../src/components/home/EntranceIntro.tsx');
+  assert.match(intro, /flownMarked = true;[\s\S]{0,260}if \(section\.querySelector\('\[data-open-land\]\[data-flown\]'\)\) return;\n\s*const vh = window\.innerHeight;/);
+  // The watcher goes with the film on every path (finish() is reduced
+  // motion's too: declared before it, never in its temporal dead zone).
+  assert.ok(island.indexOf('const unwatchCover = () =>') < island.indexOf('const finish = () =>'), 'declared before finish()');
+  assert.match(island, /overlay\.getAnimations\(\{ subtree: true \}\)\.forEach\(\(a\) => a\.cancel\(\)\);\n\s*unwatchCover\(\);/);
+});
+
 test('skip: to the end title with its tail left, never back, nothing once the landing has begun', () => {
   for (const plan of Object.values(PLANS)) {
     const target = plan.length - F.FF_TAIL;

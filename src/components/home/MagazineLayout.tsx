@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect, useLayoutEffect, useMemo, type CSSProperties, type FocusEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
-import { motion, animate, motionValue, useScroll, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
+import { motion, animate, motionValue, useMotionValueEvent, AnimatePresence, useReducedMotion, useIsPresent, type MotionValue } from 'framer-motion';
 import type { Collection, Photo } from '../../types';
 import Lightbox, { type LightboxOrigin, type LightboxTarget } from '../shared/Lightbox';
 import {
@@ -13,6 +13,7 @@ import { Bi, T, useLang, useT } from '../../i18n/react';
 import { tr, type Key } from '../../i18n/dict';
 import { paragraphsOf } from '../../i18n/content';
 import { useHoverCapable } from '../../lib/useHoverCapable';
+import { viewport } from '../../lib/viewport';
 import { usePressGive } from '../../lib/usePressGive';
 import { useInViewOnce } from '../../lib/useInViewOnce';
 import { stockPaper, stockStyle } from '../../lib/ticketStock';
@@ -105,6 +106,39 @@ const TERRAIN_GRACE_MS = 320;
 // The overlay's panel slide (a story opened without a plate: the phone, a
 // kept stub on the closing's proof sheet), for the stub's clock.
 const PANEL_SLIDE_MS = 680;
+// The overlay's shell fading in over the page (a story opened without a
+// plate or a shared photograph).
+const SHELL_FADE_MS = 700;
+/** Runs `fn` as the next frame is laid out — in a resize observer's first
+ *  word, which comes once the frame's style and layout are up to date — so
+ *  a focus() there brings nothing up to date itself. Mid-commit, a story's
+ *  focus at the close brought the style of the whole page up to date, twice
+ *  (12 ms each on a phone at a quarter speed; round wf45). Without the
+ *  observer, just after the next frame. Returns a cancel. */
+function afterNextFrame(fn: () => void): () => void {
+  if (typeof ResizeObserver !== 'undefined') {
+    let done = false;
+    const observer = new ResizeObserver(() => {
+      observer.disconnect();
+      if (done) return;
+      done = true;
+      fn();
+    });
+    observer.observe(document.documentElement);
+    return () => {
+      done = true;
+      observer.disconnect();
+    };
+  }
+  let timer = 0;
+  const frame = requestAnimationFrame(() => {
+    timer = window.setTimeout(fn, 0);
+  });
+  return () => {
+    cancelAnimationFrame(frame);
+    window.clearTimeout(timer);
+  };
+}
 // The type on the opening spread sets in reading order from the landing —
 // kicker, title, dek, credits, caption at 180 + k × 90ms (STAGGER.line) — in
 // CSS (global.css, Story block: `.story[data-set]`), so the story body
@@ -252,6 +286,10 @@ export interface MagazineLayoutProps {
    *  Homepage after it has set the page on that story's chapter. The rail's
    *  stub, the story's own, flies home into it. */
   homeStubFor?: (collectionId: string) => PlateStub | null;
+  /** Homepage only: said once the story is over the whole screen (its shell
+   *  faded in and its panel risen, or its plate grown to the full screen):
+   *  nothing of the page under it shows until the close begins. */
+  onCovered?: () => void;
 }
 
 /** What the Homepage read off the plate in the click, before any scroll lock. */
@@ -543,7 +581,7 @@ function useFrameReach<T extends HTMLElement>(armed: boolean, reduce: boolean) {
           first = false;
           // On screen or above it when the page arms: it stays as it is,
           // rather than vanishing to arrive again in front of the reader.
-          if (entry.isIntersecting || entry.boundingClientRect.top < window.innerHeight) {
+          if (entry.isIntersecting || entry.boundingClientRect.top < viewport().h) {
             observer.disconnect();
             return;
           }
@@ -1491,10 +1529,15 @@ function KeptStub({
   // runs before its ancestors' refs are attached — the scroller would still
   // be null.
   useEffect(() => {
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') {
+      measure();
+      return;
+    }
     // The grid's height moves when a caption's face arrives or the window
-    // changes width; the scroller's when the window changes height.
+    // changes width; the scroller's when the window changes height. Its
+    // first word comes as the new story is laid out: measured there, the
+    // layout already up to date (measured at once, in the commit, it brought
+    // the new story's layout up to date itself, at every open; round wf45).
     const observer = new ResizeObserver(() => measure());
     if (gridRef.current) observer.observe(gridRef.current);
     if (containerRef.current) observer.observe(containerRef.current);
@@ -2258,6 +2301,7 @@ export default function MagazineLayout({
   onEntryReady,
   entryOrigin,
   homeStubFor,
+  onCovered,
 }: MagazineLayoutProps) {
   const reduce = useReducedMotion();
   const isPresent = useIsPresent();
@@ -2333,8 +2377,25 @@ export default function MagazineLayout({
   const onEntryReadyRef = useRef(onEntryReady);
   onEntryReadyRef.current = onEntryReady;
   // One scroll source for the story: the rail's kept stub and the phone's
-  // frame folio read the offset.
-  const { scrollY } = useScroll({ container: containerRef });
+  // frame folio read the offset — the scroller's own, as each of its scroll
+  // events says it (framer's useScroll measured the scroller's whole
+  // geometry as it attached, mid-commit at the story's open: forced style
+  // and layout passes, round wf45). A story opens at its top: 0 until the
+  // reader scrolls. `scrolledRef`: it is off its top (so a new story must be
+  // put back there).
+  const [scrollY] = useState(() => motionValue(0));
+  const scrolledRef = useRef(false);
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    const onScroll = () => {
+      const top = root.scrollTop;
+      scrolledRef.current = top !== 0;
+      scrollY.set(top);
+    };
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => root.removeEventListener('scroll', onScroll);
+  }, [scrollY]);
   const [isShared, setIsShared] = useState(false);
   const [shareStatus, setShareStatus] = useState<Key | ''>('');
   const [shareFallbackUrl, setShareFallbackUrl] = useState('');
@@ -2424,7 +2485,15 @@ export default function MagazineLayout({
         : null;
     return () => {
       const previous = previousFocusRef.current;
-      if (previous?.isConnected) previous.focus({ preventScroll: true });
+      if (!previous?.isConnected) return;
+      // After the frame that takes the story off (its style the frame's
+      // own), and only where the focus has nowhere else to be — the page
+      // may already have given it back (HomePage's close does).
+      afterNextFrame(() => {
+        const active = document.activeElement;
+        if (!previous.isConnected || (active && active !== document.body && active !== previous && active.isConnected)) return;
+        previous.focus({ preventScroll: true });
+      });
     };
   }, [returnFocusElement, sharedEntry, standalone]);
 
@@ -2433,7 +2502,7 @@ export default function MagazineLayout({
   // never sit inside the now-inert Homepage during that time.
   useEffect(() => {
     if (standalone || !isPresent) return;
-    dialogRef.current?.focus({ preventScroll: true });
+    return afterNextFrame(() => dialogRef.current?.focus({ preventScroll: true }));
   }, [collection._id, sharedEntry, standalone, isPresent]);
 
   // ── The story on the page ──
@@ -2610,6 +2679,28 @@ export default function MagazineLayout({
   // The story is live — interactive, its body no longer inert — once it has
   // landed and while no turn is growing over it.
   const live = entryLanded && !turning;
+  // ── Over the whole screen ──
+  // Once the shell has faded in and the panel has risen (each says so as its
+  // own animation completes), or the plate has grown to the full screen (the
+  // landing), nothing of the page under the story can be seen: the page is
+  // told, once (onCovered), and stops drawing its blurred atlas there.
+  const onCoveredRef = useRef(onCovered);
+  onCoveredRef.current = onCovered;
+  const isPresentRef = useRef(isPresent);
+  isPresentRef.current = isPresent;
+  const coverRef = useRef({ shell: false, panel: false, told: false });
+  const settleCover = useCallback((part: 'shell' | 'panel') => {
+    const cover = coverRef.current;
+    cover[part] = true;
+    if (cover.told || !cover.shell || !cover.panel || !isPresentRef.current || !onCoveredRef.current) return;
+    cover.told = true;
+    onCoveredRef.current();
+  }, []);
+  useEffect(() => {
+    if (!plateEntry || !entryLanded || !isPresent) return;
+    settleCover('shell');
+    settleCover('panel');
+  }, [plateEntry, entryLanded, isPresent, settleCover]);
   // A grown arrival's spread is sent waiting (map undeveloped, type unset)
   // and set two frames after it is on screen, so the set is a transition the
   // reader sees. Every other way in paints it set.
@@ -2655,9 +2746,13 @@ export default function MagazineLayout({
 
   // A new story opens at its top: before its first paint (a layout effect),
   // or a turn would show the next story for a frame at the old one's scroll.
+  // Only a scroller off its top is put back: one just mounted is at it, and
+  // the write brought the new story's whole style and layout up to date in
+  // the commit (34 ms of the open on a phone at a quarter speed; round wf45).
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el || !scrolledRef.current) return;
+    scrolledRef.current = false;
     const behavior = el.style.scrollBehavior;
     el.style.scrollBehavior = 'auto';
     el.scrollTop = 0;
@@ -2668,8 +2763,7 @@ export default function MagazineLayout({
     // Standalone work pages are documents, not dialogs. Do not steal focus
     // from the browser/skip-link flow.
     if (standalone || sharedEntry || !live || !isPresent) return;
-    const frame = requestAnimationFrame(() => closeButtonRef.current?.focus({ preventScroll: true }));
-    return () => cancelAnimationFrame(frame);
+    return afterNextFrame(() => closeButtonRef.current?.focus({ preventScroll: true }));
   }, [collection._id, live, sharedEntry, standalone, isPresent]);
 
   // ── The running head ──
@@ -2697,8 +2791,10 @@ export default function MagazineLayout({
     if (!entryLanded || !root || !head || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        // One sentinel per layout; the other is not laid out at this width.
-        if ((entry.target as HTMLElement).offsetParent === null) continue;
+        // One sentinel per layout; the other is not laid out at this width
+        // (its box none: a sentinel is a pixel square; read off the entry,
+        // never off the element, which would bring the layout up to date).
+        if (!entry.boundingClientRect.width && !entry.boundingClientRect.height) continue;
         const passed = !entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0);
         if (passed) head.dataset.paper = 'true';
         else delete head.dataset.paper;
@@ -2751,8 +2847,14 @@ export default function MagazineLayout({
       folioLinesRef.current = { tops, view: root.clientHeight };
       paintFolio(root.scrollTop);
     };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
+    // Measured as the story is laid out: the observer's first word comes
+    // after that layout and before its paint (measured here, in the commit's
+    // wake, it brought the layout up to date itself; the same frame shows
+    // the folio either way).
+    if (typeof ResizeObserver === 'undefined') {
+      measure();
+      return;
+    }
     const observer = new ResizeObserver(measure);
     if (frameGridRef.current) observer.observe(frameGridRef.current);
     observer.observe(root);
@@ -3204,10 +3306,11 @@ export default function MagazineLayout({
               ? isPresent
                 ? canMorphSharedPhoto ? 0 : 0.35
                 : SHARED_CLOSE_DURATION
-              : 0.7,
+              : SHELL_FADE_MS / 1000,
           ease: EASE.arrive,
         }}
         className={`fixed inset-0 z-50 flex items-center justify-center overflow-hidden ${sharedEntry || plateEntry ? 'bg-transparent' : 'bg-black/25'}`}
+        onAnimationComplete={() => settleCover('shell')}
         role={standalone ? undefined : 'dialog'}
         aria-modal={standalone ? undefined : true}
         aria-label={t('story.dialogAria', { name: nameIn })}
@@ -3303,6 +3406,7 @@ export default function MagazineLayout({
               ? { y: { duration: reduce ? 0 : 0.68, ease: overlayEase } }
               : { duration: reduce ? 0 : 0.68, ease: overlayEase }}
           ref={containerRef}
+          onAnimationComplete={() => settleCover('panel')}
           data-lenis-prevent
           // The story's page: paper. Its geometry (global.css, Story block)
           // reads the grid tokens and frame 01's box from here.

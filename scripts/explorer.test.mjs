@@ -1065,6 +1065,45 @@ test('the map mounts once the opening film has landed, at once with no film over
   assert.match(home, /useEffect\(\(\) => afterFilm\(\(held\) => setAtlas\(\(\) => \(held && routeAtlasLoaded\) \|\| RouteAtlas\)\), \[\]\);/);
 });
 
+test('under reduced motion the film is a still: the map is not held for it (ready before the pass can be torn)', async () => {
+  // Round wf45's final check: held until the still had faded, the map was
+  // still loading its tiles when the pass could already be torn (0.3 s on a
+  // desktop, 0.8 s on a phone at a quarter speed), and a tear that soon
+  // waited for it. A still has no cuts for the map's start-up to drop.
+  const listeners = new Map();
+  const timers = [];
+  let reduce = true;
+  const root = { dataset: { reel: 'reel' }, attributes: new Set(['data-opening']), hasAttribute(name) { return this.attributes.has(name); } };
+  const fakeWindow = {
+    addEventListener: (type, fn) => { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    clearTimeout: () => {},
+    requestIdleCallback: () => 1,
+    cancelIdleCallback: () => {},
+    matchMedia: (query) => ({ matches: reduce && query === '(prefers-reduced-motion: reduce)' }),
+  };
+  const before = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = fakeWindow;
+  globalThis.document = { documentElement: root };
+  try {
+    const { afterFilm, filmOverPage } = await bundle('../src/lib/afterFilm.ts');
+    assert.equal(filmOverPage(), false, 'a still is not a film the map waits for');
+    const held = [];
+    afterFilm((wasHeld) => held.push(wasHeld));
+    assert.deepEqual(held, [false], 'mounted at once, not held');
+    assert.equal(listeners.get('archive:opening')?.size ?? 0, 0, 'nothing waited on');
+    // The film that moves is still waited for.
+    reduce = false;
+    assert.equal(filmOverPage(), true);
+    afterFilm((wasHeld) => held.push(wasHeld));
+    assert.deepEqual(held, [false], 'held under the moving film');
+  } finally {
+    globalThis.window = before.window;
+    globalThis.document = before.document;
+  }
+});
+
 test('after the film\'s hold the atlas mounts as itself, chosen once; the lazy one otherwise', () => {
   const home = source('src/components/home/HomePage.tsx');
   // The lazy atlas suspends once even with its module in, and React holds a

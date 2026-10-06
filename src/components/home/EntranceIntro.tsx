@@ -183,6 +183,10 @@ export default function EntranceIntro({ facts, first, nextTop, onArrive, onGlide
     const markFlown = () => {
       if (flownMarked) return;
       flownMarked = true;
+      // The film marks the words it carries home itself, as it lands (it
+      // read their places before its clock): nothing to measure here, on
+      // the landing's own frame.
+      if (section.querySelector('[data-open-land][data-flown]')) return;
       const vh = window.innerHeight;
       section.querySelectorAll<HTMLElement>('[data-open-land]').forEach((el) => {
         const word = el.dataset.openLand;

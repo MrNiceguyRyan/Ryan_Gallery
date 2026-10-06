@@ -535,6 +535,24 @@ export default function HomePage({ collections }: Props) {
   const plateOriginRef = useRef<PlateOrigin | null>(null);
   const pageRootRef = useRef<HTMLDivElement>(null);
   const storyActive = !!selectedCollection || storyClosing;
+  // ── Under a story over the whole screen ──
+  // MagazineLayout says when it covers the screen (its shell faded in and
+  // its panel risen, or its plate grown): the page under it then stops
+  // drawing its blurred, receded atlas and its frosted bars (global.css,
+  // main[data-story-covered]) — round wf45: the blur kept running a second
+  // under the open story, the whole screen blurred anew on a phone's GPU
+  // for nothing. The mark is written on <main> itself (no render of the page
+  // for it) and only counts beside data-story-under, so the commit that
+  // begins the close (data-story-under goes) draws the page again in the
+  // same style pass — before the panel uncovers it, the recede's way back
+  // starting from the page as it was. It is wiped at every open and close.
+  const markStoryCovered = useCallback(() => {
+    const main = explorerSectionRef.current;
+    if (main?.dataset.storyUnder === 'true') main.setAttribute('data-story-covered', '');
+  }, []);
+  const clearStoryCovered = useCallback(() => {
+    explorerSectionRef.current?.removeAttribute('data-story-covered');
+  }, []);
 
   // What a story grows out of, read once, where the ticket lies now — before
   // its stub tears off: the photograph's frame and picture (the plate), and
@@ -607,9 +625,10 @@ export default function HomePage({ collections }: Props) {
     storyOpenRef.current = true;
     storyOpenedIdRef.current = collection._id;
     storySourceChapterIdRef.current = at.chapter?.id ?? `archive-item-${collection._id}`;
+    clearStoryCovered();
     setStoryClosing(false);
     setSelectedCollection(collection);
-  }, [captureStory]);
+  }, [captureStory, clearStoryCovered]);
 
   // ── Playing a gesture's effects, in order ──
   // The admission: the cover's stub tears off whole (ArchiveChapter, on the
@@ -1211,14 +1230,16 @@ export default function HomePage({ collections }: Props) {
       storySourceChapterIdRef.current = `archive-item-${onScreen._id}`;
       storyReturnFocusRef.current = document.getElementById(`archive-item-${onScreen._id}`)?.querySelector<HTMLElement>('[role="button"], button') ?? null;
     }
+    clearStoryCovered();
     setStoryClosing(true);
     setSelectedCollection(null);
-  }, [nextFlight, placeIds]);
+  }, [clearStoryCovered, nextFlight, placeIds]);
   const selectCollectionWithinStory = useCallback((collection: Collection) => {
     setSelectedCollection(collection);
   }, []);
   const finishStoryClose = useCallback(() => {
     storyOpenRef.current = false;
+    clearStoryCovered();
     setStoryClosing(false);
     document.querySelectorAll<HTMLElement>('[data-story-source]').forEach((node) => {
       delete node.dataset.storySource;
@@ -1252,7 +1273,7 @@ export default function HomePage({ collections }: Props) {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(restoreFocus);
     });
-  }, []);
+  }, [clearStoryCovered]);
   // The atlas keeps rendering while the story panel rises over it and while
   // it drops; it pauses only once the overlay fully covers it.
   const [atlasPaused, setAtlasPaused] = useState(false);
@@ -1859,6 +1880,7 @@ export default function HomePage({ collections }: Props) {
             canonicalUrl={selectedCollection.slug ? `/works/${selectedCollection.slug}` : undefined}
             entryMode="cover"
             entryOrigin={desktopLayout ? plateOriginRef.current ?? undefined : undefined}
+            onCovered={markStoryCovered}
           />
         )}
       </AnimatePresence>
