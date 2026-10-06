@@ -981,3 +981,74 @@ test('the wheel handed to the map from the covers and the rail is caught there, 
   assert.match(home, /const hosts = \[dockHost, railEl\]/);
   assert.equal((home.match(/ref=\{setRailEl\}/g) ?? []).length, 2, 'both layouts\' rails');
 });
+
+test('the map mounts once the opening film has landed, at once with no film over the page', async () => {
+  const listeners = new Map();
+  const timers = [];
+  const idles = [];
+  const root = { dataset: {}, attributes: new Set(), hasAttribute(name) { return this.attributes.has(name); } };
+  const fakeWindow = {
+    addEventListener: (type, fn) => { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+    requestIdleCallback: (fn, options) => { idles.push({ fn, options, live: true }); return idles.length; },
+    cancelIdleCallback: (id) => { if (idles[id - 1]) idles[id - 1].live = false; },
+  };
+  const say = (state) => [...(listeners.get('archive:opening') ?? [])].forEach((fn) => fn({ detail: { state, globe: state !== 'film' } }));
+  const before = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = fakeWindow;
+  globalThis.document = { documentElement: root };
+  try {
+    const { afterFilm, filmOverPage, FILM_HOLD_CAP_MS, FILM_IDLE_TIMEOUT_MS } = await bundle('../src/lib/afterFilm.ts');
+    // No film (a second view: the head script says data-reel="skip"; the
+    // way back home: data-home="explorer"): at once, as before.
+    let mounted = 0;
+    root.dataset.reel = 'skip';
+    afterFilm(() => { mounted += 1; });
+    assert.equal(mounted, 1, 'a second view');
+    root.dataset.reel = 'reel';
+    root.dataset.home = 'explorer';
+    root.attributes.add('data-opening');
+    afterFilm(() => { mounted += 1; });
+    assert.equal(mounted, 2, 'the way back home');
+    delete root.dataset.home;
+    // The film plays: nothing until it has landed ('page'), then the first
+    // idle moment (never later than the idle timeout).
+    assert.equal(filmOverPage(), true);
+    afterFilm(() => { mounted += 1; });
+    assert.equal(mounted, 2, 'held under the film');
+    const cap = timers.at(-1);
+    assert.equal(cap.ms, FILM_HOLD_CAP_MS, 'a film that never says is not waited on for good');
+    assert.ok(FILM_HOLD_CAP_MS > 10500, 'longer than any film so far (10.2 s; the new one is 4.75 s)');
+    say('film');
+    say('landing');
+    assert.equal(mounted, 2, 'not while the words still fly home');
+    say('page');
+    assert.equal(cap.live, false, 'the cap is let go once the film has landed');
+    assert.equal(idles.length, 1);
+    assert.equal(idles[0].options.timeout, FILM_IDLE_TIMEOUT_MS);
+    idles[0].fn();
+    assert.equal(mounted, 3, 'mounted in the first idle moment after the landing');
+    say('page');
+    idles.slice(1).forEach((idle) => idle.fn());
+    assert.equal(mounted, 3, 'once');
+    // Hydrated after the film had already landed: at once.
+    fakeWindow.__archiveOpening = { state: 'page', globe: true };
+    afterFilm(() => { mounted += 1; });
+    assert.equal(mounted, 4);
+    delete fakeWindow.__archiveOpening;
+    // Unmounted under the film: never.
+    const cancel = afterFilm(() => { mounted += 1; });
+    cancel();
+    say('page');
+    timers.filter((t) => t.live).forEach((t) => t.fn());
+    idles.filter((i) => i.live).forEach((i) => i.fn());
+    assert.equal(mounted, 4, 'a cancelled hold never mounts');
+  } finally {
+    globalThis.window = before.window;
+    globalThis.document = before.document;
+  }
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /useEffect\(\(\) => afterFilm\(\(\) => setClient\(true\)\), \[\]\);/);
+});
