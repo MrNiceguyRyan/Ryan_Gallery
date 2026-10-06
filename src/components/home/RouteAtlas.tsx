@@ -6,7 +6,7 @@ import { T, useLang } from '../../i18n/react';
 import { tr } from '../../i18n/dict';
 import { getLang, type Lang } from '../../i18n/lang';
 import { MAP_BURN, MAP_INK } from '../../lib/mapInk';
-import MapGL, { Layer, Marker, Source } from 'react-map-gl/mapbox';
+import MapGL, { Marker } from 'react-map-gl/mapbox';
 import type { MapRef } from 'react-map-gl/mapbox';
 import {
   AnimatePresence,
@@ -84,7 +84,6 @@ import {
   SILVER_FOG_LITE,
   WATER_TINT,
   createGlobeChannel,
-  silverExitAt,
   silverFloorAt,
 } from '../../lib/globeLook';
 import { createPlanetLight, type PlanetLightLayer } from '../../lib/planetLight';
@@ -106,6 +105,8 @@ import {
 } from '../../lib/explorerCamera';
 import { ATLAS_IDLE_EVENT, ENTRY_LANDED_EVENT, PHONE_CARD, entryLandsAt, phoneFocalY, phoneStubRect, phoneTicketScale, setEntryLandsAt } from '../../lib/explorer';
 import { drifted as viewDrifted, holds, mapView, offerOf, overLimb, phoneView, plateAt } from '../../lib/explorerDrift';
+import { viewport } from '../../lib/viewport';
+import { holdMapPixelRatio, releaseMapPixelRatio } from '../../lib/mapPixelRatio';
 
 // A switch's turn and the covers' glide with it: the house's `turn` curve
 // (11 mois sans toi(t)'s ENTER), as a function for Mapbox and the pin.
@@ -565,17 +566,21 @@ const PROLOGUE_SATELLITE_RESIDUAL = 1;
 // archive's own veil (below) takes over at the same strength. It used to dip
 // to 10% round the silver print's exit, the one layer trading its paint
 // there out of sight; the frame went 62 → 35 → 54 luma, a two-second blink
-// just before the landing (the review of 2026-09-28). The print's exit is a
-// crossfade onto a second layer now (SILVER_EXIT, `writeSatelliteVeil`), at
-// the veil's own strength, so nothing needs hiding.
+// just before the landing (the review of 2026-09-28). The print's exit then
+// became a crossfade onto a second layer (and source) of the same imagery
+// across SILVER_EXIT. Since the toned print (2026-09-29) the planet and the
+// reader's map carry ONE grade (globeLook PLANET_PAINT === STOCK_PAINT) at a
+// veil of 1 the whole way down, so that crossfade laid a picture over the
+// same picture: through the descent's last 1.5 zoom levels the GPU drew the
+// whole screen's satellite twice and every tile came in twice (fetched,
+// decoded, uploaded) for no change of a pixel. One layer carries the planet,
+// the dive and the reader's map now (`prologue-satellite`), never hidden and
+// never repainted: its paint is the grade from the start, and only its
+// opacity follows the veil (`writeSatelliteVeil`).
 const PROLOGUE_SATELLITE_OPACITY: readonly number[] = [
   PROLOGUE_SATELLITE_FADE[0], 1,
   GLOBE_HANDOFF_ZOOM, PROLOGUE_SATELLITE_RESIDUAL,
 ];
-// The layer (and source) the archive's own paint comes up on over the silver
-// print, the same satellite imagery: the reader's map (both layers are drawn
-// only while the crossfade runs; a layer at opacity 0 is not drawn).
-const SATELLITE_STOCK_LAYER = 'prologue-satellite-stock';
 // In the archive: at a long flight's apex the camera climbs past the
 // prologue's zoom keys, so a modest photographic veil (more real ground from
 // higher up), never the prologue's full print.
@@ -597,6 +602,120 @@ function addWaterTint(map: { getLayer: (id: string) => unknown; getSource: (id: 
     paint: { 'fill-color': WATER_TINT.color, 'fill-opacity': WATER_TINT.opacity, 'fill-antialias': false },
   } as never, before);
 }
+/**
+ * The atlas's own marks, over the basemap and its names (the order the
+ * page's react-map-gl layers used to stand in, appended on load): the
+ * graticule; the whole route (its burn and its dashes, in as the atlas
+ * engages) and the travelled one (trimmed by the camera); on the planet the
+ * page brings up, its route and its dots (printed in by the descent). Every
+ * value the page changes afterwards is written by hand (the camera: trims
+ * and inks; the atlas: the whole route's opacity), so nothing re-reads them
+ * on a style change. Idempotent.
+ */
+function addAtlasMarks(
+  map: {
+    getSource: (id: string) => unknown;
+    getLayer: (id: string) => unknown;
+    addSource: (id: string, source: never) => void;
+    addLayer: (layer: never) => void;
+  },
+  { mobile, prologue, route, stops, engaged, reducedMotion, trim }: {
+    mobile: boolean;
+    prologue: boolean;
+    route: unknown;
+    stops: unknown;
+    engaged: boolean;
+    reducedMotion: boolean;
+    trim: [number, number];
+  },
+) {
+  const layout = { 'line-cap': 'round', 'line-join': 'round' };
+  const fade = { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 };
+  const source = (id: string, data: unknown, extra?: object) => {
+    if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data, ...extra } as never);
+  };
+  const layer = (spec: { id: string } & Record<string, unknown>) => {
+    if (!map.getLayer(spec.id)) map.addLayer(spec as never);
+  };
+  source('atlas-graticule', NORTH_AMERICA_GRATICULE);
+  layer({
+    id: 'atlas-graticule-line',
+    type: 'line',
+    source: 'atlas-graticule',
+    layout,
+    paint: { 'line-color': '#AEB6A9', 'line-width': 0.55, 'line-opacity': mobile ? 0.055 : 0.045 },
+  });
+  source('route-all', route, { lineMetrics: true });
+  layer({
+    id: 'route-all-glow',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: {
+      'line-color': MAP_BURN,
+      'line-width': 4,
+      'line-opacity': engaged ? 0.16 : 0,
+      'line-opacity-transition': fade,
+      'line-blur': 3,
+      'line-trim-offset': [1, 1],
+    },
+  });
+  layer({
+    id: 'route-all-line',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: {
+      'line-color': MAP_INK,
+      'line-width': 1,
+      'line-dasharray': [3, 4],
+      'line-opacity': engaged ? 0.5 : 0,
+      'line-opacity-transition': fade,
+      'line-trim-offset': [1, 1],
+    },
+  });
+  layer({
+    id: 'route-travelled-glow',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_BURN, 'line-width': 4.5, 'line-opacity': 0.22, 'line-blur': 3, 'line-trim-offset': trim },
+  });
+  layer({
+    id: 'route-travelled-line',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_INK, 'line-width': 1.5, 'line-dasharray': [5, 2.5], 'line-opacity': 0.92, 'line-trim-offset': trim },
+  });
+  if (!prologue) return;
+  // Seeded dark: the camera prints them in with the descent.
+  layer({
+    id: 'prologue-route',
+    type: 'line',
+    source: 'route-all',
+    layout,
+    paint: { 'line-color': MAP_INK, 'line-width': 1.15, 'line-dasharray': [3, 2.5], 'line-opacity': 0 },
+  });
+  source('prologue-stops', stops);
+  // Each place a small dot of white ink with a hard knockout of burn round
+  // it, upright to the viewer.
+  layer({
+    id: 'prologue-stops-dot',
+    type: 'circle',
+    source: 'prologue-stops',
+    paint: {
+      'circle-radius': 2.25,
+      'circle-color': MAP_INK,
+      'circle-stroke-color': MAP_BURN,
+      'circle-stroke-width': 1.25,
+      'circle-pitch-alignment': 'viewport',
+      'circle-opacity': 0,
+      'circle-stroke-opacity': 0,
+    },
+  });
+}
+
 // The phone's shields, css px (the desktop's SHIELD_MAP_PX is 34).
 const SHIELD_PHONE_PX = 26;
 // Where the phone's camera waits while the entrance is read (the torn pass
@@ -706,6 +825,25 @@ function unwrapTransform(map: { transform: unknown; painter?: { transform: unkno
   return true;
 }
 
+/**
+ * Mapbox's attribution control, deaf to style changes from the map's load on
+ * (see its call in `onLoad`): it rebuilt and re-parsed its credit line on
+ * every one, and the camera makes one every frame of a flight. Found by its
+ * own methods (react-map-gl adds it through the Map's `attributionControl`
+ * option); its 'sourcedata' and 'moveend' listeners are left as they are.
+ * Says whether it found the control.
+ */
+function quietAttribution(map: { off: (type: string, listener: unknown) => unknown; _controls?: unknown[] }) {
+  type Control = { _updateAttributions?: unknown; _updateData?: unknown };
+  const control = (map._controls ?? []).find((candidate): candidate is Control =>
+    !!candidate &&
+    typeof (candidate as Control)._updateAttributions === 'function' &&
+    typeof (candidate as Control)._updateData === 'function');
+  if (!control) return false;
+  map.off('styledata', control._updateData);
+  return true;
+}
+
 function isValidCoordinate(coordinates: unknown): coordinates is GeoCoordinate {
   if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
   const [longitude, latitude] = coordinates;
@@ -785,6 +923,15 @@ export default function RouteAtlas({
   onDockHost,
   onSettled,
 }: Props) {
+  // The map never draws above 2 device pixels per CSS pixel
+  // (src/lib/mapPixelRatio.ts). Held in the render itself: react-map-gl
+  // creates the map in an effect of its own, which runs before this
+  // component's effects; let go when the atlas leaves the page.
+  holdMapPixelRatio();
+  useEffect(() => {
+    holdMapPixelRatio();
+    return releaseMapPixelRatio;
+  }, []);
   const lang = useLang();
   // The basemap's own labels follow 中 / EN (src/lib/mapLanguage.ts): bound
   // once the style has loaded, unbound with the atlas.
@@ -815,7 +962,7 @@ export default function RouteAtlas({
   // the progress the look is drawn at (always 1: the planet's own look), both
   // for the light, as is `fadeZoom`, the veil's own zoom (see
   // VEIL_ZOOM_RATE), which the light fades out on.
-  const globeWritesRef = useRef({ floor: Number.NaN, archive: false, lookQ: 1, opacity: Number.NaN, stockOpacity: 0, fadeZoom: Number.NaN });
+  const globeWritesRef = useRef({ floor: Number.NaN, archive: false, lookQ: 1, opacity: Number.NaN, fadeZoom: Number.NaN });
   const mapboxToken = getMapboxToken();
   // The desktop atlas draws the globe the page brings up with the torn pass
   // (`prologue`: its silver print, its light) and descends from it onto the
@@ -1424,7 +1571,12 @@ export default function RouteAtlas({
       // stub's arc is timed to land on it.
       const landsAt = entryLandsAt();
       const at = landsAt != null ? { landsAt } : null;
-      if (mobile) return { ...phoneStubRect(window.innerWidth, window.innerHeight, entry.stop.coverRatio ?? 1.5), ...at };
+      // Asked every frame of the stub's flight: the screen's size comes from
+      // the resize-read cache (src/lib/viewport.ts), never a live read.
+      if (mobile) {
+        const view = viewport();
+        return { ...phoneStubRect(view.w, view.h, entry.stop.coverRatio ?? 1.5), ...at };
+      }
       const planned = dockPlanRef.current?.[entry.stop.id];
       return planned ? { ...coverStubRect(planned), ...at } : null;
     };
@@ -1616,6 +1768,45 @@ export default function RouteAtlas({
       geometry: { type: 'Point' as const, coordinates: stop.coordinates },
     })),
   }), [mappedStops]);
+  // ── The atlas's own marks (addAtlasMarks) ──
+  // Made by hand at the map's load, not as react-map-gl's <Source> and
+  // <Layer>: each of those re-rendered on EVERY style change of the map
+  // (react-map-gl subscribes them to 'styledata', a <Source> through a
+  // timer of its own), and the camera writes the travelled route's trim — a
+  // style change — on every frame of a flight: ten React components rendered
+  // and four timers set every frame of every switch, for layers whose paint
+  // only ever changes by hand anyway (2026-10-05). What the page changes of
+  // them is written here: the whole route comes in as the atlas engages.
+  const fullRouteRef = useRef(fullRoute);
+  fullRouteRef.current = fullRoute;
+  const prologueStopsRef = useRef(prologueStops);
+  prologueStopsRef.current = prologueStops;
+  const atlasEngagedRef = useRef(atlasEngaged);
+  atlasEngagedRef.current = atlasEngaged;
+  // The data the marks were made with (a new route — new stops — is set on them).
+  const marksDataRef = useRef<{ route: unknown; stops: unknown } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !mapLoaded) return;
+    const fade = { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 };
+    ([['route-all-glow', 0.16], ['route-all-line', 0.5]] as const).forEach(([id, on]) => {
+      if (!map.getLayer(id)) return;
+      map.setPaintProperty(id, 'line-opacity-transition', fade);
+      map.setPaintProperty(id, 'line-opacity', atlasEngaged ? on : 0);
+    });
+  }, [atlasEngaged, mapLoaded, reducedMotion]);
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    const made = marksDataRef.current;
+    if (!map || !mapLoaded || !made) return;
+    if (made.route !== fullRoute) {
+      (map.getSource('route-all') as { setData?: (data: unknown) => void } | undefined)?.setData?.(fullRoute);
+    }
+    if (prologue && made.stops !== prologueStops) {
+      (map.getSource('prologue-stops') as { setData?: (data: unknown) => void } | undefined)?.setData?.(prologueStops);
+    }
+    marksDataRef.current = { route: fullRoute, stops: prologueStops };
+  }, [fullRoute, mapLoaded, prologue, prologueStops]);
   const staticMapUrl = useMemo(
     () => staticAtlasUrl(fullRouteCoordinates, mapboxToken, mobile),
     [fullRouteCoordinates, mapboxToken, mobile],
@@ -2031,9 +2222,9 @@ export default function RouteAtlas({
     // of the nav, the rail and the controls), the band above the card (or
     // above the controls, with no card up) on a phone. DERIVED from the
     // viewport, as the dock's plan is.
+    // (Read on every move of a drag: the resize-read size, src/lib/viewport.ts.)
     const readerView = () => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      const { w: vw, h: vh } = viewport();
       if (!mobile) return mapView(vw, vh, railBox(vw).left);
       const cardH = dockAtRef.current ? phoneCardH : 0;
       return phoneView(vw, vh, vh - PHONE_CARD.controls - cardH - 12);
@@ -2173,15 +2364,15 @@ export default function RouteAtlas({
       if (!disposed) markCurrentStop(id);
     };
 
-    // ── The silver print (see src/lib/globeLook.ts) ──
-    // Two layers over the one satellite source, each with its own paint for
-    // good: `prologue-satellite` printed in silver, SATELLITE_STOCK_LAYER in
-    // the archive's own paint. Only their opacities move (writeSatelliteVeil):
-    // the silver through the prologue and the dive, crossfaded across
-    // SILVER_EXIT into the archive's paint, which alone carries the reader's
-    // map. The one layer used to trade its paint mid-dive; on the draped globe
-    // a paint change reaches the tiles over a few frames, and a rectangle of
-    // the old print showed in the sea for a moment.
+    // ── The print (see src/lib/globeLook.ts) ──
+    // One satellite layer, `prologue-satellite`, in the grade the planet and
+    // the reader's map share, from the planet the page brings up to the
+    // reader's map: only its opacity moves (writeSatelliteVeil), its paint
+    // never does (a paint change on the draped globe reaches the tiles over a
+    // few frames: a rectangle of the old print showed in the sea for a
+    // moment, when the one layer still traded its paint mid-dive). The second
+    // layer that took the reader's map over across SILVER_EXIT is gone: its
+    // paint was this one's (see PROLOGUE_SATELLITE_OPACITY).
     const lookWrites = globeWritesRef.current;
     const prologueFog = () => (globeChannel.lite ? PROLOGUE_FOG_LITE : PROLOGUE_FOG);
     // The print's grade at the planet's own look (globeLook, q = 1: the
@@ -2195,12 +2386,10 @@ export default function RouteAtlas({
       paintMode = mode;
       lookWrites.archive = mode === 'archive';
       lookWrites.opacity = Number.NaN;
-      lookWrites.stockOpacity = Number.NaN;
-      // In the archive the silver print is out for good (its share of the
-      // veil is 0 there): not drawn, and — hidden rather than at opacity 0 —
-      // its source stops loading and uploading every tile the camera passes
-      // a second time beside the archive's own paint.
-      ['prologue-route', 'prologue-stops-dot', 'prologue-satellite'].forEach((layerId) => {
+      // In the archive the planet's own marks are out for good (the route
+      // and the places print as the archive's); the photograph stays: it is
+      // the reader's map.
+      ['prologue-route', 'prologue-stops-dot'].forEach((layerId) => {
         if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', mode === 'archive' ? 'none' : 'visible');
       });
       map.setFog(mode === 'archive' ? GLOBE_FOG : prologueFog());
@@ -2221,26 +2410,16 @@ export default function RouteAtlas({
       veilTime = now;
       return veilZoom;
     };
-    // The veil V at `zoom`, and the archive's paint's share k of it: the
-    // silver print below at V(1−k)/(1−Vk) and the archive's paint over it at
-    // Vk composite to exactly paper·(1−V) + V·((1−k)·silver + k·archive), a
-    // crossfade at the veil's own strength (nothing dips, nothing cuts). At
-    // k = 1 the silver is out (not drawn at all) and the archive's paint is
-    // the veil.
-    const writeSatelliteVeil = (zoom: number, k: number) => {
+    // The veil V at `zoom`: the photograph over the dark basemap at V (1 the
+    // whole way down since 2026-09-28: the land a photograph of itself),
+    // written as a plain number only as it moves.
+    const writeSatelliteVeil = (zoom: number) => {
       if (!map.getLayer('prologue-satellite')) return;
       const keys = paintMode === 'archive' ? ARCHIVE_SATELLITE_OPACITY : PROLOGUE_SATELLITE_OPACITY;
-      const veil = satelliteOpacityAt(keys, zoom);
-      const silver = k >= 1 ? 0 : k <= 0 ? veil : (veil * (1 - k)) / (1 - veil * k);
-      const base = Math.round(silver * 500) / 500;
-      const over = k <= 0 ? 0 : Math.round(veil * Math.min(1, k) * 500) / 500;
+      const base = Math.round(satelliteOpacityAt(keys, zoom) * 500) / 500;
       if (base !== lookWrites.opacity) {
         lookWrites.opacity = base;
         map.setPaintProperty('prologue-satellite', 'raster-opacity', base);
-      }
-      if (over !== lookWrites.stockOpacity && map.getLayer(SATELLITE_STOCK_LAYER)) {
-        lookWrites.stockOpacity = over;
-        map.setPaintProperty(SATELLITE_STOCK_LAYER, 'raster-opacity', over);
       }
     };
     const writeRouteTrim = (routeProgress: number) => {
@@ -2558,24 +2737,28 @@ export default function RouteAtlas({
       const zoomNow = map.getZoom();
       const w0 = Math.max(canvasSize.width, canvasSize.height);
       const u1 = worldPx(origin, dest.center, zoomNow);
+      // The click's own frame: no live read of the window (it brought the
+      // whole page's style up to date inside the click, ~2 ms a switch on a
+      // phone; src/lib/viewport.ts).
+      const viewW = viewport().w;
       let durationMs: number;
       let curve: number;
       let easing: (t: number) => number;
       if (next.kind === 'fly') {
         // The turn (the reference's, 1.4 s); a far leg on the house's sine,
         // as long as the ground needs to stay calm (planSwitch).
-        const plan = planSwitch(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        const plan = planSwitch(w0, u1, dest.zoom - zoomNow, viewW);
         durationMs = plan.durationMs;
         curve = plan.curve;
         easing = plan.ease === 'sine' ? voyageEase : turnEase;
       } else if (next.kind === 'finish') {
         // The phone's entry cut short: a short turn from the live camera.
-        const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        const plan = planFlight(w0, u1, dest.zoom - zoomNow, viewW);
         durationMs = ENTRY_FINISH.phoneMs;
         curve = plan.curve;
         easing = turnEase;
       } else {
-        const plan = planFlight(w0, u1, dest.zoom - zoomNow, window.innerWidth);
+        const plan = planFlight(w0, u1, dest.zoom - zoomNow, viewW);
         // The phone's entry starts under the entrance's glide and runs on
         // the desktop's clock from there (phoneEntryMs: it was the glide
         // PLUS 2.4 s, 4.9 s from the tear to the cover).
@@ -2659,7 +2842,7 @@ export default function RouteAtlas({
             cutAt,
             ...afterOpening(expandAt),
             toRatio: chapterRoute[index].stop.coverRatio ?? 1.5,
-            ticketScale: phoneTicketScale(window.innerWidth, window.innerHeight, chapterRoute.map((entry) => entry.stop.coverRatio ?? 1.5)),
+            ticketScale: phoneTicketScale(viewW, viewport().h, chapterRoute.map((entry) => entry.stop.coverRatio ?? 1.5)),
             ...(carried ? { fromLines: signLines(carried.name), fromRatio: carried.coverRatio ?? 1.5 } : null),
           };
           pinRef.current = null;
@@ -2906,7 +3089,10 @@ export default function RouteAtlas({
         writePrologueInk(ink);
         hideRouteAll(ink < 1);
         entryPoseAt = globeEntryProgress(entryNow);
-        const riseZoom = entryStartZoom(risePlanetZoom(document.documentElement.clientWidth, viewportH), aim.zoom);
+        // (Every frame of the descent: the resize-read width, never a live
+        // read of the document's, src/lib/viewport.ts.)
+        const viewCw = viewport().cw;
+        const riseZoom = entryStartZoom(risePlanetZoom(viewCw, viewportH), aim.zoom);
         const pose = globeEntryPose(aim, entryPoseAt, riseZoom);
         // The frame (explorerCamera.ts `entryFrame`): the planet rises in
         // the middle of the screen facing the place, and the place goes on
@@ -2916,7 +3102,7 @@ export default function RouteAtlas({
           restCentre: restCenter(entryIndex),
           startZoom: riseZoom,
           restZoom: aim.zoom,
-          rise: { x: document.documentElement.clientWidth / 2, y: focalPoint.y },
+          rise: { x: viewCw / 2, y: focalPoint.y },
           dock: planFocal(entryIndex),
           focal: focalPoint,
           pitch: pose.pitch,
@@ -3022,11 +3208,8 @@ export default function RouteAtlas({
         if (mode !== paintMode) applyPaintMode(mode);
         const zoomNow = map.getZoom();
         const zoomVeil = followVeilZoom(zoomNow, !!still);
-        // The archive's paint comes up over the silver print across
-        // SILVER_EXIT on the way down (and the print comes back on the way
-        // up); the reader's map is the archive's paint alone.
-        const exit = mode === 'archive' ? 1 : silverExitAt(zoomVeil);
-        writeSatelliteVeil(zoomVeil, exit);
+        // One photograph the whole way down (and back up), at the veil.
+        writeSatelliteVeil(zoomVeil);
         if (zoomVeil !== lookWrites.fadeZoom) {
           lookWrites.fadeZoom = zoomVeil;
           if (mode !== 'archive' && zoomVeil < 3.8) map.triggerRepaint();
@@ -3359,9 +3542,10 @@ export default function RouteAtlas({
         // (see "The reader's map").
         minZoom={1}
         maxZoom={EXPLORE_ZOOM.max}
-        // Full device pixels, deliberately (mapbox-gl 3 reads
-        // window.devicePixelRatio live; a weak GPU gets the planet light's
-        // lite pass instead).
+        // At most 2 device pixels per CSS pixel (src/lib/mapPixelRatio.ts:
+        // mapbox-gl 3 reads window.devicePixelRatio live, through a getter
+        // the build patches to honour the cap; a weak GPU also gets the
+        // planet light's lite pass).
         // The basemap's labels avoid the places' keep-out (a symbol layer
         // on its own source), so collisions run across sources.
         crossSourceCollisions
@@ -3392,11 +3576,22 @@ export default function RouteAtlas({
           }
           map.touchZoomRotate.disableRotation();
           map.setTerrain(null);
+          // The credit line stays, unchanged, without the parse it did on
+          // every frame of a flight. Mapbox's attribution control rebuilds
+          // its text on EVERY style change — each source's credit parsed as
+          // a whole HTML document (DOMParser) — and the camera writes the
+          // travelled route's trim, a paint property and so a style change,
+          // on every frame of a flight: 450 ms of a phone's (CPU ×4) main
+          // thread across six switches, for a credit that never changes
+          // (traced 2026-10-05). It stops listening to style changes; every
+          // source that comes, goes or shows (Mapbox's 'sourcedata' metadata
+          // and visibility) still updates it, and its "Improve this map" link
+          // still follows the view on every moveend.
+          quietAttribution(map as never);
           // The prologue globe is photographic: satellite imagery at globe
-          // zooms, printed in silver (globeLook) and lit by one key light
-          // (planetLight). As the camera goes down it settles to a residual
-          // veil under the atlas's paper, and past SILVER_EXIT takes
-          // the archive's own paint back.
+          // zooms, in the archive's grade (globeLook) and lit by one key
+          // light (planetLight). The same layer, unchanged, is the reader's
+          // map once the camera is down.
           if (prologue && !map.getSource('prologue-satellite')) {
             const firstLabel = map.getStyle().layers?.find((layer) => layer.type === 'symbol')?.id;
             const lookWrites = globeWritesRef.current;
@@ -3415,30 +3610,10 @@ export default function RouteAtlas({
                 'raster-fade-duration': 160,
               } as never,
             }, firstLabel);
-            // The archive's paint, over the print: it comes up across
-            // SILVER_EXIT and is the reader's map (writeSatelliteVeil).
-            // The same imagery through a source of its own: two raster
-            // layers on one source share the draped globe's overlap
-            // stencil, and wherever a new zoom level's tiles came in over
-            // their parents mid-dive the upper layer was masked out — a
-            // tile-shaped patch of bare ground flashing in the sea for a
-            // frame or two. (The browser's cache serves the second
-            // source's tiles: the same URLs.)
-            lookWrites.stockOpacity = 0;
-            map.addSource(SATELLITE_STOCK_LAYER, { type: 'raster', url: 'mapbox://mapbox.satellite', tileSize: 256 });
-            map.addLayer({
-              id: SATELLITE_STOCK_LAYER,
-              type: 'raster',
-              source: SATELLITE_STOCK_LAYER,
-              paint: {
-                'raster-opacity': 0,
-                'raster-opacity-transition': { duration: 0, delay: 0 },
-                ...STOCK_PAINT,
-                'raster-fade-duration': 160,
-              } as never,
-            }, firstLabel);
-            // The seas' olive-grey, over both photographs' water and
-            // under the light (so the night side shades it too).
+            // (No second layer of the same imagery for the reader's map: see
+            // PROLOGUE_SATELLITE_OPACITY.)
+            // The seas' olive-grey, over the photograph's water and under
+            // the light (so the night side shades it too).
             addWaterTint(map, firstLabel);
             const light = createPlanetLight(map, () => ({
               q: globeWritesRef.current.lookQ,
@@ -3587,6 +3762,19 @@ export default function RouteAtlas({
             }, firstLabel);
             addWaterTint(map, firstLabel);
           }
+          // The atlas's own marks, over the basemap and its names: the
+          // graticule, the whole route and the travelled one, and the
+          // planet's route and dots (addAtlasMarks).
+          addAtlasMarks(map as never, {
+            mobile,
+            prologue,
+            route: fullRouteRef.current,
+            stops: prologueStopsRef.current,
+            engaged: atlasEngagedRef.current,
+            reducedMotion,
+            trim: initialRouteTrim,
+          });
+          marksDataRef.current = { route: fullRouteRef.current, stops: prologueStopsRef.current };
           // Keep-out, the /travel technique: an invisible icon on every
           // place, so the basemap does not set a town's name across the
           // ground a shield stands on.
@@ -3628,106 +3816,9 @@ export default function RouteAtlas({
           }
         }}
       >
-        <Source key="atlas-graticule" id="atlas-graticule" type="geojson" data={NORTH_AMERICA_GRATICULE}>
-          <Layer
-            id="atlas-graticule-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': '#AEB6A9',
-              'line-width': 0.55,
-              'line-opacity': mobile ? 0.055 : 0.045,
-            }}
-          />
-        </Source>
-        <Source key="route-all" id="route-all" type="geojson" data={fullRoute} lineMetrics>
-          <Layer
-            id="route-all-glow"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_BURN,
-              'line-width': 4,
-              'line-opacity': atlasEngaged ? 0.16 : 0,
-              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-              'line-blur': 3,
-              'line-trim-offset': [1, 1],
-            }}
-          />
-          <Layer
-            id="route-all-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_INK,
-              'line-width': 1,
-              'line-dasharray': [3, 4],
-              'line-opacity': atlasEngaged ? 0.5 : 0,
-              'line-opacity-transition': { duration: reducedMotion ? 0 : 700, delay: reducedMotion ? 0 : 120 },
-              'line-trim-offset': [1, 1],
-            }}
-          />
-          <Layer
-            id="route-travelled-glow"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_BURN,
-              'line-width': 4.5,
-              'line-opacity': 0.22,
-              'line-blur': 3,
-              'line-trim-offset': initialRouteTrim,
-            }}
-          />
-          <Layer
-            id="route-travelled-line"
-            type="line"
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-            paint={{
-              'line-color': MAP_INK,
-              'line-width': 1.5,
-              'line-dasharray': [5, 2.5],
-              'line-opacity': 0.92,
-              'line-trim-offset': initialRouteTrim,
-            }}
-          />
-          {prologue && (
-            <Layer
-              id="prologue-route"
-              type="line"
-              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-              paint={{
-                'line-color': MAP_INK,
-                'line-width': 1.15,
-                'line-dasharray': [3, 2.5],
-                // Seeded dark, once: the camera prints it in with the
-                // descent, and a value here that changed per render would
-                // be re-applied behind its back.
-                'line-opacity': 0,
-              }}
-            />
-          )}
-        </Source>
-        {prologue && (
-          <Source key="prologue-stops" id="prologue-stops" type="geojson" data={prologueStops}>
-            {/* Each place a small dot of white ink with a hard knockout of
-                burn round it, upright to the viewer. */}
-            <Layer
-              id="prologue-stops-dot"
-              type="circle"
-              paint={{
-                'circle-radius': 2.25,
-                'circle-color': MAP_INK,
-                'circle-stroke-color': MAP_BURN,
-                'circle-stroke-width': 1.25,
-                'circle-pitch-alignment': 'viewport',
-                'circle-opacity': 0,
-                'circle-stroke-opacity': 0,
-              }}
-            />
-          </Source>
-        )}
-  
+        {/* The graticule, the route and the planet's dots are the map's own
+            layers, added by hand at its load (addAtlasMarks, in onLoad). */}
+
         {/* The places: one shield per place (PlaceShield), upright to the
             camera, the point of its foot on the place itself. Every place
             the archive has photographs of is here. */}
@@ -3754,7 +3845,7 @@ export default function RouteAtlas({
       </MapGL>
   ) : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [atlasEngaged, chapterRoute, classicInterfaceOpacity, engagedChapterId, fullRoute, globeChannel, globeRevealed, initialRouteTrim, mapEligible, mapboxToken, mobile, onEngage, onSelect, phoneApproach, prologue, prologueStops, readerHasMap, reducedMotion, shieldPlaces, shieldPx]);
+  [chapterRoute, classicInterfaceOpacity, engagedChapterId, globeChannel, globeRevealed, mapEligible, mapboxToken, mobile, onEngage, onSelect, phoneApproach, prologue, readerHasMap, reducedMotion, shieldPlaces, shieldPx]);
 
   if (chapterRoute.length < 1 || !viewportReady) {
     return (

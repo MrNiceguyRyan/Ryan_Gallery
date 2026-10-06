@@ -191,8 +191,11 @@ test('the way back: the explorer as the reader left it, at once — no entry, no
   assert.match(css, /html\[data-home='explorer'\] \.entrance \{ display: none; \}/);
   assert.match(css, /html\[data-home='explorer'\] \.home-veil \{\s*opacity: 1;/);
   // The server draws the map's stand-in itself (no Suspense boundary left
-  // pending in the HTML: a routed page hydrated it as React #419).
-  assert.match(page, /\{client \? \(\s*<Suspense fallback=\{fallback\}>/);
+  // pending in the HTML: a routed page hydrated it as React #419). No atlas
+  // is chosen until an effect has run (round wf45: which one, after the
+  // film's hold).
+  assert.match(page, /\{Atlas \? \(\s*<Suspense fallback=\{fallback\}>[\s\S]*?<\/Suspense>\s*\) : \(\s*fallback\s*\)\}/);
+  assert.match(page, /const \[Atlas, setAtlas\] = useState<ComponentType<DeferredRouteAtlasProps> \| null>\(null\);/);
 });
 
 test('the arrow keys step through the places, as the reference\'s do', () => {
@@ -296,7 +299,8 @@ test("the phone's switch: every card folds into one ticket size, never swells, a
   // The atlas hands every switch the one scale; the carrier comes to it at
   // the arriving card's corner as it folds; the arriving card waits at it
   // and grows out of it to its own as it opens.
-  assert.match(atlas, /ticketScale: phoneTicketScale\(window\.innerWidth, window\.innerHeight, chapterRoute\.map\(\(entry\) => entry\.stop\.coverRatio \?\? 1\.5\)\),/);
+  // (The screen's size from the resize-read cache, src/lib/viewport.ts.)
+  assert.match(atlas, /ticketScale: phoneTicketScale\(viewW, viewport\(\)\.h, chapterRoute\.map\(\(entry\) => entry\.stop\.coverRatio \?\? 1\.5\)\),/);
   assert.match(chapter, /const k = ticketK\(scale, dest\);/);
   assert.match(chapter, /Math\.min\(scale \?\? Math\.min\(card\.scale, other\?\.scale \?\? card\.scale\), card\.scale\) \/ card\.scale/);
   assert.match(chapter, /phoneGrow\(play, sw\.ticketScale, sw\.expandAt, !play\.carry\);/);
@@ -413,9 +417,12 @@ test('the globe rises already facing stop 01, and the entry is the descent alone
   assert.match(pose, /const share = entryEase\(clamp01\(progress\)\);\s*const zoom = startZoom \+ \(target\.zoom - startZoom\) \* share;/);
   assert.match(atlas, /const GLOBE_TIP_FROM = 0\.2;/);
   assert.match(atlas, /const frame = entryFrame\(\{/);
-  assert.match(atlas, /rise: \{ x: document\.documentElement\.clientWidth \/ 2, y: focalPoint\.y \},/);
+  assert.match(atlas, /rise: \{ x: viewCw \/ 2, y: focalPoint\.y \},/);
   assert.match(atlas, /dock: planFocal\(entryIndex\),/);
-  assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(document\.documentElement\.clientWidth, viewportH\), aim\.zoom\);/);
+  assert.match(atlas, /const riseZoom = entryStartZoom\(risePlanetZoom\(viewCw, viewportH\), aim\.zoom\);/);
+  // Every frame of the descent: the width from the resize-read cache, never a
+  // live read of the document's (it forced a style pass each frame).
+  assert.match(atlas, /const viewCw = viewport\(\)\.cw;/);
   // The rise's planet is whole on screen (DERIVED from the viewport, never
   // measured): its limb's apparent radius clears the top by 7% of the height
   // and stays within the atlas column. Mapbox below zoom 5: a sphere of
@@ -482,7 +489,8 @@ test('a switch is the reference\'s turn: 1.4 s, its ENTER curve, no climb to spe
   }
   if (process.env.EXPLORER_NUMBERS) console.log(`switch lift at 1728: ${rows.join(', ')}`);
   const atlas = source('src/components/home/RouteAtlas.tsx');
-  assert.match(atlas, /const plan = planSwitch\(w0, u1, dest\.zoom - zoomNow, window\.innerWidth\);\s+durationMs = plan\.durationMs;\s+curve = plan\.curve;\s+easing = plan\.ease === 'sine' \? voyageEase : turnEase;/);
+  assert.match(atlas, /const viewW = viewport\(\)\.w;/);
+  assert.match(atlas, /const plan = planSwitch\(w0, u1, dest\.zoom - zoomNow, viewW\);\s+durationMs = plan\.durationMs;\s+curve = plan\.curve;\s+easing = plan\.ease === 'sine' \? voyageEase : turnEase;/);
   // The shields: the one arrived at lifts at the click (the reference's
   // active stop, 1.45 from its foot), the one left relaxes.
   assert.match(atlas, /if \(next\.kind === 'fly'\) \{[\s\S]{0,200}markCurrentStop\(destId\);/);
@@ -614,7 +622,11 @@ test('the stub hand-off: a derived target, a landing event, a stub that waits', 
   const atlas = source('src/components/home/RouteAtlas.tsx');
   const target = atlas.slice(atlas.indexOf('window.__archiveCoverStubTarget = () => {'), atlas.indexOf('delete window.__archiveCoverStubTarget'));
   assert.match(target, /coverStubRect\(planned\)/);
-  assert.match(target, /phoneStubRect\(window\.innerWidth, window\.innerHeight/);
+  // Asked every frame of the stub's flight: the size from the resize-read
+  // cache (src/lib/viewport.ts), never the window's live size.
+  assert.match(target, /const view = viewport\(\);/);
+  assert.match(target, /phoneStubRect\(view\.w, view\.h/);
+  assert.doesNotMatch(target, /window\.inner(Width|Height)/);
   assert.doesNotMatch(target, /getBoundingClientRect|offset(Width|Height|Top|Left)|client(Width|Height)/);
   assert.equal((atlas.match(/entryLanded\(entryIndex\);/g) ?? []).length, 2, 'the descent down, and reduced motion\'s cut');
   assert.match(atlas, /if \(done\.entry\) entryLanded\(done\.index\);/);
@@ -844,4 +856,230 @@ test("the phone's entry: under the glide, on the desktop's clock", () => {
   assert.equal(phoneEntryMs(1.85, 1000, 0), ENTRY.phoneMinMs);
   const atlas = source('src/components/home/RouteAtlas.tsx');
   assert.match(atlas, /durationMs = next\.kind === 'entry' \? phoneEntryMs\(dest\.zoom - zoomNow, plan\.durationMs, Math\.max\(0, next\.leadMs \?\? 0\)\) : plan\.durationMs;/);
+});
+
+// ── Performance (round wf45, owner 2026-10-05: 手机端的使用很不流畅，电脑端也一般般) ──
+
+test('the map never draws above 2 device pixels per CSS pixel: a build patch of its one getter', async () => {
+  const { MAPBOX_DPR_GETTER, MAPBOX_DPR_PATCHED, isMapboxBundle, patchMapboxPixelRatio } = await import('./mapbox-pixel-ratio.mjs');
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const dist = readFileSync(require.resolve('mapbox-gl'), 'utf8');
+  // The installed mapbox-gl reads the ratio through exactly one getter, and
+  // the patch replaces exactly that (a reshaped getter fails the build and
+  // this test, never a cap that silently does nothing).
+  assert.equal(dist.split(MAPBOX_DPR_GETTER).length, 2, 'the getter, once');
+  const patched = patchMapboxPixelRatio(dist);
+  assert.ok(patched, 'patched');
+  assert.equal(patched.split(MAPBOX_DPR_PATCHED).length, 2);
+  assert.equal(patched.includes(MAPBOX_DPR_GETTER), false);
+  assert.equal(patchMapboxPixelRatio(`${MAPBOX_DPR_GETTER};${MAPBOX_DPR_GETTER}`), null, 'never a guess');
+  assert.equal(patchMapboxPixelRatio('get devicePixelRatio(){return self.devicePixelRatio}'), null);
+  // The patched getter: the cap only when one is set and the device is over it.
+  const ratio = (devicePixelRatio, cap) => new Function('window', `return ({${MAPBOX_DPR_PATCHED}}).devicePixelRatio;`)({ devicePixelRatio, __mapboxMaxPixelRatio: cap });
+  assert.equal(ratio(3, 2), 2, 'a 3x phone draws its map at 2x');
+  assert.equal(ratio(2, 2), 2, 'a 2x MacBook: unchanged');
+  assert.equal(ratio(1.5, 2), 1.5);
+  assert.equal(ratio(1, 2), 1);
+  assert.equal(ratio(3, undefined), 3, 'no cap (the /travel map): the device\'s own');
+  assert.equal(ratio(3, 0), 3);
+  assert.equal(ratio(3, '2'), 3);
+  // Only mapbox-gl's own file, never the CommonJS plugin's wrappers of it.
+  assert.equal(isMapboxBundle('/a/node_modules/mapbox-gl/dist/mapbox-gl.js'), true);
+  assert.equal(isMapboxBundle('C:\\a\\node_modules\\mapbox-gl\\dist\\mapbox-gl.js'), true);
+  assert.equal(isMapboxBundle('/a/node_modules/mapbox-gl/dist/mapbox-gl.js?commonjs-es-import'), false);
+  assert.equal(isMapboxBundle('/a/node_modules/mapbox-gl/dist/mapbox-gl-csp.js'), false);
+  const config = source('astro.config.mjs');
+  assert.match(config, /import mapboxPixelRatio from '\.\/scripts\/mapbox-pixel-ratio\.mjs';/);
+  assert.match(config, /plugins: \[tailwindcss\(\), mapboxPixelRatio\(\)\]/);
+  // The homepage's atlas holds the cap from its render (react-map-gl makes
+  // the map in an effect of its own, before the atlas's effects) and lets it
+  // go when it leaves the page.
+  const { ATLAS_MAX_PIXEL_RATIO, mapPixelRatio } = await bundle('../src/lib/mapPixelRatio.ts');
+  assert.equal(ATLAS_MAX_PIXEL_RATIO, 2);
+  assert.deepEqual([3, 2.75, 2, 1].map((d) => mapPixelRatio(d)), [2, 2, 2, 1]);
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  assert.match(atlas, /\}: Props\) \{\n(?:\s*\/\/[^\n]*\n)*\s*holdMapPixelRatio\(\);\n\s*useEffect\(\(\) => \{\n\s*holdMapPixelRatio\(\);\n\s*return releaseMapPixelRatio;\n\s*\}, \[\]\);/);
+});
+
+test('the viewport cache: read once, dropped on a resize, before anyone else hears it', async () => {
+  const listeners = [];
+  const fakeWindow = {
+    innerWidth: 390,
+    innerHeight: 844,
+    addEventListener: (type, fn) => { if (type === 'resize') listeners.push(fn); },
+  };
+  const before = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = fakeWindow;
+  globalThis.document = { documentElement: { clientWidth: 390 } };
+  try {
+    const { viewport } = await bundle('../src/lib/viewport.ts');
+    assert.equal(listeners.length, 1, 'listening from the import itself');
+    assert.deepEqual(viewport(), { w: 390, h: 844, cw: 390 });
+    // A frame loop asking again gets the same answer without reading.
+    fakeWindow.innerWidth = 999;
+    assert.deepEqual(viewport(), { w: 390, h: 844, cw: 390 });
+    // A resize: read afresh.
+    fakeWindow.innerWidth = 844;
+    fakeWindow.innerHeight = 390;
+    globalThis.document.documentElement.clientWidth = 844;
+    listeners.forEach((fn) => fn());
+    assert.deepEqual(viewport(), { w: 844, h: 390, cw: 844 });
+  } finally {
+    globalThis.window = before.window;
+    globalThis.document = before.document;
+  }
+});
+
+test('no frame loop reads the window\'s size live (each read forced a style pass, traced 2026-10-05)', () => {
+  const atlas = source('src/components/home/RouteAtlas.tsx');
+  const pass = source('src/components/home/BoardingPass.tsx');
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  // The descent's frame, the reader's view on every move of a drag, a switch's
+  // click, the stub courier's target every frame of its flight.
+  const draw = atlas.slice(atlas.indexOf('const draw: Process = () => {'), atlas.indexOf('const schedule = () => {'));
+  assert.ok(draw.length > 1000);
+  assert.doesNotMatch(draw, /documentElement\.clientWidth|window\.inner(Width|Height)|getBoundingClientRect/);
+  const reader = atlas.slice(atlas.indexOf('const readerView = () => {'), atlas.indexOf('let driftTold'));
+  assert.match(reader, /viewport\(\)/);
+  assert.doesNotMatch(reader, /window\.inner(Width|Height)/);
+  const fly = atlas.slice(atlas.indexOf('const flyTo = (next: AtlasFlight) => {'), atlas.indexOf('const onMoveEnd = '));
+  assert.ok(fly.length > 1000);
+  assert.doesNotMatch(fly, /window\.inner(Width|Height)|getBoundingClientRect/);
+  // The pass's paper: its bounds on every tick of a drag.
+  assert.match(pass, /const vw = \(\) => viewport\(\)\.cw;/);
+  assert.match(pass, /const vh = \(\) => viewport\(\)\.h;/);
+  // The phone's card at a switch's beats.
+  const carry = chapter.slice(chapter.indexOf('const phoneCarry = '), chapter.indexOf('// After the opening: the tip'));
+  assert.ok(carry.length > 500);
+  assert.doesNotMatch(carry, /window\.inner(Width|Height)/);
+});
+
+test('the docked covers and the panel\'s sheet do not track the page\'s scroll', () => {
+  const chapter = source('src/components/home/ArchiveChapter.tsx');
+  const closing = source('src/components/home/ArchiveClosing.tsx');
+  const hook = source('src/lib/useSectionScroll.ts');
+  // framer's useScroll measured its target on every scroll of the page (the
+  // entrance's glide scrolls the window every frame for a second): a docked
+  // cover and the panel's sheet read none of it.
+  assert.doesNotMatch(chapter, /useScroll\(/);
+  assert.doesNotMatch(closing, /useScroll\(/);
+  assert.match(chapter, /useSectionScroll\(chapterRef, \['start end', 'end start'\], !\(variant === 'cover' && Boolean\(desktopMotion\)\)\)/);
+  assert.match(closing, /useSectionScroll\(sectionRef, \['start end', 'end end'\], !panel\)/);
+  assert.match(hook, /if \(!enabled \|\| !element\) return;/);
+  // The progress framer's own hook reports (`scrollYProgress`: y.progress),
+  // through its two-argument callback.
+  assert.match(hook, /scroll\(\(_progress: number, info: \{ y: \{ progress: number \} \}\) => \{\n\s*progress\.set\(info\.y\.progress\);/);
+  // The homepage's chapters are all docked covers.
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /variant="cover"\n\s*desktopMotion/);
+});
+
+test('the wheel handed to the map from the covers and the rail is caught there, not on the window', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  // A window listener that cancels wheels makes every wheel wait for the
+  // main thread before anything scrolls (the Index's sheet, the list).
+  assert.doesNotMatch(home, /window\.addEventListener\('wheel', onWheel, \{ passive: false/);
+  assert.match(home, /hosts\.forEach\(\(host\) => host\.addEventListener\('wheel', onWheel, \{ passive: false \}\)\);/);
+  assert.match(home, /const hosts = \[dockHost, railEl\]/);
+  assert.equal((home.match(/ref=\{setRailEl\}/g) ?? []).length, 2, 'both layouts\' rails');
+});
+
+test('the map mounts once the opening film has landed, at once with no film over the page', async () => {
+  const listeners = new Map();
+  const timers = [];
+  const idles = [];
+  const root = { dataset: {}, attributes: new Set(), hasAttribute(name) { return this.attributes.has(name); } };
+  const fakeWindow = {
+    addEventListener: (type, fn) => { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
+    removeEventListener: (type, fn) => listeners.get(type)?.delete(fn),
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+    requestIdleCallback: (fn, options) => { idles.push({ fn, options, live: true }); return idles.length; },
+    cancelIdleCallback: (id) => { if (idles[id - 1]) idles[id - 1].live = false; },
+  };
+  const say = (state) => [...(listeners.get('archive:opening') ?? [])].forEach((fn) => fn({ detail: { state, globe: state !== 'film' } }));
+  const before = { window: globalThis.window, document: globalThis.document };
+  globalThis.window = fakeWindow;
+  globalThis.document = { documentElement: root };
+  try {
+    const { afterFilm, filmOverPage, FILM_HOLD_CAP_MS, FILM_IDLE_TIMEOUT_MS } = await bundle('../src/lib/afterFilm.ts');
+    // No film (a second view: the head script says data-reel="skip"; the
+    // way back home: data-home="explorer"): at once, as before.
+    let mounted = 0;
+    const held = [];
+    const mount = (wasHeld) => { mounted += 1; held.push(wasHeld); };
+    root.dataset.reel = 'skip';
+    afterFilm(mount);
+    assert.equal(mounted, 1, 'a second view');
+    root.dataset.reel = 'reel';
+    root.dataset.home = 'explorer';
+    root.attributes.add('data-opening');
+    afterFilm(mount);
+    assert.equal(mounted, 2, 'the way back home');
+    assert.deepEqual(held, [false, false], 'not held: the page mounts its atlas as before');
+    delete root.dataset.home;
+    // The film plays: nothing until it has landed ('page'), then the first
+    // idle moment (never later than the idle timeout).
+    assert.equal(filmOverPage(), true);
+    afterFilm(mount);
+    assert.equal(mounted, 2, 'held under the film');
+    const cap = timers.at(-1);
+    assert.equal(cap.ms, FILM_HOLD_CAP_MS, 'a film that never says is not waited on for good');
+    assert.ok(FILM_HOLD_CAP_MS > 10500, 'longer than any film so far (10.2 s; the new one is 4.75 s)');
+    // Keyed off the film's own word, never a clock: the cap is the only
+    // timer while it plays, and the film's listener is the hold's way out.
+    assert.equal(timers.filter((t) => t.live).length, 1, 'no fixed-time mount under the film');
+    assert.equal(listeners.get('archive:opening')?.size, 1);
+    say('film');
+    say('landing');
+    assert.equal(mounted, 2, 'not while the words still fly home');
+    say('page');
+    assert.equal(cap.live, false, 'the cap is let go once the film has landed');
+    assert.equal(idles.length, 1);
+    assert.equal(idles[0].options.timeout, FILM_IDLE_TIMEOUT_MS);
+    idles[0].fn();
+    assert.equal(mounted, 3, 'mounted in the first idle moment after the landing');
+    assert.equal(held[2], true, 'and it says it was held');
+    say('page');
+    idles.slice(1).forEach((idle) => idle.fn());
+    assert.equal(mounted, 3, 'once');
+    // Hydrated after the film had already landed: at once.
+    fakeWindow.__archiveOpening = { state: 'page', globe: true };
+    afterFilm(mount);
+    assert.equal(mounted, 4);
+    assert.equal(held[3], false);
+    delete fakeWindow.__archiveOpening;
+    // Unmounted under the film: never.
+    const cancel = afterFilm(() => { mounted += 1; });
+    cancel();
+    say('page');
+    timers.filter((t) => t.live).forEach((t) => t.fn());
+    idles.filter((i) => i.live).forEach((i) => i.fn());
+    assert.equal(mounted, 4, 'a cancelled hold never mounts');
+  } finally {
+    globalThis.window = before.window;
+    globalThis.document = before.document;
+  }
+  const home = source('src/components/home/HomePage.tsx');
+  assert.match(home, /useEffect\(\(\) => afterFilm\(\(held\) => setAtlas\(\(\) => \(held && routeAtlasLoaded\) \|\| RouteAtlas\)\), \[\]\);/);
+});
+
+test('after the film\'s hold the atlas mounts as itself, chosen once; the lazy one otherwise', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  // The lazy atlas suspends once even with its module in, and React holds a
+  // revealed boundary back 300 ms after its stand-in showed: the map's
+  // start-up ran into the pass's assembly (it began 35–60 ms late on a
+  // phone at a quarter speed). The warm-up keeps the module's component.
+  assert.match(home, /const loadRouteAtlas = \(\) => import\('\.\/RouteAtlas'\);/);
+  assert.match(home, /const warmRouteAtlas = \(\) => loadRouteAtlas\(\)\.then\(\(module\) => \{\n\s*routeAtlasLoaded = module\.default;/);
+  assert.match(home, /void warmRouteAtlas\(\);/);
+  assert.doesNotMatch(home, /void loadRouteAtlas\(\);/);
+  // Chosen once, in state: a render never picks again (another type would
+  // start the map again), and the stand-in is the boundary's fallback.
+  const deferred = home.slice(home.indexOf('const DeferredRouteAtlas = memo('), home.indexOf('HomePage — the entrance, then the archive'));
+  assert.ok(deferred.length > 400);
+  assert.match(deferred, /const \[Atlas, setAtlas\] = useState<ComponentType<DeferredRouteAtlasProps> \| null>\(null\);/);
+  assert.equal((deferred.match(/routeAtlasLoaded/g) ?? []).length, 2, 'read only in the effect (and named in its comment)');
+  assert.match(deferred, /<Suspense fallback=\{fallback\}>\n\s*<Atlas \{\.\.\.props\} \/>\n\s*<\/Suspense>/);
 });

@@ -219,8 +219,14 @@ test('the archive stays on the globe (owner decision, 2026-09-25)', () => {
   // The veil and the light's fade share one rate-limited zoom (a fast dive
   // stepped the whole map 6.5 L in one frame at zoom 3.6).
   assert.match(source, /zoom: globeWritesRef\.current\.fadeZoom/);
-  // Written as plain numbers (see satelliteOpacityAt): the print below, the
-  // archive's paint over it across the silver's exit.
+  // Written as plain numbers (see satelliteOpacityAt), on ONE photograph
+  // the whole way down: the planet and the reader's map share one grade
+  // (PLANET_PAINT === STOCK_PAINT), so the second layer that crossfaded over
+  // the first across SILVER_EXIT drew the same picture twice (and loaded
+  // every tile twice) for no change of a pixel (2026-10-05). The layer is
+  // never hidden in the archive: it is the reader's map.
   assert.match(source, /map\.setPaintProperty\('prologue-satellite', 'raster-opacity', base\)/);
-  assert.match(source, /map\.setPaintProperty\(SATELLITE_STOCK_LAYER, 'raster-opacity', over\)/);
+  assert.doesNotMatch(source, /SATELLITE_STOCK_LAYER|prologue-satellite-stock/);
+  assert.equal((source.match(/map\.addSource\('prologue-satellite'/g) ?? []).length, 1);
+  assert.doesNotMatch(source, /\['prologue-route', 'prologue-stops-dot', 'prologue-satellite'\]/);
 });

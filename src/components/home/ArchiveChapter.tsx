@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import {
   animate,
   motion,
-  useScroll,
   useTransform,
   useMotionValue,
   useSpring,
@@ -44,6 +43,8 @@ import {
   type TicketForm,
 } from '../../lib/coverDock';
 import { STUB_LANDED_EVENT, phoneCard, type PhoneCard } from '../../lib/explorer';
+import { viewport } from '../../lib/viewport';
+import { useSectionScroll } from '../../lib/useSectionScroll';
 import {
   TEAR_FREE_MS,
   TEAR_MS,
@@ -451,8 +452,11 @@ function ArchiveChapter({
 
   // The section's own passage through the viewport: read by the type only
   // (the masthead's and kicker's counter-parallax, the feature title's lime
-  // word). The cover is never driven by it.
-  const { scrollYProgress } = useScroll({ target: chapterRef, offset: ['start end', 'end start'] });
+  // word). The cover is never driven by it — and a docked cover (the
+  // homepage's: it rides the map) reads none of it, so it does not track the
+  // page's scroll at all (src/lib/useSectionScroll.ts: the entrance's glide
+  // scrolls the window every frame, and each tracker measured in each one).
+  const scrollYProgress = useSectionScroll(chapterRef, ['start end', 'end start'], !(variant === 'cover' && Boolean(desktopMotion)));
   // One focus value feeds both title axes, so weight and tracking can never
   // disagree about where the plate is. Rest (0) whenever the rack is off.
   const titleFocus = useTransform(chapterDelta, (delta) =>
@@ -832,7 +836,9 @@ function ArchiveChapter({
   const phoneCarry = (play: Play, toRatio: number | undefined, time: number, ms: number, scale: number | undefined) => {
     const { cover } = parts();
     if (!phone || !card || !cover || !toRatio) return;
-    const dest = phoneCard(window.innerWidth, window.innerHeight, toRatio);
+    // (At a switch's beat: the resize-read size, never a live read of the
+    // window inside the frame, src/lib/viewport.ts.)
+    const dest = phoneCard(viewport().w, viewport().h, toRatio);
     const k = ticketK(scale, dest);
     const dx = ((dest.photoW + TICKET_STUB) * dest.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 / card.scale;
     const to = ticketTransform(k, dx);
@@ -875,7 +881,7 @@ function ArchiveChapter({
     below.getAnimations().forEach((anim) => { if (anim.playState === 'running') holdNow(anim); });
     const now = getComputedStyle(below).transform;
     const m = now && now !== 'none' ? new DOMMatrixReadOnly(now) : new DOMMatrixReadOnly();
-    const out = phoneCard(window.innerWidth, window.innerHeight, fromRatio);
+    const out = phoneCard(viewport().w, viewport().h, fromRatio);
     const k = (m.a * out.scale) / card.scale;
     const dx = (((out.photoW + TICKET_STUB) * out.scale - (card.photoW + TICKET_STUB) * card.scale) / 2 + m.e * out.scale) / card.scale;
     const own = ticketK(scale);

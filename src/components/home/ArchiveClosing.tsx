@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { animate, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import { animate, motion, useReducedMotion, useTransform } from 'framer-motion';
+import { useSectionScroll } from '../../lib/useSectionScroll';
 import type { Collection } from '../../types';
 import {
   LOOSE,
@@ -295,7 +296,11 @@ export default function ArchiveClosing({ collections, onBackToStart, onOpenStory
   const openStoryRef = useRef(onOpenStory);
   openStoryRef.current = onOpenStory;
 
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start end', 'end end'] });
+  // The page's own closing scrolls into view (its lip, its counter-move); the
+  // places panel's sheet does not scroll with the page, and tracking it there
+  // measured the sheet on every frame of the entrance's glide
+  // (src/lib/useSectionScroll.ts).
+  const scrollYProgress = useSectionScroll(sectionRef, ['start end', 'end end'], !panel);
   const lipScale = useTransform(scrollYProgress, [0, 0.62], [1, 0], { clamp: true });
   // The counter-move: the closing lies still underneath while the last
   // chapter lifts off it (darkroom.engineering's revealed footer).

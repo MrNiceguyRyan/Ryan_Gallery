@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type ComponentType,
   type CSSProperties,
 } from 'react';
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
@@ -32,6 +33,7 @@ import { NavSet } from '../Nav';
 import { T, TRich, useT } from '../../i18n/react';
 import { tr } from '../../i18n/dict';
 import { OPENING_EVENT, type OpeningDetail } from '../../lib/openingFilm';
+import { afterFilm } from '../../lib/afterFilm';
 import {
   ARRIVAL_INERT_MS,
   ATLAS_IDLE_EVENT,
@@ -60,6 +62,19 @@ import { ENTRY, ENTRY_FINISH, ENTRY_SPAN, finishEntry as finishEntryPlan } from 
 // the opening is settling without creating Mapbox's WebGL context or mounting
 // the story overlay before either one is needed.
 const loadRouteAtlas = () => import('./RouteAtlas');
+// The atlas's own component once its module is in (warmed below, under the
+// opening film). Mounted as itself after the film's hold it does not
+// suspend. The lazy one does, once, even with its module in: React then
+// holds the boundary's content back until 300 ms after its stand-in showed
+// (its reveal throttle), and the map's start-up ran into the start of the
+// pass's assembly on a phone at a quarter speed (which began 35–60 ms
+// late; measured 2026-10-05). As itself it starts ~0.1 s after the landing
+// and is through before the assembly begins.
+let routeAtlasLoaded: ComponentType<DeferredRouteAtlasProps> | null = null;
+const warmRouteAtlas = () => loadRouteAtlas().then((module) => {
+  routeAtlasLoaded = module.default;
+  return module;
+});
 const arrivalCurve = bezierFn(ARRIVAL_EASE);
 const RouteAtlas = lazy(loadRouteAtlas);
 
@@ -276,19 +291,26 @@ function RouteAtlasFallback({ mobile = false, entryProgress }: {
 // move asked for, the place in hand).
 const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRouteAtlasProps) {
   // The map is the page: it mounts at once (its chunk is warmed below) —
-  // once the page is hydrated. The server draws the stand-in itself, never
-  // a Suspense boundary: the lazy chunk is never ready on the server, so the
-  // boundary went out pending ("$?"), and a page swapped in by the router
-  // (every way back home) hydrated it as a server error (React #419, one on
-  // every return, measured 2026-09-30).
-  const [client, setClient] = useState(false);
-  useEffect(() => setClient(true), []);
+  // once the page is hydrated, or, under the opening film, once the film
+  // has landed (src/lib/afterFilm.ts: its start-up dropped the film's
+  // frames). The server draws the stand-in itself, never a Suspense
+  // boundary: the lazy chunk is never ready on the server, so the boundary
+  // went out pending ("$?"), and a page swapped in by the router (every way
+  // back home) hydrated it as a server error (React #419, one on every
+  // return, measured 2026-09-30).
+  // Which atlas is chosen once, as it mounts (never swapped after: another
+  // type would start the map again): after the film's hold, the atlas
+  // itself if its module is in (routeAtlasLoaded, above); otherwise — and
+  // always with no film over the page: a second view, the way back home —
+  // the lazy one, as before.
+  const [Atlas, setAtlas] = useState<ComponentType<DeferredRouteAtlasProps> | null>(null);
+  useEffect(() => afterFilm((held) => setAtlas(() => (held && routeAtlasLoaded) || RouteAtlas)), []);
   const fallback = <RouteAtlasFallback mobile={props.mobile} entryProgress={props.entryProgress} />;
   return (
     <div className="h-full w-full">
-      {client ? (
+      {Atlas ? (
         <Suspense fallback={fallback}>
-          <RouteAtlas {...props} />
+          <Atlas {...props} />
         </Suspense>
       ) : (
         fallback
@@ -1354,9 +1376,15 @@ export default function HomePage({ collections }: Props) {
     document.body.classList.add('walkin-in');
     setNavPillsVisible(true);
   }, []);
-  // Warm the map's chunk at once: the map is the page.
+  // Warm the map's chunks at once: the map is the page. Mapbox's own (the
+  // largest file the site sends) is fetched here too, not only when the map
+  // mounts (react-map-gl imports it then): under the opening film the mount
+  // waits for the landing (src/lib/afterFilm.ts), and on a cold 4G load the
+  // download alone then took 2.4 s of the 2.2 s the cover leaves before the
+  // pass can be torn. Fetched and read now; nothing is drawn until it mounts.
   useEffect(() => {
-    void loadRouteAtlas();
+    void warmRouteAtlas();
+    void import('mapbox-gl').catch(() => {});
   }, []);
 
   // The phone's card height: the camera sets a place in the band above it.
@@ -1417,7 +1445,12 @@ export default function HomePage({ collections }: Props) {
   // and over the rail's words too (they lie on the map), not only over the
   // bare canvas — a quarter of the screen used to be dead to it. Handed on to
   // the map's canvas as the same wheel, at the same point; the list and the
-  // Index keep their own scroll.
+  // Index keep their own scroll. Listened for on the covers' dock and the
+  // rail themselves, not on the window: a window that cancels wheels makes
+  // the browser hand EVERY wheel to the main thread before it scrolls, so
+  // the Index's sheet and the list scrolled only when the map's frame let
+  // them (2026-10-05).
+  const [railEl, setRailEl] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!free) return;
     const onWheel = (event: WheelEvent) => {
@@ -1444,9 +1477,10 @@ export default function HomePage({ collections }: Props) {
         cancelable: true,
       }));
     };
-    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
-    return () => window.removeEventListener('wheel', onWheel, { capture: true });
-  }, [free]);
+    const hosts = [dockHost, railEl].filter((host): host is HTMLDivElement => !!host);
+    hosts.forEach((host) => host.addEventListener('wheel', onWheel, { passive: false }));
+    return () => hosts.forEach((host) => host.removeEventListener('wheel', onWheel));
+  }, [dockHost, free, railEl]);
   // A click on the empty map: the ticket in hand is let go, calmly (its
   // cover fades, its shield steps back; nothing tears) — as the reference's
   // board goes when the globe itself is clicked.
@@ -1700,6 +1734,7 @@ export default function HomePage({ collections }: Props) {
                   right of the page; with nothing in hand, the archive's own
                   line. It lets the pointer through to the map elsewhere. */}
               <div
+                ref={setRailEl}
                 data-archive-column
                 className="explorer-rail"
                 data-entered={entered ? '' : undefined}
@@ -1775,7 +1810,7 @@ export default function HomePage({ collections }: Props) {
                 {atlas}
               </div>
               <div ref={setDockHost} className="archive-dock-host archive-dock-host--phone" data-let-go={letGo ? '' : undefined} />
-              <div data-archive-column className="explorer-rail explorer-rail--phone">
+              <div ref={setRailEl} data-archive-column className="explorer-rail explorer-rail--phone">
                 <h2 className="sr-only font-ui"><T k="home.placesHeading" /></h2>
                 {chapters}
               </div>
