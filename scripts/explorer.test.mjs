@@ -191,8 +191,11 @@ test('the way back: the explorer as the reader left it, at once — no entry, no
   assert.match(css, /html\[data-home='explorer'\] \.entrance \{ display: none; \}/);
   assert.match(css, /html\[data-home='explorer'\] \.home-veil \{\s*opacity: 1;/);
   // The server draws the map's stand-in itself (no Suspense boundary left
-  // pending in the HTML: a routed page hydrated it as React #419).
-  assert.match(page, /\{client \? \(\s*<Suspense fallback=\{fallback\}>/);
+  // pending in the HTML: a routed page hydrated it as React #419). No atlas
+  // is chosen until an effect has run (round wf45: which one, after the
+  // film's hold).
+  assert.match(page, /\{Atlas \? \(\s*<Suspense fallback=\{fallback\}>[\s\S]*?<\/Suspense>\s*\) : \(\s*fallback\s*\)\}/);
+  assert.match(page, /const \[Atlas, setAtlas\] = useState<ComponentType<DeferredRouteAtlasProps> \| null>\(null\);/);
 });
 
 test('the arrow keys step through the places, as the reference\'s do', () => {
@@ -1004,19 +1007,22 @@ test('the map mounts once the opening film has landed, at once with no film over
     // No film (a second view: the head script says data-reel="skip"; the
     // way back home: data-home="explorer"): at once, as before.
     let mounted = 0;
+    const held = [];
+    const mount = (wasHeld) => { mounted += 1; held.push(wasHeld); };
     root.dataset.reel = 'skip';
-    afterFilm(() => { mounted += 1; });
+    afterFilm(mount);
     assert.equal(mounted, 1, 'a second view');
     root.dataset.reel = 'reel';
     root.dataset.home = 'explorer';
     root.attributes.add('data-opening');
-    afterFilm(() => { mounted += 1; });
+    afterFilm(mount);
     assert.equal(mounted, 2, 'the way back home');
+    assert.deepEqual(held, [false, false], 'not held: the page mounts its atlas as before');
     delete root.dataset.home;
     // The film plays: nothing until it has landed ('page'), then the first
     // idle moment (never later than the idle timeout).
     assert.equal(filmOverPage(), true);
-    afterFilm(() => { mounted += 1; });
+    afterFilm(mount);
     assert.equal(mounted, 2, 'held under the film');
     const cap = timers.at(-1);
     assert.equal(cap.ms, FILM_HOLD_CAP_MS, 'a film that never says is not waited on for good');
@@ -1030,13 +1036,15 @@ test('the map mounts once the opening film has landed, at once with no film over
     assert.equal(idles[0].options.timeout, FILM_IDLE_TIMEOUT_MS);
     idles[0].fn();
     assert.equal(mounted, 3, 'mounted in the first idle moment after the landing');
+    assert.equal(held[2], true, 'and it says it was held');
     say('page');
     idles.slice(1).forEach((idle) => idle.fn());
     assert.equal(mounted, 3, 'once');
     // Hydrated after the film had already landed: at once.
     fakeWindow.__archiveOpening = { state: 'page', globe: true };
-    afterFilm(() => { mounted += 1; });
+    afterFilm(mount);
     assert.equal(mounted, 4);
+    assert.equal(held[3], false);
     delete fakeWindow.__archiveOpening;
     // Unmounted under the film: never.
     const cancel = afterFilm(() => { mounted += 1; });
@@ -1050,5 +1058,24 @@ test('the map mounts once the opening film has landed, at once with no film over
     globalThis.document = before.document;
   }
   const home = source('src/components/home/HomePage.tsx');
-  assert.match(home, /useEffect\(\(\) => afterFilm\(\(\) => setClient\(true\)\), \[\]\);/);
+  assert.match(home, /useEffect\(\(\) => afterFilm\(\(held\) => setAtlas\(\(\) => \(held && routeAtlasLoaded\) \|\| RouteAtlas\)\), \[\]\);/);
+});
+
+test('after the film\'s hold the atlas mounts as itself, chosen once; the lazy one otherwise', () => {
+  const home = source('src/components/home/HomePage.tsx');
+  // The lazy atlas suspends once even with its module in, and React holds a
+  // revealed boundary back 300 ms after its stand-in showed: the map's
+  // start-up ran into the pass's assembly (it began 35–60 ms late on a
+  // phone at a quarter speed). The warm-up keeps the module's component.
+  assert.match(home, /const loadRouteAtlas = \(\) => import\('\.\/RouteAtlas'\);/);
+  assert.match(home, /const warmRouteAtlas = \(\) => loadRouteAtlas\(\)\.then\(\(module\) => \{\n\s*routeAtlasLoaded = module\.default;/);
+  assert.match(home, /void warmRouteAtlas\(\);/);
+  assert.doesNotMatch(home, /void loadRouteAtlas\(\);/);
+  // Chosen once, in state: a render never picks again (another type would
+  // start the map again), and the stand-in is the boundary's fallback.
+  const deferred = home.slice(home.indexOf('const DeferredRouteAtlas = memo('), home.indexOf('HomePage — the entrance, then the archive'));
+  assert.ok(deferred.length > 400);
+  assert.match(deferred, /const \[Atlas, setAtlas\] = useState<ComponentType<DeferredRouteAtlasProps> \| null>\(null\);/);
+  assert.equal((deferred.match(/routeAtlasLoaded/g) ?? []).length, 2, 'read only in the effect (and named in its comment)');
+  assert.match(deferred, /<Suspense fallback=\{fallback\}>\n\s*<Atlas \{\.\.\.props\} \/>\n\s*<\/Suspense>/);
 });

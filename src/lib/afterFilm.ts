@@ -7,12 +7,15 @@
 // (OPENING_EVENT 'page', its last word also kept on
 // window.__archiveOpening; html[data-opening] goes at the same moment): the
 // map mounts in the first idle moment after that (HomePage's
-// DeferredRouteAtlas). With no film over the page — a second view, the way
-// back home, a reload deep in the page — it mounts at once, as before. It
-// still has its time to load the globe: the pass cannot be torn until the
-// cover has set itself and the pass has assembled, ~2.5 s after the landing.
-// Never held longer than FILM_HOLD_CAP_MS (a film that never says it has
-// landed).
+// DeferredRouteAtlas), as the cover sets itself — its words and its pass
+// move on the compositor, so the map's busy frames do not stop them. With
+// no film over the page — a second view, the way back home, a reload deep
+// in the page — it mounts at once, as before. It still has its time to
+// load the globe: the pass cannot be torn until the cover has set itself
+// and the pass has assembled, ~2.4 s after the landing (measured on a
+// phone at a quarter speed: the map ready 1.3 s before that; 1.1 s on a
+// first visit over 4G). Never held longer than FILM_HOLD_CAP_MS (a film
+// that never says it has landed).
 
 import { OPENING_EVENT, type OpeningDetail } from './openingFilm.ts';
 
@@ -34,11 +37,12 @@ export function filmOverPage(): boolean {
   return root.hasAttribute('data-opening');
 }
 
-/** Run `then` once no film covers the page: at once if none does, else in
- *  the first idle moment after the film has landed. Returns a cancel. */
-export function afterFilm(then: () => void): () => void {
+/** Run `then` once no film covers the page: at once if none does
+ *  (`held` false), else in the first idle moment after the film has landed
+ *  (`held` true). Returns a cancel. */
+export function afterFilm(then: (held: boolean) => void): () => void {
   if (!filmOverPage()) {
-    then();
+    then(false);
     return () => {};
   }
   let over = false;
@@ -53,7 +57,7 @@ export function afterFilm(then: () => void): () => void {
     if (over) return;
     over = true;
     stop();
-    then();
+    then(true);
   };
   function onOpening(event: Event) {
     if ((event as CustomEvent<OpeningDetail>).detail?.state !== 'page') return;

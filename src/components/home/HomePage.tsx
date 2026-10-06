@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type ComponentType,
   type CSSProperties,
 } from 'react';
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from 'framer-motion';
@@ -61,6 +62,19 @@ import { ENTRY, ENTRY_FINISH, ENTRY_SPAN, finishEntry as finishEntryPlan } from 
 // the opening is settling without creating Mapbox's WebGL context or mounting
 // the story overlay before either one is needed.
 const loadRouteAtlas = () => import('./RouteAtlas');
+// The atlas's own component once its module is in (warmed below, under the
+// opening film). Mounted as itself after the film's hold it does not
+// suspend. The lazy one does, once, even with its module in: React then
+// holds the boundary's content back until 300 ms after its stand-in showed
+// (its reveal throttle), and the map's start-up ran into the start of the
+// pass's assembly on a phone at a quarter speed (which began 35–60 ms
+// late; measured 2026-10-05). As itself it starts ~0.1 s after the landing
+// and is through before the assembly begins.
+let routeAtlasLoaded: ComponentType<DeferredRouteAtlasProps> | null = null;
+const warmRouteAtlas = () => loadRouteAtlas().then((module) => {
+  routeAtlasLoaded = module.default;
+  return module;
+});
 const arrivalCurve = bezierFn(ARRIVAL_EASE);
 const RouteAtlas = lazy(loadRouteAtlas);
 
@@ -284,14 +298,19 @@ const DeferredRouteAtlas = memo(function DeferredRouteAtlas(props: DeferredRoute
   // went out pending ("$?"), and a page swapped in by the router (every way
   // back home) hydrated it as a server error (React #419, one on every
   // return, measured 2026-09-30).
-  const [client, setClient] = useState(false);
-  useEffect(() => afterFilm(() => setClient(true)), []);
+  // Which atlas is chosen once, as it mounts (never swapped after: another
+  // type would start the map again): after the film's hold, the atlas
+  // itself if its module is in (routeAtlasLoaded, above); otherwise — and
+  // always with no film over the page: a second view, the way back home —
+  // the lazy one, as before.
+  const [Atlas, setAtlas] = useState<ComponentType<DeferredRouteAtlasProps> | null>(null);
+  useEffect(() => afterFilm((held) => setAtlas(() => (held && routeAtlasLoaded) || RouteAtlas)), []);
   const fallback = <RouteAtlasFallback mobile={props.mobile} entryProgress={props.entryProgress} />;
   return (
     <div className="h-full w-full">
-      {client ? (
+      {Atlas ? (
         <Suspense fallback={fallback}>
-          <RouteAtlas {...props} />
+          <Atlas {...props} />
         </Suspense>
       ) : (
         fallback
@@ -1364,7 +1383,7 @@ export default function HomePage({ collections }: Props) {
   // download alone then took 2.4 s of the 2.2 s the cover leaves before the
   // pass can be torn. Fetched and read now; nothing is drawn until it mounts.
   useEffect(() => {
-    void loadRouteAtlas();
+    void warmRouteAtlas();
     void import('mapbox-gl').catch(() => {});
   }, []);
 
