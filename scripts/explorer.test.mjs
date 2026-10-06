@@ -1027,6 +1027,10 @@ test('the map mounts once the opening film has landed, at once with no film over
     const cap = timers.at(-1);
     assert.equal(cap.ms, FILM_HOLD_CAP_MS, 'a film that never says is not waited on for good');
     assert.ok(FILM_HOLD_CAP_MS > 10500, 'longer than any film so far (10.2 s; the new one is 4.75 s)');
+    // Keyed off the film's own word, never a clock: the cap is the only
+    // timer while it plays, and the film's listener is the hold's way out.
+    assert.equal(timers.filter((t) => t.live).length, 1, 'no fixed-time mount under the film');
+    assert.equal(listeners.get('archive:opening')?.size, 1);
     say('film');
     say('landing');
     assert.equal(mounted, 2, 'not while the words still fly home');
