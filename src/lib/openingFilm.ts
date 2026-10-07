@@ -19,16 +19,17 @@
 //   1. the match cuts        3333       1333 (17 pages → 8, each a sixth)
 //   2. the hand-off           333        167 (two twelfths)
 //   3. the relay             2333       1250 (8 machines → 5; 15 twelfths)
-//   4. the burn               917        375 (22 frames at 24 fps → 9)
+//   4. the burn               917        583 (22 frames at 24 fps → 14; the
+//                                        countdown gone, the burn slow)
 //   5. the dark, typed        875        292 (7 keys, a 24th each)
 //   6. the end title          625        292 (the morph, the credits
 //                                        rising, the formed title held)
 //      landing A              700        555
-//      first paint → landed  10.11 s     4.74 s (measured, real time: a
-//                                        desktop 4.74, a phone at a
-//                                        quarter of the CPU 4.79; a
-//                                        sixth more on a load whose
-//                                        first face misses its beat)
+//      first paint → landed  10.11 s     4.97 s (the plan: 4.74 s
+//                                        measured before the relay and
+//                                        the burn were slowed, 2026-10-06
+//                                        and -07; a sixth more on a load
+//                                        whose first face misses its beat)
 //
 //   0. The proof (half a second, before the clock). The owner, 2026-09-29:
 //      "然后开头动画最开端是直接播放，有点突兀了，可以加一个小小的开场" (the
@@ -75,7 +76,7 @@
 //   4. A film burn, stepped at 24 fps, on the typewriter's paper: flicker,
 //      scratches and gate weave, a frame slip, a burn spreading from the
 //      line on an fbm mask (a WebGL shader on its own canvas), the frame
-//      darkening and sliding out at 6°, and a leader's countdown card.
+//      darkening and sliding out at 6° (slowly: no countdown card).
 //   5. The dark: "ryan xu" is typed on the film's base, a key a 24th, with a
 //      lime block cursor (the act's one lime).
 //   6. The end title: that line is struck in the title's case ("Ryan Xu")
@@ -963,41 +964,38 @@ export const GLYPH_MORPH = {
 
 // ── Act 4: the film burn (24 fps) ─────────────────────────────────────────
 // On the typewriter's paper (the relay's last machine). Frame numbers are
-// 0–8 from the act's start: nine frames, every stage of the burn kept and
-// each a frame or two shorter (it was 22 frames: the five seconds took the
-// black frame, five of the six leader cards and the three frames of lit
-// perforations). The canvas (a fragment shader) is drawn only when the
-// frame number changes; everything else is held on the frame by stepped
-// keyframes.
+// 0–13 from the act's start. The owner, 2026-10-07: 后面的胶片灼烧可以直接把
+// 数字倒数删掉，直接慢速灼烧好了 — so no countdown card (the leader went), and
+// the burn itself takes its time: one frame of flicker, the slip, then ten
+// frames of the hole opening from beside the typed line (it was three),
+// slow at first and gathering, and the frame darkening and sliding out. The
+// canvas (a fragment shader) is drawn only when the frame number changes;
+// everything else is held on the frame by stepped keyframes.
 export const BURN = {
-  frames: 9,
-  /** f0–1: flicker (brightness ±10%), scratches and dust; gate weave from
+  frames: 14,
+  /** f0: a flicker (brightness ±10%), scratches and dust; gate weave from
    *  f0 until the frame has gone (±1 px a frame). */
-  flicker: [0, 2] as const,
+  flicker: [0, 1] as const,
   weavePx: 1,
-  /** f2: the frame slips up a quarter, showing the frame line and the
+  /** f1: the frame slips up a quarter, showing the frame line and the
    *  perforations. */
-  slip: 2,
+  slip: 1,
   slipShare: 0.25,
-  /** f3–5: the burn spreads from beside the typed line (its radius a share
-   *  of the frame's diagonal, frame by frame from f3 on, growing as the
-   *  frame goes) and the frame outside it turns sepia. */
-  burn: [3, 6] as const,
-  radius: [0.05, 0.15, 0.3, 0.44, 0.56] as const,
-  sepia: [0.42, 0.64, 0.8, 0.88, 0.9] as const,
-  /** f6–7: all of it darkens to a deep brown-black and slides out at 6° —
+  /** f2–11: the burn spreads from beside the typed line, slowly and then
+   *  gathering (its radius a share of the frame's diagonal, frame by frame
+   *  from f2 on, growing as the frame goes) and the frame outside it turns
+   *  sepia. */
+  burn: [2, 12] as const,
+  radius: [0.025, 0.045, 0.07, 0.1, 0.14, 0.19, 0.25, 0.32, 0.4, 0.48, 0.56, 0.62] as const,
+  sepia: [0.24, 0.36, 0.48, 0.58, 0.66, 0.73, 0.79, 0.84, 0.87, 0.89, 0.9, 0.9] as const,
+  /** f12–13: all of it darkens to a deep brown-black and slides out at 6° —
    *  UP, the way the slip went (the motion runs on; a slide down would
-   *  reverse it). */
-  out: [6, 8] as const,
+   *  reverse it). Then the dark. */
+  out: [12, 14] as const,
   darkness: [0.55, 0.9] as const,
   slide: [-0.24, -0.86] as const,
   slideDeg: 6,
-  /** f8: the leader's countdown card, into the dark. */
-  leader: [8, 9] as const,
 } as const;
-/** The leader's card, one frame (it was six, a frame each). */
-export const LEADER = ['count-2'] as const;
-export type LeaderCard = (typeof LEADER)[number];
 /** The burn's colours, from the front inward: bone at the very edge (its
  *  brightest: never a white flash), then heat to char. */
 export const BURN_RAMP = ['#F4F4ED', '#FFE3A0', '#FF9A3C', '#C8471E', '#3A1408'] as const;

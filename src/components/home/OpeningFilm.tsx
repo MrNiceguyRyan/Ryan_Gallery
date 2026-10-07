@@ -1527,11 +1527,6 @@ export default function OpeningFilm({ pictures = [] }: { pictures?: readonly Ope
         live(veil, frameT(BURN.burn[0]), frameOut);
       }
       scene(q('[data-burnground]')!, f0, acts.dark.start);
-      // The leader: its card, a frame.
-      qa<HTMLElement>('[data-leader]').forEach((card, k) => {
-        const f = BURN.leader[0] + k;
-        scene(card, frameT(f), frameT(f + 1));
-      });
 
       // ── Acts 5–6: the dark, typed; the title ──
       const end = q('[data-end]')!;

@@ -6,7 +6,6 @@ import {
   CUT_MS,
   DARK_TYPED,
   DRIFT_VEC,
-  LEADER,
   PROOF_SLUG,
   SCENES,
   SHEETS,
@@ -21,7 +20,6 @@ import {
   sceneTone,
   seeded,
   type AnchorFace,
-  type LeaderCard,
   type Layers as LayerSpec,
   type OpeningPicture,
   type Scene,
@@ -50,7 +48,7 @@ import {
 //
 // New copy is PROPOSED (awaiting the owner): the typed line, the words round
 // the anchor, the printed matter's own words, the layers' captions, notes,
-// stamps and receipts, the leader card, the credit, the YOU line. No place
+// stamps and receipts, the credit, the YOU line. No place
 // is named but in one tiny easter egg (EGGS in src/lib/openingFilm.ts).
 
 const vars = (v: Record<string, string | number>) => v as CSSProperties;
@@ -840,33 +838,6 @@ function Style({ id, pictures }: { id: StyleId; pictures: readonly OpeningPictur
   );
 }
 
-// ── Act 4: the leader ─────────────────────────────────────────────────────
-// Projected: light on the dark, a little soft, with a halo. PROPOSED copy.
-// One card now, the countdown's (the five seconds took the other five).
-function Leader({ card }: { card: LeaderCard }) {
-  return (
-    <div className={`of-leader of-leader--${card}`} data-leader={card}>
-      <svg className="of-leader__dial" viewBox="0 0 200 200" aria-hidden="true">
-        {/* The projector's halo, drawn in the picture (no filter on the
-            card: a filtered card cost a frame as it came up). */}
-        <filter id={`of-dial-glow-${card}`} x="-10%" y="-10%" width="120%" height="120%">
-          <feGaussianBlur stdDeviation="1.4" result="g" />
-          <feMerge>
-            <feMergeNode in="g" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <g filter={`url(#of-dial-glow-${card})`}>
-          <circle cx="100" cy="100" r="92" />
-          <circle cx="100" cy="100" r="74" />
-          <path d="M100 0 V200 M0 100 H200" />
-        </g>
-      </svg>
-      <span className="of-leader__n font-ui">{card.slice('count-'.length)}</span>
-    </div>
-  );
-}
-
 /** The frame line's perforations (what the slip shows past the frame). */
 const PERF_ROW = Array.from({ length: 3 }, (_, i) => <i key={i} />);
 const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
@@ -877,7 +848,7 @@ const PERF_EDGE = Array.from({ length: 28 }, (_, i) => <i key={i} />);
  * marks, the grain; the relay's machines
  * over them; the hand-off's lime block; for the burn the sepia and its
  * canvas and — past its foot — the frame line and perforations a slip
- * shows), the dark of the burn with its leader card, and the dark of the
+ * shows), the dark of the burn, and the dark of the
  * end with the title. `pictures`: his photographs (the prints,
  * the magazine's plate, the lightbox's frames).
  */
@@ -927,10 +898,6 @@ export default function OpeningScenes({ pictures = [] }: { pictures?: readonly O
           <div className="of-frame__below" />
         </div>
       </div>
-
-      {LEADER.map((card) => (
-        <Leader key={card} card={card} />
-      ))}
 
       <div className="of-end" data-end>
         <div className="of-end__ground" />
