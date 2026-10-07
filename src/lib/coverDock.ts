@@ -935,39 +935,46 @@ export function glideShare(expandAt: number, ease: (t: number) => number, D: num
   };
 }
 
-// ── The arrival: a ticket from the open map ──
-// Owner, 2026-09-29: 当地球页空置的时候，点开一个地点的动效和封面出现动效很差 —
-// and, the same day, the switch's own language (先缩小成类似机票那样…到位之后
-// 展开封面，然后…尖冒出来). With nothing in hand the reader chooses a place:
-// the camera turns to it, its shield lifts in the click, and its ticket —
-// carrying its picture, a miniature in the strip — inks in at its seat
-// beside the shield (riding with it: nothing was in hand to hold still); as
-// the camera settles the cover grows open out of it, and then the tip pops
-// out and, once it is down, the tab and the cue come in. No fold, no roll:
-// there was nothing to turn from. Letting a ticket go runs the fold
-// backwards as it fades.
+// ── The arrival: a cover from the open map ──
+// Owner, 2026-09-29: 当地球页空置的时候，点开一个地点的动效和封面出现动效很差;
+// and 2026-10-06, of what that became (a ticket inked in beside the shield,
+// held, then grown open — two steps, the opening a clip on the main
+// thread): 从无封面出现的地图点开路牌的时候，封面page出现的很生硬，优化一下
+// 动效，丝滑即可，不用太大负担. So the cover now comes up WHOLE, in one calm
+// gesture, as the planet settles under it: from a little below and a hair
+// smaller, to rest, on the arrival curve, its ink in the first part of that
+// — transform and opacity only, the compositor's (the reference's board
+// lands the same way: y 16 → 0 over 0.42 s, 11moissanstoit). It rides in
+// with its shield (nothing was in hand to hold still); then the tip pops out
+// and, once it is down, the tab and the cue come in. Letting a cover go
+// still runs the fold backwards as it fades.
 export const ARRIVAL = {
-  /** The ticket never inks in sooner than this after the click (the
+  /** The cover never comes up sooner than this after the click (the
    *  shield's lift reads first)… */
   minDelayMs: 260,
   /** …and under this many screen px of travel the camera has nowhere to go. */
   stillPx: 24,
-  /** The ticket's ink comes up from nothing over this (no hard first edge). */
+  /** The rail's words follow the cover by this. */
   inkMs: 160,
-  /** The ticket is on the map, read, this long before it opens. */
-  printMs: 360,
+  /** The rise: from `risePx` below and `riseScale` of its size to rest over
+   *  TICKET_EXPAND_MS (the switch's opening, so the tip keeps its beat),
+   *  its ink up in the first `fadeMs`. */
+  risePx: 14,
+  riseScale: 0.985,
+  fadeMs: 280,
 } as const;
 
-/** When the arriving ticket inks in, opens and puts its tip out, ms after
- *  the click, for a camera that lands `landMs` after it (its tip to the
- *  oblique included) with `travelPx` of screen to cover: open by the
- *  touchdown, at once past the floor when it has nowhere to go. */
+/** When the arriving cover comes up and puts its tip out, ms after the
+ *  click, for a camera that lands `landMs` after it (its tip to the oblique
+ *  included) with `travelPx` of screen to cover: up by the touchdown, at
+ *  once past the floor when it has nowhere to go. (`inkAt` is `expandAt`:
+ *  no ticket stage before it any more.) */
 export function arrivalSchedule(landMs: number, travelPx: number) {
-  const floor = ARRIVAL.minDelayMs + ARRIVAL.printMs;
+  const floor = ARRIVAL.minDelayMs;
   const late = TICKET_EXPAND_MS + TICKET.tipGap;
   const expandAt = travelPx >= ARRIVAL.stillPx ? Math.round(Math.max(floor, landMs - late)) : floor;
   const { tipAt, extrasAt } = afterOpening(expandAt);
-  return { inkAt: expandAt - ARRIVAL.printMs, expandAt, tipAt, extrasAt };
+  return { inkAt: expandAt, expandAt, tipAt, extrasAt };
 }
 
 // ── When a cover shows ──

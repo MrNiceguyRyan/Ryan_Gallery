@@ -1148,9 +1148,10 @@ function ArchiveChapter({
   };
   // ── The arrival (src/lib/coverDock.ts, "The arrival") ──
   // This cover, asked for from the open map, shown from take-off but not
-  // yet seen: at `inkAt` its ticket inks in beside its shield, its picture
-  // a miniature in the strip; at `expandAt` it grows open; at `tipAt` its
-  // tip pops out, and once it is down its tab and cue come in.
+  // yet seen: at `expandAt` it comes up whole — from a little below, a hair
+  // small, to rest, its ink up early (transform and opacity: the
+  // compositor's, light on any phone); at `tipAt` its tip pops out, and
+  // once it is down its tab and cue come in.
   const arriveIn = (arrive: DockArrive) => {
     settlePlay();
     const { dock, plate } = parts();
@@ -1158,21 +1159,23 @@ function ArchiveChapter({
     dock.removeAttribute('data-cut');
     const play = newPlay('arrive', arrive.key, 'in', 'arrive');
     dock.setAttribute('data-switch', 'in');
-    dock.setAttribute('data-ticket', '');
-    const form = ticketForm();
-    if (reduce || !form) {
+    if (reduce) {
       settlePlay(true);
       return;
     }
-    // Out of the hand until it inks in (it is on the map, unseen).
+    // Out of the hand until it comes up (it is on the map, unseen).
     dock.setAttribute('data-arriving', '');
-    later(play, arrive.inkAt, () => {
+    later(play, arrive.expandAt, () => {
       dock.removeAttribute('data-arriving');
       play.inked = true;
       play.relayed = true;
     });
-    play.anims.push(startAt(dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ARRIVAL.inkMs, easing: CSS_EASE.arrive, fill: 'backwards' }), arrive.inkAt));
-    expandPlate(play, form, arrive.expandAt, true);
+    play.anims.push(startAt(dock.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ARRIVAL.fadeMs, easing: CSS_EASE.arrive, fill: 'backwards' }), arrive.expandAt));
+    play.plate = startAt(
+      plate.animate([{ transform: `translate3d(0, ${ARRIVAL.risePx}px, 0) scale(${ARRIVAL.riseScale})` }, { transform: 'translate3d(0, 0, 0) scale(1)' }], { duration: TICKET_EXPAND_MS, easing: CSS_EASE.arrive, fill: 'backwards' }),
+      arrive.expandAt,
+    );
+    play.anims.push(play.plate);
     play.tip = popTip(play, arrive.tipAt);
     openAndTip(play, { ...afterOpening(arrive.expandAt), tipAt: arrive.tipAt, extrasAt: arrive.extrasAt });
   };

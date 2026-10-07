@@ -13,14 +13,14 @@ import { PAGE_BOUNDS, PANEL_BOUNDS, PROOF, copyBox, copyHeight, placeCopy, proof
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('the arrival in the switch\'s language: the ticket inks in, is printed, opens by the touchdown, then its tip', () => {
+test('the arrival: the cover comes up whole by the touchdown, then its tip', () => {
   // Nowhere to go (the camera all but there): at once past the shield's lift.
   // The tab and the cue wait for the tip to be down (TICKET.extrasGap).
   const extras = TICKET.tipInMs + TICKET.extrasGap;
-  assert.deepEqual(arrivalSchedule(SWITCH.ms, 3), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
-  assert.deepEqual(arrivalSchedule(SWITCH.ms, Number.NaN), { inkAt: 260, expandAt: 620, tipAt: 1080, extrasAt: 1080 + extras });
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, 3), { inkAt: 260, expandAt: 260, tipAt: 720, extrasAt: 720 + extras });
+  assert.deepEqual(arrivalSchedule(SWITCH.ms, Number.NaN), { inkAt: 260, expandAt: 260, tipAt: 720, extrasAt: 720 + extras });
   // A real flight: open as the camera settles, the tip out at the touchdown.
-  assert.deepEqual(arrivalSchedule(1800, 500), { inkAt: 980, expandAt: 1340, tipAt: 1800, extrasAt: 1800 + extras });
+  assert.deepEqual(arrivalSchedule(1800, 500), { inkAt: 1340, expandAt: 1340, tipAt: 1800, extrasAt: 1800 + extras });
   const turn = bezierFn(EASE.turn);
   const onTurn = arrivalSchedule(SWITCH.ms, 400);
   assert.equal(onTurn.tipAt, SWITCH.ms, 'the tip comes out as the camera touches down');
@@ -35,12 +35,17 @@ test('the arrival in the switch\'s language: the ticket inks in, is printed, ope
   // the switch's.
   for (const land of [300, 900, 1400, 2000, 2600]) {
     const s = arrivalSchedule(land, 400);
-    assert.equal(s.expandAt - s.inkAt, ARRIVAL.printMs);
+    assert.equal(s.expandAt, s.inkAt, 'no ticket stage before it');
     assert.equal(s.tipAt - s.expandAt, TICKET_EXPAND_MS + TICKET.tipGap);
   }
   assert.ok(ARRIVAL.inkMs >= 120 && ARRIVAL.inkMs <= 240);
+  // One calm rise (owner, 2026-10-06: 生硬 → 丝滑，不用太大负担): a few px and a
+  // hair of scale, its ink early.
+  assert.ok(ARRIVAL.risePx >= 8 && ARRIVAL.risePx <= 20);
+  assert.ok(ARRIVAL.riseScale >= 0.97 && ARRIVAL.riseScale < 1);
+  assert.ok(ARRIVAL.fadeMs < TICKET_EXPAND_MS);
   // No unroll or open of its own any more: the switch's ticket opens it.
-  for (const gone of ['leadMs', 'unrollMs', 'openDelay', 'openMs', 'developDelay', 'developMs', 'extrasAt', 'foldMs']) {
+  for (const gone of ['leadMs', 'unrollMs', 'openDelay', 'openMs', 'developDelay', 'developMs', 'extrasAt', 'foldMs', 'printMs']) {
     assert.equal(ARRIVAL[gone], undefined, gone);
   }
 });
@@ -87,9 +92,10 @@ test('wiring: the atlas asks for the arriving ticket at take-off and says when i
   assert.match(chapter, /if \(at && arrive && arrive\.id === me && arrive\.key !== seenArrive\) \{/);
   assert.match(chapter, /if \(!out && !dock\.hasAttribute\('data-cut'\)\) \{\s+const play = playRef\.current;\s+if \(play\?\.kind === 'switch' && play\.role === 'in' && play\.inked\) hold = true;\s+letGoRef\.current\(\);/);
   const arriveIn = chapter.slice(chapter.indexOf('const arriveIn = ('), chapter.indexOf('const letGo = () => {'));
-  assert.match(arriveIn, /expandPlate\(play, form, arrive\.expandAt, true\);/);
+  assert.doesNotMatch(arriveIn, /expandPlate|ticketForm|data-ticket|clip-path/, 'no ticket stage, no clip: the compositor only');
+  assert.match(arriveIn, /plate\.animate\(\[\{ transform: `translate3d\(0, \$\{ARRIVAL\.risePx\}px, 0\) scale\(\$\{ARRIVAL\.riseScale\}\)` \}, \{ transform: 'translate3d\(0, 0, 0\) scale\(1\)' \}\], \{ duration: TICKET_EXPAND_MS, easing: CSS_EASE\.arrive,/);
   assert.match(arriveIn, /popTip\(play, arrive\.tipAt\)/);
-  assert.match(arriveIn, /startAt\(dock\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: ARRIVAL\.inkMs,/);
+  assert.match(arriveIn, /startAt\(dock\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\], \{ duration: ARRIVAL\.fadeMs,/);
   // Its words come in as it opens.
   assert.match(home, /arrive\.expandAt - performance\.now\(\)/);
   assert.match(home, /'--place-delay': `\$\{railDelay \+ ARRIVAL\.inkMs\}ms`/);
