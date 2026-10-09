@@ -203,6 +203,20 @@ assert.ok(firstPrep > folderBegin && firstPrep < folderEnd, 'The rewrite is regi
   const cjk = fs.readFileSync(`${root}/src/components/shared/CjkSerifLink.astro`, 'utf8');
   assert.match(cjk, /<link rel="stylesheet" href=\{CJK_SERIF_CSS\} media="print" onload="this\.media='all'" data-swap-media \/>/, 'The Chinese serif waits as print media and is marked for the swap');
   assert.match(cjk, /<noscript><link rel="stylesheet" href=\{CJK_SERIF_CSS\} \/><\/noscript>/, 'Without script it is a plain stylesheet');
+  // The Chinese serif from our own site (2026-10-09): Google's rules and
+  // slices, a versioned folder, cached for a year — never Google's hosts.
+  const notesLib = fs.readFileSync(`${root}/src/lib/notes.ts`, 'utf8');
+  const cjkHref = notesLib.match(/export const CJK_SERIF_CSS = '([^']+)';/)[1];
+  assert.match(cjkHref, /^\/fonts\/noto-serif-sc-v\d+\/noto-serif-sc\.css$/, 'the serif\'s rules are ours');
+  const cjkCss = fs.readFileSync(`${root}/public${cjkHref}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(cjkCss, /gstatic|googleapis/, 'no Google host in its rules');
+  const cjkFiles = [...new Set([...cjkCss.matchAll(/url\('\.\/([\w-]+\.woff2)'\)/g)].map((m) => m[1]))];
+  assert.ok(cjkFiles.length >= 90, `${cjkFiles.length} slices`);
+  for (const file of cjkFiles) {
+    const bytes = fs.readFileSync(`${root}/public${cjkHref.replace(/[^/]+$/, '')}${file}`);
+    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2', file);
+  }
+  assert.match(fs.readFileSync(`${root}/public/_headers`, 'utf8'), /\/fonts\/\*\n  Cache-Control: public, max-age=31536000, immutable/, 'the versioned folder cached a year');
 }
 
 // ── The webfonts: their rules and their nine files are our own — no first

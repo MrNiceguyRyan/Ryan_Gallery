@@ -294,13 +294,15 @@ export function blockLang(text: string | null | undefined, twin?: string | null)
   return langOf(text) ?? 'en';
 }
 
-/** The Chinese serif as a webfont (Google Fonts css2, cut into unicode-range
- *  slices, so a page downloads only the slices its characters are in). The
+/** The Chinese serif as a webfont (Noto Serif SC: Google Fonts' own rules
+ *  and files, served from our own site — public/fonts/noto-serif-sc-v36/,
+ *  owner 2026-10-09 — cut into unicode-range slices, so a page downloads
+ *  only the slices its characters are in, and never from Google). The
  *  system Song faces are not everywhere — iOS has no Songti SC for the web and
  *  would set Chinese in PingFang, a sans, beside Fraunces — so a page with
  *  Chinese on it links this and puts it first after the Latin faces
  *  (notes.css, global.css "/about"). A page with none links nothing. */
-export const CJK_SERIF_CSS = 'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600&display=swap';
+export const CJK_SERIF_CSS = '/fonts/noto-serif-sc-v36/noto-serif-sc.css';
 
 // ─── Text ─────────────────────────────────────────────────────────────────
 

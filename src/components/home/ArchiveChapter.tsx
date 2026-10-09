@@ -196,6 +196,24 @@ const STORY_AFTER_MS = TEAR_MS;
 // being left at take-off is put back if no turn follows this soon.
 const FLAP_PRIME_MAX_MS = 4200;
 // A docked sign waits for its cover to appear at most this long.
+// The cover's sizes, as it is drawn (src/lib/coverDock.ts coverSize; the
+// phone's card, src/lib/explorer.ts phoneCard): on a desktop the photograph
+// is at most ~42% of the window across (the stage's 0.8 less the stub); on a
+// phone at most ~280 px (its card under 300 px tall, scaled to fit). It was
+// "58vw / 100vw": a phone took the 1600 px print for a 280 px picture
+// (2026-10-05 measurements) — now 720 or 1000, the same sharpness on the
+// screen. Smaller prints in the ladder for the phones that need them.
+const COVER_SIZES = '(max-width: 1023px) 300px, 44vw';
+const coverSrcSetOf = (base: string) =>
+  [
+    [480, 82],
+    [720, 82],
+    [1000, 82],
+    [1600, 82],
+    [2000, 78],
+  ]
+    .map(([w, q]) => `${base}?auto=format&w=${w}&q=${q} ${w}w`)
+    .join(', ');
 const FLAP_DOCK_WAIT_MS = 1600;
 // The shared quintic smootherstep (src/lib/motion.ts), the one RouteAtlas
 // uses. The plate's matte, cue and copy accelerate and settle on the same
@@ -1790,9 +1808,7 @@ function ArchiveChapter({
   // fit the enamel rule. Derived from the letters, never measured.
   const signNameSize = useMemo(() => nameSizeFor(collection.name), [collection.name]);
   const coverUrl = coverBase ? `${coverBase}?auto=format&w=1600&q=82` : '';
-  const coverSrcSet = coverBase
-    ? `${coverBase}?auto=format&w=1000&q=82 1000w, ${coverBase}?auto=format&w=1600&q=82 1600w, ${coverBase}?auto=format&w=2000&q=78 2000w`
-    : undefined;
+  const coverSrcSet = coverBase ? coverSrcSetOf(coverBase) : undefined;
 
   // The visible <img> owns the current cover. Predecode only its neighbours,
   // with the exact same srcset/sizes contract, so a responsive 1000/2000px
@@ -1807,8 +1823,8 @@ function ArchiveChapter({
     const images = bases.map((base) => {
       const image = new Image();
       image.decoding = 'async';
-      image.sizes = '(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw';
-      image.srcset = `${base}?auto=format&w=1000&q=82 1000w, ${base}?auto=format&w=1600&q=82 1600w, ${base}?auto=format&w=2000&q=78 2000w`;
+      image.sizes = COVER_SIZES;
+      image.srcset = coverSrcSetOf(base);
       image.src = `${base}?auto=format&w=1600&q=82`;
       if (typeof image.decode === 'function') {
         void image.decode().catch(() => PRELOADED_IMAGE_URLS.delete(base));
@@ -1879,7 +1895,7 @@ function ArchiveChapter({
               ref={sharedImageSourceRef}
               src={coverUrl}
               srcSet={coverSrcSet}
-              sizes="(min-width: 1900px) 1100px, (min-width: 1024px) 58vw, 100vw"
+              sizes={COVER_SIZES}
               alt={nameShown}
               loading={prioritizeImage ? 'eager' : 'lazy'}
               fetchPriority={prioritizeImage && (isActive || resolvedChapterIndex === 0) ? 'high' : 'auto'}

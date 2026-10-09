@@ -1,11 +1,12 @@
 ---
-// The Chinese serif (Noto Serif SC, src/lib/notes.ts CJK_SERIF_CSS) for a
-// page with Chinese on it, linked so that it never holds the first paint.
+// The Chinese serif (Noto Serif SC, from our own site since 2026-10-09:
+// src/lib/notes.ts CJK_SERIF_CSS) for a page with Chinese on it, linked so
+// that it never holds the first paint.
 //
-// The stylesheet is only @font-face rules: ~120 KB from Google (440 KB of
+// The stylesheet is only @font-face rules: ~100 KB compressed (410 KB of
 // CSS once unpacked, every unicode-range slice of four weights), and as a
 // plain render-blocking <link> the page waited for all of it before
-// painting a word — on a phone's network, and from where Google is slow,
+// painting a word — on a phone's network, and from where Google was slow,
 // that is the whole wait. Its faces are `display=swap`, so what the reader
 // sees is unchanged: the Chinese is set in the system face first and in
 // the serif once its slices arrive, exactly as before; only the page is

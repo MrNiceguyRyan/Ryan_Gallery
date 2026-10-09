@@ -1,8 +1,20 @@
 {
 	"name": "ryan-gallery",
 	"compatibility_date": "2026-04-07",
+	// The one bit of server (worker/index.ts): a page's own error report at
+	// /api/client-error. Only /api/* runs it; every other request is the
+	// build's own file, served as before.
+	"main": "worker/index.ts",
 	"assets": {
-		"directory": "./dist"
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"run_worker_first": ["/api/*"]
+	},
+	// The reports go to Workers Logs; invocation logs off: nothing about a
+	// request is kept but the report's own line.
+	"observability": {
+		"enabled": true,
+		"logs": { "invocation_logs": false }
 	},
 	// Runs before every deploy of dist/: refuses a build made with a
 	// preview-only sample (`npm run build:sample`: STORY_CHAPTERS_SAMPLE=1,
@@ -25,7 +37,13 @@
 			// workers.dev URL the owner cannot reach, which has happened twice.
 			"routes": [{ "pattern": "preview.ryanxugallery.com", "custom_domain": true }],
 			"assets": {
-				"directory": "./dist"
+				"directory": "./dist",
+				"binding": "ASSETS",
+				"run_worker_first": ["/api/*"]
+			},
+			"observability": {
+				"enabled": true,
+				"logs": { "invocation_logs": false }
 			},
 			// The preview worker may show a sample build: reported, not refused.
 			"build": {
